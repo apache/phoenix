@@ -2183,7 +2183,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             long startTime = EnvironmentEdgeManager.currentTimeMillis();
             while (true) {
                 if (retried) {
-                    connection.getRegionLocator(SchemaUtil.getPhysicalName(systemTableName, this.getProps()))
+                    connection.getRegionLocator(SchemaUtil.getPhysicalName(
+                            systemTableName, this.getProps()))
                         .getRegionLocation(tableKey, true);
                 }
 

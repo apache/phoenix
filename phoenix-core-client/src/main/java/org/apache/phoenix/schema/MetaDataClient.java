@@ -6524,15 +6524,20 @@ public class MetaDataClient {
         return new MutationState(0, 0, connection);
     }
 
-    private void changePermsOnSchema(org.apache.hadoop.hbase.client.Connection hConnection, ChangePermsStatement changePermsStatement) throws Throwable {
+    private void changePermsOnSchema(org.apache.hadoop.hbase.client.Connection hConnection,
+                                     ChangePermsStatement changePermsStatement) throws Throwable {
         if (changePermsStatement.isGrantStatement()) {
-            AccessControlClient.grant(hConnection, changePermsStatement.getSchemaName(), changePermsStatement.getName(), changePermsStatement.getPermsList());
+            AccessControlClient.grant(hConnection, changePermsStatement.getSchemaName(),
+                    changePermsStatement.getName(), changePermsStatement.getPermsList());
         } else {
-            AccessControlClient.revoke(hConnection, changePermsStatement.getSchemaName(), changePermsStatement.getName(), Permission.Action.values());
+            AccessControlClient.revoke(hConnection, changePermsStatement.getSchemaName(),
+                    changePermsStatement.getName(), Permission.Action.values());
         }
     }
 
-    private void changePermsOnTables(org.apache.hadoop.hbase.client.Connection hConnection, Admin admin, ChangePermsStatement changePermsStatement, PTable inputTable) throws Throwable {
+    private void changePermsOnTables(org.apache.hadoop.hbase.client.Connection hConnection,
+                                     Admin admin, ChangePermsStatement changePermsStatement,
+                                     PTable inputTable) throws Throwable {
 
         org.apache.hadoop.hbase.TableName tableName = SchemaUtil.getPhysicalTableName
                 (inputTable.getPhysicalName().getBytes(), inputTable.isNamespaceMapped());
@@ -6587,7 +6592,9 @@ public class MetaDataClient {
         }
     }
 
-    private void changePermsOnTable(org.apache.hadoop.hbase.client.Connection hConnection, ChangePermsStatement changePermsStatement, org.apache.hadoop.hbase.TableName tableName)
+    private void changePermsOnTable(org.apache.hadoop.hbase.client.Connection hConnection,
+                                    ChangePermsStatement changePermsStatement,
+                                    org.apache.hadoop.hbase.TableName tableName)
             throws Throwable {
         if (changePermsStatement.isGrantStatement()) {
             AccessControlClient.grant(hConnection, tableName, changePermsStatement.getName(),
@@ -6598,12 +6605,15 @@ public class MetaDataClient {
         }
     }
 
-    private void changePermsOnUser(org.apache.hadoop.hbase.client.Connection hConnection, ChangePermsStatement changePermsStatement)
+    private void changePermsOnUser(org.apache.hadoop.hbase.client.Connection hConnection,
+                                   ChangePermsStatement changePermsStatement)
             throws Throwable {
         if (changePermsStatement.isGrantStatement()) {
-            AccessControlClient.grant(hConnection, changePermsStatement.getName(), changePermsStatement.getPermsList());
+            AccessControlClient.grant(hConnection, changePermsStatement.getName(),
+                    changePermsStatement.getPermsList());
         } else {
-            AccessControlClient.revoke(hConnection, changePermsStatement.getName(), Permission.Action.values());
+            AccessControlClient.revoke(hConnection, changePermsStatement.getName(),
+                    Permission.Action.values());
         }
     }
 }
