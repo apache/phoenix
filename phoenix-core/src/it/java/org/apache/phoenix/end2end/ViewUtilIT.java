@@ -371,7 +371,7 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
                 Pair<List<PTable>, List<TableInfo>> allDescendants =
                         ViewUtil.findAllDescendantViews(childLinkTable, cqs.getConfiguration(),
                                 EMPTY_BYTE_ARRAY, BASE_TABLE_SCHEMA.getBytes(),
-                                parentTable.getBytes(), HConstants.LATEST_TIMESTAMP, true);
+                                parentTable.getBytes(), HConstants.LATEST_TIMESTAMP, true,true);
                 assertTrue("No orphan views expected", allDescendants.getSecond().isEmpty());
                 List<PTable> childViews = allDescendants.getFirst();
                 assertEquals("Just 1 legit child view expected", 1, childViews.size());
@@ -386,7 +386,7 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
 
                 allDescendants = ViewUtil.findAllDescendantViews(childLinkTable,
                         cqs.getConfiguration(), EMPTY_BYTE_ARRAY, BASE_TABLE_SCHEMA.getBytes(),
-                        parentTable.getBytes(), HConstants.LATEST_TIMESTAMP, false);
+                        parentTable.getBytes(), HConstants.LATEST_TIMESTAMP, false,true);
                 assertTrue("No orphan views expected", allDescendants.getSecond().isEmpty());
                 childViews = allDescendants.getFirst();
                 assertEquals("All child views expected", childViewNames.size(), childViews.size());
@@ -418,7 +418,7 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
                 Pair<List<PTable>, List<TableInfo>> allDescendants =
                         ViewUtil.findAllDescendantViews(childLinkTable, cqs.getConfiguration(),
                                 EMPTY_BYTE_ARRAY, BASE_TABLE_SCHEMA.getBytes(),
-                                parent2TableName.getBytes(), HConstants.LATEST_TIMESTAMP, false);
+                                parent2TableName.getBytes(), HConstants.LATEST_TIMESTAMP, false,true);
                 assertTrue("No orphan views expected", allDescendants.getSecond().isEmpty());
                 assertTrue("No legitimate views expected", allDescendants.getFirst().isEmpty());
 
@@ -431,7 +431,7 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
                 // orphan parent2->view link should show up as an orphan view of parent2
                 allDescendants = ViewUtil.findAllDescendantViews(childLinkTable,
                         cqs.getConfiguration(), EMPTY_BYTE_ARRAY, BASE_TABLE_SCHEMA.getBytes(),
-                        parent2TableName.getBytes(), HConstants.LATEST_TIMESTAMP, false);
+                        parent2TableName.getBytes(), HConstants.LATEST_TIMESTAMP, false,true);
                 assertTrue("No legitimate views expected", allDescendants.getFirst().isEmpty());
                 List<TableInfo> orphanViews = allDescendants.getSecond();
                 assertEquals("1 orphan view expected", 1, orphanViews.size());
