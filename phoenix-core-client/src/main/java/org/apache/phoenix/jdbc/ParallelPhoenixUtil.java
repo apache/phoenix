@@ -122,6 +122,7 @@ public class ParallelPhoenixUtil {
                         futuresException.addSuppressed(e);
                     }
                 }
+                i++;
             }
             context.setError();
             throw futuresException;
