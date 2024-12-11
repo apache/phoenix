@@ -26,16 +26,15 @@ import org.apache.phoenix.coprocessorclient.TableInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TableViewFinderResult;
-import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.ViewUtil;
+import org.apache.phoenix.util.*;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
@@ -443,4 +442,107 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
         }
     }
 
+    /**
+     * Test {@link ViewUtil#getViewIndexIds(PhoenixConnection, String, boolean)} for a table which is not view index and ensure it throws {@link IllegalArgumentException}
+     * @throws IOException
+     * @throws SQLException
+     */
+    @Test(expected=IllegalArgumentException.class)
+    public void testGetViewIndexIdsForNonViewIndexTable() throws IOException, SQLException {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            ViewUtil.getViewIndexIds(conn.unwrap(PhoenixConnection.class), "TEST_TABLE", true);
+        }
+    }
+
+    /**
+     * Test {@link ViewUtil#getViewIndexIds(PhoenixConnection, String, boolean)} for a table with non-null schema
+     * @throws SQLException
+     * @throws IOException
+     */
+    @Test
+    public void testGetViewIndexIdsWithSchema() throws SQLException, IOException {
+        testGetViewIndexIds(generateUniqueName());
+    }
+
+    /**
+     * Test {@link ViewUtil#getViewIndexIds(PhoenixConnection, String, boolean)} for a table without schema
+     * @throws SQLException
+     * @throws IOException
+     */
+    @Test
+    public void testGetViewIndexIdsWithoutSchema() throws SQLException, IOException {
+        testGetViewIndexIds(null);
+    }
+
+    /**
+     * Helper method to test {@link ViewUtil#getViewIndexIds(PhoenixConnection, String, boolean)} method
+     * 1. Create a multi-tenant table
+     * 2. Create 2 global views (globalViewName1 & globalViewName2) and 5 global view indexes (2 on globalViewName1 & 3 on globalViewName2)
+     * 3. Create 2 tenant views (tenantViewName1 & tenantViewName2) and 3 tenant view indexes (1 on tenantViewName1 & 2 on tenantViewName2)
+     * 4. Get view index ids EXCLUDING tenant view indexes and ensure the count is 5 (5 global view indexes)
+     * 5. Get view index ids INCLUDING tenant view indexes and ensure the count is 8 (5 global view index + 3 tenant view indexes)
+     * @param schemaPrefix - schema name for the table, it can be null if no schema is to be used
+     * @throws IOException
+     * @throws SQLException
+     */
+    private void testGetViewIndexIds(String schemaPrefix) throws IOException, SQLException {
+        final String tableName = SchemaUtil.getTableName(schemaPrefix, generateUniqueName());
+        final String globalViewName1 = SchemaUtil.getTableName(schemaPrefix, generateUniqueName());
+        final String globalViewName2 = SchemaUtil.getTableName(schemaPrefix, generateUniqueName());
+        final String globalViewIndex11 = generateUniqueName() + "_INDEX11";
+        final String globalViewIndex12 = generateUniqueName() + "_INDEX12";
+        final String globalViewIndex21 = generateUniqueName() + "_INDEX21";
+        final String globalViewIndex22 = generateUniqueName() + "_INDEX22";
+        final String globalViewIndex23 = generateUniqueName() + "_INDEX23";
+
+        final String tenantId = generateUniqueName();
+        Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        tenantProps.setProperty(TENANT_ID_ATTRIB, tenantId);
+        final String tenantViewName1 = SchemaUtil.getTableName(schemaPrefix, generateUniqueName());
+        final String tenantViewName2 = SchemaUtil.getTableName(schemaPrefix, generateUniqueName());
+        final String tenantViewIndex11 = generateUniqueName() + "_INDEX11";
+        final String tenantViewIndex21 = generateUniqueName() + "_INDEX21";
+        final String tenantViewIndex22 = generateUniqueName() + "_INDEX22";
+
+        final String createTableDDL = "CREATE TABLE " + tableName +
+                "(TENANT_ID CHAR(10) NOT NULL, ID CHAR(10) NOT NULL, NUM BIGINT " +
+                "CONSTRAINT PK PRIMARY KEY (TENANT_ID, ID)) MULTI_TENANT=true";
+        final String globalViewDDL = "CREATE VIEW %s (PK1 BIGINT, PK2 BIGINT) " +
+                "AS SELECT * FROM " + tableName + " WHERE NUM > -1";
+        final String viewIndexDDL = "CREATE INDEX %s ON %s (NUM DESC) INCLUDE (ID)";
+        final String tenantViewDDL = "CREATE VIEW %s AS SELECT * FROM %s";
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+
+            // Create data table, global views and global view indexes
+            conn.createStatement().execute(createTableDDL);
+            conn.createStatement().execute(String.format(globalViewDDL, globalViewName1));
+            conn.createStatement().execute(String.format(globalViewDDL, globalViewName2));
+            conn.createStatement().execute(String.format(viewIndexDDL, globalViewIndex11, globalViewName1));
+            conn.createStatement().execute(String.format(viewIndexDDL, globalViewIndex12, globalViewName1));
+            conn.createStatement().execute(String.format(viewIndexDDL, globalViewIndex21, globalViewName2));
+            conn.createStatement().execute(String.format(viewIndexDDL, globalViewIndex22, globalViewName2));
+            conn.createStatement().execute(String.format(viewIndexDDL, globalViewIndex23, globalViewName2));
+
+
+            // Create tenant views and tenant view indexes
+            try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
+                tenantConn.createStatement().execute(
+                        String.format(tenantViewDDL, tenantViewName1, tableName));
+                tenantConn.createStatement().execute(
+                        String.format(tenantViewDDL, tenantViewName2, tableName));
+                tenantConn.createStatement().execute(String.format(viewIndexDDL, tenantViewIndex11, tenantViewName1));
+                tenantConn.createStatement().execute(String.format(viewIndexDDL, tenantViewIndex21, tenantViewName2));
+                tenantConn.createStatement().execute(String.format(viewIndexDDL, tenantViewIndex22, tenantViewName2));
+            }
+
+            // Get view indexes ids only for global view indexes (excluding tenant view indexes)
+            List<String> list = ViewUtil.getViewIndexIds(conn.unwrap(PhoenixConnection.class), MetaDataUtil.getViewIndexPhysicalName(tableName), false);
+            assertEquals(5, list.size());
+
+            // Get view indexes ids for both global and tenant view indexes
+            list = ViewUtil.getViewIndexIds(conn.unwrap(PhoenixConnection.class), MetaDataUtil.getViewIndexPhysicalName(tableName), true);
+            assertEquals(8, list.size());
+        }
+    }
 }

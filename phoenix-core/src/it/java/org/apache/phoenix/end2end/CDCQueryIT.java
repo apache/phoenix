@@ -50,6 +50,7 @@ import org.slf4j.LoggerFactory;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -209,7 +210,7 @@ public class CDCQueryIT extends CDCBaseIT {
 
         // Verify that we can access data table mutations by partition id
         PreparedStatement statement = conn.prepareStatement(
-                getCDCQuery(cdcName, saltBuckets, partitionId));
+                getCDCQuery(cdcName, partitionId));
         statement.setTimestamp(1, new Timestamp(1000));
         statement.setTimestamp(2,  new Timestamp(System.currentTimeMillis()));
         rs = statement.executeQuery();
@@ -233,22 +234,57 @@ public class CDCQueryIT extends CDCBaseIT {
         assertEquals(saltBuckets, rowCount);
     }
 
-    private static String getCDCQuery(String cdcName, int saltBuckets,
-            String[] partitionId) {
+    private static String getCDCQuery(String cdcName, String[] partitionId) {
         StringBuilder query = new StringBuilder("SELECT PARTITION_ID(), Count(*) from ");
         query.append(cdcName);
         query.append(" WHERE PARTITION_ID() IN (");
-        for (int i = 0; i < saltBuckets - 1; i++) {
+        for (int i = 0; i < partitionId.length - 1; i++) {
             query.append("'");
             query.append(partitionId[i]);
             query.append("',");
         }
         query.append("'");
-        query.append(partitionId[saltBuckets - 1]);
+        query.append(partitionId[partitionId.length - 1]);
         query.append("')");
         query.append(" AND PHOENIX_ROW_TIMESTAMP() >= ? AND PHOENIX_ROW_TIMESTAMP() < ?");
         query.append(" Group By PARTITION_ID()");
         return query.toString();
+    }
+
+    private static String addPartitionInList(Connection conn, String cdcName, String query)
+            throws SQLException{
+        ResultSet rs = conn.createStatement().executeQuery("SELECT DISTINCT PARTITION_ID() FROM "
+                + cdcName);
+        List<String> partitionIds = new ArrayList<>();
+        while (rs.next()) {
+            partitionIds.add(rs.getString(1));
+        }
+        StringBuilder builder = new StringBuilder(query);
+        builder.append(" WHERE PARTITION_ID() IN (");
+        boolean initialized = false;
+        for (String partitionId : partitionIds) {
+            if (!initialized) {
+                builder.append("'");
+                initialized = true;
+            } else {
+                builder.append(",'");
+            }
+            builder.append(partitionId);
+            builder.append("'");
+        }
+        builder.append(")");
+        return builder.toString();
+    }
+
+    private static PreparedStatement getCDCQueryPreparedStatement(Connection conn, String cdcName,
+            String query, long minTimestamp, long maxTimestamp)
+            throws SQLException {
+        StringBuilder builder = new StringBuilder(addPartitionInList(conn, cdcName, query));
+        builder.append(" AND PHOENIX_ROW_TIMESTAMP() >= ? AND PHOENIX_ROW_TIMESTAMP() < ?");
+        PreparedStatement statement = conn.prepareStatement(builder.toString());
+        statement.setTimestamp(1, new Timestamp(minTimestamp));
+        statement.setTimestamp(2,  new Timestamp(maxTimestamp));
+        return statement;
     }
 
     @Test
@@ -283,14 +319,20 @@ public class CDCQueryIT extends CDCBaseIT {
         long startTS = System.currentTimeMillis();
         List<ChangeRow> changes = generateChanges(startTS, tenantids, tableName, null,
                 COMMIT_SUCCESS);
+        long currentTime = System.currentTimeMillis();
+        long endTS = changes.get(changes.size() - 1).getTimestamp() + 1;
+        if (endTS > currentTime) {
+            Thread.sleep(endTS - currentTime);
+        }
 
         String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
         try (Connection conn = newConnection(tenantId)) {
             // For debug: uncomment to see the exact results logged to console.
             dumpCDCResults(conn, cdcName,
                     new TreeMap<String, String>() {{ put("K", "INTEGER"); }},
-                    "SELECT /*+ CDC_INCLUDE(PRE, POST) */ PHOENIX_ROW_TIMESTAMP(), K," +
-                            "\"CDC JSON\" FROM " + cdcFullName);
+                    addPartitionInList(conn, cdcFullName,
+                            "SELECT /*+ CDC_INCLUDE(PRE, POST) */ PHOENIX_ROW_TIMESTAMP(), K,"
+                                    + "\"CDC JSON\" FROM " + cdcFullName));
 
             // Existence of an CDC index hint shouldn't cause the regular query path to fail.
             // Run the same query with a CDC index hit and without it and make sure we get the same
@@ -322,18 +364,22 @@ public class CDCQueryIT extends CDCBaseIT {
                 put("V2", "INTEGER");
                 put("B.VB", "INTEGER");
             }};
-            verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
-                            "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + cdcFullName),
+            verifyChangesViaSCN(tenantId, getCDCQueryPreparedStatement(conn, cdcFullName,
+                            "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + cdcFullName, startTS,
+                            endTS).executeQuery(),
                     datatableName, dataColumns, changes, CHANGE_IMG);
-            verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
-                            "SELECT /*+ CDC_INCLUDE(CHANGE) */ PHOENIX_ROW_TIMESTAMP(), K," +
-                                    "\"CDC JSON\" FROM " + cdcFullName), datatableName, dataColumns,
-                    changes, CHANGE_IMG);
-            verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
-                            "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName),
-                    datatableName, dataColumns, changes, PRE_POST_IMG);
-            verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
-                            "SELECT * FROM " + cdcFullName),
+            verifyChangesViaSCN(tenantId, getCDCQueryPreparedStatement(conn, cdcFullName,
+                            "SELECT /*+ CDC_INCLUDE(CHANGE) */ PHOENIX_ROW_TIMESTAMP(), K,"
+                                    + "\"CDC JSON\" FROM " + cdcFullName, startTS, endTS)
+                            .executeQuery(),
+                    datatableName, dataColumns, changes, CHANGE_IMG);
+            verifyChangesViaSCN(tenantId, getCDCQueryPreparedStatement(conn, cdcFullName,
+                            "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName,
+                            startTS, endTS).executeQuery(),
+                    datatableName, dataColumns, changes,
+                    PRE_POST_IMG);
+            verifyChangesViaSCN(tenantId, getCDCQueryPreparedStatement(conn, cdcFullName,
+                    "SELECT * FROM " + cdcFullName,startTS, endTS).executeQuery(),
                     datatableName, dataColumns, changes, new HashSet<>());
 
             HashMap<String, int[]> testQueries = new HashMap<String, int[]>() {{
@@ -424,24 +470,27 @@ public class CDCQueryIT extends CDCBaseIT {
         String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
         try (Connection conn = newConnection(tenantId)) {
             // For debug: uncomment to see the exact results logged to console.
-            dumpCDCResults(conn, cdcName, pkColumns,
-                    "SELECT /*+ CDC_INCLUDE(PRE, CHANGE) */ * FROM " + cdcFullName);
+            dumpCDCResults(conn, cdcName, pkColumns, addPartitionInList(conn, cdcFullName,
+                    "SELECT /*+ CDC_INCLUDE(PRE, CHANGE) */ * FROM " + cdcFullName));
 
             List<ChangeRow> changes = new ArrayList<>();
             for (Set<ChangeRow> batch: allBatches.get(tenantId)) {
                 changes.addAll(batch);
             }
             verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
-                            "SELECT * FROM " + cdcFullName),
+                    addPartitionInList(conn, cdcFullName,"SELECT * FROM " + cdcFullName)),
                     datatableName, dataColumns, changes, CHANGE_IMG);
             verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
-                            "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + cdcFullName),
+                    addPartitionInList(conn, cdcFullName,
+                            "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + cdcFullName)),
                     datatableName, dataColumns, changes, CHANGE_IMG);
             verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
-                            "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName),
+                    addPartitionInList(conn, cdcFullName,
+                            "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName)),
                     datatableName, dataColumns, changes, PRE_POST_IMG);
             verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
-                            "SELECT /*+ CDC_INCLUDE(CHANGE, PRE, POST) */ * FROM " + cdcFullName),
+                    addPartitionInList(conn, cdcFullName,
+                            "SELECT /*+ CDC_INCLUDE(CHANGE, PRE, POST) */ * FROM " + cdcFullName)),
                     datatableName, dataColumns, changes, ALL_IMG);
             cdcIndexShouldNotBeUsedForDataTableQueries(conn, tableName, cdcName);
             checkIndexPartitionIdCount(conn, cdcFullName);

@@ -1246,7 +1246,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return num;
     }
 
-    private RowKeySchema getIndexRowKeySchema() {
+    public RowKeySchema getIndexRowKeySchema() {
         if (indexRowKeySchema != null) {
             return indexRowKeySchema;
         }
@@ -2382,8 +2382,13 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     public boolean isUncovered() {
         return isUncovered;
     }
+
     public boolean isCDCIndex() {
         return isCDCIndex;
+    }
+
+    public boolean isMultiTenant() {
+        return isMultiTenant;
     }
     
     public boolean isImmutableRows() {
@@ -2442,5 +2447,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 
     public QualifierEncodingScheme getDataEncodingScheme() {
         return dataEncodingScheme;
+    }
+
+    public byte[] getViewIndexId() {
+        return viewIndexId;
     }
 }

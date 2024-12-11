@@ -20,11 +20,14 @@ package org.apache.phoenix.parse;
 
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.expression.function.PartitionIdFunction;
-
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.RowKeyValueAccessor;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 
 public class PartitionIdParseNode extends FunctionParseNode {
@@ -43,6 +46,20 @@ public class PartitionIdParseNode extends FunctionParseNode {
                     "PartitionIdFunction does not take any parameters"
             );
         }
-        return new PartitionIdFunction(children);
+        PTable table = context.getCurrentTable().getTable();
+        if (table.getViewIndexId()!= null && table.isMultiTenant()) {
+            return new PartitionIdFunction(getExpressions(table, 2));
+        } else if (table.getViewIndexId()!= null || table.isMultiTenant()) {
+            return new PartitionIdFunction(getExpressions(table, 1));
+        } else {
+            return new PartitionIdFunction(getExpressions(table, 0));
+        }
+    }
+
+    private static List<Expression> getExpressions(PTable table, int position) {
+        List<Expression> expressionList = new ArrayList<>(1);
+        expressionList.add(new RowKeyColumnExpression(table.getPKColumns().get(position),
+                new RowKeyValueAccessor(table.getPKColumns(), position)));
+        return expressionList;
     }
 }

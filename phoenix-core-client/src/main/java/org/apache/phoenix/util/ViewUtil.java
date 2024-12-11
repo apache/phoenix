@@ -15,9 +15,13 @@
  */
 package org.apache.phoenix.util;
 
+import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.phoenix.coprocessorclient.MetaDataEndpointImplConstants;
+import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -64,7 +68,10 @@ import org.slf4j.LoggerFactory;
 import javax.annotation.Nullable;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -992,5 +999,45 @@ public class ViewUtil {
                 //        MetaDataEndpointImpl.VIEW_MODIFIED_PROPERTY_BYTES);
             }
         }
+    }
+
+    /**
+     * Retrieves the list of unique view index ids from SYSTEM.CATALOG for a given view index table
+     * @param connection - Phoenix Connection
+     * @param tableName - physical table name (having prefix {@link MetaDataUtil#VIEW_INDEX_TABLE_PREFIX} of the view index table for which view index ids need to be retrieved
+     * @param includeTenantViewIndexes - true if tenant view indexes to be included otherwise false
+     * @return - list of view index ids
+     * @throws IOException
+     * @throws SQLException
+     */
+    public static List<String> getViewIndexIds(final PhoenixConnection connection, final String tableName, final boolean includeTenantViewIndexes)
+            throws IOException, SQLException {
+        Preconditions.checkArgument(MetaDataUtil.isViewIndex(tableName));
+        final List<String> viewIndexIdsString = new ArrayList<>();
+        final String viewIndexIdsQuery = getViewIndexIdsQuery(tableName, includeTenantViewIndexes);
+        logger.info(String.format("Query to get view index ids for %s with includeTenantViewIndexes as %b is %s", tableName, includeTenantViewIndexes, viewIndexIdsQuery));
+        PreparedStatement preparedStatement = connection.prepareStatement(viewIndexIdsQuery);
+        ResultSet resultSet = preparedStatement.executeQuery();
+        while (resultSet.next()) {
+            int viewIndexType = resultSet.getInt(2);
+            // Unless explicitly specified as BIGINT in view index data type, both "null" and SMALLINT data type are considered as SMALLINT
+            if(resultSet.wasNull() || viewIndexType == Types.SMALLINT) {
+                byte[] data = PSmallint.INSTANCE.toBytes(resultSet.getObject(1));
+                viewIndexIdsString.add(Hex.encodeHexString(data));
+            } else {
+                byte[] data = PLong.INSTANCE.toBytes(resultSet.getObject(1));
+                viewIndexIdsString.add(Hex.encodeHexString(data));
+            }
+        }
+        return viewIndexIdsString;
+    }
+
+    private static String getViewIndexIdsQuery(final String tableName, boolean includeTenantViewIndexes) {
+        String schema = SchemaUtil.getSchemaNameFromFullName(SchemaUtil.getParentTableNameFromIndexTable(tableName, MetaDataUtil.VIEW_INDEX_TABLE_PREFIX));
+        final String TABLE_SCHEM_FILTER = (!StringUtils.isEmpty(schema) ? " AND TABLE_SCHEM = '" + schema + "' " : " AND TABLE_SCHEM IS NULL ");
+        final String TENANT_ID_FILTER = (!includeTenantViewIndexes ? " AND TENANT_ID IS NULL " : " ");
+        final String GET_VIEW_INDEX_TABLE_QUERY = "SELECT DISTINCT TABLE_NAME FROM SYSTEM.CATALOG WHERE LINK_TYPE = 2 AND COLUMN_FAMILY = '" + tableName + "' " + TABLE_SCHEM_FILTER + TENANT_ID_FILTER;
+        final String GET_VIEW_INDEX_IDS_QUERY = "SELECT DISTINCT VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE FROM SYSTEM.CATALOG WHERE VIEW_INDEX_ID IS NOT NULL AND TABLE_NAME IN ( " + GET_VIEW_INDEX_TABLE_QUERY + ") " + TABLE_SCHEM_FILTER + TENANT_ID_FILTER;
+        return GET_VIEW_INDEX_IDS_QUERY;
     }
 }
