@@ -64,6 +64,7 @@ public class LoggingSingleConnectionLimiterIT extends LoggingConnectionLimiterIT
                 conf.set(QueryServices.INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS, String.valueOf(20));
                 conf.set(PhoenixHAExecutorServiceProvider.HA_MAX_POOL_SIZE, String.valueOf(5));
                 conf.set(PhoenixHAExecutorServiceProvider.HA_MAX_QUEUE_SIZE, String.valueOf(30));
+                conf.set("hbase.client.registry.impl", ZKConnectionInfo.ZK_REGISTRY_NAME);
                 return conf;
             }
 
@@ -74,6 +75,7 @@ public class LoggingSingleConnectionLimiterIT extends LoggingConnectionLimiterIT
                 conf.set(QueryServices.INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS, String.valueOf(20));
                 conf.set(PhoenixHAExecutorServiceProvider.HA_MAX_POOL_SIZE, String.valueOf(5));
                 conf.set(PhoenixHAExecutorServiceProvider.HA_MAX_QUEUE_SIZE, String.valueOf(30));
+                conf.set("hbase.client.registry.impl", ZKConnectionInfo.ZK_REGISTRY_NAME);
                 Configuration copy = new Configuration(conf);
                 copy.addResource(confToClone);
                 return copy;
@@ -90,9 +92,10 @@ public class LoggingSingleConnectionLimiterIT extends LoggingConnectionLimiterIT
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
         DriverManager.registerDriver(new PhoenixTestDriver());
         String profileName = "setup";
-        final String urlWithPrinc = url + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + profileName
-                + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
         Properties props = new Properties();
+        final String urlWithPrinc =
+                ConnectionInfo.createNoLogin(url, null, props).withPrincipal("nocache")
+                        .toUrl();
 
         try (Connection connection = DriverManager.getConnection(urlWithPrinc, props)) {
             try (Statement statement = connection.createStatement()) {
