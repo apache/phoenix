@@ -240,7 +240,7 @@ public class FailoverPhoenixConnectionIT {
      */
     @Test(timeout = 300000)
     public void testNonHAConnectionNotClosedAfterFailover() throws Exception {
-        String firstUrl = String.format("jdbc:phoenix:%s", CLUSTERS.getUrl1());
+        String firstUrl = String.format("jdbc:phoenix+zk:%s", CLUSTERS.getUrl1());
         // This is a vanilla Phoenix connection without using high availability (HA) feature.
         Connection phoenixConn = DriverManager.getConnection(firstUrl, new Properties());
         Connection failoverConn = createFailoverConnection();
