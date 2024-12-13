@@ -58,6 +58,7 @@ public class BaseScannerRegionObserverConstants {
     public static final String TOPN = "_TopN";
     public static final String UNGROUPED_AGG = "_UngroupedAgg";
     public static final String DELETE_AGG = "_DeleteAgg";
+    public static final String SINGLE_ROW_DELETE = "_SingleRowDelete";
     public static final String UPSERT_SELECT_TABLE = "_UpsertSelectTable";
     public static final String UPSERT_SELECT_EXPRS = "_UpsertSelectExprs";
     public static final String DELETE_CQ = "_DeleteCQ";
