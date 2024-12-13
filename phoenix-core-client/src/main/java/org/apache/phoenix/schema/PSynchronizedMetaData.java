@@ -83,6 +83,17 @@ public class PSynchronizedMetaData implements PMetaData {
     }
 
     @Override
+    public PTableRef getTableRefOptimized(PTableKey key) {
+        readWriteLock.readLock().lock();
+        try {
+            return delegate.getTableRefOptimized(key);
+        }
+        finally {
+            readWriteLock.readLock().unlock();
+        }
+    }
+
+    @Override
     public void updateResolvedTimestamp(PTable table, long resolvedTimestamp) throws SQLException {
         readWriteLock.writeLock().lock();
         try {

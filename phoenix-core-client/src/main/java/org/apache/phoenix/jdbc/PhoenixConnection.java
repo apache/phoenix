@@ -761,13 +761,22 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
     }
 
     public PTable getTable(PTableKey key) throws SQLException {
-        PTable table;
-        try {
-            table = getTableRef(key).getTable();
-        } catch (TableNotFoundException e) {
-            table =  getTableNoCache(key.getName());
+        PTableRef tableRef = getTableRefOptimized(key);
+        if (tableRef == null && key.getTenantId() != null) {
+            tableRef = getTableRefOptimized(new PTableKey(null, key.getName()));
         }
-        return table;
+        if (tableRef == null) {
+            return getTableNoCache(key.getName());
+        }
+        return tableRef.getTable();
+    }
+
+    public PTableRef getTableRefOptimized(PTableKey key) {
+        PTableRef tableRef = getQueryServices().getMetaDataCache().getTableRefOptimized(key);
+        if (tableRef != null && prune(tableRef.getTable())) {
+            return null;
+        }
+        return tableRef;
     }
 
     public PTableRef getTableRef(PTableKey key) throws TableNotFoundException {

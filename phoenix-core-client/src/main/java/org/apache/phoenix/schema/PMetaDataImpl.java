@@ -83,6 +83,19 @@ public class PMetaDataImpl implements PMetaData {
 
     @Override
     public PTableRef getTableRef(PTableKey key) throws TableNotFoundException {
+        return getTableRef(key, false);
+    }
+
+    @Override
+    public PTableRef getTableRefOptimized(PTableKey key) {
+        try {
+            return getTableRef(key, true);
+        } catch (TableNotFoundException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private PTableRef getTableRef(PTableKey key, boolean doNotThrowTableNotFoundException) throws TableNotFoundException {
         if (physicalNameToLogicalTableMap.containsKey(key.getName())) {
             key = physicalNameToLogicalTableMap.get(key.getName());
         }
@@ -90,7 +103,7 @@ public class PMetaDataImpl implements PMetaData {
         if (!key.getName().contains(QueryConstants.SYSTEM_SCHEMA_NAME)) {
             updateGlobalMetric(ref);
         }
-        if (ref == null) {
+        if (ref == null && ! doNotThrowTableNotFoundException) {
             throw new TableNotFoundException(key.getName());
         }
         return ref;

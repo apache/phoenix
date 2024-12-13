@@ -29,6 +29,7 @@ public interface PMetaData extends MetaDataMutated, Iterable<PTable> {
     }
     public int size();
     public PTableRef getTableRef(PTableKey key) throws TableNotFoundException;
+    public PTableRef getTableRefOptimized(PTableKey key);
     public void pruneTables(Pruner pruner);
     public PFunction getFunction(PTableKey key) throws FunctionNotFoundException;
     public void pruneFunctions(Pruner pruner);

@@ -31,6 +31,7 @@ import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TimeKeeper;
+import org.junit.Assert;
 import org.junit.Test;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -39,13 +40,23 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 public class PMetaDataImplTest {
     
     private static void addToTable(PMetaData metaData, String name, int size, TestTimeKeeper timeKeeper) throws SQLException {
-        PTable table = new PSizedTable(new PTableKey(null,name), size);
+        addToTable(metaData, null, name, size, timeKeeper);
+    }
+
+    private static void addToTable(PMetaData metaData, String tenantId, String name, int size, TestTimeKeeper timeKeeper) throws SQLException {
+        PName keyTenantId = tenantId == null ? null : new PNameImpl(tenantId);
+        PTable table = new PSizedTable(new PTableKey(keyTenantId, name), size);
         metaData.addTable(table, System.currentTimeMillis());
         timeKeeper.incrementTime();
     }
     
     private static void removeFromTable(PMetaData metaData, String name, TestTimeKeeper timeKeeper) throws SQLException {
-        metaData.removeTable(null, name, null, HConstants.LATEST_TIMESTAMP);
+        removeFromTable(metaData, null, name, timeKeeper);
+    }
+
+    private static void removeFromTable(PMetaData metaData, String tenantId, String name, TestTimeKeeper timeKeeper) throws SQLException {
+        PName keyTenantId = tenantId == null ? null : new PNameImpl(tenantId);
+        metaData.removeTable(keyTenantId, name, null, HConstants.LATEST_TIMESTAMP);
         timeKeeper.incrementTime();
     }
     
@@ -53,6 +64,13 @@ public class PMetaDataImplTest {
         PTable table = metaData.getTableRef(new PTableKey(null,name)).getTable();
         timeKeeper.incrementTime();
         return table;
+    }
+
+    private static PTableRef getTableRefOptimized(PMetaData metaData, String tenantId, String name, TestTimeKeeper timeKeeper) {
+        PName keyTenantId = tenantId == null ? null : new PNameImpl(tenantId);
+        PTableRef tableRef = metaData.getTableRefOptimized(new PTableKey(keyTenantId, name));
+        timeKeeper.incrementTime();
+        return tableRef;
     }
     
     private static void assertNames(PMetaData metaData, String... names) {
@@ -196,6 +214,37 @@ public class PMetaDataImplTest {
             fail("the schema should be removed");
         } catch (SchemaNotFoundException e) {
         }
+    }
+
+    @Test
+    public void testGetTableRefOptimized() throws Exception {
+        TestTimeKeeper timeKeeper = new TestTimeKeeper();
+        Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
+        props.put(QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB, "10");
+        props.put(QueryServices.CLIENT_CACHE_ENCODING, "object");
+        PMetaData metaData = new PMetaDataImpl(5, Long.MAX_VALUE, timeKeeper,  new ReadOnlyProps(props));
+        String tenantId = "t1";
+        String tableName = "a";
+
+        // Test for PTableRef with null tenant Id
+        addToTable(metaData, null, tableName, 5, timeKeeper);
+        Assert.assertEquals(1, metaData.size());
+        PTableRef tableRef = getTableRefOptimized(metaData, null, tableName, timeKeeper);
+        Assert.assertNotNull(tableRef);
+        removeFromTable(metaData, null, tableName, timeKeeper);
+        Assert.assertEquals(0, metaData.size());
+        tableRef = getTableRefOptimized(metaData, null, tableName, timeKeeper);
+        Assert.assertNull(tableRef);
+
+        // Test for PTableRef with non-null tenant Id
+        addToTable(metaData, tenantId, tableName, 5, timeKeeper);
+        Assert.assertEquals(1, metaData.size());
+        tableRef = getTableRefOptimized(metaData, tenantId, tableName, timeKeeper);
+        Assert.assertNotNull(tableRef);
+        removeFromTable(metaData, tenantId, tableName, timeKeeper);
+        Assert.assertEquals(0, metaData.size());
+        tableRef = getTableRefOptimized(metaData, tenantId, tableName, timeKeeper);
+        Assert.assertNull(tableRef);
     }
 
     private static class PSizedTable extends PTableImpl {
