@@ -217,7 +217,7 @@ public class PMetaDataImplTest {
     }
 
     @Test
-    public void testGetTableRefOptimized() throws Exception {
+    public void testGetTableRefOptimizationForMultiTenancy() throws Exception {
         TestTimeKeeper timeKeeper = new TestTimeKeeper();
         Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
         props.put(QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB, "10");
