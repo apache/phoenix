@@ -66,9 +66,9 @@ public class PMetaDataImplTest {
         return table;
     }
 
-    private static PTableRef getTableRefOptimized(PMetaData metaData, String tenantId, String name, TestTimeKeeper timeKeeper) {
+    private static PTableRef getTableRefNoTNFE(PMetaData metaData, String tenantId, String name, TestTimeKeeper timeKeeper) {
         PName keyTenantId = tenantId == null ? null : new PNameImpl(tenantId);
-        PTableRef tableRef = metaData.getTableRefOptimized(new PTableKey(keyTenantId, name));
+        PTableRef tableRef = metaData.getTableRefNoTNFE(new PTableKey(keyTenantId, name));
         timeKeeper.incrementTime();
         return tableRef;
     }
@@ -229,21 +229,21 @@ public class PMetaDataImplTest {
         // Test for PTableRef with null tenant Id
         addToTable(metaData, null, tableName, 5, timeKeeper);
         Assert.assertEquals(1, metaData.size());
-        PTableRef tableRef = getTableRefOptimized(metaData, null, tableName, timeKeeper);
+        PTableRef tableRef = getTableRefNoTNFE(metaData, null, tableName, timeKeeper);
         Assert.assertNotNull(tableRef);
         removeFromTable(metaData, null, tableName, timeKeeper);
         Assert.assertEquals(0, metaData.size());
-        tableRef = getTableRefOptimized(metaData, null, tableName, timeKeeper);
+        tableRef = getTableRefNoTNFE(metaData, null, tableName, timeKeeper);
         Assert.assertNull(tableRef);
 
         // Test for PTableRef with non-null tenant Id
         addToTable(metaData, tenantId, tableName, 5, timeKeeper);
         Assert.assertEquals(1, metaData.size());
-        tableRef = getTableRefOptimized(metaData, tenantId, tableName, timeKeeper);
+        tableRef = getTableRefNoTNFE(metaData, tenantId, tableName, timeKeeper);
         Assert.assertNotNull(tableRef);
         removeFromTable(metaData, tenantId, tableName, timeKeeper);
         Assert.assertEquals(0, metaData.size());
-        tableRef = getTableRefOptimized(metaData, tenantId, tableName, timeKeeper);
+        tableRef = getTableRefNoTNFE(metaData, tenantId, tableName, timeKeeper);
         Assert.assertNull(tableRef);
     }
 

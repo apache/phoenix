@@ -83,10 +83,10 @@ public class PSynchronizedMetaData implements PMetaData {
     }
 
     @Override
-    public PTableRef getTableRefOptimized(PTableKey key) {
+    public PTableRef getTableRefNoTNFE(PTableKey key) {
         readWriteLock.readLock().lock();
         try {
-            return delegate.getTableRefOptimized(key);
+            return delegate.getTableRefNoTNFE(key);
         }
         finally {
             readWriteLock.readLock().unlock();

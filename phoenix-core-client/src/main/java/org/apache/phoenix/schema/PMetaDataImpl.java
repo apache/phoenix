@@ -87,7 +87,7 @@ public class PMetaDataImpl implements PMetaData {
     }
 
     @Override
-    public PTableRef getTableRefOptimized(PTableKey key) {
+    public PTableRef getTableRefNoTNFE(PTableKey key) {
         try {
             return getTableRef(key, true);
         } catch (TableNotFoundException e) {
