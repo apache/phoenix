@@ -100,6 +100,7 @@ public class LiteralResultIterationPlan extends BaseQueryPlan {
             @Override
             public void close() throws SQLException {
                 SQLCloseables.closeAll(caches.values());
+                caches.clear();
                 this.closed = true;
             }
 
