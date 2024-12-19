@@ -226,6 +226,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
         }
         if (firstException != null) {
             SQLCloseables.closeAllQuietly(dependencies.values());
+            dependencies.clear();
             throw firstException;
         }
 

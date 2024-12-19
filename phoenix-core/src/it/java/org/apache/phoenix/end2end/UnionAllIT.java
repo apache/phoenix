@@ -766,6 +766,105 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testBug7492() throws Exception {
+
+        String accountTableDDL = "CREATE TABLE ACCOUNT (\n" +
+                "ACCOUNT_IDENTIFIER VARCHAR(100) NOT NULL,\n" +
+                "CRN_NUMBER_TEXT VARCHAR(100),\n" +
+                "ORIGINAL_CURRENCY_CODE VARCHAR(100),\n" +
+                "OUTSTANDING_BALANCE_AMOUNT DECIMAL(20,4),\n" +
+                "SOURCE_SYSTEM_CODE VARCHAR(6) NOT NULL,\n" +
+                "ACCOUNT_TYPE_CODE VARCHAR(100)\n" +
+                "CONSTRAINT pk PRIMARY KEY (ACCOUNT_IDENTIFIER, SOURCE_SYSTEM_CODE)\n" +
+                ") SALT_BUCKET=4";
+        String exchangeTableDDL = "CREATE TABLE EXCHANGE_RATE (\n" +
+                "CURRENCY_CODE VARCHAR(3) NOT NULL,\n" +
+                "SPOT_RATE DECIMAL(15,9),\n" +
+                "EXPANDED_SPOT_RATE DECIMAL(19,9),\n" +
+                "RECORD_LAST_UPDATE_DATE TIMESTAMP\n" +
+                "CONSTRAINT pk PRIMARY KEY (CURRENCY_CODE)\n" +
+                ")SALT_BUCKETS=4";
+        String customerTableDDL = "CREATE TABLE CUSTOMER (\n" +
+                "CUSTOMER_IDENTIFIER VARCHAR(100),\n" +
+                "SOURCE_SYSTEM_CODE VARCHAR(100) NOT NULL,\n" +
+                "CRN_NUMBER_TEXT VARCHAR(100),\n" +
+                "CONSTRAINT pk PRIMARY KEY (CUSTOMER_IDENTIFIER, SOURCE_SYSTEM_CODE)\n" +
+                ") SALT_BUCKETS=4";
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+
+        try {
+            createTestTable(getUrl(), accountTableDDL);
+            createTestTable(getUrl(), exchangeTableDDL);
+            createTestTable(getUrl(), customerTableDDL);
+
+            String dml = "UPSERT INTO ACCOUNT VALUES ('ACC_1', 'CRN_1', 'IDR', 999, 'SRC_1', 'ATC_1')";
+            conn.prepareStatement(dml).execute();
+
+            dml = "UPSERT INTO EXCHANGE_RATE VALUES ('IDR', 0.53233436, 0.198919644, '2024-07-03')";
+            conn.prepareStatement(dml).execute();
+
+            dml = "UPSERT INTO CUSTOMER VALUES ('CUST_1', 'SRC_1','CRN_1')";
+            conn.prepareStatement(dml).execute();
+
+            conn.commit();
+
+            String query = "select * from CUSTOMER";
+
+            PreparedStatement pstmt = conn.prepareStatement(query);
+            assertTrue(pstmt.getParameterMetaData() != null);
+            ResultSet rs = pstmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("CUST_1",rs.getString(1));
+            assertEquals("SRC_1",rs.getString(2));
+            assertEquals("CRN_1",rs.getString(3));
+            assertFalse(rs.next());
+
+            query = "SELECT\n" +
+                    "    ca1.ORIGINAL_CURRENCY_CODE AS ORIGINAL_CURRENCY_CODE\n" +
+                    "FROM\n" +
+                    "    ACCOUNT ca1\n" +
+                    "LEFT JOIN EXCHANGE_RATE er1 ON\n" +
+                    "    ca1.ORIGINAL_CURRENCY_CODE = er1.CURRENCY_CODE\n" +
+                    "WHERE\n" +
+                    "    (ca1.ACCOUNT_IDENTIFIER,\n" +
+                    "    ca1.SOURCE_SYSTEM_CODE) IN (\n" +
+                    "    SELECT\n" +
+                    "        ca.ACCOUNT_IDENTIFIER,\n" +
+                    "        ca.SOURCE_SYSTEM_CODE\n" +
+                    "    FROM\n" +
+                    "        ACCOUNT ca\n" +
+                    "    WHERE\n" +
+                    "        ca.CRN_NUMBER_TEXT IN (\n" +
+                    "        SELECT\n" +
+                    "            CRN_NUMBER_TEXT\n" +
+                    "        FROM\n" +
+                    "            CUSTOMER\n" +
+                    "        WHERE\n" +
+                    "            CUSTOMER_IDENTIFIER = 'CUST_2'\n" +
+                    "        AND SOURCE_SYSTEM_CODE='SRC_1'))\n" +
+                    "AND ca1.ACCOUNT_TYPE_CODE IN ('ATC_1')\n" +
+                    "UNION ALL\n" +
+                    "SELECT\n" +
+                    "    ca1.ORIGINAL_CURRENCY_CODE AS ORIGINAL_CURRENCY_CODE\n" +
+                    "FROM\n" +
+                    "    ACCOUNT ca1\n" +
+                    "WHERE\n" +
+                    "    ca1.ACCOUNT_TYPE_CODE IN ('ATC_1')";
+            pstmt = conn.prepareStatement(query);
+            assertTrue(pstmt.getParameterMetaData() != null);
+            rs = pstmt.executeQuery();
+
+            assertTrue(rs.next());
+
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
     public void testParameterMetaDataNotNull() throws Exception {
         String tableName1 = generateUniqueName();
         String tableName2 = generateUniqueName();
