@@ -74,6 +74,7 @@ public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
             .put(TaskType.DROP_CHILD_VIEWS, "org.apache.phoenix.coprocessor.tasks.DropChildViewsTask")
             .put(TaskType.INDEX_REBUILD, "org.apache.phoenix.coprocessor.tasks.IndexRebuildTask")
             .put(TaskType.TRANSFORM_MONITOR, "org.apache.phoenix.coprocessor.tasks.TransformMonitorTask")
+            .put(TaskType.CDC_STREAM_PARTITION, "org.apache.phoenix.coprocessor.tasks.CdcStreamPartitionMetadataTask")
             .build();
 
     public enum TaskResultCode {

@@ -35,10 +35,14 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.bson.RawBsonDocument;
 
 public class CDCUtil {
     public static final String CDC_INDEX_PREFIX = "PHOENIX_CDC_INDEX_";
+
+    // phoenix-cdc-stream-{tableName}-{cdc object name}-{cdc index timestamp}
+    public static String CDC_STREAM_NAME_FORMAT = "phoenix-cdc-stream-%s-%s-%d";
 
     /**
      * Make a set of CDC change scope enums from the given string containing comma separated scope
@@ -149,5 +153,31 @@ public class CDCUtil {
                 || sqlType == Types.VARBINARY
                 || sqlType == Types.LONGVARBINARY
                 || dataType.getSqlType() == PDataType.VARBINARY_ENCODED_TYPE);
+    }
+
+    public enum CdcStreamStatus {
+        ENABLED("ENABLED"),
+        ENABLING("ENABLING"),
+        DISABLED("DISABLED"),
+        DISABLING("DISABLING");
+
+        private final String serializedValue;
+
+        private CdcStreamStatus(String value) {
+            this.serializedValue = value;
+        }
+
+        public String getSerializedValue() {
+            return serializedValue;
+        }
+    }
+
+    public static long getCDCCreationTimestamp(PTable table) {
+        for (PTable index : table.getIndexes()) {
+            if (CDCUtil.isCDCIndex(index)) {
+                return index.getTimeStamp();
+            }
+        }
+        return -1;
     }
 }

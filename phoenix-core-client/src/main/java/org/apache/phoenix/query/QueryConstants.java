@@ -655,11 +655,11 @@ public interface QueryConstants {
             SYSTEM_CDC_STREAM_STATUS_TABLE + "\"(\n" +
             // PK columns
             TABLE_NAME + " VARCHAR NOT NULL," +
-            STREAM_STATUS + " VARCHAR NOT NULL," +
+            STREAM_NAME + " VARCHAR NOT NULL," +
             // Non-PK columns
-            STREAM_NAME + " VARCHAR,\n" +
+            STREAM_STATUS + " VARCHAR,\n" +
             "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" +
-            TABLE_NAME + "," + STREAM_STATUS + "))\n" +
+            TABLE_NAME + "," + STREAM_NAME + "))\n" +
             HConstants.VERSIONS + "=%s,\n" +
             ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" +
             TRANSACTIONAL + "=" + Boolean.FALSE;

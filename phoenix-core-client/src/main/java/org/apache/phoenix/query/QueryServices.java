@@ -533,6 +533,8 @@ public interface QueryServices extends SQLCloseable {
 
     long DEFAULT_PHOENIX_METADATA_CACHE_UPDATE_ROWLOCK_TIMEOUT = 60000;
 
+    String PHOENIX_STREAMS_GET_TABLE_REGIONS_TIMEOUT = "phoenix.streams.get.table.regions.timeout";
+
     /**
      * Get executor service used for parallel scans
      */
