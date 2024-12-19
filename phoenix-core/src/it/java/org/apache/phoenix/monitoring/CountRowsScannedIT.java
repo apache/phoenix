@@ -22,19 +22,17 @@ import static org.junit.Assert.assertEquals;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Map;
 
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -301,32 +299,6 @@ public class CountRowsScannedIT extends BaseTest {
     }
 
     private long countRowsScannedFromSql(Statement stmt, String sql) throws SQLException {
-        ResultSet rs = stmt.executeQuery(sql);
-        while (rs.next()) {
-            // loop to the end
-        }
-        return getRowsScanned(rs);
-    }
-
-    private long getRowsScanned(ResultSet rs) throws SQLException {
-        if (!(rs instanceof PhoenixResultSet)) {
-            return -1;
-        }
-        Map<String, Map<MetricType, Long>> metrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
-
-        long sum = 0;
-        boolean valid = false;
-        for (Map.Entry<String, Map<MetricType, Long>> entry : metrics.entrySet()) {
-            Long val = entry.getValue().get(MetricType.COUNT_ROWS_SCANNED);
-            if (val != null) {
-                sum += val.longValue();
-                valid = true;
-            }
-        }
-        if (valid) {
-            return sum;
-        } else {
-            return -1;
-        }
+        return TestUtil.getMetricFromSql(stmt, sql, MetricType.COUNT_ROWS_SCANNED);
     }
 }
