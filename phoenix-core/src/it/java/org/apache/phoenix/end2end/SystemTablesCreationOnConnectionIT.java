@@ -112,12 +112,12 @@ public class SystemTablesCreationOnConnectionIT {
     private static final Set<String> PHOENIX_SYSTEM_TABLES = new HashSet<>(Arrays.asList(
             "SYSTEM.CATALOG", "SYSTEM.SEQUENCE", "SYSTEM.STATS", "SYSTEM.FUNCTION",
             "SYSTEM.MUTEX", "SYSTEM.LOG", "SYSTEM.CHILD_LINK", "SYSTEM.TASK","SYSTEM.TRANSFORM",
-            "SYSTEM.CDC_STREAM_STATUS", "SYSTEM.CDC_STREAM"));
+            "SYSTEM.CDC_STREAM_STATUS", "SYSTEM.CDC_STREAM", "SYSTEM.PHOENIX_INDEX_TOOL_RESULT", "SYSTEM.PHOENIX_INDEX_TOOL"));
 
     private static final Set<String> PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES = new HashSet<>(
             Arrays.asList("SYSTEM:CATALOG", "SYSTEM:SEQUENCE", "SYSTEM:STATS", "SYSTEM:FUNCTION",
                     "SYSTEM:MUTEX", "SYSTEM:LOG", "SYSTEM:CHILD_LINK", "SYSTEM:TASK", "SYSTEM:TRANSFORM",
-                    "SYSTEM:CDC_STREAM_STATUS", "SYSTEM:CDC_STREAM"));
+                    "SYSTEM:CDC_STREAM_STATUS", "SYSTEM:CDC_STREAM", "SYSTEM:PHOENIX_INDEX_TOOL_RESULT", "SYSTEM:PHOENIX_INDEX_TOOL"));
 
     private static class PhoenixSysCatCreationServices extends ConnectionQueryServicesImpl {
 
@@ -357,6 +357,7 @@ public class SystemTablesCreationOnConnectionIT {
         assertEquals(PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES, hbaseTables);
         assertEquals(1, countUpgradeAttempts);
         assertEquals(1, actualSysCatUpgrades);
+        // todo this still fails
     }
 
     // Conditions: server-side namespace mapping is enabled, the first connection to the server will
