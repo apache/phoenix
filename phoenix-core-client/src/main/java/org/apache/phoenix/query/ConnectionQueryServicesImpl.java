@@ -323,6 +323,8 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
+import org.apache.phoenix.mapreduce.index.IndexToolTableUtil;
+
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
     private static final Logger LOGGER =
             LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
@@ -3844,6 +3846,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     LOGGER.error("Upgrade is required. Must run 'EXECUTE UPGRADE' "
                                             + "before any other command");
                                 }
+                                try {
+                                    // check if we have old PHOENIX_INDEX_TOOL tables
+                                    // move data to the new tables under System, or simply create the new tables
+                                    IndexToolTableUtil.createNewIndexToolTables(metaConnection);
+
+                                } catch (Exception ignore) {}
                             }
                             success = true;
                         } catch (RetriableUpgradeException e) {
