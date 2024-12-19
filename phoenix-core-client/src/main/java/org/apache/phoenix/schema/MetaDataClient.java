@@ -2079,7 +2079,7 @@ public class MetaDataClient {
                             schemaNameBytes,
                             viewOrTableName,
                             HConstants.LATEST_TIMESTAMP,
-                            false);
+                            false,false);
             List<PTable> legitimateChildViews = descViews.getFirst();
             int dataTableOrViewPkCols = tableOrView.getPKColumns().size();
             if (legitimateChildViews != null && legitimateChildViews.size() > 0) {
