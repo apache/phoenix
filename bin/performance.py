@@ -65,7 +65,9 @@ phoenix_utils.setPath()
 
 java_cmd = phoenix_utils.java
 
-execute = ('%s %s $PHOENIX_OPTS -cp "%s%s%s%s%s"-Dlog4j2.configurationFile=file:' +
+execute = ('%s %s $PHOENIX_OPTS -cp "%s%s%s%s%s"' +
+           ' -Djava.util.logging.config.class=org.apache.hadoop.hbase.logging.JulToSlf4jInitializer ' +
+           ' -Dlog4j2.configurationFile=file:' +
            os.path.join(phoenix_utils.current_dir, "log4j2.properties") +
            ' org.apache.phoenix.util.PhoenixRuntime -t %s %s ') % \
     (java_cmd, phoenix_utils.jvm_module_flags, hbase_config_path, os.pathsep,
