@@ -80,7 +80,6 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ProjectedColumn;
@@ -863,7 +862,9 @@ public class JoinCompiler {
                  * The columns are pruned, so {@link ColumnResolver} should be refreshed.
                  */
                 DerivedTableNode newDerivedTableNode =
-                        NODE_FACTORY.derivedTable(this.tableNode.getAlias(), newSubselectStatement);
+                        NODE_FACTORY.derivedTable(SchemaUtil.ESCAPE_CHARACTER
+                                + this.tableNode.getAlias()
+                                + SchemaUtil.ESCAPE_CHARACTER, newSubselectStatement);
                 TableRef newTableRef =
                         FromCompiler.refreshDerivedTableNode(origResolver, newDerivedTableNode);
                 assert newTableRef != null;
