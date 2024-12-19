@@ -219,6 +219,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
 					super.close();
 				} finally {
 					SQLCloseables.closeAll(dependencies.values());
+					dependencies.clear();
 				}
 			}
 		};
