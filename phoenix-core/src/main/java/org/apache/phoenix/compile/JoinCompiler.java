@@ -865,7 +865,9 @@ public class JoinCompiler {
                  * The columns are pruned, so {@link ColumnResolver} should be refreshed.
                  */
                 DerivedTableNode newDerivedTableNode =
-                        NODE_FACTORY.derivedTable(this.tableNode.getAlias(), newSubselectStatement);
+                        NODE_FACTORY.derivedTable(SchemaUtil.ESCAPE_CHARACTER
+                                + this.tableNode.getAlias()
+                                + SchemaUtil.ESCAPE_CHARACTER, newSubselectStatement);
                 TableRef newTableRef =
                         FromCompiler.refreshDerivedTableNode(origResolver, newDerivedTableNode);
                 assert newTableRef != null;
