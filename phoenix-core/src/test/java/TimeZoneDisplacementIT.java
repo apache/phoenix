@@ -33,6 +33,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -294,6 +295,52 @@ public class TimeZoneDisplacementIT extends ParallelStatsEnabledIT {
             assertEquals(DateUtil.getDateFormatter(DateUtil.DEFAULT_DATE_FORMAT)
                     .format(DateUtil.applyInputDisplacement(nowDate, tz)),
                 rs.getString("ROWTS"));
+        }
+    }
+
+    @Test
+    public void testGetObjectWithNullValue() throws Exception {
+        String tableName = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.put(QueryServices.APPLY_TIME_ZONE_DISPLACMENT_ATTRIB, Boolean.TRUE.toString());
+        try (PhoenixConnection conn =
+                     (PhoenixConnection) DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("CREATE TABLE " + tableName +
+                        " (ID INTEGER PRIMARY KEY, D1 DATE)");
+            }
+
+            String dateString = "2025-01-01 10:00:00";
+            try (PreparedStatement insertPstmt = conn.prepareStatement("UPSERT INTO " + tableName +
+                    " (ID, D1) values" + " (?, ?) ")) {
+                insertPstmt.setInt(1, 1);
+                insertPstmt.setString(2, dateString);
+                insertPstmt.executeUpdate();
+
+                insertPstmt.setInt(1, 2);
+                insertPstmt.setString(2, null);
+                insertPstmt.executeUpdate();
+            }
+
+            PreparedStatement queryPstmt = conn.prepareStatement("SELECT * FROM "
+                    + tableName + " WHERE ID = ?");
+            ResultSet resultSet;
+            try {
+                queryPstmt.setInt(1, 1);
+                resultSet = queryPstmt.executeQuery();
+                Assert.assertTrue(resultSet.next());
+                Assert.assertNotNull(resultSet.getObject("D1"));
+
+                queryPstmt.setInt(1, 2);
+                resultSet = queryPstmt.executeQuery();
+                Assert.assertTrue(resultSet.next());
+                Assert.assertNull(resultSet.getObject("D1"));
+            } finally {
+                if (queryPstmt != null) {
+                    queryPstmt.close();
+                }
+            }
         }
     }
 }
