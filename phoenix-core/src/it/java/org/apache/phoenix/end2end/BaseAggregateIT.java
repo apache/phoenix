@@ -440,6 +440,8 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
             explainPlanAttributes.getServerWhereFilter());
         assertEquals("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]",
             explainPlanAttributes.getServerAggregate());
+        assertFalse("Explain plan regionLocation attribute should not be empty",
+            explainPlanAttributes.getRegionLocations().isEmpty());
     }
     
     @Test
@@ -501,6 +503,8 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
             explainPlanAttributes.getServerWhereFilter());
         assertEquals("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]",
             explainPlanAttributes.getServerAggregate());
+        assertFalse("Explain plan regionLocation attribute should not be empty",
+            explainPlanAttributes.getRegionLocations().isEmpty());
     }
 
     @Test
@@ -572,6 +576,8 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
         List<KeyRange> splits = TestUtil.getAllSplits(conn, tableName);
         // nGuideposts when stats are enabled, 4 when disabled
         assertEquals(4, splits.size());
+        assertFalse("Explain plan regionLocation attribute should not be empty",
+            explainPlanAttributes.getRegionLocations().isEmpty());
     }
     
     @Test
