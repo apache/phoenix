@@ -47,6 +47,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_STATUS_NAME;
 import static org.apache.phoenix.util.CDCUtil.CDC_STREAM_NAME_FORMAT;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 @Category(ParallelStatsDisabledTest.class)
 public class CDCStreamIT extends CDCBaseIT {
@@ -116,7 +117,8 @@ public class CDCStreamIT extends CDCBaseIT {
             Assert.fail("Only one CDC entity is allowed per table");
         } catch (SQLException e) {
             // expected
-            assertEquals(SQLExceptionCode.CDC_STREAM_ALREADY_ENABLED.getErrorCode(), e.getErrorCode());
+            assertEquals(SQLExceptionCode.CDC_ALREADY_ENABLED.getErrorCode(), e.getErrorCode());
+            assertTrue(e.getMessage().contains(streamName));
         }
 
         // run task to populate partitions and enable stream
@@ -131,7 +133,8 @@ public class CDCStreamIT extends CDCBaseIT {
             Assert.fail("Only one CDC entity is allowed per table");
         } catch (SQLException e) {
             // expected
-            assertEquals(SQLExceptionCode.CDC_STREAM_ALREADY_ENABLED.getErrorCode(), e.getErrorCode());
+            assertEquals(SQLExceptionCode.CDC_ALREADY_ENABLED.getErrorCode(), e.getErrorCode());
+            assertTrue(e.getMessage().contains(streamName));
         }
 
         //drop cdc
@@ -156,7 +159,7 @@ public class CDCStreamIT extends CDCBaseIT {
         ResultSet rs = conn.createStatement().executeQuery("SELECT STREAM_STATUS FROM "
                 + SYSTEM_CDC_STREAM_STATUS_NAME + " WHERE TABLE_NAME='" + tableName +
                 "' AND STREAM_NAME='" + streamName + "'");
-        Assert.assertTrue(rs.next());
+        assertTrue(rs.next());
         Assert.assertEquals(status.getSerializedValue(), rs.getString(1));
     }
 
@@ -174,7 +177,7 @@ public class CDCStreamIT extends CDCBaseIT {
             ps.setString(2, streamName);
             ps.setString(3, ri.getEncodedName());
             ResultSet rs = ps.executeQuery();
-            Assert.assertTrue(rs.next());
+            assertTrue(rs.next());
         }
     }
 }

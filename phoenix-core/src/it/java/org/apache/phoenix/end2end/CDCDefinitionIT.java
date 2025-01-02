@@ -35,12 +35,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 
-import static org.apache.phoenix.schema.PTable.CDCChangeScope.POST;
-import static org.apache.phoenix.schema.PTable.CDCChangeScope.PRE;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -101,7 +98,7 @@ public class CDCDefinitionIT extends CDCBaseIT {
                 assertTrue(e.getMessage().endsWith(cdcName));
             } else {
                 // we only support Streams for tables as of now
-                assertEquals(SQLExceptionCode.CDC_STREAM_ALREADY_ENABLED.getErrorCode(), e.getErrorCode());
+                assertEquals(SQLExceptionCode.CDC_ALREADY_ENABLED.getErrorCode(), e.getErrorCode());
             }
         }
 
@@ -111,7 +108,7 @@ public class CDCDefinitionIT extends CDCBaseIT {
         } catch (SQLException e) {
             // when we replace CREATE CDC with ENABLE CDC, we will not have IF NOT EXISTS usage
             if (!forView) {
-                assertEquals(SQLExceptionCode.CDC_STREAM_ALREADY_ENABLED.getErrorCode(), e.getErrorCode());
+                assertEquals(SQLExceptionCode.CDC_ALREADY_ENABLED.getErrorCode(), e.getErrorCode());
             }
         }
 
@@ -121,7 +118,7 @@ public class CDCDefinitionIT extends CDCBaseIT {
             createCDC(conn, cdc_sql);
         } catch (SQLException e) {
             if (!forView) {
-                assertEquals(SQLExceptionCode.CDC_STREAM_ALREADY_ENABLED.getErrorCode(), e.getErrorCode());
+                assertEquals(SQLExceptionCode.CDC_ALREADY_ENABLED.getErrorCode(), e.getErrorCode());
             } else {
                 Assert.fail("Multiple CDCs should be allowed on views.");
             }

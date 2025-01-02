@@ -88,7 +88,7 @@ public class CdcStreamPartitionMetadataTask extends BaseTask  {
                         .setStartTs(taskRecord.getTimeStamp())
                         .setEndTs(null)
                         .build());
-                LOGGER.error("Marking task as RETRY. " +
+                LOGGER.warn("Marking task as RETRY. " +
                         "SQLException while bootstrapping CDC Stream Partition Metadata for "
                         + taskRecord.getTableName() + " and timestamp " + timestamp.toString(), e);
                 return null;

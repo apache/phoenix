@@ -18,7 +18,7 @@
 package org.apache.phoenix.schema;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_TRANSACTIONAL_TABLE;
-import static org.apache.phoenix.exception.SQLExceptionCode.CDC_STREAM_ALREADY_ENABLED;
+import static org.apache.phoenix.exception.SQLExceptionCode.CDC_ALREADY_ENABLED;
 import static org.apache.phoenix.exception.SQLExceptionCode.ERROR_WRITING_TO_SCHEMA_REGISTRY;
 import static org.apache.phoenix.exception.SQLExceptionCode.SALTING_NOT_ALLOWED_FOR_CDC;
 import static org.apache.phoenix.exception.SQLExceptionCode.TABLE_ALREADY_EXIST;
@@ -1970,9 +1970,11 @@ public class MetaDataClient {
                         statement.getDataTable().getTableName());
         String cdcObjName = statement.getCdcObjName().getName();
 
-        if (isStreamEnabled(dataTableFullName)) {
-            throw new SQLExceptionInfo.Builder(CDC_STREAM_ALREADY_ENABLED).setTableName(
-                    dataTableFullName).build().buildException();
+        // if CDC was already enabled, throw SQLException with the Stream Name
+        String streamName = getStreamNameIfCDCEnabled(dataTableFullName);
+        if (streamName != null) {
+            throw new SQLExceptionInfo.Builder(CDC_ALREADY_ENABLED).setTableName(streamName)
+                    .build().buildException();
         }
         Map<String, Object> tableProps = Maps.newHashMapWithExpectedSize(
                 statement.getProps().size());
@@ -2100,7 +2102,7 @@ public class MetaDataClient {
         }
     }
 
-    private boolean isStreamEnabled(String tableName) throws SQLException {
+    private String getStreamNameIfCDCEnabled(String tableName) throws SQLException {
         // check if a stream is already enabled for this table
         String query = "SELECT STREAM_NAME FROM " + SYSTEM_CDC_STREAM_STATUS_NAME
                 + " WHERE TABLE_NAME = ? AND STREAM_STATUS IN (?, ?)";
@@ -2109,8 +2111,11 @@ public class MetaDataClient {
             ps.setString(2, CDCUtil.CdcStreamStatus.ENABLING.getSerializedValue());
             ps.setString(3, CDCUtil.CdcStreamStatus.ENABLED.getSerializedValue());
             ResultSet rs = ps.executeQuery();
-            return rs.next();
+            if (rs.next()) {
+               return rs.getString(1);
+            }
         }
+        return null;
     }
 
     /**

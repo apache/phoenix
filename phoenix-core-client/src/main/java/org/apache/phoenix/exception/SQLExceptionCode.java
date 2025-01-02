@@ -383,8 +383,8 @@ public enum SQLExceptionCode {
     SALTING_NOT_ALLOWED_FOR_CDC(10962,"44A44", SALT_BUCKETS +
             " property can not be set for CDC"),
 
-    CDC_STREAM_ALREADY_ENABLED(10963, "44A45",
-            "CDC Stream is either enabled or is in the process of being enabled."),
+    CDC_ALREADY_ENABLED(10963, "44A45",
+            "CDC on this table is either enabled or is in the process of being enabled."),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {
