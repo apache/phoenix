@@ -154,7 +154,6 @@ import org.apache.hadoop.hbase.TableNotEnabledException;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Append;
 import org.apache.hadoop.hbase.client.CheckAndMutate;
-import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Connection;
@@ -771,7 +770,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     @Override
     public void clearTableRegionCache(TableName tableName) throws SQLException {
-        ((ClusterConnection)connection).clearRegionCache(tableName);
+        try {
+            connection.getRegionLocator(tableName).clearRegionLocationCache();
+        } catch (IOException e) {
+            LOGGER.info("Exception while clearing table region cache", e);
+            //TODO allow passing cause to TableNotFoundException
+            throw new TableNotFoundException(tableName.toString());
+        }
     }
 
     public byte[] getNextRegionStartKey(HRegionLocation regionLocation, byte[] currentKey,
@@ -875,8 +880,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 currentKey = startRowKey;
                 do {
                     HRegionLocation regionLocation =
-                        ((ClusterConnection) connection).getRegionLocation(table,
-                            currentKey, false);
+                            connection.getRegionLocator(table).getRegionLocation(currentKey, false);
                     currentKey =
                         getNextRegionStartKey(regionLocation, currentKey, prevRegionLocation);
                     locations.add(regionLocation);
@@ -2179,8 +2183,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             long startTime = EnvironmentEdgeManager.currentTimeMillis();
             while (true) {
                 if (retried) {
-                    ((ClusterConnection) connection).relocateRegion(
-                        SchemaUtil.getPhysicalName(systemTableName, this.getProps()), tableKey);
+                    connection.getRegionLocator(SchemaUtil.getPhysicalName(
+                            systemTableName, this.getProps()))
+                        .getRegionLocation(tableKey, true);
                 }
 
                 Table ht = this.getTable(SchemaUtil.getPhysicalName(systemTableName, this.getProps()).getName());
