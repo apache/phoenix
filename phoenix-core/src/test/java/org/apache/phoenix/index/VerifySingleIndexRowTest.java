@@ -112,21 +112,6 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
         INVALID_COLUMN
     }
 
-    public static class UnitTestClock extends EnvironmentEdge {
-        long initialTime;
-        long delta;
-
-        public UnitTestClock(long delta) {
-            initialTime = System.currentTimeMillis() + delta;
-            this.delta = delta;
-        }
-
-        @Override
-        public long currentTime() {
-            return System.currentTimeMillis() + delta;
-        }
-    }
-
     @Mock
     Result indexRow;
     @Mock
@@ -754,7 +739,7 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
 
     private void expireThisRow() {
         rebuildScanner.setIndexTableTTL(INDEX_TABLE_EXPIRY_SEC);
-        UnitTestClock expiryClock = new UnitTestClock(5000);
+        TestClock expiryClock = new TestClock(System.currentTimeMillis(), 5000, false);
         EnvironmentEdgeManager.injectEdge(expiryClock);
     }
 
