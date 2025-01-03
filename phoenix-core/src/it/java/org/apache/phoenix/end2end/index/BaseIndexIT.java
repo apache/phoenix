@@ -184,6 +184,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                 assertEquals("FULL SCAN ",
                     explainPlanAttributes.getExplainScanType());
             }
+            assertFalse("Explain plan regionLocation attribute should not be empty",
+                explainPlanAttributes.getRegionLocations().isEmpty());
 
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -613,6 +615,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                     explainPlanAttributes.getTableName());
                 assertNull(explainPlanAttributes.getClientSortAlgo());
             }
+            assertFalse("Explain plan regionLocation attribute should not be empty",
+                explainPlanAttributes.getRegionLocations().isEmpty());
 
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -720,6 +724,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                     explainPlanAttributes.getTableName());
                 assertNull(explainPlanAttributes.getClientSortAlgo());
             }
+            assertFalse("Explain plan regionLocation attribute should not be empty",
+                explainPlanAttributes.getRegionLocations().isEmpty());
 
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
