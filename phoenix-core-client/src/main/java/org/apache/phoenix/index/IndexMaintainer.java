@@ -1074,6 +1074,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             return true;
         }
         List<Cell> cols = IndexUtil.readColumnsFromRow(dataRowState, getIndexWhereColumns());
+        if (cols.isEmpty()) {
+            return false;
+        }
         // Cells should be sorted as they are searched using a binary search during expression
         // evaluation
         Collections.sort(cols, CellComparator.getInstance());

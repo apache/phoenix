@@ -100,7 +100,12 @@ public class CreateTableStatement extends MutableStatement {
                                    Map<String, Integer> familyCounters, boolean noVerify) {
         this.tableName = tableName;
         this.props = props == null ? ImmutableListMultimap.<String,Pair<String,Object>>of() : props;
-        this.tableType = PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(tableName.getSchemaName()) ? PTableType.SYSTEM : tableType;
+        this.tableType =
+                (PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(
+                        tableName.getSchemaName()) &&
+                        (tableType == PTableType.TABLE || tableType == PTableType.SYSTEM) ?
+                        PTableType.SYSTEM :
+                        tableType);
         this.columns = columns == null ? ImmutableList.<ColumnDef>of() : ImmutableList.<ColumnDef>copyOf(columns);
         this.pkConstraint = pkConstraint == null ? PrimaryKeyConstraint.EMPTY : pkConstraint;
         this.splitNodes = splitNodes == null ? Collections.<ParseNode>emptyList() : ImmutableList.copyOf(splitNodes);
