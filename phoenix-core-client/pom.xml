@@ -152,6 +152,10 @@
             <configuration>
               <artifactItems>
                 <artifactItem>
+                  <groupId>org.slf4j</groupId>
+                  <artifactId>jul-to-slf4j</artifactId>
+                </artifactItem>
+                <artifactItem>
                   <groupId>org.apache.logging.log4j</groupId>
                   <artifactId>log4j-api</artifactId>
                 </artifactItem>

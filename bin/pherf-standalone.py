@@ -38,7 +38,8 @@ java_cmd = phoenix_utils.java + ' ' + phoenix_utils.jvm_module_flags + \
     phoenix_utils.logging_jar + os.pathsep + \
     phoenix_utils.phoenix_client_embedded_jar + os.pathsep +\
     phoenix_utils.phoenix_pherf_jar + \
-    '" -Dlog4j2.configurationFile=file:' + \
+    '" -Djava.util.logging.config.class=org.apache.hadoop.hbase.logging.JulToSlf4jInitializer ' +\
+    ' -Dlog4j2.configurationFile=file:' + \
     os.path.join(phoenix_utils.current_dir, "log4j2.properties") + \
     " org.apache.phoenix.pherf.Pherf " + args 
 
