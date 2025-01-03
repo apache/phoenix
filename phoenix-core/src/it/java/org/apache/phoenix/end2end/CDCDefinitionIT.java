@@ -23,6 +23,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -34,12 +35,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 
-import static org.apache.phoenix.schema.PTable.CDCChangeScope.POST;
-import static org.apache.phoenix.schema.PTable.CDCChangeScope.PRE;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -95,20 +93,37 @@ public class CDCDefinitionIT extends CDCBaseIT {
             conn.createStatement().execute(cdc_sql);
             fail("Expected to fail due to duplicate index");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.TABLE_ALREADY_EXIST.getErrorCode(), e.getErrorCode());
-            assertTrue(e.getMessage().endsWith(cdcName));
+            if (forView) {
+                assertEquals(SQLExceptionCode.TABLE_ALREADY_EXIST.getErrorCode(), e.getErrorCode());
+                assertTrue(e.getMessage().endsWith(cdcName));
+            } else {
+                // we only support Streams for tables as of now
+                assertEquals(SQLExceptionCode.CDC_ALREADY_ENABLED.getErrorCode(), e.getErrorCode());
+            }
         }
 
-        conn.createStatement().execute("CREATE CDC IF NOT EXISTS " + cdcName + " ON " + tableName +
-                " INCLUDE (pre, post)");
+        try {
+            conn.createStatement().execute("CREATE CDC IF NOT EXISTS " + cdcName + " ON " + tableName +
+                    " INCLUDE (pre, post)");
+        } catch (SQLException e) {
+            // when we replace CREATE CDC with ENABLE CDC, we will not have IF NOT EXISTS usage
+            if (!forView) {
+                assertEquals(SQLExceptionCode.CDC_ALREADY_ENABLED.getErrorCode(), e.getErrorCode());
+            }
+        }
 
         cdcName = generateUniqueName();
         cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName + " INCLUDE (pre, post)";
-        createCDC(conn, cdc_sql);
-        assertCDCState(conn, cdcName, PRE+","+POST, 3);
-        assertPTable(cdcName, new HashSet<>(
-                Arrays.asList(PRE, POST)), tableName, datatableName);
-        assertNoResults(conn, cdcName);
+        try {
+            createCDC(conn, cdc_sql);
+        } catch (SQLException e) {
+            if (!forView) {
+                assertEquals(SQLExceptionCode.CDC_ALREADY_ENABLED.getErrorCode(), e.getErrorCode());
+            } else {
+                Assert.fail("Multiple CDCs should be allowed on views.");
+            }
+        }
+
 
         conn.close();
     }
