@@ -113,7 +113,7 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
                 regionInfoA.getStartKey() : regionInfoB.getStartKey();
 
         byte[] inferredParentEndKey = (regionInfoB.getEndKey().length == 0 || regionInfoA.getEndKey().length == 0)
-                ? regionInfoB.getEndKey()
+                ? new byte[0]
                 : Bytes.compareTo(regionInfoA.getEndKey(), regionInfoB.getEndKey()) < 0
                     ? regionInfoB.getEndKey()
                     : regionInfoA.getEndKey();
