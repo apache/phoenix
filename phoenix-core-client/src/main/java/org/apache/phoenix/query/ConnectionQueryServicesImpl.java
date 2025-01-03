@@ -323,6 +323,8 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
+import org.apache.phoenix.mapreduce.index.IndexToolTableUtil;
+
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
     private static final Logger LOGGER =
             LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
@@ -4025,6 +4027,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try {
             metaConnection.createStatement().executeUpdate(getCDCStreamDDL());
         } catch (TableAlreadyExistsException ignore) {}
+        try {
+            // check if we have old PHOENIX_INDEX_TOOL tables
+            // move data to the new tables under System, or simply create the new tables
+            IndexToolTableUtil.createNewIndexToolTables(metaConnection);
+
+        } catch (Exception ignore) {}
     }
 
     /**
@@ -4587,6 +4595,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // create an entry for the SYSTEM namespace in the SYSCAT table, so that GRANT/REVOKE commands can work
             // with SYSTEM Namespace
             createSchemaIfNotExistsSystemNSMappingEnabled(metaConnection);
+
+            try {
+                // check if we have old PHOENIX_INDEX_TOOL tables
+                // move data to the new tables under System, or simply create the new tables
+                IndexToolTableUtil.createNewIndexToolTables(metaConnection);
+
+            } catch (Exception ignore) {}
 
             clearUpgradeRequired();
             success = true;
