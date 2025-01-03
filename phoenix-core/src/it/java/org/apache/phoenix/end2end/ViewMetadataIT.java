@@ -599,7 +599,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                                 cqs.getConfiguration(),
                                 EMPTY_BYTE_ARRAY, BASE_TABLE_SCHEMA.getBytes(),
                                 parent1TableName.getBytes(),
-                                HConstants.LATEST_TIMESTAMP, false);
+                                HConstants.LATEST_TIMESTAMP, false,true);
                 List<PTable> legitChildViews = allDescendants.getFirst();
                 List<TableInfo> orphanViews = allDescendants.getSecond();
                 // All of the orphan links are legit views of the other parent
@@ -612,7 +612,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                         cqs.getConfiguration(), EMPTY_BYTE_ARRAY,
                         BASE_TABLE_SCHEMA.getBytes(),
                         parent2TableName.getBytes(),
-                        HConstants.LATEST_TIMESTAMP, false);
+                        HConstants.LATEST_TIMESTAMP, false,true);
                 legitChildViews = allDescendants.getFirst();
                 orphanViews = allDescendants.getSecond();
                 // All of the orphan links are legit views of the other parent
@@ -644,7 +644,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                         cqs.getConfiguration(), EMPTY_BYTE_ARRAY,
                         BASE_TABLE_SCHEMA.getBytes(),
                         parent1TableName.getBytes(),
-                        HConstants.LATEST_TIMESTAMP, false);
+                        HConstants.LATEST_TIMESTAMP, false,true);
                 legitChildViews = allDescendants.getFirst();
                 orphanViews = allDescendants.getSecond();
                 assertLegitChildViews(expectedLegitChildViewsListForParent1,
@@ -655,7 +655,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                         cqs.getConfiguration(), EMPTY_BYTE_ARRAY,
                         BASE_TABLE_SCHEMA.getBytes(),
                         parent2TableName.getBytes(),
-                        HConstants.LATEST_TIMESTAMP, false);
+                        HConstants.LATEST_TIMESTAMP, false,true);
                 legitChildViews = allDescendants.getFirst();
                 orphanViews = allDescendants.getSecond();
 
