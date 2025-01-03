@@ -363,6 +363,10 @@ public abstract class ExplainTable {
                 buf.append(originalSize);
             } else {
                 buf.append(regionLocations);
+                if (explainPlanAttributesBuilder != null) {
+                    explainPlanAttributesBuilder.setRegionLocations(
+                        Collections.unmodifiableList(regionLocations));
+                }
             }
             buf.append(") ");
             return buf.toString();
