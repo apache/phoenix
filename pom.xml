@@ -113,7 +113,7 @@
     <sqlline.version>1.9.0</sqlline.version>
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
     <jsr305.version>2.0.1</jsr305.version>
-    <snappy.version>0.5</snappy.version>
+    <snappy.version>1.1.10.5</snappy.version>
     <commons-codec.version>1.16.0</commons-codec.version>
     <htrace.version>3.1.0-incubating</htrace.version>
     <jodatime.version>2.10.5</jodatime.version>
@@ -1644,8 +1644,8 @@
         <version>${jsr305.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.iq80.snappy</groupId>
-        <artifactId>snappy</artifactId>
+        <groupId>org.xerial.snappy</groupId>
+        <artifactId>snappy-java</artifactId>
         <version>${snappy.version}</version>
       </dependency>
       <dependency>
