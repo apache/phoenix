@@ -4,6 +4,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
+import java.util.Arrays;
 import java.util.Optional;
 
 import org.apache.hadoop.conf.Configuration;
@@ -33,19 +35,19 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
 
     private static final String STREAM_STATUS_QUERY
             = "SELECT STREAM_NAME FROM " + SYSTEM_CDC_STREAM_STATUS_NAME +
-            "WHERE TABLE_NAME = ? AND STREAM_STATUS='"
+            " WHERE TABLE_NAME = ? AND STREAM_STATUS='"
             + CDCUtil.CdcStreamStatus.ENABLED.getSerializedValue() + "'";
 
     // tableName, streamName, partitionId, parentId, startTime, endTime, startKey, endKey
     private static final String PARTITION_UPSERT_SQL
-            = "UPSERT INTO " + SYSTEM_CDC_STREAM_NAME + "VALUES (?,?,?,?,?,?,?,?)";
+            = "UPSERT INTO " + SYSTEM_CDC_STREAM_NAME + " VALUES (?,?,?,?,?,?,?,?)";
 
     private static final String PARENT_PARTITION_QUERY
             = "SELECT PARTITION_ID FROM " + SYSTEM_CDC_STREAM_NAME +
             " WHERE TABLE_NAME = ? AND STREAM_NAME = ? ";
 
     private static final String PARENT_PARTITION_UPDATE_END_TIME_SQL
-            = "UPSERT INTO" + SYSTEM_CDC_STREAM_NAME + " (TABLE_NAME, STREAM_NAME, PARTITION_ID, " +
+            = "UPSERT INTO " + SYSTEM_CDC_STREAM_NAME + " (TABLE_NAME, STREAM_NAME, PARTITION_ID, " +
             "PARTITION_END_TIME) VALUES (?,?,?,?)";
 
     @Override
@@ -71,7 +73,8 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
             // CDC will be enabled on Phoenix tables only
             PTable phoenixTable = getPhoenixTable(conn, regionInfoA.getTable());
             if (phoenixTable == null) {
-                LOGGER.info("Not a Phoenix Table, skipping partition metadata update.");
+                LOGGER.info(regionInfoA.getTable() + " is not a Phoenix Table, " +
+                        "skipping partition metadata update.");
                 return;
             }
             // find streamName with ENABLED status
@@ -81,13 +84,16 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
             ResultSet rs = pstmt.executeQuery();
             if (rs.next()) {
                 String streamName = rs.getString(1);
+                LOGGER.info("Updating partition metadata for table=" + tableName + ", stream=" + streamName);
                 String parentPartitionID = getParentPartitionId(conn, tableName, streamName, regionInfoA, regionInfoB);
                 upsertDaughterPartition(conn, tableName, streamName, parentPartitionID, regionInfoA);
                 upsertDaughterPartition(conn, tableName, streamName, parentPartitionID, regionInfoB);
                 updateParentPartitionEndTime(conn, tableName, streamName, parentPartitionID, regionInfoA.getRegionId());
             }
         } catch (SQLException e) {
-            LOGGER.error("Unable to update CDC Stream Partition metadata: " + e);
+            LOGGER.error("Unable to update CDC Stream Partition metadata during split with daughter regions: "
+                    + regionInfoA.getEncodedName() + " " + regionInfoB.getEncodedName() );
+            LOGGER.error("Error: " + e);
         }
     }
 
@@ -136,12 +142,15 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
         pstmt.setString(index++, streamName);
         if (inferredParentStartKey.length > 0) pstmt.setBytes(index++, inferredParentStartKey);
         if (inferredParentEndKey.length > 0) pstmt.setBytes(index++, inferredParentEndKey);
-        LOGGER.info(pstmt.toString());
+        LOGGER.info("Query to get parent partition id: " + pstmt);
         ResultSet rs = pstmt.executeQuery();
         if (rs.next()) {
             return rs.getString(1);
         } else {
-            throw new SQLException("Could not find parent of the provided daughters.");
+            throw new SQLException(String.format("Could not find parent of the provided daughters: " +
+                    "startKeyA=%s endKeyA=%s startKeyB=%s endKeyB=%s",
+                    Arrays.toString(regionInfoA.getStartKey()), Arrays.toString(regionInfoA.getEndKey()),
+                    Arrays.toString(regionInfoB.getStartKey()), Arrays.toString(regionInfoB.getEndKey())));
         }
     }
 
@@ -163,7 +172,7 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
         pstmt.setString(4, parentPartitionID);
         pstmt.setLong(5, startTime);
         // endTime in not set when inserting a new partition
-        pstmt.setLong(6, -1L);
+        pstmt.setNull(6, Types.BIGINT);
         pstmt.setBytes(7, startKey.length == 0 ? null : startKey);
         pstmt.setBytes(8, endKey.length == 0 ? null : endKey);
         pstmt.executeUpdate();
