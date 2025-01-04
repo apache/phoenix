@@ -190,7 +190,8 @@ public class CDCStreamIT extends CDCBaseIT {
         splitTable(conn, tableName, Bytes.toBytes("m"));
 
         //check partition metadata - daughter regions are inserted and parent's end time is updated.
-        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM SYSTEM.CDC_STREAM");
+        ResultSet rs = conn.createStatement().executeQuery(
+                "SELECT * FROM SYSTEM.CDC_STREAM WHERE TABLE_NAME='" + tableName + "'");
         PartitionMetadata parent = null;
         List<PartitionMetadata> daughters = new ArrayList<>();
         while (rs.next()) {
