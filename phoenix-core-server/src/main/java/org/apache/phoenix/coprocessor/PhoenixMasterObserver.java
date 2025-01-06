@@ -22,7 +22,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
-import java.util.Arrays;
 import java.util.Optional;
 
 import org.apache.hadoop.conf.Configuration;
@@ -51,8 +50,8 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixMasterObserver.class);
 
     private static final String STREAM_STATUS_QUERY
-            = "SELECT STREAM_NAME FROM " + SYSTEM_CDC_STREAM_STATUS_NAME +
-            " WHERE TABLE_NAME = ? AND STREAM_STATUS='"
+            = "SELECT STREAM_NAME FROM " + SYSTEM_CDC_STREAM_STATUS_NAME
+            + " WHERE TABLE_NAME = ? AND STREAM_STATUS='"
             + CDCUtil.CdcStreamStatus.ENABLED.getSerializedValue() + "'";
 
     // tableName, streamName, partitionId, parentId, startTime, endTime, startKey, endKey
@@ -60,12 +59,12 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
             = "UPSERT INTO " + SYSTEM_CDC_STREAM_NAME + " VALUES (?,?,?,?,?,?,?,?)";
 
     private static final String PARENT_PARTITION_QUERY
-            = "SELECT PARTITION_ID FROM " + SYSTEM_CDC_STREAM_NAME +
-            " WHERE TABLE_NAME = ? AND STREAM_NAME = ? ";
+            = "SELECT PARTITION_ID FROM " + SYSTEM_CDC_STREAM_NAME
+            + " WHERE TABLE_NAME = ? AND STREAM_NAME = ? ";
 
     private static final String PARENT_PARTITION_UPDATE_END_TIME_SQL
-            = "UPSERT INTO " + SYSTEM_CDC_STREAM_NAME + " (TABLE_NAME, STREAM_NAME, PARTITION_ID, " +
-            "PARTITION_END_TIME) VALUES (?,?,?,?)";
+            = "UPSERT INTO " + SYSTEM_CDC_STREAM_NAME + " (TABLE_NAME, STREAM_NAME, PARTITION_ID, "
+            + "PARTITION_END_TIME) VALUES (?,?,?,?)";
 
     @Override
     public Optional<MasterObserver> getMasterObserver() {
@@ -83,15 +82,16 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
      */
     @Override
     public void postCompletedSplitRegionAction(final ObserverContext<MasterCoprocessorEnvironment> c,
-                                               final RegionInfo regionInfoA, final RegionInfo regionInfoB) {
+                                               final RegionInfo regionInfoA,
+                                               final RegionInfo regionInfoB) {
         Configuration conf = c.getEnvironment().getConfiguration();
         try {
             Connection conn  = QueryUtil.getConnectionOnServer(conf);
             // CDC will be enabled on Phoenix tables only
             PTable phoenixTable = getPhoenixTable(conn, regionInfoA.getTable());
             if (phoenixTable == null) {
-                LOGGER.info(regionInfoA.getTable() + " is not a Phoenix Table, " +
-                        "skipping partition metadata update.");
+                LOGGER.info("{} is not a Phoenix Table, skipping partition metadata update.",
+                        regionInfoA.getTable());
                 return;
             }
             // find streamName with ENABLED status
@@ -101,18 +101,16 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
             ResultSet rs = pstmt.executeQuery();
             if (rs.next()) {
                 String streamName = rs.getString(1);
-                LOGGER.info("Updating partition metadata for table=" + tableName + ", stream="
-                        + streamName + " for daughters " + regionInfoA.getEncodedName() + " "
-                        + regionInfoB.getEncodedName());
+                LOGGER.info("Updating partition metadata for table={}, stream={} daughters {} {}",
+                        tableName, streamName, regionInfoA.getEncodedName(), regionInfoB.getEncodedName());
                 String parentPartitionID = getParentPartitionId(conn, tableName, streamName, regionInfoA, regionInfoB);
                 upsertDaughterPartition(conn, tableName, streamName, parentPartitionID, regionInfoA);
                 upsertDaughterPartition(conn, tableName, streamName, parentPartitionID, regionInfoB);
                 updateParentPartitionEndTime(conn, tableName, streamName, parentPartitionID, regionInfoA.getRegionId());
             }
         } catch (SQLException e) {
-            LOGGER.error("Unable to update CDC Stream Partition metadata during split with daughter regions: "
-                    + regionInfoA.getEncodedName() + " " + regionInfoB.getEncodedName() );
-            LOGGER.error("Error: " + e);
+            LOGGER.error("Unable to update CDC Stream Partition metadata during split with daughter regions: {} {}",
+                    regionInfoA.getEncodedName(), regionInfoB.getEncodedName(), e);
         }
     }
 
@@ -128,28 +126,22 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
 
     /**
      * Lookup parent's partition id (region's encoded name) in SYSTEM.CDC_STREAM.
-     * We infer start and end key for the parent from the two daughters' start/end keys.
+     * RegionInfoA is left daughter and RegionInfoB is right daughter so parent's key range would
+     * be [RegionInfoA stratKey, RegionInfoB endKey]
      */
     private String getParentPartitionId(Connection conn, String tableName, String streamName,
                                         RegionInfo regionInfoA, RegionInfo regionInfoB)
             throws SQLException {
-        byte[] inferredParentStartKey =
-                Bytes.compareTo(regionInfoA.getStartKey(), regionInfoB.getStartKey()) < 0 ?
-                regionInfoA.getStartKey() : regionInfoB.getStartKey();
-
-        byte[] inferredParentEndKey = (regionInfoB.getEndKey().length == 0 || regionInfoA.getEndKey().length == 0)
-                ? new byte[0]
-                : Bytes.compareTo(regionInfoA.getEndKey(), regionInfoB.getEndKey()) < 0
-                    ? regionInfoB.getEndKey()
-                    : regionInfoA.getEndKey();
+        byte[] parentStartKey = regionInfoA.getStartKey();
+        byte[] parentEndKey = regionInfoB.getEndKey();
 
         StringBuilder qb = new StringBuilder(PARENT_PARTITION_QUERY);
-        if (inferredParentStartKey.length == 0) {
+        if (parentStartKey.length == 0) {
             qb.append(" AND PARTITION_START_KEY IS NULL ");
         } else {
             qb.append(" AND PARTITION_START_KEY = ? ");
         }
-        if (inferredParentEndKey.length == 0) {
+        if (parentEndKey.length == 0) {
             qb.append(" AND PARTITION_END_KEY IS NULL ");
         } else {
             qb.append(" AND PARTITION_END_KEY = ? ");
@@ -159,17 +151,19 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
         int index = 1;
         pstmt.setString(index++, tableName);
         pstmt.setString(index++, streamName);
-        if (inferredParentStartKey.length > 0) pstmt.setBytes(index++, inferredParentStartKey);
-        if (inferredParentEndKey.length > 0) pstmt.setBytes(index++, inferredParentEndKey);
+        if (parentStartKey.length > 0) pstmt.setBytes(index++, parentStartKey);
+        if (parentEndKey.length > 0) pstmt.setBytes(index++, parentEndKey);
         LOGGER.info("Query to get parent partition id: " + pstmt);
         ResultSet rs = pstmt.executeQuery();
         if (rs.next()) {
             return rs.getString(1);
         } else {
-            throw new SQLException(String.format("Could not find parent of the provided daughters: " +
-                    "startKeyA=%s endKeyA=%s startKeyB=%s endKeyB=%s",
-                    Arrays.toString(regionInfoA.getStartKey()), Arrays.toString(regionInfoA.getEndKey()),
-                    Arrays.toString(regionInfoB.getStartKey()), Arrays.toString(regionInfoB.getEndKey())));
+            throw new SQLException(String.format("Could not find parent of the provided daughters: "
+                            + "startKeyA=%s endKeyA=%s startKeyB=%s endKeyB=%s",
+                    Bytes.toStringBinary(regionInfoA.getStartKey()),
+                    Bytes.toStringBinary(regionInfoA.getEndKey()),
+                    Bytes.toStringBinary(regionInfoB.getStartKey()),
+                    Bytes.toStringBinary(regionInfoB.getEndKey())));
         }
     }
 

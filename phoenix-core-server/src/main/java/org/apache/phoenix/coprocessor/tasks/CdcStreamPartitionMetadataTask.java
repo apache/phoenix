@@ -137,7 +137,7 @@ public class CdcStreamPartitionMetadataTask extends BaseTask  {
         try (PreparedStatement ps = pconn.prepareStatement(CDC_STREAM_PARTITION_UPSERT_SQL)) {
             for (HRegionLocation tableRegion : tableRegions) {
                 // set parent_partition_id, partition_end_time to null
-                RegionInfo ri = tableRegion.getRegionInfo();
+                RegionInfo ri = tableRegion.getRegion();
                 ps.setString(1, tableName);
                 ps.setString(2, streamName);
                 ps.setString(3, ri.getEncodedName());

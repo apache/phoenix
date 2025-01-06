@@ -239,7 +239,7 @@ public class CDCStreamIT extends CDCBaseIT {
         assertEquals(splitParent.partitionId, daughters.get(0).parentPartitionId);
         assertEquals(splitParent.partitionId, daughters.get(1).parentPartitionId);
         assertTrue(daughters.stream().anyMatch(d -> d.startKey == null && d.endKey != null && d.endKey[0] == 'd'));
-        assertTrue(daughters.stream().anyMatch(d -> d.startKey[0] == 'd' && d.endKey[0] == 'l'));
+        assertTrue(daughters.stream().anyMatch(d -> d.startKey != null && d.startKey[0] == 'd' && d.endKey[0] == 'l'));
     }
 
     /**
