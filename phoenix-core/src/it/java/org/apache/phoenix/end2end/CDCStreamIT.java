@@ -18,10 +18,13 @@
 
 package org.apache.phoenix.end2end;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.PhoenixMasterObserver;
@@ -46,6 +49,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -166,25 +170,7 @@ public class CDCStreamIT extends CDCBaseIT {
         // create table, cdc and bootstrap stream metadata
         Connection conn = newConnection();
         String tableName = generateUniqueName();
-        String cdcName = generateUniqueName();
-        String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
-        conn.createStatement().execute(
-                "CREATE TABLE  " + tableName + " ( k VARCHAR PRIMARY KEY," + " v1 INTEGER,"
-                        + " v2 VARCHAR)");
-        createCDC(conn, cdc_sql, null);
-        String streamName = getStreamName(conn, tableName, cdcName);
-        TaskRegionObserver.SelfHealingTask task =
-                new TaskRegionObserver.SelfHealingTask(
-                        TaskRegionEnvironment, QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
-        task.run();
-        assertStreamStatus(conn, tableName, streamName, CDCUtil.CdcStreamStatus.ENABLED);
-
-        //upsert sample data
-        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('a', 1, 'foo')");
-        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('b', 2, 'bar')");
-        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('k', 3, 'alice')");
-        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('p', 4, 'bob')");
-        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('w', 5, 'cat')");
+        createTableAndEnableCDC(conn, tableName);
 
         //split the only region somewhere in the middle
         splitTable(conn, tableName, Bytes.toBytes("m"));
@@ -195,11 +181,12 @@ public class CDCStreamIT extends CDCBaseIT {
         PartitionMetadata parent = null;
         List<PartitionMetadata> daughters = new ArrayList<>();
         while (rs.next()) {
+            PartitionMetadata pm = new PartitionMetadata(rs);
             // parent which was split
-            if (rs.getLong(6) > 0) {
-                parent = new PartitionMetadata(rs);
+            if (pm.endTime > 0) {
+                parent = pm;
             } else {
-                daughters.add(new PartitionMetadata(rs));
+                daughters.add(pm);
             }
         }
         assertNotNull(parent);
@@ -210,6 +197,132 @@ public class CDCStreamIT extends CDCBaseIT {
         assertEquals(parent.partitionId, daughters.get(1).parentPartitionId);
         assertTrue(daughters.stream().anyMatch(d -> d.startKey == null && d.endKey != null && d.endKey[0] == 'm'));
         assertTrue(daughters.stream().anyMatch(d -> d.endKey == null && d.startKey != null && d.startKey[0] == 'm'));
+    }
+
+    /**
+     * Split the first region of the table with empty start key.
+     */
+    @Test
+    public void testPartitionMetadataFirstRegionSplits() throws Exception {
+        // create table, cdc and bootstrap stream metadata
+        Connection conn = newConnection();
+        String tableName = generateUniqueName();
+        createTableAndEnableCDC(conn, tableName);
+
+        //split the only region [null, null]
+        splitTable(conn, tableName, Bytes.toBytes("l"));
+        // we have 2 regions - [null, l], [l, null], split the first region
+        splitTable(conn, tableName, Bytes.toBytes("d"));
+        ResultSet rs = conn.createStatement().executeQuery(
+                "SELECT * FROM SYSTEM.CDC_STREAM WHERE TABLE_NAME='" + tableName + "'");
+        PartitionMetadata grandparent = null, splitParent = null, unSplitParent = null;
+        List<PartitionMetadata> daughters = new ArrayList<>();
+        while (rs.next()) {
+            PartitionMetadata pm = new PartitionMetadata(rs);
+            if (pm.endTime > 0) {
+                if (pm.startKey == null && pm.endKey == null) {
+                    grandparent = pm;
+                } else {
+                    splitParent = pm;
+                }
+            } else if (pm.endKey == null) {
+                unSplitParent = pm;
+            } else {
+                daughters.add(pm);
+            }
+        }
+        assertNotNull(grandparent);
+        assertNotNull(unSplitParent);
+        assertNotNull(splitParent);
+        assertEquals(2, daughters.size());
+        assertEquals(daughters.get(0).startTime, splitParent.endTime);
+        assertEquals(daughters.get(1).startTime, splitParent.endTime);
+        assertEquals(splitParent.partitionId, daughters.get(0).parentPartitionId);
+        assertEquals(splitParent.partitionId, daughters.get(1).parentPartitionId);
+        assertTrue(daughters.stream().anyMatch(d -> d.startKey == null && d.endKey != null && d.endKey[0] == 'd'));
+        assertTrue(daughters.stream().anyMatch(d -> d.startKey[0] == 'd' && d.endKey[0] == 'l'));
+    }
+
+    /**
+     * Split the last region of the table with empty end key.
+     */
+    @Test
+    public void testPartitionMetadataLastRegionSplits() throws Exception {
+        // create table, cdc and bootstrap stream metadata
+        Connection conn = newConnection();
+        String tableName = generateUniqueName();
+        createTableAndEnableCDC(conn, tableName);
+
+        //split the only region [null, null]
+        splitTable(conn, tableName, Bytes.toBytes("l"));
+        // we have 2 regions - [null, l], [l, null], split the second region
+        splitTable(conn, tableName, Bytes.toBytes("q"));
+        ResultSet rs = conn.createStatement().executeQuery(
+                "SELECT * FROM SYSTEM.CDC_STREAM WHERE TABLE_NAME='" + tableName + "'");
+        PartitionMetadata grandparent = null, splitParent = null, unSplitParent = null;
+        List<PartitionMetadata> daughters = new ArrayList<>();
+        while (rs.next()) {
+            PartitionMetadata pm = new PartitionMetadata(rs);
+            if (pm.endTime > 0) {
+                if (pm.startKey == null && pm.endKey == null) {
+                    grandparent = pm;
+                } else {
+                    splitParent = pm;
+                }
+            } else if (pm.startKey == null) {
+                unSplitParent = pm;
+            } else {
+                daughters.add(pm);
+            }
+        }
+        assertNotNull(grandparent);
+        assertNotNull(unSplitParent);
+        assertNotNull(splitParent);
+        assertEquals(2, daughters.size());
+        assertEquals(daughters.get(0).startTime, splitParent.endTime);
+        assertEquals(daughters.get(1).startTime, splitParent.endTime);
+        assertEquals(splitParent.partitionId, daughters.get(0).parentPartitionId);
+        assertEquals(splitParent.partitionId, daughters.get(1).parentPartitionId);
+        assertTrue(daughters.stream().anyMatch(d -> d.startKey[0] == 'l' && d.endKey[0] == 'q'));
+        assertTrue(daughters.stream().anyMatch(d -> d.endKey == null && d.startKey != null && d.startKey[0] == 'q'));
+    }
+
+    /**
+     * Split a middle region of the table with non-empty start/end key.
+     */
+    @Test
+    public void testPartitionMetadataMiddleRegionSplits() throws Exception {
+        // create table, cdc and bootstrap stream metadata
+        Connection conn = newConnection();
+        String tableName = generateUniqueName();
+        createTableAndEnableCDC(conn, tableName);
+
+        //split the only region [null, null]
+        splitTable(conn, tableName, Bytes.toBytes("d"));
+        // we have 2 regions - [null, d], [d, null], split the second region
+        splitTable(conn, tableName, Bytes.toBytes("q"));
+        // we have 3 regions - [null, d], [d, q], [q, null], split the second region
+        splitTable(conn, tableName, Bytes.toBytes("j"));
+        // [null, d], [d, j], [j, q], [q, null]
+        ResultSet rs = conn.createStatement().executeQuery(
+                "SELECT * FROM SYSTEM.CDC_STREAM WHERE TABLE_NAME='" + tableName + "'");
+        PartitionMetadata parent = null;
+        List<PartitionMetadata> daughters = new ArrayList<>();
+        while (rs.next()) {
+            PartitionMetadata pm = new PartitionMetadata(rs);
+            if (pm.startKey != null && pm.endKey != null) {
+                if (pm.endTime > 0) parent = pm;
+                else daughters.add(pm);
+            }
+        }
+        assertNotNull(parent);
+        assertEquals(2, daughters.size());
+        assertEquals(daughters.get(0).startTime, parent.endTime);
+        assertEquals(daughters.get(1).startTime, parent.endTime);
+        assertEquals(parent.partitionId, daughters.get(0).parentPartitionId);
+        assertEquals(parent.partitionId, daughters.get(1).parentPartitionId);
+        assertTrue(daughters.stream().anyMatch(d -> d.startKey[0] == 'd' && d.endKey[0] == 'j'));
+        assertTrue(daughters.stream().anyMatch(d -> d.startKey[0] == 'j' && d.endKey[0] == 'q'));
     }
 
     private String getStreamName(Connection conn, String tableName, String cdcName) throws SQLException {
@@ -244,23 +357,51 @@ public class CDCStreamIT extends CDCBaseIT {
         }
     }
 
+    private void createTableAndEnableCDC(Connection conn, String tableName) throws Exception {
+        String cdcName = generateUniqueName();
+        String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
+        conn.createStatement().execute(
+                "CREATE TABLE  " + tableName + " ( k VARCHAR PRIMARY KEY," + " v1 INTEGER,"
+                        + " v2 VARCHAR)");
+        createCDC(conn, cdc_sql, null);
+        String streamName = getStreamName(conn, tableName, cdcName);
+        TaskRegionObserver.SelfHealingTask task =
+                new TaskRegionObserver.SelfHealingTask(
+                        TaskRegionEnvironment, QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
+        task.run();
+        assertStreamStatus(conn, tableName, streamName, CDCUtil.CdcStreamStatus.ENABLED);
+
+        //upsert sample data
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('a', 1, 'foo')");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('b', 2, 'bar')");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('e', 3, 'alice')");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('j', 4, 'bob')");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('m', 5, 'cat')");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('p', 6, 'cat')");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('t', 7, 'cat')");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('z', 8, 'cat')");
+    }
+
+    /**
+     * Split the table at the provided split point.
+     */
     private void splitTable(Connection conn, String tableName, byte[] splitPoint) throws Exception {
-        byte[] tableNameBytes = Bytes.toBytes(tableName);
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        int queryTimeout = services.getProps()
-                .getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB,
-                        QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
-        int nRegions = services.getAllTableRegions(tableNameBytes, queryTimeout).size();
-        int nInitialRegions = nRegions;
         Admin admin = services.getAdmin();
+        Configuration configuration =
+                conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration();
+        org.apache.hadoop.hbase.client.Connection hbaseConn =
+                ConnectionFactory.createConnection(configuration);
+        RegionLocator regionLocator = hbaseConn.getRegionLocator(TableName.valueOf(tableName));
+        int nRegions = regionLocator.getAllRegionLocations().size();
         try {
             admin.split(TableName.valueOf(tableName), splitPoint);
-            int nTries = 0;
-            while (nRegions == nInitialRegions && nTries < 10) {
-                Thread.sleep(1000);
-                nRegions = services.getAllTableRegions(tableNameBytes, queryTimeout).size();
-                nTries++;
-            }
+            int retryCount = 0;
+            do {
+                Thread.sleep(2000);
+                retryCount++;
+            } while (retryCount < 10 && regionLocator.getAllRegionLocations().size() == nRegions);
+            Assert.assertNotEquals(regionLocator.getAllRegionLocations().size(), nRegions);
         } finally {
             admin.close();
         }
