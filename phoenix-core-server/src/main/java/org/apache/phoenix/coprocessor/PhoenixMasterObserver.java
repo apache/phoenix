@@ -85,8 +85,7 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
                                                final RegionInfo regionInfoA,
                                                final RegionInfo regionInfoB) {
         Configuration conf = c.getEnvironment().getConfiguration();
-        try {
-            Connection conn  = QueryUtil.getConnectionOnServer(conf);
+        try (Connection conn  = QueryUtil.getConnectionOnServer(conf)) {
             // CDC will be enabled on Phoenix tables only
             PTable phoenixTable = getPhoenixTable(conn, regionInfoA.getTable());
             if (phoenixTable == null) {
