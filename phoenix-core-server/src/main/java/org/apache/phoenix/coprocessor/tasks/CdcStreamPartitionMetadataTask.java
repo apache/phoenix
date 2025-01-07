@@ -37,6 +37,7 @@ import java.io.IOException;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.sql.Types;
 import java.util.List;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_NAME;
@@ -55,9 +56,8 @@ public class CdcStreamPartitionMetadataTask extends BaseTask  {
     private static final String CDC_STREAM_STATUS_UPSERT_SQL
             = "UPSERT INTO " + SYSTEM_CDC_STREAM_STATUS_NAME + " VALUES (?, ?, ?)";
 
-    // parent_partition_id will be null, set partition_end_time to -1
     private static final String CDC_STREAM_PARTITION_UPSERT_SQL
-            = "UPSERT INTO " + SYSTEM_CDC_STREAM_NAME + " VALUES (?,?,?,null,?,-1,?,?)";
+            = "UPSERT INTO " + SYSTEM_CDC_STREAM_NAME + " VALUES (?,?,?,?,?,?,?,?)";
 
     @Override
     public TaskRegionObserver.TaskResult run(Task.TaskRecord taskRecord) {
@@ -136,13 +136,16 @@ public class CdcStreamPartitionMetadataTask extends BaseTask  {
             throws SQLException {
         try (PreparedStatement ps = pconn.prepareStatement(CDC_STREAM_PARTITION_UPSERT_SQL)) {
             for (HRegionLocation tableRegion : tableRegions) {
-                RegionInfo ri = tableRegion.getRegionInfo();
+                // set parent_partition_id, partition_end_time to null
+                RegionInfo ri = tableRegion.getRegion();
                 ps.setString(1, tableName);
                 ps.setString(2, streamName);
                 ps.setString(3, ri.getEncodedName());
-                ps.setLong(4, ri.getRegionId());
-                ps.setBytes(5, ri.getStartKey());
-                ps.setBytes(6, ri.getEndKey());
+                ps.setNull(4, Types.VARCHAR);
+                ps.setLong(5, ri.getRegionId());
+                ps.setNull(6, Types.BIGINT);
+                ps.setBytes(7, ri.getStartKey());
+                ps.setBytes(8, ri.getEndKey());
                 ps.executeUpdate();
             }
             pconn.commit();
