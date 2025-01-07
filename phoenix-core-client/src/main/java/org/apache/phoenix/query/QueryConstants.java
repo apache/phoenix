@@ -677,7 +677,7 @@ public interface QueryConstants {
             PARTITION_START_KEY + " VARBINARY_ENCODED," +
             PARTITION_END_KEY + " VARBINARY_ENCODED,\n" +
             "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" +
-            TABLE_NAME + "," + STREAM_NAME + "," + PARTITION_ID + "))\n" +
+            TABLE_NAME + "," + STREAM_NAME + "))\n" +
             HConstants.VERSIONS + "=%s,\n" +
             ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" +
             TRANSACTIONAL + "=" + Boolean.FALSE;
