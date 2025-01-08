@@ -670,14 +670,14 @@ public interface QueryConstants {
             TABLE_NAME + " VARCHAR NOT NULL," +
             STREAM_NAME + " VARCHAR NOT NULL," +
             PARTITION_ID + " VARCHAR NOT NULL," +
-            // Non-PK columns
             PARENT_PARTITION_ID + " VARCHAR," +
+            // Non-PK columns
             PARTITION_START_TIME + " BIGINT," +
             PARTITION_END_TIME + " BIGINT," +
             PARTITION_START_KEY + " VARBINARY_ENCODED," +
             PARTITION_END_KEY + " VARBINARY_ENCODED,\n" +
             "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" +
-            TABLE_NAME + "," + STREAM_NAME + "," + PARTITION_ID + "))\n" +
+            TABLE_NAME + "," + STREAM_NAME + "," + PARTITION_ID + "," + PARENT_PARTITION_ID + "))\n" +
             HConstants.VERSIONS + "=%s,\n" +
             ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" +
             TRANSACTIONAL + "=" + Boolean.FALSE;
