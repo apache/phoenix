@@ -47,6 +47,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.FailoverSQLException;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
@@ -590,6 +591,47 @@ public class FailoverPhoenixConnectionIT {
         // close failover connection will reset metrics
         conn.close();
         assertTrue(PhoenixRuntime.getWriteMetricInfoForMutationsSinceLastReset(conn).isEmpty());
+    }
+
+    /**
+     * Test transit cluster role record which should affect all the principals for a given HAGroup
+     */
+    @Test(timeout = 300000)
+    public void testAllConnectionsOfHAIsAffected() throws Exception {
+        Connection conn = createFailoverConnection();
+        PhoenixConnection wrappedConn = ((FailoverPhoenixConnection) conn).getWrappedConnection();
+
+        //Create another connection with same params except different principal
+        //This should use same haGroup as default one and transiting that haGroup should affect this conn as well.
+        String principal = RandomStringUtils.randomAlphabetic(5);
+        Connection conn2 = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(principal), clientProperties);
+        PhoenixConnection wrappedConn2 = ((FailoverPhoenixConnection) conn2).getWrappedConnection();
+
+        // Following we create a new HA group and create a connection against this HA group with default PRINCIPAL
+        String haGroupName2 = haGroup.getGroupInfo().getName() + "2";
+        CLUSTERS.initClusterRole(haGroupName2, HighAvailabilityPolicy.FAILOVER);
+        Properties clientProperties2 = new Properties(clientProperties);
+        clientProperties2.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName2);
+        Connection conn3 = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(), clientProperties2);
+        PhoenixConnection wrappedConn3 = ((FailoverPhoenixConnection) conn3).getWrappedConnection();
+
+        //Create another connection with haGroup2 with same principal as for conn2 with haGroup, which should not be
+        //affected by transiting haGroup
+        Connection conn4 = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(principal), clientProperties2);
+        PhoenixConnection wrappedConn4 = ((FailoverPhoenixConnection) conn4).getWrappedConnection();
+
+        assertFalse(wrappedConn.isClosed());
+        assertFalse(wrappedConn2.isClosed());
+        assertFalse(wrappedConn3.isClosed());
+        assertFalse(wrappedConn4.isClosed());
+
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.ACTIVE);
+
+        assertTrue(wrappedConn.isClosed());
+        assertTrue(wrappedConn2.isClosed());
+        assertFalse(wrappedConn3.isClosed()); //only connection with haGroup will be closed irrespective of principal
+        assertFalse(wrappedConn4.isClosed());
+
     }
 
     /**

@@ -49,6 +49,8 @@ import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -126,6 +128,7 @@ public class HighAvailabilityGroup {
     static final Logger LOG = LoggerFactory.getLogger(HighAvailabilityGroup.class);
     @VisibleForTesting
     static final Map<HAGroupInfo, HighAvailabilityGroup> GROUPS = new ConcurrentHashMap<>();
+    static final Map<HAGroupInfo, List<HAURLInfo>> URLS = new ConcurrentHashMap<>();
     @VisibleForTesting
     static final Cache<HAGroupInfo, Boolean> MISSING_CRR_GROUPS_CACHE = CacheBuilder.newBuilder()
             .expireAfterWrite(PHOENIX_HA_TRANSITION_TIMEOUT_MS_DEFAULT, TimeUnit.MILLISECONDS)
@@ -206,12 +209,30 @@ public class HighAvailabilityGroup {
                     .build()
                     .buildException();
         }
+        String principal = null;
         String additionalJDBCParams = null;
         int idx = url.indexOf("]");
         int extraIdx = url.indexOf(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR, idx + 1);
         if (extraIdx != -1) {
-            // skip the JDBC_PROTOCOL_SEPARATOR
             additionalJDBCParams  = url.substring(extraIdx + 1);
+            //Get the principal
+            extraIdx = additionalJDBCParams.indexOf(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+            if (extraIdx != -1) {
+                if (extraIdx == 0) {
+                    principal = null;
+                } else {
+                    principal = additionalJDBCParams.substring(0, extraIdx);
+                }
+                additionalJDBCParams = additionalJDBCParams.substring(extraIdx + 1);
+            } else {
+                extraIdx = additionalJDBCParams.indexOf(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR);
+                if (extraIdx != -1) {
+                    principal = additionalJDBCParams.substring(0, extraIdx);
+                } else {
+                    principal = additionalJDBCParams;
+                }
+                additionalJDBCParams = null;
+            }
         }
 
         url = url.substring(url.indexOf("[") + 1, url.indexOf("]"));
@@ -224,7 +245,10 @@ public class HighAvailabilityGroup {
                     .build()
                     .buildException();
         }
-        return new HAGroupInfo(name, urls[0], urls[1], additionalJDBCParams);
+        HAURLInfo haurlInfo = new HAURLInfo(name, principal, additionalJDBCParams);
+        //Set context with current haUrlInfo
+        HAURLInfo.setCurrentURLInfo(haurlInfo);
+        return new HAGroupInfo(name, urls[0], urls[1]);
     }
 
     /**
@@ -252,6 +276,7 @@ public class HighAvailabilityGroup {
 
         HighAvailabilityGroup haGroup = GROUPS.computeIfAbsent(info,
                 haGroupInfo -> new HighAvailabilityGroup(haGroupInfo, properties));
+        URLS.computeIfAbsent(info, haGroupInfo -> new ArrayList<>()).add(HAURLInfo.getCurrentURLInfo());
         try {
             haGroup.init();
         } catch (Exception e) {
@@ -742,7 +767,8 @@ public class HighAvailabilityGroup {
      * An HAGroupInfo contains information of an HA group.
      * <p>
      * It is constructed based on client input, including the JDBC connection string and properties.
-     * Objects of this class are used as the keys of HA group cache {@link #GROUPS}.
+     * Objects of this class are used as the keys of HA group cache {@link #GROUPS} and HA url info cache
+     * {@link #URLS}.
      * <p>
      * This class is immutable.
      */
@@ -750,9 +776,8 @@ public class HighAvailabilityGroup {
     static final class HAGroupInfo {
         private final String name;
         private final PairOfSameType<String> urls;
-        private final String additionalJDBCParams;
 
-        HAGroupInfo(String name, String url1, String url2, String additionalJDBCParams) {
+        HAGroupInfo(String name, String url1, String url2) {
             Preconditions.checkNotNull(name);
             Preconditions.checkNotNull(url1);
             Preconditions.checkNotNull(url2);
@@ -766,11 +791,6 @@ public class HighAvailabilityGroup {
             } else {
                 this.urls = new PairOfSameType<>(url1, url2);
             }
-            this.additionalJDBCParams = additionalJDBCParams;
-        }
-
-        HAGroupInfo(String name, String url1, String url2) {
-            this(name, url1, url2, null);
         }
 
         public String getName() {
@@ -785,16 +805,34 @@ public class HighAvailabilityGroup {
             return urls.getSecond();
         }
 
+
+        //It applies only the current thread context's URL Info as we have 1:n mapping between
+        //HAURLInfo -> HAGroupInfo.
         public String getJDBCUrl(String zkUrl) {
-            Preconditions.checkArgument(zkUrl.equals(getUrl1()) || zkUrl.equals(getUrl2()),
+            Preconditions.checkArgument(zkUrl.equals(getUrl1()) || zkUrl.equals(getUrl2())
+                            || zkUrl.equals("[" + getUrl1() + "|" + getUrl2() + "]")
+                            || zkUrl.equals("[" + getUrl2() + "|" + getUrl1() + "]"),
                     "The URL '" + zkUrl + "' does not belong to this HA group " + this);
             StringBuilder sb = new StringBuilder();
             sb.append(PhoenixRuntime.JDBC_PROTOCOL_ZK);
             sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
             sb.append(zkUrl);
-            if (!Strings.isNullOrEmpty(additionalJDBCParams)) {
-                sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
-                sb.append(additionalJDBCParams);
+            HAURLInfo haurlInfo = HAURLInfo.getCurrentURLInfo();
+            if (haurlInfo != null) {
+                if (!Strings.isNullOrEmpty(haurlInfo.getPrincipal()) &&
+                        !Strings.isNullOrEmpty(haurlInfo.getAdditionalJDBCParams())) {
+                    sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+                    sb.append(haurlInfo.getPrincipal());
+                    sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+                    sb.append(haurlInfo.getAdditionalJDBCParams());
+                } else if (!Strings.isNullOrEmpty(haurlInfo.getPrincipal())) {
+                    sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+                    sb.append(haurlInfo.getPrincipal());
+                } else if (!Strings.isNullOrEmpty(haurlInfo.getAdditionalJDBCParams())) {
+                    sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+                    sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+                    sb.append(haurlInfo.getAdditionalJDBCParams());
+                }
             }
             return sb.toString();
         }
@@ -843,6 +881,95 @@ public class HighAvailabilityGroup {
                     .append(name)
                     .append(urls).hashCode();
         }
+    }
+
+    /**
+     * An HAURLInfo contains information of an HA Url with respect of HA Group Name.
+     * <p>
+     * It is constructed based on client input, including the JDBC connection string and properties.
+     * Objects of this class are used to get appropriate principal and additional JDBC parameters.
+     * This class stores the current object of HAURLInfo which can be used to create correct URL for
+     * current context (haGroup, principal and other JDBC params)
+     * <p>
+     * This class is immutable.
+     */
+
+    @VisibleForTesting
+    static final class HAURLInfo {
+        private final String name;
+        private final String principal;
+        private final String additionalJDBCParams;
+
+        private static final ThreadLocal<HAURLInfo> currentURLInfo = new ThreadLocal<HAURLInfo>();
+
+        HAURLInfo(String name, String principal, String additionalJDBCParams) {
+            Preconditions.checkNotNull(name);
+            this.name = name;
+            this.principal = principal;
+            this.additionalJDBCParams = additionalJDBCParams;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public String getPrincipal() {
+            return principal;
+        }
+
+        public String getAdditionalJDBCParams() {
+            return additionalJDBCParams;
+        }
+
+        @Override
+        public String toString() {
+            if (principal != null) {
+                return String.format("%s[%s]", name, principal);
+            }
+            return name;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (other == null) {
+                return false;
+            }
+            if (other == this) {
+                return true;
+            }
+            if (other.getClass() != getClass()) {
+                return false;
+            }
+            HAURLInfo otherInfo = (HAURLInfo) other;
+            return new EqualsBuilder()
+                    .append(name, otherInfo.name)
+                    .append(principal, otherInfo.principal)
+                    .isEquals();
+        }
+
+        @Override
+        public int hashCode() {
+            if (principal != null) {
+                return new HashCodeBuilder(7, 47)
+                        .append(name)
+                        .append(principal).hashCode();
+            }
+            return new HashCodeBuilder(7, 47).append(name).hashCode();
+        }
+
+        public static void setCurrentURLInfo(HAURLInfo connectionInfo) {
+            currentURLInfo.set(connectionInfo);
+        }
+
+        public static HAURLInfo getCurrentURLInfo() {
+            return currentURLInfo.get();
+        }
+
+        public static void clearCurrentURLInfo() {
+            currentURLInfo.remove();
+        }
+
+
     }
 
     /**

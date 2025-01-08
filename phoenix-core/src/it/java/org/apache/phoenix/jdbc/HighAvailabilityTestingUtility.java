@@ -350,6 +350,11 @@ public class HighAvailabilityTestingUtility {
             return getJdbcUrl(String.format("[%s|%s]", url1, url2));
         }
 
+        public String getJdbcHAUrl(String principal) {
+            return getJdbcUrl(String.format("[%s|%s]", url1, url2), principal);
+        }
+
+
         public String getJdbcUrl1() {
             return getJdbcUrl(url1);
         }
@@ -359,6 +364,10 @@ public class HighAvailabilityTestingUtility {
 
         public String getJdbcUrl(String zkUrl) {
             return String.format("jdbc:phoenix+zk:%s:%s", zkUrl, PRINCIPAL);
+        }
+
+        public String getJdbcUrl(String zkUrl, String principal) {
+            return String.format("jdbc:phoenix+zk:%s:%s", zkUrl, principal);
         }
 
         public String getUrl1() {

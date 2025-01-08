@@ -28,6 +28,7 @@ import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.jdbc.HighAvailabilityGroup.HAURLInfo;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.slf4j.Logger;
@@ -65,16 +66,29 @@ enum HighAvailabilityPolicy {
             LOG.info("Cluster {} becomes STANDBY in HA group {}, now close all its connections",
                     zkUrl, haGroup.getGroupInfo());
             ConnectionQueryServices cqs = null;
+            HAURLInfo currentURLInfo = HAURLInfo.getCurrentURLInfo();
             try {
-                cqs = PhoenixDriver.INSTANCE.getConnectionQueryServices(
-                        haGroup.getGroupInfo().getJDBCUrl(zkUrl), haGroup.getProperties());
-                cqs.closeAllConnections(new SQLExceptionInfo
-                        .Builder(SQLExceptionCode.HA_CLOSED_AFTER_FAILOVER)
-                        .setMessage("Phoenix connection got closed due to failover")
-                        .setHaGroupInfo(haGroup.getGroupInfo().toString()));
-                LOG.info("Closed all connections to cluster {} for HA group {}", zkUrl,
-                        haGroup.getGroupInfo());
+                //get current thread context's urlInfo
+                //Close connections for every HAURLInfo's (different principal) connections for a give HAGroup
+                for (HAURLInfo haurlInfo : HighAvailabilityGroup.URLS.get(haGroup.getGroupInfo())) {
+                    HAURLInfo.setCurrentURLInfo(haurlInfo);
+                    String jdbcZKUrl = haGroup.getGroupInfo().getJDBCUrl(zkUrl);
+                    cqs = PhoenixDriver.INSTANCE.getConnectionQueryServices(
+                            jdbcZKUrl, haGroup.getProperties());
+                    cqs.closeAllConnections(new SQLExceptionInfo
+                            .Builder(SQLExceptionCode.HA_CLOSED_AFTER_FAILOVER)
+                            .setMessage("Phoenix connection got closed due to failover")
+                            .setHaGroupInfo(haGroup.getGroupInfo().toString()));
+                    LOG.info("Closed all connections to cluster {} for HA group {}",
+                            jdbcZKUrl, haGroup.getGroupInfo());
+                }
+
             } finally {
+                if (currentURLInfo != null) {
+                    HAURLInfo.setCurrentURLInfo(currentURLInfo);
+                } else {
+                    HAURLInfo.clearCurrentURLInfo();
+                }
                 if (cqs != null) {
                     // CQS is closed but it is not invalidated from global cache in PhoenixDriver
                     // so that any new connection will get error instead of creating a new CQS
@@ -84,12 +98,26 @@ enum HighAvailabilityPolicy {
                 }
             }
         }
+
         private void transitActive(HighAvailabilityGroup haGroup, String zkUrl)
                 throws SQLException {
             // Invalidate CQS cache if any that has been closed but has not been cleared
-            LOG.info("invalidating cqs cache for zkUrl: " + zkUrl);
-            PhoenixDriver.INSTANCE.invalidateCache(haGroup.getGroupInfo().getJDBCUrl(zkUrl),
-                    haGroup.getProperties());
+            HAURLInfo currentURLInfo = HAURLInfo.getCurrentURLInfo();
+            try {
+                for (HAURLInfo haurlInfo : HighAvailabilityGroup.URLS.get(haGroup.getGroupInfo())) {
+                    HAURLInfo.setCurrentURLInfo(haurlInfo);
+                    String jdbcZKUrl = haGroup.getGroupInfo().getJDBCUrl(zkUrl);
+                    LOG.info("invalidating cqs cache for zkUrl: " + jdbcZKUrl);
+                    PhoenixDriver.INSTANCE.invalidateCache(jdbcZKUrl,
+                            haGroup.getProperties());
+                }
+            } finally {
+                if (currentURLInfo != null) {
+                    HAURLInfo.setCurrentURLInfo(currentURLInfo);
+                } else {
+                    HAURLInfo.clearCurrentURLInfo();
+                }
+            }
         }
     },
 

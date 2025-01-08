@@ -132,23 +132,28 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
     }
 
     protected final Connection createConnection(String url, Properties info) throws SQLException {
-        Properties augmentedInfo = PropertiesUtil.deepCopy(info);
-        augmentedInfo.putAll(getDefaultProps().asMap());
-        if (url.contains("|")) {
-            // High availability connection using two clusters
-            Optional<HighAvailabilityGroup> haGroup = HighAvailabilityGroup.get(url, augmentedInfo);
-            if (haGroup.isPresent()) {
-                return haGroup.get().connect(augmentedInfo);
-            } else {
-                // If empty HA group is returned, fall back to single cluster.
-                url =
-                        HighAvailabilityGroup.getFallbackCluster(url, info).orElseThrow(
-                            () -> new SQLException(
-                                    "HA group can not be initialized, fallback to single cluster"));
+        try {
+            Properties augmentedInfo = PropertiesUtil.deepCopy(info);
+            augmentedInfo.putAll(getDefaultProps().asMap());
+            if (url.contains("|")) {
+                // High availability connection using two clusters
+                Optional<HighAvailabilityGroup> haGroup = HighAvailabilityGroup.get(url, augmentedInfo);
+                if (haGroup.isPresent()) {
+                    return haGroup.get().connect(augmentedInfo);
+                } else {
+                    // If empty HA group is returned, fall back to single cluster.
+                    url =
+                            HighAvailabilityGroup.getFallbackCluster(url, info).orElseThrow(
+                                    () -> new SQLException(
+                                            "HA group can not be initialized, fallback to single cluster"));
+                }
             }
+            ConnectionQueryServices cqs = getConnectionQueryServices(url, augmentedInfo);
+            return cqs.connect(url, augmentedInfo);
+        } finally {
+            //Clean out the ThreadLocal variable to prevent leak
+            HighAvailabilityGroup.HAURLInfo.clearCurrentURLInfo();
         }
-        ConnectionQueryServices cqs = getConnectionQueryServices(url, augmentedInfo);
-        return cqs.connect(url, augmentedInfo);
     }
 
     /**
