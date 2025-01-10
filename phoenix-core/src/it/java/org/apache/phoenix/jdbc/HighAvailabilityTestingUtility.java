@@ -358,6 +358,11 @@ public class HighAvailabilityTestingUtility {
         public String getJdbcUrl1() {
             return getJdbcUrl(url1);
         }
+
+        public String getJdbcUrl1(String principal) {
+            return getJdbcUrl(url1, principal);
+        }
+
         public String getJdbcUrl2() {
             return getJdbcUrl(url2);
         }

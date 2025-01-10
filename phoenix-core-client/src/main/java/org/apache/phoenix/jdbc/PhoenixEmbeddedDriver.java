@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
 import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 
 import java.sql.Connection;
@@ -30,7 +31,10 @@ import java.util.logging.Logger;
 
 import javax.annotation.concurrent.Immutable;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
@@ -132,28 +136,25 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
     }
 
     protected final Connection createConnection(String url, Properties info) throws SQLException {
-        try {
-            Properties augmentedInfo = PropertiesUtil.deepCopy(info);
-            augmentedInfo.putAll(getDefaultProps().asMap());
-            if (url.contains("|")) {
-                // High availability connection using two clusters
-                Optional<HighAvailabilityGroup> haGroup = HighAvailabilityGroup.get(url, augmentedInfo);
-                if (haGroup.isPresent()) {
-                    return haGroup.get().connect(augmentedInfo);
-                } else {
-                    // If empty HA group is returned, fall back to single cluster.
-                    url =
-                            HighAvailabilityGroup.getFallbackCluster(url, info).orElseThrow(
-                                    () -> new SQLException(
-                                            "HA group can not be initialized, fallback to single cluster"));
-                }
+        Properties augmentedInfo = PropertiesUtil.deepCopy(info);
+        augmentedInfo.putAll(getDefaultProps().asMap());
+        if (url.contains("|")) {
+            // Get HAURLInfo to pass it to connection creation
+            HAURLInfo haurlInfo = HighAvailabilityGroup.getUrlInfo(url, augmentedInfo);
+            // High availability connection using two clusters
+            Optional<HighAvailabilityGroup> haGroup = HighAvailabilityGroup.get(url, augmentedInfo);
+            if (haGroup.isPresent()) {
+                return haGroup.get().connect(augmentedInfo, haurlInfo);
+            } else {
+                // If empty HA group is returned, fall back to single cluster.
+                url =
+                        HighAvailabilityGroup.getFallbackCluster(url, info).orElseThrow(
+                                () -> new SQLException(
+                                        "HA group can not be initialized, fallback to single cluster"));
             }
-            ConnectionQueryServices cqs = getConnectionQueryServices(url, augmentedInfo);
-            return cqs.connect(url, augmentedInfo);
-        } finally {
-            //Clean out the ThreadLocal variable to prevent leak
-            HighAvailabilityGroup.HAURLInfo.clearCurrentURLInfo();
         }
+        ConnectionQueryServices cqs = getConnectionQueryServices(url, augmentedInfo);
+        return cqs.connect(url, augmentedInfo);
     }
 
     /**

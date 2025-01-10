@@ -72,14 +72,11 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
     public static final String FAILOVER_TIMEOUT_MS_ATTR = "phoenix.ha.failover.timeout.ms";
     public static final long FAILOVER_TIMEOUT_MS_DEFAULT = 10_000;
     private static final Logger LOG = LoggerFactory.getLogger(FailoverPhoenixConnection.class);
+
     /**
-     * Connection properties.
+     * Context for FailoverPhoenixConnection
      */
-    private final Properties properties;
-    /**
-     * High availability group.
-     */
-    private final HighAvailabilityGroup haGroup;
+    private final FailoverPhoenixContext context;
     /**
      * Failover policy, per connection.
      */
@@ -103,13 +100,12 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
      */
     private Map<String, Map<MetricType, Long>> previousReadMetrics = new HashMap<>();
 
-    public FailoverPhoenixConnection(HighAvailabilityGroup haGroup, Properties properties)
+    public FailoverPhoenixConnection(FailoverPhoenixContext context)
             throws SQLException {
-        this.properties = properties;
-        this.haGroup = haGroup;
-        this.policy = FailoverPolicy.get(properties);
+        this.context = context;
+        this.policy = FailoverPolicy.get(context.getProperties());
         this.isClosed = false;
-        this.connection = haGroup.connectActive(properties);
+        this.connection = context.getHAGroup().connectActive(context.getProperties(), context.getHAURLInfo());
     }
 
     /**
@@ -171,9 +167,9 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
     void failover(long timeoutMs) throws SQLException {
         checkConnection();
 
-        if (haGroup.isActive(connection)) {
+        if (context.getHAGroup().isActive(connection)) {
             LOG.info("Connection {} is against ACTIVE cluster in HA group {}; skip failing over.",
-                    connection.getURL(), haGroup.getGroupInfo().getName());
+                    connection.getURL(), context.getHAGroup().getGroupInfo().getName());
             return;
         }
 
@@ -183,7 +179,7 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
         while (newConn == null &&
                 EnvironmentEdgeManager.currentTimeMillis() < startTime + timeoutMs) {
             try {
-                newConn = haGroup.connectActive(properties);
+                newConn = context.getHAGroup().connectActive(context.getProperties(), context.getHAURLInfo());
             } catch (SQLException e) {
                 cause = e;
                 LOG.info("Got exception when trying to connect to active cluster.", e);
@@ -197,7 +193,7 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
         }
         if (newConn == null) {
             throw new FailoverSQLException("Can not failover connection",
-                    haGroup.getGroupInfo().toString(), cause);
+                    context.getHAGroup().getGroupInfo().toString(), cause);
         }
 
         final PhoenixConnection oldConn = connection;
@@ -217,7 +213,7 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
                     oldConn.close(new SQLExceptionInfo
                             .Builder(SQLExceptionCode.HA_CLOSED_AFTER_FAILOVER)
                             .setMessage("Phoenix connection got closed due to failover")
-                            .setHaGroupInfo(haGroup.getGroupInfo().toString())
+                            .setHaGroupInfo(context.getHAGroup().getGroupInfo().toString())
                             .build()
                             .buildException());
                 } catch (SQLException e) {
@@ -226,7 +222,7 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
                 }
             }
         }
-        LOG.info("Connection {} failed over to {}", haGroup.getGroupInfo(), connection.getURL());
+        LOG.info("Connection {} failed over to {}", context.getHAGroup().getGroupInfo(), connection.getURL());
     }
 
     /**
@@ -241,7 +237,7 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
     private void checkConnection() throws SQLException {
         if (isClosed) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CONNECTION_CLOSED)
-                    .setHaGroupInfo(haGroup.getGroupInfo().toString())
+                    .setHaGroupInfo(context.getHAGroup().getGroupInfo().toString())
                     .build()
                     .buildException();
         }
@@ -249,7 +245,7 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
             throw new SQLExceptionInfo
                     .Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION)
                     .setMessage("Connection has not been established to ACTIVE HBase cluster")
-                    .setHaGroupInfo(haGroup.getGroupInfo().toString())
+                    .setHaGroupInfo(context.getHAGroup().getGroupInfo().toString())
                     .build()
                     .buildException();
         }
@@ -327,7 +323,7 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
     @VisibleForTesting
     <T> T wrapActionDuringFailover(SupplierWithSQLException<T> s) throws SQLException {
         checkConnection();
-        final long timeoutMs = Long.parseLong(properties.getProperty(FAILOVER_TIMEOUT_MS_ATTR,
+        final long timeoutMs = Long.parseLong(context.getProperties().getProperty(FAILOVER_TIMEOUT_MS_ATTR,
                 String.valueOf(FAILOVER_TIMEOUT_MS_DEFAULT)));
         int failoverCount = 0;
         while (true) {
@@ -641,5 +637,13 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
     @FunctionalInterface
     interface RunWithSQLException {
         void run() throws SQLException;
+    }
+
+    /**
+     * @return the context of a given FailoverPhoenixConnection
+     */
+    @VisibleForTesting
+    public FailoverPhoenixContext getContext() {
+        return context;
     }
 }

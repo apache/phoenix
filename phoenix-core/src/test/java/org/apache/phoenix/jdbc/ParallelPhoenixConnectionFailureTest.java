@@ -73,7 +73,7 @@ public class ParallelPhoenixConnectionFailureTest extends BaseTest {
                 new ParallelPhoenixContext(new Properties(),
                         Mockito.mock(HighAvailabilityGroup.class),
                         HighAvailabilityTestingUtility.getListOfSingleThreadExecutorServices(),
-                        null);
+                        null, Mockito.mock(HAURLInfo.class));
         ParallelPhoenixConnection parallelConn =
                 new ParallelPhoenixConnection(context, CompletableFuture.completedFuture(connSpy1),
                         CompletableFuture.completedFuture(connSpy2));

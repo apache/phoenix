@@ -19,6 +19,8 @@ package org.apache.phoenix.jdbc;
 
 import static org.apache.hadoop.test.GenericTestUtils.waitFor;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.GROUPS;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.URLS;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithConnection;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
@@ -48,6 +50,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.FailoverSQLException;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
@@ -57,6 +60,7 @@ import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.After;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
@@ -631,6 +635,47 @@ public class FailoverPhoenixConnectionIT {
         assertTrue(wrappedConn2.isClosed());
         assertFalse(wrappedConn3.isClosed()); //only connection with haGroup will be closed irrespective of principal
         assertFalse(wrappedConn4.isClosed());
+
+    }
+
+    @Test(timeout = 300000)
+    public void testUserPrincipal() throws Exception {
+        Connection conn = createFailoverConnection(); //PRINCIPAL, haGroupName
+        FailoverPhoenixConnection fconn = (FailoverPhoenixConnection) conn;
+        ConnectionQueryServices cqsi = PhoenixDriver.INSTANCE.getConnectionQueryServices(CLUSTERS.getJdbcUrl1(), clientProperties);
+
+        String haGroupName2 = testName.getMethodName() + RandomStringUtils.randomAlphabetic(3);;
+        CLUSTERS.initClusterRole(haGroupName2, HighAvailabilityPolicy.FAILOVER);
+        clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName2);
+        Connection conn2 = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(), clientProperties); //PRINCIPAL,haGroupName2
+        FailoverPhoenixConnection fconn2 = (FailoverPhoenixConnection) conn2;
+        ConnectionQueryServices cqsi2 = PhoenixDriver.INSTANCE.getConnectionQueryServices(CLUSTERS.getJdbcUrl1(), clientProperties);
+
+        clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName);
+        String principal3 = RandomStringUtils.randomAlphabetic(5);
+        Connection conn3 = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(principal3), clientProperties);//principal3, haGroupName
+        FailoverPhoenixConnection fconn3 = (FailoverPhoenixConnection) conn3;
+        ConnectionQueryServices cqsi3 = PhoenixDriver.INSTANCE.getConnectionQueryServices(CLUSTERS.getJdbcUrl1(principal3), clientProperties);
+
+        //Check wrapped connection urls
+        Assert.assertEquals(CLUSTERS.getJdbcUrl1(), fconn.getWrappedConnection().getURL());
+        Assert.assertEquals(CLUSTERS.getJdbcUrl1(), fconn2.getWrappedConnection().getURL());
+        Assert.assertEquals(CLUSTERS.getJdbcUrl1(principal3), fconn3.getWrappedConnection().getURL());
+
+        //Check HAGroup mappings
+        Assert.assertEquals(2, GROUPS.size());
+        Assert.assertEquals(GROUPS.size(), URLS.size());
+        Assert.assertEquals(2, URLS.get(haGroup.getGroupInfo()).size());
+
+        //Check cqsi objects should be same with what we get from connections
+        Assert.assertEquals(HBaseTestingUtilityPair.PRINCIPAL,cqsi.getUserName());
+        Assert.assertSame(cqsi, fconn.getWrappedConnection().getQueryServices());
+
+        Assert.assertEquals(HBaseTestingUtilityPair.PRINCIPAL,cqsi2.getUserName());
+        Assert.assertSame(cqsi2, fconn2.getWrappedConnection().getQueryServices());
+
+        Assert.assertEquals(principal3,cqsi3.getUserName());
+        Assert.assertSame(cqsi3, fconn3.getWrappedConnection().getQueryServices());
 
     }
 
