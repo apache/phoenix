@@ -609,6 +609,9 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         ColumnProjector projector = getRowProjector().getColumnProjector(columnIndex - 1);
         Object value = projector.getValue(currentRow, projector.getExpression().getDataType(), ptr);
         wasNull = (value == null);
+        if (wasNull) {
+            return null;
+        }
         if (isApplyTimeZoneDisplacement) {
             PDataType type = projector.getExpression().getDataType();
             if (type == PDate.INSTANCE || type == PUnsignedDate.INSTANCE) {
