@@ -28,12 +28,6 @@ import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 
 public abstract class CompatOmidTransactionTable implements Table {
 
-    protected Table hTable;
-
-    public CompatOmidTransactionTable(Table hTable) {
-        this.hTable = hTable;
-    }
-
     @Override
     public RegionLocator getRegionLocator() throws IOException {
         throw new UnsupportedOperationException();
