@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.end2end;
 
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
@@ -35,6 +36,7 @@ import org.apache.hadoop.hbase.filter.QualifierFilter;
 import org.apache.hadoop.hbase.filter.RowFilter;
 import org.apache.hadoop.hbase.filter.SubstringComparator;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.PhoenixTestBuilder;
@@ -59,14 +61,28 @@ import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PBinary;
+import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Before;
@@ -81,6 +97,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -162,6 +179,111 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
         } catch (SQLException e) {
             e.printStackTrace();
         }
+    }
+
+    private SortOrder[][] getSortOrders() {
+        SortOrder[][]
+                sortOrders =
+                new SortOrder[][] {
+                        { SortOrder.ASC, SortOrder.ASC, SortOrder.ASC },
+                        { SortOrder.ASC, SortOrder.ASC, SortOrder.DESC },
+                        { SortOrder.ASC, SortOrder.DESC, SortOrder.ASC },
+                        { SortOrder.ASC, SortOrder.DESC, SortOrder.DESC },
+                        { SortOrder.DESC, SortOrder.ASC, SortOrder.ASC },
+                        { SortOrder.DESC, SortOrder.ASC, SortOrder.DESC },
+                        { SortOrder.DESC, SortOrder.DESC, SortOrder.ASC },
+                        { SortOrder.DESC, SortOrder.DESC, SortOrder.DESC }
+                };
+        return sortOrders;
+    }
+
+
+    private List<PDataType[]> getTestCases() {
+
+        List<PDataType[]> testCases = new ArrayList<>();
+        // Test Case 1: PK1 = Integer, PK2 = Integer, PK3 = Integer
+        testCases.add(new PDataType[] { PInteger.INSTANCE, PInteger.INSTANCE, PInteger.INSTANCE });
+        // Test Case 2: PK1 = Long, PK2 = Long, PK3 = Long
+        testCases.add(new PDataType[] { PLong.INSTANCE, PLong.INSTANCE, PLong.INSTANCE });
+        // Test Case 3: PK1 = Timestamp, PK2 = Timestamp, PK3 = Timestamp
+        testCases.add(
+                new PDataType[] { PTimestamp.INSTANCE, PTimestamp.INSTANCE, PTimestamp.INSTANCE });
+        // Test Case 4: PK1 = Char, PK2 = Char, PK3 = Char
+        testCases.add(new PDataType[] { PChar.INSTANCE, PChar.INSTANCE, PChar.INSTANCE });
+        // Test Case 5: PK1 = Decimal, PK2 = Decimal, PK3 = Integer
+        // last PK cannot be of variable length when creating a view on top of it
+        testCases.add(new PDataType[] { PDecimal.INSTANCE, PDecimal.INSTANCE, PInteger.INSTANCE });
+        // Test Case 6: PK1 = Date, PK2 = Date, PK3 = Date
+        testCases.add(new PDataType[] { PDate.INSTANCE, PDate.INSTANCE, PDate.INSTANCE });
+        // Test Case 7: PK1 = Varchar, PK2 = Varchar, PK3 = Integer
+        // last PK cannot be of variable length when creating a view on top of it
+        testCases.add(new PDataType[] { PVarchar.INSTANCE, PVarchar.INSTANCE, PInteger.INSTANCE });
+
+        // Test Case 8: PK1 = VARBINARY_ENCODED, PK2 = Varchar, PK3 = VARBINARY_ENCODED
+        testCases.add(new PDataType[] { PVarbinaryEncoded.INSTANCE, PVarchar.INSTANCE, PInteger.INSTANCE });
+        return testCases;
+    }
+
+    private String getWhereClause(String[] pkNames, PDataType[] testPKTypes) {
+
+        StringBuilder builder = new StringBuilder("WHERE ");
+        Random rnd = new Random();
+
+        for (int b = 0; b < testPKTypes.length; b++) {
+            if (b > 0) builder.append(" AND ");
+            switch (testPKTypes[b].getSqlType()) {
+            case Types.VARCHAR: {
+                // pkTypeStr = "VARCHAR(25)";
+                builder.append(pkNames[b]).append(" = ").append("'")
+                        .append(RandomStringUtils.randomAlphanumeric(25)).append("'");
+                break;
+            }
+            case Types.CHAR: {
+                //pkTypeStr = "CHAR(15)";
+                builder.append(pkNames[b]).append(" = ").append("'")
+                        .append(RandomStringUtils.randomAlphanumeric(15)).append("'");
+                break;
+            }
+            case Types.DECIMAL:
+                //pkTypeStr = "DECIMAL(8,2)";
+                builder.append(pkNames[b]).append(" = ").append(rnd.nextDouble());
+                break;
+            case Types.INTEGER:
+                //pkTypeStr = "INTEGER";
+                builder.append(pkNames[b]).append(" = ").append(rnd.nextInt(500000));
+                break;
+            case Types.BIGINT:
+                //pkTypeStr = "BIGINT";
+                builder.append(pkNames[b]).append(" = ").append(rnd.nextLong());
+                break;
+            case Types.DATE:
+                //pkTypeStr = "DATE";
+                builder.append(pkNames[b]).append(" = ")
+                        .append(" TO_DATE('2022-03-21T15:03:57+00:00') ");
+                break;
+            case Types.TIMESTAMP:
+                //pkTypeStr = "TIMESTAMP";
+                builder.append(pkNames[b]).append(" = ")
+                        .append(" TO_TIMESTAMP('2019-10-27T16:17:57+00:00') ");
+                break;
+            case Types.VARBINARY:
+                // pkTypeStr = "VARBINARY";
+            case PDataType.VARBINARY_ENCODED_TYPE:
+                // pkTypeStr = "VARBINARY_ENCODED";
+                byte[] varBytes = ByteUtil.concat(
+                        RandomStringUtils.randomAlphanumeric(25).getBytes(),
+                        Bytes.toBytes(rnd.nextInt(50000)),
+                        Bytes.toBytes(Math.floor(rnd.nextInt(50000) * rnd.nextDouble())));
+                builder.append(pkNames[b]).append(" = ")
+                        .append(PVarbinary.INSTANCE.toStringLiteral(varBytes));
+                break;
+            default:
+                // pkTypeStr = "VARCHAR(25)";
+                builder.append(pkNames[b]).append("=").append("'")
+                        .append(RandomStringUtils.randomAlphanumeric(15)).append("'");
+            }
+        }
+        return builder.toString();
     }
 
     private void clearCache(boolean globalFixNeeded, boolean tenantFixNeeded, List<String> allTenants)
@@ -2347,6 +2469,162 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
 
     }
 
+    protected void testMajorCompactTenantViewsWithVariousPKTypesAndSortOrder() throws Exception {
+        try {
+            List<PDataType[]> testCases = getTestCases();
+            SortOrder[][] sortOrders = getSortOrders();
+            for (PDataType[] aCase : testCases) {
+                for (SortOrder[] sortOrder : sortOrders) {
+                    runTenantViewsWithVariousPKTypes(aCase, sortOrder);
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.info(LogUtil.getCallerStackTrace());
+            LOGGER.error(e.getMessage());
+        }
+
+    }
+
+    /**
+     * Test special case:
+     * Test with various PK Types and SortOrders
+     * This can occur when the TENANT_ID and global view PARTITION_KEY overlap.
+     * @throws Exception
+     */
+
+    private void runTenantViewsWithVariousPKTypes(PDataType[] pkDataTypes, SortOrder[] sortOrders) throws Exception {
+        // View TTL is set in seconds (for e.g 10 secs)
+        resetEnvironmentEdgeManager();
+        int viewTTL = VIEW_TTL_10_SECS;
+        // Define the test schema.
+        // 1. Table with columns => (ORG_ID, KP, COL1, COL2, COL3), PK => (ORG_ID, KP)
+        // 2. GlobalView with columns => (ID1, ID2, ID3, COL4, COL5, COL6), PK => (ID1, ID2, ID3)
+        // 3. Tenant with columns => (ZID, COL7, COL8, COL9), PK => (ZID)
+        final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
+
+        TableOptions
+                tableOptions = TableOptions.withDefaults();
+        tableOptions.setTableProps("");
+        tableOptions.setTableProps("COLUMN_ENCODED_BYTES=0,MULTI_TENANT=true,DEFAULT_COLUMN_FAMILY='0'");
+        tableOptions.setTablePKColumns(Arrays.asList("OID", "KP"));
+        tableOptions.setTablePKColumnTypes(Arrays.asList("CHAR(15)", "CHAR(3)"));
+
+        DataOptions dataOptions = DataOptions.withDefaults();
+        dataOptions.setTenantViewName("Z01");
+        dataOptions.setKeyPrefix("Z01");
+
+        GlobalViewOptions
+                globalViewOptions = GlobalViewOptions.withDefaults();
+        String[] globalViewPKNames = new String[] { "ID1", "ID2", "ID3" };
+        globalViewOptions.setGlobalViewPKColumns(asList(globalViewPKNames));
+        globalViewOptions.setGlobalViewPKColumnTypes(
+                asList(
+                        pkDataTypes[0].getSqlTypeName(),
+                        pkDataTypes[1].getSqlTypeName(),
+                        pkDataTypes[2].getSqlTypeName()
+                )
+        );
+        globalViewOptions.setGlobalViewPKColumnSort(asList(
+                sortOrders[0].name(),
+                sortOrders[1].name(),
+                sortOrders[2].name()
+        ));
+
+        TenantViewOptions
+                tenantViewOptions = TenantViewOptions.withDefaults();
+        tenantViewOptions.setTenantViewCondition(String.format(
+                "SELECT * FROM %s.%s %s",
+                dataOptions.getSchemaName(), dataOptions.getGlobalViewName(),
+                getWhereClause(globalViewPKNames, pkDataTypes)));
+        // View TTL is set to 10s => 10000 ms
+        tenantViewOptions.setTableProps(String.format("TTL=%d", viewTTL));
+
+        schemaBuilder.withTableOptions(tableOptions)
+                .withTenantViewOptions(tenantViewOptions);
+
+        schemaBuilder
+                .withDataOptions(dataOptions)
+                .withGlobalViewOptions(globalViewOptions)
+                .buildWithNewTenant();
+
+        // Define the test data.
+        DataSupplier
+                dataSupplier = new DataSupplier() {
+
+            @Override public List<Object> getValues(int rowIndex) {
+                Random rnd = new Random();
+                String zid = String.format(ZID_FMT, rowIndex);
+                String col1 = String.format(COL1_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col2 = String.format(COL2_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col3 = String.format(COL3_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col4 = String.format(COL4_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col5 = String.format(COL5_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col6 = String.format(COL6_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+
+                return Lists.newArrayList(
+                        new Object[] { col1, col2, col3, col4, col5, col6,
+                                zid, col7, col8, col9 });
+            }
+        };
+
+        long earliestTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+        // Create a test data reader/writer for the above schema.
+        DataWriter
+                dataWriter = new BasicDataWriter();
+        DataReader
+                dataReader = new BasicDataReader();
+
+        List<String> columns =
+                Lists.newArrayList(
+                        "COL1", "COL2", "COL3", "COL4", "COL5",
+                        "COL6", "ZID", "COL7", "COL8", "COL9");
+        List<String> rowKeyColumns = Lists.newArrayList("ZID");
+        String tenantConnectUrl =
+                getUrl() + ';' + TENANT_ID_ATTRIB + '=' +
+                        schemaBuilder.getDataOptions().getTenantId();
+        try (Connection writeConnection = DriverManager
+                .getConnection(tenantConnectUrl)) {
+            writeConnection.setAutoCommit(true);
+            dataWriter.setConnection(writeConnection);
+            dataWriter.setDataSupplier(dataSupplier);
+            dataWriter.setUpsertColumns(columns);
+            dataWriter.setRowKeyColumns(rowKeyColumns);
+            dataWriter.setTargetEntity(schemaBuilder.getEntityTenantViewName());
+            org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object>
+                    upsertedData =
+                    upsertData(dataWriter, DEFAULT_NUM_ROWS);
+
+            dataReader.setValidationColumns(columns);
+            dataReader.setRowKeyColumns(rowKeyColumns);
+            dataReader.setDML(String
+                    .format("SELECT %s from %s", Joiner.on(",").join(columns),
+                            schemaBuilder.getEntityTenantViewName()));
+            dataReader.setTargetEntity(schemaBuilder.getEntityTenantViewName());
+            long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+
+            validateExpiredRowsAreNotReturnedUsingData(viewTTL, upsertedData,
+                    dataReader, schemaBuilder);
+        }
+
+
+
+        PTable table = schemaBuilder.getBaseTable();
+        // validate multi-tenanted base table
+        validateAfterMajorCompaction(
+                table.getSchemaName().toString(),
+                table.getTableName().toString(),
+                false,
+                earliestTimestamp,
+                viewTTL,
+                false,
+                0
+        );
+    }
+
+
     /**
      * Test special case:
      * When there are overlapping row key prefixes.
@@ -2354,7 +2632,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
      * @throws Exception
      */
 
-    protected void testTenantViewsWIthOverlappingRowPrefixes() throws Exception {
+    protected void testTenantViewsWithOverlappingRowPrefixes() throws Exception {
         // View TTL is set in seconds (for e.g 10 secs)
         int viewTTL = VIEW_TTL_10_SECS;
         // Define the test schema.

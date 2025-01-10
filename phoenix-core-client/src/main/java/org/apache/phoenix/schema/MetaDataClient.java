@@ -3655,7 +3655,7 @@ public class MetaDataClient {
 
             if ((rowKeyMatcher == null) ||
                     Bytes.compareTo(rowKeyMatcher, HConstants.EMPTY_BYTE_ARRAY) == 0) {
-                tableUpsert.setNull(38, Types.VARBINARY);
+                tableUpsert.setNull(38, PDataType.VARBINARY_ENCODED_TYPE);
             } else {
                 tableUpsert.setBytes(38, rowKeyMatcher);
             }

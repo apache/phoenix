@@ -406,7 +406,7 @@ public interface QueryConstants {
             MAX_LOOKBACK_AGE + " BIGINT, \n" +
             CDC_INCLUDE_TABLE + " VARCHAR, \n" +
             TTL + " VARCHAR, \n" +
-            ROW_KEY_MATCHER + " VARBINARY, \n" +
+            ROW_KEY_MATCHER + " VARBINARY_ENCODED, \n" +
             // Column metadata (will be null for table row)
             DATA_TYPE + " INTEGER," +
             COLUMN_SIZE + " INTEGER," +

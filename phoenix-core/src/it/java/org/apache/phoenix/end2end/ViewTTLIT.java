@@ -56,9 +56,14 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
@@ -79,6 +84,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -1702,8 +1708,13 @@ public class ViewTTLIT extends BaseViewTTLIT {
     }
 
     @Test
-    public void testTenantViewsWIthOverlappingRowPrefixes() throws Exception {
-        super.testTenantViewsWIthOverlappingRowPrefixes();
+    public void testMajorCompactTenantViewsWithVariousPKTypesAndSortOrder() throws Exception {
+        super.testMajorCompactTenantViewsWithVariousPKTypesAndSortOrder();
+    }
+
+    @Test
+    public void testTenantViewsWithOverlappingRowPrefixes() throws Exception {
+        super.testTenantViewsWithOverlappingRowPrefixes();
     }
 
 }
