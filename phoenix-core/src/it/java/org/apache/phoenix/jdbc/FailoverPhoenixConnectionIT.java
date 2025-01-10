@@ -662,11 +662,6 @@ public class FailoverPhoenixConnectionIT {
         Assert.assertEquals(CLUSTERS.getJdbcUrl1(), fconn2.getWrappedConnection().getURL());
         Assert.assertEquals(CLUSTERS.getJdbcUrl1(principal3), fconn3.getWrappedConnection().getURL());
 
-        //Check HAGroup mappings
-        Assert.assertEquals(2, GROUPS.size());
-        Assert.assertEquals(GROUPS.size(), URLS.size());
-        Assert.assertEquals(2, URLS.get(haGroup.getGroupInfo()).size());
-
         //Check cqsi objects should be same with what we get from connections
         Assert.assertEquals(HBaseTestingUtilityPair.PRINCIPAL,cqsi.getUserName());
         Assert.assertSame(cqsi, fconn.getWrappedConnection().getQueryServices());

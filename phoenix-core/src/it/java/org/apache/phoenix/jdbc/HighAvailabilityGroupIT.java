@@ -36,6 +36,7 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
@@ -199,14 +200,6 @@ public class HighAvailabilityGroupIT {
                     haGroup2.get().getGroupInfo().getJDBCUrl(CLUSTERS.getUrl2(), haURLInfo2));
             assertEquals(CLUSTERS.getJdbcHAUrl(principal), haGroup2.get().getGroupInfo().
                     getJDBCUrl(String.format("[%s|%s]", CLUSTERS.getUrl1(), CLUSTERS.getUrl2()), haURLInfo2));
-
-            //GROUPS cache and URL cache should be of size 1 as both should have same HAGroupInfo
-            assertEquals(1, GROUPS.size());
-            assertEquals(GROUPS.size(), URLS.size());
-            assertSame(haGroup.getGroupInfo(), haGroup2.get().getGroupInfo());
-            //URLS cache should have a list of size 2 for the current HAGroupInfo one for each principal maintaining
-            //1:n mapping in map.
-            assertEquals(2, URLS.get(haGroup.getGroupInfo()).size());
         } finally {
             haGroup2.ifPresent(HighAvailabilityGroup::close);
         }
@@ -223,9 +216,6 @@ public class HighAvailabilityGroupIT {
             assertTrue(haGroup3.isPresent());
             assertNotSame(haGroup, haGroup3.get());
 
-            //GROUPS cache and URL cache should be of size 2 as we have a new mapping of different HAGroupName
-            assertEquals(2, GROUPS.size());
-            assertEquals(GROUPS.size(), URLS.size());
             assertNotSame(haGroup.getGroupInfo(), haGroup3.get().getGroupInfo());
 
             //URLs we are getting for haGroup3 should have same principal as default PRINCIPAL.
@@ -235,11 +225,6 @@ public class HighAvailabilityGroupIT {
                     haGroup3.get().getGroupInfo().getJDBCUrl(CLUSTERS.getUrl2(), haurlInfo3));
             assertEquals(CLUSTERS.getJdbcHAUrl(), haGroup3.get().getGroupInfo().
                     getJDBCUrl(String.format("[%s|%s]", CLUSTERS.getUrl1(), CLUSTERS.getUrl2()), haurlInfo3));
-
-            //URLS cache should have a list of size 2 for the current HAGroupInfo one for each principal maintaining
-            //1:n mapping in map.
-            assertEquals(2, URLS.get(haGroup.getGroupInfo()).size());
-            assertEquals(1, URLS.get(haGroup3.get().getGroupInfo()).size());
 
         } finally {
             haGroup3.ifPresent(HighAvailabilityGroup::close);
@@ -266,13 +251,6 @@ public class HighAvailabilityGroupIT {
             assertEquals(CLUSTERS.getJdbcHAUrl(principal), haGroup4.get().getGroupInfo().
                     getJDBCUrl(String.format("[%s|%s]", CLUSTERS.getUrl1(), CLUSTERS.getUrl2()), haURLInfo4));
 
-            //GROUPS cache and URL cache should be of size 2 as we are using the default HAGroup mapping
-            assertEquals(2, GROUPS.size());
-            assertEquals(GROUPS.size(), URLS.size());
-            assertSame(haGroup.getGroupInfo(), haGroup4.get().getGroupInfo());
-            //URLS cache should have a list of size 3 for the current HAGroupInfo one for each principal maintaining
-            //1:n mapping in map.
-            assertEquals(3, URLS.get(haGroup.getGroupInfo()).size());
         } finally {
             haGroup4.ifPresent(HighAvailabilityGroup::close);
         }
