@@ -217,15 +217,18 @@ public class HighAvailabilityGroup {
                 if (extraIdx != 0) {
                     principal = additionalJDBCParams.substring(0, extraIdx);
                 }
+                //Storing terminator as part of additional Params
                 additionalJDBCParams = additionalJDBCParams.substring(extraIdx + 1);
             } else {
                 extraIdx = additionalJDBCParams.indexOf(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR);
                 if (extraIdx != -1) {
+                    //Not storing terminator to make it consistent.
                     principal = additionalJDBCParams.substring(0, extraIdx);
+                    additionalJDBCParams = String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR);
                 } else {
                     principal = additionalJDBCParams;
+                    additionalJDBCParams = null;
                 }
-                additionalJDBCParams = null;
             }
         }
 
