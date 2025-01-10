@@ -21,9 +21,14 @@ import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.GROUPED_AGGREGATOR_VALUE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
+import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_FAMILY;
+import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_QUALIFIER;
 
 import java.io.DataOutput;
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
@@ -34,9 +39,13 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.jdbc.PhoenixPrefetchedResultSet;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -209,5 +218,36 @@ public class TupleUtil {
             out.write(kv.getBuffer(), kv.getOffset(), kv.getLength());
           }
         return size;
+    }
+
+    /**
+     * Convert the given Tuple containing list of Cells to ResultSet with similar effect as if
+     * SELECT * FROM <table-name> is queried.
+     *
+     * @param toProject Tuple to be projected.
+     * @param tableName Table name.
+     * @param conn Phoenix Connection object.
+     * @return ResultSet for the give single row.
+     * @throws SQLException If any SQL operation fails.
+     */
+    public static ResultSet getResultSet(Tuple toProject, String tableName, Connection conn)
+        throws SQLException {
+        try (PhoenixResultSet resultSet = (PhoenixResultSet) conn.createStatement()
+            .executeQuery("SELECT * FROM " + tableName)) {
+            PTable pTable =
+                resultSet.getStatement().getQueryPlan().getContext().getResolver().getTables()
+                    .get(0).getTable();
+            TupleProjector tupleProjector = new TupleProjector(pTable);
+            // Project results for ResultSet.
+            Tuple tuple = tupleProjector.projectResults(toProject, true);
+            // Use new CF:CQ that can be correctly used by ResultSet.
+            Cell newCell = tuple.getValue(VALUE_COLUMN_FAMILY, VALUE_COLUMN_QUALIFIER);
+            ResultSet newResultSet =
+                new PhoenixPrefetchedResultSet(resultSet.getRowProjector(), resultSet.getContext(),
+                    Collections.singletonList(
+                        new ResultTuple(Result.create(Collections.singletonList(newCell)))));
+            newResultSet.next();
+            return newResultSet;
+        }
     }
 }

@@ -222,11 +222,11 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
      * If the row is successfully updated, return the updated row, otherwise if the row
      * cannot be updated, return non-updated row.
      *
-     * @return The pair of int and Tuple, where int represents value 1 for successful row update
-     * and 0 for non-successful row update, and Tuple represents the state of the row.
+     * @return The pair of int and ResultSet, where int represents value 1 for successful row update
+     * and 0 for non-successful row update, and ResultSet represents the state of the row.
      * @throws SQLException If the statement cannot be executed.
      */
-    public Pair<Integer, Tuple> executeUpdateReturnRow() throws SQLException {
+    public Pair<Integer, ResultSet> executeUpdateReturnRow() throws SQLException {
         if (!connection.getAutoCommit()) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.AUTO_COMMIT_NOT_ENABLED).build()
                     .buildException();

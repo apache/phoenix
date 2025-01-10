@@ -494,17 +494,11 @@ public class Bson4IT extends ParallelStatsDisabledIT {
                                               String jsonPath,
                                               boolean success)
           throws SQLException, IOException {
-    Pair<Integer, Tuple> resultPair =
-            stmt.unwrap(PhoenixPreparedStatement.class).executeUpdateReturnRow();
+    Pair<Integer, ResultSet> resultPair =
+        stmt.unwrap(PhoenixPreparedStatement.class).executeUpdateReturnRow();
     assertEquals(success ? 1 : 0, resultPair.getFirst().intValue());
-    Tuple result = resultPair.getSecond();
-    PTable table = conn.unwrap(PhoenixConnection.class).getTable(tableName);
-
-    Cell cell = result.getValue(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
-            table.getColumns().get(2).getColumnQualifierBytes());
-    assertEquals(RawBsonDocument.parse(getJsonString(jsonPath)),
-            PBson.INSTANCE.toObject(cell.getValueArray(), cell.getValueOffset(),
-                    cell.getValueLength()));
+    ResultSet resultSet = resultPair.getSecond();
+    assertEquals(RawBsonDocument.parse(getJsonString(jsonPath)), resultSet.getObject(3));
   }
 
   private static void validateIndexUsed(PreparedStatement ps, String indexName)
