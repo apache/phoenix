@@ -40,7 +40,6 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Result;
@@ -52,7 +51,6 @@ import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -60,12 +58,6 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.schema.tuple.ResultTuple;
-import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.schema.types.PBson;
-import org.apache.phoenix.schema.types.PDouble;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -362,7 +354,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                                                        BsonDocument expectedDoc,
                                                        Integer col4)
             throws SQLException {
-        final Pair<Integer, ResultSet> resultPair = ps.executeUpdateReturnRow();
+        final Pair<Integer, ResultSet> resultPair = ps.executeAtomicUpdateReturnRow();
         ResultSet resultSet = resultPair.getSecond();
         if (!isSinglePointLookup) {
             assertNull(resultSet);
@@ -409,10 +401,10 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             PhoenixPreparedStatement ps =
                     conn.prepareStatement(upsertSql).unwrap(PhoenixPreparedStatement.class);
             ps.setObject(1, inputDoc);
-            resultPair = ps.executeUpdateReturnRow();
+            resultPair = ps.executeAtomicUpdateReturnRow();
         } else {
             resultPair = conn.createStatement().unwrap(PhoenixStatement.class)
-                    .executeUpdateReturnRow(upsertSql);
+                    .executeAtomicUpdateReturnRow(upsertSql);
         }
         assertEquals(success ? 1 : 0, resultPair.getFirst().intValue());
         ResultSet resultSet = resultPair.getSecond();

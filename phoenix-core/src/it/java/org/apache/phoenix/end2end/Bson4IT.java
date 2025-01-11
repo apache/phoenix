@@ -31,13 +31,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.schema.types.PBson;
 import org.apache.phoenix.schema.types.PDouble;
 import org.bson.BsonArray;
 import org.bson.BsonBinary;
@@ -495,7 +489,7 @@ public class Bson4IT extends ParallelStatsDisabledIT {
                                               boolean success)
           throws SQLException, IOException {
     Pair<Integer, ResultSet> resultPair =
-        stmt.unwrap(PhoenixPreparedStatement.class).executeUpdateReturnRow();
+        stmt.unwrap(PhoenixPreparedStatement.class).executeAtomicUpdateReturnRow();
     assertEquals(success ? 1 : 0, resultPair.getFirst().intValue());
     ResultSet resultSet = resultPair.getSecond();
     assertEquals(RawBsonDocument.parse(getJsonString(jsonPath)), resultSet.getObject(3));

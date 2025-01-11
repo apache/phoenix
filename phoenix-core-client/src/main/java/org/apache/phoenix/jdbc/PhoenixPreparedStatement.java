@@ -57,7 +57,6 @@ import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.schema.ExecuteQueryNotApplicableException;
 import org.apache.phoenix.schema.ExecuteUpdateNotApplicableException;
 import org.apache.phoenix.schema.Sequence;
-import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.SQLCloseable;
@@ -226,7 +225,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
      * and 0 for non-successful row update, and ResultSet represents the state of the row.
      * @throws SQLException If the statement cannot be executed.
      */
-    public Pair<Integer, ResultSet> executeUpdateReturnRow() throws SQLException {
+    public Pair<Integer, ResultSet> executeAtomicUpdateReturnRow() throws SQLException {
         if (!connection.getAutoCommit()) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.AUTO_COMMIT_NOT_ENABLED).build()
                     .buildException();
