@@ -216,9 +216,9 @@ def shell_quote(args):
         import subprocess
         return subprocess.list2cmdline(args)
     else:
-        # pipes module isn't available on Windows
-        import pipes
-        return " ".join([pipes.quote(tryDecode(v)) for v in args])
+        # *nix
+        import shlex
+        return " ".join([shlex.quote(tryDecode(v)) for v in args])
 
 
 def __set_java_home():
