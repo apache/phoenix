@@ -70,9 +70,11 @@ public class HashCacheFactory implements ServerCacheFactory {
     public Closeable newCache(ImmutableBytesWritable cachePtr, byte[] txState, MemoryChunk chunk, boolean useProtoForIndexMaintainer, int clientVersion) throws SQLException {
         try {
             // This reads the uncompressed length from the front of the compressed input
-            int uncompressedLen = Snappy.uncompressedLength(cachePtr.get(), cachePtr.getOffset(), cachePtr.getLength());
+            int uncompressedLen = Snappy.uncompressedLength(cachePtr.get(), cachePtr.getOffset(),
+                cachePtr.getLength());
             byte[] uncompressed = new byte[uncompressedLen];
-            Snappy.uncompress(cachePtr.get(), cachePtr.getOffset(), cachePtr.getLength(), uncompressed, 0);
+            Snappy.uncompress(cachePtr.get(), cachePtr.getOffset(), cachePtr.getLength(),
+                uncompressed, 0);
             return new HashCacheImpl(uncompressed, chunk, clientVersion);
         } catch (IOException e) {
             throw ClientUtil.parseServerException(e);
