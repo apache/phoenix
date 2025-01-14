@@ -210,6 +210,13 @@ public class HighAvailabilityGroup {
         int idx = url.indexOf("]");
         int extraIdx = url.indexOf(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR, idx + 1);
         if (extraIdx != -1) {
+            //after zk quorums there should be a separator
+            if (extraIdx != idx + 1) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
+                        .setMessage(String.format("URL %s is not a valid HA connection string", url))
+                        .build()
+                        .buildException();
+            }
             additionalJDBCParams  = url.substring(extraIdx + 1);
             //Get the principal
             extraIdx = additionalJDBCParams.indexOf(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
@@ -228,6 +235,19 @@ public class HighAvailabilityGroup {
                 } else {
                     principal = additionalJDBCParams;
                     additionalJDBCParams = null;
+                }
+            }
+        } else {
+            extraIdx = url.indexOf(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR, idx + 1);
+            if (extraIdx != -1) {
+                //There is something in between zkquorum and terminator but no separator(s), So not sure what it is
+                if (extraIdx != idx + 1) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
+                            .setMessage(String.format("URL %s is not a valid HA connection string", url))
+                            .build()
+                            .buildException();
+                } else {
+                    additionalJDBCParams = url.substring(extraIdx);
                 }
             }
         }
@@ -848,14 +868,20 @@ public class HighAvailabilityGroup {
                         !Strings.isNullOrEmpty(haURLInfo.getAdditionalJDBCParams())) {
                     sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
                     sb.append(haURLInfo.getPrincipal());
-                    sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+                    if (!haURLInfo.getAdditionalJDBCParams().
+                            equals(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR))) {
+                        sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+                    }
                     sb.append(haURLInfo.getAdditionalJDBCParams());
                 } else if (!Strings.isNullOrEmpty(haURLInfo.getPrincipal())) {
                     sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
                     sb.append(haURLInfo.getPrincipal());
                 } else if (!Strings.isNullOrEmpty(haURLInfo.getAdditionalJDBCParams())) {
-                    sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
-                    sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+                    if (!haURLInfo.getAdditionalJDBCParams().
+                            equals(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR))) {
+                        sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+                        sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+                    }
                     sb.append(haURLInfo.getAdditionalJDBCParams());
                 }
             }
