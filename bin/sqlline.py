@@ -97,7 +97,8 @@ java_cmd = phoenix_utils.java + ' ' + phoenix_utils.jvm_module_flags + ' $PHOENI
     phoenix_utils.slf4j_backend_jar + os.pathsep + \
     phoenix_utils.logging_jar + os.pathsep + \
     phoenix_utils.phoenix_client_embedded_jar + \
-    '" -Dlog4j2.configurationFile=file:' + os.path.join(phoenix_utils.current_dir, "log4j2.properties") + \
+    '" -Djava.util.logging.config.class=org.apache.hadoop.hbase.logging.JulToSlf4jInitializer ' + \
+    ' -Dlog4j2.configurationFile=file:' + os.path.join(phoenix_utils.current_dir, "log4j2.properties") + \
     disable_jna + \
     " sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver" + \
     (not args.noconnect and " -u " + phoenix_utils.shell_quote([jdbc_url]) or "") + \

@@ -86,6 +86,7 @@ def setPath():
     LOGGING_JAR_PATTERN = "log4j-core*.jar"
     LOGGING_JAR_PATTERN2 = "log4j-api*.jar"
     LOGGING_JAR_PATTERN3 = "log4j-1.2-api*.jar"
+    LOGGING_JAR_PATTERN4 = "jul-to-slf4j*.jar"
     SQLLINE_WITH_DEPS_PATTERN = "sqlline-*-jar-with-dependencies.jar"
 
 
@@ -189,6 +190,7 @@ def setPath():
         logging_jar = findFileInPathWithoutRecursion(LOGGING_JAR_PATTERN, os.path.join(current_dir, "..","lib"))
         logging_jar += ":"+findFileInPathWithoutRecursion(LOGGING_JAR_PATTERN2, os.path.join(current_dir, "..","lib"))
         logging_jar += ":"+findFileInPathWithoutRecursion(LOGGING_JAR_PATTERN3, os.path.join(current_dir, "..","lib"))
+        logging_jar += ":"+findFileInPathWithoutRecursion(LOGGING_JAR_PATTERN4, os.path.join(current_dir, "..","lib"))
 
     __set_java_home()
     __set_jvm_flags()
