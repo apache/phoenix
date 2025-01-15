@@ -162,6 +162,11 @@
 
     <!-- Test Dependencies -->
     <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>jul-to-slf4j</artifactId>
+        <scope>test</scope>
+    </dependency>
+    <dependency>
         <groupId>org.apache.logging.log4j</groupId>
         <artifactId>log4j-api</artifactId>
         <scope>test</scope>
@@ -310,6 +315,9 @@
             </ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>
               org.apache.logging.log4j:log4j-1.2-api
+            </ignoredUnusedDeclaredDependency>
+            <ignoredUnusedDeclaredDependency>
+              org.slf4j:jul-to-slf4j
             </ignoredUnusedDeclaredDependency>
           </ignoredUnusedDeclaredDependencies>
           <ignoredUsedUndeclaredDependencies>

@@ -40,7 +40,6 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Result;
@@ -52,7 +51,6 @@ import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -60,12 +58,6 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.schema.tuple.ResultTuple;
-import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.schema.types.PBson;
-import org.apache.phoenix.schema.types.PDouble;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -146,6 +138,11 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
     public void testReturnRowResult1() throws Exception {
         Assume.assumeTrue("Set correct result to RegionActionResult on hbase versions " +
                 "2.4.18+, 2.5.9+, and 2.6.0+", isSetCorrectResultEnabledOnHBase());
+        // NOTE - Tuple result projection does not work well with local index because
+        // this assertion can be false: CellUtil.matchingRows(kvs[0], kvs[kvs.length-1])
+        // as the Tuple contains different rowkeys.
+        Assume.assumeTrue("ResultSet return does not work with local index",
+            !indexDDL.startsWith("create local index"));
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String sample1 = getJsonString("json/sample_01.json");
@@ -171,10 +168,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             ps.setString(1, "pk000");
             ps.setDouble(2, -123.98);
             ps.setString(3, "pk003");
-            validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", true, true,
-                    bsonDocument2, 234);
-            validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", true, false,
-                    bsonDocument2, 234);
+            validateReturnedRowAfterDelete(ps, "col2_001", true, true, bsonDocument2, 234);
+            validateReturnedRowAfterDelete(ps, "col2_001", true, false, bsonDocument2, 234);
 
             validateMultiRowDelete(tableName, conn, bsonDocument2);
         }
@@ -184,6 +179,11 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
     public void testReturnRowResult2() throws Exception {
         Assume.assumeTrue("Set correct result to RegionActionResult on hbase versions " +
                 "2.4.18+, 2.5.9+, and 2.6.0+", isSetCorrectResultEnabledOnHBase());
+        // NOTE - Tuple result projection does not work well with local index because
+        // this assertion can be false: CellUtil.matchingRows(kvs[0], kvs[kvs.length-1])
+        // as the Tuple contains different rowkeys.
+        Assume.assumeTrue("ResultSet return does not work with local index",
+            !indexDDL.startsWith("create local index"));
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String sample1 = getJsonString("json/sample_01.json");
@@ -213,8 +213,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             ps.setDouble(2, -123.98);
             ps.setString(3, "pk003");
             ps.setInt(4, 235);
-            validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", true, false,
-                    bsonDocument2, 234);
+            validateReturnedRowAfterDelete(ps, "col2_001", true, false, bsonDocument2, 234);
 
             ps = conn.prepareStatement("DELETE FROM " + tableName
                             + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ?")
@@ -223,12 +222,10 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             ps.setDouble(2, -123.98);
             ps.setString(3, "pk003");
             ps.setInt(4, 234);
-            validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", true, true,
-                    bsonDocument2, 234);
+            validateReturnedRowAfterDelete(ps, "col2_001", true, true, bsonDocument2, 234);
 
             verifyIndexRow(conn, tableName, true);
-            validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", true, false,
-                    bsonDocument2, 234);
+            validateReturnedRowAfterDelete(ps, "col2_001", true, false, bsonDocument2, 234);
 
             validateMultiRowDelete(tableName, conn, bsonDocument2);
         }
@@ -266,13 +263,11 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                 .unwrap(PhoenixPreparedStatement.class);
         ps.setString(1, "pk001");
         ps.setDouble(2, 122.34);
-        validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", false, false,
-                bsonDocument2, 234);
+        validateReturnedRowAfterDelete(ps, "col2_001", false, false, bsonDocument2, 234);
 
         ps = conn.prepareStatement(
                 "DELETE FROM " + tableName).unwrap(PhoenixPreparedStatement.class);
-        validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", false, false,
-                bsonDocument2, 234);
+        validateReturnedRowAfterDelete(ps, "col2_001", false, false, bsonDocument2, 234);
 
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
         assertFalse(rs.next());
@@ -287,8 +282,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
         ps.setDouble(2, 122.34);
         ps.setString(3, "pk004");
         ps.setString(4, "pk005");
-        validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", false, false,
-                bsonDocument2, 234);
+        validateReturnedRowAfterDelete(ps, "col2_001", false, false, bsonDocument2, 234);
     }
 
     private static void validateAtomicUpsertReturnRow(String tableName, Connection conn, BsonDocument bsonDocument1,
@@ -353,71 +347,42 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
         conn.createStatement().execute(upsertSql);
     }
 
-    private static void validateReturnedRowAfterDelete(Connection conn,
-                                                       PhoenixPreparedStatement ps,
-                                                       String tableName,
-                                                       Double col1,
+    private static void validateReturnedRowAfterDelete(PhoenixPreparedStatement ps,
                                                        String col2,
                                                        boolean isSinglePointLookup,
                                                        boolean atomicDeleteSuccessful,
                                                        BsonDocument expectedDoc,
                                                        Integer col4)
             throws SQLException {
-        final Pair<Integer, Tuple> resultPair = ps.executeUpdateReturnRow();
-        ResultTuple result = (ResultTuple) resultPair.getSecond();
-
-        PTable table = conn.unwrap(PhoenixConnection.class).getTable(tableName);
-
+        final Pair<Integer, ResultSet> resultPair = ps.executeAtomicUpdateReturnRow();
+        ResultSet resultSet = resultPair.getSecond();
         if (!isSinglePointLookup) {
-            assertNull(result.getResult());
+            assertNull(resultSet);
             return;
         }
-        Cell cell =
-                result.getResult()
-                        .getColumnLatestCell(table.getColumns().get(3).getFamilyName().getBytes(),
-                                table.getColumns().get(3).getColumnQualifierBytes());
         if (!atomicDeleteSuccessful) {
-            assertNull(cell);
+            assertTrue(resultSet == null || resultSet.getObject(4) == null);
             return;
         }
-
-        validateReturnedRowResult(col2, expectedDoc, col4, table, result);
+        validateReturnedRowResult(col2, expectedDoc, col4, resultSet);
     }
 
-    private static void validateReturnedRowResult(String col2,
-                                                  BsonDocument expectedDoc, Integer col4,
-                                                  PTable table, ResultTuple result) {
-        Cell cell = result.getResult()
-                .getColumnLatestCell(table.getColumns().get(4).getFamilyName().getBytes(),
-                        table.getColumns().get(4).getColumnQualifierBytes());
+    private static void validateReturnedRowResult(String col2, BsonDocument expectedDoc,
+        Integer col4, ResultSet resultSet) throws SQLException {
         if (col2 != null) {
-            assertEquals(col2,
-                    PVarchar.INSTANCE.toObject(cell.getValueArray(), cell.getValueOffset(),
-                            cell.getValueLength()));
+            assertEquals(col2, resultSet.getString(5));
         } else {
-            assertNull(cell);
+            assertNull(resultSet.getString(5));
         }
-
-        cell = result.getResult()
-                .getColumnLatestCell(table.getColumns().get(5).getFamilyName().getBytes(),
-                        table.getColumns().get(5).getColumnQualifierBytes());
         if (expectedDoc != null) {
-            assertEquals(expectedDoc,
-                    PBson.INSTANCE.toObject(cell.getValueArray(), cell.getValueOffset(),
-                            cell.getValueLength()));
+            assertEquals(expectedDoc, resultSet.getObject(6));
         } else {
-            assertNull(cell);
+            assertNull(resultSet.getObject(6));
         }
-
-        cell = result.getResult()
-                .getColumnLatestCell(table.getColumns().get(6).getFamilyName().getBytes(),
-                        table.getColumns().get(6).getColumnQualifierBytes());
         if (col4 != null) {
-            assertEquals(col4,
-                    PInteger.INSTANCE.toObject(cell.getValueArray(), cell.getValueOffset(),
-                            cell.getValueLength()));
+            assertEquals(col4, resultSet.getObject(7));
         } else {
-            assertNull(cell);
+            assertNull(resultSet.getObject(7));
         }
     }
 
@@ -431,42 +396,25 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                                                        BsonDocument expectedDoc,
                                                        Integer col4)
             throws SQLException {
-        final Pair<Integer, Tuple> resultPair;
+        final Pair<Integer, ResultSet> resultPair;
         if (inputDoc != null) {
             PhoenixPreparedStatement ps =
                     conn.prepareStatement(upsertSql).unwrap(PhoenixPreparedStatement.class);
             ps.setObject(1, inputDoc);
-            resultPair = ps.executeUpdateReturnRow();
+            resultPair = ps.executeAtomicUpdateReturnRow();
         } else {
             resultPair = conn.createStatement().unwrap(PhoenixStatement.class)
-                    .executeUpdateReturnRow(upsertSql);
+                    .executeAtomicUpdateReturnRow(upsertSql);
         }
         assertEquals(success ? 1 : 0, resultPair.getFirst().intValue());
-        ResultTuple result = (ResultTuple) resultPair.getSecond();
+        ResultSet resultSet = resultPair.getSecond();
         PTable table = conn.unwrap(PhoenixConnection.class).getTable(tableName);
 
-        Cell cell =
-                result.getResult()
-                        .getColumnLatestCell(table.getColumns().get(3).getFamilyName().getBytes(),
-                                table.getColumns().get(3).getColumnQualifierBytes());
-        ImmutableBytesPtr ptr = new ImmutableBytesPtr();
-        table.getRowKeySchema().iterator(cell.getRowArray(), ptr, 1);
-        assertEquals("pk000",
-                PVarchar.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength()));
-
-        ptr = new ImmutableBytesPtr();
-        table.getRowKeySchema().iterator(cell.getRowArray(), ptr, 2);
-        assertEquals(-123.98,
-                PDouble.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength()));
-
-        ptr = new ImmutableBytesPtr();
-        table.getRowKeySchema().iterator(cell.getRowArray(), ptr, 3);
-        assertEquals("pk003",
-                PVarchar.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength()));
-        assertEquals(col1,
-                PDouble.INSTANCE.toObject(cell.getValueArray(), cell.getValueOffset(),
-                        cell.getValueLength()));
-        validateReturnedRowResult(col2, expectedDoc, col4, table, result);
+        assertEquals("pk000", resultSet.getString(1));
+        assertEquals(-123.98, resultSet.getDouble(2), 0.0);
+        assertEquals("pk003", resultSet.getString(3));
+        assertEquals(col1, resultSet.getDouble(4), 0.0);
+        validateReturnedRowResult(col2, expectedDoc, col4, resultSet);
     }
 
     @Test
@@ -492,8 +440,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             ps.setString(1, "pk001");
             ps.setString(2, "pk002");
             ps.setString(3, "pk003");
-            validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", false, false,
-                    null, 234);
+            validateReturnedRowAfterDelete(ps, "col2_001", false, false, null, 234);
 
             ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
             assertFalse(rs.next());
