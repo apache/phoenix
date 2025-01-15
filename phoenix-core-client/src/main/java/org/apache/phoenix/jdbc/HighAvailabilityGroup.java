@@ -383,7 +383,8 @@ public class HighAvailabilityGroup {
      *
      * @param url        The HA connection url optionally; empty optional if properties disables fallback
      * @param properties The client connection properties
-     * @return The connection url of the single cluster to fall back on, with a fully qualified JDBC protocol
+     * @return The connection url of the single cluster to fall back on,
+     * with a fully qualified JDBC protocol
      * @throws SQLException if fails to get HA information and/or invalid properties are seen
      */
     static Optional<String> getFallbackCluster(String url, Properties properties) throws SQLException {
@@ -403,8 +404,8 @@ public class HighAvailabilityGroup {
 
         // Ensure the fallback cluster URL includes the JDBC protocol prefix
         if (!fallbackCluster.startsWith(PhoenixRuntime.JDBC_PROTOCOL_ZK)) {
-            fallbackCluster = PhoenixRuntime.JDBC_PROTOCOL_ZK +
-                    PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + fallbackCluster;
+            fallbackCluster = PhoenixRuntime.JDBC_PROTOCOL_ZK
+                    + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + fallbackCluster;
         }
 
         LOG.info("Falling back to single cluster '{}' for the HA group {} to serve HA connection "
