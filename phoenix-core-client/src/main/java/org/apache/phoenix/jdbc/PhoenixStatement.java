@@ -230,6 +230,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
+import org.apache.phoenix.util.TupleUtil;
 import org.apache.phoenix.util.ValidateLastDDLTimestampUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -584,17 +585,15 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         return executeMutation(stmt, true, queryLogger, null).getFirst();
     }
 
-    Pair<Integer, Tuple> executeMutation(final CompilableStatement stmt,
+    Pair<Integer, ResultSet> executeMutation(final CompilableStatement stmt,
                                    final AuditQueryLogger queryLogger,
                                    final ReturnResult returnResult) throws SQLException {
         return executeMutation(stmt, true, queryLogger, returnResult);
     }
 
-    private Pair<Integer, Tuple> executeMutation(final CompilableStatement stmt,
-                                                  final boolean doRetryOnMetaNotFoundError,
-                                                  final AuditQueryLogger queryLogger,
-                                                  final ReturnResult returnResult)
-            throws SQLException {
+    private Pair<Integer, ResultSet> executeMutation(final CompilableStatement stmt,
+        final boolean doRetryOnMetaNotFoundError, final AuditQueryLogger queryLogger,
+        final ReturnResult returnResult) throws SQLException {
         if (connection.isReadOnly()) {
             throw new SQLExceptionInfo.Builder(
                 SQLExceptionCode.READ_ONLY_CONNECTION).
@@ -604,9 +603,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         try {
             return CallRunner
                    .run(
-                           new CallRunner.CallableThrowable<Pair<Integer, Tuple>, SQLException>() {
+                           new CallRunner.CallableThrowable<Pair<Integer, ResultSet>, SQLException>() {
                         @Override
-                            public Pair<Integer, Tuple> call() throws SQLException {
+                            public Pair<Integer, ResultSet> call() throws SQLException {
                             boolean success = false;
                             String tableName = null;
                             boolean isUpsert = false;
@@ -683,9 +682,11 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                     queryLogger.log(QueryLogInfo.NO_OF_RESULTS_ITERATED_I, lastUpdateCount);
                                     queryLogger.syncAudit();
                                 }
-
                                 success = true;
-                                return new Pair<>(lastUpdateCount, new ResultTuple(result));
+                                return new Pair<>(lastUpdateCount,
+                                    result == null || result.isEmpty() ?
+                                        null : TupleUtil.getResultSet(new ResultTuple(result),
+                                        tableName, connection));
                             }
                             //Force update cache and retry if meta not found error occurs
                             catch (MetaDataEntityNotFoundException e) {
@@ -2478,17 +2479,17 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
      * cannot be updated, return non-updated row.
      *
      * @param sql The SQL DML statement, UPSERT or DELETE for Phoenix.
-     * @return The pair of int and Tuple, where int represents value 1 for successful row
-     * update and 0 for non-successful row update, and Tuple represents the state of the row.
+     * @return The pair of int and ResultSet, where int represents value 1 for successful row
+     * update and 0 for non-successful row update, and ResultSet represents the state of the row.
      * @throws SQLException If the statement cannot be executed.
      */
-    public Pair<Integer, Tuple> executeUpdateReturnRow(String sql) throws SQLException {
+    public Pair<Integer, ResultSet> executeAtomicUpdateReturnRow(String sql) throws SQLException {
         if (!connection.getAutoCommit()) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.AUTO_COMMIT_NOT_ENABLED).build()
                     .buildException();
         }
         CompilableStatement stmt = preExecuteUpdate(sql);
-        Pair<Integer, Tuple> result =
+        Pair<Integer, ResultSet> result =
                 executeMutation(stmt, createAuditQueryLogger(stmt, sql), ReturnResult.ROW);
         flushIfNecessary();
         return result;
