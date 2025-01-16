@@ -66,9 +66,10 @@ enum HighAvailabilityPolicy {
             LOG.info("Cluster {} becomes STANDBY in HA group {}, now close all its connections",
                     zkUrl, haGroup.getGroupInfo());
             ConnectionQueryServices cqs = null;
-            try {
-                //Close connections for every HAURLInfo's (different principal) connections for a give HAGroup
-                for (HAURLInfo haurlInfo : HighAvailabilityGroup.URLS.get(haGroup.getGroupInfo())) {
+
+            //Close connections for every HAURLInfo's (different principal) connections for a give HAGroup
+            for (HAURLInfo haurlInfo : HighAvailabilityGroup.URLS.get(haGroup.getGroupInfo())) {
+                try {
                     String jdbcZKUrl = haGroup.getGroupInfo().getJDBCUrl(zkUrl, haurlInfo);
                     cqs = PhoenixDriver.INSTANCE.getConnectionQueryServices(
                             jdbcZKUrl, haGroup.getProperties());
@@ -78,16 +79,15 @@ enum HighAvailabilityPolicy {
                             .setHaGroupInfo(haGroup.getGroupInfo().toString()));
                     LOG.info("Closed all connections to cluster {} for HA group {}",
                             jdbcZKUrl, haGroup.getGroupInfo());
-                }
-
-            } finally {
-                if (cqs != null) {
-                    // CQS is closed but it is not invalidated from global cache in PhoenixDriver
-                    // so that any new connection will get error instead of creating a new CQS
-                    LOG.info("Closing CQS after cluster '{}' becomes STANDBY", zkUrl);
-                    cqs.close();
-                    LOG.info("Successfully closed CQS after cluster '{}' becomes STANDBY", zkUrl);
-                }
+                } finally {
+                        if (cqs != null) {
+                            // CQS is closed but it is not invalidated from global cache in PhoenixDriver
+                            // so that any new connection will get error instead of creating a new CQS
+                            LOG.info("Closing CQS after cluster '{}' becomes STANDBY", zkUrl);
+                            cqs.close();
+                            LOG.info("Successfully closed CQS after cluster '{}' becomes STANDBY", zkUrl);
+                        }
+                    }
             }
         }
 

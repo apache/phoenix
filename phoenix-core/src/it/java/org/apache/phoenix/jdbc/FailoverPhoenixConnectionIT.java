@@ -651,16 +651,22 @@ public class FailoverPhoenixConnectionIT {
         FailoverPhoenixConnection fconn2 = (FailoverPhoenixConnection) conn2;
         ConnectionQueryServices cqsi2 = PhoenixDriver.INSTANCE.getConnectionQueryServices(CLUSTERS.getJdbcUrl1(), clientProperties);
 
-        clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName);
-        String principal3 = RandomStringUtils.randomAlphabetic(5);
-        Connection conn3 = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(principal3), clientProperties);//principal3, haGroupName
+        Connection conn3 = DriverManager.getConnection(CLUSTERS.getJdbcHAUrlWithoutPrincipal(), clientProperties); //null,haGroupName2
         FailoverPhoenixConnection fconn3 = (FailoverPhoenixConnection) conn3;
-        ConnectionQueryServices cqsi3 = PhoenixDriver.INSTANCE.getConnectionQueryServices(CLUSTERS.getJdbcUrl1(principal3), clientProperties);
+        ConnectionQueryServices cqsi3 = PhoenixDriver.INSTANCE.getConnectionQueryServices(CLUSTERS.
+                getJdbcUrlWithoutPrincipal(CLUSTERS.getUrl1()), clientProperties);
+
+        clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName);
+        String principal4 = RandomStringUtils.randomAlphabetic(5);
+        Connection conn4 = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(principal4), clientProperties);//principal4, haGroupName
+        FailoverPhoenixConnection fconn4 = (FailoverPhoenixConnection) conn4;
+        ConnectionQueryServices cqsi4 = PhoenixDriver.INSTANCE.getConnectionQueryServices(CLUSTERS.getJdbcUrl1(principal4), clientProperties);
 
         //Check wrapped connection urls
         Assert.assertEquals(CLUSTERS.getJdbcUrl1(), fconn.getWrappedConnection().getURL());
         Assert.assertEquals(CLUSTERS.getJdbcUrl1(), fconn2.getWrappedConnection().getURL());
-        Assert.assertEquals(CLUSTERS.getJdbcUrl1(principal3), fconn3.getWrappedConnection().getURL());
+        Assert.assertEquals(CLUSTERS.getJdbcUrlWithoutPrincipal(CLUSTERS.getUrl1()), fconn3.getWrappedConnection().getURL());
+        Assert.assertEquals(CLUSTERS.getJdbcUrl1(principal4), fconn4.getWrappedConnection().getURL());
 
         //Check cqsi objects should be same with what we get from connections
         Assert.assertEquals(HBaseTestingUtilityPair.PRINCIPAL,cqsi.getUserName());
@@ -669,8 +675,11 @@ public class FailoverPhoenixConnectionIT {
         Assert.assertEquals(HBaseTestingUtilityPair.PRINCIPAL,cqsi2.getUserName());
         Assert.assertSame(cqsi2, fconn2.getWrappedConnection().getQueryServices());
 
-        Assert.assertEquals(principal3,cqsi3.getUserName());
+        Assert.assertNull(cqsi3.getUserName());
         Assert.assertSame(cqsi3, fconn3.getWrappedConnection().getQueryServices());
+
+        Assert.assertEquals(principal4,cqsi4.getUserName());
+        Assert.assertSame(cqsi4, fconn4.getWrappedConnection().getQueryServices());
 
     }
 

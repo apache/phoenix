@@ -852,8 +852,6 @@ public class HighAvailabilityGroup {
         }
 
 
-        //It applies only the current thread context's URL Info as we have 1:n mapping between
-        //HAURLInfo -> HAGroupInfo.
         public String getJDBCUrl(String zkUrl, HAURLInfo haURLInfo) {
             Preconditions.checkArgument(zkUrl.equals(getUrl1()) || zkUrl.equals(getUrl2())
                             || zkUrl.equals("[" + getUrl1() + "|" + getUrl2() + "]")

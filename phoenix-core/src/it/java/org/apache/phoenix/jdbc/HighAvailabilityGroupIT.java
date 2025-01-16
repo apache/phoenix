@@ -26,6 +26,7 @@ import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasic
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
@@ -210,6 +211,7 @@ public class HighAvailabilityGroupIT {
         CLUSTERS.initClusterRole(haGroupName3, HighAvailabilityPolicy.FAILOVER);
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName3);
         Optional<HighAvailabilityGroup> haGroup3 = Optional.empty();
+        Optional<HighAvailabilityGroup> haGroup4 = Optional.empty();
         try {
             HAURLInfo haurlInfo3 = HighAvailabilityGroup.getUrlInfo(jdbcUrl, clientProperties);
             haGroup3 = HighAvailabilityGroup.get(jdbcUrl, clientProperties);
@@ -226,33 +228,46 @@ public class HighAvailabilityGroupIT {
             assertEquals(CLUSTERS.getJdbcHAUrl(), haGroup3.get().getGroupInfo().
                     getJDBCUrl(String.format("[%s|%s]", CLUSTERS.getUrl1(), CLUSTERS.getUrl2()), haurlInfo3));
 
+            // should get same ha Group without principal
+            String haUrl4 = CLUSTERS.getJdbcHAUrlWithoutPrincipal();
+            HAURLInfo haURLInfo4 = HighAvailabilityGroup.getUrlInfo(haUrl4, clientProperties);
+            haGroup4 = HighAvailabilityGroup.get(haUrl4, clientProperties);
+            assertTrue(haGroup4.isPresent());
+            assertNotSame(haGroup, haGroup4.get());
+            assertSame(haGroup3.get(), haGroup4.get());
+
+            assertNotSame(haGroup.getGroupInfo(), haGroup4.get().getGroupInfo());
+            assertSame(haGroup3.get().getGroupInfo(), haGroup4.get().getGroupInfo());
+            assertNotEquals(haurlInfo3, haURLInfo4);
+
         } finally {
             haGroup3.ifPresent(HighAvailabilityGroup::close);
+            haGroup4.ifPresent(HighAvailabilityGroup::close);
         }
 
         // Client will get the same HighAvailabilityGroup using the same information as key again
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroup.getGroupInfo().getName());
-        Optional<HighAvailabilityGroup> haGroup4 = Optional.empty();
+        Optional<HighAvailabilityGroup> haGroup5 = Optional.empty();
         try {
             //Again using a random principal which should be used now for generating jdbcUrls
             String principal = RandomStringUtils.randomAlphabetic(5);
-            String haUrl4 = CLUSTERS.getJdbcHAUrl(principal);
-            HAURLInfo haURLInfo4 = HighAvailabilityGroup.getUrlInfo(haUrl4, clientProperties);
-            haGroup4 = HighAvailabilityGroup.get(haUrl4, clientProperties);
-            assertTrue(haGroup4.isPresent());
-            assertSame(haGroup, haGroup4.get());
+            String haUrl5 = CLUSTERS.getJdbcHAUrl(principal);
+            HAURLInfo haURLInfo5 = HighAvailabilityGroup.getUrlInfo(haUrl5, clientProperties);
+            haGroup5 = HighAvailabilityGroup.get(haUrl5, clientProperties);
+            assertTrue(haGroup5.isPresent());
+            assertSame(haGroup, haGroup5.get());
 
             //URLs we are getting for haGroup4 should have newer principal i.e. Current HAURLInfo should have new
             //principal instead default PRINCIPAL
             assertEquals(CLUSTERS.getJdbcUrl(CLUSTERS.getUrl1(), principal),
-                    haGroup4.get().getGroupInfo().getJDBCUrl(CLUSTERS.getUrl1(), haURLInfo4));
+                    haGroup4.get().getGroupInfo().getJDBCUrl(CLUSTERS.getUrl1(), haURLInfo5));
             assertEquals(CLUSTERS.getJdbcUrl(CLUSTERS.getUrl2(), principal),
-                    haGroup4.get().getGroupInfo().getJDBCUrl(CLUSTERS.getUrl2(), haURLInfo4));
+                    haGroup4.get().getGroupInfo().getJDBCUrl(CLUSTERS.getUrl2(), haURLInfo5));
             assertEquals(CLUSTERS.getJdbcHAUrl(principal), haGroup4.get().getGroupInfo().
-                    getJDBCUrl(String.format("[%s|%s]", CLUSTERS.getUrl1(), CLUSTERS.getUrl2()), haURLInfo4));
+                    getJDBCUrl(String.format("[%s|%s]", CLUSTERS.getUrl1(), CLUSTERS.getUrl2()), haURLInfo5));
 
         } finally {
-            haGroup4.ifPresent(HighAvailabilityGroup::close);
+            haGroup5.ifPresent(HighAvailabilityGroup::close);
         }
 
     }
