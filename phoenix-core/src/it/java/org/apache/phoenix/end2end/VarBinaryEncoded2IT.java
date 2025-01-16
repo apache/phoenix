@@ -26,6 +26,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
 
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -46,22 +47,28 @@ public class VarBinaryEncoded2IT extends ParallelStatsDisabledIT {
 
   private final boolean columnEncoded;
   private final boolean coveredIndex;
+  private final boolean isBindStatement;
 
-  public VarBinaryEncoded2IT(boolean columnEncoded, boolean coveredIndex) {
+  public VarBinaryEncoded2IT(boolean columnEncoded, boolean coveredIndex, boolean isBindStatement) {
     this.columnEncoded = columnEncoded;
     this.coveredIndex = coveredIndex;
+    this.isBindStatement = isBindStatement;
   }
 
   @Parameterized.Parameters(name =
       "VarBinary2IT_columnEncoded={0}, coveredIndex={1}")
   public static synchronized Collection<Object[]> data() {
     return Arrays.asList(
-        new Object[][] {
-            {false, false},
-            {false, true},
-            {true, false},
-            {true, true}
-        });
+            new Object[][]{
+                    {false, false, false},
+                    {false, true, false},
+                    {true, false, false},
+                    {true, true, false},
+                    {false, false, true},
+                    {false, true, true},
+                    {true, false, true},
+                    {true, true, true}
+            });
   }
 
   @Test
@@ -271,11 +278,19 @@ public class VarBinaryEncoded2IT extends ParallelStatsDisabledIT {
 
       Assert.assertFalse(resultSet.next());
 
-      preparedStatement = conn.prepareStatement("SELECT * FROM " + tableName
-          + " WHERE COL1 = ? AND COL2 BETWEEN ? AND ?");
-      preparedStatement.setString(1, b4);
-      preparedStatement.setBytes(2, b51);
-      preparedStatement.setBytes(3, b5);
+      if (isBindStatement) {
+        preparedStatement = conn.prepareStatement("SELECT * FROM " + tableName
+                + " WHERE COL1 = ? AND COL2 BETWEEN ? AND ?");
+        preparedStatement.setString(1, b4);
+        preparedStatement.setBytes(2, b51);
+        preparedStatement.setBytes(3, b5);
+      } else {
+        preparedStatement = conn.prepareStatement("SELECT * FROM " + tableName
+                + " WHERE COL1 = ? AND COL2 BETWEEN "
+                + PVarbinary.INSTANCE.toStringLiteral(b51) + " AND "
+                + PVarbinary.INSTANCE.toStringLiteral(b5));
+        preparedStatement.setString(1, b4);
+      }
 
       assertIndexUsed(preparedStatement, indexName, "RANGE SCAN ");
 
@@ -597,11 +612,18 @@ public class VarBinaryEncoded2IT extends ParallelStatsDisabledIT {
 
       Assert.assertFalse(resultSet.next());
 
-      preparedStatement = conn.prepareStatement("SELECT * FROM " + tableName
-          + " WHERE COL1 = ? AND COL2 IN (?, ?)");
-      preparedStatement.setBytes(1, b4);
-      preparedStatement.setBytes(2, b51);
-      preparedStatement.setBytes(3, b5);
+      if (isBindStatement) {
+        preparedStatement = conn.prepareStatement("SELECT * FROM " + tableName
+                + " WHERE COL1 = ? AND COL2 IN (?, ?)");
+        preparedStatement.setBytes(1, b4);
+        preparedStatement.setBytes(2, b51);
+        preparedStatement.setBytes(3, b5);
+      } else {
+        preparedStatement = conn.prepareStatement("SELECT * FROM " + tableName
+                + " WHERE COL1 = " + PVarbinary.INSTANCE.toStringLiteral(b4)
+                + " AND COL2 IN (" + PVarbinary.INSTANCE.toStringLiteral(b51) + ", "
+                + PVarbinary.INSTANCE.toStringLiteral(b5) + ")");
+      }
 
       assertIndexUsed(preparedStatement, indexName, "SKIP SCAN ON 2 KEYS ");
 

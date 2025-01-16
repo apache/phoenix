@@ -26,6 +26,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
 
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -43,8 +44,10 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 public class VarBinaryEncoded1IT extends ParallelStatsDisabledIT {
 
   private final String tableDDLOptions;
+  private final boolean isBindStatement;
 
-  public VarBinaryEncoded1IT(boolean columnEncoded, String transactionProvider, boolean mutable) {
+  public VarBinaryEncoded1IT(boolean columnEncoded, String transactionProvider, boolean mutable,
+                             boolean isBindStatement) {
     StringBuilder optionBuilder = new StringBuilder();
     if (!columnEncoded) {
       if (optionBuilder.length() != 0) {
@@ -71,20 +74,29 @@ public class VarBinaryEncoded1IT extends ParallelStatsDisabledIT {
           " TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + transactionProvider + "'");
     }
     this.tableDDLOptions = optionBuilder.toString();
+    this.isBindStatement = isBindStatement;
   }
 
   @Parameterized.Parameters(name =
-      "VarBinary1IT_columnEncoded={0}, transactionProvider={1}, mutable={2}")
+          "VarBinary1IT_columnEncoded={0}, transactionProvider={1}, mutable={2}")
   public static synchronized Collection<Object[]> data() {
-    return Arrays.asList(new Object[][] {
-        {false, null, false},
-        {false, "OMID", false},
-        {false, null, true},
-        {false, "OMID", true},
-        {true, null, false},
-        {true, "OMID", false},
-        {true, null, true},
-        {true, "OMID", true},
+    return Arrays.asList(new Object[][]{
+            {false, null, false, false},
+            {false, "OMID", false, false},
+            {false, null, true, false},
+            {false, "OMID", true, false},
+            {true, null, false, false},
+            {true, "OMID", false, false},
+            {true, null, true, false},
+            {true, "OMID", true, false},
+            {false, null, false, true},
+            {false, "OMID", false, true},
+            {false, null, true, true},
+            {false, "OMID", true, true},
+            {true, null, false, true},
+            {true, "OMID", false, true},
+            {true, null, true, true},
+            {true, "OMID", true, true}
     });
   }
 
@@ -240,11 +252,16 @@ public class VarBinaryEncoded1IT extends ParallelStatsDisabledIT {
 
       Assert.assertFalse(resultSet.next());
 
-      PreparedStatement preparedStatement =
-          conn.prepareStatement("SELECT * FROM " + tableName + " WHERE PK1 = ?");
-
-      preparedStatement.setBytes(1, b11);
-      resultSet = preparedStatement.executeQuery();
+      PreparedStatement preparedStatement;
+      if (isBindStatement) {
+        preparedStatement =
+                conn.prepareStatement("SELECT * FROM " + tableName + " WHERE PK1 = ?");
+        preparedStatement.setBytes(1, b11);
+        resultSet = preparedStatement.executeQuery();
+      } else {
+        resultSet = conn.createStatement().executeQuery("SELECT * FROM " + tableName
+                + " WHERE PK1 = " + PVarbinary.INSTANCE.toStringLiteral(b11));
+      }
 
       Assert.assertTrue(resultSet.next());
 
@@ -294,11 +311,16 @@ public class VarBinaryEncoded1IT extends ParallelStatsDisabledIT {
       Assert.assertFalse(resultSet.next());
 
 
-      preparedStatement = conn.prepareStatement(
-          "SELECT * FROM " + tableName + " WHERE PK1 = ? AND PK2 IS NOT NULL ");
-
-      preparedStatement.setBytes(1, b11);
-      resultSet = preparedStatement.executeQuery();
+      if (isBindStatement) {
+        preparedStatement = conn.prepareStatement(
+                "SELECT * FROM " + tableName + " WHERE PK1 = ? AND PK2 IS NOT NULL ");
+        preparedStatement.setBytes(1, b11);
+        resultSet = preparedStatement.executeQuery();
+      } else {
+        resultSet = conn.createStatement().executeQuery(
+                "SELECT * FROM " + tableName + " WHERE PK1 = " +
+                        PVarbinary.INSTANCE.toStringLiteral(b11) + " AND PK2 IS NOT NULL");
+      }
 
       Assert.assertTrue(resultSet.next());
 
@@ -338,11 +360,17 @@ public class VarBinaryEncoded1IT extends ParallelStatsDisabledIT {
 
       Assert.assertFalse(resultSet.next());
 
-      preparedStatement =
-          conn.prepareStatement("SELECT * FROM " + tableName + " WHERE PK1 = ? AND PK2 = ?");
-      preparedStatement.setBytes(1, b11);
-      preparedStatement.setBytes(2, b21);
-      resultSet = preparedStatement.executeQuery();
+      if (isBindStatement) {
+        preparedStatement =
+                conn.prepareStatement("SELECT * FROM " + tableName + " WHERE PK1 = ? AND PK2 = ?");
+        preparedStatement.setBytes(1, b11);
+        preparedStatement.setBytes(2, b21);
+        resultSet = preparedStatement.executeQuery();
+      } else {
+        resultSet = conn.createStatement().executeQuery("SELECT * FROM " + tableName + " WHERE " +
+                "PK1 = " + PVarbinary.INSTANCE.toStringLiteral(b11) + " AND PK2 = " +
+                PVarbinary.INSTANCE.toStringLiteral(b21));
+      }
 
       Assert.assertTrue(resultSet.next());
 
@@ -373,12 +401,21 @@ public class VarBinaryEncoded1IT extends ParallelStatsDisabledIT {
 
       Assert.assertFalse(resultSet.next());
 
-      preparedStatement = conn.prepareStatement("SELECT * FROM " + tableName
-          + " WHERE PK1 = ? AND PK2 BETWEEN ? AND ? AND PK3 IS NOT NULL");
-      preparedStatement.setBytes(1, b11);
-      preparedStatement.setBytes(2, new byte[] {57, -83, 0, -2, 0, -7, -12, -13, 3, 24, -121});
-      preparedStatement.setBytes(3, new byte[] {57, -83, 0, -2, 0, -7, -12, -13, 4});
-      resultSet = preparedStatement.executeQuery();
+      if (isBindStatement) {
+        preparedStatement = conn.prepareStatement("SELECT * FROM " + tableName
+                + " WHERE PK1 = ? AND PK2 BETWEEN ? AND ? AND PK3 IS NOT NULL");
+        preparedStatement.setBytes(1, b11);
+        preparedStatement.setBytes(2, new byte[]{57, -83, 0, -2, 0, -7, -12, -13, 3, 24, -121});
+        preparedStatement.setBytes(3, new byte[]{57, -83, 0, -2, 0, -7, -12, -13, 4});
+        resultSet = preparedStatement.executeQuery();
+      } else {
+        resultSet = conn.createStatement().executeQuery("SELECT * FROM " + tableName
+                + " WHERE PK1 = " + PVarbinary.INSTANCE.toStringLiteral(b11) + " AND PK2 BETWEEN "
+                + PVarbinary.INSTANCE.toStringLiteral(
+                new byte[]{57, -83, 0, -2, 0, -7, -12, -13, 3, 24, -121}) + " AND " +
+                PVarbinary.INSTANCE.toStringLiteral(
+                        new byte[]{57, -83, 0, -2, 0, -7, -12, -13, 4}) + " AND PK3 IS NOT NULL");
+      }
 
       Assert.assertTrue(resultSet.next());
 
@@ -400,13 +437,21 @@ public class VarBinaryEncoded1IT extends ParallelStatsDisabledIT {
 
       Assert.assertFalse(resultSet.next());
 
-      preparedStatement = conn.prepareStatement("SELECT * FROM " + tableName
-          + " WHERE PK1 = ? AND PK2 IN (?, ?, ?)");
-      preparedStatement.setBytes(1, b11);
-      preparedStatement.setBytes(2, b21);
-      preparedStatement.setBytes(3, b23);
-      preparedStatement.setBytes(4, b22);
-      resultSet = preparedStatement.executeQuery();
+      if (isBindStatement) {
+        preparedStatement = conn.prepareStatement("SELECT * FROM " + tableName
+                + " WHERE PK1 = ? AND PK2 IN (?, ?, ?)");
+        preparedStatement.setBytes(1, b11);
+        preparedStatement.setBytes(2, b21);
+        preparedStatement.setBytes(3, b23);
+        preparedStatement.setBytes(4, b22);
+        resultSet = preparedStatement.executeQuery();
+      } else {
+        resultSet = conn.createStatement().executeQuery("SELECT * FROM " + tableName
+                + " WHERE PK1 = " + PVarbinary.INSTANCE.toStringLiteral(b11) + " AND PK2 IN (" +
+                PVarbinary.INSTANCE.toStringLiteral(b21) + ", " +
+                PVarbinary.INSTANCE.toStringLiteral(b23) + ", " +
+                PVarbinary.INSTANCE.toStringLiteral(b22) + ")");
+      }
 
       Assert.assertTrue(resultSet.next());
 
@@ -446,12 +491,20 @@ public class VarBinaryEncoded1IT extends ParallelStatsDisabledIT {
 
       Assert.assertFalse(resultSet.next());
 
-      preparedStatement = conn.prepareStatement(
-          "SELECT * FROM " + tableName + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ?");
-      preparedStatement.setBytes(1, b11);
-      preparedStatement.setBytes(2, b21);
-      preparedStatement.setBytes(3, b31);
-      resultSet = preparedStatement.executeQuery();
+      if (isBindStatement) {
+        preparedStatement = conn.prepareStatement(
+                "SELECT * FROM " + tableName + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ?");
+        preparedStatement.setBytes(1, b11);
+        preparedStatement.setBytes(2, b21);
+        preparedStatement.setBytes(3, b31);
+        resultSet = preparedStatement.executeQuery();
+      } else {
+        resultSet = conn.createStatement().executeQuery(
+                "SELECT * FROM " + tableName + " WHERE PK1 = " +
+                        PVarbinary.INSTANCE.toStringLiteral(b11) + " AND PK2 = " +
+                        PVarbinary.INSTANCE.toStringLiteral(b21) + " AND PK3 = " +
+                        PVarbinary.INSTANCE.toStringLiteral(b31));
+      }
 
       Assert.assertTrue(resultSet.next());
 
@@ -464,11 +517,18 @@ public class VarBinaryEncoded1IT extends ParallelStatsDisabledIT {
 
       Assert.assertFalse(resultSet.next());
 
-      preparedStatement = conn.prepareStatement(
-          "SELECT * FROM " + tableName + " WHERE PK1 = ? AND PK2 = ? AND PK3 IS NULL");
-      preparedStatement.setBytes(1, b11);
-      preparedStatement.setBytes(2, b21);
-      resultSet = preparedStatement.executeQuery();
+      if (isBindStatement) {
+        preparedStatement = conn.prepareStatement(
+                "SELECT * FROM " + tableName + " WHERE PK1 = ? AND PK2 = ? AND PK3 IS NULL");
+        preparedStatement.setBytes(1, b11);
+        preparedStatement.setBytes(2, b21);
+        resultSet = preparedStatement.executeQuery();
+      } else {
+        resultSet = conn.createStatement().executeQuery(
+                "SELECT * FROM " + tableName + " WHERE PK1 = " +
+                        PVarbinary.INSTANCE.toStringLiteral(b11) + " AND PK2 = " +
+                        PVarbinary.INSTANCE.toStringLiteral(b21) + " AND PK3 IS NULL");
+      }
 
       Assert.assertTrue(resultSet.next());
 
@@ -2066,12 +2126,21 @@ public class VarBinaryEncoded1IT extends ParallelStatsDisabledIT {
 
       Assert.assertFalse(resultSet.next());
 
-      preparedStatement = conn.prepareStatement("SELECT * FROM " + tableName
-          + " WHERE PK1 = ? AND PK2 BETWEEN ? AND ? AND PK3 IS NOT NULL");
-      preparedStatement.setDouble(1, b11);
-      preparedStatement.setBytes(2, new byte[] {57, -83, 0, -2, 0, -7, -12, -13, 3, 24, -121});
-      preparedStatement.setBytes(3, new byte[] {57, -83, 0, -2, 0, -7, -12, -13, 4});
-      resultSet = preparedStatement.executeQuery();
+      if (isBindStatement) {
+        preparedStatement = conn.prepareStatement("SELECT * FROM " + tableName
+                + " WHERE PK1 = ? AND PK2 BETWEEN ? AND ? AND PK3 IS NOT NULL");
+        preparedStatement.setDouble(1, b11);
+        preparedStatement.setBytes(2, new byte[]{57, -83, 0, -2, 0, -7, -12, -13, 3, 24, -121});
+        preparedStatement.setBytes(3, new byte[]{57, -83, 0, -2, 0, -7, -12, -13, 4});
+        resultSet = preparedStatement.executeQuery();
+      } else {
+        resultSet = conn.createStatement().executeQuery("SELECT * FROM " + tableName
+                + " WHERE PK1 = " + b11 +
+                " AND PK2 BETWEEN " + PVarbinary.INSTANCE.toStringLiteral(
+                new byte[]{57, -83, 0, -2, 0, -7, -12, -13, 3, 24, -121}) +
+                " AND " + PVarbinary.INSTANCE.toStringLiteral(
+                new byte[]{57, -83, 0, -2, 0, -7, -12, -13, 4}) + " AND PK3 IS NOT NULL");
+      }
 
       Assert.assertTrue(resultSet.next());
 
@@ -2093,13 +2162,21 @@ public class VarBinaryEncoded1IT extends ParallelStatsDisabledIT {
 
       Assert.assertFalse(resultSet.next());
 
-      preparedStatement = conn.prepareStatement("SELECT * FROM " + tableName
-          + " WHERE PK1 = ? AND PK2 IN (?, ?, ?)");
-      preparedStatement.setDouble(1, b11);
-      preparedStatement.setBytes(2, b21);
-      preparedStatement.setBytes(3, b23);
-      preparedStatement.setBytes(4, b22);
-      resultSet = preparedStatement.executeQuery();
+      if (isBindStatement) {
+        preparedStatement = conn.prepareStatement("SELECT * FROM " + tableName
+                + " WHERE PK1 = ? AND PK2 IN (?, ?, ?)");
+        preparedStatement.setDouble(1, b11);
+        preparedStatement.setBytes(2, b21);
+        preparedStatement.setBytes(3, b23);
+        preparedStatement.setBytes(4, b22);
+        resultSet = preparedStatement.executeQuery();
+      } else {
+        resultSet = conn.createStatement().executeQuery("SELECT * FROM " + tableName
+                + " WHERE PK1 = " + b11
+                + " AND PK2 IN (" + PVarbinary.INSTANCE.toStringLiteral(b21) + ","
+                + PVarbinary.INSTANCE.toStringLiteral(b22) + ", "
+                + PVarbinary.INSTANCE.toStringLiteral(b23) + ")");
+      }
 
       Assert.assertTrue(resultSet.next());
 
