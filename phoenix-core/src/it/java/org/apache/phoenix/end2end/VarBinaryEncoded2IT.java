@@ -154,11 +154,11 @@ public class VarBinaryEncoded2IT extends ParallelStatsDisabledIT {
             Bytes.toBytes("col21048rnbfpe3-"), Bytes.toBytes("col319efnrugifj"));
         upsertRow(preparedStatement, b10, b20, b30, b40, b50, b60);
         upsertRow(preparedStatement, b1, b2, b3, b4, b5, b6);
-        upsertRow(preparedStatement, b11, b21, b31, b41, b51, b61);
+        upsertRow(conn, tableName, b11, b21, b31, b41, b51, b61);
         upsertRow(preparedStatement, b12, b22, b32, b42, b52, b62);
-        upsertRow(preparedStatement, b13, b23, b33, b43, b53, b63);
+        upsertRow(conn, tableName, b13, b23, b33, b43, b53, b63);
         upsertRow(preparedStatement, b14, b24, b34, b44, b54, b64);
-        upsertRow(preparedStatement, b15, b25, b35, b45, b55, b65);
+        upsertRow(conn, tableName, b15, b25, b35, b45, b55, b65);
         upsertRow(preparedStatement, b16, b26, b36, b46, b56, b66);
       }
       conn.commit();
@@ -444,16 +444,16 @@ public class VarBinaryEncoded2IT extends ParallelStatsDisabledIT {
 
       try (PreparedStatement preparedStatement = conn.prepareStatement("UPSERT INTO " + tableName
           + "(PK1, PK2, PK3, COL1, COL2, COL3) VALUES (?, ?, ?, ?, ?, ?)")) {
-        upsertRow(preparedStatement, Bytes.toBytes("pk1-ehgir4jf"), Bytes.toBytes("pk22p0jfdkhrgi"),
+        upsertRow(conn, tableName, Bytes.toBytes("pk1-ehgir4jf"), Bytes.toBytes("pk22p0jfdkhrgi"),
             Bytes.toBytes("pk33ogjirhhf"), Bytes.toBytes("col19fnbb0hf0t"),
             Bytes.toBytes("col21048rnbfpe3-"), Bytes.toBytes("col319efnrugifj"));
         upsertRow(preparedStatement, b10, b20, b30, b40, b50, b60);
-        upsertRow(preparedStatement, b1, b2, b3, b4, b5, b6);
+        upsertRow(conn, tableName, b1, b2, b3, b4, b5, b6);
         upsertRow(preparedStatement, b11, b21, b31, b41, b51, b61);
         upsertRow(preparedStatement, b12, b22, b32, b42, b52, b62);
-        upsertRow(preparedStatement, b13, b23, b33, b43, b53, b63);
+        upsertRow(conn, tableName, b13, b23, b33, b43, b53, b63);
         upsertRow(preparedStatement, b14, b24, b34, b44, b54, b64);
-        upsertRow(preparedStatement, b15, b25, b35, b45, b55, b65);
+        upsertRow(conn, tableName, b15, b25, b35, b45, b55, b65);
         upsertRow(preparedStatement, b16, b26, b36, b46, b56, b66);
       }
       conn.commit();
@@ -1252,6 +1252,29 @@ public class VarBinaryEncoded2IT extends ParallelStatsDisabledIT {
     preparedStatement.executeUpdate();
   }
 
+  private static void upsertRow(Connection conn, String tableName, byte[] b10, byte[] b20,
+                                byte[] b30, byte[] b40, byte[] b50, byte[] b60)
+          throws SQLException {
+    if (b30 != null) {
+      conn.createStatement().executeUpdate("UPSERT INTO " + tableName
+              + "(PK1, PK2, PK3, COL1, COL2, COL3) VALUES ("
+              + PVarbinary.INSTANCE.toStringLiteral(b10) + ", "
+              + PVarbinary.INSTANCE.toStringLiteral(b20) + ", "
+              + PVarbinary.INSTANCE.toStringLiteral(b30) + ", "
+              + PVarbinary.INSTANCE.toStringLiteral(b40) + ", "
+              + PVarbinary.INSTANCE.toStringLiteral(b50) + ", "
+              + PVarbinary.INSTANCE.toStringLiteral(b60) + ")");
+    } else {
+      conn.createStatement().executeUpdate("UPSERT INTO " + tableName
+              + "(PK1, PK2, COL1, COL2, COL3) VALUES ("
+              + PVarbinary.INSTANCE.toStringLiteral(b10) + ", "
+              + PVarbinary.INSTANCE.toStringLiteral(b20) + ", "
+              + PVarbinary.INSTANCE.toStringLiteral(b40) + ", "
+              + PVarbinary.INSTANCE.toStringLiteral(b50) + ", "
+              + PVarbinary.INSTANCE.toStringLiteral(b60) + ")");
+    }
+  }
+
   private static void upsertRow(PreparedStatement preparedStatement, byte[] b10, byte[] b20,
       byte[] b30, String b40, byte[] b50, byte[] b60) throws SQLException {
     preparedStatement.setBytes(1, b10);
@@ -1283,6 +1306,29 @@ public class VarBinaryEncoded2IT extends ParallelStatsDisabledIT {
     preparedStatement.setBytes(5, b50);
     preparedStatement.setBytes(6, b60);
     preparedStatement.executeUpdate();
+  }
+
+  private static void upsertRow(Connection conn, String tableName, byte[] b13, byte[] b23,
+                                byte[] b33, String b43, byte[] b53, byte[] b63)
+          throws SQLException {
+    if (b33 != null) {
+      conn.createStatement().executeUpdate("UPSERT INTO " + tableName
+              + "(PK1, PK2, PK3, COL1, COL2, COL3) VALUES ("
+              + PVarbinary.INSTANCE.toStringLiteral(b13) + ", "
+              + PVarbinary.INSTANCE.toStringLiteral(b23) + ", "
+              + PVarbinary.INSTANCE.toStringLiteral(b33) + ", '"
+              + b43 + "', "
+              + PVarbinary.INSTANCE.toStringLiteral(b53) + ", "
+              + PVarbinary.INSTANCE.toStringLiteral(b63) + ")");
+    } else {
+      conn.createStatement().executeUpdate("UPSERT INTO " + tableName
+              + "(PK1, PK2, COL1, COL2, COL3) VALUES ("
+              + PVarbinary.INSTANCE.toStringLiteral(b13) + ", "
+              + PVarbinary.INSTANCE.toStringLiteral(b23) + ", '"
+              + b43 + "', "
+              + PVarbinary.INSTANCE.toStringLiteral(b53) + ", "
+              + PVarbinary.INSTANCE.toStringLiteral(b63) + ")");
+    }
   }
 
 }
