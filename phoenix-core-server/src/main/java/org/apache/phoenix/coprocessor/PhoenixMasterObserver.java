@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -65,7 +64,7 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
 
     private static final String PARENT_PARTITION_QUERY_FOR_SPLIT
             = "SELECT PARTITION_ID, PARENT_PARTITION_ID FROM " + SYSTEM_CDC_STREAM_NAME
-            + " WHERE TABLE_NAME = ? AND STREAM_NAME = ? ";
+            + " WHERE TABLE_NAME = ? AND STREAM_NAME = ? AND PARTITION_END_TIME IS NULL ";
 
     private static final String PARENT_PARTITION_QUERY_FOR_MERGE
             = "SELECT PARENT_PARTITION_ID FROM " + SYSTEM_CDC_STREAM_NAME
@@ -105,7 +104,7 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
             String tableName = phoenixTable.getName().getString();
             String streamName = getStreamName(conn, tableName);
             if (streamName != null) {
-                LOGGER.info("Updating partition metadata for table={}, stream={} daughters {} {}",
+                LOGGER.info("Updating split partition metadata for table={}, stream={} daughters {} {}",
                         tableName, streamName, regionInfoA.getEncodedName(), regionInfoB.getEncodedName());
                 // ancestorIDs = [parentId, grandparentId1, grandparentId2...]
                 List<String> ancestorIDs
@@ -150,6 +149,8 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
             String tableName = phoenixTable.getName().getString();
             String streamName = getStreamName(conn, tableName);
             if (streamName != null) {
+                LOGGER.info("Updating merged partition metadata for table={}, stream={} daughter {}",
+                        tableName, streamName, mergedRegion.getEncodedName());
                 // upsert a row for daughter-parent for each merged region
                 upsertDaughterPartitions(conn, tableName, streamName,
                         Arrays.stream(regionsToMerge).map(RegionInfo::getEncodedName).collect(Collectors.toList()),

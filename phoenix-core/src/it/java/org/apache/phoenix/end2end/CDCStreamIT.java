@@ -18,13 +18,8 @@
 
 package org.apache.phoenix.end2end;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.RegionInfo;
-import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.PhoenixMasterObserver;
@@ -33,12 +28,12 @@ import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -49,8 +44,12 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_STATUS_NAME;
@@ -172,7 +171,7 @@ public class CDCStreamIT extends CDCBaseIT {
         createTableAndEnableCDC(conn, tableName);
 
         //split the only region somewhere in the middle
-        splitTable(conn, tableName, Bytes.toBytes("m"));
+        TestUtil.splitTable(conn, tableName, Bytes.toBytes("m"));
 
         //check partition metadata - daughter regions are inserted and parent's end time is updated.
         ResultSet rs = conn.createStatement().executeQuery(
@@ -209,9 +208,9 @@ public class CDCStreamIT extends CDCBaseIT {
         createTableAndEnableCDC(conn, tableName);
 
         //split the only region [null, null]
-        splitTable(conn, tableName, Bytes.toBytes("l"));
+        TestUtil.splitTable(conn, tableName, Bytes.toBytes("l"));
         // we have 2 regions - [null, l], [l, null], split the first region
-        splitTable(conn, tableName, Bytes.toBytes("d"));
+        TestUtil.splitTable(conn, tableName, Bytes.toBytes("d"));
         ResultSet rs = conn.createStatement().executeQuery(
                 "SELECT * FROM SYSTEM.CDC_STREAM WHERE TABLE_NAME='" + tableName + "'");
         PartitionMetadata grandparent = null, splitParent = null, unSplitParent = null;
@@ -253,9 +252,9 @@ public class CDCStreamIT extends CDCBaseIT {
         createTableAndEnableCDC(conn, tableName);
 
         //split the only region [null, null]
-        splitTable(conn, tableName, Bytes.toBytes("l"));
+        TestUtil.splitTable(conn, tableName, Bytes.toBytes("l"));
         // we have 2 regions - [null, l], [l, null], split the second region
-        splitTable(conn, tableName, Bytes.toBytes("q"));
+        TestUtil.splitTable(conn, tableName, Bytes.toBytes("q"));
         ResultSet rs = conn.createStatement().executeQuery(
                 "SELECT * FROM SYSTEM.CDC_STREAM WHERE TABLE_NAME='" + tableName + "'");
         PartitionMetadata grandparent = null, splitParent = null, unSplitParent = null;
@@ -297,11 +296,11 @@ public class CDCStreamIT extends CDCBaseIT {
         createTableAndEnableCDC(conn, tableName);
 
         //split the only region [null, null]
-        splitTable(conn, tableName, Bytes.toBytes("d"));
+        TestUtil.splitTable(conn, tableName, Bytes.toBytes("d"));
         // we have 2 regions - [null, d], [d, null], split the second region
-        splitTable(conn, tableName, Bytes.toBytes("q"));
+        TestUtil.splitTable(conn, tableName, Bytes.toBytes("q"));
         // we have 3 regions - [null, d], [d, q], [q, null], split the second region
-        splitTable(conn, tableName, Bytes.toBytes("j"));
+        TestUtil.splitTable(conn, tableName, Bytes.toBytes("j"));
         // [null, d], [d, j], [j, q], [q, null]
         ResultSet rs = conn.createStatement().executeQuery(
                 "SELECT * FROM SYSTEM.CDC_STREAM WHERE TABLE_NAME='" + tableName + "'");
@@ -322,6 +321,160 @@ public class CDCStreamIT extends CDCBaseIT {
         assertEquals(parent.partitionId, daughters.get(1).parentPartitionId);
         assertTrue(daughters.stream().anyMatch(d -> d.startKey[0] == 'd' && d.endKey[0] == 'j'));
         assertTrue(daughters.stream().anyMatch(d -> d.startKey[0] == 'j' && d.endKey[0] == 'q'));
+    }
+
+    /**
+     * Test split of a region which came from a merge.
+     */
+    @Test
+    public void testPartitionMetadataMergedRegionSplits() throws Exception {
+        // create table, cdc and bootstrap stream metadata
+        Connection conn = newConnection();
+        String tableName = generateUniqueName();
+        createTableAndEnableCDC(conn, tableName);
+
+        //split the only region
+        TestUtil.splitTable(conn, tableName, Bytes.toBytes("d"));
+
+        //merge the 2 regions
+        List<HRegionLocation> regions = TestUtil.getAllTableRegions(conn, tableName);
+        TestUtil.mergeTableRegions(conn, tableName, regions.stream()
+                .map(HRegionLocation::getRegion)
+                .map(RegionInfo::getEncodedName)
+                .collect(Collectors.toList()));
+
+        //split again
+        TestUtil.splitTable(conn, tableName, Bytes.toBytes("l"));
+
+        //verify partition metadata
+        ResultSet rs = conn.createStatement().executeQuery(
+                "SELECT * FROM SYSTEM.CDC_STREAM WHERE TABLE_NAME='" + tableName + "'");
+        List<PartitionMetadata> mergedParent = new ArrayList<>();
+        List<PartitionMetadata> splitDaughters = new ArrayList<>();
+
+        while (rs.next()) {
+            PartitionMetadata pm = new PartitionMetadata(rs);
+            if (pm.startKey == null && pm.endKey == null && pm.parentPartitionId != null) {
+                mergedParent.add(pm);
+            }
+            if (pm.endTime == 0) {
+                splitDaughters.add(pm);
+            }
+        }
+        assertEquals(2, mergedParent.size());
+        assertEquals(2, splitDaughters.size());
+        assertEquals(mergedParent.get(0).partitionId, mergedParent.get(1).partitionId);
+        assertEquals(mergedParent.get(0).partitionId, splitDaughters.get(0).parentPartitionId);
+        assertEquals(mergedParent.get(0).partitionId, splitDaughters.get(1).parentPartitionId);
+        assertEquals(splitDaughters.get(0).startTime, splitDaughters.get(1).startTime);
+        assertEquals(splitDaughters.get(0).startTime, mergedParent.get(0).endTime);
+        assertEquals(splitDaughters.get(0).startTime, mergedParent.get(1).endTime);
+    }
+
+
+
+    /**
+     * Test merge of 2 regions which came from a split.
+     */
+    @Test
+    public void testPartitionMetadataSplitRegionsMerge() throws Exception {
+        // create table, cdc and bootstrap stream metadata
+        Connection conn = newConnection();
+        String tableName = generateUniqueName();
+        createTableAndEnableCDC(conn, tableName);
+
+        //split the only region
+        TestUtil.splitTable(conn, tableName, Bytes.toBytes("l"));
+
+        //merge the 2 regions
+        List<HRegionLocation> regions = TestUtil.getAllTableRegions(conn, tableName);
+        TestUtil.mergeTableRegions(conn, tableName, regions.stream()
+                                                    .map(HRegionLocation::getRegion)
+                                                    .map(RegionInfo::getEncodedName)
+                                                    .collect(Collectors.toList()));
+
+        //verify partition metadata
+        ResultSet rs = conn.createStatement().executeQuery(
+                "SELECT * FROM SYSTEM.CDC_STREAM WHERE TABLE_NAME='" + tableName + "'");
+
+        List<PartitionMetadata> splitParents = new ArrayList<>();
+        List<PartitionMetadata> mergedDaughter = new ArrayList<>();
+        while (rs.next()) {
+            PartitionMetadata pm = new PartitionMetadata(rs);
+            if (pm.startKey == null && pm.endKey == null && pm.endTime == 0) {
+                mergedDaughter.add(pm);
+            }
+            if (pm.startKey != null || pm.endKey != null) {
+                splitParents.add(pm);
+            }
+        }
+        assertEquals(2, mergedDaughter.size());
+        assertEquals(2, splitParents.size());
+        assertEquals(mergedDaughter.get(0).startTime, mergedDaughter.get(1).startTime);
+        assertEquals(mergedDaughter.get(0).endTime, mergedDaughter.get(1).endTime);
+        assertEquals(mergedDaughter.get(0).partitionId, mergedDaughter.get(1).partitionId);
+        assertTrue(mergedDaughter.stream().anyMatch(d -> Objects.equals(d.parentPartitionId, splitParents.get(0).partitionId)));
+        assertTrue(mergedDaughter.stream().anyMatch(d -> Objects.equals(d.parentPartitionId, splitParents.get(1).partitionId)));
+        for (PartitionMetadata splitDaughter : splitParents) {
+            Assert.assertEquals(mergedDaughter.get(0).startTime, splitDaughter.endTime);
+        }
+    }
+
+    /**
+     * Test merge of 2 regions which came from different merges.
+     */
+    @Test
+    public void testPartitionMetadataMergedRegionsMerge() throws Exception {
+        // create table, cdc and bootstrap stream metadata
+        Connection conn = newConnection();
+        String tableName = generateUniqueName();
+        createTableAndEnableCDC(conn, tableName);
+
+        // split the only region
+        TestUtil.splitTable(conn, tableName, Bytes.toBytes("l"));
+        // split both regions
+        TestUtil.splitTable(conn, tableName, Bytes.toBytes("d"));
+        TestUtil.splitTable(conn, tableName, Bytes.toBytes("q"));
+        // merge first two and last two regions
+        List<HRegionLocation> regions = TestUtil.getAllTableRegions(conn, tableName);
+        TestUtil.mergeTableRegions(conn, tableName, regions.subList(0,2).stream()
+                .map(HRegionLocation::getRegion)
+                .map(RegionInfo::getEncodedName)
+                .collect(Collectors.toList()));
+        TestUtil.mergeTableRegions(conn, tableName, regions.subList(2,4).stream()
+                .map(HRegionLocation::getRegion)
+                .map(RegionInfo::getEncodedName)
+                .collect(Collectors.toList()));
+        // merge the two regions
+        regions = TestUtil.getAllTableRegions(conn, tableName);
+        TestUtil.mergeTableRegions(conn, tableName, regions.stream()
+                .map(HRegionLocation::getRegion)
+                .map(RegionInfo::getEncodedName)
+                .collect(Collectors.toList()));
+
+        //verify partition metadata
+        ResultSet rs = conn.createStatement().executeQuery(
+                "SELECT * FROM SYSTEM.CDC_STREAM WHERE TABLE_NAME='" + tableName + "'");
+
+        List<PartitionMetadata> mergedDaughter = new ArrayList<>();
+        List<PartitionMetadata> mergedParents = new ArrayList<>();
+        while (rs.next()) {
+            PartitionMetadata pm = new PartitionMetadata(rs);
+            if (pm.endTime == 0) {
+                mergedDaughter.add(pm);
+            }
+            // this will add extra rows, we will prune later
+            else if (pm.startKey == null || pm.endKey == null) {
+                mergedParents.add(pm);
+            }
+        }
+        assertEquals(2, mergedDaughter.size());
+        assertEquals(9, mergedParents.size());
+        assertEquals(mergedDaughter.get(0).startTime, mergedDaughter.get(1).startTime);
+        Collections.sort(mergedParents, Comparator.comparing(o -> o.endTime));
+        for (PartitionMetadata mergedParent : mergedParents.subList(mergedParents.size()-4, mergedParents.size())) {
+            assertEquals(mergedDaughter.get(0).startTime, mergedParent.endTime);
+        }
     }
 
     private String getStreamName(Connection conn, String tableName, String cdcName) throws SQLException {
@@ -379,31 +532,6 @@ public class CDCStreamIT extends CDCBaseIT {
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('p', 6, 'cat')");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('t', 7, 'cat')");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('z', 8, 'cat')");
-    }
-
-    /**
-     * Split the table at the provided split point.
-     */
-    private void splitTable(Connection conn, String tableName, byte[] splitPoint) throws Exception {
-        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        Admin admin = services.getAdmin();
-        Configuration configuration =
-                conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration();
-        org.apache.hadoop.hbase.client.Connection hbaseConn =
-                ConnectionFactory.createConnection(configuration);
-        RegionLocator regionLocator = hbaseConn.getRegionLocator(TableName.valueOf(tableName));
-        int nRegions = regionLocator.getAllRegionLocations().size();
-        try {
-            admin.split(TableName.valueOf(tableName), splitPoint);
-            int retryCount = 0;
-            do {
-                Thread.sleep(2000);
-                retryCount++;
-            } while (retryCount < 10 && regionLocator.getAllRegionLocations().size() == nRegions);
-            Assert.assertNotEquals(regionLocator.getAllRegionLocations().size(), nRegions);
-        } finally {
-            admin.close();
-        }
     }
 
     /**
