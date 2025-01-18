@@ -41,9 +41,21 @@ import static org.apache.phoenix.util.ViewIndexIdRetrieveUtil.NULL_DATA_TYPE_VAL
 import static org.apache.phoenix.util.ViewIndexIdRetrieveUtil.VIEW_INDEX_ID_BIGINT_TYPE_PTR_LEN;
 
 /**
- * Function to return the timestamp of the empty column which functions as the row timestamp. The
- * result returned can be used for debugging(eg. using HBase shell), logging etc.
+ * Function to return the ViewIndexId value based on the ViewIndexIDDataType field.
  * Can also be used in sql predicates.
+ * THe ViewIndexId field value needs to be interpreted based on the type specified in the
+ * ViewIndexIdDataType field
+ This is how the various client created view index id's look like:
+ client                  VIEW_INDEX_ID(Cell number of bytes)     VIEW_INDEX_ID_DATA_TYPE
+ pre-4.15                        2 bytes                                     NULL
+ post-4.15[config smallint]      2 bytes                                     5(smallint)
+ post-4.15[config bigint]        8 bytes                                     -5(bigint)
+
+ VIEW_INDEX_ID_DATA_TYPE,      VIEW_INDEX_ID(Cell representation of the data)
+ NULL,                         SMALLINT         -> RETRIEVE AND CONVERT TO BIGINT
+ SMALLINT,                     SMALLINT         -> RETRIEVE AND CONVERT TO BIGINT
+ BIGINT,                       BIGINT           -> DO NOT CONVERT
+
  */
 @BuiltInFunction(name = DecodeViewIndexIdFunction.NAME,
         nodeClass= DecodeViewIndexIdParseNode.class,
@@ -58,9 +70,7 @@ public class DecodeViewIndexIdFunction extends ScalarFunction {
     }
 
     /**
-     *  @param children An EMPTY_COLUMN key value expression injected thru
-     *  {@link PhoenixRowTimestampParseNode#create create}
-     *  will cause the empty column key value to be evaluated during scan filter processing.
+     *  @param children VIEW_INDEX_ID and VIEW_INDEX_ID_DATA_TYPE expressions
      */
     public DecodeViewIndexIdFunction(List<Expression> children) {
         super(children);
@@ -134,7 +144,6 @@ public class DecodeViewIndexIdFunction extends ScalarFunction {
                         SortOrder.ASC);
             }
 
-            System.out.println("DecodeViewIndexIdFunction: Type: " + type);
             ImmutableBytesWritable columnValue =
                     new ImmutableBytesWritable(CellUtil.cloneValue(viewIndexIdCell));
             if ((type == NULL_DATA_TYPE_VALUE || type == Types.SMALLINT) && (viewIndexIdCell.getValueLength() <

@@ -3370,9 +3370,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 }
                 Delete delete = new Delete(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength(),
                         clientTimeStamp);
-                if (Bytes.compareTo(key, 0, key.length, kv.getRowArray(), kv.getRowOffset(), kv.getRowLength()) == 0) {
-                    LOGGER.info("doDropTable:Found key {} ", Bytes.toStringBinary(key));
-                } else {
+                if (Bytes.compareTo(key, 0, key.length, kv.getRowArray(), kv.getRowOffset(), kv.getRowLength()) != 0) {
                     catalogMutations.add(delete);
                 }
                 results.clear();
