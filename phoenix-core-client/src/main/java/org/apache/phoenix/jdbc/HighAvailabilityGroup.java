@@ -213,7 +213,8 @@ public class HighAvailabilityGroup {
             //after zk quorums there should be a separator
             if (extraIdx != idx + 1) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
-                        .setMessage(String.format("URL %s is not a valid HA connection string", url))
+                        .setMessage(String.format("URL %s is not a valid HA connection string",
+                                url))
                         .build()
                         .buildException();
             }
@@ -240,10 +241,12 @@ public class HighAvailabilityGroup {
         } else {
             extraIdx = url.indexOf(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR, idx + 1);
             if (extraIdx != -1) {
-                //There is something in between zkquorum and terminator but no separator(s), So not sure what it is
+                //There is something in between zkquorum and terminator but no separator(s),
+                //So not sure what it is
                 if (extraIdx != idx + 1) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
-                            .setMessage(String.format("URL %s is not a valid HA connection string", url))
+                            .setMessage(String.format("URL %s is not a valid HA connection string",
+                                    url))
                             .build()
                             .buildException();
                 } else {
@@ -265,7 +268,8 @@ public class HighAvailabilityGroup {
         return haurlInfo;
     }
 
-    private static HAGroupInfo getHAGroupInfo(String url, Properties properties) throws SQLException {
+    private static HAGroupInfo getHAGroupInfo(String url, Properties properties)
+            throws SQLException {
         url = checkUrl(url);
         url = url.substring(url.indexOf("[") + 1, url.indexOf("]"));
         String [] urls = url.split("\\|");
@@ -580,7 +584,8 @@ public class HighAvailabilityGroup {
      * @return a Phoenix connection to current active HBase cluster
      * @throws SQLException if fails to get a connection
      */
-    PhoenixConnection connectActive(final Properties properties, final HAURLInfo haurlInfo) throws SQLException {
+    PhoenixConnection connectActive(final Properties properties, final HAURLInfo haurlInfo)
+            throws SQLException {
         try {
             Optional<String> url = roleRecord.getActiveUrl();
             if (state == State.READY && url.isPresent()) {
@@ -648,7 +653,8 @@ public class HighAvailabilityGroup {
      * connection to the given cluster without checking the context of the cluster's role. Please
      * use {@link #connectActive(Properties, HAURLInfo)} to connect to the ACTIVE cluster.
      */
-    PhoenixConnection connectToOneCluster(String url, Properties properties, HAURLInfo haurlInfo) throws SQLException {
+    PhoenixConnection connectToOneCluster(String url, Properties properties, HAURLInfo haurlInfo)
+            throws SQLException {
         Preconditions.checkNotNull(url);
         if (url.startsWith(PhoenixRuntime.JDBC_PROTOCOL)) {
             Preconditions.checkArgument(url.length() > PhoenixRuntime.JDBC_PROTOCOL.length(),
@@ -862,8 +868,8 @@ public class HighAvailabilityGroup {
             sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
             sb.append(zkUrl);
             if (haURLInfo != null) {
-                if (!Strings.isNullOrEmpty(haURLInfo.getPrincipal()) &&
-                        !Strings.isNullOrEmpty(haURLInfo.getAdditionalJDBCParams())) {
+                if (!Strings.isNullOrEmpty(haURLInfo.getPrincipal())
+                        && !Strings.isNullOrEmpty(haURLInfo.getAdditionalJDBCParams())) {
                     sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
                     sb.append(haURLInfo.getPrincipal());
                     if (!haURLInfo.getAdditionalJDBCParams().

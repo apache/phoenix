@@ -39,8 +39,8 @@ import org.slf4j.LoggerFactory;
 enum HighAvailabilityPolicy {
     FAILOVER {
         @Override
-        public Connection provide(HighAvailabilityGroup haGroup, Properties info, HAURLInfo haURLInfo)
-                throws SQLException {
+        public Connection provide(HighAvailabilityGroup haGroup, Properties info,
+                                  HAURLInfo haURLInfo) throws SQLException {
             FailoverPhoenixContext context = new FailoverPhoenixContext(info, haGroup, haURLInfo);
             return new FailoverPhoenixConnection(context);
         }
@@ -67,7 +67,7 @@ enum HighAvailabilityPolicy {
                     zkUrl, haGroup.getGroupInfo());
             ConnectionQueryServices cqs = null;
 
-            //Close connections for every HAURLInfo's (different principal) connections for a give HAGroup
+            //Close connections for every HAURLInfo's (different principal) conn for a give HAGroup
             for (HAURLInfo haurlInfo : HighAvailabilityGroup.URLS.get(haGroup.getGroupInfo())) {
                 try {
                     String jdbcZKUrl = haGroup.getGroupInfo().getJDBCUrl(zkUrl, haurlInfo);
@@ -80,14 +80,15 @@ enum HighAvailabilityPolicy {
                     LOG.info("Closed all connections to cluster {} for HA group {}",
                             jdbcZKUrl, haGroup.getGroupInfo());
                 } finally {
-                        if (cqs != null) {
-                            // CQS is closed but it is not invalidated from global cache in PhoenixDriver
-                            // so that any new connection will get error instead of creating a new CQS
-                            LOG.info("Closing CQS after cluster '{}' becomes STANDBY", zkUrl);
-                            cqs.close();
-                            LOG.info("Successfully closed CQS after cluster '{}' becomes STANDBY", zkUrl);
-                        }
+                    if (cqs != null) {
+                        //CQS is closed but it is not invalidated from global cache in PhoenixDriver
+                        //so that any new connection will get error instead of creating a new CQS
+                        LOG.info("Closing CQS after cluster '{}' becomes STANDBY", zkUrl);
+                        cqs.close();
+                        LOG.info("Successfully closed CQS after cluster '{}' becomes STANDBY",
+                                zkUrl);
                     }
+                }
             }
         }
 
@@ -105,13 +106,14 @@ enum HighAvailabilityPolicy {
 
     PARALLEL {
         @Override
-        public Connection provide(HighAvailabilityGroup haGroup, Properties info, HAURLInfo haURLInfo)
-                throws SQLException {
+        public Connection provide(HighAvailabilityGroup haGroup, Properties info,
+                                  HAURLInfo haURLInfo) throws SQLException {
             List<Boolean> executorCapacities = PhoenixHAExecutorServiceProvider.hasCapacity(info);
             if (executorCapacities.contains(Boolean.TRUE)) {
                 ParallelPhoenixContext context =
                         new ParallelPhoenixContext(info, haGroup,
-                                PhoenixHAExecutorServiceProvider.get(info), executorCapacities, haURLInfo);
+                                PhoenixHAExecutorServiceProvider.get(info),
+                                executorCapacities, haURLInfo);
                 return new ParallelPhoenixConnection(context);
             } else {
                 // TODO: Once we have operation/primary wait timeout use the same
@@ -139,7 +141,8 @@ enum HighAvailabilityPolicy {
      * @return a JDBC connection
      * @throws SQLException if fails to provide a connection
      */
-    abstract Connection provide(HighAvailabilityGroup haGroup, Properties info, HAURLInfo haurlInfo) throws SQLException;
+    abstract Connection provide(HighAvailabilityGroup haGroup, Properties info, HAURLInfo haurlInfo)
+            throws SQLException;
 
     /**
      * Call-back function when a cluster role transition is detected in the high availability group.

@@ -28,7 +28,8 @@ public class FailoverPhoenixContext {
     private final HighAvailabilityGroup haGroup;
     private final HAURLInfo haurlInfo;
 
-    FailoverPhoenixContext(Properties properties, HighAvailabilityGroup haGroup, HAURLInfo haurlInfo) {
+    FailoverPhoenixContext(Properties properties, HighAvailabilityGroup haGroup,
+                           HAURLInfo haurlInfo) {
         this.properties = properties;
         this.haGroup = haGroup;
         this.haurlInfo = haurlInfo;

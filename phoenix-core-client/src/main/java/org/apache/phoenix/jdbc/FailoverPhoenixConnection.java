@@ -105,7 +105,8 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
         this.context = context;
         this.policy = FailoverPolicy.get(context.getProperties());
         this.isClosed = false;
-        this.connection = context.getHAGroup().connectActive(context.getProperties(), context.getHAURLInfo());
+        this.connection = context.getHAGroup().connectActive(context.getProperties(),
+                context.getHAURLInfo());
     }
 
     /**
@@ -179,7 +180,8 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
         while (newConn == null &&
                 EnvironmentEdgeManager.currentTimeMillis() < startTime + timeoutMs) {
             try {
-                newConn = context.getHAGroup().connectActive(context.getProperties(), context.getHAURLInfo());
+                newConn = context.getHAGroup().connectActive(context.getProperties(),
+                        context.getHAURLInfo());
             } catch (SQLException e) {
                 cause = e;
                 LOG.info("Got exception when trying to connect to active cluster.", e);
@@ -222,7 +224,8 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
                 }
             }
         }
-        LOG.info("Connection {} failed over to {}", context.getHAGroup().getGroupInfo(), connection.getURL());
+        LOG.info("Connection {} failed over to {}", context.getHAGroup().getGroupInfo(),
+                connection.getURL());
     }
 
     /**
@@ -323,8 +326,9 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
     @VisibleForTesting
     <T> T wrapActionDuringFailover(SupplierWithSQLException<T> s) throws SQLException {
         checkConnection();
-        final long timeoutMs = Long.parseLong(context.getProperties().getProperty(FAILOVER_TIMEOUT_MS_ATTR,
-                String.valueOf(FAILOVER_TIMEOUT_MS_DEFAULT)));
+        final long timeoutMs = Long.parseLong(context.getProperties().
+                getProperty(FAILOVER_TIMEOUT_MS_ATTR,
+                        String.valueOf(FAILOVER_TIMEOUT_MS_DEFAULT)));
         int failoverCount = 0;
         while (true) {
             try {
