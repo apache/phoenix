@@ -272,6 +272,81 @@ public class HighAvailabilityGroupIT {
 
     }
 
+    @Test
+    public void testHAGroupMappings() throws Exception {
+
+        //Try creating new HAGroup with same params except Principal
+        Optional<HighAvailabilityGroup> haGroup2 = Optional.empty();
+        try {
+            String principal = RandomStringUtils.randomAlphabetic(5);
+            String haUrl2 = CLUSTERS.getJdbcHAUrl(principal);
+            HAURLInfo haURLInfo2 = HighAvailabilityGroup.getUrlInfo(haUrl2, clientProperties);
+            haGroup2 = HighAvailabilityGroup.get(haUrl2, clientProperties);
+            assertTrue(haGroup2.isPresent());
+            //We should get same HAGroup as we have mapping of <HAGroupName, urls> -> HAGroup
+            assertSame(haGroup, haGroup2.get());
+            //We should have 2 values on URLS mapping for the given haGroup/haGroup2.
+            assertEquals(2, URLS.get(haGroup.getGroupInfo()).size());
+            assertTrue(URLS.get(haGroup.getGroupInfo()).contains(haURLInfo2));
+
+        } finally {
+            haGroup2.ifPresent(HighAvailabilityGroup::close);
+        }
+
+        //Create 2 more different urls connecting to a different HAGroup
+        String haGroupName3 = testName.getMethodName() + RandomStringUtils.randomAlphabetic(3);
+        CLUSTERS.initClusterRole(haGroupName3, HighAvailabilityPolicy.FAILOVER);
+        clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName3);
+        Optional<HighAvailabilityGroup> haGroup3 = Optional.empty();
+        Optional<HighAvailabilityGroup> haGroup4 = Optional.empty();
+        try {
+            HAURLInfo haurlInfo3 = HighAvailabilityGroup.getUrlInfo(jdbcUrl, clientProperties);
+            haGroup3 = HighAvailabilityGroup.get(jdbcUrl, clientProperties);
+            assertTrue(haGroup3.isPresent());
+            assertNotSame(haGroup, haGroup3.get());
+            assertNotSame(haGroup.getGroupInfo(), haGroup3.get().getGroupInfo());
+            assertEquals(1, URLS.get(haGroup3.get().getGroupInfo()).size());
+
+
+            // should get same ha Group without principal
+            String haUrl4 = CLUSTERS.getJdbcHAUrlWithoutPrincipal();
+            HAURLInfo haURLInfo4 = HighAvailabilityGroup.getUrlInfo(haUrl4, clientProperties);
+            haGroup4 = HighAvailabilityGroup.get(haUrl4, clientProperties);
+            assertTrue(haGroup4.isPresent());
+            assertNotSame(haGroup, haGroup4.get());
+            assertSame(haGroup3.get(), haGroup4.get());
+            assertEquals(2, URLS.get(haGroup4.get().getGroupInfo()).size());
+
+            assertNotEquals(haurlInfo3, haURLInfo4);
+
+        } finally {
+            haGroup3.ifPresent(HighAvailabilityGroup::close);
+            haGroup4.ifPresent(HighAvailabilityGroup::close);
+        }
+
+        // Client will get the same HighAvailabilityGroup using the same information as key again
+        clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroup.getGroupInfo().getName());
+        Optional<HighAvailabilityGroup> haGroup5 = Optional.empty();
+        try {
+            String haUrl5 = CLUSTERS.getJdbcHAUrl();
+            HAURLInfo haURLInfo5 = HighAvailabilityGroup.getUrlInfo(haUrl5, clientProperties);
+            haGroup5 = HighAvailabilityGroup.get(haUrl5, clientProperties);
+            assertTrue(haGroup5.isPresent());
+            assertSame(haGroup, haGroup5.get());
+
+            //haURLInfo5 should be same as global one and URLS mapping should not change so
+            //set mapping for global HAGroupInfo should have 2 values
+            assertEquals(2, URLS.get(haGroup.getGroupInfo()).size());
+            assertTrue(URLS.get(haGroup.getGroupInfo()).contains(haURLInfo5));
+            assertEquals(haURLInfo5, haURLInfo);
+
+
+        } finally {
+            haGroup5.ifPresent(HighAvailabilityGroup::close);
+        }
+
+    }
+
     /**
      * Test that HA group should see latest version of cluster role record.
      */

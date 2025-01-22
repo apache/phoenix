@@ -50,11 +50,13 @@ import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -126,9 +128,23 @@ public class HighAvailabilityGroup {
     public static final long PHOENIX_HA_TRANSITION_TIMEOUT_MS_DEFAULT = 5 * 60 * 1000; // 5 mins
 
     static final Logger LOG = LoggerFactory.getLogger(HighAvailabilityGroup.class);
+
+    /**
+     * Two maps to store client provided info mapping to HighAvailabilityGroup.
+     * GROUPS which store HAGroupInfo (name and url of clusters where CRR resides)
+     * to HighAvailabilityGroup mapping, which is the information required to get roleRecord
+     * and URLS which store HAGroupInfo to HAURLInfo (name, principal) 1:n mapping
+     * which represents a given group of clients trying to connect to a HighAvailabilityGroup,
+     * this info is required to fetch the CQSI(s) linked to given HighAvailabilityGroup in case
+     * of failover or a change where CQSIs needs to be closed and invalidated
+     *
+     * HAURLInfo is stored in {@link ParallelPhoenixContext} and {@link FailoverPhoenixContext}
+     * for the current given connection
+     *
+     */
     @VisibleForTesting
     static final Map<HAGroupInfo, HighAvailabilityGroup> GROUPS = new ConcurrentHashMap<>();
-    static final Map<HAGroupInfo, List<HAURLInfo>> URLS = new ConcurrentHashMap<>();
+    static final Map<HAGroupInfo, Set<HAURLInfo>> URLS = new ConcurrentHashMap<>();
     @VisibleForTesting
     static final Cache<HAGroupInfo, Boolean> MISSING_CRR_GROUPS_CACHE = CacheBuilder.newBuilder()
             .expireAfterWrite(PHOENIX_HA_TRANSITION_TIMEOUT_MS_DEFAULT, TimeUnit.MILLISECONDS)
@@ -264,7 +280,7 @@ public class HighAvailabilityGroup {
         }
         HAURLInfo haurlInfo = new HAURLInfo(name, principal, additionalJDBCParams);
         HAGroupInfo info = getHAGroupInfo(url, properties);
-        URLS.computeIfAbsent(info, haGroupInfo -> new ArrayList<>()).add(haurlInfo);
+        URLS.computeIfAbsent(info, haGroupInfo -> new HashSet<>()).add(haurlInfo);
         return haurlInfo;
     }
 
