@@ -26,6 +26,7 @@ import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasic
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
@@ -36,6 +37,7 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
@@ -76,6 +78,7 @@ public class HighAvailabilityGroupIT {
     private String jdbcUrl;
     /** Failover HA group for to test. */
     private HighAvailabilityGroup haGroup;
+    private HAURLInfo haURLInfo;
     /** HA Group name for this test. */
     private String haGroupName;
 
@@ -106,6 +109,7 @@ public class HighAvailabilityGroupIT {
         // Make first cluster ACTIVE
         CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER);
         jdbcUrl = CLUSTERS.getJdbcHAUrl();
+        haURLInfo = HighAvailabilityGroup.getUrlInfo(jdbcUrl, clientProperties);
         haGroup = getHighAvailibilityGroup(jdbcUrl,clientProperties);
     }
 
@@ -162,6 +166,185 @@ public class HighAvailabilityGroupIT {
         } finally {
             haGroup4.ifPresent(HighAvailabilityGroup::close);
         }
+    }
+
+    /**
+     * Test HAGroup.get() method to get same HAGroups if we have different principals only and different HAGroups
+     * if anything else in the key changes
+     * @throws Exception
+     */
+    @Test
+    public void testGetWithDifferentPrincipals() throws Exception {
+        //Client will get same HAGroup if we have difference in principal only but JDBCURLs should have different
+        //principals
+        assertEquals(CLUSTERS.getJdbcUrl1(), haGroup.getGroupInfo().getJDBCUrl(CLUSTERS.getUrl1(), haURLInfo));
+        assertEquals(CLUSTERS.getJdbcUrl2(), haGroup.getGroupInfo().getJDBCUrl(CLUSTERS.getUrl2(), haURLInfo));
+        assertEquals(CLUSTERS.getJdbcHAUrl(), haGroup.getGroupInfo().
+                getJDBCUrl(String.format("[%s|%s]", CLUSTERS.getUrl1(), CLUSTERS.getUrl2()), haURLInfo));
+
+        //Try creating new HAGroup with same params except Principal
+        Optional<HighAvailabilityGroup> haGroup2 = Optional.empty();
+        try {
+            String principal = RandomStringUtils.randomAlphabetic(5);
+            String haUrl2 = CLUSTERS.getJdbcHAUrl(principal);
+            HAURLInfo haURLInfo2 = HighAvailabilityGroup.getUrlInfo(haUrl2, clientProperties);
+            haGroup2 = HighAvailabilityGroup.get(haUrl2, clientProperties);
+            assertTrue(haGroup2.isPresent());
+            //We should get same HAGroup as we have mapping of <HAGroupName, urls> -> HAGroup
+            assertSame(haGroup, haGroup2.get());
+
+            //URLs we are getting for haGroup2 should have newer principal i.e. Current HAURLInfo should have new
+            //principal instead default PRINCIPAL
+            assertEquals(CLUSTERS.getJdbcUrl(CLUSTERS.getUrl1(), principal),
+                    haGroup2.get().getGroupInfo().getJDBCUrl(CLUSTERS.getUrl1(), haURLInfo2));
+            assertEquals(CLUSTERS.getJdbcUrl(CLUSTERS.getUrl2(), principal),
+                    haGroup2.get().getGroupInfo().getJDBCUrl(CLUSTERS.getUrl2(), haURLInfo2));
+            assertEquals(CLUSTERS.getJdbcHAUrl(principal), haGroup2.get().getGroupInfo().
+                    getJDBCUrl(String.format("[%s|%s]", CLUSTERS.getUrl1(), CLUSTERS.getUrl2()), haURLInfo2));
+        } finally {
+            haGroup2.ifPresent(HighAvailabilityGroup::close);
+        }
+
+        // Client will get a different HighAvailabilityGroup when group name is different and with same principal as
+        // default HAGroup
+        String haGroupName3 = testName.getMethodName() + RandomStringUtils.randomAlphabetic(3);
+        CLUSTERS.initClusterRole(haGroupName3, HighAvailabilityPolicy.FAILOVER);
+        clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName3);
+        Optional<HighAvailabilityGroup> haGroup3 = Optional.empty();
+        Optional<HighAvailabilityGroup> haGroup4 = Optional.empty();
+        try {
+            HAURLInfo haurlInfo3 = HighAvailabilityGroup.getUrlInfo(jdbcUrl, clientProperties);
+            haGroup3 = HighAvailabilityGroup.get(jdbcUrl, clientProperties);
+            assertTrue(haGroup3.isPresent());
+            assertNotSame(haGroup, haGroup3.get());
+
+            assertNotSame(haGroup.getGroupInfo(), haGroup3.get().getGroupInfo());
+
+            //URLs we are getting for haGroup3 should have same principal as default PRINCIPAL.
+            assertEquals(CLUSTERS.getJdbcUrl1(),
+                    haGroup3.get().getGroupInfo().getJDBCUrl(CLUSTERS.getUrl1(), haurlInfo3));
+            assertEquals(CLUSTERS.getJdbcUrl2(),
+                    haGroup3.get().getGroupInfo().getJDBCUrl(CLUSTERS.getUrl2(), haurlInfo3));
+            assertEquals(CLUSTERS.getJdbcHAUrl(), haGroup3.get().getGroupInfo().
+                    getJDBCUrl(String.format("[%s|%s]", CLUSTERS.getUrl1(), CLUSTERS.getUrl2()), haurlInfo3));
+
+            // should get same ha Group without principal
+            String haUrl4 = CLUSTERS.getJdbcHAUrlWithoutPrincipal();
+            HAURLInfo haURLInfo4 = HighAvailabilityGroup.getUrlInfo(haUrl4, clientProperties);
+            haGroup4 = HighAvailabilityGroup.get(haUrl4, clientProperties);
+            assertTrue(haGroup4.isPresent());
+            assertNotSame(haGroup, haGroup4.get());
+            assertSame(haGroup3.get(), haGroup4.get());
+
+            assertNotSame(haGroup.getGroupInfo(), haGroup4.get().getGroupInfo());
+            assertSame(haGroup3.get().getGroupInfo(), haGroup4.get().getGroupInfo());
+            assertNotEquals(haurlInfo3, haURLInfo4);
+
+        } finally {
+            haGroup3.ifPresent(HighAvailabilityGroup::close);
+            haGroup4.ifPresent(HighAvailabilityGroup::close);
+        }
+
+        // Client will get the same HighAvailabilityGroup using the same information as key again
+        clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroup.getGroupInfo().getName());
+        Optional<HighAvailabilityGroup> haGroup5 = Optional.empty();
+        try {
+            //Again using a random principal which should be used now for generating jdbcUrls
+            String principal = RandomStringUtils.randomAlphabetic(5);
+            String haUrl5 = CLUSTERS.getJdbcHAUrl(principal);
+            HAURLInfo haURLInfo5 = HighAvailabilityGroup.getUrlInfo(haUrl5, clientProperties);
+            haGroup5 = HighAvailabilityGroup.get(haUrl5, clientProperties);
+            assertTrue(haGroup5.isPresent());
+            assertSame(haGroup, haGroup5.get());
+
+            //URLs we are getting for haGroup4 should have newer principal i.e. Current HAURLInfo should have new
+            //principal instead default PRINCIPAL
+            assertEquals(CLUSTERS.getJdbcUrl(CLUSTERS.getUrl1(), principal),
+                    haGroup4.get().getGroupInfo().getJDBCUrl(CLUSTERS.getUrl1(), haURLInfo5));
+            assertEquals(CLUSTERS.getJdbcUrl(CLUSTERS.getUrl2(), principal),
+                    haGroup4.get().getGroupInfo().getJDBCUrl(CLUSTERS.getUrl2(), haURLInfo5));
+            assertEquals(CLUSTERS.getJdbcHAUrl(principal), haGroup4.get().getGroupInfo().
+                    getJDBCUrl(String.format("[%s|%s]", CLUSTERS.getUrl1(), CLUSTERS.getUrl2()), haURLInfo5));
+
+        } finally {
+            haGroup5.ifPresent(HighAvailabilityGroup::close);
+        }
+
+    }
+
+    @Test
+    public void testHAGroupMappings() throws Exception {
+
+        //Try creating new HAGroup with same params except Principal
+        Optional<HighAvailabilityGroup> haGroup2 = Optional.empty();
+        try {
+            String principal = RandomStringUtils.randomAlphabetic(5);
+            String haUrl2 = CLUSTERS.getJdbcHAUrl(principal);
+            HAURLInfo haURLInfo2 = HighAvailabilityGroup.getUrlInfo(haUrl2, clientProperties);
+            haGroup2 = HighAvailabilityGroup.get(haUrl2, clientProperties);
+            assertTrue(haGroup2.isPresent());
+            //We should get same HAGroup as we have mapping of <HAGroupName, urls> -> HAGroup
+            assertSame(haGroup, haGroup2.get());
+            //We should have 2 values on URLS mapping for the given haGroup/haGroup2.
+            assertEquals(2, URLS.get(haGroup.getGroupInfo()).size());
+            assertTrue(URLS.get(haGroup.getGroupInfo()).contains(haURLInfo2));
+
+        } finally {
+            haGroup2.ifPresent(HighAvailabilityGroup::close);
+        }
+
+        //Create 2 more different urls connecting to a different HAGroup
+        String haGroupName3 = testName.getMethodName() + RandomStringUtils.randomAlphabetic(3);
+        CLUSTERS.initClusterRole(haGroupName3, HighAvailabilityPolicy.FAILOVER);
+        clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName3);
+        Optional<HighAvailabilityGroup> haGroup3 = Optional.empty();
+        Optional<HighAvailabilityGroup> haGroup4 = Optional.empty();
+        try {
+            HAURLInfo haurlInfo3 = HighAvailabilityGroup.getUrlInfo(jdbcUrl, clientProperties);
+            haGroup3 = HighAvailabilityGroup.get(jdbcUrl, clientProperties);
+            assertTrue(haGroup3.isPresent());
+            assertNotSame(haGroup, haGroup3.get());
+            assertNotSame(haGroup.getGroupInfo(), haGroup3.get().getGroupInfo());
+            assertEquals(1, URLS.get(haGroup3.get().getGroupInfo()).size());
+
+
+            // should get same ha Group without principal
+            String haUrl4 = CLUSTERS.getJdbcHAUrlWithoutPrincipal();
+            HAURLInfo haURLInfo4 = HighAvailabilityGroup.getUrlInfo(haUrl4, clientProperties);
+            haGroup4 = HighAvailabilityGroup.get(haUrl4, clientProperties);
+            assertTrue(haGroup4.isPresent());
+            assertNotSame(haGroup, haGroup4.get());
+            assertSame(haGroup3.get(), haGroup4.get());
+            assertEquals(2, URLS.get(haGroup4.get().getGroupInfo()).size());
+
+            assertNotEquals(haurlInfo3, haURLInfo4);
+
+        } finally {
+            haGroup3.ifPresent(HighAvailabilityGroup::close);
+            haGroup4.ifPresent(HighAvailabilityGroup::close);
+        }
+
+        // Client will get the same HighAvailabilityGroup using the same information as key again
+        clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroup.getGroupInfo().getName());
+        Optional<HighAvailabilityGroup> haGroup5 = Optional.empty();
+        try {
+            String haUrl5 = CLUSTERS.getJdbcHAUrl();
+            HAURLInfo haURLInfo5 = HighAvailabilityGroup.getUrlInfo(haUrl5, clientProperties);
+            haGroup5 = HighAvailabilityGroup.get(haUrl5, clientProperties);
+            assertTrue(haGroup5.isPresent());
+            assertSame(haGroup, haGroup5.get());
+
+            //haURLInfo5 should be same as global one and URLS mapping should not change so
+            //set mapping for global HAGroupInfo should have 2 values
+            assertEquals(2, URLS.get(haGroup.getGroupInfo()).size());
+            assertTrue(URLS.get(haGroup.getGroupInfo()).contains(haURLInfo5));
+            assertEquals(haURLInfo5, haURLInfo);
+
+
+        } finally {
+            haGroup5.ifPresent(HighAvailabilityGroup::close);
+        }
+
     }
 
     /**
@@ -317,7 +500,7 @@ public class HighAvailabilityGroupIT {
      */
     @Test
     public void testConnect() throws SQLException {
-        Connection connection = haGroup.connect(clientProperties);
+        Connection connection = haGroup.connect(clientProperties, haURLInfo);
         assertNotNull(connection);
         assertNotNull(connection.unwrap(FailoverPhoenixConnection.class));
     }
@@ -328,11 +511,11 @@ public class HighAvailabilityGroupIT {
     @Test
     public void testConnectToOneCluster() throws SQLException {
         final String url = CLUSTERS.getJdbcUrl1();
-        PhoenixConnection connection = haGroup.connectToOneCluster(url, clientProperties);
+        PhoenixConnection connection = haGroup.connectToOneCluster(url, clientProperties, haURLInfo);
         assertEquals(url, connection.getURL());
 
         try {
-            haGroup.connectToOneCluster(null, clientProperties);
+            haGroup.connectToOneCluster(null, clientProperties, haURLInfo);
             fail("Should have failed since null is not in any HA group");
         } catch (Exception e) {
             LOG.info("Got expected exception with invalid null host url", e);
@@ -341,7 +524,7 @@ public class HighAvailabilityGroupIT {
         final String randomHostUrl = String.format("%s:%d",
                 RandomStringUtils.randomAlphabetic(4), RandomUtils.nextInt(0,65536));
         try {
-            haGroup.connectToOneCluster(randomHostUrl, clientProperties);
+            haGroup.connectToOneCluster(randomHostUrl, clientProperties, haURLInfo);
             fail("Should have failed since '" + randomHostUrl + "' is not in HA group " + haGroup);
         } catch (IllegalArgumentException e) {
             LOG.info("Got expected exception with invalid host url '{}'", randomHostUrl, e);
@@ -351,7 +534,7 @@ public class HighAvailabilityGroupIT {
     /**
      * Test that it can connect to a given cluster in this HA group after ZK service restarts.
      *
-     * Method {@link HighAvailabilityGroup#connectToOneCluster(String, Properties)} is used by
+     * Method {@link HighAvailabilityGroup#connectToOneCluster(String, Properties, HAURLInfo)} is used by
      * Phoenix HA framework to connect to one specific HBase cluster in this HA group.  The cluster
      * may not necessarily be in ACTIVE role.  For example, parallel HA connection needs to connect
      * to both clusters. This tests that it can connect to a specific ZK cluster after ZK restarts.
@@ -376,7 +559,7 @@ public class HighAvailabilityGroupIT {
             doTestBasicOperationsWithConnection(conn, tableName, null);
         }
         // test with HA group to get connection to one cluster
-        try (Connection conn = haGroup.connectToOneCluster(jdbcUrlToCluster1, clientProperties)) {
+        try (Connection conn = haGroup.connectToOneCluster(jdbcUrlToCluster1, clientProperties, haURLInfo)) {
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
         }
     }
@@ -386,9 +569,9 @@ public class HighAvailabilityGroupIT {
      */
     @Test
     public void testIsConnectionActive() throws Exception {
-        PhoenixConnection conn1 = haGroup.connectToOneCluster(CLUSTERS.getUrl1(), clientProperties);
+        PhoenixConnection conn1 = haGroup.connectToOneCluster(CLUSTERS.getUrl1(), clientProperties, haURLInfo);
         assertTrue(haGroup.isActive(conn1));
-        PhoenixConnection conn2 = haGroup.connectToOneCluster(CLUSTERS.getUrl2(), clientProperties);
+        PhoenixConnection conn2 = haGroup.connectToOneCluster(CLUSTERS.getUrl2(), clientProperties, haURLInfo);
         assertFalse(haGroup.isActive(conn2));
 
         CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.ACTIVE);
@@ -418,7 +601,7 @@ public class HighAvailabilityGroupIT {
     public void testCanConnectWhenStandbyHBaseClusterDown() throws Exception {
         doTestWhenOneHBaseDown(CLUSTERS.getHBaseCluster2(), () -> {
             // HA group is already initialized
-            Connection connection = haGroup.connect(clientProperties);
+            Connection connection = haGroup.connect(clientProperties, haURLInfo);
             assertNotNull(connection);
             assertNotNull(connection.unwrap(FailoverPhoenixConnection.class));
         });
@@ -437,7 +620,7 @@ public class HighAvailabilityGroupIT {
             HighAvailabilityGroup.CURATOR_CACHE.invalidateAll();
 
             // HA group is already initialized
-            Connection connection = haGroup.connect(clientProperties);
+            Connection connection = haGroup.connect(clientProperties, haURLInfo);
             assertNotNull(connection);
             assertNotNull(connection.unwrap(FailoverPhoenixConnection.class));
         });
@@ -459,11 +642,12 @@ public class HighAvailabilityGroupIT {
             CLUSTERS.initClusterRole(haGroupName2, HighAvailabilityPolicy.FAILOVER);
             Optional<HighAvailabilityGroup> haGroup2 = Optional.empty();
             try {
+                HAURLInfo haURLInfo = HighAvailabilityGroup.getUrlInfo(jdbcUrl, clientProperties);
                 haGroup2 = HighAvailabilityGroup.get(jdbcUrl, clientProperties);
                 assertTrue(haGroup2.isPresent());
                 assertNotSame(haGroup2.get(), haGroup);
                 // get a new connection in this new HA group; should be pointing to ACTIVE cluster1
-                try (Connection connection = haGroup2.get().connect(clientProperties)) {
+                try (Connection connection = haGroup2.get().connect(clientProperties, haURLInfo)) {
                     assertNotNull(connection);
                     assertNotNull(connection.unwrap(FailoverPhoenixConnection.class));
                 }
@@ -489,11 +673,12 @@ public class HighAvailabilityGroupIT {
        doTestWhenOneZKDown(CLUSTERS.getHBaseCluster2(), () -> {
            Optional<HighAvailabilityGroup> haGroup2 = Optional.empty();
            try {
+               HAURLInfo haURLInfo = HighAvailabilityGroup.getUrlInfo(jdbcUrl, clientProperties);
                haGroup2 = HighAvailabilityGroup.get(jdbcUrl, clientProperties);
                assertTrue(haGroup2.isPresent());
                assertNotSame(haGroup2.get(), haGroup);
                // get a new connection in this new HA group; should be pointing to ACTIVE cluster1
-               Connection connection = haGroup2.get().connect(clientProperties);
+               Connection connection = haGroup2.get().connect(clientProperties, haURLInfo);
                assertNotNull(connection);
                assertNotNull(connection.unwrap(FailoverPhoenixConnection.class));
            } finally {
@@ -509,7 +694,7 @@ public class HighAvailabilityGroupIT {
     public void testCanNotEstablishConnectionWhenActiveHBaseClusterDown() throws Exception {
         doTestWhenOneHBaseDown(CLUSTERS.getHBaseCluster1(), () -> {
             try {
-                haGroup.connectActive(clientProperties);
+                haGroup.connectActive(clientProperties, haURLInfo);
                 fail("Should have failed because ACTIVE HBase cluster is down.");
             } catch (SQLException e) {
                 LOG.info("Got expected exception when ACTIVE HBase cluster is down", e);
@@ -529,7 +714,7 @@ public class HighAvailabilityGroupIT {
     public void testConnectActiveWhenActiveZKClusterRestarts() throws Exception {
         doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
             try {
-                haGroup.connectActive(clientProperties);
+                haGroup.connectActive(clientProperties, haURLInfo);
                 fail("Should have failed because of ACTIVE ZK cluster is down.");
             } catch (SQLException e) {
                 LOG.info("Got expected exception when ACTIVE ZK cluster is down", e);
@@ -537,7 +722,7 @@ public class HighAvailabilityGroupIT {
             }
         });
 
-        try (Connection conn = haGroup.connectActive(clientProperties)) {
+        try (Connection conn = haGroup.connectActive(clientProperties, haURLInfo)) {
             assertNotNull(conn);
             LOG.info("Successfully connect to HA group {} after restarting ACTIVE ZK", haGroup);
         } // all other exceptions will fail the test

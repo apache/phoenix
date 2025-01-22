@@ -57,6 +57,7 @@ public class ParallelPhoenixContext {
     private final Properties properties;
 
     private final HighAvailabilityGroup haGroup;
+    private final HAURLInfo haurlInfo;
     private final long operationTimeoutMs;
 
     private volatile boolean isClosed = false;
@@ -72,12 +73,15 @@ public class ParallelPhoenixContext {
      * @param executorCapacities Ordered list of executorCapacities corresponding to executors. Null is interpreted as
      *                           executors having capacity
      */
-    ParallelPhoenixContext(Properties properties, HighAvailabilityGroup haGroup, List<PhoenixHAExecutorServiceProvider.PhoenixHAClusterExecutorServices> executors, List<Boolean> executorCapacities) {
+    ParallelPhoenixContext(Properties properties, HighAvailabilityGroup haGroup,
+                           List<PhoenixHAExecutorServiceProvider.PhoenixHAClusterExecutorServices> executors,
+                           List<Boolean> executorCapacities, HAURLInfo haurlInfo) {
         Preconditions.checkNotNull(executors);
         Preconditions.checkArgument(executors.size() >= 2, "Expected 2 executor pairs, one for each connection with a normal/close executor");
         GLOBAL_HA_PARALLEL_CONNECTION_CREATED_COUNTER.increment();
         this.properties = properties;
         this.haGroup = haGroup;
+        this.haurlInfo = haurlInfo;
 
         this.parallelPhoenixMetrics = new ParallelPhoenixMetrics();
         this.operationTimeoutMs = getOperationTimeoutMs(properties);
@@ -122,6 +126,10 @@ public class ParallelPhoenixContext {
 
     public HighAvailabilityGroup getHaGroup() {
         return haGroup;
+    }
+
+    public HAURLInfo getHaurlInfo() {
+        return haurlInfo;
     }
 
     public boolean isAutoCommit() {
