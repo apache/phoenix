@@ -19,18 +19,40 @@ package org.apache.phoenix.util;
 
 public class ManualEnvironmentEdge extends EnvironmentEdge {
     // Sometimes 0 ts might have a special value, so lets start with 1
+    // value is in Nano seconds
     protected long value = 1L;
 
+    private long convertMsToNs(long value) {
+        return value * 1000000;
+    }
+
+    private long convertNsToMs(long value) {
+        return value / 1000000;
+    }
+
     public void setValue(long newValue) {
-        value = newValue;
+        value = convertMsToNs(newValue);
     }
 
     public void incrementValue(long addedValue) {
-        value += addedValue;
+        value += convertMsToNs(addedValue);
     }
 
     @Override
     public long currentTime() {
+        return convertNsToMs(this.value);
+    }
+
+    @Override
+    public long nanoTime() {
         return this.value;
+    }
+
+    public void setValueInNs(long newValue) {
+        this.value = newValue;
+    }
+
+    public void incrementValueInNs(long newValue) {
+        this.value += newValue;
     }
 }

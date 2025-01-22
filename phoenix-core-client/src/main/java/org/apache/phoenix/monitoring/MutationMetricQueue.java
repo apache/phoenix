@@ -21,13 +21,19 @@ import static org.apache.phoenix.monitoring.MetricType.ATOMIC_UPSERT_COMMIT_TIME
 import static org.apache.phoenix.monitoring.MetricType.DELETE_BATCH_FAILED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_BATCH_FAILED_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_COMMIT_TIME;
+import static org.apache.phoenix.monitoring.MetricType.DELETE_EXECUTE_MUTATION_TIME;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_MUTATION_BYTES;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_MUTATION_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.DELETE_PLAN_CREATION_TIME;
+import static org.apache.phoenix.monitoring.MetricType.DELETE_PLAN_EXECUTION_TIME;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_FAILED_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BYTES;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_COMMIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.INDEX_COMMIT_FAILURE_SIZE;
+import static org.apache.phoenix.monitoring.MetricType.UPSERT_EXECUTE_MUTATION_TIME;
+import static org.apache.phoenix.monitoring.MetricType.UPSERT_PLAN_CREATION_TIME;
+import static org.apache.phoenix.monitoring.MetricType.UPSERT_PLAN_EXECUTION_TIME;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_BATCH_FAILED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_BATCH_FAILED_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_COMMIT_TIME;
@@ -93,7 +99,12 @@ public class MutationMetricQueue {
             publishedMetricsForTable.put(metric.getUpsertBatchFailedCounter().getMetricType(), metric.getUpsertBatchFailedCounter().getValue());
             publishedMetricsForTable.put(metric.getDeleteBatchFailedSize().getMetricType(), metric.getDeleteBatchFailedSize().getValue());
             publishedMetricsForTable.put(metric.getDeleteBatchFailedCounter().getMetricType(), metric.getDeleteBatchFailedCounter().getValue());
-
+            publishedMetricsForTable.put(metric.getUpsertMutationPlanCreationTime().getMetricType(), metric.getUpsertMutationPlanCreationTime().getValue());
+            publishedMetricsForTable.put(metric.getUpsertMutationPlanExecutionTime().getMetricType(), metric.getUpsertMutationPlanExecutionTime().getValue());
+            publishedMetricsForTable.put(metric.getDeleteMutationPlanCreationTime().getMetricType(), metric.getDeleteMutationPlanCreationTime().getValue());
+            publishedMetricsForTable.put(metric.getDeleteMutationPlanExecutionTime().getMetricType(), metric.getDeleteMutationPlanExecutionTime().getValue());
+            publishedMetricsForTable.put(metric.getUpsertExecuteMutationTime().getMetricType(), metric.getUpsertExecuteMutationTime().getValue());
+            publishedMetricsForTable.put(metric.getDeleteExecuteMutationTime().getMetricType(), metric.getDeleteExecuteMutationTime().getValue());
         }
         return publishedMetrics;
     }
@@ -125,16 +136,26 @@ public class MutationMetricQueue {
         private final CombinableMetric numOfIndexCommitFailMutations = new CombinableMetricImpl(
                 INDEX_COMMIT_FAILURE_SIZE);
 
+        private final CombinableMetric upsertMutationPlanCreationTime = new CombinableMetricImpl(UPSERT_PLAN_CREATION_TIME);
+        private final CombinableMetric upsertMutationPlanExecutionTime = new CombinableMetricImpl(UPSERT_PLAN_EXECUTION_TIME);
+        private final CombinableMetric deleteMutationPlanCreationTime = new CombinableMetricImpl(DELETE_PLAN_CREATION_TIME);
+        private final CombinableMetric deleteMutationPlanExecutionTime = new CombinableMetricImpl(DELETE_PLAN_EXECUTION_TIME);
+        private final CombinableMetric upsertExecuteMutationTime = new CombinableMetricImpl(UPSERT_EXECUTE_MUTATION_TIME);
+        private final CombinableMetric deleteExecuteMutationTime = new CombinableMetricImpl(DELETE_EXECUTE_MUTATION_TIME);
+
+
         public static final MutationMetric EMPTY_METRIC =
-                new MutationMetric(0,0,0,0, 0, 0,0,0,0,0,0,0,0,0,0);
+                new MutationMetric(0,0,0,0, 0, 0,0,0,0,0,0,0,0,0,0, 0, 0, 0, 0, 0, 0);
 
         public MutationMetric(long numMutations, long upsertMutationsSizeBytes,
-                long deleteMutationsSizeBytes, long commitTimeForUpserts, long commitTimeForAtomicUpserts,
-                long commitTimeForDeletes, long numFailedMutations, long upsertMutationSqlCounterSuccess,
-                long deleteMutationSqlCounterSuccess, long totalMutationBytes,
-                long numOfPhase3Failed, long upsertBatchFailedSize,
-                long upsertBatchFailedCounter, long deleteBatchFailedSize,
-                long deleteBatchFailedCounter) {
+                              long deleteMutationsSizeBytes, long commitTimeForUpserts, long commitTimeForAtomicUpserts,
+                              long commitTimeForDeletes, long numFailedMutations, long upsertMutationSqlCounterSuccess,
+                              long deleteMutationSqlCounterSuccess, long totalMutationBytes,
+                              long numOfPhase3Failed, long upsertBatchFailedSize,
+                              long upsertBatchFailedCounter, long deleteBatchFailedSize,
+                              long deleteBatchFailedCounter, long upsertMutationPlanCreationTime,
+                              long upsertMutationPlanExecutionTime, long deleteMutationPlanCreationTime,
+                              long deleteMutationPlanExecutionTime, long upsertExecuteMutationTime, long deleteExecuteMutationTime) {
             this.numMutations.change(numMutations);
             this.totalCommitTimeForUpserts.change(commitTimeForUpserts);
             this.totalCommitTimeForAtomicUpserts.change(commitTimeForAtomicUpserts);
@@ -151,6 +172,12 @@ public class MutationMetricQueue {
             this.upsertBatchFailedCounter.change(upsertBatchFailedCounter);
             this.deleteBatchFailedSize.change(deleteBatchFailedSize);
             this.deleteBatchFailedCounter.change(deleteBatchFailedCounter);
+            this.upsertMutationPlanCreationTime.change(upsertMutationPlanCreationTime);
+            this.upsertMutationPlanExecutionTime.change(upsertMutationPlanExecutionTime);
+            this.deleteMutationPlanCreationTime.change(deleteMutationPlanCreationTime);
+            this.deleteMutationPlanExecutionTime.change(deleteMutationPlanExecutionTime);
+            this.upsertExecuteMutationTime.change(upsertExecuteMutationTime);
+            this.deleteExecuteMutationTime.change(deleteExecuteMutationTime);
         }
 
         public CombinableMetric getTotalCommitTimeForUpserts() {
@@ -215,6 +242,30 @@ public class MutationMetricQueue {
             return deleteBatchFailedCounter;
         }
 
+        public CombinableMetric getUpsertMutationPlanCreationTime() {
+            return upsertMutationPlanCreationTime;
+        }
+
+        public CombinableMetric getUpsertMutationPlanExecutionTime() {
+            return upsertMutationPlanExecutionTime;
+        }
+
+        public CombinableMetric getDeleteMutationPlanCreationTime() {
+            return deleteMutationPlanCreationTime;
+        }
+
+        public CombinableMetric getDeleteMutationPlanExecutionTime() {
+            return deleteMutationPlanExecutionTime;
+        }
+
+        public CombinableMetric getUpsertExecuteMutationTime() {
+            return upsertExecuteMutationTime;
+        }
+
+        public CombinableMetric getDeleteExecuteMutationTime() {
+            return deleteExecuteMutationTime;
+        }
+
         public void combineMetric(MutationMetric other) {
             this.numMutations.combine(other.numMutations);
             this.totalCommitTimeForUpserts.combine(other.totalCommitTimeForUpserts);
@@ -232,6 +283,12 @@ public class MutationMetricQueue {
             this.upsertBatchFailedCounter.combine(other.upsertBatchFailedCounter);
             this.deleteBatchFailedSize.combine(other.deleteBatchFailedSize);
             this.deleteBatchFailedCounter.combine(other.deleteBatchFailedCounter);
+            this.upsertMutationPlanCreationTime.combine(other.upsertMutationPlanCreationTime);
+            this.upsertMutationPlanExecutionTime.combine(other.upsertMutationPlanExecutionTime);
+            this.deleteMutationPlanCreationTime.combine(other.deleteMutationPlanCreationTime);
+            this.deleteMutationPlanExecutionTime.combine(other.deleteMutationPlanExecutionTime);
+            this.upsertExecuteMutationTime.combine(other.upsertExecuteMutationTime);
+            this.deleteExecuteMutationTime.combine(other.deleteExecuteMutationTime);
         }
 
     }

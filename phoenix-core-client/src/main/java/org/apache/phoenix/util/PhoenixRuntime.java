@@ -1660,4 +1660,12 @@ public class PhoenixRuntime {
         String scn = props.get(CURRENT_SCN_ATTRIB);
         return scn != null ? Long.parseLong(scn) : HConstants.LATEST_TIMESTAMP;
     }
+
+    public static long convertTimeInNsToMs(long value) {
+        return value / 1000000;
+    }
+
+    public static long convertTimeInMsToNs(long value) {
+        return value * 1000000;
+    }
  }
