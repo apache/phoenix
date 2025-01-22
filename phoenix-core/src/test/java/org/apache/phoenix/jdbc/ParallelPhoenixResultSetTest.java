@@ -53,7 +53,8 @@ public class ParallelPhoenixResultSetTest {
                         new ParallelPhoenixContext(new Properties(), null,
                                 HighAvailabilityTestingUtility
                                         .getListOfSingleThreadExecutorServices(),
-                                null),
+                                null,
+                                Mockito.mock(HAURLInfo.class)),
                         completableRs1, completableRs2);
     }
 
@@ -109,7 +110,8 @@ public class ParallelPhoenixResultSetTest {
                         new ParallelPhoenixContext(new Properties(), null,
                                 HighAvailabilityTestingUtility
                                         .getListOfSingleThreadExecutorServices(),
-                                null),
+                                null,
+                                Mockito.mock(HAURLInfo.class)),
                         completableRs1, completableRs2);
 
         resultSet.next();
@@ -149,7 +151,8 @@ public class ParallelPhoenixResultSetTest {
                         new ParallelPhoenixContext(new Properties(), null,
                                 HighAvailabilityTestingUtility
                                         .getListOfSingleThreadExecutorServices(),
-                                null),
+                                null,
+                                Mockito.mock(HAURLInfo.class)),
                         completableRs1, completableRs2);
 
         resultSet.next();
@@ -189,7 +192,8 @@ public class ParallelPhoenixResultSetTest {
                         new ParallelPhoenixContext(new Properties(), null,
                                 HighAvailabilityTestingUtility
                                         .getListOfSingleThreadExecutorServices(),
-                                null),
+                                null,
+                                Mockito.mock(HAURLInfo.class)),
                         completableRs1, completableRs2);
 
         resultSet.next();
@@ -250,7 +254,8 @@ public class ParallelPhoenixResultSetTest {
                         new ParallelPhoenixContext(new Properties(), null,
                                 HighAvailabilityTestingUtility
                                         .getListOfSingleThreadExecutorServices(),
-                                null),
+                                null,
+                                Mockito.mock(HAURLInfo.class)),
                         completableRs1, completableRs2);
 
         //run next in the background

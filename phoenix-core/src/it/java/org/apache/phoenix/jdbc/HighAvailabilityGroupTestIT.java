@@ -90,6 +90,7 @@ public class HighAvailabilityGroupTestIT {
     private final ClusterRoleRecord record = mock(ClusterRoleRecord.class);
     /** The HA group to test. This is spied but not mocked. */
     private HighAvailabilityGroup haGroup;
+    private HAURLInfo haURLInfo;
 
     @Rule
     public final TestName testName = new TestName();
@@ -129,6 +130,7 @@ public class HighAvailabilityGroupTestIT {
 
         HAGroupInfo haGroupInfo = new HAGroupInfo(haGroupName, ZK1, ZK2);
         haGroup = spy(new HighAvailabilityGroup(haGroupInfo, clientProperties, record, READY));
+        haURLInfo = spy(new HAURLInfo(haGroupName));
     }
 
     /**
@@ -138,18 +140,19 @@ public class HighAvailabilityGroupTestIT {
      */
     @Test
     public void testConnect() throws SQLException {
-        final Connection conn = haGroup.connect(clientProperties);
+        final Connection conn = haGroup.connect(clientProperties, haURLInfo);
         assertTrue(conn instanceof FailoverPhoenixConnection);
         FailoverPhoenixConnection failoverConnection = conn.unwrap(FailoverPhoenixConnection.class);
         assertNotNull(failoverConnection);
         // Verify that the failover should have connected to ACTIVE cluster once
-        verify(haGroup, times(1)).connectActive(any(Properties.class));
-        verify(haGroup, times(1)).connectToOneCluster(anyString(), eq(clientProperties));
+        verify(haGroup, times(1)).connectActive(any(Properties.class), any(HAURLInfo.class));
+        verify(haGroup, times(1)).connectToOneCluster(anyString(),
+                eq(clientProperties), any(HAURLInfo.class));
         verify(DRIVER, atLeastOnce()).getConnectionQueryServices(anyString(), eq(clientProperties));
 
         when(record.getPolicy()).thenReturn(HighAvailabilityPolicy.PARALLEL);
         // get a new connection from this HA group
-        final Connection conn2 = haGroup.connect(clientProperties);
+        final Connection conn2 = haGroup.connect(clientProperties, haURLInfo);
         assertTrue(conn2 instanceof ParallelPhoenixConnection);
     }
 
@@ -161,7 +164,7 @@ public class HighAvailabilityGroupTestIT {
         final HAGroupInfo info = haGroup.getGroupInfo();
         haGroup = spy(new HighAvailabilityGroup(info, clientProperties, record, UNINITIALIZED));
         try {
-            haGroup.connect(clientProperties);
+            haGroup.connect(clientProperties, haURLInfo);
             fail("Should have failed since HA group is not READY!");
         } catch (SQLException e) {
             LOG.info("Got expected exception", e);
@@ -178,11 +181,11 @@ public class HighAvailabilityGroupTestIT {
     public void testConnectToOneCluster() throws SQLException {
         // test with JDBC string
         final String jdbcString = String.format("jdbc:phoenix:%s", ZK1);
-        haGroup.connectToOneCluster(jdbcString, clientProperties);
+        haGroup.connectToOneCluster(jdbcString, clientProperties, haURLInfo);
         verify(DRIVER, times(1)).getConnectionQueryServices(anyString(), eq(clientProperties));
 
         // test with only ZK string
-        haGroup.connectToOneCluster(ZK1, clientProperties);
+        haGroup.connectToOneCluster(ZK1, clientProperties, haURLInfo);
         verify(DRIVER, times(2)).getConnectionQueryServices(anyString(), eq(clientProperties));
     }
 
@@ -195,7 +198,7 @@ public class HighAvailabilityGroupTestIT {
         // test with JDBC string and UNKNOWN cluster role
         final String jdbcString = String.format("jdbc:phoenix:%s", ZK1);
         try {
-            haGroup.connectToOneCluster(jdbcString, clientProperties);
+            haGroup.connectToOneCluster(jdbcString, clientProperties, haURLInfo);
             fail("Should have failed because cluster is in UNKNOWN role");
         } catch (SQLException e) { // expected exception
             assertEquals(SQLExceptionCode.HA_CLUSTER_CAN_NOT_CONNECT.getErrorCode(),
@@ -206,7 +209,7 @@ public class HighAvailabilityGroupTestIT {
         // test with only ZK string and OFFLINE cluster role
         when(record.getRole(eq(ZK1))).thenReturn(ClusterRole.OFFLINE);
         try {
-            haGroup.connectToOneCluster(jdbcString, clientProperties);
+            haGroup.connectToOneCluster(jdbcString, clientProperties, haURLInfo);
             fail("Should have failed because cluster is in OFFLINE role");
         } catch (SQLException e) { // expected exception
             assertEquals(SQLExceptionCode.HA_CLUSTER_CAN_NOT_CONNECT.getErrorCode(),
@@ -221,7 +224,7 @@ public class HighAvailabilityGroupTestIT {
     @Test (expected = IllegalArgumentException.class)
     public void testConnectToOneClusterShouldFailWithNonHAJdbcString() throws SQLException {
         final String jdbcString = "jdbc:phoenix:dummyhost";
-        haGroup.connectToOneCluster(jdbcString, clientProperties);
+        haGroup.connectToOneCluster(jdbcString, clientProperties, haURLInfo);
         verify(DRIVER, never()).getConnectionQueryServices(anyString(), eq(clientProperties));
     }
 
@@ -233,7 +236,7 @@ public class HighAvailabilityGroupTestIT {
         // test with JDBC string
         final String hosts = "zk1-2,zk1-1:2181:/hbase";
         final String jdbcString = String.format("jdbc:phoenix+zk:%s", hosts);
-        haGroup.connectToOneCluster(jdbcString, clientProperties);
+        haGroup.connectToOneCluster(jdbcString, clientProperties, haURLInfo);
         verify(DRIVER, times(1)).getConnectionQueryServices(eq(String.format("jdbc:phoenix+zk:%s",ZK1)), eq(clientProperties));
     }
 
@@ -260,7 +263,7 @@ public class HighAvailabilityGroupTestIT {
     @Test
     public void testIsConnectionActive() throws SQLException {
         assertFalse(haGroup.isActive(null));
-        PhoenixConnection connection = haGroup.connectToOneCluster(ZK1, clientProperties);
+        PhoenixConnection connection = haGroup.connectToOneCluster(ZK1, clientProperties, haURLInfo);
         assertTrue(haGroup.isActive(connection));
     }
 

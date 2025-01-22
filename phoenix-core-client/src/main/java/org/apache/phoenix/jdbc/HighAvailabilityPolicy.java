@@ -39,9 +39,10 @@ import org.slf4j.LoggerFactory;
 enum HighAvailabilityPolicy {
     FAILOVER {
         @Override
-        public Connection provide(HighAvailabilityGroup haGroup, Properties info)
-                throws SQLException {
-            return new FailoverPhoenixConnection(haGroup, info);
+        public Connection provide(HighAvailabilityGroup haGroup, Properties info,
+                                  HAURLInfo haURLInfo) throws SQLException {
+            FailoverPhoenixContext context = new FailoverPhoenixContext(info, haGroup, haURLInfo);
+            return new FailoverPhoenixConnection(context);
         }
         @Override
         void transitClusterRole(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
@@ -65,50 +66,61 @@ enum HighAvailabilityPolicy {
             LOG.info("Cluster {} becomes STANDBY in HA group {}, now close all its connections",
                     zkUrl, haGroup.getGroupInfo());
             ConnectionQueryServices cqs = null;
-            try {
-                cqs = PhoenixDriver.INSTANCE.getConnectionQueryServices(
-                        haGroup.getGroupInfo().getJDBCUrl(zkUrl), haGroup.getProperties());
-                cqs.closeAllConnections(new SQLExceptionInfo
-                        .Builder(SQLExceptionCode.HA_CLOSED_AFTER_FAILOVER)
-                        .setMessage("Phoenix connection got closed due to failover")
-                        .setHaGroupInfo(haGroup.getGroupInfo().toString()));
-                LOG.info("Closed all connections to cluster {} for HA group {}", zkUrl,
-                        haGroup.getGroupInfo());
-            } finally {
-                if (cqs != null) {
-                    // CQS is closed but it is not invalidated from global cache in PhoenixDriver
-                    // so that any new connection will get error instead of creating a new CQS
-                    LOG.info("Closing CQS after cluster '{}' becomes STANDBY", zkUrl);
-                    cqs.close();
-                    LOG.info("Successfully closed CQS after cluster '{}' becomes STANDBY", zkUrl);
+
+            //Close connections for every HAURLInfo's (different principal) conn for a give HAGroup
+            for (HAURLInfo haurlInfo : HighAvailabilityGroup.URLS.get(haGroup.getGroupInfo())) {
+                try {
+                    String jdbcZKUrl = haGroup.getGroupInfo().getJDBCUrl(zkUrl, haurlInfo);
+                    cqs = PhoenixDriver.INSTANCE.getConnectionQueryServices(
+                            jdbcZKUrl, haGroup.getProperties());
+                    cqs.closeAllConnections(new SQLExceptionInfo
+                            .Builder(SQLExceptionCode.HA_CLOSED_AFTER_FAILOVER)
+                            .setMessage("Phoenix connection got closed due to failover")
+                            .setHaGroupInfo(haGroup.getGroupInfo().toString()));
+                    LOG.info("Closed all connections to cluster {} for HA group {}",
+                            jdbcZKUrl, haGroup.getGroupInfo());
+                } finally {
+                    if (cqs != null) {
+                        //CQS is closed but it is not invalidated from global cache in PhoenixDriver
+                        //so that any new connection will get error instead of creating a new CQS
+                        LOG.info("Closing CQS after cluster '{}' becomes STANDBY", zkUrl);
+                        cqs.close();
+                        LOG.info("Successfully closed CQS after cluster '{}' becomes STANDBY",
+                                zkUrl);
+                    }
                 }
             }
         }
+
         private void transitActive(HighAvailabilityGroup haGroup, String zkUrl)
                 throws SQLException {
             // Invalidate CQS cache if any that has been closed but has not been cleared
-            LOG.info("invalidating cqs cache for zkUrl: " + zkUrl);
-            PhoenixDriver.INSTANCE.invalidateCache(haGroup.getGroupInfo().getJDBCUrl(zkUrl),
-                    haGroup.getProperties());
+            for (HAURLInfo haurlInfo : HighAvailabilityGroup.URLS.get(haGroup.getGroupInfo())) {
+                String jdbcZKUrl = haGroup.getGroupInfo().getJDBCUrl(zkUrl, haurlInfo);
+                LOG.info("invalidating cqs cache for zkUrl: " + jdbcZKUrl);
+                PhoenixDriver.INSTANCE.invalidateCache(jdbcZKUrl,
+                        haGroup.getProperties());
+            }
         }
     },
 
     PARALLEL {
         @Override
-        public Connection provide(HighAvailabilityGroup haGroup, Properties info)
-                throws SQLException {
+        public Connection provide(HighAvailabilityGroup haGroup, Properties info,
+                                  HAURLInfo haURLInfo) throws SQLException {
             List<Boolean> executorCapacities = PhoenixHAExecutorServiceProvider.hasCapacity(info);
             if (executorCapacities.contains(Boolean.TRUE)) {
                 ParallelPhoenixContext context =
                         new ParallelPhoenixContext(info, haGroup,
-                                PhoenixHAExecutorServiceProvider.get(info), executorCapacities);
+                                PhoenixHAExecutorServiceProvider.get(info),
+                                executorCapacities, haURLInfo);
                 return new ParallelPhoenixConnection(context);
             } else {
                 // TODO: Once we have operation/primary wait timeout use the same
                 // Give regular connection or a failover connection?
                 LOG.warn("Falling back to single phoenix connection due to resource constraints");
                 GlobalClientMetrics.GLOBAL_HA_PARALLEL_CONNECTION_FALLBACK_COUNTER.increment();
-                return haGroup.connectActive(info);
+                return haGroup.connectActive(info, haURLInfo);
             }
         }
         @Override
@@ -125,10 +137,12 @@ enum HighAvailabilityPolicy {
      *
      * @param haGroup The high availability (HA) group
      * @param info Connection properties
+     * @param haurlInfo additional info of client provided url
      * @return a JDBC connection
      * @throws SQLException if fails to provide a connection
      */
-    abstract Connection provide(HighAvailabilityGroup haGroup, Properties info) throws SQLException;
+    abstract Connection provide(HighAvailabilityGroup haGroup, Properties info, HAURLInfo haurlInfo)
+            throws SQLException;
 
     /**
      * Call-back function when a cluster role transition is detected in the high availability group.

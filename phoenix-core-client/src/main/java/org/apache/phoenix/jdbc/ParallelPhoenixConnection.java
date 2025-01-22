@@ -69,14 +69,15 @@ public class ParallelPhoenixConnection implements PhoenixMonitoredConnection {
     CompletableFuture<PhoenixConnection> futureConnection2;
     public ParallelPhoenixConnection(ParallelPhoenixContext context) throws SQLException {
         this.context = context;
-        LOG.trace("First Url: {} Second Url: {}", context.getHaGroup().getGroupInfo().getJDBCUrl1(),
-                context.getHaGroup().getGroupInfo().getJDBCUrl2());
+        LOG.trace("First Url: {} Second Url: {}", context.getHaGroup().getGroupInfo().
+                        getJDBCUrl1(context.getHaurlInfo()), context.getHaGroup().getGroupInfo().
+                        getJDBCUrl2(context.getHaurlInfo()));
         futureConnection1 = context.chainOnConn1(() -> getConnection(context.getHaGroup(),
-                context.getHaGroup().getGroupInfo().getJDBCUrl1(),
-                context.getProperties()));
+                context.getHaGroup().getGroupInfo().getJDBCUrl1(context.getHaurlInfo()),
+                context.getProperties(), context.getHaurlInfo()));
         futureConnection2 = context.chainOnConn2(() -> getConnection(context.getHaGroup(),
-                context.getHaGroup().getGroupInfo().getJDBCUrl2(),
-                context.getProperties()));
+                context.getHaGroup().getGroupInfo().getJDBCUrl2(context.getHaurlInfo()),
+                context.getProperties(), context.getHaurlInfo()));
 
         // Ensure one connection is successful before returning
         ParallelPhoenixUtil.INSTANCE.runFutures(Arrays.asList(futureConnection1, futureConnection2), context, false);
@@ -91,9 +92,10 @@ public class ParallelPhoenixConnection implements PhoenixMonitoredConnection {
         ParallelPhoenixUtil.INSTANCE.runFutures(Arrays.asList(futureConnection1, futureConnection2), context, false);
     }
 
-    private static PhoenixConnection getConnection(HighAvailabilityGroup haGroup, String url, Properties properties) {
+    private static PhoenixConnection getConnection(HighAvailabilityGroup haGroup, String url,
+                                                   Properties properties, HAURLInfo haurlInfo) {
         try {
-            return haGroup.connectToOneCluster(url, properties);
+            return haGroup.connectToOneCluster(url, properties, haurlInfo);
         } catch (SQLException exception) {
             if (LOG.isTraceEnabled()) {
                 LOG.trace(String.format("Failed to get a connection for haGroup %s to %s", haGroup.toString(), url), exception);

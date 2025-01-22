@@ -70,7 +70,9 @@ public class ParallelPhoenixContextTest {
             ParallelPhoenixContext context =
                     new ParallelPhoenixContext(new Properties(),
                             Mockito.mock(HighAvailabilityGroup.class),
-                            Lists.newArrayList(Mockito.mock(PhoenixHAExecutorServiceProvider.PhoenixHAClusterExecutorServices.class)), null);
+                            Lists.newArrayList(Mockito.mock(PhoenixHAExecutorServiceProvider.
+                                    PhoenixHAClusterExecutorServices.class)), null,
+                            Mockito.mock(HAURLInfo.class));
             fail("Should not construct with less than 2 ThreadPools");
         } catch (IllegalArgumentException e) {
         }
@@ -85,7 +87,8 @@ public class ParallelPhoenixContextTest {
                                 Mockito.mock(Properties.class),
                                 Mockito.mock(ClusterRoleRecord.class),
                                 HighAvailabilityGroup.State.READY),
-                        executorList, Lists.newArrayList(Boolean.FALSE, Boolean.TRUE));
+                        executorList, Lists.newArrayList(Boolean.FALSE, Boolean.TRUE),
+                        Mockito.mock(HAURLInfo.class));
         CompletableFuture<Boolean> future1 = context.chainOnConn1(() -> true);
         assertTrue(future1.isCompletedExceptionally());
         assertEquals(0, ((TrackingThreadPoolExecutor) executorList.get(0).getExecutorService()).tasksExecuted.get());
@@ -105,7 +108,8 @@ public class ParallelPhoenixContextTest {
                                 Mockito.mock(Properties.class),
                                 Mockito.mock(ClusterRoleRecord.class),
                                 HighAvailabilityGroup.State.READY),
-                        executorList, Lists.newArrayList(Boolean.TRUE, Boolean.FALSE));
+                        executorList, Lists.newArrayList(Boolean.TRUE, Boolean.FALSE),
+                        Mockito.mock(HAURLInfo.class));
         CompletableFuture<Boolean> future1 = context.chainOnConn1(() -> true);
         assertTrue(future1.get());
         assertEquals(1, ((TrackingThreadPoolExecutor) executorList.get(0).getExecutorService()).tasksExecuted.get());
@@ -121,7 +125,8 @@ public class ParallelPhoenixContextTest {
         ParallelPhoenixContext context =
                 new ParallelPhoenixContext(new Properties(),
                         Mockito.mock(HighAvailabilityGroup.class), executorList,
-                        Lists.newArrayList(Boolean.TRUE, Boolean.TRUE));
+                        Lists.newArrayList(Boolean.TRUE, Boolean.TRUE),
+                        Mockito.mock(HAURLInfo.class));
         CompletableFuture<Boolean> future1 = context.chainOnConn1(() -> true);
         assertTrue(future1.get());
         assertEquals(1, ((TrackingThreadPoolExecutor) executorList.get(0).getExecutorService()).tasksExecuted.get());
