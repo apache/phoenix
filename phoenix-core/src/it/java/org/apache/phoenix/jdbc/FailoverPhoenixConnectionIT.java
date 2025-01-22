@@ -19,7 +19,6 @@ package org.apache.phoenix.jdbc;
 
 import static org.apache.hadoop.test.GenericTestUtils.waitFor;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION;
-import static org.apache.phoenix.jdbc.HighAvailabilityGroup.GROUPS;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.URLS;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithConnection;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
@@ -48,9 +47,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.commons.lang3.RandomStringUtils;
-import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.FailoverSQLException;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
@@ -683,6 +683,52 @@ public class FailoverPhoenixConnectionIT {
 
     }
 
+    @Test(timeout = 300000)
+    public void testHAGroupMappingsWithDifferentPrincipalsOnDifferentThreads() throws Exception {
+        int numThreads = RandomUtils.nextInt(3, 5);
+        List<Thread> connectionThreads = new ArrayList<>(numThreads);
+        AtomicBoolean isPrincipalNull = new AtomicBoolean(false);
+        //Creating random number of connections one connection per thread with different principal
+        //Including one connection will null principal all of them will be using given haGroupName
+        //which is specific to test
+        for (int i = 0; i < numThreads; i++) {
+            isPrincipalNull.set((i + 1) % 3 == 0);
+            connectionThreads.add(new Thread(() -> {
+                try {
+                    createConnectionWithRandomPrincipal(isPrincipalNull.get());
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
+            }));
+        }
+
+        //Create multiple connections with given principal
+        String principal = RandomStringUtils.randomAlphabetic(3);
+        int numConnectionsWithSamePrincipal = 3;
+        for (int i = 0; i < numConnectionsWithSamePrincipal; i++) {
+            connectionThreads.add(new Thread(() -> {
+                try {
+                    DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(principal), clientProperties);
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
+            }));
+        }
+
+        for (Thread connectionThread : connectionThreads) {
+            connectionThread.start();
+        }
+
+        for (Thread connectionThread : connectionThreads) {
+            connectionThread.join();
+        }
+
+        //For the given ha group of current test the value in URLS set for current haGroupInfo
+        //should be numThreads + 1 as all the connections created with same principal should have
+        //one entry in map.
+        Assert.assertEquals(numThreads + 1, URLS.get(haGroup.getGroupInfo()).size());
+    }
+
     /**
      * Helper method to verify that the failover connection has expected mutation metrics.
      *
@@ -726,5 +772,13 @@ public class FailoverPhoenixConnectionIT {
             assertTrue(e.getCause() instanceof FailoverSQLException);
             LOG.info("Got expected failover exception after connection is closed.", e);
         } // all other type of exception will fail this test.
+    }
+
+    private Connection createConnectionWithRandomPrincipal(boolean isPrincipalNull) throws SQLException {
+        String principal = RandomStringUtils.randomAlphabetic(5);
+        if (isPrincipalNull) {
+            return DriverManager.getConnection(CLUSTERS.getJdbcHAUrlWithoutPrincipal(), clientProperties);
+        }
+        return DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(principal), clientProperties);
     }
 }
