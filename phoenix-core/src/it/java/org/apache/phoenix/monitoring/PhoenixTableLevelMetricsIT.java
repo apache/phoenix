@@ -1671,11 +1671,6 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             this.time.addAndGet(this.delay);
             return currentTime;
         }
-
-        @Override
-        public long nanoTime() {
-            return convertTimeInMsToNs(currentTime());
-        }
     }
 
     /**

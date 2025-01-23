@@ -18,8 +18,6 @@
  */
 package org.apache.phoenix.util;
 
-import org.apache.commons.lang3.NotImplementedException;
-
 /**
  * Has some basic interaction with the environment. Alternate implementations
  * can be used where required (eg in tests).
@@ -43,6 +41,14 @@ public abstract class EnvironmentEdge implements org.apache.hadoop.hbase.util.En
    * @return a time marker in nano seconds
    */
   public long nanoTime() {
-    throw new NotImplementedException("Not Implemented!");
+    return convertMsToNs(currentTime());
+  }
+
+  protected long convertMsToNs(long value) {
+    return value * 1000000;
+  }
+
+  protected long convertNsToMs(long value) {
+    return value / 1000000;
   }
 }

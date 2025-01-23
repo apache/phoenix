@@ -22,14 +22,6 @@ public class ManualEnvironmentEdge extends EnvironmentEdge {
     // value is in Nano seconds
     protected long value = 1L;
 
-    private long convertMsToNs(long value) {
-        return value * 1000000;
-    }
-
-    private long convertNsToMs(long value) {
-        return value / 1000000;
-    }
-
     public void setValue(long newValue) {
         value = convertMsToNs(newValue);
     }
