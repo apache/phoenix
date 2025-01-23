@@ -39,6 +39,7 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesTestImpl;
+import org.apache.phoenix.util.DefaultEnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.InstanceResolver;
@@ -125,7 +126,6 @@ import static org.apache.phoenix.monitoring.PhoenixMetricsIT.doDeleteAllFromTabl
 import static org.apache.phoenix.util.DelayedOrFailingRegionServer.INJECTED_EXCEPTION_STRING;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.clearTableLevelMetrics;
-import static org.apache.phoenix.util.PhoenixRuntime.convertTimeInNsToMs;
 import static org.apache.phoenix.util.PhoenixRuntime.getOverAllReadRequestMetricInfo;
 import static org.apache.phoenix.util.PhoenixRuntime.getPhoenixTableClientMetrics;
 import static org.apache.phoenix.util.PhoenixRuntime.getRequestReadMetricInfo;
@@ -196,8 +196,11 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(BaseTest.DRIVER_CLASS_NAME_ATTRIB, PhoenixMetricsTestingDriver.class.getName());
         initAndRegisterTestDriver(url, new ReadOnlyProps(props.entrySet().iterator()));
-        MyClock clock = new MyClock(System.currentTimeMillis(), CLOCK_DELAY);
-        EnvironmentEdgeManager.injectEdge(clock); // This will ensure at least one 1 ms is elapsed in executeMutation call
+    }
+
+    private void useCustomClock() {
+        MyClock clock = new MyClock(10, CLOCK_DELAY);
+        EnvironmentEdgeManager.injectEdge(clock);
     }
 
     @AfterClass public static void tearDownMiniCluster() {
@@ -719,8 +722,9 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
     }
 
     @Test public void testTableLevelMetricsForUpsert() throws Throwable {
+        useCustomClock();
         String tableName = generateUniqueName();
-        int numRows = 1;
+        int numRows = 10000;
         Connection conn = null;
         Throwable exception = null;
         try {
@@ -744,12 +748,15 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             assertMutationTableMetrics(true, tableName, numRows, 0,
                     MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * CLOCK_DELAY * numRows,
                     true, numRows, 0, 0, 1, 0,
-                    writeMutMetrics, conn, true, convertTimeInMsToNs(CLOCK_DELAY) * numRows,
-                    convertTimeInMsToNs(CLOCK_DELAY) * numRows, convertTimeInMsToNs(MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * CLOCK_DELAY) * numRows);
+                    writeMutMetrics, conn, true,
+                    convertTimeInMsToNs(CLOCK_DELAY) * numRows,
+                    convertTimeInMsToNs(CLOCK_DELAY) * numRows,
+                    convertTimeInMsToNs(MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * CLOCK_DELAY) * numRows);
         }
     }
 
     @Test public void testTableLevelMetricsForBatchUpserts() throws Throwable {
+        useCustomClock();
         String tableName = generateUniqueName();
         int numRows = 20;
         Connection conn = null;
@@ -771,15 +778,17 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(true, tableName, numRows, 0,
-                    MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * CLOCK_DELAY * numRows, true, numRows,
-                    0, 0, 1, 0,
-                    writeMutMetrics, conn, true, convertTimeInMsToNs(CLOCK_DELAY) * numRows,
-                    convertTimeInNsToMs(CLOCK_DELAY) * numRows,
+                    MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * CLOCK_DELAY * numRows,
+                    true, numRows, 0, 0, 1, 0,
+                     writeMutMetrics, conn, true,
+                    convertTimeInMsToNs(CLOCK_DELAY) * numRows,
+                    convertTimeInMsToNs(CLOCK_DELAY) * numRows,
                     convertTimeInMsToNs(MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * CLOCK_DELAY) * numRows);
         }
     }
 
     @Test public void testTableLevelMetricsAutoCommitTrueUpsert() throws Throwable {
+        useCustomClock();
         String tableName = generateUniqueName();
         String ddl = String.format(CREATE_TABLE_DDL, tableName, 20);
         int numRows = 10;
@@ -815,11 +824,15 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             // mutation commit time since autoCommit was on
             assertMutationTableMetrics(true, tableName, numRows, 0,
                     writeMutMetrics.get(UPSERT_COMMIT_TIME), true, numRows, 0, 0, numRows, 0,
-                    writeMutMetrics, conn,true, 0, 0, 0);
+                    writeMutMetrics, conn,true,
+                    convertTimeInMsToNs(CLOCK_DELAY) * numRows,
+                    convertTimeInMsToNs(CLOCK_DELAY) * numRows,
+                    convertTimeInMsToNs(MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * CLOCK_DELAY) * numRows);
         }
     }
 
     @Test public void testTableLevelMetricsforFailingUpsert() throws Throwable {
+        useCustomClock();
         String tableName = generateUniqueName();
         // Restrict the key to just 2 characters so that we fail later
         String ddl = String.format(CREATE_TABLE_DDL, tableName, 2);
@@ -854,11 +867,14 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(true, tableName, 0, 1, 0, false, 0, 0, 0, 1, 0,
-                    writeMutMetrics, conn, true, 0, 0, 0);
+                    writeMutMetrics, conn, true,
+                    convertTimeInMsToNs(CLOCK_DELAY), 0,
+                    convertTimeInMsToNs(3 * CLOCK_DELAY));
         }
     }
 
     @Test public void testTableLevelMetricsforUpsertSqlTime() throws Throwable {
+        useCustomClock();
         String tableName = generateUniqueName();
         String ddl = String.format(CREATE_TABLE_DDL, tableName, 10);
         int numRows = 10;
@@ -895,11 +911,14 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             conn.close();
             assertMutationTableMetrics(true, tableName, numRows, 0, 5 * delay * numRows, true, numRows, 0, 0, 1,
                     0, writeMutMetrics, conn, true,
-                    convertTimeInMsToNs(delay) * numRows, convertTimeInMsToNs(delay) * numRows, convertTimeInMsToNs(5 * delay) * numRows);
+                    convertTimeInMsToNs(delay) * numRows,
+                    convertTimeInMsToNs(delay) * numRows,
+                    convertTimeInMsToNs(MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * delay) * numRows);
         }
     }
 
     @Test public void testTableLevelMetricsUpsertCommitFailedWithAutoCommitTrue() throws Throwable {
+        useCustomClock();
         String tableName = generateUniqueName();
         String ddl = String.format(CREATE_TABLE_DDL, tableName, 10);
         int numRows = 10;
@@ -942,12 +961,18 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     writeMutMetrics =
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
-            assertMutationTableMetrics(true, tableName, 0, 1, 0, true, 1, 0, 1, 0, 1,
-                    writeMutMetrics, conn, true, 0, 0, 0);
+            assertMutationTableMetrics(true, tableName, 0, 1,
+                    MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * CLOCK_DELAY,
+                    true, 1, 0, 1, 0, 1,
+                    writeMutMetrics, conn, true,
+                    convertTimeInMsToNs(CLOCK_DELAY),
+                    convertTimeInMsToNs(CLOCK_DELAY),
+                    convertTimeInMsToNs(MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * CLOCK_DELAY));
         }
     }
 
     @Test public void testTableLevelMetricsUpsertCommitFailed() throws Throwable {
+        useCustomClock();
         String tableName = generateUniqueName();
         String ddl = String.format(CREATE_TABLE_DDL, tableName, 10);
         int numRows = 10;
@@ -993,8 +1018,13 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     writeMutMetrics =
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
-            assertMutationTableMetrics(true, tableName, numRows, 0, 0, true, numRows, 0, numRows, 0,
-                    1, writeMutMetrics, conn, true, 0, 0, 0);
+            assertMutationTableMetrics(true, tableName, numRows, 0,
+                    MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * CLOCK_DELAY,
+                    true, numRows, 0, numRows, 0,
+                    1, writeMutMetrics, conn, true,
+                    convertTimeInMsToNs(CLOCK_DELAY),
+                    convertTimeInMsToNs(CLOCK_DELAY),
+                    convertTimeInMsToNs(MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * CLOCK_DELAY));
         }
     }
 
@@ -1033,12 +1063,16 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     writeMutMetrics =
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
-            assertMutationTableMetrics(true, tableName, numRows, 0, 0, true, numRows, delayRs, 0, 1,
-                    0, writeMutMetrics, conn, true, 0, 0, 0);
+            assertMutationTableMetrics(true, tableName, numRows, 0,
+                    0,
+                    true, numRows, delayRs, 0, 1,
+                    0, writeMutMetrics, conn, true,
+                    0, 0, 0);
         }
     }
 
     @Test public void testTableLevelMetricsForPointDelete() throws Throwable {
+        useCustomClock();
         String tableName = generateUniqueName();
         int numRows = 15;
         Connection conn = null;
@@ -1064,12 +1098,18 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     writeMutMetrics =
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
-            assertMutationTableMetrics(false, tableName, 1, 0, 0, true, 1, 0, 0, 1, 0,
-                    writeMutMetrics, conn, false, 0, 0, 0);
+            assertMutationTableMetrics(false, tableName, 1, 0,
+                    MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * CLOCK_DELAY,
+                    true, 1, 0, 0, 1, 0,
+                    writeMutMetrics, conn, false,
+                    convertTimeInMsToNs(CLOCK_DELAY),
+                    convertTimeInMsToNs(CLOCK_DELAY),
+                    convertTimeInMsToNs(MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * CLOCK_DELAY));
         }
     }
 
     @Test public void testTableLevelMetricsForDeleteAll() throws Throwable {
+        useCustomClock();
         String tableName = generateUniqueName();
         int numRows = 15;
         Connection conn = null;
@@ -1095,12 +1135,18 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     writeMutMetrics =
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
-            assertMutationTableMetrics(false, tableName, 1, 0, 0, true, numRows, 0, 0, 1, 0,
-                    writeMutMetrics, conn, false, 0, 0, 0);
+            assertMutationTableMetrics(false, tableName, 1, 0,
+                    MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * CLOCK_DELAY,
+                    true, numRows, 0, 0, 1, 0,
+                    writeMutMetrics, conn, false,
+                    convertTimeInMsToNs(CLOCK_DELAY),
+                    convertTimeInMsToNs(CLOCK_DELAY),
+                    convertTimeInMsToNs(MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * CLOCK_DELAY));
         }
     }
 
     @Test public void testTableLevelMetricsAutoCommitTrueDelete() throws Throwable {
+        useCustomClock();
         String tableName = generateUniqueName();
         int numRows = 15;
         Connection conn = null;
@@ -1132,8 +1178,13 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             // accumulated for those mutations except of the ones collected in executeMutation method
             assertNotNull(writeMutMetrics);
             conn.close();
-            assertMutationTableMetrics(false, tableName, 1, 0, 0, false, 0, 0, 0, 0, 0,
-                    writeMutMetrics, conn, false, 0, 0, 0);
+            assertMutationTableMetrics(false, tableName, 1, 0,
+                    MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * CLOCK_DELAY,
+                    false, 0, 0, 0, 0, 0,
+                    writeMutMetrics, conn, false,
+                    convertTimeInMsToNs(CLOCK_DELAY),
+                    convertTimeInMsToNs(CLOCK_DELAY),
+                    convertTimeInMsToNs(MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * CLOCK_DELAY));
         }
     }
 
@@ -1221,6 +1272,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
     }
 
     @Test public void testTableLevelMetricsDeleteCommitFailed() throws Throwable {
+        useCustomClock();
         String tableName = generateUniqueName();
         int numRows = 15;
         Connection conn = null;
@@ -1261,13 +1313,19 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     writeMutMetrics =
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
-            assertMutationTableMetrics(false, tableName, 1, 0, 0, true, numRows, 0, numRows, 0, 1,
-                    writeMutMetrics, conn, false, 0, 0, 0);
+            assertMutationTableMetrics(false, tableName, 1, 0,
+                    MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * CLOCK_DELAY,
+                    true, numRows, 0, numRows, 0, 1,
+                    writeMutMetrics, conn, false,
+                    convertTimeInMsToNs(CLOCK_DELAY),
+                    convertTimeInMsToNs(CLOCK_DELAY),
+                    convertTimeInMsToNs(MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * CLOCK_DELAY));
         }
     }
 
     @Test
     public void testMetricsWithIndexUsage() throws Exception {
+        useCustomClock();
         // Generate unique names for the table and index
         String dataTable = generateUniqueName();
         String indexName = generateUniqueName() + "_IDX";
@@ -1299,9 +1357,10 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         // Assert that mutation plan creation and execution metrics have captured only for
         // data table and not index table
         for(PhoenixTableMetric metric: getPhoenixTableClientMetrics().get(dataTable)) {
-            assertMetricValue(metric, UPSERT_PLAN_CREATION_TIME, 0, CompareOp.GTEQ);
-            assertMetricValue(metric, UPSERT_PLAN_EXECUTION_TIME, 0, CompareOp.GTEQ);
-            assertMetricValue(metric, UPSERT_EXECUTE_MUTATION_TIME, 0, CompareOp.GTEQ);
+            assertMetricValue(metric, UPSERT_PLAN_CREATION_TIME, convertTimeInMsToNs(CLOCK_DELAY), CompareOp.GTEQ);
+            assertMetricValue(metric, UPSERT_PLAN_EXECUTION_TIME, convertTimeInMsToNs(CLOCK_DELAY), CompareOp.GTEQ);
+            assertMetricValue(metric, UPSERT_EXECUTE_MUTATION_TIME,
+                    convertTimeInMsToNs(MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * CLOCK_DELAY), CompareOp.GTEQ);
         }
         for(PhoenixTableMetric metric: getPhoenixTableClientMetrics().get(indexName)) {
             assertMetricValue(metric, UPSERT_PLAN_CREATION_TIME, 0, CompareOp.EQ);
@@ -1390,6 +1449,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
     }
 
     @Test public void testTableLevelMetricsForAtomicUpserts() throws Throwable {
+        useCustomClock();
         String tableName = generateUniqueName();
         Connection conn = null;
         Throwable exception = null;
@@ -1426,8 +1486,13 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             conn.close();
             // 1 regular upsert + numAtomicUpserts
             // 2 mutations (regular and atomic on the same row in the same batch will be split)
-            assertMutationTableMetrics(true, tableName, 1 + numAtomicUpserts, 0, 0, true, 2, 0, 0, 2, 0,
-                writeMutMetrics, conn, false, 0, 0, 0);
+            assertMutationTableMetrics(true, tableName, 1 + numAtomicUpserts, 0,
+                    MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * CLOCK_DELAY * (numAtomicUpserts + 1),
+                    true, 2, 0, 0, 2, 0,
+                writeMutMetrics, conn, false,
+                    convertTimeInMsToNs(CLOCK_DELAY) * (numAtomicUpserts + 1),
+                    convertTimeInMsToNs(CLOCK_DELAY) * (numAtomicUpserts + 1),
+                    convertTimeInMsToNs(MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * CLOCK_DELAY) * (numAtomicUpserts + 1));
             assertEquals(numAtomicUpserts, getMetricFromTableMetrics(tableName, ATOMIC_UPSERT_SQL_COUNTER));
             assertTrue(getMetricFromTableMetrics(tableName, ATOMIC_UPSERT_COMMIT_TIME) > 0);
         }
