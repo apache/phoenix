@@ -29,6 +29,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_NUM_PARAL
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_OPEN_PHOENIX_CONNECTIONS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTION_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_SERVICES_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIMEOUT_COUNTER;
@@ -1070,6 +1071,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         Properties props = new Properties();
         props.setProperty(QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS, Integer.toString(maxConnections));
 
+        GLOBAL_PHOENIX_CONNECTION_TIME.getMetric().reset();
         GLOBAL_HCONNECTIONS_COUNTER.getMetric().reset();
         GLOBAL_QUERY_SERVICES_COUNTER.getMetric().reset();
         GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.getMetric().reset();
@@ -1087,6 +1089,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
                 c.close();
             }
         }
+        assert(GLOBAL_PHOENIX_CONNECTION_TIME.getMetric().getValue() > 0);
         assertEquals(1, GLOBAL_QUERY_SERVICES_COUNTER.getMetric().getValue());
         assertTrue("No connection was throttled!", wasThrottled);
         assertEquals(1, GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER.getMetric().getValue());
@@ -1127,7 +1130,8 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         Properties props2 = new Properties(props);
         //Will create IllegalArgumentException while parsing loglevel
         props2.setProperty(QueryServices.LOG_LEVEL, "notKnown");
-
+        
+        GLOBAL_PHOENIX_CONNECTION_TIME.getMetric().reset();
         GLOBAL_QUERY_SERVICES_COUNTER.getMetric().reset();
         GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.getMetric().reset();
         GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER.getMetric().reset();
@@ -1157,6 +1161,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
                 c.close();
             }
         }
+        assert(GLOBAL_PHOENIX_CONNECTION_TIME.getMetric().getValue() > 0);
         assertEquals(1, GLOBAL_QUERY_SERVICES_COUNTER.getMetric().getValue());
         assertEquals(1, GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER.getMetric().getValue());
         assertEquals(3, GLOBAL_FAILED_PHOENIX_CONNECTIONS.getMetric().getValue());
@@ -1205,6 +1210,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
                     c.close();
                 } catch (Exception ignore) {}
             }
+            assert(GLOBAL_PHOENIX_CONNECTION_TIME.getMetric().getValue() > 0);
             assertEquals(expectedHConnections, GLOBAL_HCONNECTIONS_COUNTER.getMetric().getValue());
             assertEquals(expectedHConnections, GLOBAL_QUERY_SERVICES_COUNTER.getMetric().getValue());
         } finally {
@@ -1236,6 +1242,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
             for (int i = 0; i < futures.size(); i++) {
                 futures.get(i).get();
             }
+            assert(GLOBAL_PHOENIX_CONNECTION_TIME.getMetric().getValue() > 0);
             assertEquals(numConnections, GLOBAL_HCONNECTIONS_COUNTER.getMetric().getValue());
             assertEquals(numConnections, GLOBAL_QUERY_SERVICES_COUNTER.getMetric().getValue());
         } finally {

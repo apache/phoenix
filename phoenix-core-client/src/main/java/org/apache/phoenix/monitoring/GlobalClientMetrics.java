@@ -51,6 +51,7 @@ import static org.apache.phoenix.monitoring.MetricType.TASK_QUEUE_WAIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTIONS_FAILED_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTION_TIME;
 import static org.apache.phoenix.monitoring.MetricType.TASK_REJECTED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.HA_PARALLEL_POOL1_TASK_END_TO_END_TIME;
 import static org.apache.phoenix.monitoring.MetricType.HA_PARALLEL_POOL1_TASK_EXECUTED_COUNTER;
@@ -132,6 +133,7 @@ public enum GlobalClientMetrics {
     GLOBAL_HCONNECTIONS_COUNTER(HCONNECTIONS_COUNTER),
     GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER(PHOENIX_CONNECTIONS_THROTTLED_COUNTER),
     GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER(PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER),
+    GLOBAL_PHOENIX_CONNECTION_TIME(PHOENIX_CONNECTION_TIME),
     GLOBAL_PAGED_ROWS_COUNTER(PAGED_ROWS_COUNTER),
     GLOBAL_HBASE_COUNT_RPC_CALLS(COUNT_RPC_CALLS),
     GLOBAL_HBASE_COUNT_REMOTE_RPC_CALLS(COUNT_REMOTE_RPC_CALLS),
