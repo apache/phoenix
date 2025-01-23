@@ -909,7 +909,9 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     writeMutMetrics =
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
-            assertMutationTableMetrics(true, tableName, numRows, 0, 5 * delay * numRows, true, numRows, 0, 0, 1,
+            assertMutationTableMetrics(true, tableName, numRows, 0,
+                    MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * delay * numRows,
+                    true, numRows, 0, 0, 1,
                     0, writeMutMetrics, conn, true,
                     convertTimeInMsToNs(delay) * numRows,
                     convertTimeInMsToNs(delay) * numRows,
@@ -1064,10 +1066,8 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(true, tableName, numRows, 0,
-                    0,
-                    true, numRows, delayRs, 0, 1,
-                    0, writeMutMetrics, conn, true,
-                    0, 0, 0);
+                    0, true, numRows, delayRs, 0, 1,
+                    0, writeMutMetrics, conn, true, 0, 0, 0);
         }
     }
 
@@ -1489,7 +1489,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             assertMutationTableMetrics(true, tableName, 1 + numAtomicUpserts, 0,
                     MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * CLOCK_DELAY * (numAtomicUpserts + 1),
                     true, 2, 0, 0, 2, 0,
-                writeMutMetrics, conn, false,
+                    writeMutMetrics, conn, false,
                     convertTimeInMsToNs(CLOCK_DELAY) * (numAtomicUpserts + 1),
                     convertTimeInMsToNs(CLOCK_DELAY) * (numAtomicUpserts + 1),
                     convertTimeInMsToNs(MIN_CLOCK_DELAYS_IN_EXECUTE_MUTATION * CLOCK_DELAY) * (numAtomicUpserts + 1));

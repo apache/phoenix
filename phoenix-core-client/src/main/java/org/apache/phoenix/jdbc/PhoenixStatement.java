@@ -43,6 +43,7 @@ import static org.apache.phoenix.monitoring.MetricType.UPSERT_FAILED_SQL_COUNTER
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_SQL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_SUCCESS_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MutationMetricQueue.MutationMetric;
 
 import java.io.File;
 import java.io.IOException;
@@ -234,7 +235,6 @@ import org.apache.phoenix.util.TupleUtil;
 import org.apache.phoenix.util.ValidateLastDDLTimestampUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import static org.apache.phoenix.monitoring.MutationMetricQueue.MutationMetric;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
@@ -744,13 +744,13 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                         }
                                         MutationMetric stagedMutationMetric;
                                         if (isUpsert) {
-                                            stagedMutationMetric = getStagedMutationMetric(
+                                            stagedMutationMetric = getUncommittedMutationMetric(
                                                     mutationPlanCreationTimeInNs, mutationPlanExecutionTimeInNs,
                                                     0, 0,
                                                     executeMutationTimeSpentInNs, 0);
                                         }
                                         else {
-                                            stagedMutationMetric = getStagedMutationMetric(0, 0,
+                                            stagedMutationMetric = getUncommittedMutationMetric(0, 0,
                                                     mutationPlanCreationTimeInNs, mutationPlanExecutionTimeInNs,
                                                     0, executeMutationTimeSpentInNs);
                                         }
@@ -798,9 +798,20 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         }
     }
 
-    private MutationMetric getStagedMutationMetric(long upsertMutationPlanCreationTime, long upsertMutationPlanExecutionTime,
-                                                   long deleteMutationPlanCreationTime, long deleteMutationPlanExecutionTime,
-                                                   long upsertExecuteMutationTime, long deleteExecuteMutationTime) {
+    /**
+     * Get mutation metrics for executeMutation call i.e. before the mutation are committed.
+     * All the times are in nano seconds.
+     * @param upsertMutationPlanCreationTime Time taken to create the upsert mutation plan.
+     * @param upsertMutationPlanExecutionTime Time taken to execute the upsert mutation plan.
+     * @param deleteMutationPlanCreationTime Time taken to create the delete mutation plan.
+     * @param deleteMutationPlanExecutionTime Time taken to execute the delete mutation plan.
+     * @param upsertExecuteMutationTime Time taken by upsert in executeMutation call.
+     * @param deleteExecuteMutationTime Time taken by delete in executeMutation call.
+     * @return MutationMetric object.
+     */
+    private MutationMetric getUncommittedMutationMetric(long upsertMutationPlanCreationTime, long upsertMutationPlanExecutionTime,
+                                                        long deleteMutationPlanCreationTime, long deleteMutationPlanExecutionTime,
+                                                        long upsertExecuteMutationTime, long deleteExecuteMutationTime) {
         return new MutationMetric(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 upsertMutationPlanCreationTime, upsertMutationPlanExecutionTime, deleteMutationPlanCreationTime,
                 deleteMutationPlanExecutionTime, upsertExecuteMutationTime, deleteExecuteMutationTime);
