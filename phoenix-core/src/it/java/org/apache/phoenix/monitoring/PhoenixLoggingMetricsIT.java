@@ -157,7 +157,7 @@ public class PhoenixLoggingMetricsIT extends BasePhoenixMetricsIT {
         // Hence mutation metrics are not expected during connection close
         loggedConn.close();
         assertTrue("Mutation write metrics are not logged for " + tableName2,
-                mutationWriteMetricsMap.size() == 0);
+                mutationWriteMetricsMap.size() > 0);
         assertTrue("Mutation read metrics for not found for " + tableName1,
                 mutationReadMetricsMap.get(tableName1).size() > 0);
         assertReadMetricsForMutatingSql(tableName1, 1, mutationReadMetricsMap);
