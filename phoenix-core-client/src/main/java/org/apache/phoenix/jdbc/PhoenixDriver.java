@@ -240,7 +240,8 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
             throw e;
         } finally {
             unlock(LockMode.READ);
-            GLOBAL_PHOENIX_CONNECTION_TIME.update( EnvironmentEdgeManager.currentTimeMillis() - connectionStartTime);
+            GLOBAL_PHOENIX_CONNECTION_TIME.update(
+                    EnvironmentEdgeManager.currentTimeMillis() - connectionStartTime);
         }
     }
     
