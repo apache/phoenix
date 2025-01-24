@@ -25,6 +25,7 @@ import java.util.Map;
 
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_FAILED_SIZE;
+import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_SUCCESS_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BYTES;
 import static org.apache.phoenix.monitoring.MetricType.NUM_METADATA_LOOKUP_FAILURES;
 import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_FAILURES;
@@ -140,7 +141,8 @@ public class TableClientMetrics {
                 TABLE_NUM_SYSTEM_TABLE_RPC_SUCCESS(NUM_SYSTEM_TABLE_RPC_SUCCESS),
                 TABLE_NUM_SYSTEM_TABLE_RPC_FAILURES(NUM_SYSTEM_TABLE_RPC_FAILURES),
                 TABLE_NUM_METADATA_LOOKUP_FAILURES(NUM_METADATA_LOOKUP_FAILURES),
-                TABLE_TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS(TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS);
+                TABLE_TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS(TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS),
+                TABLE_MUTATION_BATCH_SUCCESS_COUNTER(MUTATION_BATCH_SUCCESS_COUNTER);
 
         private MetricType metricType;
         private PhoenixTableMetric metric;

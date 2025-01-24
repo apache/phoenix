@@ -1425,6 +1425,7 @@ public class MutationState implements SQLCloseable {
                 List<Mutation> currentMutationBatch = null;
                 boolean areAllBatchesSuccessful = false;
                 Object[] resultObjects = null;
+                int mutationBatchSuccessCounter = 0;
 
                 try {
                     if (table.isTransactional()) {
@@ -1530,7 +1531,7 @@ public class MutationState implements SQLCloseable {
                         // REPLAY_ONLY_INDEX_WRITES for first batch
                         // only in case of 1121 SQLException
                         itrListMutation.remove();
-
+                        mutationBatchSuccessCounter++;
                         batchCount++;
                         if (LOGGER.isDebugEnabled())
                             LOGGER.debug("Sent batch of " + mutationBatch.size() + " for "
@@ -1624,7 +1625,7 @@ public class MutationState implements SQLCloseable {
                                     numMutations,
                                     numFailedMutations,
                                     numFailedPhase3Mutations,
-                                    mutationCommitTime);
+                                    mutationCommitTime, mutationBatchSuccessCounter);
                     // Combine failure mutation metrics with committed ones for the final picture
                     committedMutationsMetric.combineMetric(failureMutationMetrics);
                     mutationMetricQueue.addMetricsForTable(htableNameStr, committedMutationsMetric);
@@ -1724,7 +1725,7 @@ public class MutationState implements SQLCloseable {
                 numUpsertMutationsInBatch,
                 allUpsertsMutations ? 1 : 0,
                 numDeleteMutationsInBatch,
-                allDeletesMutations ? 1 : 0);
+                allDeletesMutations ? 1 : 0, 0);
     }
 
     /**
@@ -1743,7 +1744,7 @@ public class MutationState implements SQLCloseable {
     static MutationMetric getCommittedMutationsMetric(
             MutationBytes totalMutationBytesObject, List<List<Mutation>> unsentMutationBatchList,
             long numMutations, long numFailedMutations,
-            long numFailedPhase3Mutations, long mutationCommitTime) {
+            long numFailedPhase3Mutations, long mutationCommitTime, long mutationBatchSuccessCounter) {
         long committedUpsertMutationBytes = totalMutationBytesObject == null ? 0 :
                 totalMutationBytesObject.getUpsertMutationBytes();
         long committedAtomicUpsertMutationBytes = totalMutationBytesObject == null ? 0:
@@ -1807,7 +1808,7 @@ public class MutationState implements SQLCloseable {
                 committedDeleteMutationCounter,
                 committedTotalMutationBytes,
                 numFailedPhase3Mutations,
-                0, 0, 0, 0 );
+                0, 0, 0, 0, mutationBatchSuccessCounter);
     }
 
     private void filterIndexCheckerMutations(Map<TableInfo, List<Mutation>> mutationMap,
