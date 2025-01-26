@@ -379,6 +379,29 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         }
     }
 
+    static void createTableAndRunUpsertSelect(String destTableName, String sourceTableName,
+                                              boolean resetGlobalMetricsAfterTableCreate,
+                                              boolean resetTableMetricsAfterTableCreate,
+                                              boolean commit, Connection conn) throws SQLException {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute(String.format(DDL, destTableName));
+        }
+        conn.commit();
+        if (resetGlobalMetricsAfterTableCreate) {
+            resetGlobalMetrics();
+        }
+
+        if (resetTableMetricsAfterTableCreate) {
+            PhoenixRuntime.clearTableLevelMetrics();
+        }
+        try (Statement stmt = conn.createStatement()) {
+            stmt.executeUpdate(String.format(UPSERT_SELECT_DML, destTableName, sourceTableName));
+        }
+        if (commit) {
+            conn.commit();
+        }
+    }
+
     static void doPointDeleteFromTable(String tableName, Connection conn) throws SQLException {
         try (PreparedStatement stmt = conn.prepareStatement(
                 String.format(POINT_DELETE_DML, tableName))) {

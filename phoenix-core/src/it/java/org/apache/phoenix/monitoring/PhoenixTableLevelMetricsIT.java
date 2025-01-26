@@ -67,6 +67,7 @@ import static org.apache.phoenix.monitoring.MetricType.ATOMIC_UPSERT_SQL_COUNTER
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BYTES;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SCAN_BYTES;
+import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_SUCCESS_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_SUCCESS;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_FAILURE_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_SUCCESS_SQL_COUNTER;
@@ -115,8 +116,10 @@ import static org.apache.phoenix.monitoring.MetricType.UPSERT_SUCCESS_SQL_COUNTE
 import static org.apache.phoenix.monitoring.PhoenixMetricsIT.POINT_LOOKUP_SELECT_QUERY;
 import static org.apache.phoenix.monitoring.PhoenixMetricsIT.RANGE_SCAN_SELECT_QUERY;
 import static org.apache.phoenix.monitoring.PhoenixMetricsIT.createTableAndInsertValues;
+import static org.apache.phoenix.monitoring.PhoenixMetricsIT.createTableAndRunUpsertSelect;
 import static org.apache.phoenix.monitoring.PhoenixMetricsIT.doPointDeleteFromTable;
 import static org.apache.phoenix.monitoring.PhoenixMetricsIT.doDeleteAllFromTable;
+import static org.apache.phoenix.query.QueryServices.ENABLE_SERVER_UPSERT_SELECT;
 import static org.apache.phoenix.util.DelayedOrFailingRegionServer.INJECTED_EXCEPTION_STRING;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.clearTableLevelMetrics;
@@ -186,6 +189,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         // Add our own driver
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(BaseTest.DRIVER_CLASS_NAME_ATTRIB, PhoenixMetricsTestingDriver.class.getName());
+        props.put(ENABLE_SERVER_UPSERT_SELECT, "true");
         initAndRegisterTestDriver(url, new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -342,7 +346,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             final long expectedUpsertOrDeleteAggregateSuccessCt,
             final long expectedUpsertOrDeleteAggregateFailureCt,
             final Map<MetricType, Long> writeMutMetrics, final Connection conn,
-            final boolean expectedSystemCatalogMetric)
+            final boolean expectedSystemCatalogMetric, final long expectedMutationBatchSuccessCount)
             throws SQLException {
         assertTrue(conn != null && conn.isClosed());
         assertFalse(hasMutationBeenExplicitlyCommitted && writeMutMetrics == null);
@@ -432,6 +436,10 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                         writeMutMetrics.get(isUpsert ?
                                 UPSERT_BATCH_FAILED_COUNTER :
                                 DELETE_BATCH_FAILED_COUNTER), CompareOp.EQ);
+                assertMetricValue(metric, MUTATION_BATCH_SUCCESS_COUNTER,
+                        writeMutMetrics.get(MUTATION_BATCH_SUCCESS_COUNTER), CompareOp.EQ);
+                assertMetricValue(metric, MUTATION_BATCH_SUCCESS_COUNTER,
+                        expectedMutationBatchSuccessCount, CompareOp.EQ);
             }
         }
         if (expectedSystemCatalogMetric) {
@@ -713,7 +721,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             // Must be asserted after connection close since that's where
             // we populate table-level metrics
             assertMutationTableMetrics(true, tableName, numRows, 0, 0, true, numRows, 0, 0, 1, 0,
-                    writeMutMetrics, conn, true);
+                    writeMutMetrics, conn, true, 100);
         }
     }
 
@@ -739,7 +747,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(true, tableName, numRows, 0, 0, true, numRows, 0, 0, 1, 0,
-                    writeMutMetrics, conn, true);
+                    writeMutMetrics, conn, true, 1);
         }
     }
 
@@ -779,7 +787,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             // mutation commit time since autoCommit was on
             assertMutationTableMetrics(true, tableName, numRows, 0,
                     writeMutMetrics.get(UPSERT_COMMIT_TIME), true, numRows, 0, 0, numRows, 0,
-                    writeMutMetrics, conn,true);
+                    writeMutMetrics, conn,true, 10);
         }
     }
 
@@ -814,7 +822,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             }
             assertNotNull("Failed to get a connection!", conn);
             conn.close();
-            assertMutationTableMetrics(true, tableName, 0, 1, 0, false, 0, 0, 0, 1, 0, null, conn, true);
+            assertMutationTableMetrics(true, tableName, 0, 1, 0, false, 0, 0, 0, 1, 0, null, conn, true, 0);
         }
     }
 
@@ -854,7 +862,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(true, tableName, numRows, 0, delay, true, numRows, 0, 0, 1,
-                    0, writeMutMetrics, conn, true);
+                    0, writeMutMetrics, conn, true, 1);
         }
     }
 
@@ -902,7 +910,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(true, tableName, 0, 1, 0, true, 1, 0, 1, 0, 1,
-                    writeMutMetrics, conn, true);
+                    writeMutMetrics, conn, true, 0);
         }
     }
 
@@ -953,7 +961,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(true, tableName, numRows, 0, 0, true, numRows, 0, numRows, 0,
-                    1, writeMutMetrics, conn, true);
+                    1, writeMutMetrics, conn, true, 0);
         }
     }
 
@@ -993,7 +1001,51 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(true, tableName, numRows, 0, 0, true, numRows, delayRs, 0, 1,
-                    0, writeMutMetrics, conn, true);
+                    0, writeMutMetrics, conn, true, 1);
+        }
+    }
+
+    @Test public void testUpsertSelectWithRunOnServerAsTrue() throws SQLException {
+        String srcTableName = generateUniqueName();
+        String destTableName = generateUniqueName();
+        int numRows = 10;
+        Map<MetricType, Long> writeMutMetrics;
+        try (Connection conn = getConnFromTestDriver()) {
+            createTableAndInsertValues(srcTableName, true, true,
+                    numRows, true, conn, false);
+        }
+        try (Connection conn = getConnFromTestDriver()) {
+            conn.setAutoCommit(true); // Set auto-commit to make upsert select run on server
+            createTableAndRunUpsertSelect(destTableName, srcTableName, true,
+                    true, true, conn);
+            writeMutMetrics = PhoenixRuntime.getWriteMetricInfoForMutationsSinceLastReset(conn).get(destTableName);
+        }
+        assertNull(writeMutMetrics); // No commits were done from client to server so, no metrics recorded
+        for (PhoenixTableMetric metric: getPhoenixTableClientMetrics().get(destTableName)) {
+            assertMetricValue(metric, MUTATION_BATCH_SUCCESS_COUNTER, 0, CompareOp.EQ);
+        }
+    }
+
+    @Test public void testUpsertSelectWithRunOnServerAsFalse() throws SQLException {
+        String srcTableName = generateUniqueName();
+        String destTableName = generateUniqueName();
+        int numRows = 10;
+        Map<MetricType, Long> writeMutMetrics;
+        try (Connection conn = getConnFromTestDriver()) {
+            createTableAndInsertValues(srcTableName, true, true,
+                    numRows, true, conn, false);
+        }
+        try (Connection conn = getConnFromTestDriver()) {
+            createTableAndRunUpsertSelect(destTableName, srcTableName, true,
+                    true, true, conn);
+            writeMutMetrics = PhoenixRuntime.getWriteMetricInfoForMutationsSinceLastReset(conn).get(destTableName);
+        }
+        // Rows were fetched to client from source table and committed to destination table on server
+        assertNotNull(writeMutMetrics);
+        for (PhoenixTableMetric metric: getPhoenixTableClientMetrics().get(destTableName)) {
+            assertMetricValue(metric, MUTATION_BATCH_SUCCESS_COUNTER,
+                    writeMutMetrics.get(MUTATION_BATCH_SUCCESS_COUNTER), CompareOp.EQ);
+            assertMetricValue(metric, MUTATION_BATCH_SUCCESS_COUNTER, 1, CompareOp.EQ);
         }
     }
 
@@ -1024,7 +1076,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(false, tableName, 1, 0, 0, true, 1, 0, 0, 1, 0,
-                    writeMutMetrics, conn, false);
+                    writeMutMetrics, conn, false, 1);
         }
     }
 
@@ -1055,7 +1107,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(false, tableName, 1, 0, 0, true, numRows, 0, 0, 1, 0,
-                    writeMutMetrics, conn, false);
+                    writeMutMetrics, conn, false, 1);
         }
     }
 
@@ -1092,7 +1144,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             assertNull(writeMutMetrics);
             conn.close();
             assertMutationTableMetrics(false, tableName, 1, 0, 0, false, 0, 0, 0, 0, 0,
-                    writeMutMetrics, conn, false);
+                    writeMutMetrics, conn, false, 1);
         }
     }
 
@@ -1136,7 +1188,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             assertNull(writeMutMetrics);
             conn.close();
-            assertMutationTableMetrics(false, tableName, 0, 1, 0, false, 0, 0, 0, 0, 1, null, conn, false);
+            assertMutationTableMetrics(false, tableName, 0, 1, 0, false, 0, 0, 0, 0, 1, null, conn, false, 0);
         }
     }
 
@@ -1175,7 +1227,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(false, tableName, 1, 0, injectDelay, true, 1, 0, 0, 1, 0,
-                    writeMutMetrics, conn, false);
+                    writeMutMetrics, conn, false, 1);
         }
     }
 
@@ -1221,7 +1273,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(false, tableName, 1, 0, 0, true, numRows, 0, numRows, 0, 1,
-                    writeMutMetrics, conn, false);
+                    writeMutMetrics, conn, false, 0);
         }
     }
 
@@ -1246,6 +1298,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
 
         // Insert data into the table
         String insertData = "UPSERT INTO " + dataTable + " VALUES (?, ?)";
+        Map<String, Map<MetricType, Long>> writeMutMetrics;
         try (Connection conn = getConnFromTestDriver();
              PreparedStatement stmt = conn.prepareStatement(insertData)) {
             for (int i = 1; i <= 10; i++) {
@@ -1254,6 +1307,21 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                 stmt.executeUpdate();
             }
             conn.commit();
+            writeMutMetrics = PhoenixRuntime.getWriteMetricInfoForMutationsSinceLastReset(conn);
+        }
+        for(PhoenixTableMetric metric: getPhoenixTableClientMetrics().get(dataTable)) {
+            if(metric.getMetricType().equals(MUTATION_BATCH_SUCCESS_COUNTER)) {
+                assertMetricValue(metric, MUTATION_BATCH_SUCCESS_COUNTER, 1, CompareOp.EQ);
+                assertMetricValue(metric, MUTATION_BATCH_SUCCESS_COUNTER,
+                        writeMutMetrics.get(dataTable).get(MUTATION_BATCH_SUCCESS_COUNTER), CompareOp.EQ);
+            }
+        }
+        for(PhoenixTableMetric metric: getPhoenixTableClientMetrics().get(indexName)) {
+            if(metric.getMetricType().equals(MUTATION_BATCH_SUCCESS_COUNTER)) {
+                assertMetricValue(metric, MUTATION_BATCH_SUCCESS_COUNTER, 2, CompareOp.EQ);
+                assertMetricValue(metric, MUTATION_BATCH_SUCCESS_COUNTER,
+                        writeMutMetrics.get(indexName).get(MUTATION_BATCH_SUCCESS_COUNTER), CompareOp.EQ);
+            }
         }
 
         // Check if the index is being used
@@ -1332,7 +1400,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(false, tableName, 1, 0, 0, true, numRows, delayRs, 0, 1, 0,
-                    writeMutMetrics, conn, false);
+                    writeMutMetrics, conn, false, 1);
         }
     }
 
@@ -1374,7 +1442,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             // 1 regular upsert + numAtomicUpserts
             // 2 mutations (regular and atomic on the same row in the same batch will be split)
             assertMutationTableMetrics(true, tableName, 1 + numAtomicUpserts, 0, 0, true, 2, 0, 0, 2, 0,
-                writeMutMetrics, conn, false);
+                writeMutMetrics, conn, false, 2);
             assertEquals(numAtomicUpserts, getMetricFromTableMetrics(tableName, ATOMIC_UPSERT_SQL_COUNTER));
             assertTrue(getMetricFromTableMetrics(tableName, ATOMIC_UPSERT_COMMIT_TIME) > 0);
         }
