@@ -19,6 +19,7 @@ package org.apache.phoenix.jdbc;
 
 import static org.apache.hadoop.test.GenericTestUtils.waitFor;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.URLS;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithConnection;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
@@ -46,7 +47,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.FailoverSQLException;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
@@ -56,6 +60,7 @@ import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.After;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
@@ -593,6 +598,138 @@ public class FailoverPhoenixConnectionIT {
     }
 
     /**
+     * Test transit cluster role record which should affect all the principals for a given HAGroup
+     */
+    @Test(timeout = 300000)
+    public void testAllConnectionsOfHAIsAffected() throws Exception {
+        Connection conn = createFailoverConnection();
+        PhoenixConnection wrappedConn = ((FailoverPhoenixConnection) conn).getWrappedConnection();
+
+        //Create another connection with same params except different principal
+        //This should use same haGroup as default one and transiting that haGroup should affect this conn as well.
+        String principal = RandomStringUtils.randomAlphabetic(5);
+        Connection conn2 = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(principal), clientProperties);
+        PhoenixConnection wrappedConn2 = ((FailoverPhoenixConnection) conn2).getWrappedConnection();
+
+        // Following we create a new HA group and create a connection against this HA group with default PRINCIPAL
+        String haGroupName2 = haGroup.getGroupInfo().getName() + "2";
+        CLUSTERS.initClusterRole(haGroupName2, HighAvailabilityPolicy.FAILOVER);
+        Properties clientProperties2 = new Properties(clientProperties);
+        clientProperties2.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName2);
+        Connection conn3 = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(), clientProperties2);
+        PhoenixConnection wrappedConn3 = ((FailoverPhoenixConnection) conn3).getWrappedConnection();
+
+        //Create another connection with haGroup2 with same principal as for conn2 with haGroup, which should not be
+        //affected by transiting haGroup
+        Connection conn4 = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(principal), clientProperties2);
+        PhoenixConnection wrappedConn4 = ((FailoverPhoenixConnection) conn4).getWrappedConnection();
+
+        assertFalse(wrappedConn.isClosed());
+        assertFalse(wrappedConn2.isClosed());
+        assertFalse(wrappedConn3.isClosed());
+        assertFalse(wrappedConn4.isClosed());
+
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.ACTIVE);
+
+        assertTrue(wrappedConn.isClosed());
+        assertTrue(wrappedConn2.isClosed());
+        assertFalse(wrappedConn3.isClosed()); //only connection with haGroup will be closed irrespective of principal
+        assertFalse(wrappedConn4.isClosed());
+
+    }
+
+    @Test(timeout = 300000)
+    public void testUserPrincipal() throws Exception {
+        Connection conn = createFailoverConnection(); //PRINCIPAL, haGroupName
+        FailoverPhoenixConnection fconn = (FailoverPhoenixConnection) conn;
+        ConnectionQueryServices cqsi = PhoenixDriver.INSTANCE.getConnectionQueryServices(CLUSTERS.getJdbcUrl1(), clientProperties);
+
+        String haGroupName2 = testName.getMethodName() + RandomStringUtils.randomAlphabetic(3);;
+        CLUSTERS.initClusterRole(haGroupName2, HighAvailabilityPolicy.FAILOVER);
+        clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName2);
+        Connection conn2 = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(), clientProperties); //PRINCIPAL,haGroupName2
+        FailoverPhoenixConnection fconn2 = (FailoverPhoenixConnection) conn2;
+        ConnectionQueryServices cqsi2 = PhoenixDriver.INSTANCE.getConnectionQueryServices(CLUSTERS.getJdbcUrl1(), clientProperties);
+
+        Connection conn3 = DriverManager.getConnection(CLUSTERS.getJdbcHAUrlWithoutPrincipal(), clientProperties); //null,haGroupName2
+        FailoverPhoenixConnection fconn3 = (FailoverPhoenixConnection) conn3;
+        ConnectionQueryServices cqsi3 = PhoenixDriver.INSTANCE.getConnectionQueryServices(CLUSTERS.
+                getJdbcUrlWithoutPrincipal(CLUSTERS.getUrl1()), clientProperties);
+
+        clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName);
+        String principal4 = RandomStringUtils.randomAlphabetic(5);
+        Connection conn4 = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(principal4), clientProperties);//principal4, haGroupName
+        FailoverPhoenixConnection fconn4 = (FailoverPhoenixConnection) conn4;
+        ConnectionQueryServices cqsi4 = PhoenixDriver.INSTANCE.getConnectionQueryServices(CLUSTERS.getJdbcUrl1(principal4), clientProperties);
+
+        //Check wrapped connection urls
+        Assert.assertEquals(CLUSTERS.getJdbcUrl1(), fconn.getWrappedConnection().getURL());
+        Assert.assertEquals(CLUSTERS.getJdbcUrl1(), fconn2.getWrappedConnection().getURL());
+        Assert.assertEquals(CLUSTERS.getJdbcUrlWithoutPrincipal(CLUSTERS.getUrl1()), fconn3.getWrappedConnection().getURL());
+        Assert.assertEquals(CLUSTERS.getJdbcUrl1(principal4), fconn4.getWrappedConnection().getURL());
+
+        //Check cqsi objects should be same with what we get from connections
+        Assert.assertEquals(HBaseTestingUtilityPair.PRINCIPAL,cqsi.getUserName());
+        Assert.assertSame(cqsi, fconn.getWrappedConnection().getQueryServices());
+
+        Assert.assertEquals(HBaseTestingUtilityPair.PRINCIPAL,cqsi2.getUserName());
+        Assert.assertSame(cqsi2, fconn2.getWrappedConnection().getQueryServices());
+
+        Assert.assertNull(cqsi3.getUserName());
+        Assert.assertSame(cqsi3, fconn3.getWrappedConnection().getQueryServices());
+
+        Assert.assertEquals(principal4,cqsi4.getUserName());
+        Assert.assertSame(cqsi4, fconn4.getWrappedConnection().getQueryServices());
+
+    }
+
+    @Test(timeout = 300000)
+    public void testHAGroupMappingsWithDifferentPrincipalsOnDifferentThreads() throws Exception {
+        int numThreads = RandomUtils.nextInt(3, 5);
+        List<Thread> connectionThreads = new ArrayList<>(numThreads);
+        AtomicBoolean isPrincipalNull = new AtomicBoolean(false);
+        //Creating random number of connections one connection per thread with different principal
+        //Including one connection will null principal all of them will be using given haGroupName
+        //which is specific to test
+        for (int i = 0; i < numThreads; i++) {
+            isPrincipalNull.set((i + 1) % 3 == 0);
+            connectionThreads.add(new Thread(() -> {
+                try {
+                    createConnectionWithRandomPrincipal(isPrincipalNull.get());
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
+            }));
+        }
+
+        //Create multiple connections with given principal
+        String principal = RandomStringUtils.randomAlphabetic(3);
+        int numConnectionsWithSamePrincipal = 3;
+        for (int i = 0; i < numConnectionsWithSamePrincipal; i++) {
+            connectionThreads.add(new Thread(() -> {
+                try {
+                    DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(principal), clientProperties);
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
+            }));
+        }
+
+        for (Thread connectionThread : connectionThreads) {
+            connectionThread.start();
+        }
+
+        for (Thread connectionThread : connectionThreads) {
+            connectionThread.join();
+        }
+
+        //For the given ha group of current test the value in URLS set for current haGroupInfo
+        //should be numThreads + 1 as all the connections created with same principal should have
+        //one entry in map.
+        Assert.assertEquals(numThreads + 1, URLS.get(haGroup.getGroupInfo()).size());
+    }
+
+    /**
      * Helper method to verify that the failover connection has expected mutation metrics.
      *
      * @param conn the failover Phoenix connection
@@ -635,5 +772,13 @@ public class FailoverPhoenixConnectionIT {
             assertTrue(e.getCause() instanceof FailoverSQLException);
             LOG.info("Got expected failover exception after connection is closed.", e);
         } // all other type of exception will fail this test.
+    }
+
+    private Connection createConnectionWithRandomPrincipal(boolean isPrincipalNull) throws SQLException {
+        String principal = RandomStringUtils.randomAlphabetic(5);
+        if (isPrincipalNull) {
+            return DriverManager.getConnection(CLUSTERS.getJdbcHAUrlWithoutPrincipal(), clientProperties);
+        }
+        return DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(principal), clientProperties);
     }
 }

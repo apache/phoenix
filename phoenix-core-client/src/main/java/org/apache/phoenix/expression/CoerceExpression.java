@@ -28,6 +28,7 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PDataType;
 
 import org.apache.phoenix.schema.types.PVarbinary;
@@ -153,8 +154,9 @@ public class CoerceExpression extends BaseSingleExpression {
         // encode rhs literal value to VARBINARY_ENCODED type. This makes the eventual coerce
         // evaluation successful.
         if (getChild() instanceof LiteralExpression
-            && getChild().getDataType() == PVarbinary.INSTANCE
-            && getDataType() == PVarbinaryEncoded.INSTANCE) {
+                && (getChild().getDataType() == PVarbinary.INSTANCE ||
+                getChild().getDataType() == PBinary.INSTANCE)
+                && getDataType() == PVarbinaryEncoded.INSTANCE) {
             Expression expression;
             try {
                 expression =

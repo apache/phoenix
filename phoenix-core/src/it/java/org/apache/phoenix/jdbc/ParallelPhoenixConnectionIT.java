@@ -138,24 +138,25 @@ public class ParallelPhoenixConnectionIT {
         try (Connection conn = getParallelConnection()) {
             ParallelPhoenixConnection pr = conn.unwrap(ParallelPhoenixConnection.class);
             ParallelPhoenixContext context = pr.getContext();
+            HAURLInfo haurlInfo = context.getHaurlInfo();
             HighAvailabilityGroup.HAGroupInfo group = context.getHaGroup().getGroupInfo();
             if (CLUSTERS.getUrl1().compareTo(CLUSTERS.getUrl2()) <= 0) {
-                Assert.assertEquals(CLUSTERS.getJdbcUrl1(), group.getJDBCUrl1());
-                Assert.assertEquals(CLUSTERS.getJdbcUrl2(), group.getJDBCUrl2());
+                Assert.assertEquals(CLUSTERS.getJdbcUrl1(), group.getJDBCUrl1(haurlInfo));
+                Assert.assertEquals(CLUSTERS.getJdbcUrl2(), group.getJDBCUrl2(haurlInfo));
             } else {
-                Assert.assertEquals(CLUSTERS.getJdbcUrl2(), group.getJDBCUrl1());
-                Assert.assertEquals(CLUSTERS.getJdbcUrl1(), group.getJDBCUrl2());
+                Assert.assertEquals(CLUSTERS.getJdbcUrl2(), group.getJDBCUrl1(haurlInfo));
+                Assert.assertEquals(CLUSTERS.getJdbcUrl1(), group.getJDBCUrl2(haurlInfo));
             }
             ConnectionQueryServices cqsi;
             // verify connection#1
-            cqsi = PhoenixDriver.INSTANCE.getConnectionQueryServices(group.getJDBCUrl1(), clientProperties);
+            cqsi = PhoenixDriver.INSTANCE.getConnectionQueryServices(group.getJDBCUrl1(haurlInfo), clientProperties);
             Assert.assertEquals(HBaseTestingUtilityPair.PRINCIPAL, cqsi.getUserName());
             PhoenixConnection pConn = pr.getFutureConnection1().get();
             ConnectionQueryServices cqsiFromConn = pConn.getQueryServices();
             Assert.assertEquals(HBaseTestingUtilityPair.PRINCIPAL, cqsiFromConn.getUserName());
             Assert.assertTrue(cqsi == cqsiFromConn);
             // verify connection#2
-            cqsi = PhoenixDriver.INSTANCE.getConnectionQueryServices(group.getJDBCUrl2(), clientProperties);
+            cqsi = PhoenixDriver.INSTANCE.getConnectionQueryServices(group.getJDBCUrl2(haurlInfo), clientProperties);
             Assert.assertEquals(HBaseTestingUtilityPair.PRINCIPAL, cqsi.getUserName());
             pConn = pr.getFutureConnection2().get();
             cqsiFromConn = pConn.getQueryServices();

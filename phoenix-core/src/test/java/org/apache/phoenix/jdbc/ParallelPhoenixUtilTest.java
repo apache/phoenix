@@ -46,7 +46,8 @@ public class ParallelPhoenixUtilTest {
 
     private static final ParallelPhoenixContext context =
             new ParallelPhoenixContext(new Properties(), null,
-                    HighAvailabilityTestingUtility.getListOfSingleThreadExecutorServices(), null);
+                    HighAvailabilityTestingUtility.getListOfSingleThreadExecutorServices(), null,
+                    Mockito.mock(HAURLInfo.class));
 
     @Test
     public void getAnyOfNonExceptionallySingleFutureTest() throws Exception {
@@ -114,7 +115,7 @@ public class ParallelPhoenixUtilTest {
         ParallelPhoenixContext ctx =
                 new ParallelPhoenixContext(props, null,
                         HighAvailabilityTestingUtility.getListOfSingleThreadExecutorServices(),
-                        null);
+                        null, Mockito.mock(HAURLInfo.class));
         long startTime = EnvironmentEdgeManager.currentTime();
         try {
             util.getAnyOfNonExceptionally(futures, ctx);
