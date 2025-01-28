@@ -132,7 +132,7 @@ public abstract class BasePhoenixMetricsIT extends BaseTest {
             boolean upsertMutationSqlCounterPresent = false;
             boolean upsertCommitTimeCounterPresent = false;
             boolean deleteCommitTimeCounterPresent = false;
-            boolean mutationBatchSuccessCounterPresent = false;
+            boolean mutationBatchCounterPresent = false;
             for (Map.Entry<MetricType, Long> metric : p.entrySet()) {
                 MetricType metricType = metric.getKey();
                 long metricValue = metric.getValue();
@@ -207,10 +207,10 @@ public abstract class BasePhoenixMetricsIT extends BaseTest {
                     }
                     deleteCommitTimeCounterPresent = true;
                 }
-                else if (metricType.equals(MetricType.MUTATION_BATCH_SUCCESS_COUNTER)) {
+                else if (metricType.equals(MetricType.MUTATION_BATCH_COUNTER)) {
                     assertTrue("mutation batch success counter should be greater than zero",
                             metricValue > 0);
-                    mutationBatchSuccessCounterPresent = true;
+                    mutationBatchCounterPresent = true;
                 }
             }
             assertTrue(mutationBatchSizePresent);
@@ -228,7 +228,7 @@ public abstract class BasePhoenixMetricsIT extends BaseTest {
             assertTrue(deleteBatchFailedCounterPresent);
             assertTrue(upsertCommitTimeCounterPresent);
             assertTrue(deleteCommitTimeCounterPresent);
-            assertTrue(mutationBatchSuccessCounterPresent);
+            assertTrue(mutationBatchCounterPresent);
         }
     }
 

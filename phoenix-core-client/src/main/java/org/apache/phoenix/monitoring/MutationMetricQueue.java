@@ -23,7 +23,7 @@ import static org.apache.phoenix.monitoring.MetricType.DELETE_BATCH_FAILED_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_COMMIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_MUTATION_BYTES;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_MUTATION_SQL_COUNTER;
-import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_SUCCESS_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_FAILED_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BYTES;
@@ -94,7 +94,7 @@ public class MutationMetricQueue {
             publishedMetricsForTable.put(metric.getUpsertBatchFailedCounter().getMetricType(), metric.getUpsertBatchFailedCounter().getValue());
             publishedMetricsForTable.put(metric.getDeleteBatchFailedSize().getMetricType(), metric.getDeleteBatchFailedSize().getValue());
             publishedMetricsForTable.put(metric.getDeleteBatchFailedCounter().getMetricType(), metric.getDeleteBatchFailedCounter().getValue());
-            publishedMetricsForTable.put(metric.getMutationBatchSuccessCounter().getMetricType(), metric.getMutationBatchSuccessCounter().getValue());
+            publishedMetricsForTable.put(metric.getMutationBatchCounter().getMetricType(), metric.getMutationBatchCounter().getValue());
         }
         return publishedMetrics;
     }
@@ -126,7 +126,7 @@ public class MutationMetricQueue {
         private final CombinableMetric numOfIndexCommitFailMutations = new CombinableMetricImpl(
                 INDEX_COMMIT_FAILURE_SIZE);
 
-        private final CombinableMetric mutationBatchSuccessCounter = new CombinableMetricImpl(MUTATION_BATCH_SUCCESS_COUNTER);
+        private final CombinableMetric mutationBatchCounter = new CombinableMetricImpl(MUTATION_BATCH_COUNTER);
 
         public static final MutationMetric EMPTY_METRIC =
                 new MutationMetric(0,0,0,0, 0, 0,0,0,0,0,0,0,0,0,0, 0);
@@ -137,7 +137,7 @@ public class MutationMetricQueue {
                 long deleteMutationSqlCounterSuccess, long totalMutationBytes,
                 long numOfPhase3Failed, long upsertBatchFailedSize,
                 long upsertBatchFailedCounter, long deleteBatchFailedSize,
-                long deleteBatchFailedCounter, long mutationBatchSuccessCounter) {
+                long deleteBatchFailedCounter, long mutationBatchCounter) {
             this.numMutations.change(numMutations);
             this.totalCommitTimeForUpserts.change(commitTimeForUpserts);
             this.totalCommitTimeForAtomicUpserts.change(commitTimeForAtomicUpserts);
@@ -154,7 +154,7 @@ public class MutationMetricQueue {
             this.upsertBatchFailedCounter.change(upsertBatchFailedCounter);
             this.deleteBatchFailedSize.change(deleteBatchFailedSize);
             this.deleteBatchFailedCounter.change(deleteBatchFailedCounter);
-            this.mutationBatchSuccessCounter.change(mutationBatchSuccessCounter);
+            this.mutationBatchCounter.change(mutationBatchCounter);
         }
 
         public CombinableMetric getTotalCommitTimeForUpserts() {
@@ -219,8 +219,8 @@ public class MutationMetricQueue {
             return deleteBatchFailedCounter;
         }
 
-        public CombinableMetric getMutationBatchSuccessCounter() {
-            return mutationBatchSuccessCounter;
+        public CombinableMetric getMutationBatchCounter() {
+            return mutationBatchCounter;
         }
 
         public void combineMetric(MutationMetric other) {
@@ -240,7 +240,7 @@ public class MutationMetricQueue {
             this.upsertBatchFailedCounter.combine(other.upsertBatchFailedCounter);
             this.deleteBatchFailedSize.combine(other.deleteBatchFailedSize);
             this.deleteBatchFailedCounter.combine(other.deleteBatchFailedCounter);
-            this.mutationBatchSuccessCounter.combine(other.mutationBatchSuccessCounter);
+            this.mutationBatchCounter.combine(other.mutationBatchCounter);
         }
 
     }

@@ -38,7 +38,6 @@ import org.apache.phoenix.query.ConfigurationFactory;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.query.QueryServicesTestImpl;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -67,7 +66,7 @@ import static org.apache.phoenix.monitoring.MetricType.ATOMIC_UPSERT_SQL_COUNTER
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BYTES;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SCAN_BYTES;
-import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_SUCCESS_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_SUCCESS;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_FAILURE_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_SUCCESS_SQL_COUNTER;
@@ -122,6 +121,7 @@ import static org.apache.phoenix.monitoring.PhoenixMetricsIT.doDeleteAllFromTabl
 import static org.apache.phoenix.query.QueryServices.ENABLE_SERVER_UPSERT_SELECT;
 import static org.apache.phoenix.util.DelayedOrFailingRegionServer.INJECTED_EXCEPTION_STRING;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
+import static org.apache.phoenix.util.PhoenixRuntime.UPSERT_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.clearTableLevelMetrics;
 import static org.apache.phoenix.util.PhoenixRuntime.getOverAllReadRequestMetricInfo;
 import static org.apache.phoenix.util.PhoenixRuntime.getPhoenixTableClientMetrics;
@@ -346,7 +346,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             final long expectedUpsertOrDeleteAggregateSuccessCt,
             final long expectedUpsertOrDeleteAggregateFailureCt,
             final Map<MetricType, Long> writeMutMetrics, final Connection conn,
-            final boolean expectedSystemCatalogMetric, final long expectedMutationBatchSuccessCount)
+            final boolean expectedSystemCatalogMetric, final long expectedMutationBatchCount)
             throws SQLException {
         assertTrue(conn != null && conn.isClosed());
         assertFalse(hasMutationBeenExplicitlyCommitted && writeMutMetrics == null);
@@ -436,10 +436,10 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                         writeMutMetrics.get(isUpsert ?
                                 UPSERT_BATCH_FAILED_COUNTER :
                                 DELETE_BATCH_FAILED_COUNTER), CompareOp.EQ);
-                assertMetricValue(metric, MUTATION_BATCH_SUCCESS_COUNTER,
-                        writeMutMetrics.get(MUTATION_BATCH_SUCCESS_COUNTER), CompareOp.EQ);
-                assertMetricValue(metric, MUTATION_BATCH_SUCCESS_COUNTER,
-                        expectedMutationBatchSuccessCount, CompareOp.EQ);
+                assertMetricValue(metric, MUTATION_BATCH_COUNTER,
+                        writeMutMetrics.get(MUTATION_BATCH_COUNTER), CompareOp.EQ);
+                assertMetricValue(metric, MUTATION_BATCH_COUNTER,
+                        expectedMutationBatchCount, CompareOp.EQ);
             }
         }
         if (expectedSystemCatalogMetric) {
@@ -910,7 +910,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(true, tableName, 0, 1, 0, true, 1, 0, 1, 0, 1,
-                    writeMutMetrics, conn, true, 0);
+                    writeMutMetrics, conn, true, 1);
         }
     }
 
@@ -961,7 +961,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(true, tableName, numRows, 0, 0, true, numRows, 0, numRows, 0,
-                    1, writeMutMetrics, conn, true, 0);
+                    1, writeMutMetrics, conn, true, 1);
         }
     }
 
@@ -1022,7 +1022,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         }
         assertNull(writeMutMetrics); // No commits were done from client to server so, no metrics recorded
         for (PhoenixTableMetric metric: getPhoenixTableClientMetrics().get(destTableName)) {
-            assertMetricValue(metric, MUTATION_BATCH_SUCCESS_COUNTER, 0, CompareOp.EQ);
+            assertMetricValue(metric, MUTATION_BATCH_COUNTER, 0, CompareOp.EQ);
         }
     }
 
@@ -1043,9 +1043,28 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         // Rows were fetched to client from source table and committed to destination table on server
         assertNotNull(writeMutMetrics);
         for (PhoenixTableMetric metric: getPhoenixTableClientMetrics().get(destTableName)) {
-            assertMetricValue(metric, MUTATION_BATCH_SUCCESS_COUNTER,
-                    writeMutMetrics.get(MUTATION_BATCH_SUCCESS_COUNTER), CompareOp.EQ);
-            assertMetricValue(metric, MUTATION_BATCH_SUCCESS_COUNTER, 1, CompareOp.EQ);
+            assertMetricValue(metric, MUTATION_BATCH_COUNTER,
+                    writeMutMetrics.get(MUTATION_BATCH_COUNTER), CompareOp.EQ);
+            assertMetricValue(metric, MUTATION_BATCH_COUNTER, 1, CompareOp.EQ);
+        }
+    }
+
+    @Test public void testUpsertWithOverriddenUpsertBatchSize() throws SQLException {
+        String tableName = generateUniqueName();
+        int numRows = 100;
+        Map<MetricType, Long> writeMutMetrics;
+        Properties props = new Properties();
+        props.put(UPSERT_BATCH_SIZE_ATTRIB, "5");
+        try (Connection conn = DriverManager.getConnection(url, props)) {
+            createTableAndInsertValues(tableName, true, true,
+                    numRows, true, conn, false);
+            writeMutMetrics = PhoenixRuntime.getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
+        }
+        assertNotNull(writeMutMetrics);
+        for (PhoenixTableMetric metric: getPhoenixTableClientMetrics().get(tableName)) {
+            assertMetricValue(metric, MUTATION_BATCH_COUNTER,
+                    writeMutMetrics.get(MUTATION_BATCH_COUNTER), CompareOp.EQ);
+            assertMetricValue(metric, MUTATION_BATCH_COUNTER, 20, CompareOp.EQ);
         }
     }
 
@@ -1273,7 +1292,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(false, tableName, 1, 0, 0, true, numRows, 0, numRows, 0, 1,
-                    writeMutMetrics, conn, false, 0);
+                    writeMutMetrics, conn, false, 1);
         }
     }
 
@@ -1310,17 +1329,17 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             writeMutMetrics = PhoenixRuntime.getWriteMetricInfoForMutationsSinceLastReset(conn);
         }
         for(PhoenixTableMetric metric: getPhoenixTableClientMetrics().get(dataTable)) {
-            if(metric.getMetricType().equals(MUTATION_BATCH_SUCCESS_COUNTER)) {
-                assertMetricValue(metric, MUTATION_BATCH_SUCCESS_COUNTER, 1, CompareOp.EQ);
-                assertMetricValue(metric, MUTATION_BATCH_SUCCESS_COUNTER,
-                        writeMutMetrics.get(dataTable).get(MUTATION_BATCH_SUCCESS_COUNTER), CompareOp.EQ);
+            if(metric.getMetricType().equals(MUTATION_BATCH_COUNTER)) {
+                assertMetricValue(metric, MUTATION_BATCH_COUNTER, 1, CompareOp.EQ);
+                assertMetricValue(metric, MUTATION_BATCH_COUNTER,
+                        writeMutMetrics.get(dataTable).get(MUTATION_BATCH_COUNTER), CompareOp.EQ);
             }
         }
         for(PhoenixTableMetric metric: getPhoenixTableClientMetrics().get(indexName)) {
-            if(metric.getMetricType().equals(MUTATION_BATCH_SUCCESS_COUNTER)) {
-                assertMetricValue(metric, MUTATION_BATCH_SUCCESS_COUNTER, 2, CompareOp.EQ);
-                assertMetricValue(metric, MUTATION_BATCH_SUCCESS_COUNTER,
-                        writeMutMetrics.get(indexName).get(MUTATION_BATCH_SUCCESS_COUNTER), CompareOp.EQ);
+            if(metric.getMetricType().equals(MUTATION_BATCH_COUNTER)) {
+                assertMetricValue(metric, MUTATION_BATCH_COUNTER, 2, CompareOp.EQ);
+                assertMetricValue(metric, MUTATION_BATCH_COUNTER,
+                        writeMutMetrics.get(indexName).get(MUTATION_BATCH_COUNTER), CompareOp.EQ);
             }
         }
 

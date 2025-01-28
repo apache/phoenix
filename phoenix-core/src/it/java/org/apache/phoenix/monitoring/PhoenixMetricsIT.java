@@ -41,7 +41,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_TASK_EXEC
 import static org.apache.phoenix.monitoring.MetricType.COUNT_MILLS_BETWEEN_NEXTS;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_COMMIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.MEMORY_CHUNK_BYTES;
-import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_SUCCESS_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_COMMIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_TIMEOUT_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.TASK_END_TO_END_TIME;
@@ -77,7 +77,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.metrics2.AbstractMetric;
 import org.apache.hbase.thirdparty.com.google.common.base.Joiner;
 import org.apache.hbase.thirdparty.com.google.common.collect.Lists;
@@ -90,7 +89,6 @@ import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -135,7 +133,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
 
     private static final List<MetricType> mutationMetricsToSkip =
             Lists.newArrayList(MUTATION_COMMIT_TIME, UPSERT_COMMIT_TIME, DELETE_COMMIT_TIME,
-                    MUTATION_BATCH_SUCCESS_COUNTER);
+                    MUTATION_BATCH_COUNTER);
     private static final List<MetricType> readMetricsToSkip =
             Lists.newArrayList(TASK_QUEUE_WAIT_TIME, TASK_EXECUTION_TIME, TASK_END_TO_END_TIME,
                     COUNT_MILLS_BETWEEN_NEXTS);
@@ -517,7 +515,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
             boolean mutationCommitTimePresent = false;
             boolean mutationBytesPresent = false;
             boolean mutationBatchFailedPresent = false;
-            boolean mutationBatchSuccessCounterPresent = false;
+            boolean mutationBatchCounterPresent = false;
             for (Entry<MetricType, Long> metric : p.entrySet()) {
                 MetricType metricType = metric.getKey();
                 long metricValue = metric.getValue();
@@ -534,17 +532,16 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
                     assertEquals("Zero failed mutations expected", 0, metricValue);
                     mutationBatchFailedPresent = true;
                 }
-                else if (metricType.equals(MetricType.MUTATION_BATCH_SUCCESS_COUNTER)) {
-                    assertTrue("Mutation batch success count should be greater than zero",
-                            metricValue > 0);
-                    mutationBatchSuccessCounterPresent = true;
+                else if (metricType.equals(MetricType.MUTATION_BATCH_COUNTER)) {
+                    assertEquals("Mutation batch success count should be greater than zero", 1, metricValue);
+                    mutationBatchCounterPresent = true;
                 }
             }
             assertTrue(mutationBatchSizePresent);
             assertTrue(mutationCommitTimePresent);
             assertTrue(mutationBytesPresent);
             assertTrue(mutationBatchFailedPresent);
-            assertTrue(mutationBatchSuccessCounterPresent);
+            assertTrue(mutationBatchCounterPresent);
         }
         Map<String, Map<MetricType, Long>> readMetrics = PhoenixRuntime.getReadMetricInfoForMutationsSinceLastReset(pConn);
         assertEquals("Read metrics should be empty", 0, readMetrics.size());
