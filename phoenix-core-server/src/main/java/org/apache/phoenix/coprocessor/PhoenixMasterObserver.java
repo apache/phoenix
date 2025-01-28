@@ -261,6 +261,7 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
                                          String streamName, List<String> parentPartitionIDs,
                                          List<RegionInfo> daughters)
             throws SQLException {
+        conn.setAutoCommit(false);
         PreparedStatement pstmt = conn.prepareStatement(PARTITION_UPSERT_SQL);
         for (RegionInfo daughter : daughters) {
             for (String parentPartitionID : parentPartitionIDs) {
@@ -292,6 +293,7 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
     private void updateParentPartitionEndTime(Connection conn, String tableName,
                                               String streamName, List<String> ancestorIDs,
                                               long daughterStartTime) throws SQLException {
+        conn.setAutoCommit(false);
         // ancestorIDs = [parentID, grandparentID1, grandparentID2...]
         PreparedStatement pstmt = conn.prepareStatement(PARENT_PARTITION_UPDATE_END_TIME_SQL);
         for (int i=1; i<ancestorIDs.size(); i++) {
