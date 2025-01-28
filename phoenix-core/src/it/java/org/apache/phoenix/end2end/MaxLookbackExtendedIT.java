@@ -130,7 +130,7 @@ public class MaxLookbackExtendedIT extends BaseTest {
         optionBuilder.append(", VERSIONS=" + versions);
         optionBuilder.append(", KEEP_DELETED_CELLS=TRUE");
         if(hasTableLevelMaxLookback) {
-            optionBuilder.append(", MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000);
+            optionBuilder.append(", MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK_AGE);
         }
         tableDDLOptions = optionBuilder.toString();
         try (Connection conn = DriverManager.getConnection(getUrl())) {
@@ -218,7 +218,7 @@ public class MaxLookbackExtendedIT extends BaseTest {
     @Test
     public void testTooLowSCNWithMaxLookbackAge() throws Exception {
         if(hasTableLevelMaxLookback) {
-            optionBuilder.append(", MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000);
+            optionBuilder.append(", MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK_AGE);
             tableDDLOptions = optionBuilder.toString();
         }
         String dataTableName = generateUniqueName();
@@ -252,7 +252,7 @@ public class MaxLookbackExtendedIT extends BaseTest {
     @Test(timeout=120000L)
     public void testRecentlyDeletedRowsNotCompactedAway() throws Exception {
         if(hasTableLevelMaxLookback) {
-            optionBuilder.append(", MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000);
+            optionBuilder.append(", MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK_AGE);
             tableDDLOptions = optionBuilder.toString();
         }
         try (Connection conn = DriverManager.getConnection(getUrl())) {
@@ -477,7 +477,7 @@ public class MaxLookbackExtendedIT extends BaseTest {
         int versions = 2;
         optionBuilder.append(", VERSIONS=" + versions);
         if(hasTableLevelMaxLookback) {
-            optionBuilder.append(", MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000);
+            optionBuilder.append(", MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK_AGE);
         }
         tableDDLOptions = optionBuilder.toString();
         String firstValue = "abc";
@@ -562,7 +562,7 @@ public class MaxLookbackExtendedIT extends BaseTest {
     @Test(timeout=60000)
     public void testOverrideMaxLookbackForCompaction() throws Exception {
         if(hasTableLevelMaxLookback) {
-            optionBuilder.append(", MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000);
+            optionBuilder.append(", MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK_AGE);
             tableDDLOptions = optionBuilder.toString();
         }
         try (Connection conn = DriverManager.getConnection(getUrl())) {
@@ -621,7 +621,7 @@ public class MaxLookbackExtendedIT extends BaseTest {
     @Test(timeout=60000)
     public void testRetainingLastRowVersion() throws Exception {
         if(hasTableLevelMaxLookback) {
-            optionBuilder.append(", MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000);
+            optionBuilder.append(", MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK_AGE);
             tableDDLOptions = optionBuilder.toString();
         }
         try(Connection conn = DriverManager.getConnection(getUrl())) {

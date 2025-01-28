@@ -111,7 +111,7 @@ public class TableTTLIT extends BaseTest {
             optionBuilder.append(", COLUMN_ENCODED_BYTES=0");
         }
         if (tableLevelMaxLooback != null) {
-            optionBuilder.append(", MAX_LOOKBACK_AGE=").append(tableLevelMaxLooback * 1000);
+            optionBuilder.append(", MAX_LOOKBACK_AGE=").append(tableLevelMaxLooback);
         }
         this.tableDDLOptions = optionBuilder.toString();
         injectEdge = new ManualEnvironmentEdge();

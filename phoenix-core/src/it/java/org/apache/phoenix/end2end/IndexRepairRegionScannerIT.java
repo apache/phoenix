@@ -833,7 +833,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
             return;
         }
         final int NROWS = 4;
-        final int maxLookbackAge = 12000;
+        final int maxLookbackAge = 12;
         if ((optionBuilder.length() > 0 && optionBuilder.toString().trim().startsWith("SPLIT ON"))
                 || optionBuilder.length() == 0) {
             optionBuilder.insert(0, "MAX_LOOKBACK_AGE=" + maxLookbackAge + " ");
@@ -885,7 +885,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute("UPSERT INTO " + dataTableFullName + " VALUES(2, 102, 202)");
             conn.commit();
             IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
-            customEdge.incrementValue(maxLookbackAge + 1);
+            customEdge.incrementValue(maxLookbackAge * 1000 + 1);
             indexTool = IndexToolIT.runIndexTool(false, schemaName, dataTableName,
                     indexTableName, null, 0, IndexVerifyType.BEFORE, "-fi");
             mrJobCounters = IndexToolIT.getMRJobCounters(indexTool);

@@ -1171,7 +1171,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
         if (! mutable) {
             return;
         }
-        int maxLookbackAge = 12000;
+        int maxLookbackAge = 12;
         optionBuilder.append(", MAX_LOOKBACK_AGE=").append(maxLookbackAge);
         tableDDLOptions = optionBuilder.toString();
         String schemaName = generateUniqueName();
@@ -1190,7 +1190,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
             SystemTransformRecord record = Transform.getTransformRecord(schemaName, dataTableName,
                     null, null, conn.unwrap(PhoenixConnection.class));
             assertNotNull(record);
-            assertEquals(Long.valueOf(maxLookbackAge), queryTableLevelMaxLookbackAge(record.getNewPhysicalTableName()));
+            assertEquals(Long.valueOf(maxLookbackAge * 1000), queryTableLevelMaxLookbackAge(record.getNewPhysicalTableName()));
             assertMetadata(conn, PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN,
                     PTable.QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, record.getNewPhysicalTableName());
 
@@ -1231,7 +1231,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
             customEdge.incrementValue(delta);
             assertEquals(numOfRows, getRowCount(conn, record.getNewPhysicalTableName()));
             assertEquals(numOfRows, getRowCount(conn, dataTableFullName));
-            customEdge.incrementValue(maxLookbackAge);
+            customEdge.incrementValue(maxLookbackAge * 1000);
             args = getArgList(schemaName, dataTableName, null, null, null,
                     null, false, false, false, false, false);
             args.add("-v");
