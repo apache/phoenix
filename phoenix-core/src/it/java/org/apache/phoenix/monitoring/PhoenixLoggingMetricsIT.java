@@ -153,8 +153,6 @@ public class PhoenixLoggingMetricsIT extends BasePhoenixMetricsIT {
         String upsertSelect = "UPSERT INTO " + tableName2 + " SELECT * FROM " + tableName1;
         loggedConn.createStatement().executeUpdate(upsertSelect);
 
-        // Autocommit is turned off by default
-        // Hence mutation metrics are not expected during connection close
         loggedConn.close();
         assertTrue("Mutation write metrics should be logged for " + tableName2,
                 mutationWriteMetricsMap.size() > 0);
