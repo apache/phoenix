@@ -115,7 +115,7 @@ public abstract class BasePhoenixMetricsIT extends BaseTest {
             assertEquals("Table names didn't match!", tableName, t);
             Map<MetricType, Long> p = entry.getValue();
 
-            assertEquals("There should have been sixteen metrics", 22, p.size());
+            assertEquals("There should have been 22 metrics", 22, p.size());
 
             boolean mutationBatchSizePresent = false;
             boolean mutationCommitTimePresent = false;
