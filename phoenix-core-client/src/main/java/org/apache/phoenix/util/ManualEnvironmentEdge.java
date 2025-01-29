@@ -23,16 +23,16 @@ public class ManualEnvironmentEdge extends EnvironmentEdge {
     protected long value = 1L;
 
     public void setValue(long newValue) {
-        value = convertMsToNs(newValue);
+        value = convertTimeInMsToNs(newValue);
     }
 
     public void incrementValue(long addedValue) {
-        value += convertMsToNs(addedValue);
+        value += convertTimeInMsToNs(addedValue);
     }
 
     @Override
     public long currentTime() {
-        return convertNsToMs(this.value);
+        return convertTimeInNsToMs(this.value);
     }
 
     @Override

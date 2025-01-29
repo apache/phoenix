@@ -124,13 +124,13 @@ import static org.apache.phoenix.monitoring.PhoenixMetricsIT.createTableAndInser
 import static org.apache.phoenix.monitoring.PhoenixMetricsIT.doPointDeleteFromTable;
 import static org.apache.phoenix.monitoring.PhoenixMetricsIT.doDeleteAllFromTable;
 import static org.apache.phoenix.util.DelayedOrFailingRegionServer.INJECTED_EXCEPTION_STRING;
+import static org.apache.phoenix.util.EnvironmentEdge.convertTimeInMsToNs;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.clearTableLevelMetrics;
 import static org.apache.phoenix.util.PhoenixRuntime.getOverAllReadRequestMetricInfo;
 import static org.apache.phoenix.util.PhoenixRuntime.getPhoenixTableClientMetrics;
 import static org.apache.phoenix.util.PhoenixRuntime.getRequestReadMetricInfo;
 import static org.apache.phoenix.util.PhoenixRuntime.getWriteMetricInfoForMutationsSinceLastReset;
-import static org.apache.phoenix.util.PhoenixRuntime.convertTimeInMsToNs;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;

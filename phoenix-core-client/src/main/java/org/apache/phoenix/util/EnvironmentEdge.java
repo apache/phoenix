@@ -41,14 +41,14 @@ public abstract class EnvironmentEdge implements org.apache.hadoop.hbase.util.En
    * @return a time marker in nano seconds
    */
   public long nanoTime() {
-    return convertMsToNs(currentTime());
+    return convertTimeInMsToNs(currentTime());
   }
 
-  protected long convertMsToNs(long value) {
+  public static long convertTimeInMsToNs(long value) {
     return value * 1000000;
   }
 
-  protected long convertNsToMs(long value) {
+  public static long convertTimeInNsToMs(long value) {
     return value / 1000000;
   }
 }

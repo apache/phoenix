@@ -222,6 +222,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.CursorUtil;
+import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.LogUtil;
@@ -730,7 +731,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                         long executeMutationTimeSpentInNs =
                                                 EnvironmentEdgeManager.timeMarkerInNanos() - startExecuteMutationTime;
                                         // This will ensure existing use cases of metrics are not broken.
-                                        long executeMutationTimeSpent = PhoenixRuntime.convertTimeInNsToMs(executeMutationTimeSpentInNs);
+                                        long executeMutationTimeSpent = EnvironmentEdge.convertTimeInNsToMs(executeMutationTimeSpentInNs);
 
                                         TableMetricsManager.updateMetricsMethod(tableName, isUpsert ?
                                                 UPSERT_SQL_COUNTER : DELETE_SQL_COUNTER, 1);
