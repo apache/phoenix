@@ -94,7 +94,8 @@ public class MutationMetricQueue {
             publishedMetricsForTable.put(metric.getUpsertBatchFailedCounter().getMetricType(), metric.getUpsertBatchFailedCounter().getValue());
             publishedMetricsForTable.put(metric.getDeleteBatchFailedSize().getMetricType(), metric.getDeleteBatchFailedSize().getValue());
             publishedMetricsForTable.put(metric.getDeleteBatchFailedCounter().getMetricType(), metric.getDeleteBatchFailedCounter().getValue());
-            publishedMetricsForTable.put(metric.getMutationBatchCounter().getMetricType(), metric.getMutationBatchCounter().getValue());
+            publishedMetricsForTable.put(metric.getMutationBatchCounter().getMetricType(),
+                    metric.getMutationBatchCounter().getValue());
         }
         return publishedMetrics;
     }
@@ -126,10 +127,11 @@ public class MutationMetricQueue {
         private final CombinableMetric numOfIndexCommitFailMutations = new CombinableMetricImpl(
                 INDEX_COMMIT_FAILURE_SIZE);
 
-        private final CombinableMetric mutationBatchCounter = new CombinableMetricImpl(MUTATION_BATCH_COUNTER);
+        private final CombinableMetric mutationBatchCounter =
+                new CombinableMetricImpl(MUTATION_BATCH_COUNTER);
 
         public static final MutationMetric EMPTY_METRIC =
-                new MutationMetric(0,0,0,0, 0, 0,0,0,0,0,0,0,0,0,0, 0);
+                new MutationMetric(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
         public MutationMetric(long numMutations, long upsertMutationsSizeBytes,
                 long deleteMutationsSizeBytes, long commitTimeForUpserts, long commitTimeForAtomicUpserts,

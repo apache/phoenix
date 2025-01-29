@@ -88,8 +88,8 @@ public enum MetricType {
     DELETE_BATCH_FAILED_COUNTER("dbfc", "Number of delete mutation batches that failed to be committed",
             LogLevel.OFF, PLong.INSTANCE),
 
-    MUTATION_BATCH_COUNTER("mbc", "Number of mutation batches committed " +
-            "in a commit call", LogLevel.OFF, PLong.INSTANCE),
+    MUTATION_BATCH_COUNTER("mbc", "Number of mutation batches committed "
+            + "in a commit call", LogLevel.OFF, PLong.INSTANCE),
 
     // select-specific query (read) metrics updated during executeQuery
     SELECT_SUCCESS_SQL_COUNTER("sss", "Counter for number of select sql queries that successfully"
