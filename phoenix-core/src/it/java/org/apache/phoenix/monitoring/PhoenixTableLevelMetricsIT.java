@@ -335,6 +335,8 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
      * @param writeMutMetrics                       write mutation metrics object
      * @param conn                                  connection object. Note: this method must be called after connection close
      *                                              since that's where we populate table-level write metrics
+     * @param expectedMutationBatchCount            expected number of mutation batches per commit call
+
      */
     private static void assertMutationTableMetrics(final boolean isUpsert, final String tableName,
             final long expectedUpsertOrDeleteSuccessSqlCt,
