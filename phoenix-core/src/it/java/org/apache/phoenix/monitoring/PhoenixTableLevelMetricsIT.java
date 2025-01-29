@@ -345,7 +345,14 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
      * @param writeMutMetrics                       write mutation metrics object
      * @param conn                                  connection object. Note: this method must be called after connection close
      *                                              since that's where we populate table-level write metrics
-     */
+     * @param expectedSystemCatalogMetric           True if metrics for calls to SYSTEM.CATALOG table were captured
+     *                                              and should be validated
+     * @param expectedMinMutationPlanCreationTime   minimum expected time taken to create mutation plan
+     * @param expectedMinMutationPlanExecutionTime  minimum expected time taken to execute mutation plan
+     * @param expectedMinExecuteMutationTime        minimum expected time taken by executeMutation() call
+     *
+     * @throws SQLException
+       */
     private static void assertMutationTableMetrics(final boolean isUpsert, final String tableName,
             final long expectedUpsertOrDeleteSuccessSqlCt,
             final long expectedUpsertOrDeleteFailedSqlCt,
