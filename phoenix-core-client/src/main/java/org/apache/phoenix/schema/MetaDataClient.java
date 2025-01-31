@@ -985,6 +985,7 @@ public class MetaDataClient {
                 }
                 // only inherit columns view indexes (and not local indexes on regular tables which also have a viewIndexId)
                 if (hasIndexId && parentTable.getType() != PTableType.VIEW) {
+                    result.setTable(getPTableWithAncestorLastDDLTimestampMap(table, parentTable));
                     return false;
                 }
                 // if alwaysAddAncestorColumnsAndIndexes is false we only recalculate if the ancestor table or table
