@@ -48,6 +48,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
 import java.sql.BatchUpdateException;
+import java.sql.Connection;
 import java.sql.ParameterMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -75,6 +76,7 @@ import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.hbase.thirdparty.org.apache.commons.collections4.CollectionUtils;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.compile.BaseMutationPlan;
 import org.apache.phoenix.compile.CloseStatementCompiler;
@@ -148,6 +150,7 @@ import org.apache.phoenix.parse.DeclareCursorStatement;
 import org.apache.phoenix.parse.DeleteJarStatement;
 import org.apache.phoenix.parse.DeleteStatement;
 import org.apache.phoenix.parse.ExplainType;
+import org.apache.phoenix.parse.PartitionIdParseNode;
 import org.apache.phoenix.parse.ShowCreateTableStatement;
 import org.apache.phoenix.parse.ShowCreateTable;
 import org.apache.phoenix.parse.DropColumnStatement;
@@ -348,7 +351,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     }
 
 
-    private PhoenixResultSet executeQuery(final CompilableStatement stmt,
+    private PhoenixResultSet executeQuery(final CompilableStatement compilableStatement,
                                           final boolean doRetryOnMetaNotFoundError,
                                           final QueryLogger queryLogger, final boolean noCommit,
                                           boolean shouldValidateLastDdlTimestamp)
@@ -367,6 +370,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                             clearResultSet();
                             PhoenixResultSet rs = null;
                             QueryPlan plan = null;
+                            CompilableStatement stmt = compilableStatement;
                             try {
                                 PhoenixConnection conn = getConnection();
                                 conn.checkOpen();
@@ -378,6 +382,28 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 }
                                 plan = stmt.compilePlan(PhoenixStatement.this,
                                                 Sequence.ValueOp.VALIDATE_SEQUENCE);
+                                if (plan.getTableRef() != null && PTableType.CDC.equals(
+                                        plan.getTableRef().getTable().getType())) {
+                                    if (stmt instanceof ExecutableSelectStatement) {
+                                        ParseNode parseNode =
+                                                ((ExecutableSelectStatement) stmt).getWhere();
+                                        List<AliasedNode> selectNodes =
+                                                ((ExecutableSelectStatement) stmt).getSelect();
+                                        boolean queryPartitionIds =
+                                                CollectionUtils.isNotEmpty(selectNodes)
+                                                        && selectNodes.size() == 1
+                                                        && selectNodes.get(0)
+                                                        .getNode() instanceof PartitionIdParseNode;
+                                        if (!queryPartitionIds &&
+                                                !isPartitionIdIncludedInTree(parseNode)) {
+                                            stmt = parseStatement(addPartitionInList(conn,
+                                                    plan.getTableRef().getTable().toString(),
+                                                    stmt));
+                                            plan = stmt.compilePlan(PhoenixStatement.this,
+                                                    Sequence.ValueOp.VALIDATE_SEQUENCE);
+                                        }
+                                    }
+                                }
                                 // Send mutations to hbase, so they are visible to subsequent reads.
                                 // Use original plan for data table so that data and immutable indexes will be sent
                                 // TODO: for joins, we need to iterate through all tables, but we need the original table,
@@ -553,6 +579,75 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             Throwables.propagate(e);
             throw new IllegalStateException(); // Can't happen as Throwables.propagate() always throws
         }
+    }
+
+    /**
+     * Add IN Operator for PARTITION_ID() so that the full table scan CDC query can be
+     * optimized to be range scan.
+     *
+     * @param conn The Connection.
+     * @param cdcName CDC Object name.
+     * @param stmt Compilable Statement object.
+     * @return Updated query including PartitionId with IN operator.
+     * @throws SQLException If the distinct partition ids retrival fails.
+     */
+    private static String addPartitionInList(Connection conn, String cdcName,
+                                             CompilableStatement stmt)
+            throws SQLException {
+        ResultSet rs = conn.createStatement().executeQuery("SELECT DISTINCT PARTITION_ID() FROM "
+                + cdcName);
+        List<String> partitionIds = new ArrayList<>();
+        while (rs.next()) {
+            partitionIds.add(rs.getString(1));
+        }
+        String query = stmt.toString();
+        if (partitionIds.isEmpty()) {
+            return query;
+        }
+        StringBuilder builder;
+        boolean queryHasWhere = query.contains(" WHERE ");
+        if (queryHasWhere) {
+            builder = new StringBuilder(query);
+            builder.append(" AND PARTITION_ID() IN (");
+        } else {
+            builder = new StringBuilder(query.split(cdcName)[0]);
+            builder.append(cdcName);
+            builder.append(" WHERE PARTITION_ID() IN (");
+        }
+        boolean initialized = false;
+        for (String partitionId : partitionIds) {
+            if (!initialized) {
+                builder.append("'");
+                initialized = true;
+            } else {
+                builder.append(",'");
+            }
+            builder.append(partitionId);
+            builder.append("'");
+        }
+        builder.append(")");
+        if (!queryHasWhere) {
+            builder.append(query.split(cdcName)[1]);
+        }
+        return builder.toString();
+    }
+
+    /**
+     * Return true if the parseNode or any of its children contains PARTITION_ID() function.
+     *
+     * @param parseNode The parseNode from Where clause.
+     * @return True if the parseNode or any of its children contains PARTITION_ID()
+     * function. False otherwise.
+     */
+    private static boolean isPartitionIdIncludedInTree(ParseNode parseNode) {
+        if (parseNode instanceof PartitionIdParseNode) {
+            return true;
+        }
+        if (parseNode == null || CollectionUtils.isEmpty(parseNode.getChildren())) {
+            return false;
+        }
+        return parseNode.getChildren().stream()
+                .anyMatch(PhoenixStatement::isPartitionIdIncludedInTree);
     }
 
     public String getTargetForAudit(CompilableStatement stmt) {
