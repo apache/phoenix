@@ -188,7 +188,7 @@ public class CDCUtil {
      * @param cdcName CDC Object name.
      * @param query SQL Query Statement.
      * @return Updated query including PartitionId with IN operator.
-     * @throws SQLException If the distinct partition ids retrival fails.
+     * @throws SQLException If the distinct partition ids retrieval fails.
      */
     public static String addPartitionInList(final Connection conn, final String cdcName,
                                             final String query) throws SQLException {
