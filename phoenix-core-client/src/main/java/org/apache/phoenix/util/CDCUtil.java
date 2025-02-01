@@ -18,10 +18,14 @@
 
 package org.apache.phoenix.util;
 
+import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
 import java.util.Set;
@@ -30,9 +34,12 @@ import java.util.StringTokenizer;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.util.StringUtils;
+import org.apache.hbase.thirdparty.org.apache.commons.collections4.CollectionUtils;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
+import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.PartitionIdParseNode;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
@@ -153,6 +160,73 @@ public class CDCUtil {
                 || sqlType == Types.VARBINARY
                 || sqlType == Types.LONGVARBINARY
                 || dataType.getSqlType() == PDataType.VARBINARY_ENCODED_TYPE);
+    }
+
+    /**
+     * Return true if the parseNode or any of its children contains PARTITION_ID() function.
+     *
+     * @param parseNode The parseNode from Where clause.
+     * @return True if the parseNode or any of its children contains PARTITION_ID()
+     * function. False otherwise.
+     */
+    public static boolean isPartitionIdIncludedInTree(ParseNode parseNode) {
+        if (parseNode instanceof PartitionIdParseNode) {
+            return true;
+        }
+        if (parseNode == null || CollectionUtils.isEmpty(parseNode.getChildren())) {
+            return false;
+        }
+        return parseNode.getChildren().stream()
+                .anyMatch(CDCUtil::isPartitionIdIncludedInTree);
+    }
+
+    /**
+     * Add IN Operator for PARTITION_ID() so that the full table scan CDC query can be
+     * optimized to be range scan.
+     *
+     * @param conn The Connection.
+     * @param cdcName CDC Object name.
+     * @param query SQL Query Statement.
+     * @return Updated query including PartitionId with IN operator.
+     * @throws SQLException If the distinct partition ids retrival fails.
+     */
+    public static String addPartitionInList(final Connection conn, final String cdcName,
+                                            final String query) throws SQLException {
+        ResultSet rs = conn.createStatement().executeQuery("SELECT DISTINCT PARTITION_ID() FROM "
+                + cdcName);
+        List<String> partitionIds = new ArrayList<>();
+        while (rs.next()) {
+            partitionIds.add(rs.getString(1));
+        }
+        if (partitionIds.isEmpty()) {
+            return query;
+        }
+        StringBuilder builder;
+        boolean queryHasWhere = query.contains(" WHERE ");
+        if (queryHasWhere) {
+            builder = new StringBuilder(query);
+            builder.append(" AND PARTITION_ID() IN (");
+        } else {
+            builder = new StringBuilder(query.split(cdcName)[0]);
+            builder.append(cdcName);
+            builder.append(" WHERE PARTITION_ID() IN (");
+        }
+        boolean initialized = false;
+        for (String partitionId : partitionIds) {
+            if (!initialized) {
+                builder.append("'");
+                initialized = true;
+            } else {
+                builder.append(",'");
+            }
+            builder.append(partitionId);
+            builder.append("'");
+        }
+        builder.append(")");
+        if (!queryHasWhere) {
+            builder.append(query.split(cdcName)[1]);
+        }
+        return builder.toString();
     }
 
     public enum CdcStreamStatus {

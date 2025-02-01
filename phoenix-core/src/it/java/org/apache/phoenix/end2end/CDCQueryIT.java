@@ -249,7 +249,7 @@ public class CDCQueryIT extends CDCBaseIT {
         return query.toString();
     }
 
-    private static PreparedStatement getCDCQueryPreparedStatement(Connection conn, String cdcName,
+    private static PreparedStatement getCDCQueryPreparedStatement(Connection conn,
             String query, long minTimestamp, long maxTimestamp)
             throws SQLException {
         StringBuilder builder = new StringBuilder(query);
@@ -338,21 +338,21 @@ public class CDCQueryIT extends CDCBaseIT {
                 put("V2", "INTEGER");
                 put("B.VB", "INTEGER");
             }};
-            verifyChangesViaSCN(tenantId, getCDCQueryPreparedStatement(conn, cdcFullName,
+            verifyChangesViaSCN(tenantId, getCDCQueryPreparedStatement(conn,
                             "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + cdcFullName, startTS,
                             endTS).executeQuery(),
                     datatableName, dataColumns, changes, CHANGE_IMG);
-            verifyChangesViaSCN(tenantId, getCDCQueryPreparedStatement(conn, cdcFullName,
+            verifyChangesViaSCN(tenantId, getCDCQueryPreparedStatement(conn,
                             "SELECT /*+ CDC_INCLUDE(CHANGE) */ PHOENIX_ROW_TIMESTAMP(), K,"
                                     + "\"CDC JSON\" FROM " + cdcFullName, startTS, endTS)
                             .executeQuery(),
                     datatableName, dataColumns, changes, CHANGE_IMG);
-            verifyChangesViaSCN(tenantId, getCDCQueryPreparedStatement(conn, cdcFullName,
+            verifyChangesViaSCN(tenantId, getCDCQueryPreparedStatement(conn,
                             "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName,
                             startTS, endTS).executeQuery(),
                     datatableName, dataColumns, changes,
                     PRE_POST_IMG);
-            verifyChangesViaSCN(tenantId, getCDCQueryPreparedStatement(conn, cdcFullName,
+            verifyChangesViaSCN(tenantId, getCDCQueryPreparedStatement(conn,
                     "SELECT * FROM " + cdcFullName,startTS, endTS).executeQuery(),
                     datatableName, dataColumns, changes, new HashSet<>());
 
