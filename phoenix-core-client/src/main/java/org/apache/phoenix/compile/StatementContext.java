@@ -42,6 +42,7 @@ import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.TTLExpression;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PTime;

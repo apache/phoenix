@@ -23,6 +23,7 @@ option java_generate_equals_and_hash = true;
 option optimize_for = SPEED;
 
 import "PGuidePosts.proto";
+import "ServerCachingService.proto";
 
 enum PTableType {
   SYSTEM = 0;
@@ -128,4 +129,19 @@ message PTable {
 message EncodedCQCounter {
   required string colFamily = 1;
   required int32 counter = 2;
+}
+
+message LiteralTTL {
+  required int32 ttlValue = 1;
+}
+
+message ConditionTTL {
+  required string ttlExpression = 1;
+  required bytes compiledExpression = 2;
+  repeated ColumnReference ttlExpressionColumns = 30;
+}
+
+message TTLExpression {
+  optional LiteralTTL literal = 1;
+  optional ConditionTTL condition = 2;
 }

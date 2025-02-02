@@ -434,12 +434,6 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     }
 
     @VisibleForTesting
-    public int setIndexTableTTL(int ttl) {
-        indexTableTTL = ttl;
-        return 0;
-    }
-
-    @VisibleForTesting
     public int setIndexMaintainer(IndexMaintainer indexMaintainer) {
         this.indexMaintainer = indexMaintainer;
         return 0;
@@ -857,15 +851,6 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         while (expectedIndex < expectedSize && actualIndex <actualSize) {
             previousExpected = expected;
             expected = expectedMutationList.get(expectedIndex);
-            // Check if cell expired as per the current server's time and data table ttl
-            // Index table should have the same ttl as the data table, hence we might not
-            // get a value back from index if it has already expired between our rebuild and
-            // verify
-            // TODO: have a metric to update for these cases
-            if (isTimestampBeforeTTL(indexTableTTL, currentTime, getTimestamp(expected))) {
-                verificationPhaseResult.setExpiredIndexRowCount(verificationPhaseResult.getExpiredIndexRowCount() + 1);
-                return true;
-            }
             actual = actualMutationList.get(actualIndex);
             if (expected instanceof Put) {
                 if (previousExpected instanceof Delete) {
@@ -997,21 +982,6 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                 ClientUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
             }
         }
-        List<byte[]> expiredIndexRows = new ArrayList<>();
-        // Check if any expected rows from index(which we didn't get) are already expired due to TTL
-        // TODO: metrics for expired rows
-        long currentTime = EnvironmentEdgeManager.currentTimeMillis();
-        for (Map.Entry<byte[], List<Mutation>> entry: expectedIndexMutationMap.entrySet()) {
-            List<Mutation> mutationList = entry.getValue();
-            if (isTimestampBeforeTTL(indexTableTTL, currentTime, getTimestamp(mutationList.get(mutationList.size() - 1)))) {
-                verificationPhaseResult.setExpiredIndexRowCount(verificationPhaseResult.getExpiredIndexRowCount() + 1);
-                expiredIndexRows.add(entry.getKey());
-            }
-        }
-        // Remove the expired rows from indexMutationMap
-        for (byte[] indexKey : expiredIndexRows) {
-            expectedIndexMutationMap.remove(indexKey);
-        }
         // Count and log missing rows
         for (Map.Entry<byte[], List<Mutation>> entry: expectedIndexMutationMap.entrySet()) {
             byte[] indexKey = entry.getKey();
@@ -1020,7 +990,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
             if (mutation instanceof Delete) {
                 continue;
             }
-            currentTime = EnvironmentEdgeManager.currentTimeMillis();
+            long currentTime = EnvironmentEdgeManager.currentTimeMillis();
             String errorMsg;
             IndexVerificationOutputRepository.IndexVerificationErrorType errorType;
             if (isTimestampBeyondMaxLookBack(maxLookBackInMills, currentTime, getTimestamp(mutation))){

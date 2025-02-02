@@ -66,7 +66,7 @@ public class CDCDefinitionIT extends CDCBaseIT {
         String datatableName = tableName;
         conn.createStatement().execute(
                 "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER,"
-                        + " v2 DATE)");
+                        + " v2 DATE) TTL=100");
         if (forView) {
             String viewName = generateUniqueName();
             conn.createStatement().execute(
