@@ -31,7 +31,7 @@ import org.apache.phoenix.parse.CreateTableStatement;
 
 public abstract class TTLExpression {
 
-    public static final TTLExpression TTL_EXPRESSION_FORVER =
+    public static final TTLExpression TTL_EXPRESSION_FOREVER =
             new LiteralTTLExpression(HConstants.FOREVER);
     public static final TTLExpression TTL_EXPRESSION_NOT_DEFINED =
             new LiteralTTLExpression(PhoenixDatabaseMetaData.TTL_NOT_DEFINED);
@@ -40,7 +40,7 @@ public abstract class TTLExpression {
         if (PhoenixDatabaseMetaData.NONE_TTL.equalsIgnoreCase(ttlExpr)) {
             return TTL_EXPRESSION_NOT_DEFINED;
         } else if (PhoenixDatabaseMetaData.FOREVER_TTL.equalsIgnoreCase(ttlExpr)) {
-            return TTL_EXPRESSION_FORVER;
+            return TTL_EXPRESSION_FOREVER;
         } else {
             try {
                 int ttlValue = Integer.parseInt(ttlExpr);
@@ -55,9 +55,17 @@ public abstract class TTLExpression {
         if (ttlValue == PhoenixDatabaseMetaData.TTL_NOT_DEFINED) {
             return TTL_EXPRESSION_NOT_DEFINED;
         } else if (ttlValue == HConstants.FOREVER) {
-            return TTL_EXPRESSION_FORVER;
+            return TTL_EXPRESSION_FOREVER;
         } else {
             return new LiteralTTLExpression(ttlValue);
+        }
+    }
+
+    public static TTLExpression create (TTLExpression ttlExpr) {
+        if (ttlExpr instanceof LiteralTTLExpression) {
+            return new LiteralTTLExpression((LiteralTTLExpression) ttlExpr);
+        } else {
+            return new ConditionalTTLExpression((ConditionalTTLExpression) ttlExpr);
         }
     }
 
@@ -120,8 +128,8 @@ public abstract class TTLExpression {
     abstract public void validateTTLOnAlter(PhoenixConnection connection,
                                             PTable table) throws SQLException;
 
-    abstract public void compileTTLExpression(PhoenixConnection connection,
-                                              PTable table) throws SQLException;
+    abstract public TTLExpression compileTTLExpression(
+            PhoenixConnection connection, PTable table) throws SQLException;
 
     abstract public PTableProtos.TTLExpression toProto(
             PhoenixConnection connection, PTable table) throws SQLException, IOException;

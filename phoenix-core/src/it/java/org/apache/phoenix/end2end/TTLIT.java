@@ -138,21 +138,21 @@ public class TTLIT extends ParallelStatsDisabledIT {
 
     private void assertTTLForGivenPTable(PTable table, int ttl) {
         LiteralTTLExpression expected = new LiteralTTLExpression(ttl);
-        Assert.assertEquals(expected, table.getTTL());
+        Assert.assertEquals(expected, table.getTTLExpression());
     }
 
 
     private void assertTTLForGivenEntity(Connection connection, String entityName, int ttl) throws SQLException {
         PTable pTable = PhoenixRuntime.getTable(connection, entityName);
         LiteralTTLExpression expected = new LiteralTTLExpression(ttl);
-        Assert.assertEquals(expected, pTable.getTTL());
+        Assert.assertEquals(expected, pTable.getTTLExpression());
     }
 
     private void assertTTLForIndexName(Connection connection, String indexName, int ttl) throws SQLException {
         if (!indexName.equals(SKIP_ASSERT)) {
             PTable index = PhoenixRuntime.getTable(connection, indexName);
             LiteralTTLExpression expected = new LiteralTTLExpression(ttl);
-            Assert.assertEquals(expected, index.getTTL());
+            Assert.assertEquals(expected, index.getTTLExpression());
         }
     }
 

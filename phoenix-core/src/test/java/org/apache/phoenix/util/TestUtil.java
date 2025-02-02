@@ -1404,7 +1404,7 @@ public class TestUtil {
         TTLExpression tableTTL;
         if (phoenixTTLEnabled) {
             tableTTL = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,
-                    tableName.getNameAsString())).getTTL();
+                    tableName.getNameAsString())).getTTLExpression();
         } else {
             tableTTL = TTLExpression.create(getColumnDescriptor(conn, tableName).getTimeToLive());
         }

@@ -44,7 +44,7 @@ import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverCons
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.IS_PHOENIX_TTL_SCAN_TABLE_SYSTEM;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.isPhoenixTableTTLEnabled;
-import static org.apache.phoenix.schema.TTLExpression.TTL_EXPRESSION_FORVER;
+import static org.apache.phoenix.schema.TTLExpression.TTL_EXPRESSION_FOREVER;
 
 /**
  *  TTLRegionScanner masks expired rows using the empty column cell timestamp
@@ -89,7 +89,7 @@ public class TTLRegionScanner extends BaseRegionScanner {
         // an older client and does not supply the empty column parameters, the masking should not
         // be done here. We also disable masking when TTL is HConstants.FOREVER.
         isMaskingEnabled = emptyCF != null && emptyCQ != null
-                && ttlExpression != TTL_EXPRESSION_FORVER
+                && !ttlExpression.equals(TTL_EXPRESSION_FOREVER)
                 && (isPhoenixTableTTLEnabled(env.getConfiguration()) && (isSystemTable == null
                 || !Bytes.toBoolean(isSystemTable)));
     }

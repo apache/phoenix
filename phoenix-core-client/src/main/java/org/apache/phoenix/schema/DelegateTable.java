@@ -381,8 +381,14 @@ public class DelegateTable implements PTable {
         return delegate.hasViewModifiedUseStatsForParallelization();
     }
 
-    @Override public TTLExpression getTTL() {
-        return delegate.getTTL();
+    @Override public TTLExpression getTTLExpression() {
+        return delegate.getTTLExpression();
+    }
+
+    @Override
+    public TTLExpression getCompiledTTLExpression(PhoenixConnection connection)
+            throws SQLException {
+        return delegate.getCompiledTTLExpression(connection);
     }
 
     @Override

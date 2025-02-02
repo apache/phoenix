@@ -52,7 +52,7 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
 
     private static void assertTTL(Connection conn, String tableName, TTLExpression expected) throws SQLException {
         PTable table = conn.unwrap(PhoenixConnection.class).getTable(tableName);
-        assertEquals(expected, table.getTTL());
+        assertEquals(expected, table.getTTLExpression());
     }
 
     private void validateScan(Connection conn,
@@ -70,9 +70,10 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
         plan.iterator(); // create the iterator to initialize the scan
         Scan scan = plan.getContext().getScan();
         Map<byte[], NavigableSet<byte[]>> familyMap = scan.getFamilyMap();
-        PTable table = pconn.getTable(tableName);
-        ConditionalTTLExpression condTTL = (ConditionalTTLExpression) table.getTTL();
-        Set<ColumnReference> columnsReferenced = condTTL.getColumnsReferenced(pconn, table);
+        PTable table = plan.getTableRef().getTable();
+        ConditionalTTLExpression condTTL =
+                (ConditionalTTLExpression) table.getCompiledTTLExpression(pconn);
+        Set<ColumnReference> columnsReferenced = condTTL.getColumnsReferenced();
         assertEquals(expectedNonPKColsInTTLExpr, columnsReferenced.size());
         for (ColumnReference colRef : columnsReferenced) {
             NavigableSet<byte[]> set = familyMap.get(colRef.getFamily());

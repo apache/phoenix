@@ -1112,7 +1112,7 @@ public class PTableImpl implements PTable {
                 .setMaxLookbackAge(table.getMaxLookbackAge())
                 .setCDCIncludeScopes(table.getCDCIncludeScopes())
                 .setAncestorLastDDLTimestampMap(table.getAncestorLastDDLTimestampMap())
-                .setTTL(table.getTTL())
+                .setTTL(table.getTTLExpression())
                 .setRowKeyMatcher(table.getRowKeyMatcher());
     }
 
@@ -2295,9 +2295,9 @@ public class PTableImpl implements PTable {
         builder.setCDCIncludeScopes(CDCUtil.makeChangeScopeStringFromEnums(
                 table.getCDCIncludeScopes() != null ? table.getCDCIncludeScopes()
                 : Collections.EMPTY_SET));
-        if (table.getTTL() != null) {
+        if (table.getTTLExpression() != null) {
             builder.setTtl(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(
-                    table.getTTL().getTTLExpression())));
+                    table.getTTLExpression().getTTLExpression())));
         }
         if (table.getRowKeyMatcher() != null) {
             builder.setRowKeyMatcher(ByteStringer.wrap(table.getRowKeyMatcher()));
@@ -2398,8 +2398,14 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public TTLExpression getTTL() {
+    public TTLExpression getTTLExpression() {
         return ttl;
+    }
+
+    @Override
+    public TTLExpression getCompiledTTLExpression(PhoenixConnection connection)
+            throws SQLException {
+        return ttl.compileTTLExpression(connection, this);
     }
 
     @Override

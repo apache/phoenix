@@ -86,12 +86,14 @@ public class ConditionalTTLExpression extends TTLExpression {
     private final String ttlExpr;
     // compiled expression according to the table schema. For indexes the expression is
     // first re-written to use index column references and then compiled.
-    private Expression compiledExpr;
+    private final Expression compiledExpr;
     // columns referenced in the ttl expression to be added to scan
-    private Set<ColumnReference> conditionExprColumns;
+    private final Set<ColumnReference> conditionExprColumns;
 
     public ConditionalTTLExpression(String ttlExpr) {
         this.ttlExpr = ttlExpr;
+        this.compiledExpr = null;
+        this.conditionExprColumns = null;
     }
 
     private ConditionalTTLExpression(String ttlExpr,
@@ -100,6 +102,12 @@ public class ConditionalTTLExpression extends TTLExpression {
         this.ttlExpr = ttlExpr;
         this.compiledExpr = compiledExpression;
         this.conditionExprColumns = conditionExprColumns;
+    }
+
+    public ConditionalTTLExpression(ConditionalTTLExpression expr) {
+        this.ttlExpr = expr.ttlExpr;
+        this.compiledExpr = null;
+        this.conditionExprColumns = null;
     }
 
     @Override
@@ -205,12 +213,14 @@ public class ConditionalTTLExpression extends TTLExpression {
     }
 
     @Override
-    public synchronized void compileTTLExpression(PhoenixConnection connection,
-                                                  PTable table) throws SQLException {
+    public TTLExpression compileTTLExpression(PhoenixConnection connection,
+                                              PTable table) throws SQLException {
 
         Pair<Expression, Set<ColumnReference>> exprAndCols = buildExpression(connection, table);
-        compiledExpr = exprAndCols.getFirst();
-        conditionExprColumns = exprAndCols.getSecond();
+        return new ConditionalTTLExpression(
+                ttlExpr,
+                exprAndCols.getFirst(),
+                exprAndCols.getSecond());
     }
 
     private Pair<Expression, Set<ColumnReference>> buildExpression(
@@ -243,11 +253,10 @@ public class ConditionalTTLExpression extends TTLExpression {
     }
 
     // Returns the columns referenced in the ttl expression to be added to scan
-    public synchronized Set<ColumnReference> getColumnsReferenced(
-            PhoenixConnection connection,
-            PTable table) throws SQLException {
+    public Set<ColumnReference> getColumnsReferenced() {
         if (conditionExprColumns == null) {
-            compileTTLExpression(connection, table);
+            throw new RuntimeException(
+                    String.format("Conditional TTL Expression %s not compiled", this.ttlExpr));
         }
         return conditionExprColumns;
     }
@@ -290,11 +299,10 @@ public class ConditionalTTLExpression extends TTLExpression {
     @Override
     public PTableProtos.TTLExpression toProto(PhoenixConnection connection,
                                               PTable table) throws SQLException, IOException {
-        // we want to compile the expression every time we pass it as a scan attribute. This is
-        // needed so that any stateless expressions like CURRENT_TIME() are always evaluated.
-        // Otherwise we can cache stale values and keep reusing the stale values which can give
-        // incorrect results.
-        compileTTLExpression(connection, table);
+        if (compiledExpr == null || conditionExprColumns == null) {
+            throw new RuntimeException(
+                    String.format("Conditional TTL Expression %s not compiled", this.ttlExpr));
+        }
         PTableProtos.TTLExpression.Builder ttl = PTableProtos.TTLExpression.newBuilder();
         PTableProtos.ConditionTTL.Builder condition = PTableProtos.ConditionTTL.newBuilder();
         condition.setTtlExpression(ttlExpr);

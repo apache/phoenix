@@ -32,7 +32,7 @@ import static org.apache.phoenix.query.QueryConstants.SPLITS_FILE;
 import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
 import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
 import static org.apache.phoenix.schema.PTableType.CDC;
-import static org.apache.phoenix.schema.TTLExpression.TTL_EXPRESSION_FORVER;
+import static org.apache.phoenix.schema.TTLExpression.TTL_EXPRESSION_FOREVER;
 import static org.apache.phoenix.schema.TTLExpression.TTL_EXPRESSION_NOT_DEFINED;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSet;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
@@ -2428,9 +2428,9 @@ public class MetaDataClient {
      */
     private TTLExpression checkAndGetTTLFromHierarchy(PTable parent, String entityName) throws SQLException {
         if (CDCUtil.isCDCIndex(entityName)) {
-            return TTL_EXPRESSION_FORVER;
+            return TTL_EXPRESSION_FOREVER;
         }
-        return parent != null ? (parent.getType() == TABLE ? parent.getTTL() :
+        return parent != null ? (parent.getType() == TABLE ? parent.getTTLExpression() :
                 (parent.getType() == VIEW && parent.getViewType() != MAPPED ?
                         getTTLFromViewHierarchy(parent) : TTL_EXPRESSION_NOT_DEFINED)) :
                 TTL_EXPRESSION_NOT_DEFINED;
@@ -2443,9 +2443,9 @@ public class MetaDataClient {
      * @throws TableNotFoundException if not able to find any table in hierarchy
      */
     private TTLExpression getTTLFromViewHierarchy(PTable view) throws SQLException {
-            return view.getTTL() != TTL_EXPRESSION_NOT_DEFINED
-                    ? view.getTTL() : (checkIfParentIsTable(view)
-                    ? PhoenixRuntime.getTable(connection, view.getPhysicalNames().get(0).toString()).getTTL()
+            return !view.getTTLExpression().equals(TTL_EXPRESSION_NOT_DEFINED)
+                    ? view.getTTLExpression() : (checkIfParentIsTable(view)
+                    ? PhoenixRuntime.getTable(connection, view.getPhysicalNames().get(0).toString()).getTTLExpression()
                     : getTTLFromViewHierarchy(PhoenixRuntime.getTable(connection, view.getParentName().toString())));
     }
 
@@ -2546,7 +2546,7 @@ public class MetaDataClient {
                         .buildException();
                 }
                 ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent, tableName);
-                if (ttlFromHierarchy != TTL_EXPRESSION_NOT_DEFINED) {
+                if (!ttlFromHierarchy.equals(TTL_EXPRESSION_NOT_DEFINED)) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.
                             TTL_ALREADY_DEFINED_IN_HIERARCHY)
                             .setSchemaName(schemaName)
@@ -2567,7 +2567,7 @@ public class MetaDataClient {
                 ttl = ttlProp;
             } else {
                 ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent, tableName);
-                if (ttlFromHierarchy != TTL_EXPRESSION_NOT_DEFINED) {
+                if (!ttlFromHierarchy.equals(TTL_EXPRESSION_NOT_DEFINED)) {
                     ttlFromHierarchy.validateTTLOnCreate(connection,
                             statement,
                             parent,
@@ -3662,7 +3662,7 @@ public class MetaDataClient {
                 tableUpsert.setString(36, cdcIncludeScopesStr);
             }
 
-            if (ttl == null || ttl == TTL_EXPRESSION_NOT_DEFINED) {
+            if (ttl == null || ttl.equals(TTL_EXPRESSION_NOT_DEFINED)) {
                 tableUpsert.setNull(37, Types.VARCHAR);
             } else {
                 tableUpsert.setString(37, ttl.getTTLExpression());
@@ -3823,7 +3823,9 @@ public class MetaDataClient {
                                 : statement.getWhereClause().toString())
                         .setMaxLookbackAge(maxLookbackAge)
                         .setCDCIncludeScopes(cdcIncludeScopes)
-                        .setTTL(ttl == null || ttl == TTL_EXPRESSION_NOT_DEFINED ? ttlFromHierarchy : ttl)
+                        .setTTL(ttl == null || ttl.equals(TTL_EXPRESSION_NOT_DEFINED) ?
+                                TTLExpression.create(ttlFromHierarchy) :
+                                TTLExpression.create(ttl))
                         .setRowKeyMatcher(rowKeyMatcher)
                         .build();
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
@@ -4385,7 +4387,7 @@ public class MetaDataClient {
         }
         if (ttl != null) {
             mutateStringProperty(connection, tenantId, schemaName, tableName, TTL,
-                    ttl == TTL_EXPRESSION_NOT_DEFINED ? null : ttl.getTTLExpression());
+                    ttl.equals(TTL_EXPRESSION_NOT_DEFINED) ? null : ttl.getTTLExpression());
         }
         if (isChangeDetectionEnabled != null) {
             mutateBooleanProperty(connection, tenantId, schemaName, tableName, CHANGE_DETECTION_ENABLED, isChangeDetectionEnabled);
@@ -4646,7 +4648,7 @@ public class MetaDataClient {
                         ttlAlreadyDefined = checkAndGetTTLFromHierarchy(PhoenixRuntime.getTableNoCache(
                                 connection, table.getParentName().toString()), tableName);
                     }
-                    if (ttlAlreadyDefined != TTL_EXPRESSION_NOT_DEFINED) {
+                    if (!ttlAlreadyDefined.equals(TTL_EXPRESSION_NOT_DEFINED)) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.
                                 TTL_ALREADY_DEFINED_IN_HIERARCHY)
                                 .setSchemaName(schemaName)
@@ -5313,9 +5315,10 @@ public class MetaDataClient {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_DROP_VIEW_REFERENCED_COL)
                                 .setColumnName(columnToDrop.getName().getString()).build().buildException();
                     } else if (table.hasConditionalTTL()) {
-                        ConditionalTTLExpression ttlExpr = (ConditionalTTLExpression) table.getTTL();
+                        ConditionalTTLExpression ttlExpr = (ConditionalTTLExpression)
+                                table.getCompiledTTLExpression(connection);
                         Set<ColumnReference> colsReferencedInTTLExpr =
-                                ttlExpr.getColumnsReferenced(connection, table);
+                                ttlExpr.getColumnsReferenced();
                         ColumnReference colDropRef = new ColumnReference(
                                 columnToDrop.getFamilyName() == null ?
                                         null : columnToDrop.getFamilyName().getBytes(),
@@ -6200,7 +6203,7 @@ public class MetaDataClient {
                         .build()
                         .buildException();
             }
-            if (metaProperties.getTTL() != table.getTTL()) {
+            if (metaProperties.getTTL() != table.getTTLExpression()) {
                 TTLExpression newTTL = metaProperties.getTTL();
                 newTTL.validateTTLOnAlter(connection, table);
                 metaPropertiesEvaluated.setTTL(metaProperties.getTTL());

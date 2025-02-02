@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.CreateTableStatement;
@@ -34,6 +35,10 @@ public class LiteralTTLExpression extends TTLExpression {
     public LiteralTTLExpression(int ttl) {
         Preconditions.checkArgument(ttl >= 0);
         this.ttlValue = ttl;
+    }
+
+    public LiteralTTLExpression(LiteralTTLExpression ttlExpr) {
+        this.ttlValue = ttlExpr.ttlValue;
     }
 
     @Override
@@ -81,7 +86,8 @@ public class LiteralTTLExpression extends TTLExpression {
     public void validateTTLOnAlter(PhoenixConnection connection, PTable table) {}
 
     @Override
-    public void compileTTLExpression(PhoenixConnection connection, PTable table) {
+    public TTLExpression compileTTLExpression(PhoenixConnection connection, PTable table) {
+        return this;
     }
 
     public static LiteralTTLExpression createFromProto(PTableProtos.LiteralTTL literal) {

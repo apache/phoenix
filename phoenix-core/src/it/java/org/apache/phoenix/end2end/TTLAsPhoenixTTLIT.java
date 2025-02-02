@@ -194,7 +194,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute(ddl);
             assertTTLValue(conn.unwrap(PhoenixConnection.class),
-                    TTLExpression.TTL_EXPRESSION_FORVER, tableName);
+                    TTLExpression.TTL_EXPRESSION_FOREVER, tableName);
 
             ddl = "ALTER TABLE  " + tableName + " SET TTL=NONE";
             conn.createStatement().execute(ddl);
@@ -220,7 +220,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             ddl = "ALTER TABLE  " + tableName + " SET TTL=FOREVER";
             conn.createStatement().execute(ddl);
             assertTTLValue(conn.unwrap(PhoenixConnection.class),
-                    TTLExpression.TTL_EXPRESSION_FORVER, tableName);
+                    TTLExpression.TTL_EXPRESSION_FOREVER, tableName);
             //Setting TTL should not be stored as CF Descriptor properties when
             //phoenix.table.ttl.enabled is true
             columnFamilies =
@@ -559,11 +559,11 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
 
     private void assertTTLValue(PhoenixConnection conn, TTLExpression expected, String name) throws SQLException {
         assertEquals("TTL value did not match :-", expected,
-                PhoenixRuntime.getTableNoCache(conn, name).getTTL());
+                PhoenixRuntime.getTableNoCache(conn, name).getTTLExpression());
     }
 
     private void assertTTLValue(PTable table, TTLExpression expected) {
-        assertEquals("TTL value did not match :-", expected, table.getTTL());
+        assertEquals("TTL value did not match :-", expected, table.getTTLExpression());
     }
 
     private String createTableWithOrWithOutTTLAsItsProperty(Connection conn, boolean withTTL) throws SQLException {

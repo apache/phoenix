@@ -221,7 +221,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         assertEquals(cdcTable.getPhysicalName().getString(), tableName == datatableName ?
                 indexFullName : getViewIndexPhysicalName(datatableName));
         PTable cdcIndexTable = PhoenixRuntime.getTable(conn, indexFullName);
-        assertEquals(cdcIndexTable.getTTL(), TTLExpression.TTL_EXPRESSION_FORVER);
+        assertEquals(cdcIndexTable.getTTLExpression(), TTLExpression.TTL_EXPRESSION_FOREVER);
     }
 
     protected void assertSaltBuckets(Connection conn, String tableName, Integer nbuckets)

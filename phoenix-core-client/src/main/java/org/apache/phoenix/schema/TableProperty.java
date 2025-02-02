@@ -24,12 +24,10 @@ import static org.apache.phoenix.exception.SQLExceptionCode.DEFAULT_COLUMN_FAMIL
 import static org.apache.phoenix.exception.SQLExceptionCode.SALT_ONLY_ON_CREATE_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.VIEW_WITH_PROPERTIES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 
 import java.sql.SQLException;
 import java.util.Map;
 
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -273,7 +271,7 @@ public enum TableProperty {
 
         @Override
         public Object getPTableValue(PTable table) {
-            return table.getTTL();
+            return table.getTTLExpression();
         }
     },
 

@@ -1167,7 +1167,7 @@ public class ScanUtil {
     public static TTLExpression getTTLExpression(Scan scan) throws IOException {
         byte[] phoenixTTL = scan.getAttribute(BaseScannerRegionObserverConstants.TTL);
         if (phoenixTTL == null) {
-            return TTLExpression.TTL_EXPRESSION_FORVER;
+            return TTLExpression.TTL_EXPRESSION_FOREVER;
         }
         return TTLExpression.create(phoenixTTL);
     }
@@ -1441,7 +1441,11 @@ public class ScanUtil {
                 return;
             }
         }
-        TTLExpression ttlExpr = table.getTTL();
+        // we want to compile the expression every time we pass it as a scan attribute. This is
+        // needed so that any stateless expressions like CURRENT_TIME() are always evaluated.
+        // Otherwise, we can cache stale values and keep reusing the stale values which can give
+        // incorrect results.
+        TTLExpression ttlExpr = table.getCompiledTTLExpression(phoenixConnection);
         byte[] ttlForScan = ttlExpr.getTTLForScanAttribute(phoenixConnection, table);
         if (ttlForScan != null) {
             byte[] emptyColumnFamilyName = SchemaUtil.getEmptyColumnFamily(table);
@@ -1490,8 +1494,9 @@ public class ScanUtil {
             return;
         }
 
-        ConditionalTTLExpression ttlExpr = (ConditionalTTLExpression) table.getTTL();
-        Set<ColumnReference> colsReferenced = ttlExpr.getColumnsReferenced(connection, table);
+        ConditionalTTLExpression ttlExpr =
+                (ConditionalTTLExpression) table.getCompiledTTLExpression(connection);
+        Set<ColumnReference> colsReferenced = ttlExpr.getColumnsReferenced();
         for (ColumnReference colref : colsReferenced) {
             // TODO Single Cell
             scan.addColumn(colref.getFamily(), colref.getQualifier());

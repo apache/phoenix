@@ -345,8 +345,8 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
                 SchemaUtil.isNamespaceMappingEnabled(null, cqsi.getProps()));
         if (configuration.getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
                 QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED)) {
-            return pSourceTable.getTTL() == TTL_EXPRESSION_NOT_DEFINED ? DEFAULT_TTL
-                    : ((LiteralTTLExpression) pSourceTable.getTTL()).getTTLValue(); // TODO
+            return pSourceTable.getTTLExpression().equals(TTL_EXPRESSION_NOT_DEFINED) ? DEFAULT_TTL
+                    : ((LiteralTTLExpression) pSourceTable.getTTLExpression()).getTTLValue(); // TODO
         } else {
             TableDescriptor tableDesc;
             try (Admin admin = cqsi.getAdmin()) {

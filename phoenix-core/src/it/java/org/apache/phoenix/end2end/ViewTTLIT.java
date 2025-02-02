@@ -43,7 +43,6 @@ import java.util.Properties;
 import java.util.Random;
 
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -87,8 +86,6 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class ViewTTLIT extends BaseViewTTLIT {
@@ -1607,7 +1604,7 @@ public class ViewTTLIT extends BaseViewTTLIT {
                             queryPlan.getContext());
             Assert.assertFalse("Should not have any rows", rs.next());
             Assert.assertEquals("Should have atleast one element", 1, queryPlan.getScans().size());
-            Assert.assertEquals("PhoenixTTL does not match", table.getTTL(),
+            Assert.assertEquals("PhoenixTTL does not match", table.getTTLExpression(),
                     ScanUtil.getTTLExpression(queryPlan.getScans().get(0).get(0)));
             Assert.assertTrue("Masking attribute should be set",
                     ScanUtil.isMaskTTLExpiredRows(queryPlan.getScans().get(0).get(0)));
@@ -1643,7 +1640,7 @@ public class ViewTTLIT extends BaseViewTTLIT {
             scan.setAttribute(BaseScannerRegionObserverConstants.DELETE_PHOENIX_TTL_EXPIRED,
                     PDataType.TRUE_BYTES);
             scan.setAttribute(BaseScannerRegionObserverConstants.TTL,
-                    table.getTTL().getTTLForScanAttribute(conn, table));
+                    table.getCompiledTTLExpression(conn).getTTLForScanAttribute(conn, table));
 
             PhoenixResultSet
                     rs =
@@ -1651,7 +1648,7 @@ public class ViewTTLIT extends BaseViewTTLIT {
                             queryPlan.getContext());
             Assert.assertFalse("Should not have any rows", rs.next());
             Assert.assertEquals("Should have atleast one element", 1, queryPlan.getScans().size());
-            Assert.assertEquals("PhoenixTTL does not match", table.getTTL(),
+            Assert.assertEquals("PhoenixTTL does not match", table.getTTLExpression(),
                     ScanUtil.getTTLExpression(queryPlan.getScans().get(0).get(0)));
             Assert.assertFalse("Masking attribute should not be set",
                     ScanUtil.isMaskTTLExpiredRows(queryPlan.getScans().get(0).get(0)));

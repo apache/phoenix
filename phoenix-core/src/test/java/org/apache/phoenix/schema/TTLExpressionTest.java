@@ -52,9 +52,9 @@ public class TTLExpressionTest {
 
     @Test
     public void testForever() {
-        assertEquals(TTLExpression.TTL_EXPRESSION_FORVER,
+        assertEquals(TTLExpression.TTL_EXPRESSION_FOREVER,
                 TTLExpression.create(PhoenixDatabaseMetaData.FOREVER_TTL));
-        assertEquals(TTLExpression.TTL_EXPRESSION_FORVER,
+        assertEquals(TTLExpression.TTL_EXPRESSION_FOREVER,
                 TTLExpression.create(HConstants.FOREVER));
     }
 

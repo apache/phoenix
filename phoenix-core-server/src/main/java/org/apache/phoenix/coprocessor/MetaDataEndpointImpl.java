@@ -95,7 +95,7 @@ import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.schema.PTableType.CDC;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.schema.PTableType.VIEW;
-import static org.apache.phoenix.schema.TTLExpression.TTL_EXPRESSION_FORVER;
+import static org.apache.phoenix.schema.TTLExpression.TTL_EXPRESSION_FOREVER;
 import static org.apache.phoenix.schema.TTLExpression.TTL_EXPRESSION_NOT_DEFINED;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.SchemaUtil.*;
@@ -1491,8 +1491,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             ttl = TTLExpression.create(ttlStr);
         }
         ttl = ttlKv != null ? ttl : oldTable != null
-                ? oldTable.getTTL() : TTL_EXPRESSION_NOT_DEFINED;
-        if (tableType == VIEW && viewType != MAPPED && ttl == TTL_EXPRESSION_NOT_DEFINED) {
+                ? oldTable.getTTLExpression() : TTL_EXPRESSION_NOT_DEFINED;
+        if (tableType == VIEW && viewType != MAPPED && ttl.equals(TTL_EXPRESSION_NOT_DEFINED)) {
             //Scan SysCat to get TTL from Parent View/Table
             byte[] viewKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
                     schemaName == null ? null : schemaName.getBytes(), tableNameBytes);
@@ -1679,7 +1679,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         builder.setMaxLookbackAge(maxLookbackAge != null ? maxLookbackAge :
                 (oldTable != null ? oldTable.getMaxLookbackAge() : null));
 
-        if (tableType == INDEX && !isThisAViewIndex && ttl == TTL_EXPRESSION_NOT_DEFINED) {
+        if (tableType == INDEX && !isThisAViewIndex && ttl.equals(TTL_EXPRESSION_NOT_DEFINED)) {
             //If this is an index on Table get TTL from Table
             byte[] tableKey = getTableKey(tenantId == null ? null : tenantId.getBytes(),
                     parentSchemaName == null ? null : parentSchemaName.getBytes(),
@@ -1688,8 +1688,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         }
         if (tableType == INDEX
                 && CDCUtil.isCDCIndex(tableName.getString())
-                && ttl != TTL_EXPRESSION_NOT_DEFINED) {
-            ttl = TTL_EXPRESSION_FORVER;
+                && !ttl.equals(TTL_EXPRESSION_NOT_DEFINED)) {
+            ttl = TTL_EXPRESSION_FOREVER;
         }
         builder.setTTL(ttl);
         builder.setEncodedCQCounter(cqCounter);
@@ -3868,7 +3868,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     String newTTLStr = (String) PVarchar.INSTANCE.toObject(cell.getValueArray(),
                             cell.getValueOffset(), cell.getValueLength());
                     TTLExpression newTTL = TTLExpression.create(newTTLStr);
-                    return newTTL != TTL_EXPRESSION_NOT_DEFINED;
+                    return !newTTL.equals(TTL_EXPRESSION_NOT_DEFINED);
                 }
             }
         }

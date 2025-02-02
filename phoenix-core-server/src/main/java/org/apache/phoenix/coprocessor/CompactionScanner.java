@@ -26,7 +26,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_
 import static org.apache.phoenix.query.QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT;
-import static org.apache.phoenix.schema.TTLExpression.TTL_EXPRESSION_FORVER;
+import static org.apache.phoenix.schema.TTLExpression.TTL_EXPRESSION_FOREVER;
 import static org.apache.phoenix.schema.TTLExpression.TTL_EXPRESSION_NOT_DEFINED;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
@@ -615,7 +615,7 @@ public class CompactionScanner implements InternalScanner {
 
             if (tableList != null && !tableList.isEmpty()) {
                 tableList.forEach(m -> {
-                    if (m.getTTL() != TTL_EXPRESSION_NOT_DEFINED) {
+                    if (!m.getTTL().equals(TTL_EXPRESSION_NOT_DEFINED)) {
                         // add the ttlInfo to the cache.
                         // each new/unique ttlInfo object added returns a unique tableId.
                         int tableId = -1;
@@ -695,7 +695,7 @@ public class CompactionScanner implements InternalScanner {
 
             if (tableList != null && !tableList.isEmpty()) {
                 tableList.forEach(m -> {
-                    if (m.getTTL() != TTL_EXPRESSION_NOT_DEFINED) {
+                    if (!m.getTTL().equals(TTL_EXPRESSION_NOT_DEFINED)) {
                         // add the ttlInfo to the cache.
                         // each new/unique ttlInfo object added returns a unique tableId.
                         int tableId = -1;
@@ -1079,16 +1079,13 @@ public class CompactionScanner implements InternalScanner {
                                             viewIndexIdBytes =
                                                     PLong.INSTANCE.toBytes(index.getViewIndexId());
                                         }
-                                        TTLExpression indexTTL = index.getTTL();
-                                        if (indexTTL instanceof ConditionalTTLExpression) {
-                                            indexTTL.compileTTLExpression(
-                                                    tableConnection.unwrap(PhoenixConnection.class),
-                                                    index);
-                                        }
+                                        TTLExpression indexTTL =
+                                                index.getCompiledTTLExpression(tableConnection
+                                                        .unwrap(PhoenixConnection.class));
                                         tableTTLInfoList.add(
                                                 new TableTTLInfo(pTable.getPhysicalName().getBytes(),
                                                         tenantIdBytes, index.getTableName().getBytes(),
-                                                        viewIndexIdBytes, index.getTTL()));
+                                                        viewIndexIdBytes, indexTTL));
                                     }
 
                                 }
@@ -1099,9 +1096,8 @@ public class CompactionScanner implements InternalScanner {
                                                          configuration)) {
                                         PTable pTable = PhoenixRuntime.getTableNoCache(
                                                 tableConnection, fullTableName);
-                                        viewTTL.compileTTLExpression(
-                                                tableConnection.unwrap(PhoenixConnection.class),
-                                                pTable);
+                                        viewTTL = pTable.getCompiledTTLExpression(tableConnection
+                                                .unwrap(PhoenixConnection.class));
                                     }
                                 }
                                 tableTTLInfoList.add(
@@ -1240,7 +1236,7 @@ public class CompactionScanner implements InternalScanner {
 
         public TableTTLTrackerForFlushesAndMinor(String tableName) {
 
-            ttlExpr = TTL_EXPRESSION_FORVER;
+            ttlExpr = TTL_EXPRESSION_FOREVER;
             LOGGER.info(String.format(
                     "TableTTLTrackerForFlushesAndMinor params:- " +
                             "(table-name=%s, ttl=%s)",
@@ -1268,15 +1264,14 @@ public class CompactionScanner implements InternalScanner {
                 Store store) throws IOException {
 
             boolean isSystemTable = pTable.getType() == PTableType.SYSTEM;
-            if (isSystemTable) {
-                ColumnFamilyDescriptor cfd = store.getColumnFamilyDescriptor();
-                ttlExpr = TTLExpression.create(cfd.getTimeToLive());
-            } else {
-                ttlExpr = pTable.getTTL() != TTL_EXPRESSION_NOT_DEFINED
-                        ? pTable.getTTL() : TTL_EXPRESSION_FORVER;
-            }
             try {
-                ttlExpr.compileTTLExpression(pConn, pTable);
+                if (isSystemTable) {
+                    ColumnFamilyDescriptor cfd = store.getColumnFamilyDescriptor();
+                    ttlExpr = TTLExpression.create(cfd.getTimeToLive());
+                } else {
+                    ttlExpr = !pTable.getTTLExpression().equals(TTL_EXPRESSION_NOT_DEFINED)
+                            ? pTable.getCompiledTTLExpression(pConn) : TTL_EXPRESSION_FOREVER;
+                }
             } catch (SQLException e) {
                 throw ClientUtil.createIOException(
                         String.format("Error compiling ttl expression %s", ttlExpr), e);
@@ -1325,10 +1320,9 @@ public class CompactionScanner implements InternalScanner {
                 this.tableRowKeyMatcher =
                         new PartitionedTableRowKeyMatcher(table, isSalted, isSharedIndex,
                                 isLongViewIndexEnabled, viewTTLTenantViewsPerScanLimit);
-                this.ttlExpr = table.getTTL() != TTL_EXPRESSION_NOT_DEFINED
-                        ? table.getTTL() : TTL_EXPRESSION_FORVER;
                 try {
-                    this.ttlExpr.compileTTLExpression(pConn, table);
+                    this.ttlExpr = !table.getTTLExpression().equals(TTL_EXPRESSION_NOT_DEFINED)
+                            ? table.getCompiledTTLExpression(pConn) : TTL_EXPRESSION_FOREVER;
                 } catch (SQLException e) {
                     throw ClientUtil.createIOException(
                             String.format("Error compiling ttl expression %s", this.ttlExpr), e);
