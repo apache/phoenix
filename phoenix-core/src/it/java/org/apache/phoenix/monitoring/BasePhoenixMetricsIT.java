@@ -114,8 +114,7 @@ public abstract class BasePhoenixMetricsIT extends BaseTest {
             String t = entry.getKey();
             assertEquals("Table names didn't match!", tableName, t);
             Map<MetricType, Long> p = entry.getValue();
-
-            assertEquals("There should have been 22 metrics", 22, p.size());
+            assertEquals("There should have been 23 metrics", 23, p.size());
 
             boolean mutationBatchSizePresent = false;
             boolean mutationCommitTimePresent = false;
@@ -132,6 +131,7 @@ public abstract class BasePhoenixMetricsIT extends BaseTest {
             boolean upsertMutationSqlCounterPresent = false;
             boolean upsertCommitTimeCounterPresent = false;
             boolean deleteCommitTimeCounterPresent = false;
+            boolean mutationBatchCounterPresent = false;
             boolean upsertPlanCreationTimePresent = false;
             boolean upsertPlanExecutionTimePresent = false;
             boolean upsertExecuteMutationTimePresent = false;
@@ -212,59 +212,70 @@ public abstract class BasePhoenixMetricsIT extends BaseTest {
                     }
                     deleteCommitTimeCounterPresent = true;
                 }
+                else if (metricType.equals(MetricType.MUTATION_BATCH_COUNTER)) {
+                    assertTrue("mutation batch success counter should be greater than zero",
+                            metricValue > 0);
+                    mutationBatchCounterPresent = true;
+                }
                 else if (metricType.equals(MetricType.UPSERT_PLAN_CREATION_TIME)) {
                     if (isUpsert) {
-                        assertTrue("Upsert plan creation time counter should be greater than zero",
-                                metricValue > 0);
+                        assertTrue("Upsert plan creation time counter should be greater "
+                                + "than zero", metricValue > 0);
                     } else {
-                        assertEquals("Zero upsert plan creation time counter expected", 0, metricValue);
+                        assertEquals("Zero upsert plan creation time counter expected",
+                                0, metricValue);
                     }
                     upsertPlanCreationTimePresent = true;
                 }
                 else if (metricType.equals(MetricType.UPSERT_PLAN_EXECUTION_TIME)) {
                     if (isUpsert) {
-                        assertTrue("Upsert plan execution time counter should be greater than zero",
-                                metricValue > 0);
+                        assertTrue("Upsert plan execution time counter should be greater "
+                                + "than zero", metricValue > 0);
                     } else {
-                        assertEquals("Zero upsert plan execution time counter expected", 0, metricValue);
+                        assertEquals("Zero upsert plan execution time counter expected",
+                                0, metricValue);
                     }
                     upsertPlanExecutionTimePresent = true;
                 }
                 else if (metricType.equals(MetricType.UPSERT_EXECUTE_MUTATION_TIME)) {
                     if (isUpsert) {
-                        assertTrue("Upsert execute mutation time counter should be greater than zero",
-                                metricValue > 0);
+                        assertTrue("Upsert execute mutation time counter should be greater "
+                                        + "than zero", metricValue > 0);
                     } else {
-                        assertEquals("Zero upsert execute mutation time counter expected", 0, metricValue);
+                        assertEquals("Zero upsert execute mutation time counter expected",
+                                0, metricValue);
                     }
                     upsertExecuteMutationTimePresent = true;
                 }
                 else if (metricType.equals(MetricType.DELETE_PLAN_CREATION_TIME)) {
                     if (! isUpsert) {
-                        assertTrue("Delete plan creation time counter should be greater than zero",
-                                metricValue > 0);
+                        assertTrue("Delete plan creation time counter should be greater "
+                                + "than zero", metricValue > 0);
                     } else {
-                        assertEquals("Zero delete plan creation time counter expected", 0, metricValue);
+                        assertEquals("Zero delete plan creation time counter expected",
+                                0, metricValue);
 
                     }
                     deletePlanCreationTimePresent = true;
                 }
                 else if (metricType.equals(MetricType.DELETE_PLAN_EXECUTION_TIME)) {
                     if (! isUpsert) {
-                        assertTrue("Delete plan execution time counter should be greater than zero",
-                                metricValue > 0);
+                        assertTrue("Delete plan execution time counter should be greater "
+                                + "than zero", metricValue > 0);
                     } else {
-                        assertEquals("Zero delete plan execution time counter expected", 0, metricValue);
+                        assertEquals("Zero delete plan execution time counter expected",
+                                0, metricValue);
 
                     }
                     deletePlanExecutionTimePresent = true;
                 }
                 else if (metricType.equals(MetricType.DELETE_EXECUTE_MUTATION_TIME)) {
                     if (! isUpsert) {
-                        assertTrue("Delete execute mutation time counter should be greater than zero",
-                                metricValue > 0);
+                        assertTrue("Delete execute mutation time counter should be greater "
+                                + "than zero", metricValue > 0);
                     } else {
-                        assertEquals("Zero delete execute mutation time counter expected", 0, metricValue);
+                        assertEquals("Zero delete execute mutation time counter expected",
+                                0, metricValue);
                     }
                     deleteExecuteMutationTimePresent = true;
                 }
@@ -284,6 +295,7 @@ public abstract class BasePhoenixMetricsIT extends BaseTest {
             assertTrue(deleteBatchFailedCounterPresent);
             assertTrue(upsertCommitTimeCounterPresent);
             assertTrue(deleteCommitTimeCounterPresent);
+            assertTrue(mutationBatchCounterPresent);
             assertTrue(upsertPlanCreationTimePresent);
             assertTrue(upsertPlanExecutionTimePresent);
             assertTrue(upsertExecuteMutationTimePresent);

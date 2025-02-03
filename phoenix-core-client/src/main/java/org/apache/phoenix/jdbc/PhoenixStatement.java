@@ -746,16 +746,19 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                         MutationMetric stagedMutationMetric;
                                         if (isUpsert) {
                                             stagedMutationMetric = getUncommittedMutationMetric(
-                                                    mutationPlanCreationTimeInNs, mutationPlanExecutionTimeInNs,
-                                                    0, 0,
+                                                    mutationPlanCreationTimeInNs,
+                                                    mutationPlanExecutionTimeInNs, 0, 0,
                                                     executeMutationTimeSpentInNs, 0);
                                         }
                                         else {
-                                            stagedMutationMetric = getUncommittedMutationMetric(0, 0,
-                                                    mutationPlanCreationTimeInNs, mutationPlanExecutionTimeInNs,
-                                                    0, executeMutationTimeSpentInNs);
+                                            stagedMutationMetric = getUncommittedMutationMetric(
+                                                    0, 0,
+                                                    mutationPlanCreationTimeInNs,
+                                                    mutationPlanExecutionTimeInNs, 0,
+                                                    executeMutationTimeSpentInNs);
                                         }
-                                        state.getMutationMetricQueue().addMetricsForTable(tableName, stagedMutationMetric);
+                                        state.getMutationMetricQueue().addMetricsForTable(
+                                                tableName, stagedMutationMetric);
 
                                         if (success) {
                                             TableMetricsManager.updateMetricsMethod(tableName, isUpsert ?
@@ -813,9 +816,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     private MutationMetric getUncommittedMutationMetric(long upsertMutationPlanCreationTime, long upsertMutationPlanExecutionTime,
                                                         long deleteMutationPlanCreationTime, long deleteMutationPlanExecutionTime,
                                                         long upsertExecuteMutationTime, long deleteExecuteMutationTime) {
-        return new MutationMetric(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                upsertMutationPlanCreationTime, upsertMutationPlanExecutionTime, deleteMutationPlanCreationTime,
-                deleteMutationPlanExecutionTime, upsertExecuteMutationTime, deleteExecuteMutationTime);
+        return new MutationMetric(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                upsertMutationPlanCreationTime, upsertMutationPlanExecutionTime,
+                deleteMutationPlanCreationTime, deleteMutationPlanExecutionTime,
+                upsertExecuteMutationTime, deleteExecuteMutationTime);
     }
 
     /**

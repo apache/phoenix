@@ -31,7 +31,9 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -154,8 +156,20 @@ public class PhoenixLoggingMetricsIT extends BasePhoenixMetricsIT {
         loggedConn.createStatement().executeUpdate(upsertSelect);
 
         loggedConn.close();
-        assertTrue("Mutation write metrics should be logged for " + tableName2,
-                mutationWriteMetricsMap.size() > 0);
+        Set<MetricType> mutationMetricsFromExecuteUpdate = new HashSet<>();
+        mutationMetricsFromExecuteUpdate.add(MetricType.UPSERT_PLAN_CREATION_TIME);
+        mutationMetricsFromExecuteUpdate.add(MetricType.UPSERT_PLAN_EXECUTION_TIME);
+        mutationMetricsFromExecuteUpdate.add(MetricType.UPSERT_EXECUTE_MUTATION_TIME);
+        // No mutations were sent from client to server but we will collect metrics from
+        // executeUpdate() call so, maximum 3 metrics should be non-zero
+        int unexpectedMetrics = 0;
+        for (Map.Entry<MetricType, Long> entry: mutationWriteMetricsMap.get(tableName2).entrySet()) {
+            if (! mutationMetricsFromExecuteUpdate.contains(entry.getKey()) && entry.getValue() > 0) {
+                unexpectedMetrics++;
+            }
+        }
+        assertTrue("Unexpected metrics were found for " + tableName2 + " : "
+                + mutationWriteMetricsMap.get(tableName2), unexpectedMetrics == 0);
         assertTrue("Mutation read metrics not found for " + tableName1,
                 mutationReadMetricsMap.get(tableName1).size() > 0);
         assertReadMetricsForMutatingSql(tableName1, 1, mutationReadMetricsMap);

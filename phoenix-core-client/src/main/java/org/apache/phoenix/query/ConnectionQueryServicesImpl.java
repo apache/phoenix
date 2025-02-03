@@ -4444,6 +4444,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
             //move TTL values stored in descriptor to SYSCAT TTL column.
             moveTTLFromHBaseLevelTTLToPhoenixLevelTTL(metaConnection);
+            UpgradeUtil.bootstrapLastDDLTimestampForTablesAndViews(metaConnection);
             UpgradeUtil.bootstrapLastDDLTimestampForIndexes(metaConnection);
         }
         return metaConnection;

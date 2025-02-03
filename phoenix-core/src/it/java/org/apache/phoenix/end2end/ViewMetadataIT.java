@@ -86,9 +86,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PNameImpl;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
@@ -1387,11 +1385,12 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         String view4 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         String index1 = generateUniqueName();
         String index2 = generateUniqueName();
+        String index3 = generateUniqueName();
         String tenant1 = TENANT1;
         String tenant2 = TENANT2;
-        /*                                     baseTable
-                                 /                  |            \                  \
-                         view1(tenant1)    view3(tenant2)    index1(global)       view4(global)
+        /*                                                  baseTable
+                                 /                  |            \                  \               \
+                         view1(tenant1)    view3(tenant2)    index1(global)   index3(local)    view4(global)
                           /
                         view2(tenant1)
                         /
@@ -1402,6 +1401,8 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
             conn.createStatement().execute(baseTableDDL);
             String index1DDL = "CREATE INDEX " + index1 + " ON " + baseTable + "(V1)";
             conn.createStatement().execute(index1DDL);
+            String index3DDL = "CREATE LOCAL INDEX " + index3 + " ON " + baseTable + "(V1)";
+            conn.createStatement().execute(index3DDL);
 
 
             try (Connection tenant1Conn = getTenantConnection(tenant1)) {
@@ -1436,12 +1437,17 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
             assertEquals(1, map.size());
             assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
 
-            //global index in cache and in parent PTable
+            //global/local index in cache and in parent PTable
             PTable index1PTable = PhoenixRuntime.getTable(conn, SchemaUtil.getTableName(SCHEMA1, index1));
             map = index1PTable.getAncestorLastDDLTimestampMap();
             assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
-            assertEquals(1, basePTable.getIndexes().size());
+            PTable index3PTable = PhoenixRuntime.getTable(conn, SchemaUtil.getTableName(SCHEMA1, index3));
+            map = index3PTable.getAncestorLastDDLTimestampMap();
+            assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
+            assertEquals(2, basePTable.getIndexes().size());
             map = basePTable.getIndexes().get(0).getAncestorLastDDLTimestampMap();
+            assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
+            map = basePTable.getIndexes().get(1).getAncestorLastDDLTimestampMap();
             assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
 
             //tenant2 view
@@ -1469,10 +1475,11 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                 map = index2PTable.getAncestorLastDDLTimestampMap();
                 assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
                 assertEquals(view2PTable.getLastDDLTimestamp(), map.get(view2Key));
-                assertEquals(2, view2PTable.getIndexes().size());
+                assertEquals(3, view2PTable.getIndexes().size());
                 for (PTable index : view2PTable.getIndexes()) {
                     // inherited index
-                    if (index.getTableName().getString().equals(index1)) {
+                    if (index.getTableName().getString().equals(index1)
+                            || index.getTableName().getString().equals(index3)) {
                         map = index.getAncestorLastDDLTimestampMap();
                         assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
                     } else {

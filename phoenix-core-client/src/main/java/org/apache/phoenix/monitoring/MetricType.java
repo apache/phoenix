@@ -90,21 +90,18 @@ public enum MetricType {
 
     UPSERT_PLAN_CREATION_TIME("upct", "Time taken to create the upsert mutation plan in ns",
             LogLevel.OFF, PLong.INSTANCE),
-
     UPSERT_PLAN_EXECUTION_TIME("upet", "Time taken to execute the upsert mutation plan in ns",
             LogLevel.OFF, PLong.INSTANCE),
-
     UPSERT_EXECUTE_MUTATION_TIME("uemt", "Time taken by upsert in executeMutation in ns",
             LogLevel.OFF, PLong.INSTANCE),
-
     DELETE_PLAN_CREATION_TIME("dpct", "Time taken to create the delete mutation plan in ns",
             LogLevel.OFF, PLong.INSTANCE),
-
     DELETE_PLAN_EXECUTION_TIME("dpet", "Time taken to execute the delete mutation plan in ns",
             LogLevel.OFF, PLong.INSTANCE),
-
     DELETE_EXECUTE_MUTATION_TIME("demt", "Time taken by delete in executeMutation in ns",
             LogLevel.OFF, PLong.INSTANCE),
+    MUTATION_BATCH_COUNTER("mbc", "Number of mutation batches committed "
+            + "in a commit call", LogLevel.OFF, PLong.INSTANCE),
 
     // select-specific query (read) metrics updated during executeQuery
     SELECT_SUCCESS_SQL_COUNTER("sss", "Counter for number of select sql queries that successfully"

@@ -1420,7 +1420,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
            null : PLong.INSTANCE.getCodec().decodeLong(lastDDLTimestampKv.getValueArray(),
                 lastDDLTimestampKv.getValueOffset(), SortOrder.getDefault());
         builder.setLastDDLTimestamp(lastDDLTimestampKv != null ? lastDDLTimestamp :
-            oldTable != null ? oldTable.getLastDDLTimestamp() : null);
+            oldTable != null ? oldTable.getLastDDLTimestamp() : timeStamp);
 
         Cell changeDetectionEnabledKv = tableKeyValues[CHANGE_DETECTION_ENABLED_INDEX];
         boolean isChangeDetectionEnabled = changeDetectionEnabledKv != null

@@ -124,6 +124,9 @@ public class ValidateLastDDLTimestampUtil {
                     = getValidateDDLTimestampRequest(tableRefs);
             service.validateLastDDLTimestamp(null, request);
         } catch (Exception e) {
+            if (e instanceof StaleMetadataCacheException) {
+                throw (StaleMetadataCacheException) e;
+            }
             SQLException parsedException = ClientUtil.parseServerException(e);
             if (parsedException instanceof StaleMetadataCacheException) {
                 throw parsedException;
@@ -152,7 +155,7 @@ public class ValidateLastDDLTimestampUtil {
      * @return ValidateLastDDLTimestampRequest for the table in tableRef
      */
     private static RegionServerEndpointProtos.ValidateLastDDLTimestampRequest
-        getValidateDDLTimestampRequest(List<TableRef> tableRefs) {
+        getValidateDDLTimestampRequest(List<TableRef> tableRefs) throws StaleMetadataCacheException {
 
         RegionServerEndpointProtos.ValidateLastDDLTimestampRequest.Builder requestBuilder
                 = RegionServerEndpointProtos.ValidateLastDDLTimestampRequest.newBuilder();
@@ -168,12 +171,20 @@ public class ValidateLastDDLTimestampUtil {
                     : tableRef.getTable().getAncestorLastDDLTimestampMap().entrySet()) {
                 innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
                 PTableKey ancestorKey = entry.getKey();
+                if (entry.getValue() == null) {
+                    throw new StaleMetadataCacheException(
+                            "LAST_DDL_TIMESTAMP set to null in client cache for {}" + ancestorKey);
+                }
                 setLastDDLTimestampRequestParameters(innerBuilder, ancestorKey, entry.getValue());
                 requestBuilder.addLastDDLTimestampRequests(innerBuilder);
             }
 
             // add the current table to the request
             PTable ptable = tableRef.getTable();
+            if (ptable.getLastDDLTimestamp() == null) {
+                throw new StaleMetadataCacheException(
+                        "LAST_DDL_TIMESTAMP set to null in client cache for {}" + ptable.getKey());
+            }
             innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
             setLastDDLTimestampRequestParameters(innerBuilder, ptable.getKey(),
                     ptable.getLastDDLTimestamp());
@@ -181,6 +192,10 @@ public class ValidateLastDDLTimestampUtil {
 
             // add all indexes of the current table
             for (PTable idxPTable : tableRef.getTable().getIndexes()) {
+                if (idxPTable.getLastDDLTimestamp() == null) {
+                    throw new StaleMetadataCacheException(
+                            "LAST_DDL_TIMESTAMP set to null in client cache for {}" + idxPTable.getKey());
+                }
                 innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
                 setLastDDLTimestampRequestParameters(innerBuilder, idxPTable.getKey(),
                         idxPTable.getLastDDLTimestamp());
