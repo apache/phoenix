@@ -142,6 +142,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORE_NULLS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAM_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAM_STATUS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAM_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_STATUS_TABLE;
@@ -658,6 +659,7 @@ public interface QueryConstants {
             STREAM_NAME + " VARCHAR NOT NULL," +
             // Non-PK columns
             STREAM_STATUS + " VARCHAR,\n" +
+            STREAM_TYPE + " VARCHAR,\n" +
             "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" +
             TABLE_NAME + "," + STREAM_NAME + "))\n" +
             HConstants.VERSIONS + "=%s,\n" +
