@@ -238,16 +238,15 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
             boolean ignoreInvalidRows = cmdLine.hasOption(IGNORE_ERRORS_OPT.getOpt());
             conf.setBoolean(FormatToBytesWritableMapper.IGNORE_INVALID_ROW_CONFKEY,
                 ignoreInvalidRows);
-            conf.set(FormatToBytesWritableMapper.TABLE_NAME_CONFKEY,
-                SchemaUtil.getEscapedFullTableName(qualifiedTableName));
+            String tbn = SchemaUtil.getEscapedFullTableName(qualifiedTableName);
+            conf.set(FormatToBytesWritableMapper.TABLE_NAME_CONFKEY, tbn);
             // give subclasses their hook
             configureOptions(cmdLine, importColumns, conf);
             String sName = SchemaUtil.normalizeIdentifier(schemaName);
             String tName = SchemaUtil.normalizeIdentifier(tableName);
 
-            String tn = SchemaUtil.getEscapedTableName(sName, tName);
             ResultSet rsempty =
-                    conn.createStatement().executeQuery("SELECT * FROM " + tn + " LIMIT 1");
+                    conn.createStatement().executeQuery("SELECT * FROM " + tbn + " LIMIT 1");
             boolean tableNotEmpty = rsempty.next();
             rsempty.close();
 
