@@ -118,7 +118,7 @@
     <protobuf.group>com.google.protobuf</protobuf.group>
     <protobuf-java.version>2.5.0</protobuf-java.version>
     <protoc.version>2.5.0</protoc.version>
-    <commons-io.version>2.14.0</commons-io.version>
+    <commons-io.version>2.18.0</commons-io.version>
     <commons-lang3.version>3.8</commons-lang3.version>
     <commons-csv.version>1.0</commons-csv.version>
     <commons-compress.version>1.26.0</commons-compress.version>
