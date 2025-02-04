@@ -84,7 +84,7 @@ public class ParallelPhoenixNullComparingResultSetIT {
         jdbcUrl = CLUSTERS.getJdbcHAUrl();
         haGroup = HighAvailabilityTestingUtility.getHighAvailibilityGroup(jdbcUrl, PROPERTIES);
         LOG.info("Initialized haGroup {} with URL {}", haGroup.getGroupInfo().getName(), jdbcUrl);
-        CLUSTERS.createTableOnClusterPair(tableName, false);
+        CLUSTERS.createTableOnClusterPair(haGroup, tableName, false);
         // Disable replication from cluster 1 to cluster 2
         ReplicationAdmin admin =
                 new ReplicationAdmin(CLUSTERS.getHBaseCluster1().getConfiguration());
@@ -108,12 +108,12 @@ public class ParallelPhoenixNullComparingResultSetIT {
 
     @Test
     public void testRowOnCluster1() throws SQLException {
-        testRowOnCluster(CLUSTERS.getUrl1());
+        testRowOnCluster(CLUSTERS.getURL(1, haGroup.getRoleRecord().getRegistryType()));
     }
 
     @Test
     public void testRowOnCluster2() throws SQLException {
-        testRowOnCluster(CLUSTERS.getUrl2());
+        testRowOnCluster(CLUSTERS.getURL(2, haGroup.getRoleRecord().getRegistryType()));
     }
 
     private void testRowOnCluster(String clusterUrl) throws SQLException {
@@ -156,15 +156,15 @@ public class ParallelPhoenixNullComparingResultSetIT {
     }
 
     private void addRowToCluster1(String tableName, int id, int v) throws SQLException {
-        addRowToCluster(CLUSTERS.getUrl1(), tableName, id, v);
+        addRowToCluster(CLUSTERS.getURL(1, haGroup.getRoleRecord().getRegistryType()), tableName, id, v);
     }
 
     private void addRowToCluster2(String tableName, int id, int v) throws SQLException {
-        addRowToCluster(CLUSTERS.getUrl2(), tableName, id, v);
+        addRowToCluster(CLUSTERS.getURL(2, haGroup.getRoleRecord().getRegistryType()), tableName, id, v);
     }
 
     private void addRowToCluster(String url, String tableName, int id, int v) throws SQLException {
-        String jdbcUrl = CLUSTERS.getJdbcUrl(url);
+        String jdbcUrl = CLUSTERS.getJdbcUrl(haGroup, url);
         try (Connection conn = DriverManager.getConnection(jdbcUrl, PROPERTIES)) {
             Statement stmt = conn.createStatement();
             stmt.executeUpdate(String.format("UPSERT INTO %s VALUES(%d, %d)", tableName, id, v));

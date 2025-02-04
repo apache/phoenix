@@ -131,7 +131,7 @@ public class ParallelPhoenixConnectionWorkflowIT {
                 "  )  \n" +
                 ") IMMUTABLE_ROWS=true, VERSIONS=1, REPLICATION_SCOPE=1", tableName);
 
-        CONNECTIONS = Lists.newArrayList(CLUSTERS.getCluster1Connection(), CLUSTERS.getCluster2Connection());
+        CONNECTIONS = Lists.newArrayList(getConnection(CLUSTERS.getZkUrl1()), getConnection(CLUSTERS.getZkUrl2()));
 
         for (Connection conn : CONNECTIONS) {
             try (Statement statement = conn.createStatement()) {
@@ -143,7 +143,7 @@ public class ParallelPhoenixConnectionWorkflowIT {
         CLUSTERS.checkReplicationComplete();
 
         //preload some data
-        try (Connection connection = CLUSTERS.getCluster1Connection()) {
+        try (Connection connection = getConnection(CLUSTERS.getZkUrl1())) {
             loadData(connection, USER_ID, WORK_ID, 100, 20);
         }
         CLUSTERS.checkReplicationComplete();
@@ -268,7 +268,7 @@ public class ParallelPhoenixConnectionWorkflowIT {
     public void testSingleDelete() throws SQLException {
         String userId = StringUtils.rightPad(BaseTest.generateUniqueName(), 15).substring(0, 15);
         String workId = testName.getMethodName();
-        loadData(CLUSTERS.getCluster1Connection(), userId, workId, 10, 10);
+        loadData(CLUSTERS.getCluster1Connection(haGroup), userId, workId, 10, 10);
         CLUSTERS.checkReplicationComplete();
 
         for (Connection conn : CONNECTIONS) {
@@ -306,7 +306,7 @@ public class ParallelPhoenixConnectionWorkflowIT {
     public void testBatchDelete() throws SQLException {
         String userId = StringUtils.rightPad(BaseTest.generateUniqueName(), 15).substring(0, 15);
         String workId = testName.getMethodName();
-        loadData(CLUSTERS.getCluster1Connection(), userId, workId, 10, 10);
+        loadData(CLUSTERS.getCluster1Connection(haGroup), userId, workId, 10, 10);
         CLUSTERS.checkReplicationComplete();
 
         //delete batch
@@ -340,9 +340,9 @@ public class ParallelPhoenixConnectionWorkflowIT {
     public void testGroupDelete() throws SQLException {
         String userId = StringUtils.rightPad(BaseTest.generateUniqueName(), 15).substring(0, 15);
         String workId1 = testName.getMethodName();
-        loadData(CLUSTERS.getCluster1Connection(), userId, workId1, 10, 10);
+        loadData(CLUSTERS.getCluster1Connection(haGroup), userId, workId1, 10, 10);
         String workId2 = testName.getMethodName() + "2";
-        loadData(CLUSTERS.getCluster1Connection(), userId, workId2, 10, 10);
+        loadData(CLUSTERS.getCluster1Connection(haGroup), userId, workId2, 10, 10);
         CLUSTERS.checkReplicationComplete();
 
         //delete group
@@ -463,6 +463,10 @@ public class ParallelPhoenixConnectionWorkflowIT {
         Connection connection = DriverManager.getConnection(jdbcUrl, clientProperties);
         connection.setAutoCommit(true);
         return connection;
+    }
+
+    private static Connection getConnection(String url) throws SQLException {
+        return DriverManager.getConnection(url, new Properties());
     }
 
 }

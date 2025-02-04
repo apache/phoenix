@@ -46,10 +46,11 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.Map;
-import java.util.Properties;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
@@ -60,6 +61,7 @@ import org.apache.phoenix.monitoring.GlobalMetric;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -69,6 +71,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.rules.TestName;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -76,6 +80,7 @@ import org.slf4j.LoggerFactory;
  * Test failover basics for {@link ParallelPhoenixConnection}.
  */
 @Category(NeedsOwnMiniClusterTest.class)
+@RunWith(Parameterized.class)
 public class ParallelPhoenixConnectionIT {
     private static final Logger LOG = LoggerFactory.getLogger(ParallelPhoenixConnectionIT.class);
     private static final HBaseTestingUtilityPair CLUSTERS = new HBaseTestingUtilityPair();
@@ -92,7 +97,21 @@ public class ParallelPhoenixConnectionIT {
     private String tableName;
     /** HA Group name for this test. */
     private String haGroupName;
+    private final ClusterRoleRecord.RegistryType registryType;
 
+    public ParallelPhoenixConnectionIT(ClusterRoleRecord.RegistryType registryType) {
+        this.registryType = registryType;
+    }
+
+    @Parameterized.Parameters(name="ClusterRoleRecord_registryType={0}")
+    public static Collection<Object> data() {
+        return Arrays.asList(new Object[] {
+                ClusterRoleRecord.RegistryType.ZK,
+                ClusterRoleRecord.RegistryType.MASTER,
+                ClusterRoleRecord.RegistryType.RPC,
+                null //For Backward Compatibility
+        });
+    }
     @BeforeClass
     public static void setUpBeforeClass() throws Exception {
         CLUSTERS.start();
@@ -115,12 +134,16 @@ public class ParallelPhoenixConnectionIT {
         clientProperties = new Properties(GLOBAL_PROPERTIES);
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName);
         // Make first cluster ACTIVE
-        CLUSTERS.initClusterRole(haGroupName, PARALLEL);
+        if (registryType == null) {
+            CLUSTERS.initClusterRole(haGroupName, PARALLEL);
+        } else {
+            CLUSTERS.initClusterRole(haGroupName, PARALLEL, registryType);
+        }
 
         haGroup = HighAvailabilityTestingUtility.getHighAvailibilityGroup(CLUSTERS.getJdbcHAUrl(), clientProperties);
         LOG.info("Initialized haGroup {} with URL {}", haGroup, CLUSTERS.getJdbcHAUrl());
-        tableName = testName.getMethodName();
-        CLUSTERS.createTableOnClusterPair(tableName);
+        tableName = RandomStringUtils.randomAlphabetic(10);
+        CLUSTERS.createTableOnClusterPair(haGroup, tableName);
     }
 
     /**
@@ -137,26 +160,22 @@ public class ParallelPhoenixConnectionIT {
     public void testUserPrincipal() throws Exception {
         try (Connection conn = getParallelConnection()) {
             ParallelPhoenixConnection pr = conn.unwrap(ParallelPhoenixConnection.class);
-            ParallelPhoenixContext context = pr.getContext();
-            HAURLInfo haurlInfo = context.getHaurlInfo();
-            HighAvailabilityGroup.HAGroupInfo group = context.getHaGroup().getGroupInfo();
-            if (CLUSTERS.getUrl1().compareTo(CLUSTERS.getUrl2()) <= 0) {
-                Assert.assertEquals(CLUSTERS.getJdbcUrl1(), group.getJDBCUrl1(haurlInfo));
-                Assert.assertEquals(CLUSTERS.getJdbcUrl2(), group.getJDBCUrl2(haurlInfo));
-            } else {
-                Assert.assertEquals(CLUSTERS.getJdbcUrl2(), group.getJDBCUrl1(haurlInfo));
-                Assert.assertEquals(CLUSTERS.getJdbcUrl1(), group.getJDBCUrl2(haurlInfo));
-            }
+
+            Assert.assertTrue(CLUSTERS.getJdbcUrl1(haGroup).equals(pr.getFutureConnection1().get().getURL()) ||
+                    CLUSTERS.getJdbcUrl1(haGroup).equals(pr.getFutureConnection2().get().getURL()));
+            Assert.assertTrue(CLUSTERS.getJdbcUrl2(haGroup).equals(pr.getFutureConnection1().get().getURL()) ||
+                    CLUSTERS.getJdbcUrl2(haGroup).equals(pr.getFutureConnection2().get().getURL()));
+
             ConnectionQueryServices cqsi;
             // verify connection#1
-            cqsi = PhoenixDriver.INSTANCE.getConnectionQueryServices(group.getJDBCUrl1(haurlInfo), clientProperties);
+            cqsi = PhoenixDriver.INSTANCE.getConnectionQueryServices(CLUSTERS.getJdbcUrl1(haGroup), clientProperties);
             Assert.assertEquals(HBaseTestingUtilityPair.PRINCIPAL, cqsi.getUserName());
             PhoenixConnection pConn = pr.getFutureConnection1().get();
             ConnectionQueryServices cqsiFromConn = pConn.getQueryServices();
             Assert.assertEquals(HBaseTestingUtilityPair.PRINCIPAL, cqsiFromConn.getUserName());
             Assert.assertTrue(cqsi == cqsiFromConn);
             // verify connection#2
-            cqsi = PhoenixDriver.INSTANCE.getConnectionQueryServices(group.getJDBCUrl2(haurlInfo), clientProperties);
+            cqsi = PhoenixDriver.INSTANCE.getConnectionQueryServices(CLUSTERS.getJdbcUrl2(haGroup), clientProperties);
             Assert.assertEquals(HBaseTestingUtilityPair.PRINCIPAL, cqsi.getUserName());
             pConn = pr.getFutureConnection2().get();
             cqsiFromConn = pConn.getQueryServices();
@@ -208,7 +227,7 @@ public class ParallelPhoenixConnectionIT {
         CLUSTERS.checkReplicationComplete();
 
         //ensure values on both clusters
-        try (Connection conn = CLUSTERS.getCluster1Connection();
+        try (Connection conn = CLUSTERS.getCluster1Connection(haGroup);
              Statement statement = conn.createStatement();
              ResultSet rs = statement.executeQuery(String.format("SELECT COUNT(*) FROM %s", tableName))) {
             assertTrue(rs.next());
@@ -216,7 +235,7 @@ public class ParallelPhoenixConnectionIT {
         }
 
         //ensure values on both clusters
-        try (Connection conn = CLUSTERS.getCluster2Connection();
+        try (Connection conn = CLUSTERS.getCluster2Connection(haGroup);
              Statement statement = conn.createStatement();
              ResultSet rs = statement.executeQuery(String.format("SELECT COUNT(*) FROM %s", tableName))) {
             assertTrue(rs.next());
@@ -257,14 +276,14 @@ public class ParallelPhoenixConnectionIT {
         CLUSTERS.checkReplicationComplete();
 
         //ensure values on both clusters
-        try (Connection conn = CLUSTERS.getCluster1Connection();
+        try (Connection conn = CLUSTERS.getCluster1Connection(haGroup);
              Statement statement = conn.createStatement();
              ResultSet rs = statement.executeQuery(String.format("SELECT COUNT(*) FROM %s",tableName))) {
             assertOperationTypeForStatement(statement, Operation.QUERY);
             assertTrue(rs.next());
             assertEquals(100, rs.getInt(1));
         }
-        try (Connection conn = CLUSTERS.getCluster2Connection();
+        try (Connection conn = CLUSTERS.getCluster2Connection(haGroup);
              Statement statement = conn.createStatement();
              ResultSet rs = statement.executeQuery(String.format("SELECT COUNT(*) FROM %s",tableName))) {
             assertTrue(rs.next());
@@ -332,11 +351,24 @@ public class ParallelPhoenixConnectionIT {
                 /* Determine which cluster is down from a phoenix HA point of view and close the other */
 
                 CompletableFuture<PhoenixConnection> pConn = null;
-                int downClientPort = CLUSTERS.getHBaseCluster1().getZkCluster().getClientPort();
-                if(((ParallelPhoenixConnection) conn).getContext().getHaGroup().getRoleRecord().getZk1().contains(String.valueOf(downClientPort))) {
-                    pConn = ((ParallelPhoenixConnection) conn).futureConnection2;
+                if (registryType == ClusterRoleRecord.RegistryType.ZK || registryType == null) {
+                    int downClientPort = CLUSTERS.getHBaseCluster1().getZkCluster().getClientPort();
+                    if(((ParallelPhoenixConnection) conn).getContext().getHaGroup().getRoleRecord().
+                            getUrl1().contains(String.valueOf(downClientPort))) {
+                        pConn = ((ParallelPhoenixConnection) conn).futureConnection2;
+                    } else {
+                        pConn = ((ParallelPhoenixConnection) conn).futureConnection1;
+                    }
                 } else {
-                    pConn = ((ParallelPhoenixConnection) conn).futureConnection1;
+                    //Get the master url of other cluster and get the corresponding pConnection to close
+                    String masterAddress = JDBCUtil.formatUrl(CLUSTERS.getHBaseCluster2().
+                            getConfiguration().get(HConstants.MASTER_ADDRS_KEY), registryType);
+                    if (((ParallelPhoenixConnection) conn).getContext().getHaGroup().getRoleRecord().
+                            getUrl1().equals(masterAddress)) {
+                        pConn = ((ParallelPhoenixConnection) conn).futureConnection1;
+                    } else {
+                        pConn = ((ParallelPhoenixConnection) conn).futureConnection2;
+                    }
                 }
 
                 //Close the connection this will cause "failures", may have to retry wait for this
@@ -512,8 +544,8 @@ public class ParallelPhoenixConnectionIT {
     @Test
     public void testSeparateMetadata() throws Exception {
         //make a table on the 2nd cluster
-        String tableName = "TABLE_" + testName.getMethodName();
-        try(Connection conn = CLUSTERS.getCluster2Connection()) {
+        String tableName = "TABLE_" + RandomStringUtils.randomAlphabetic(10);
+        try(Connection conn = CLUSTERS.getCluster2Connection(haGroup)) {
 
             String ddl = "CREATE TABLE " + tableName + " ( MYKEY VARCHAR NOT NULL, MYVALUE VARCHAR CONSTRAINT PK_DATA PRIMARY KEY (MYKEY))";
             try(Statement stmt = conn.createStatement()) {
@@ -530,6 +562,80 @@ public class ParallelPhoenixConnectionIT {
              Statement statement = conn.createStatement();
              ResultSet rs = statement.executeQuery(String.format("SELECT * FROM %s",tableName))) {
             assertTrue(rs.next());
+        }
+    }
+
+    /**
+     * This is to make sure all Phoenix connections are closed when registryType changes
+     * of a CRR.
+     * scenarios
+     *   1) ZK --> RPC
+     *   2) null (ZK) --> MASTER
+     *   3) MASTER --> ZK
+     *   4) RPC --> ZK
+     *
+     * Test with many connections.
+     */
+    @Test
+    public void testAllWrappedConnectionsClosedAfterRegistryChange() throws Exception {
+        short numberOfConnections = 10;
+        List<Connection> connectionList = new ArrayList<>(numberOfConnections);
+        for (short i = 0; i < numberOfConnections; i++) {
+            connectionList.add(getParallelConnection());
+        }
+        ClusterRoleRecord.RegistryType newRegistry = null;
+        if (registryType == null) {
+            newRegistry = ClusterRoleRecord.RegistryType.MASTER;
+        } else if (registryType == ClusterRoleRecord.RegistryType.ZK) {
+            newRegistry = ClusterRoleRecord.RegistryType.RPC;
+        } else if (registryType == ClusterRoleRecord.RegistryType.MASTER) {
+            newRegistry = ClusterRoleRecord.RegistryType.ZK;
+        } else if (registryType == ClusterRoleRecord.RegistryType.RPC) {
+            newRegistry = ClusterRoleRecord.RegistryType.ZK;
+        }
+        CLUSTERS.transitClusterRoleRecordRegistry(haGroup, newRegistry);
+
+        for (short i = 0; i < numberOfConnections; i++) {
+            LOG.info("Asserting connection number {}", i);
+            ParallelPhoenixConnection conn = ((ParallelPhoenixConnection) connectionList.get(i));
+            assertFalse(conn.isClosed());
+            assertTrue(conn.futureConnection1.get().isClosed());
+            assertTrue(conn.futureConnection2.get().isClosed());
+        }
+    }
+
+    /**
+     * This is to make sure all Phoenix connections are closed when registryType changes
+     * of a CRR.
+     * scenarios
+     *   1) ZK --> MASTER
+     *   2) null (ZK) --> RPC
+     *   3) MASTER --> null
+     *   4) RPC --> null
+     *
+     * Test with many connections.
+     */
+    @Test(timeout = 300000)
+    public void testAllWrappedConnectionsClosedAfterRegistryChange2() throws Exception {
+        short numberOfConnections = 10;
+        List<Connection> connectionList = new ArrayList<>(numberOfConnections);
+        for (short i = 0; i < numberOfConnections; i++) {
+            connectionList.add(getParallelConnection());
+        }
+        ClusterRoleRecord.RegistryType newRegistry = null;
+        if (registryType == null) {
+            newRegistry = ClusterRoleRecord.RegistryType.RPC;
+        } else if (registryType == ClusterRoleRecord.RegistryType.ZK) {
+            newRegistry = ClusterRoleRecord.RegistryType.MASTER;
+        }
+        CLUSTERS.transitClusterRoleRecordRegistry(haGroup, newRegistry);
+
+        for (short i = 0; i < numberOfConnections; i++) {
+            LOG.info("Asserting connection number {}", i);
+            ParallelPhoenixConnection conn = ((ParallelPhoenixConnection) connectionList.get(i));
+            assertFalse(conn.isClosed());
+            assertTrue(conn.futureConnection1.get().isClosed());
+            assertTrue(conn.futureConnection2.get().isClosed());
         }
     }
 
