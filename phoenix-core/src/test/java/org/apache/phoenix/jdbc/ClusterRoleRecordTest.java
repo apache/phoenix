@@ -24,29 +24,48 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Optional;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
-import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.JacksonUtil;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestName;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * Unit test for {@link ClusterRoleRecord}.
  */
+@RunWith(Parameterized.class)
 public class ClusterRoleRecordTest {
     private static final Logger LOG = LoggerFactory.getLogger(ClusterRoleRecordTest.class);
-    private static final String ZK1 = "zk1-1\\:2181,zk1-2\\:2181::/hbase";
-    private static final String ZK2 = "zk2-1\\:2181,zk2-2\\:2181::/hbase";
+    private static final String URL1 = "zk1-1\\:2181,zk1-2\\:2181";
+    private static final String URL2 = "zk2-1\\:2181,zk2-2\\:2181";
+    private final ClusterRoleRecord.RegistryType registryType;
 
     @Rule
     public final TestName testName = new TestName();
+
+    public ClusterRoleRecordTest(ClusterRoleRecord.RegistryType registryType) {
+        this.registryType = registryType;
+    }
+
+    @Parameterized.Parameters(name="ClusterRoleRecord_registryType={0}")
+    public static Collection<Object> data() {
+        return Arrays.asList(new Object[] {
+                ClusterRoleRecord.RegistryType.ZK,
+                ClusterRoleRecord.RegistryType.MASTER,
+                ClusterRoleRecord.RegistryType.RPC,
+                null //For Backward Compatibility
+        });
+    }
 
     /**
      * Helper method to create a temp JSON file with the given array of cluster role records.
@@ -63,11 +82,9 @@ public class ClusterRoleRecordTest {
 
     @Test
     public void testReadWriteJsonToFile() throws IOException {
-        ClusterRoleRecord record = new ClusterRoleRecord(
-                testName.getMethodName(), HighAvailabilityPolicy.FAILOVER,
-                ZK1, ClusterRole.ACTIVE,
-                ZK2, ClusterRole.STANDBY,
-                1);
+        ClusterRoleRecord record = getClusterRoleRecord(testName.getMethodName(),
+                HighAvailabilityPolicy.FAILOVER, URL1, ClusterRole.ACTIVE,
+                URL2, ClusterRole.STANDBY, 1);
         String fileName = createJsonFileWithRecords(record);
         String fileContent = FileUtils.readFileToString(new File(fileName), "UTF-8");
         assertTrue(fileContent.contains(record.getHaGroupName()));
@@ -75,11 +92,9 @@ public class ClusterRoleRecordTest {
 
     @Test
     public void testToAndFromJson() throws IOException {
-        ClusterRoleRecord record = new ClusterRoleRecord(
-                testName.getMethodName(), HighAvailabilityPolicy.FAILOVER,
-                ZK1, ClusterRole.ACTIVE,
-                ZK2, ClusterRole.STANDBY,
-                1);
+        ClusterRoleRecord record = getClusterRoleRecord(testName.getMethodName(),
+                HighAvailabilityPolicy.FAILOVER, URL1, ClusterRole.ACTIVE,
+                URL2, ClusterRole.STANDBY,1);
         byte[] bytes = ClusterRoleRecord.toJson(record);
         Optional<ClusterRoleRecord> record2 = ClusterRoleRecord.fromJson(bytes);
         assertTrue(record2.isPresent());
@@ -88,39 +103,28 @@ public class ClusterRoleRecordTest {
 
     @Test
     public void testGetActiveUrl() {
-        String haGroupName = testName.getMethodName();
-        {
-            ClusterRoleRecord record = new ClusterRoleRecord(
-                    haGroupName, HighAvailabilityPolicy.FAILOVER,
-                    ZK1, ClusterRole.ACTIVE,
-                    ZK2, ClusterRole.STANDBY,
-                    0);
-            assertTrue(record.getActiveUrl().isPresent());
-            assertEquals(ZK1, record.getActiveUrl().get());
-        }
-        {
-            ClusterRoleRecord record = new ClusterRoleRecord(
-                    haGroupName, HighAvailabilityPolicy.FAILOVER,
-                    ZK1, ClusterRole.STANDBY,
-                    ZK2, ClusterRole.STANDBY,
-                    0);
-            assertFalse(record.getActiveUrl().isPresent());
-        }
+        ClusterRoleRecord record = getClusterRoleRecord(testName.getMethodName(),
+                HighAvailabilityPolicy.FAILOVER, URL1, ClusterRole.ACTIVE,
+                URL2, ClusterRole.STANDBY,0);
+        assertTrue(record.getActiveUrl().isPresent());
+        assertEquals(getFullUrl(URL1), record.getActiveUrl().get());
+
+        record = getClusterRoleRecord(testName.getMethodName(),
+                HighAvailabilityPolicy.FAILOVER, URL1, ClusterRole.STANDBY,
+                URL2, ClusterRole.STANDBY, 0);
+        assertFalse(record.getActiveUrl().isPresent());
+
     }
 
     @Test
     public void testIsNewerThan() {
         String haGroupName = testName.getMethodName();
-        ClusterRoleRecord recordV0 = new ClusterRoleRecord(
-                haGroupName, HighAvailabilityPolicy.FAILOVER,
-                ZK1, ClusterRole.STANDBY,
-                ZK2 , ClusterRole.STANDBY,
-                0);
-        ClusterRoleRecord recordV1 = new ClusterRoleRecord(
-                haGroupName, HighAvailabilityPolicy.FAILOVER,
-                ZK1, ClusterRole.STANDBY,
-                ZK2 , ClusterRole.STANDBY,
-                2);
+        ClusterRoleRecord recordV0 = getClusterRoleRecord(haGroupName,
+                HighAvailabilityPolicy.FAILOVER, URL1, ClusterRole.STANDBY,
+                URL2, ClusterRole.STANDBY,0);
+        ClusterRoleRecord recordV1 = getClusterRoleRecord(haGroupName,
+                HighAvailabilityPolicy.FAILOVER, URL1, ClusterRole.STANDBY,
+                URL2, ClusterRole.STANDBY,2);
         assertTrue(recordV1.isNewerThan(recordV0));  // v1 is indeed newer
         assertFalse(recordV1.isNewerThan(recordV1)); // irreflexive
         assertFalse(recordV0.isNewerThan(recordV1)); // antisymmetry
@@ -129,11 +133,9 @@ public class ClusterRoleRecordTest {
         // Cluster role records for different HA groups can not compare in reality,
         // so they are not newer than each other.
         String haGroupName2 = haGroupName + RandomStringUtils.randomAlphabetic(2);
-        ClusterRoleRecord record2 = new ClusterRoleRecord(
-                haGroupName2, HighAvailabilityPolicy.FAILOVER,
-                ZK1, ClusterRole.STANDBY,
-                ZK2 , ClusterRole.STANDBY,
-                1);
+        ClusterRoleRecord record2 = getClusterRoleRecord(haGroupName2,
+                HighAvailabilityPolicy.FAILOVER, URL1, ClusterRole.STANDBY,
+                URL2, ClusterRole.STANDBY, 1);
         assertFalse(recordV0.isNewerThan(record2));
         assertFalse(recordV1.isNewerThan(record2));
         assertFalse(record2.isNewerThan(recordV0));
@@ -143,16 +145,12 @@ public class ClusterRoleRecordTest {
     @Test
     public void testHasSameInfo() {
         String haGroupName = testName.getMethodName();
-        ClusterRoleRecord recordV0 = new ClusterRoleRecord(
-                haGroupName, HighAvailabilityPolicy.FAILOVER,
-                ZK1, ClusterRole.ACTIVE,
-                ZK2 , ClusterRole.STANDBY,
-                0);
-        ClusterRoleRecord recordV1 = new ClusterRoleRecord(
-                haGroupName, HighAvailabilityPolicy.FAILOVER,
-                ZK1, ClusterRole.ACTIVE,
-                ZK2 , ClusterRole.STANDBY,
-                1);
+        ClusterRoleRecord recordV0 = getClusterRoleRecord(haGroupName,
+                HighAvailabilityPolicy.FAILOVER, URL1, ClusterRole.ACTIVE,
+                URL2, ClusterRole.STANDBY,0);
+        ClusterRoleRecord recordV1 = getClusterRoleRecord(haGroupName,
+                HighAvailabilityPolicy.FAILOVER, URL1, ClusterRole.ACTIVE,
+                URL2, ClusterRole.STANDBY, 1);
         assertTrue(recordV1.hasSameInfo(recordV0));
         assertTrue(recordV1.hasSameInfo(recordV1));
         assertTrue(recordV0.hasSameInfo(recordV1));
@@ -161,16 +159,12 @@ public class ClusterRoleRecordTest {
     @Test
     public void testHasSameInfoDifferentZKOrder() {
         String haGroupName = testName.getMethodName();
-        ClusterRoleRecord recordV0 = new ClusterRoleRecord(
-                haGroupName, HighAvailabilityPolicy.FAILOVER,
-                ZK2, ClusterRole.ACTIVE,
-                ZK1 , ClusterRole.STANDBY,
-                0);
-        ClusterRoleRecord recordV1 = new ClusterRoleRecord(
-                haGroupName, HighAvailabilityPolicy.FAILOVER,
-                ZK1, ClusterRole.ACTIVE,
-                ZK2 , ClusterRole.STANDBY,
-                1);
+        ClusterRoleRecord recordV0 = getClusterRoleRecord(haGroupName,
+                HighAvailabilityPolicy.FAILOVER, URL2, ClusterRole.ACTIVE,
+                URL1, ClusterRole.STANDBY, 0);
+        ClusterRoleRecord recordV1 = getClusterRoleRecord(haGroupName,
+                HighAvailabilityPolicy.FAILOVER, URL1, ClusterRole.ACTIVE,
+                URL2, ClusterRole.STANDBY, 1);
         assertTrue(recordV1.hasSameInfo(recordV0));
         assertTrue(recordV1.hasSameInfo(recordV1));
         assertTrue(recordV0.hasSameInfo(recordV1));
@@ -178,19 +172,15 @@ public class ClusterRoleRecordTest {
 
     @Test
     public void testHasSameInfoDifferentHostOrder() {
-        String hostzk1ordered = "zk1-1,zk1-2:2181:/hbase";
-        String hostzk1unordered = "zk1-2,zk1-1:2181:/hbase";
+        String hostzk1ordered = "zk1-1,zk1-2:2181";
+        String hostzk1unordered = "zk1-2,zk1-1:2181";
         String haGroupName = testName.getMethodName();
-        ClusterRoleRecord recordV0 = new ClusterRoleRecord(
-                haGroupName, HighAvailabilityPolicy.FAILOVER,
-                ZK2, ClusterRole.ACTIVE,
-                hostzk1ordered , ClusterRole.STANDBY,
-                0);
-        ClusterRoleRecord recordV1 = new ClusterRoleRecord(
-                haGroupName, HighAvailabilityPolicy.FAILOVER,
-                hostzk1unordered, ClusterRole.ACTIVE,
-                ZK2 , ClusterRole.STANDBY,
-                1);
+        ClusterRoleRecord recordV0 = getClusterRoleRecord(haGroupName,
+                HighAvailabilityPolicy.FAILOVER, URL2, ClusterRole.ACTIVE,
+                hostzk1ordered, ClusterRole.STANDBY, 0);
+        ClusterRoleRecord recordV1 = getClusterRoleRecord(haGroupName,
+                HighAvailabilityPolicy.FAILOVER, hostzk1unordered, ClusterRole.ACTIVE,
+                URL2, ClusterRole.STANDBY,1);
         assertTrue(recordV1.hasSameInfo(recordV0));
         assertTrue(recordV1.hasSameInfo(recordV1));
         assertTrue(recordV0.hasSameInfo(recordV1));
@@ -199,53 +189,79 @@ public class ClusterRoleRecordTest {
     @Test
     public void testHasSameInfoNegative() {
         String haGroupName = testName.getMethodName();
-        ClusterRoleRecord record = new ClusterRoleRecord(
-                haGroupName, HighAvailabilityPolicy.PARALLEL,
-                ZK1, ClusterRole.ACTIVE,
-                ZK2 , ClusterRole.STANDBY,
-                0);
+        ClusterRoleRecord record = getClusterRoleRecord(haGroupName,
+                HighAvailabilityPolicy.PARALLEL, URL1, ClusterRole.ACTIVE,
+                URL2, ClusterRole.STANDBY,0);
 
-        ClusterRoleRecord recordFailover = new ClusterRoleRecord(
-                haGroupName, HighAvailabilityPolicy.FAILOVER,
-                ZK1, ClusterRole.ACTIVE,
-                ZK2 , ClusterRole.STANDBY,
-                1);
+        ClusterRoleRecord recordFailover = getClusterRoleRecord(haGroupName,
+                HighAvailabilityPolicy.FAILOVER, URL1, ClusterRole.ACTIVE,
+                URL2, ClusterRole.STANDBY,1);
         assertFalse(record.hasSameInfo(recordFailover));
         assertFalse(recordFailover.hasSameInfo(record));
 
         String haGroupName2 = haGroupName + RandomStringUtils.randomAlphabetic(2);
-        ClusterRoleRecord record2 = new ClusterRoleRecord(
-                haGroupName2, HighAvailabilityPolicy.PARALLEL,
-                ZK1, ClusterRole.ACTIVE,
-                ZK2 , ClusterRole.STANDBY,
-                1);
+        ClusterRoleRecord record2 = getClusterRoleRecord(haGroupName2,
+                HighAvailabilityPolicy.PARALLEL, URL1, ClusterRole.ACTIVE,
+                URL2, ClusterRole.STANDBY,1);
         assertFalse(record.hasSameInfo(record2));
         assertFalse(record2.hasSameInfo(record));
     }
 
     @Test
     public void testGetRole() {
-        ClusterRoleRecord record = new ClusterRoleRecord(
-                testName.getMethodName(), HighAvailabilityPolicy.FAILOVER,
-                ZK1, ClusterRole.ACTIVE,
-                ZK2 , ClusterRole.STANDBY,
-                0);
-        assertEquals(ClusterRole.ACTIVE, record.getRole(ZK1));
-        assertEquals(ClusterRole.ACTIVE, record.getRole(record.getZk1()));
-        assertEquals(ClusterRole.STANDBY, record.getRole(record.getZk2()));
+        ClusterRoleRecord record = getClusterRoleRecord(testName.getMethodName(),
+                HighAvailabilityPolicy.FAILOVER, URL1, ClusterRole.ACTIVE,
+                URL2, ClusterRole.STANDBY,0);
+        assertEquals(ClusterRole.ACTIVE, record.getRole(getFullUrl(URL1)));
+        assertEquals(ClusterRole.ACTIVE, record.getRole(record.getUrl1()));
+        assertEquals(ClusterRole.STANDBY, record.getRole(record.getUrl2()));
         assertEquals(ClusterRole.UNKNOWN, record.getRole(null));
         assertEquals(ClusterRole.UNKNOWN, record.getRole("foo"));
     }
 
     @Test
     public void testToPrettyString() {
-        ClusterRoleRecord record = new ClusterRoleRecord(
-                testName.getMethodName(), HighAvailabilityPolicy.PARALLEL,
-                ZK1, ClusterRole.ACTIVE,
-                ZK2, ClusterRole.STANDBY,
-                1);
+        ClusterRoleRecord record =  getClusterRoleRecord(testName.getMethodName(),
+                HighAvailabilityPolicy.PARALLEL, URL1, ClusterRole.ACTIVE,
+                URL2, ClusterRole.STANDBY,1);
         LOG.info("toString(): {}", record.toString());
         LOG.info("toPrettyString:\n{}", record.toPrettyString());
         assertNotEquals(record.toString(), record.toPrettyString());
+    }
+
+    //Private Helper Methods
+
+    private ClusterRoleRecord getClusterRoleRecord(String name, HighAvailabilityPolicy policy,
+                              String url1, ClusterRole role1, String url2, ClusterRole role2, int version) {
+        url1 = getFullUrl(url1);
+        url2 = getFullUrl(url2);
+        if (registryType == null) {
+            return new ClusterRoleRecord(
+                    name, policy,
+                    url1, role1,
+                    url2, role2,
+                    version);
+        } else {
+            return new ClusterRoleRecord(
+                    name, policy,
+                    registryType,
+                    url1, role1,
+                    url2, role2,
+                    version);
+        }
+    }
+
+    private String getFullUrl(String url) {
+        if (registryType == null) {
+            return url + "::/hbase";
+        }
+        switch (registryType){
+            case MASTER:
+            case RPC:
+                return url;
+            case ZK:
+            default:
+                return url + "::/hbase";
+        }
     }
 }

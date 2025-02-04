@@ -20,7 +20,6 @@ package org.apache.phoenix.jdbc;
 import org.apache.hadoop.hbase.StartMiniClusterOption;
 import org.apache.phoenix.end2end.PhoenixRegionServerEndpointTestImpl;
 import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.commons.lang3.RandomUtils;
@@ -64,6 +63,9 @@ import static org.apache.phoenix.jdbc.ClusterRoleRecordGeneratorTool.PHOENIX_HA_
 import static org.apache.phoenix.jdbc.FailoverPhoenixConnection.FAILOVER_TIMEOUT_MS_ATTR;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.*;
 import static org.apache.phoenix.query.QueryServices.COLLECT_REQUEST_LEVEL_METRICS;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_MASTER;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_RPC;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_ZK;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -83,9 +85,9 @@ public class HighAvailabilityTestingUtility {
         private final HBaseTestingUtility hbaseCluster1 = new HBaseTestingUtility();
         private final HBaseTestingUtility hbaseCluster2 = new HBaseTestingUtility();
         /** The host\:port::/hbase format of the JDBC string for HBase cluster 1. */
-        private String url1;
+        private String zkUrl1;
         /** The host\:port::/hbase format of the JDBC string for HBase cluster 2. */
-        private String url2;
+        private String zkUrl2;
         private PhoenixHAAdminHelper haAdmin1;
         private PhoenixHAAdminHelper haAdmin2;
         private Admin admin1;
@@ -118,11 +120,11 @@ public class HighAvailabilityTestingUtility {
             String confAddress1 = hbaseCluster1.getConfiguration().get(HConstants.ZOOKEEPER_QUORUM);
             String confAddress2 = hbaseCluster2.getConfiguration().get(HConstants.ZOOKEEPER_QUORUM);
 
-            url1 = String.format("%s\\:%d::/hbase", confAddress1, hbaseCluster1.getZkCluster().getClientPort());
-            url2 = String.format("%s\\:%d::/hbase", confAddress2, hbaseCluster2.getZkCluster().getClientPort());
+            zkUrl1 = String.format("%s\\:%d::/hbase", confAddress1, hbaseCluster1.getZkCluster().getClientPort());
+            zkUrl2 = String.format("%s\\:%d::/hbase", confAddress2, hbaseCluster2.getZkCluster().getClientPort());
 
-            haAdmin1 = new PhoenixHAAdminHelper(getUrl1(), hbaseCluster1.getConfiguration(), PhoenixHAAdminTool.HighAvailibilityCuratorProvider.INSTANCE);
-            haAdmin2 = new PhoenixHAAdminHelper(getUrl2(), hbaseCluster2.getConfiguration(), PhoenixHAAdminTool.HighAvailibilityCuratorProvider.INSTANCE);
+            haAdmin1 = new PhoenixHAAdminHelper(getZkUrl1(), hbaseCluster1.getConfiguration(), PhoenixHAAdminTool.HighAvailibilityCuratorProvider.INSTANCE);
+            haAdmin2 = new PhoenixHAAdminHelper(getZkUrl2(), hbaseCluster2.getConfiguration(), PhoenixHAAdminTool.HighAvailibilityCuratorProvider.INSTANCE);
 
             admin1 = hbaseCluster1.getConnection().getAdmin();
             admin2 = hbaseCluster2.getConnection().getAdmin();
@@ -135,8 +137,28 @@ public class HighAvailabilityTestingUtility {
             admin2.addReplicationPeer(PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT, replicationPeerConfig2);
 
             LOG.info("MiniHBase DR cluster pair is ready for testing.  Cluster Urls [{},{}]",
-                    getUrl1(), getUrl2());
+                    getZkUrl1(), getZkUrl2());
             logClustersStates();
+        }
+
+        /**
+         * Get Specific url of specific cluster based on index and registryType
+         */
+        public String getURL(int clusterIndex, ClusterRoleRecord.RegistryType registryType) {
+            if (registryType == null) {
+                return clusterIndex == 1 ? zkUrl1 : zkUrl2;
+            }
+            String masterAddress1 = hbaseCluster1.getConfiguration().get(HConstants.MASTER_ADDRS_KEY);
+            String masterAddress2 = hbaseCluster2.getConfiguration().get(HConstants.MASTER_ADDRS_KEY);
+            switch (registryType) {
+                case RPC:
+                case MASTER:
+                    return clusterIndex == 1 ? masterAddress1.replaceAll(":", "\\\\:") :
+                            masterAddress2.replaceAll(":", "\\\\:");
+                case ZK:
+                default:
+                    return clusterIndex == 1 ? zkUrl1 : zkUrl2;
+            }
         }
 
         /** initialize two ZK clusters for cluster role znode. */
@@ -144,10 +166,23 @@ public class HighAvailabilityTestingUtility {
                 throws Exception {
             ClusterRoleRecord record = new ClusterRoleRecord(
                     haGroupName, policy,
-                    getUrl1(), ClusterRole.ACTIVE,
-                    getUrl2(), ClusterRole.STANDBY,
+                    getZkUrl1(), ClusterRole.ACTIVE,
+                    getZkUrl2(), ClusterRole.STANDBY,
                     1);
+            addRoleRecordToClusters(record);
+        }
 
+        public void initClusterRole(String haGroupName, HighAvailabilityPolicy policy,
+                                    ClusterRoleRecord.RegistryType type) throws Exception {
+            ClusterRoleRecord record = new ClusterRoleRecord(
+                    haGroupName, policy, type,
+                    getURL(1, type), ClusterRole.ACTIVE,
+                    getURL(2, type), ClusterRole.STANDBY,
+                    1);
+            addRoleRecordToClusters(record);
+        }
+
+        private void addRoleRecordToClusters(ClusterRoleRecord record) throws Exception {
             int failures = 0;
             do {
                 try {
@@ -178,9 +213,43 @@ public class HighAvailabilityTestingUtility {
                 ClusterRole role2) throws Exception {
             final ClusterRoleRecord newRoleRecord = new ClusterRoleRecord(
                     haGroup.getGroupInfo().getName(), haGroup.getRoleRecord().getPolicy(),
-                    getUrl1(), role1,
-                    getUrl2(), role2,
+                    haGroup.getRoleRecord().getRegistryType(),
+                    getURL(1, haGroup.getRoleRecord().getRegistryType()), role1,
+                    getURL(2, haGroup.getRoleRecord().getRegistryType()), role2,
                     haGroup.getRoleRecord().getVersion() + 1); // always use a newer version
+            applyNewRoleRecord(newRoleRecord, haGroup);
+        }
+
+        /**
+         * Set registryType for roleRecord and wait the cluster role transition to happen.
+         *
+         * @param haGroup the HA group name
+         * @param type RegistryType to change roleRecord to
+         */
+        public void transitClusterRoleRecordRegistry(HighAvailabilityGroup haGroup,
+                                                     ClusterRoleRecord.RegistryType type) throws Exception {
+            final ClusterRoleRecord newRoleRecord = new ClusterRoleRecord(
+                    haGroup.getGroupInfo().getName(), haGroup.getRoleRecord().getPolicy(),
+                    type,
+                    getURL(1, type), ClusterRole.ACTIVE,
+                    getURL(2, type), ClusterRole.STANDBY,
+                    haGroup.getRoleRecord().getVersion() + 1); // always use a newer version
+            applyNewRoleRecord(newRoleRecord, haGroup);
+        }
+
+        public void refreshClusterRoleRecordAfterClusterRestart(HighAvailabilityGroup haGroup,
+                                                ClusterRole role1, ClusterRole role2) throws Exception {
+            final ClusterRoleRecord newRoleRecord = new ClusterRoleRecord(
+                    haGroup.getGroupInfo().getName(), haGroup.getRoleRecord().getPolicy(),
+                    haGroup.getRoleRecord().getRegistryType(),
+                    getURL(1, haGroup.getRoleRecord().getRegistryType()), role1,
+                    getURL(2, haGroup.getRoleRecord().getRegistryType()), role2,
+                    haGroup.getRoleRecord().getVersion() + 1); // always use a newer version
+            applyNewRoleRecord(newRoleRecord, haGroup);
+        }
+
+        private void applyNewRoleRecord(ClusterRoleRecord newRoleRecord,
+                                        HighAvailabilityGroup haGroup) throws Exception {
             LOG.info("Transiting cluster role for HA group {} V{}->V{}, existing: {}, new: {}",
                     haGroup.getGroupInfo().getName(), haGroup.getRoleRecord().getVersion(),
                     newRoleRecord.getVersion(), haGroup.getRoleRecord(), newRoleRecord);
@@ -189,13 +258,13 @@ public class HighAvailabilityTestingUtility {
                 haAdmin1.createOrUpdateDataOnZookeeper(newRoleRecord);
                 successAtLeastOnce = true;
             } catch (IOException e) {
-                LOG.warn("Fail to update new record on {} because {}", getUrl1(), e.getMessage());
+                LOG.warn("Fail to update new record on {} because {}", getZkUrl1(), e.getMessage());
             }
             try {
                 haAdmin2.createOrUpdateDataOnZookeeper(newRoleRecord);
                 successAtLeastOnce = true;
             } catch (IOException e) {
-                LOG.warn("Fail to update new record on {} because {}", getUrl2(), e.getMessage());
+                LOG.warn("Fail to update new record on {} because {}", getZkUrl2(), e.getMessage());
             }
 
             if (!successAtLeastOnce) {
@@ -247,10 +316,9 @@ public class HighAvailabilityTestingUtility {
          * @param clusterIndex 1 based
          * @return a Phoenix Connection to the indexed cluster
          */
-        public Connection getClusterConnection(int clusterIndex) throws SQLException {
-            String clusterUrl = clusterIndex == 1 ? getUrl1() : getUrl2();
+        public Connection getClusterConnection(int clusterIndex, HighAvailabilityGroup haGroup) throws SQLException {
             Properties props = new Properties();
-            String url = getJdbcUrl(clusterUrl);
+            String url = getJdbcUrl(haGroup, getURL(clusterIndex, haGroup.getRoleRecord().getRegistryType()));
             return DriverManager.getConnection(url, props);
         }
 
@@ -258,16 +326,16 @@ public class HighAvailabilityTestingUtility {
          * Returns a Phoenix Connection to cluster 1
          * @return a Phoenix Connection to the cluster
          */
-        public Connection getCluster1Connection() throws SQLException {
-            return getClusterConnection(1);
+        public Connection getCluster1Connection(HighAvailabilityGroup haGroup) throws SQLException {
+            return getClusterConnection(1, haGroup);
         }
 
         /**
          * Returns a Phoenix Connection to cluster 2
          * @return a Phoenix Connection to the cluster
          */
-        public Connection getCluster2Connection() throws SQLException {
-            return getClusterConnection(2);
+        public Connection getCluster2Connection(HighAvailabilityGroup haGroup) throws SQLException {
+            return getClusterConnection(2, haGroup);
         }
 
         //TODO: Replace with a real check for replication complete
@@ -344,51 +412,79 @@ public class HighAvailabilityTestingUtility {
         }
 
         /**
-         * @return the JDBC connection URL for this pair of HBase cluster in the HA format
+         * The JDBC connection url for the given clusters in particular format.
+         * Note that HAUrl will contain ZK as host which is used to create HA Connection
+         * from client, although wrapped connections can be using master url based on the
+         * registry Type set in roleRecord.
+         *
+         * below methods will return urls based on registryType and HAUrl will be zk based
          */
         public String getJdbcHAUrl() {
-            return getJdbcUrl(String.format("[%s|%s]", url1, url2));
+            return getJdbcHAUrl(PRINCIPAL);
         }
 
         public String getJdbcHAUrl(String principal) {
-            return getJdbcUrl(String.format("[%s|%s]", url1, url2), principal);
+            return String.format("%s:[%s|%s]:%s", JDBC_PROTOCOL_ZK, getZkUrl1(), getZkUrl2(), principal);
         }
 
         public String getJdbcHAUrlWithoutPrincipal() {
-            return getJdbcUrlWithoutPrincipal(String.format("[%s|%s]", url1, url2));
+            return String.format("%s:[%s|%s]", JDBC_PROTOCOL_ZK, getZkUrl1(), getZkUrl2());
         }
 
 
-        public String getJdbcUrl1() {
-            return getJdbcUrl(url1);
+        public String getJdbcUrl1(HighAvailabilityGroup haGroup) {
+            return getJdbcUrl(haGroup, getURL(1, haGroup.getRoleRecord().getRegistryType()));
         }
 
-        public String getJdbcUrl1(String principal) {
-            return getJdbcUrl(url1, principal);
+        public String getJdbcUrl1(HighAvailabilityGroup haGroup, String principal) {
+            return getJdbcUrl(haGroup, getURL(1, haGroup.getRoleRecord().getRegistryType()), principal);
         }
 
-        public String getJdbcUrl2() {
-            return getJdbcUrl(url2);
+        public String getJdbcUrl2(HighAvailabilityGroup haGroup) {
+            return getJdbcUrl(haGroup, getURL(2, haGroup.getRoleRecord().getRegistryType()));
         }
 
-        public String getJdbcUrl(String zkUrl) {
-            return String.format("jdbc:phoenix+zk:%s:%s", zkUrl, PRINCIPAL);
+        public String getJdbcUrl2(HighAvailabilityGroup haGroup, String principal) {
+            return getJdbcUrl(haGroup, getURL(2, haGroup.getRoleRecord().getRegistryType()), principal);
         }
 
-        public String getJdbcUrl(String zkUrl, String principal) {
-            return String.format("jdbc:phoenix+zk:%s:%s", zkUrl, principal);
+        public String getJdbcUrl(HighAvailabilityGroup haGroup, String url) {
+            String interimUrl = getUrlWithoutPrincipal(haGroup, url);
+            return String.format("%s:%s",interimUrl, PRINCIPAL);
         }
 
-        public String getJdbcUrlWithoutPrincipal(String zkUrl) {
-            return String.format("jdbc:phoenix+zk:%s", zkUrl);
+        public String getJdbcUrl(HighAvailabilityGroup haGroup, String url, String principal) {
+            String interimUrl = getUrlWithoutPrincipal(haGroup, url);
+            return String.format("%s:%s",interimUrl, principal);
         }
 
-        public String getUrl1() {
-            return url1;
+        public String getJdbcUrlWithoutPrincipal(HighAvailabilityGroup haGroup, String url) {
+            String interimUrl = getUrlWithoutPrincipal(haGroup, url);
+            if (interimUrl.endsWith("::")) {
+                interimUrl = interimUrl.substring(0, interimUrl.length() - 2);
+            }
+            return interimUrl;
         }
 
-        public String getUrl2() {
-            return url2;
+        public String getZkUrl1() {
+            return zkUrl1;
+        }
+
+        public String getZkUrl2() {
+            return zkUrl2;
+        }
+
+        private String getUrlWithoutPrincipal(HighAvailabilityGroup haGroup, String url) {
+            StringBuilder sb = new StringBuilder();
+            switch (haGroup.getRoleRecord().getRegistryType()) {
+                case MASTER:
+                    return sb.append(JDBC_PROTOCOL_MASTER).append(":").append(url).append("::").toString();
+                case RPC:
+                    return sb.append(JDBC_PROTOCOL_RPC).append(":").append(url).append("::").toString();
+                case ZK:
+                default:
+                    return sb.append(JDBC_PROTOCOL_ZK).append(":").append(url).toString();
+            }
         }
 
         /**
@@ -399,7 +495,7 @@ public class HighAvailabilityTestingUtility {
             getHBaseCluster1().getConfiguration()
                     .iterator()
                     .forEachRemaining(k -> properties.setProperty(k.getKey(), k.getValue()));
-            return HighAvailabilityGroup.getCurator(getUrl1(), properties);
+            return HighAvailabilityGroup.getCurator(getZkUrl1(), properties);
         }
 
         /**
@@ -410,7 +506,7 @@ public class HighAvailabilityTestingUtility {
             getHBaseCluster2().getConfiguration()
                     .iterator()
                     .forEachRemaining(k -> properties.setProperty(k.getKey(), k.getValue()));
-            return HighAvailabilityGroup.getCurator(getUrl2(), properties);
+            return HighAvailabilityGroup.getCurator(getZkUrl2(), properties);
         }
 
         /**
@@ -419,8 +515,8 @@ public class HighAvailabilityTestingUtility {
          * @param tableName the table name
          * @throws SQLException if error happens
          */
-        public void createTableOnClusterPair(String tableName) throws SQLException {
-            createTableOnClusterPair(tableName, true);
+        public void createTableOnClusterPair(HighAvailabilityGroup haGroup, String tableName) throws SQLException {
+            createTableOnClusterPair(haGroup, tableName, true);
         }
 
         /**
@@ -432,10 +528,11 @@ public class HighAvailabilityTestingUtility {
          * @param replicationScope the table replication scope true=1 and false=0
          * @throws SQLException if error happens
          */
-        public void createTableOnClusterPair(String tableName, boolean replicationScope)
+        public void createTableOnClusterPair(HighAvailabilityGroup haGroup, String tableName, boolean replicationScope)
                 throws SQLException {
-            for (String url : Arrays.asList(getUrl1(), getUrl2())) {
-                String jdbcUrl = getJdbcUrl(url);
+            for (String url : Arrays.asList(getURL(1, haGroup.getRoleRecord().getRegistryType()),
+                    getURL(2, haGroup.getRoleRecord().getRegistryType()))) {
+                String jdbcUrl = getJdbcUrl(haGroup, url);
                 try (Connection conn = DriverManager.getConnection(jdbcUrl, new Properties())) {
                     conn.createStatement().execute(String.format(
                             "CREATE TABLE IF NOT EXISTS %s (\n"
@@ -464,9 +561,10 @@ public class HighAvailabilityTestingUtility {
          * @param tableName the table name
          * @throws SQLException if error happens
          */
-        public void createTenantSpecificTable(String tableName) throws SQLException {
-            for (String url : Arrays.asList(getUrl1(), getUrl2())) {
-                String jdbcUrl = getJdbcUrl(url);
+        public void createTenantSpecificTable(HighAvailabilityGroup haGroup, String tableName) throws SQLException {
+            for (String url : Arrays.asList(getURL(1, haGroup.getRoleRecord().getRegistryType()),
+                    getURL(2, haGroup.getRoleRecord().getRegistryType()))) {
+                String jdbcUrl = getJdbcUrl(haGroup, url);
                 try (Connection conn = DriverManager.getConnection(jdbcUrl, new Properties())) {
                     conn.createStatement().execute(String.format(
                             "CREATE TABLE IF NOT EXISTS %s (\n"
@@ -510,7 +608,7 @@ public class HighAvailabilityTestingUtility {
 
         @Override
         public String toString() {
-            return "HBaseTestingUtilityPair{" + getUrl1() + ", " + getUrl2() + "}";
+            return "HBaseTestingUtilityPair{" + getZkUrl1() + ", " + getZkUrl2() + "}";
         }
 
         /** Sets up the default HBase configuration for Phoenix HA testing. */

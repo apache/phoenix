@@ -24,6 +24,8 @@ import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.STANDBY;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -44,63 +46,85 @@ enum HighAvailabilityPolicy {
             FailoverPhoenixContext context = new FailoverPhoenixContext(info, haGroup, haURLInfo);
             return new FailoverPhoenixConnection(context);
         }
+
         @Override
         void transitClusterRole(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
                 ClusterRoleRecord newRecord) throws SQLException {
             if (oldRecord.getRole1() == ACTIVE && newRecord.getRole1() == STANDBY) {
-                transitStandby(haGroup, oldRecord.getZk1());
+                transitStandby(haGroup, oldRecord.getUrl1(), oldRecord.getRegistryType());
             }
             if (oldRecord.getRole2() == ACTIVE && newRecord.getRole2() == STANDBY) {
-                transitStandby(haGroup, oldRecord.getZk2());
+                transitStandby(haGroup, oldRecord.getUrl2(), oldRecord.getRegistryType());
             }
             if (oldRecord.getRole1() != ACTIVE && newRecord.getRole1() == ACTIVE) {
-                transitActive(haGroup, oldRecord.getZk1());
+                transitActive(haGroup, oldRecord.getUrl1(), oldRecord.getRegistryType());
             }
             if (oldRecord.getRole2() != ACTIVE && newRecord.getRole2() == ACTIVE) {
-                transitActive(haGroup, oldRecord.getZk2());
+                transitActive(haGroup, oldRecord.getUrl2(), oldRecord.getRegistryType());
             }
         }
-        private void transitStandby(HighAvailabilityGroup haGroup, String zkUrl)
-                throws SQLException {
-            // Close connections when a previously ACTIVE HBase cluster becomes STANDBY.
-            LOG.info("Cluster {} becomes STANDBY in HA group {}, now close all its connections",
-                    zkUrl, haGroup.getGroupInfo());
-            ConnectionQueryServices cqs = null;
 
-            //Close connections for every HAURLInfo's (different principal) conn for a give HAGroup
-            for (HAURLInfo haurlInfo : HighAvailabilityGroup.URLS.get(haGroup.getGroupInfo())) {
-                try {
-                    String jdbcZKUrl = haGroup.getGroupInfo().getJDBCUrl(zkUrl, haurlInfo);
-                    cqs = PhoenixDriver.INSTANCE.getConnectionQueryServices(
-                            jdbcZKUrl, haGroup.getProperties());
-                    cqs.closeAllConnections(new SQLExceptionInfo
-                            .Builder(SQLExceptionCode.HA_CLOSED_AFTER_FAILOVER)
-                            .setMessage("Phoenix connection got closed due to failover")
-                            .setHaGroupInfo(haGroup.getGroupInfo().toString()));
-                    LOG.info("Closed all connections to cluster {} for HA group {}",
-                            jdbcZKUrl, haGroup.getGroupInfo());
-                } finally {
-                    if (cqs != null) {
-                        //CQS is closed but it is not invalidated from global cache in PhoenixDriver
-                        //so that any new connection will get error instead of creating a new CQS
-                        LOG.info("Closing CQS after cluster '{}' becomes STANDBY", zkUrl);
-                        cqs.close();
-                        LOG.info("Successfully closed CQS after cluster '{}' becomes STANDBY",
-                                zkUrl);
-                    }
+        @Override
+        void transitRoleRecordRegistry(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
+                                       ClusterRoleRecord newRecord) throws SQLException {
+            Optional<String> activeUrl = oldRecord.getActiveUrl();
+
+            //Close connections for Active HBase cluster as there is a change in Registry Type
+            if (activeUrl.isPresent()) {
+                LOG.info("Cluster {} has a change in registryType in HA group {}, now closing all its connections",
+                        activeUrl.get(), oldRecord.getRegistryType());
+                closeConnections(haGroup, activeUrl.get(), oldRecord.getRegistryType());
+            } else {
+                LOG.info("None of the cluster in HA Group {} is active", haGroup);
+            }
+        }
+
+        @Override
+        void transitClusterUrl(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
+                               ClusterRoleRecord newRecord) throws SQLException {
+            if (!Objects.equals(oldRecord.getUrl1(), newRecord.getUrl1())) {
+                //If role changes then it is already handled at the first transit step {@link #transitClusterRole}
+                //And we only care about ACTIVE connections as STANDBY we are not creating connections
+                if (oldRecord.getRole1() == ACTIVE && newRecord.getRole1() == ACTIVE) {
+                    LOG.info("Cluster {} is changed to {} in HA group {}, now closing all its connections",
+                            oldRecord.getUrl1(), newRecord.getUrl1(), haGroup);
+                    closeConnections(haGroup, oldRecord.getUrl1(), oldRecord.getRegistryType());
+                    //Do we need to invalidate now?
+                } else {
+                    LOG.info("Cluster {} is changed to {} in HA group {}, which is not active",
+                            oldRecord.getUrl1(), newRecord.getUrl1(), haGroup);
+                }
+            }
+            if (!Objects.equals(oldRecord.getUrl2(), newRecord.getUrl2())) {
+                if (oldRecord.getRole2() == ACTIVE && newRecord.getRole2() == ACTIVE) {
+                    LOG.info("Cluster {} is changed to {} in HA group {}, now closing all its connections",
+                            oldRecord.getUrl2(), newRecord.getUrl2(), haGroup);
+                    closeConnections(haGroup, oldRecord.getUrl2(), oldRecord.getRegistryType());
+                    //Do we need to invalidate now?
+                } else {
+                    LOG.info("Cluster {} is changed to {} in HA group {}, which is not active",
+                            oldRecord.getUrl2(), newRecord.getUrl2(), haGroup);
                 }
             }
         }
 
-        private void transitActive(HighAvailabilityGroup haGroup, String zkUrl)
-                throws SQLException {
+        private void transitStandby(HighAvailabilityGroup haGroup, String url,
+                                    ClusterRoleRecord.RegistryType registryType) throws SQLException {
+            // Close connections when a previously ACTIVE HBase cluster becomes STANDBY.
+            LOG.info("Cluster {} becomes STANDBY in HA group {}, now close all its connections",
+                    url, haGroup.getGroupInfo());
+            closeConnections(haGroup, url, registryType);
+        }
+
+        private void transitActive(HighAvailabilityGroup haGroup, String url,
+                                   ClusterRoleRecord.RegistryType registryType) throws SQLException {
             // Invalidate CQS cache if any that has been closed but has not been cleared
-            for (HAURLInfo haurlInfo : HighAvailabilityGroup.URLS.get(haGroup.getGroupInfo())) {
-                String jdbcZKUrl = haGroup.getGroupInfo().getJDBCUrl(zkUrl, haurlInfo);
-                LOG.info("invalidating cqs cache for zkUrl: " + jdbcZKUrl);
-                PhoenixDriver.INSTANCE.invalidateCache(jdbcZKUrl,
-                        haGroup.getProperties());
-            }
+                for (HAURLInfo haurlInfo : HighAvailabilityGroup.URLS.get(haGroup.getGroupInfo())) {
+                    String jdbcUrl = HighAvailabilityGroup.getJDBCUrl(url, haurlInfo, registryType);
+                    LOG.info("invalidating cqs cache for zkUrl: " + jdbcUrl);
+                    PhoenixDriver.INSTANCE.invalidateCache(jdbcUrl,
+                            haGroup.getProperties());
+                }
         }
     },
 
@@ -123,14 +147,79 @@ enum HighAvailabilityPolicy {
                 return haGroup.connectActive(info, haURLInfo);
             }
         }
+
         @Override
         void transitClusterRole(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
                 ClusterRoleRecord newRecord) {
-            LOG.info("Cluster role changed for parallel HA policy.");
+            //No Action for Parallel Policy
+        }
+
+
+        @Override
+        void transitRoleRecordRegistry(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
+                                       ClusterRoleRecord newRecord) throws SQLException {
+            //Close connections of both clusters as there is a change in registryType
+            LOG.info("Cluster {} and {} has a change in registryType in HA group {}, now closing all its connections",
+                    oldRecord.getUrl1(), oldRecord.getUrl2() , oldRecord.getRegistryType());
+            //close connections for cluster 1
+            closeConnections(haGroup, oldRecord.getUrl1(), oldRecord.getRegistryType());
+            //close connections for cluster 2
+            closeConnections(haGroup, oldRecord.getUrl2(), oldRecord.getRegistryType());
+        }
+
+        @Override
+        void transitClusterUrl(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
+                               ClusterRoleRecord newRecord) throws SQLException {
+            if (!Objects.equals(oldRecord.getUrl1(), newRecord.getUrl1())) {
+                LOG.info("Cluster {} is changed to {} in HA group {}, now closing all its connections",
+                        oldRecord.getUrl1(), newRecord.getUrl1(), haGroup);
+                closeConnections(haGroup, oldRecord.getUrl1(), oldRecord.getRegistryType());
+                //Do we need to invalidate now?
+            }
+            if (!Objects.equals(oldRecord.getUrl2(), newRecord.getUrl2())) {
+                LOG.info("Cluster {} is changed to {} in HA group {}, now closing all its connections",
+                        oldRecord.getUrl2(), newRecord.getUrl2(), haGroup);
+                closeConnections(haGroup, oldRecord.getUrl2(), oldRecord.getRegistryType());
+                //Do we need to invalidate now?
+            }
+
         }
     };
 
     private static final Logger LOG = LoggerFactory.getLogger(HighAvailabilityGroup.class);
+
+    /**
+     * Utility to close cqs and all it's connection for specific url of a HAGroup
+     * @param haGroup The High Availability (HA) Group
+     * @param url The url on which cqs and connections are present
+     * @param registryType The registry Type of connections
+     * @throws SQLException if fails to close the connections
+     */
+    private static void closeConnections(HighAvailabilityGroup haGroup, String url,
+                                         ClusterRoleRecord.RegistryType registryType) throws SQLException {
+        ConnectionQueryServices cqs = null;
+        //Close connections for every HAURLInfo's (different principal) conn for a give HAGroup
+        for (HAURLInfo haurlInfo : HighAvailabilityGroup.URLS.get(haGroup.getGroupInfo())) {
+            try {
+                cqs = PhoenixDriver.INSTANCE.getConnectionQueryServices(
+                        HighAvailabilityGroup.getJDBCUrl(url, haurlInfo, registryType), haGroup.getProperties());
+                cqs.closeAllConnections(new SQLExceptionInfo
+                        .Builder(SQLExceptionCode.HA_CLOSED_AFTER_FAILOVER)
+                        .setMessage("Phoenix connection got closed due to failover")
+                        .setHaGroupInfo(haGroup.getGroupInfo().toString()));
+                LOG.info("Closed all connections to cluster {} for HA group {}", url,
+                        haGroup.getGroupInfo());
+            } finally {
+                if (cqs != null) {
+                    // CQS is closed, but it is not invalidated from global cache in PhoenixDriver
+                    // so that any new connection will get error instead of creating a new CQS
+                    LOG.info("Closing CQS after cluster '{}' becomes STANDBY", url);
+                    cqs.close();
+                    LOG.info("Successfully closed CQS after cluster '{}' becomes STANDBY", url);
+                }
+            }
+        }
+    }
 
     /**
      * Provides a JDBC connection from given connection string and properties.
@@ -145,7 +234,28 @@ enum HighAvailabilityPolicy {
             throws SQLException;
 
     /**
-     * Call-back function when a cluster role transition is detected in the high availability group.
+     * Call-back function when a cluster role record transition is detected in the high availability group.
+     *
+     * @param haGroup The high availability (HA) group
+     * @param oldRecord The older cluster role record cached in this client for the given HA group
+     * @param newRecord New cluster role record read from one ZooKeeper cluster znode
+     * @throws SQLException if fails to handle the cluster role record transition
+     */
+    public void transitClusterRoleRecord(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
+                                           ClusterRoleRecord newRecord) throws SQLException {
+        transitClusterRole(haGroup, oldRecord, newRecord);
+        if (oldRecord.getRegistryType() != newRecord.getRegistryType()) {
+            transitRoleRecordRegistry(haGroup, oldRecord, newRecord);
+        } else{
+            //We are closing all the relevant connections when registry is changing so no need to check if url is
+            //changing or not, as most probably they are changing with respect to registry Type. But if registry
+            //is not changing then need to check urls
+            transitClusterUrl(haGroup, oldRecord, newRecord);
+        }
+    }
+
+    /**
+     * Call-back function when only role transition is detected in the high availability group or clusterRoleRecord.
      *
      * @param haGroup The high availability (HA) group
      * @param oldRecord The older cluster role record cached in this client for the given HA group
@@ -154,4 +264,28 @@ enum HighAvailabilityPolicy {
      */
     abstract void transitClusterRole(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
             ClusterRoleRecord newRecord) throws SQLException;
+
+
+    /**
+     * Call-back function when only registry transition is detected in the high availability group or clusterRoleRecord.
+     *
+     * @param haGroup The high availability (HA) group
+     * @param oldRecord The older cluster role record cached in this client for the given HA group
+     * @param newRecord New cluster role record read from one ZooKeeper cluster znode
+     * @throws SQLException if fails to handle the cluster role record registry transition
+     */
+    abstract void transitRoleRecordRegistry(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
+                                     ClusterRoleRecord newRecord) throws SQLException;
+
+    /**
+     * Call-back function when only url transition is detected in the high availability group or clusterRoleRecord.
+     *
+     * @param haGroup The high availability (HA) group
+     * @param oldRecord The older cluster role record cached in this client for the given HA group
+     * @param newRecord New cluster role record read from one ZooKeeper cluster znode
+     * @throws SQLException if fails to handle the cluster url transition
+     */
+    abstract void transitClusterUrl(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
+                                            ClusterRoleRecord newRecord) throws SQLException;
+
 }

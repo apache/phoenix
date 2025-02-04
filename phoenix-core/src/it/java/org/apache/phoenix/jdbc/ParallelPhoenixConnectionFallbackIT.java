@@ -72,7 +72,7 @@ public class ParallelPhoenixConnectionFallbackIT {
         jdbcUrl = CLUSTERS.getJdbcHAUrl();
         haGroup = HighAvailabilityTestingUtility.getHighAvailibilityGroup(jdbcUrl, PROPERTIES);
         LOG.info("Initialized haGroup {} with URL {}", haGroup.getGroupInfo().getName(), jdbcUrl);
-        CLUSTERS.createTableOnClusterPair(tableName);
+        CLUSTERS.createTableOnClusterPair(haGroup, tableName);
     }
 
     @AfterClass

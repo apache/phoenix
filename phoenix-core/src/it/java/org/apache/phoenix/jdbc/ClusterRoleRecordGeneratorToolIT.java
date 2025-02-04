@@ -104,8 +104,8 @@ public class ClusterRoleRecordGeneratorToolIT {
         assertEquals(1, records.size());
         for (ClusterRoleRecord record : records) {
             assertEquals(HighAvailabilityPolicy.FAILOVER, record.getPolicy());
-            assertEquals(ClusterRole.ACTIVE, record.getRole(CLUSTERS.getUrl1()));
-            assertEquals(ClusterRole.STANDBY, record.getRole(CLUSTERS.getUrl2()));
+            assertEquals(ClusterRole.ACTIVE, record.getRole(CLUSTERS.getZkUrl1()));
+            assertEquals(ClusterRole.STANDBY, record.getRole(CLUSTERS.getZkUrl2()));
         }
     }
 
@@ -126,8 +126,8 @@ public class ClusterRoleRecordGeneratorToolIT {
         assertEquals(3, records.size());
         for (ClusterRoleRecord record : records) {
             assertEquals(HighAvailabilityPolicy.PARALLEL, record.getPolicy());
-            assertEquals(ClusterRole.ACTIVE, record.getRole(CLUSTERS.getUrl2()));
-            assertEquals(ClusterRole.STANDBY, record.getRole(CLUSTERS.getUrl1()));
+            assertEquals(ClusterRole.ACTIVE, record.getRole(CLUSTERS.getZkUrl2()));
+            assertEquals(ClusterRole.STANDBY, record.getRole(CLUSTERS.getZkUrl1()));
         }
     }
 }
