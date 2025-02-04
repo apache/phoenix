@@ -68,6 +68,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.generated.DynamicColumnMetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
@@ -77,6 +78,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.ParseNode;
@@ -122,7 +124,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -130,72 +131,10 @@ import java.util.Map.Entry;
 import java.util.Set;
 import javax.annotation.Nonnull;
 
-import javax.annotation.Nonnull;
-
 import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Durability;
-import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.ByteStringer;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.compile.ExpressionCompiler;
-import org.apache.phoenix.compile.FromCompiler;
-import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.coprocessor.generated.DynamicColumnMetaDataProtos;
-import org.apache.phoenix.coprocessor.generated.PTableProtos;
-import org.apache.phoenix.exception.DataExceedsCapacityException;
-import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.LiteralExpression;
-import org.apache.phoenix.expression.SingleCellConstructorExpression;
-import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
-import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.index.IndexMaintainer;
-import org.apache.phoenix.parse.ParseNode;
-import org.apache.phoenix.parse.SQLParser;
-import org.apache.phoenix.protobuf.ProtobufUtil;
-import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
-import org.apache.phoenix.schema.transform.TransformMaintainer;
-import org.apache.phoenix.schema.types.PBinary;
-import org.apache.phoenix.schema.types.PChar;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDouble;
-import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PVarbinaryEncoded;
-import org.apache.phoenix.schema.types.PVarchar;
 
-import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
-import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
-import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSortedMap;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
-import org.apache.phoenix.transaction.TransactionFactory;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.CDCUtil;
-import org.apache.phoenix.util.EncodedColumnsUtil;
-import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.SizedUtil;
-import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 /**
  *
@@ -2218,6 +2157,10 @@ public class PTableImpl implements PTable {
     }
 
     public static PTableProtos.PTable toProto(PTable table) {
+        return toProto(table, MetaDataProtocol.MIN_VERSION_ALLOW_VBE_COLUMNS);
+    }
+
+    public static PTableProtos.PTable toProto(PTable table, long clientVersion) {
         PTableProtos.PTable.Builder builder = PTableProtos.PTable.newBuilder();
         if (table.getTenantId() != null) {
             builder.setTenantId(ByteStringer.wrap(table.getTenantId().getBytes()));
@@ -2259,17 +2202,32 @@ public class PTableImpl implements PTable {
         }
         List<PColumn> columns = table.getColumns();
         int columnSize = columns.size();
-        for (int i = offset; i < columnSize; i++) {
-            PColumn column = columns.get(i);
-            builder.addColumns(PColumnImpl.toProto(column));
+        // check whether we need the backward compatibility check.
+        boolean
+                checkBackwardCompatibility =
+                (clientVersion < MetaDataProtocol.MIN_VERSION_ALLOW_VBE_COLUMNS)
+                        && (table.getSchemaName().getString()
+                        .equalsIgnoreCase(PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME));
+        if (checkBackwardCompatibility) {
+            for (int i = offset; i < columnSize; i++) {
+                PColumn column = columns.get(i);
+                builder.addColumns(PColumnImpl.toProto(getBackwardCompatibleColumn(
+                        column,
+                        table.getTableName().getString())));
+            }
+        } else {
+            for (int i = offset; i < columnSize; i++) {
+                PColumn column = columns.get(i);
+                builder.addColumns(PColumnImpl.toProto(column));
+            }
         }
         List<PTable> indexes = table.getIndexes();
         for (PTable curIndex : indexes) {
-            builder.addIndexes(toProto(curIndex));
+            builder.addIndexes(toProto(curIndex, clientVersion));
         }
         PTable transformingNewTable = table.getTransformingNewTable();
         if (transformingNewTable != null) {
-            builder.setTransformingNewTable(toProto(transformingNewTable));
+            builder.setTransformingNewTable(toProto(transformingNewTable, clientVersion));
         }
         builder.setIsImmutableRows(table.isImmutableRows());
         // TODO remove this field in 5.0 release
@@ -2514,6 +2472,46 @@ public class PTableImpl implements PTable {
     @Override
     public Map<PTableKey, Long> getAncestorLastDDLTimestampMap() {
         return ancestorLastDDLTimestampMap;
+    }
+
+    // Helper method for creating backward compatible PColumn object for columns that introduced the
+    // VARBINARY_ENCODED field in release version 5.3.0.
+    // Without this adjustment the older clients would get the following exception -
+    // "Error: org.apache.phoenix.schema.IllegalDataException: java.sql.SQLException:
+    // ERROR 201 (22000): Illegal data. Unsupported sql type: VARBINARY_ENCODED"
+    // The following columns were introduced as part of the 5.3.0 release
+    // SYSTEM.CATALOG.ROW_KEY_MATCHER
+    // SYSTEM.CDC_STREAM.PARTITION_START_KEY
+    // SYSTEM.CDC_STREAM.PARTITION_END_KEY
+    private static PColumn getBackwardCompatibleColumn(PColumn column, String tableName) {
+
+                // SYSTEM.CATALOG.ROW_KEY_MATCHER
+        if ((tableName.equalsIgnoreCase(PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE)
+                && column.getName().getString().equalsIgnoreCase(PhoenixDatabaseMetaData.ROW_KEY_MATCHER))
+                // SYSTEM.CDC_STREAM.PARTITION_START_KEY
+                || (tableName.equalsIgnoreCase(PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_TABLE)
+                && column.getName().getString().equalsIgnoreCase(PhoenixDatabaseMetaData.PARTITION_START_KEY))
+                // SYSTEM.CDC_STREAM.PARTITION_END_KEY
+                || (tableName.equalsIgnoreCase(PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_TABLE)
+                && column.getName().getString().equalsIgnoreCase(PhoenixDatabaseMetaData.PARTITION_END_KEY))) {
+            return new PColumnImpl(column.getName(),
+                    column.getFamilyName(),
+                    PVarbinary.INSTANCE,
+                    column.getMaxLength(),
+                    column.getScale(),
+                    column.isNullable(),
+                    column.getPosition(),
+                    column.getSortOrder(),
+                    column.getArraySize(),
+                    column.getViewConstant(),
+                    column.isViewReferenced(),
+                    column.getExpressionStr(),
+                    column.isRowTimestamp(),
+                    column.isDynamic(),
+                    column.getColumnQualifierBytes(),
+                    column.getTimestamp());
+        }
+        return column;
     }
 
     private void buildIndexWhereExpression(PhoenixConnection connection) throws SQLException {
