@@ -76,6 +76,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.TestClock;
 import org.hamcrest.CoreMatchers;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -98,23 +99,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixMetricsIT.class);
-
-    private static class MyClock extends EnvironmentEdge {
-        private long time;
-        private final long delay;
-
-        public MyClock (long time, long delay) {
-            this.time = time;
-            this.delay = delay;
-        }
-
-        @Override
-        public long currentTime() {
-            long currentTime = this.time;
-            this.time += this.delay;
-            return currentTime;
-        }
-    }
 
     @Test
     public void testResetGlobalPhoenixMetrics() throws Exception {
@@ -330,7 +314,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
             stmt.setQueryTimeout(queryTimeout);
             ResultSet rs = stmt.executeQuery(String.format("SELECT * FROM %s", tableName));
             // Make the query time out with a longer delay than the set query timeout value (in ms)
-            MyClock clock = new MyClock(10, queryTimeout * 2 * 1000);
+            TestClock clock = new TestClock(10, queryTimeout * 2 * 1000, true);
             EnvironmentEdgeManager.injectEdge(clock);
             try {
                 rs.next();
