@@ -13,12 +13,10 @@ import org.apache.phoenix.query.PhoenixTestBuilder;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TableViewFinderResult;
-import org.apache.phoenix.util.TestUtil;
 import org.apache.phoenix.util.ViewUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -52,7 +50,10 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
     static final int VIEW_TTL_300_SECS = 300;
     static final int VIEW_TTL_120_SECS = 120;
 
-    static final String SYS_CATALOG_VIEW_HEADER_SQL = "SELECT TTL FROM SYSTEM.CATALOG "
+    static final String SYS_CATALOG_ROW_KEY_MATCHER_HEADER_SQL = "SELECT ROW_KEY_MATCHER FROM SYSTEM.CATALOG "
+            + "WHERE %s AND TABLE_SCHEM <> 'SYSTEM' AND TABLE_NAME = '%s' AND " + "ROW_KEY_MATCHER IS NOT NULL";
+
+    static final String SYS_CATALOG_VIEW_TTL_HEADER_SQL = "SELECT TTL FROM SYSTEM.CATALOG "
             + "WHERE %s AND TABLE_SCHEM = '%s' AND TABLE_NAME = '%s' AND TABLE_TYPE = 'v'";
 
     static final String SYS_CATALOG_VIEW_INDEX_HEADER_SQL = "SELECT VIEW_INDEX_ID FROM SYSTEM.CATALOG "
@@ -74,7 +75,7 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
     static final String SYS_CATALOG_IDX_VIEW_INDEX_HEADER_SQL = "SELECT \": DECODE_VIEW_INDEX_ID(VIEW_INDEX_ID,VIEW_INDEX_ID_DATA_TYPE)\" FROM %s " +
             "WHERE %s AND \":TABLE_SCHEM\" = '%s' AND \":TABLE_NAME\" = '%s'" ;
 
-    private static RegionCoprocessorEnvironment TaskRegionEnvironment;
+    private static RegionCoprocessorEnvironment taskRegionEnvironment;
 
     @BeforeClass
     public static void doSetup() throws Exception {
@@ -96,14 +97,13 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
         setUpTestDriver(new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS,
                 DEFAULT_PROPERTIES.entrySet().iterator()));
 
-        TaskRegionEnvironment =
+        taskRegionEnvironment =
                 getUtility()
                         .getRSForFirstRegionInTable(
                                 PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
                         .getRegions(PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
                         .get(0).getCoprocessorHost()
                         .findCoprocessorEnvironment(TaskRegionObserver.class.getName());
-
 
 
     }
@@ -161,7 +161,7 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
                     "TENANT_ID IS NULL" :
                     String.format("TENANT_ID = '%s'", tenantId);
             String sql = String
-                    .format(SYS_CATALOG_VIEW_HEADER_SQL, tenantClause, schemaName, tableName);
+                    .format(SYS_CATALOG_VIEW_TTL_HEADER_SQL, tenantClause, schemaName, tableName);
             stmt.execute(sql);
             ResultSet rs = stmt.getResultSet();
             if (exists) {
@@ -169,6 +169,30 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
                 long actualTTLValueReturned = ttlStr != null ? Integer.valueOf(ttlStr): 0;
                 assertEquals(String.format("Expected rows do not match for schema = %s, table = %s",
                         schemaName, tableName), ttlValueExpected, actualTTLValueReturned);
+            } else {
+                assertFalse(String.format("Rows do exists for schema = %s, table = %s",
+                        schemaName, tableName), rs.next());
+
+            }
+        }
+    }
+
+    void assertSystemCatalogHasRowKeyMatcherRelatedColumns(String tenantId, String schemaName,
+            String tableName, boolean exists) throws SQLException {
+
+        try (Connection connection = DriverManager.getConnection(getUrl())) {
+            Statement stmt = connection.createStatement();
+            String tenantClause = tenantId == null || tenantId.isEmpty() ?
+                    "TENANT_ID IS NULL" :
+                    String.format("TENANT_ID = '%s'", tenantId);
+            String sql = String
+                    .format(SYS_CATALOG_ROW_KEY_MATCHER_HEADER_SQL, tenantClause, tableName);
+            stmt.execute(sql);
+            ResultSet rs = stmt.getResultSet();
+            if (exists) {
+                byte[] matcherBytes = rs.next() ? rs.getBytes(1) : null;
+                assertNotNull(String.format("Expected rows do not match for schema = %s, table = %s",
+                        schemaName, tableName), matcherBytes);
             } else {
                 assertFalse(String.format("Rows do exists for schema = %s, table = %s",
                         schemaName, tableName), rs.next());
@@ -291,9 +315,10 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
             // Run DropChildViewsTask to complete the tasks for dropping child views. The depth of the view tree is 2,
             // so we expect that this will be done in two task handling runs as each non-root level will be processed
             // in one run
+
             TaskRegionObserver.SelfHealingTask task =
                     new TaskRegionObserver.SelfHealingTask(
-                            TaskRegionEnvironment, QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
+                            taskRegionEnvironment, QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
             for (int i = 0; i < numTaskRuns; i++) {
                 task.run();
             }
@@ -542,12 +567,15 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
         // Assert index header rows (link_type IS NULL AND TABLE_TYPE = 'i') exists in SYSTEM. CATALOG
         assertSystemCatalogHasViewIndexHeaderRelatedColumns(tenantId, schemaName, indexOnTenantViewName,true);
 
+        assertSystemCatalogHasRowKeyMatcherRelatedColumns(tenantId, schemaName, tenantViewName,true);
 
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Statement stmt = conn.createStatement()) {
             //TestUtil.dumpTable(conn, TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES));
             stmt.execute("CREATE INDEX IF NOT EXISTS SYS_VIEW_HDR_IDX ON SYSTEM.CATALOG(TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY) INCLUDE (TABLE_TYPE, VIEW_STATEMENT, TTL, ROW_KEY_MATCHER) WHERE TABLE_SCHEM <> 'SYSTEM' AND TABLE_TYPE = 'v'");
+            stmt.execute("CREATE INDEX IF NOT EXISTS SYS_ROW_KEY_MATCHER_IDX ON SYSTEM.CATALOG(ROW_KEY_MATCHER, TTL, TABLE_TYPE, TENANT_ID, TABLE_SCHEM, TABLE_NAME) INCLUDE (VIEW_STATEMENT) WHERE TABLE_SCHEM <> 'SYSTEM' AND TABLE_TYPE = 'v' AND ROW_KEY_MATCHER IS NOT NULL");
             stmt.execute("CREATE INDEX IF NOT EXISTS SYS_VIEW_INDEX_HDR_IDX ON SYSTEM.CATALOG(DECODE_VIEW_INDEX_ID(VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE), TENANT_ID, TABLE_SCHEM, TABLE_NAME) INCLUDE(TABLE_TYPE, LINK_TYPE, VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE)  WHERE TABLE_SCHEM <> 'SYSTEM' AND TABLE_TYPE = 'i' AND LINK_TYPE IS NULL AND VIEW_INDEX_ID IS NOT NULL");
+
             conn.commit();
         }
 
@@ -558,40 +586,50 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
         // Assert System Catalog index table has been created
         assertSystemCatalogIndexTable("SYS_VIEW_HDR_IDX", true);
         assertSystemCatalogIndexTable("SYS_VIEW_INDEX_HDR_IDX", true);
+        assertSystemCatalogIndexTable("SYS_ROW_KEY_MATCHER_IDX", true);
         // Assert appropriate rows are inserted in the SYSTEM.CATALOG index tables
         assertSystemCatalogIndexHaveViewHeaders("SYSTEM.SYS_VIEW_HDR_IDX", tenantId, schemaName, tenantViewName, true);
+        assertSystemCatalogIndexHaveViewHeaders("SYSTEM.SYS_ROW_KEY_MATCHER_IDX", tenantId, schemaName, tenantViewName, true);
         assertSystemCatalogIndexHaveViewIndexHeaders("SYSTEM.SYS_VIEW_INDEX_HDR_IDX", tenantId, schemaName, indexOnTenantViewName, true);
 
         /**
          * Testing explain plans
          */
 
-        List<String> plans = getExplain("select TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, TABLE_TYPE FROM SYSTEM.CATALOG WHERE TABLE_SCHEM <> 'SYSTEM' AND TABLE_TYPE = 'v'", new Properties());
+        List<String> plans = getExplain("select TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, TABLE_TYPE FROM SYSTEM.CATALOG WHERE TABLE_SCHEM <> 'SYSTEM' AND TABLE_TYPE = 'v' ", new Properties());
         assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER SYSTEM.SYS_VIEW_HDR_IDX", plans.get(0));
 
-        plans = getExplain("select VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE FROM SYSTEM.CATALOG WHERE TABLE_SCHEM <> 'SYSTEM' AND TABLE_TYPE = 'i' AND LINK_TYPE IS NULL AND VIEW_INDEX_ID IS NOT NULL", new Properties());
+        plans = getExplain("select VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE FROM SYSTEM.CATALOG WHERE TABLE_TYPE = 'i' AND LINK_TYPE IS NULL AND VIEW_INDEX_ID IS NOT NULL", new Properties());
         assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER SYSTEM.SYS_VIEW_INDEX_HDR_IDX", plans.get(0));
+
+        plans = getExplain("select ROW_KEY_MATCHER, TTL, TABLE_NAME FROM SYSTEM.CATALOG WHERE TABLE_SCHEM <> 'SYSTEM' AND ROW_KEY_MATCHER IS NOT NULL", new Properties());
+        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER SYSTEM.SYS_ROW_KEY_MATCHER_IDX [not null]", plans.get(0));
 
         /**
          * Testing cleanup of SYS_INDEX rows after dropping tables and views
          */
         LOGGER.info("Dropping base table " + fullBaseTableName);
         dropTableWithChildViews(fullBaseTableName, 1);
-        // Assert view header rows (link_type IS NULL AND TABLE_TYPE = 'v') does not exists in SYSTEM.CATALOG
+        // Assert view header rows (link_type IS NULL AND TABLE_TYPE = 'v') does not exist in SYSTEM.CATALOG
         assertSystemCatalogHasViewHeaderRelatedColumns(tenantId, schemaName, tenantViewName,
                 false, VIEW_TTL_120_SECS);
+        // Assert view header rows (ROW_KEY_MATCHER IS NOT NULL does not exist in SYSTEM.CATALOG
+        assertSystemCatalogHasRowKeyMatcherRelatedColumns(tenantId, schemaName, tenantViewName,false);
         // Assert index header rows (link_type IS NULL AND TABLE_TYPE = 'i') does not exists in SYSTEM.CATALOG
         assertSystemCatalogHasViewIndexHeaderRelatedColumns(tenantId, schemaName, tenantViewName,false);
 
         // Assert appropriate rows are dropped/deleted in the SYSTEM.CATALOG index tables
         assertSystemCatalogIndexHaveViewHeaders("SYSTEM.SYS_VIEW_HDR_IDX", tenantId, schemaName, tenantViewName, false);
+        assertSystemCatalogIndexHaveViewHeaders("SYSTEM.SYS_ROW_KEY_MATCHER_IDX", tenantId, schemaName, tenantViewName, false);
         assertSystemCatalogIndexHaveViewIndexHeaders("SYSTEM.SYS_VIEW_INDEX_HDR_IDX", tenantId, schemaName, tenantViewName, false);
 
         dropSystemCatalogIndex("SYS_VIEW_HDR_IDX");
+        dropSystemCatalogIndex("SYS_ROW_KEY_MATCHER_IDX");
         dropSystemCatalogIndex("SYS_VIEW_INDEX_HDR_IDX");
 
         // Assert System Catalog index table dropped
         assertSystemCatalogIndexTable("SYSTEM.SYS_VIEW_HDR_IDX", false);
+        assertSystemCatalogIndexTable("SYSTEM.SYS_ROW_KEY_MATCHER_IDX", false);
         assertSystemCatalogIndexTable("SYSTEM.SYS_VIEW_INDEX_HDR_IDX", false);
     }
 
