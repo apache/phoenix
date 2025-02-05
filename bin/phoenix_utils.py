@@ -203,7 +203,8 @@ def setPath():
         logging_jar += ":"+findFileInPathWithoutRecursion(LOGGING_JAR_PATTERN3, os.path.join(current_dir, "..","lib"))
         logging_jar += ":"+findFileInPathWithoutRecursion(LOGGING_JAR_PATTERN4, os.path.join(current_dir, "..","lib"))
 
-    __set_java_home()
+    __read_hbase_env()
+    __set_java()
     __set_jvm_flags()
     return ""
 
@@ -222,13 +223,19 @@ def shell_quote(args):
         import pipes
         return " ".join([pipes.quote(tryDecode(v)) for v in args])
 
-
-def __set_java_home():
+def __set_java():
     global java_home
     global java
     java_home = os.getenv('JAVA_HOME')
-    java = 'java'
+    if java_home:
+        java = os.path.join(java_home, 'bin', 'java')
+    else:
+        java = 'java'
 
+
+def __read_hbase_env():
+    if os.getenv("SKIP_HBASE_ENV"):
+        return ""
     # HBase configuration folder path (where hbase-site.xml reside) for
     # HBase/Phoenix client side property override
     hbase_config_path = hbase_conf_dir
@@ -246,18 +253,11 @@ def __set_java_home():
         sys.stderr.write("hbase-env file unknown on platform {}{}".format(os.name, os.linesep))
         sys.exit(-1)
 
-    hbase_env = {}
     if os.path.isfile(hbase_env_path):
         p = subprocess.Popen(hbase_env_cmd, stdout = subprocess.PIPE)
         for x in p.stdout:
             (k, _, v) = tryDecode(x).partition('=')
-            hbase_env[k.strip()] = v.strip()
-
-    if 'JAVA_HOME' in hbase_env:
-        java_home = hbase_env['JAVA_HOME']
-
-    if java_home:
-        java = os.path.join(java_home, 'bin', 'java')
+            os.environ[k.strip()] = v.strip()
 
     return ""
 

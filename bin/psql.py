@@ -30,7 +30,7 @@ phoenix_utils.setPath()
 
 args = phoenix_utils.shell_quote(sys.argv[1:])
 
-java_cmd = phoenix_utils.java + ' ' + phoenix_utils.jvm_module_flags + ' $PHOENIX_OPTS ' + \
+java_cmd = phoenix_utils.java + ' ' + phoenix_utils.jvm_module_flags + ' $HBASE_OPTS $PHOENIX_OPTS ' + \
     ' -cp "' + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_utils.hadoop_conf + \
     os.pathsep + phoenix_utils.slf4j_backend_jar + \
     os.pathsep + phoenix_utils.logging_jar + \
