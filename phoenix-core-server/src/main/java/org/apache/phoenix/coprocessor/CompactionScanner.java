@@ -356,7 +356,7 @@ public class CompactionScanner implements InternalScanner {
             return false;
         }
     }
-    /*
+
     private void printRow(List<Cell> result, String title, boolean sort) {
         List<Cell> row;
         if (sort) {
@@ -370,31 +370,33 @@ public class CompactionScanner implements InternalScanner {
                 + "compaction time: " + compactionTime);
         System.out.println("Max lookback window start time: " + maxLookbackWindowStart);
         System.out.println("Max lookback in ms: " + maxLookbackInMillis);
-        System.out.println("TTL in ms: " + ttlInMillis);
+        RowContext rowContext = phoenixLevelRowCompactor.rowTracker.getRowContext();
+        System.out.println("TTL in ms: " + rowContext.ttl);
         boolean maxLookbackLine = false;
         boolean ttlLine = false;
         for (Cell cell : row) {
             if (!maxLookbackLine && cell.getTimestamp() < maxLookbackWindowStart) {
-                System.out.println("-----> Max lookback window start time: " + maxLookbackWindowStart);
+                //System.out.println("-----> Max lookback window start time: " + maxLookbackWindowStart);
                 maxLookbackLine = true;
-            } else if (!ttlLine && cell.getTimestamp() < ttlWindowStart) {
-                System.out.println("-----> TTL window start time: " + ttlWindowStart);
+            } else if (!ttlLine && cell.getTimestamp() < rowContext.ttlWindowStart) {
+                //System.out.println("-----> TTL window start time: " + rowContext.ttlWindowStart);
                 ttlLine = true;
             }
             System.out.println(cell);
         }
     }
-     */
 
     @Override
     public boolean next(List<Cell> result) throws IOException {
         boolean hasMore = storeScanner.next(result);
         inputCellCount += result.size();
         if (!result.isEmpty()) {
-            // printRow(result, "Input for " + tableName + " " + columnFamilyName, true); // This is for debugging
+            // This is for debugging
+            //printRow(result, "Input for " + tableName + " " + columnFamilyName, true);
             phoenixLevelRowCompactor.compact(result, false);
             outputCellCount += result.size();
-            // printRow(result, "Output for " + tableName + " " + columnFamilyName, true); // This is for debugging
+            // This is for debugging
+            //printRow(result, "Output for " + tableName + " " + columnFamilyName, true);
         }
         return hasMore;
     }

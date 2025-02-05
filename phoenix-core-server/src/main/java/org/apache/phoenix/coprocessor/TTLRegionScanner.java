@@ -19,7 +19,6 @@ package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 
@@ -33,8 +32,6 @@ import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
@@ -128,38 +125,61 @@ public class TTLRegionScanner extends BaseRegionScanner {
         if (maxTimestamp - minTimestamp <= ttl) {
             return false;
         }
+
         // We need check if the gap between two consecutive cell timestamps is more than ttl
-        // and if so trim the cells beyond the gap
-        Scan singleRowScan = new Scan();
-        singleRowScan.setRaw(true);
-        singleRowScan.readAllVersions();
-        singleRowScan.setTimeRange(scan.getTimeRange().getMin(), scan.getTimeRange().getMax());
-        byte[] rowKey = CellUtil.cloneRow(result.get(0));
-        singleRowScan.withStartRow(rowKey, true);
-        singleRowScan.withStopRow(rowKey, true);
-        RegionScanner scanner = ((DelegateRegionScanner)delegate).getNewRegionScanner(singleRowScan);
+        // and if so trim the cells beyond the gap. The gap analysis works by doing a scan in a
+        // sliding time range window of ttl width. This scan reads the latest version of the row in
+        // that time range. If we find a version, then in that time range there is no gap. We find
+        // the timestamp at which the update happened and then slide the window past that
+        // timestamp. If no version is returned, then we have found a gap.
+        // On a gap, all the cells below the current sliding window's end time
+        // can be trimmed from the result. We slide the window past the current end time to find
+        // any more gaps so that we can find the largest timestamp in the
+        // [minTimestamp, maxTimestamp] window below which all the cells can be trimmed.
+        // This algorithm doesn't read all the row versions into the memory since the
+        // number of row versions can be unbounded and reading all of them at once can cause GC
+        // issues. In practice, ttl windows are in days or months so the entire
+        // [minTimestamp, maxTimestamp] range shouldn't span more than 2-3 ttl windows.
+        // We know that an update happened at minTimestamp so initialize the sliding window
+        // to [minTimestamp + 1, minTimestamp + ttl] which means the scan range should be
+        // [minTimestamp + 1, minTimestamp + ttl + 1).
+        long wndStartTS = minTimestamp + 1;
+        long wndEndTS = wndStartTS + ttl;
+        // any cell in the scan result list having a timestamp below trimTimestamp will be
+        // removed from the list and not returned back to the client. Initially, it is equal to
+        // the minTimestamp.
+        long trimTimestamp = minTimestamp;
         List<Cell> row = new ArrayList<>();
-        scanner.next(row);
-        scanner.close();
-        if (row.isEmpty()) {
-            return true;
-        }
-        int size = row.size();
-        long tsArray[] = new long[size];
-        int i = 0;
-        for (Cell cell : row) {
-            tsArray[i++] = cell.getTimestamp();
-        }
-        Arrays.sort(tsArray);
-        for (i = size - 1; i > 0; i--) {
-            if (tsArray[i] - tsArray[i - 1] > ttl) {
-                minTimestamp = tsArray[i];
-                break;
+        while (wndEndTS <= maxTimestamp) {
+            row.clear(); // reset the row on every iteration
+            Scan singleRowScan = new Scan();
+            singleRowScan.setTimeRange(wndStartTS, wndEndTS);
+            byte[] rowKey = CellUtil.cloneRow(result.get(0));
+            singleRowScan.withStartRow(rowKey, true);
+            singleRowScan.withStopRow(rowKey, true);
+            RegionScanner scanner =
+                    ((DelegateRegionScanner) delegate).getNewRegionScanner(singleRowScan);
+            scanner.next(row);
+            scanner.close();
+            if (row.isEmpty()) {
+                // no update in this window, we found a gap and the row expired
+                trimTimestamp = wndEndTS - 1;
+                // next window will start at wndEndTS. Scan timeranges are half-open [min, max)
+                wndStartTS = wndEndTS;
+            } else {
+                // we found an update within the ttl
+                long lastUpdateTS = 0;
+                for (Cell cell : row) {
+                    lastUpdateTS = Math.max(lastUpdateTS, cell.getTimestamp());
+                }
+                // slide the window 1 past the lastUpdateTS
+                wndStartTS = lastUpdateTS + 1;
             }
+            wndEndTS = wndStartTS + ttl;
         }
         Iterator<Cell> iterator = result.iterator();
         while(iterator.hasNext()) {
-            if (iterator.next().getTimestamp() < minTimestamp) {
+            if (iterator.next().getTimestamp() < trimTimestamp) {
                 iterator.remove();
             }
         }

@@ -53,7 +53,11 @@ import java.util.Properties;
 import java.util.Random;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
@@ -338,12 +342,102 @@ public class TableTTLIT extends BaseTest {
             updateColumn(conn, tableName, "a2", 3, "col3");
             updateColumn(conn, tableName, "a3", 5, "col5");
             conn.commit();
+            String dql = "SELECT * from " + tableName;
+            ResultSet rs = conn.createStatement().executeQuery(dql);
+            // check that all older columns are masked
+            while (rs.next()) {
+                String id = rs.getString(1);
+                int updatedColIndex = 0;
+                if (id.equals("a1")) {
+                    updatedColIndex = 2;
+                } else if (id.equals("a2")) {
+                    updatedColIndex = 3;
+                } else if (id.equals("a3")) {
+                    updatedColIndex = 5;
+                } else {
+                    fail(String.format("Got unexpected row key %s", id));
+                }
+                for (int colIndex = 1; colIndex <= MAX_COLUMN_INDEX; ++colIndex) {
+                    if (colIndex != updatedColIndex) {
+                        assertNull(rs.getString(colIndex + 1));
+                    } else {
+                        assertNotNull(rs.getString(colIndex + 1));
+                    }
+                }
+            }
             flush(TableName.valueOf(tableName));
             majorCompact(TableName.valueOf(tableName));
-            String dql = "SELECT count(*) from " + tableName;
-            ResultSet rs = conn.createStatement().executeQuery(dql);
+            dql = "SELECT count(*) from " + tableName;
+            rs = conn.createStatement().executeQuery(dql);
             assertTrue(rs.next());
             assertEquals(3, rs.getInt(1));
+        }
+    }
+
+    @Test
+    public void testMaskingGapAnalysis() throws Exception {
+        // for the purpose of this test only considering cases when maxlookback is 0
+        if (tableLevelMaxLooback == null || tableLevelMaxLooback != 0) {
+            return;
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            createTable(tableName);
+            long startTime = System.currentTimeMillis() + 1000;
+            startTime = (startTime / 1000) * 1000;
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            injectEdge.setValue(startTime);
+            updateRow(conn, tableName, "a1"); // min timestamp
+            conn.commit();
+            for (int i = 0; i < 3; ++i) {
+                injectEdge.incrementValue(1);
+                updateColumn(conn, tableName, "a1", 2, "col2" + 2*i);
+                conn.commit();
+                injectEdge.incrementValue(ttl * 1000);
+                updateColumn(conn, tableName, "a1", 2, "col2" + (2*i + 1));
+                conn.commit();
+            }
+            // set the max timestamp so that gap is 4*ttl - 1
+            injectEdge.setValue(startTime + (4*ttl*1000) - 1);
+            updateColumn(conn, tableName, "a1", 2, "col2_max"); // max timestamp
+            conn.commit();
+            String dql = String.format("SELECT * from %s where id='%s'",
+                    tableName, "a1");
+            ResultSet rs = conn.createStatement().executeQuery(dql);
+            assertTrue(rs.next());
+            assertEquals("col2_max", rs.getString("val2"));
+        }
+    }
+
+    @Test
+    public void testMultipleUpdatesToSingleColumn() throws Exception {
+        // for the purpose of this test only considering cases when maxlookback is 0
+        if (tableLevelMaxLooback == null || tableLevelMaxLooback != 0) {
+            return;
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            createTable(tableName);
+            long startTime = System.currentTimeMillis() + 1000;
+            startTime = (startTime / 1000) * 1000;
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            injectEdge.setValue(startTime);
+            updateRow(conn, tableName, "a1");
+            injectEdge.incrementValue(1);
+            for (int i = 0; i < 15; ++i) {
+                updateColumn(conn, tableName, "a1", 2, "col2_" + i);
+                conn.commit();
+                injectEdge.incrementValue((ttl / 10) * 1000);
+            }
+            conn.commit();
+            String dql = "select * from " + tableName + " where id='a1'";
+            try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
+                while (rs.next()) {
+                    for (int col = 1; col <= MAX_COLUMN_INDEX + 1; col++) {
+                        System.out.println(rs.getString(col));
+                    }
+                }
+            }
         }
     }
 
