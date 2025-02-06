@@ -44,7 +44,7 @@ cp_components = [phoenix_target_dir + "/*"]
 with open(cp_file_path, 'r') as cp_file:
     cp_components.append(cp_file.read())
 
-java_cmd = ("java $HBASE_OPTS $PHOENIX_OPTS -Dlog4j2.configurationFile=file:%s " +
+java_cmd = ("java $PHOENIX_OPTS -Dlog4j2.configurationFile=file:%s " +
                 "-cp %s org.apache.phoenix.Sandbox") % (
                             logging_config, ":".join(cp_components))
 
