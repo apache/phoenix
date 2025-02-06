@@ -461,6 +461,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
             SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_CDC_STREAM_TABLE);
     public static final String STREAM_NAME = "STREAM_NAME";
     public static final String STREAM_STATUS = "STREAM_STATUS";
+    public static final String STREAM_TYPE = "STREAM_TYPE";
     public static final String PARTITION_ID = "PARTITION_ID";
     public static final String PARENT_PARTITION_ID = "PARENT_PARTITION_ID";
     public static final String PARTITION_START_TIME = "PARTITION_START_TIME";
