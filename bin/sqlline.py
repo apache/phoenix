@@ -90,7 +90,8 @@ if os.uname()[4].startswith('ppc'):
 else:
     disable_jna = ""
 
-java_cmd = phoenix_utils.java + ' ' + phoenix_utils.jvm_module_flags + ' $PHOENIX_OPTS ' + \
+java_cmd = phoenix_utils.java + ' ' + phoenix_utils.jvm_module_flags + \
+    ' $HBASE_OPTS $PHOENIX_OPTS ' + \
     ' -cp "' + phoenix_utils.hbase_conf_dir + os.pathsep + \
     phoenix_utils.hadoop_conf + os.pathsep + \
     phoenix_utils.sqlline_with_deps_jar + os.pathsep + \
