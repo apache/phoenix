@@ -24,6 +24,7 @@ import os
 import fnmatch
 import re
 import subprocess
+import sys
 
 def find(pattern, classPaths):
     paths = classPaths.split(os.pathsep)
