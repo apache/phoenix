@@ -389,23 +389,45 @@ public class TableTTLIT extends BaseTest {
             injectEdge.setValue(startTime);
             updateRow(conn, tableName, "a1"); // min timestamp
             conn.commit();
-            for (int i = 0; i < 3; ++i) {
-                injectEdge.incrementValue(1);
-                updateColumn(conn, tableName, "a1", 2, "col2" + 2*i);
-                conn.commit();
-                injectEdge.incrementValue(ttl * 1000);
-                updateColumn(conn, tableName, "a1", 2, "col2" + (2*i + 1));
-                conn.commit();
+            String dql = String.format("SELECT * from %s where id='%s'", tableName, "a1");
+            String [] colValues = new String[MAX_COLUMN_INDEX + 1];
+            try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
+                assertTrue(rs.next());
+                for (int i = 1; i <= MAX_COLUMN_INDEX; ++i) {
+                    // initialize the column values to the current row version
+                    colValues[i] = rs.getString("val" + i);
+                }
             }
-            // set the max timestamp so that gap is 4*ttl - 1
-            injectEdge.setValue(startTime + (4*ttl*1000) - 1);
-            updateColumn(conn, tableName, "a1", 2, "col2_max"); // max timestamp
-            conn.commit();
-            String dql = String.format("SELECT * from %s where id='%s'",
-                    tableName, "a1");
-            ResultSet rs = conn.createStatement().executeQuery(dql);
-            assertTrue(rs.next());
-            assertEquals("col2_max", rs.getString("val2"));
+            for (int iter = 1; iter <= 20; ++iter) {
+                injectEdge.incrementValue(1);
+                int colIndex = RAND.nextInt(MAX_COLUMN_INDEX) + 1;
+                String value = Integer.toString(RAND.nextInt(1000));
+                updateColumn(conn, tableName, "a1", colIndex, value);
+                conn.commit();
+                colValues[colIndex] = value;
+
+                injectEdge.incrementValue(ttl * 1000);
+                colIndex = RAND.nextInt(MAX_COLUMN_INDEX) + 1;
+                value = Integer.toString(RAND.nextInt(1000));
+                updateColumn(conn, tableName, "a1", colIndex, value);
+                conn.commit();
+                colValues[colIndex] = value;
+
+                if (iter % 5 == 0) {
+                    // every 5th iteration introduce a gap
+                    // first verify the current row
+                    try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
+                        assertTrue(rs.next());
+                        for (int i = 1; i <= MAX_COLUMN_INDEX; ++i) {
+                            Assert.assertEquals(colValues[i], rs.getString("val" + i));
+                        }
+                    }
+                    // inject the gap
+                    injectEdge.incrementValue(ttl*1000 + RAND.nextInt(ttl*1000));
+                    // row expires after the gap so reset the col values to null
+                    colValues = new String[MAX_COLUMN_INDEX + 1];
+                }
+            }
         }
     }
 

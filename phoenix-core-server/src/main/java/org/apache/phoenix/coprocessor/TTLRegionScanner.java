@@ -126,7 +126,7 @@ public class TTLRegionScanner extends BaseRegionScanner {
             return false;
         }
 
-        // We need check if the gap between two consecutive cell timestamps is more than ttl
+        // We need to check if the gap between two consecutive cell timestamps is more than ttl
         // and if so trim the cells beyond the gap. The gap analysis works by doing a scan in a
         // sliding time range window of ttl width. This scan reads the latest version of the row in
         // that time range. If we find a version, then in that time range there is no gap. We find
@@ -150,7 +150,10 @@ public class TTLRegionScanner extends BaseRegionScanner {
         // the minTimestamp.
         long trimTimestamp = minTimestamp;
         List<Cell> row = new ArrayList<>();
+        LOG.debug("Doing gap analysis for {} min = {}, max = {}",
+                env.getRegionInfo().getRegionNameAsString(), minTimestamp, maxTimestamp);
         while (wndEndTS <= maxTimestamp) {
+            LOG.debug("WndStart = {}, WndEnd = {}, trim = {}", wndStartTS, wndEndTS, trimTimestamp);
             row.clear(); // reset the row on every iteration
             Scan singleRowScan = new Scan();
             singleRowScan.setTimeRange(wndStartTS, wndEndTS);
@@ -164,6 +167,7 @@ public class TTLRegionScanner extends BaseRegionScanner {
             if (row.isEmpty()) {
                 // no update in this window, we found a gap and the row expired
                 trimTimestamp = wndEndTS - 1;
+                LOG.debug("Found gap at {}", trimTimestamp);
                 // next window will start at wndEndTS. Scan timeranges are half-open [min, max)
                 wndStartTS = wndEndTS;
             } else {
@@ -173,6 +177,7 @@ public class TTLRegionScanner extends BaseRegionScanner {
                     lastUpdateTS = Math.max(lastUpdateTS, cell.getTimestamp());
                 }
                 // slide the window 1 past the lastUpdateTS
+                LOG.debug("lastUpdateTS = {}", lastUpdateTS);
                 wndStartTS = lastUpdateTS + 1;
             }
             wndEndTS = wndStartTS + ttl;
