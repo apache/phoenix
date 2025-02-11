@@ -455,6 +455,10 @@ public class HighAvailabilityTestingUtility {
             return String.format("%s:%s",interimUrl, principal);
         }
 
+        public String getJdbcUrl(String url) {
+            return String.format("jdbc:phoenix+zk:%s:%s", url, PRINCIPAL);
+        }
+
         public String getJdbcUrlWithoutPrincipal(HighAvailabilityGroup haGroup, String url) {
             String interimUrl = getUrlWithoutPrincipal(haGroup, url);
             if (interimUrl.endsWith("::")) {

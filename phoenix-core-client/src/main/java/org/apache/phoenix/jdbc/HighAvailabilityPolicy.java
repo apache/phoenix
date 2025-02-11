@@ -117,31 +117,6 @@ enum HighAvailabilityPolicy {
                 LOG.info("Couldn't find active url in old ClusterRoleRecord, " +
                         "Doing nothing for FailoverPhoenixConnections");
             }
-
-//            if (!Objects.equals(oldRecord.getUrl1(), newRecord.getUrl1())) {
-//                //If role changes then it is already handled at the first transit step {@link #transitClusterRole}
-//                //And we only care about ACTIVE connections as STANDBY we are not creating connections
-//                if (oldRecord.getRole1() == ACTIVE && newRecord.getRole1() == ACTIVE) {
-//                    LOG.info("Cluster {} is changed to {} in HA group {}, now closing all its connections",
-//                            oldRecord.getUrl1(), newRecord.getUrl1(), haGroup);
-//                    closeConnections(haGroup, oldRecord.getUrl1(), oldRecord.getRegistryType());
-//                    //Do we need to invalidate now?
-//                } else {
-//                    LOG.info("Cluster {} is changed to {} in HA group {}, which is not active",
-//                            oldRecord.getUrl1(), newRecord.getUrl1(), haGroup);
-//                }
-//            }
-//            if (!Objects.equals(oldRecord.getUrl2(), newRecord.getUrl2())) {
-//                if (oldRecord.getRole2() == ACTIVE && newRecord.getRole2() == ACTIVE) {
-//                    LOG.info("Cluster {} is changed to {} in HA group {}, now closing all its connections",
-//                            oldRecord.getUrl2(), newRecord.getUrl2(), haGroup);
-//                    closeConnections(haGroup, oldRecord.getUrl2(), oldRecord.getRegistryType());
-//                    //Do we need to invalidate now?
-//                } else {
-//                    LOG.info("Cluster {} is changed to {} in HA group {}, which is not active",
-//                            oldRecord.getUrl2(), newRecord.getUrl2(), haGroup);
-//                }
-//            }
         }
 
         private void transitStandby(HighAvailabilityGroup haGroup, String url,

@@ -145,7 +145,7 @@ public class HighAvailabilityTestingUtilityIT {
     @Test
     public void testClusterReplication() throws Exception {
         try (Connection conn = CLUSTERS.getClusterConnection(0, haGroup)) {
-            doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
+            doTestBasicOperationsWithConnection(conn, tableName, null);
         }
 
         CLUSTERS.checkReplicationComplete();

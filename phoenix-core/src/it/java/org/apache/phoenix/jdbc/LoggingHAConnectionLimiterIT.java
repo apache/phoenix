@@ -86,7 +86,8 @@ public class LoggingHAConnectionLimiterIT extends LoggingConnectionLimiterIT {
         GLOBAL_PROPERTIES.put(PHOENIX_HA_GROUP_ATTR, PARALLEL.name());
 
 
-        CONNECTIONS = Lists.newArrayList(getConnection(CLUSTERS.getZkUrl1()), getConnection(CLUSTERS.getZkUrl2()));
+        CONNECTIONS = Lists.newArrayList(getConnection(CLUSTERS.getJdbcUrl(CLUSTERS.getZkUrl1())),
+                getConnection(CLUSTERS.getJdbcUrl(CLUSTERS.getZkUrl2())));
         LOG.info(String.format("************* Num connections : %d", CONNECTIONS.size()));
 
         for (Connection conn : CONNECTIONS) {
@@ -97,7 +98,7 @@ public class LoggingHAConnectionLimiterIT extends LoggingConnectionLimiterIT {
         }
 
         //preload some data
-        try (Connection connection = getConnection(CLUSTERS.getZkUrl1())) {
+        try (Connection connection = getConnection(CLUSTERS.getJdbcUrl(CLUSTERS.getZkUrl1()))) {
             loadData(connection, ORG_ID, GROUP_ID, 100, 20);
         }
     }
