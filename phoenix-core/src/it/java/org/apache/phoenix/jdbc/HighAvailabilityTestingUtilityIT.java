@@ -35,6 +35,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
 
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.junit.AfterClass;
@@ -103,7 +104,7 @@ public class HighAvailabilityTestingUtilityIT {
             CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER, registryType);
         }
 
-        tableName = testName.getMethodName();
+        tableName = RandomStringUtils.randomAlphabetic(10);
         jdbcHAUrl = CLUSTERS.getJdbcHAUrl();
         haGroup = getHighAvailibilityGroup(jdbcHAUrl,clientProperties);
         CLUSTERS.createTableOnClusterPair(haGroup, tableName);

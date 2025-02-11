@@ -160,27 +160,32 @@ public class ParallelPhoenixConnectionIT {
     public void testUserPrincipal() throws Exception {
         try (Connection conn = getParallelConnection()) {
             ParallelPhoenixConnection pr = conn.unwrap(ParallelPhoenixConnection.class);
-
-            Assert.assertTrue(CLUSTERS.getJdbcUrl1(haGroup).equals(pr.getFutureConnection1().get().getURL()) ||
-                    CLUSTERS.getJdbcUrl1(haGroup).equals(pr.getFutureConnection2().get().getURL()));
-            Assert.assertTrue(CLUSTERS.getJdbcUrl2(haGroup).equals(pr.getFutureConnection1().get().getURL()) ||
-                    CLUSTERS.getJdbcUrl2(haGroup).equals(pr.getFutureConnection2().get().getURL()));
+            PhoenixConnection pConn;
+            PhoenixConnection pConn2;
+            if (CLUSTERS.getJdbcUrl1(haGroup).equals(pr.getFutureConnection1().get().getURL())) {
+                assertEquals(CLUSTERS.getJdbcUrl2(haGroup), pr.getFutureConnection2().get().getURL());
+                pConn = pr.getFutureConnection1().get();
+                pConn2 = pr.getFutureConnection2().get();
+            } else {
+                assertEquals(CLUSTERS.getJdbcUrl1(haGroup), pr.getFutureConnection2().get().getURL());
+                assertEquals(CLUSTERS.getJdbcUrl2(haGroup), pr.getFutureConnection1().get().getURL());
+                pConn = pr.getFutureConnection2().get();
+                pConn2 = pr.getFutureConnection1().get();
+            }
 
             ConnectionQueryServices cqsi;
             // verify connection#1
             cqsi = PhoenixDriver.INSTANCE.getConnectionQueryServices(CLUSTERS.getJdbcUrl1(haGroup), clientProperties);
             Assert.assertEquals(HBaseTestingUtilityPair.PRINCIPAL, cqsi.getUserName());
-            PhoenixConnection pConn = pr.getFutureConnection1().get();
             ConnectionQueryServices cqsiFromConn = pConn.getQueryServices();
             Assert.assertEquals(HBaseTestingUtilityPair.PRINCIPAL, cqsiFromConn.getUserName());
-            Assert.assertTrue(cqsi == cqsiFromConn);
+            Assert.assertSame(cqsi, cqsiFromConn);
             // verify connection#2
             cqsi = PhoenixDriver.INSTANCE.getConnectionQueryServices(CLUSTERS.getJdbcUrl2(haGroup), clientProperties);
             Assert.assertEquals(HBaseTestingUtilityPair.PRINCIPAL, cqsi.getUserName());
-            pConn = pr.getFutureConnection2().get();
-            cqsiFromConn = pConn.getQueryServices();
+            cqsiFromConn = pConn2.getQueryServices();
             Assert.assertEquals(HBaseTestingUtilityPair.PRINCIPAL, cqsiFromConn.getUserName());
-            Assert.assertTrue(cqsi == cqsiFromConn);
+            Assert.assertSame(cqsi, cqsiFromConn);
         }
     }
 
