@@ -592,7 +592,7 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
                         ViewUtil.findAllDescendantViews(childLinkTable, cqs.getConfiguration(),
                                 EMPTY_BYTE_ARRAY, parentSchemaName.getBytes(),
                                 parentTableName.getBytes(),
-                                HConstants.LATEST_TIMESTAMP, false);
+                                HConstants.LATEST_TIMESTAMP, false,true);
                 for (PTable view : allDescendants.getFirst()) {
                     PName tenantId = view.getTenantId();
                     String viewName = view.getName().getString();
