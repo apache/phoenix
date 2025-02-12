@@ -78,12 +78,15 @@ import org.apache.phoenix.util.UpgradeUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.junit.runners.MethodSorters;
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Category(NeedsOwnMiniClusterTest.class)
 public class SystemTablesCreationOnConnectionIT {
 
@@ -112,12 +115,12 @@ public class SystemTablesCreationOnConnectionIT {
     private static final Set<String> PHOENIX_SYSTEM_TABLES = new HashSet<>(Arrays.asList(
             "SYSTEM.CATALOG", "SYSTEM.SEQUENCE", "SYSTEM.STATS", "SYSTEM.FUNCTION",
             "SYSTEM.MUTEX", "SYSTEM.LOG", "SYSTEM.CHILD_LINK", "SYSTEM.TASK","SYSTEM.TRANSFORM",
-            "SYSTEM.CDC_STREAM_STATUS", "SYSTEM.CDC_STREAM"));
+            "SYSTEM.CDC_STREAM_STATUS", "SYSTEM.CDC_STREAM", "SYSTEM.PHOENIX_INDEX_TOOL_RESULT", "SYSTEM.PHOENIX_INDEX_TOOL"));
 
     private static final Set<String> PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES = new HashSet<>(
             Arrays.asList("SYSTEM:CATALOG", "SYSTEM:SEQUENCE", "SYSTEM:STATS", "SYSTEM:FUNCTION",
                     "SYSTEM:MUTEX", "SYSTEM:LOG", "SYSTEM:CHILD_LINK", "SYSTEM:TASK", "SYSTEM:TRANSFORM",
-                    "SYSTEM:CDC_STREAM_STATUS", "SYSTEM:CDC_STREAM"));
+                    "SYSTEM:CDC_STREAM_STATUS", "SYSTEM:CDC_STREAM", "SYSTEM:PHOENIX_INDEX_TOOL_RESULT", "SYSTEM:PHOENIX_INDEX_TOOL"));
 
     private static class PhoenixSysCatCreationServices extends ConnectionQueryServicesImpl {
 
@@ -345,7 +348,7 @@ public class SystemTablesCreationOnConnectionIT {
     // Expected: We will migrate all SYSTEM\..* tables to the SYSTEM namespace and also upgrade
     // SYSTEM:CATALOG
     @Test
-    public void testMigrateToSystemNamespaceAndUpgradeSysCat() throws Exception {
+    public void testABCFirstMigrateToSystemNamespaceAndUpgradeSysCat() throws Exception {
         setOldTimestampToInduceUpgrade = true;
         PhoenixSysCatCreationTestingDriver driver =
                 firstConnNSMappingServerEnabledClientEnabledMappingDisabled();
@@ -357,6 +360,7 @@ public class SystemTablesCreationOnConnectionIT {
         assertEquals(PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES, hbaseTables);
         assertEquals(1, countUpgradeAttempts);
         assertEquals(1, actualSysCatUpgrades);
+        // todo this still fails
     }
 
     // Conditions: server-side namespace mapping is enabled, the first connection to the server will
