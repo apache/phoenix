@@ -19,21 +19,22 @@ package org.apache.phoenix.cache;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Collections;
+import java.util.List;
 import java.util.Properties;
-import java.util.concurrent.TimeUnit;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsMetadataCachingSource;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.jdbc.ClusterRoleRecord;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixHAAdmin;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
 import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
 import org.apache.phoenix.thirdparty.com.google.common.cache.RemovalListener;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
@@ -49,12 +50,17 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
     protected Configuration conf;
     // key is the combination of <tenantID, schema name, table name>, value is the lastDDLTimestamp
     protected final Cache<ImmutableBytesPtr, Long> lastDDLTimestampMap;
+    private final PhoenixHAAdmin phoenixHAAdmin;
+    private final Cache<String, ClusterRoleRecord.ClusterRole> haGroupClusterRoleMap;
     private static final Logger LOGGER = LoggerFactory.getLogger(ServerMetadataCacheImpl.class);
     private static final String PHOENIX_COPROC_REGIONSERVER_CACHE_SIZE
             = "phoenix.coprocessor.regionserver.cache.size";
     private static final long DEFAULT_PHOENIX_COPROC_REGIONSERVER_CACHE_SIZE = 10000L;
     private static volatile ServerMetadataCacheImpl cacheInstance;
     private MetricsMetadataCachingSource metricsSource;
+    private static final String PHOENIX_HA_GROUP_NAMES = "phoenix.ha.group.names";
+    private static final String[] PHOENIX_HA_GROUP_NAMES_DEFAULT = new String[0];
+    private String[] haGroupNames;
 
     /**
      * Creates/gets an instance of ServerMetadataCache.
@@ -62,7 +68,7 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
      * @param conf configuration
      * @return cache
      */
-    public static ServerMetadataCacheImpl getInstance(Configuration conf) {
+    public static ServerMetadataCacheImpl getInstance(Configuration conf) throws Exception {
         ServerMetadataCacheImpl result = cacheInstance;
         if (result == null) {
             synchronized (ServerMetadataCacheImpl.class) {
@@ -75,8 +81,10 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
         return result;
     }
 
-    public ServerMetadataCacheImpl(Configuration conf) {
+    public ServerMetadataCacheImpl(Configuration conf) throws Exception {
         this.conf = HBaseConfiguration.create(conf);
+        this.phoenixHAAdmin = new PhoenixHAAdmin(conf);
+        this.haGroupClusterRoleMap = CacheBuilder.newBuilder().build();
         this.metricsSource = MetricsPhoenixCoprocessorSourceFactory
                                 .getInstance().getMetadataCachingSource();
         long maxSize = conf.getLong(PHOENIX_COPROC_REGIONSERVER_CACHE_SIZE,
@@ -90,7 +98,10 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
                 // maximum number of entries this cache can handle.
                 .maximumSize(maxSize)
                 .build();
+        this.haGroupNames = conf.getStrings(PHOENIX_HA_GROUP_NAMES, PHOENIX_HA_GROUP_NAMES_DEFAULT);
+        this.phoenixHAAdmin.registerHAGroupClusterRoleMapCache(this.haGroupClusterRoleMap, haGroupNames);
     }
+
 
     /**
      * Returns the last DDL timestamp from the table.
@@ -150,7 +161,17 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
         lastDDLTimestampMap.invalidate(tableKeyPtr);
     }
 
+    @Override
+    public boolean isMutationBlocked() {
+        boolean result = false;
+        for (String haGroupName : haGroupNames) {
+            result = result || (haGroupClusterRoleMap.getIfPresent(haGroupName) == ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY);
+        }
+        return result;
+    }
+
     protected Connection getConnection(Properties properties) throws SQLException {
         return QueryUtil.getConnectionOnServer(properties, this.conf);
     }
+
 }
