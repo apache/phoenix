@@ -23,6 +23,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.JacksonUtil;
 import org.slf4j.Logger;
@@ -77,39 +78,64 @@ public class ClusterRoleRecord {
         }
     }
 
+    /**
+     * Enum for HBaseRegistryType being used in current clusterRoleRecord, final connection url are constructed based
+     * on RegistryType and urls stored in clusterRoleRecord
+     */
+    public enum RegistryType {
+        ZK, MASTER, RPC
+    }
+
     private final String haGroupName;
     private final HighAvailabilityPolicy policy;
-    private final String zk1;
+    private final RegistryType registryType;
+    private final String url1;
     private final ClusterRole role1;
-    private final String zk2;
+    private final String url2;
     private final ClusterRole role2;
     private final long version;
 
     @JsonCreator
     public ClusterRoleRecord(@JsonProperty("haGroupName") String haGroupName,
-            @JsonProperty("policy") HighAvailabilityPolicy policy,
-            @JsonProperty("zk1") String zk1, @JsonProperty("role1") ClusterRole role1,
-            @JsonProperty("zk2") String zk2, @JsonProperty("role2") ClusterRole role2,
-            @JsonProperty("version") long version) {
+                             @JsonProperty("policy") HighAvailabilityPolicy policy,
+                             @JsonProperty("registryType") RegistryType registryType,
+                             @JsonProperty("url1") String url1, @JsonProperty("role1") ClusterRole role1,
+                             @JsonProperty("url2") String url2, @JsonProperty("role2") ClusterRole role2,
+                             @JsonProperty("version") long version) {
         this.haGroupName = haGroupName;
         this.policy = policy;
+        this.registryType = registryType != null ? registryType : RegistryType.ZK;;
         //Do we really need to normalize here ?
-        zk1 = JDBCUtil.formatZookeeperUrl(zk1);
-        zk2 = JDBCUtil.formatZookeeperUrl(zk2);
+        //We are normalizing to have urls in specific formats for each registryType for getting accurate comparisons
+        //Passing registryType as these url most probably won't have protocol in url, and it might be normalized based
+        //to wrong registry type as we normalize w.r.t {@link ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY}
+        //but considering source of truth registryType present on roleRecord.
+        url1 = JDBCUtil.formatUrl(url1, this.registryType);
+        url2 = JDBCUtil.formatUrl(url2, this.registryType);
+
+        Preconditions.checkArgument(!url1.equals(url2), "Two clusters have the same URLS!");
         // Ignore the given order of url1 and url2
-        if (zk1.compareTo(zk2) < 0) {
-            this.zk1 = zk1;
+        if (url1.compareTo(url2) < 0) {
+            this.url1 = url1;
             this.role1 = role1;
-            this.zk2 = zk2;
+            this.url2 = url2;
             this.role2 = role2;
         } else {
-            this.zk1 = zk2;
+            this.url1 = url2;
             this.role1 = role2;
-            this.zk2 = zk1;
+            this.url2 = url1;
             this.role2 = role1;
         }
         this.version = version;
     }
+
+    public ClusterRoleRecord(String haGroupName, HighAvailabilityPolicy policy,
+                             String url1, ClusterRole role1,
+                             String url2, ClusterRole role2,
+                             long version) {
+        this(haGroupName, policy, RegistryType.ZK, url1, role1, url2, role2, version);
+    }
+
 
     public static Optional<ClusterRoleRecord> fromJson(byte[] bytes) {
         if (bytes == null) {
@@ -130,10 +156,10 @@ public class ClusterRoleRecord {
     @JsonIgnore
     public Optional<String> getActiveUrl() {
         if (role1 == ClusterRole.ACTIVE) {
-            return Optional.of(zk1);
+            return Optional.of(url1);
         }
         if (role2 == ClusterRole.ACTIVE) {
-            return Optional.of(zk2);
+            return Optional.of(url2);
         }
         return Optional.empty();
     }
@@ -150,18 +176,16 @@ public class ClusterRoleRecord {
 
     public boolean hasSameInfo(ClusterRoleRecord other) {
         return haGroupName.equals(other.haGroupName) &&
-                policy.equals(other.policy) &&
-                zk1.equalsIgnoreCase(other.zk1) &&
-                zk2.equalsIgnoreCase(other.zk2);
+                policy.equals(other.policy);
     }
 
     /**
-     * @return role by ZK url or UNKNOWN if the zkUrl does not belong to this HA group
+     * @return role by url or UNKNOWN if the Url does not belong to this HA group
      */
-    public ClusterRole getRole(String zkUrl) {
-        if (zk1.equals(zkUrl)) {
+    public ClusterRole getRole(String url) {
+        if (url1.equals(url)) {
             return role1;
-        } else if (zk2.equals(zkUrl)) {
+        } else if (url2.equals(url)) {
             return role2;
         } else {
             return ClusterRole.UNKNOWN;
@@ -176,16 +200,20 @@ public class ClusterRoleRecord {
         return policy;
     }
 
-    public String getZk1() {
-        return zk1;
+    public RegistryType getRegistryType() {
+        return registryType;
+    }
+
+    public String getUrl1() {
+        return url1;
     }
 
     public ClusterRole getRole1() {
         return role1;
     }
 
-    public String getZk2() {
-        return zk2;
+    public String getUrl2() {
+        return url2;
     }
 
     public ClusterRole getRole2() {
@@ -201,9 +229,10 @@ public class ClusterRoleRecord {
         return new HashCodeBuilder()
                 .append(haGroupName)
                 .append(policy)
-                .append(zk1)
+                .append(registryType)
+                .append(url1)
                 .append(role1)
-                .append(zk2)
+                .append(url2)
                 .append(role2)
                 .append(version)
                 .hashCode();
@@ -222,9 +251,10 @@ public class ClusterRoleRecord {
             return new EqualsBuilder()
                     .append(haGroupName, otherRecord.haGroupName)
                     .append(policy, otherRecord.policy)
-                    .append(zk1, otherRecord.zk1)
+                    .append(registryType, otherRecord.registryType)
+                    .append(url1, otherRecord.url1)
                     .append(role1, otherRecord.role1)
-                    .append(zk2, otherRecord.zk2)
+                    .append(url2, otherRecord.url2)
                     .append(role2, otherRecord.role2)
                     .append(version, otherRecord.version)
                     .isEquals();
@@ -236,9 +266,10 @@ public class ClusterRoleRecord {
         return "ClusterRoleRecord{"
                 + "haGroupName='" + haGroupName + '\''
                 + ", policy=" + policy
-                + ", zk1='" + zk1 + '\''
+                + ", registryType=" + registryType
+                + ", zk1='" + url1 + '\''
                 + ", role1=" + role1
-                + ", zk2='" + zk2 + '\''
+                + ", zk2='" + url2 + '\''
                 + ", role2=" + role2
                 + ", version=" + version
                 + '}';

@@ -49,9 +49,7 @@ import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -271,6 +269,11 @@ public class HighAvailabilityGroup {
             }
         }
 
+        //If additional parameter is only ; then making it null.
+        additionalJDBCParams = additionalJDBCParams != null ?
+                (additionalJDBCParams.equals(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR) ?
+                        null : additionalJDBCParams) : null;
+
         String name = properties.getProperty(PHOENIX_HA_GROUP_ATTR);
         if (StringUtils.isEmpty(name)) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.HA_INVALID_PROPERTIES)
@@ -398,7 +401,9 @@ public class HighAvailabilityGroup {
         }
         String fallbackCluster = properties.getProperty(PHOENIX_HA_FALLBACK_CLUSTER_KEY);
         if (StringUtils.isEmpty(fallbackCluster)) {
-            fallbackCluster = haGroupInfo.getUrl1();
+            LOG.error("Fallback to single cluster is enabled for the HA group {} but cluster key is empty" +
+                    " per configuration. HA url: '{}'.", haGroupInfo.getName(), url);
+            return Optional.empty();
         }
         LOG.info("Falling back to single cluster '{}' for the HA group {} to serve HA connection "
                         + "request against url '{}'.",
@@ -659,7 +664,7 @@ public class HighAvailabilityGroup {
             return false;
         }
         return roleRecord.getActiveUrl()
-                .equals(Optional.of(JDBCUtil.formatZookeeperUrl(connection.getURL())));
+                .equals(Optional.of(JDBCUtil.formatUrl(connection.getURL())));
     }
 
     /**
@@ -676,11 +681,11 @@ public class HighAvailabilityGroup {
             Preconditions.checkArgument(url.length() > PhoenixRuntime.JDBC_PROTOCOL.length(),
                     "The URL '" + url + "' is not a valid Phoenix connection string");
         }
-        url = JDBCUtil.formatZookeeperUrl(url);
-        Preconditions.checkArgument(url.equals(info.getUrl1()) || url.equals(info.getUrl2()),
-                "The URL '" + url + "' does not belong to this HA group " + info);
+        //we don't need to normalize here? as we already store url in roleRecord object as normalized,
+        //or we are just normalizing for tests?
+        url = JDBCUtil.formatUrl(url, roleRecord.getRegistryType());
 
-        String jdbcString = info.getJDBCUrl(url, haurlInfo);
+        String jdbcString = getJDBCUrl(url, haurlInfo, roleRecord.getRegistryType());
 
         ClusterRole role = roleRecord.getRole(url);
         if (!role.canConnect()) {
@@ -690,7 +695,7 @@ public class HighAvailabilityGroup {
                     .buildException();
         }
 
-        // Get driver instead of using PhoenixDriver.INSTANCE since it can be test or mocked driver
+        // Get driver instead of using PhoenixDriver.INSTANCE since it can be a test or mocked driver
         Driver driver = DriverManager.getDriver(jdbcString);
         Preconditions.checkArgument(driver instanceof PhoenixEmbeddedDriver,
                 "No JDBC driver is registered for Phoenix high availability (HA) framework");
@@ -781,7 +786,7 @@ public class HighAvailabilityGroup {
         LOG.info("HA group {} is in {} to set V{} record", info, state, newRoleRecord.getVersion());
         Future<?> future = nodeChangedExecutor.submit(() -> {
             try {
-                roleRecord.getPolicy().transitClusterRole(this, roleRecord, newRoleRecord);
+                roleRecord.getPolicy().transitClusterRoleRecord(this, roleRecord, newRoleRecord);
             } catch (SQLException e) {
                 throw new CompletionException(e);
             }
@@ -850,8 +855,9 @@ public class HighAvailabilityGroup {
             Preconditions.checkNotNull(url1);
             Preconditions.checkNotNull(url2);
             this.name = name;
-            url1 = JDBCUtil.formatZookeeperUrl(url1);
-            url2 = JDBCUtil.formatZookeeperUrl(url2);
+            //Normalizing these urls with ZK protocol as these are the ZK urls of clusters where roleRecords resides.
+            url1 = JDBCUtil.formatUrl(url1, ClusterRoleRecord.RegistryType.ZK);
+            url2 = JDBCUtil.formatUrl(url2, ClusterRoleRecord.RegistryType.ZK);
             Preconditions.checkArgument(!url1.equals(url2), "Two clusters have the same ZK!");
             // Ignore the given order of url1 and url2, and reorder for equals comparison.
             if (url1.compareTo(url2) > 0) {
@@ -873,47 +879,12 @@ public class HighAvailabilityGroup {
             return urls.getSecond();
         }
 
-
-        public String getJDBCUrl(String zkUrl, HAURLInfo haURLInfo) {
-            Preconditions.checkArgument(zkUrl.equals(getUrl1()) || zkUrl.equals(getUrl2())
-                            || zkUrl.equals("[" + getUrl1() + "|" + getUrl2() + "]")
-                            || zkUrl.equals("[" + getUrl2() + "|" + getUrl1() + "]"),
-                    "The URL '" + zkUrl + "' does not belong to this HA group " + this);
-            StringBuilder sb = new StringBuilder();
-            sb.append(PhoenixRuntime.JDBC_PROTOCOL_ZK);
-            sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
-            sb.append(zkUrl);
-            if (haURLInfo != null) {
-                if (!Strings.isNullOrEmpty(haURLInfo.getPrincipal())
-                        && !Strings.isNullOrEmpty(haURLInfo.getAdditionalJDBCParams())) {
-                    sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
-                    sb.append(haURLInfo.getPrincipal());
-                    if (!haURLInfo.getAdditionalJDBCParams().
-                            equals(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR))) {
-                        sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
-                    }
-                    sb.append(haURLInfo.getAdditionalJDBCParams());
-                } else if (!Strings.isNullOrEmpty(haURLInfo.getPrincipal())) {
-                    sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
-                    sb.append(haURLInfo.getPrincipal());
-                } else if (!Strings.isNullOrEmpty(haURLInfo.getAdditionalJDBCParams())) {
-                    if (!haURLInfo.getAdditionalJDBCParams().
-                            equals(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR))) {
-                        sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
-                        sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
-                    }
-                    sb.append(haURLInfo.getAdditionalJDBCParams());
-                }
-            }
-            return sb.toString();
-        }
-
         public String getJDBCUrl1(HAURLInfo haURLInfo) {
-            return getJDBCUrl(getUrl1(), haURLInfo);
+            return getJDBCUrl(getUrl1(), haURLInfo, ClusterRoleRecord.RegistryType.ZK);
         }
 
         public String getJDBCUrl2(HAURLInfo haURLInfo) {
-            return getJDBCUrl(getUrl2(), haURLInfo);
+            return getJDBCUrl(getUrl2(), haURLInfo, ClusterRoleRecord.RegistryType.ZK);
         }
 
         /**
@@ -952,6 +923,53 @@ public class HighAvailabilityGroup {
                     .append(name)
                     .append(urls).hashCode();
         }
+    }
+
+    /**
+     * Helper method to construct the jdbc url back from the given information
+     * @param url contains host and port part of jdbc url, to get ha url in jdbc format
+     *            this function can be used, but needs url in ha format already i.e. [url1|url2]
+     *            for MASTER and RPC registry
+     * @param haURLInfo contains principal and additional information
+     * @param type Registry Type for which url has to be constructed
+     * @return jdbc url in proper format
+     */
+    public static String getJDBCUrl(String url, HAURLInfo haURLInfo, ClusterRoleRecord.RegistryType type) {
+        //Need extra separator for Master and pc connections for principal as no znode path is there
+        boolean extraSeparator = false;
+        StringBuilder sb = new StringBuilder();
+        switch (type) {
+            case ZK:
+                sb.append(PhoenixRuntime.JDBC_PROTOCOL_ZK);
+                break;
+            case RPC:
+                sb.append(PhoenixRuntime.JDBC_PROTOCOL_RPC);
+                extraSeparator = true;
+                break;
+            case MASTER:
+                sb.append(PhoenixRuntime.JDBC_PROTOCOL_MASTER);
+                extraSeparator = true;
+                break;
+            default:
+                sb.append(PhoenixRuntime.JDBC_PROTOCOL);
+        }
+        sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+        sb.append(url);
+        if (haURLInfo != null) {
+            if (anyNotNull(haURLInfo.getPrincipal(), haURLInfo.getAdditionalJDBCParams())) {
+                if (extraSeparator) {
+                    //For Master and RPC connection url we need 2 extra separator
+                    sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR).
+                            append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+                }
+                sb.append(haURLInfo.getPrincipal() == null ? PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR :
+                        PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + haURLInfo.getPrincipal());
+            }
+            if (anyNotNull(haURLInfo.getAdditionalJDBCParams())) {
+                sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR).append(haURLInfo.getAdditionalJDBCParams());
+            }
+        }
+        return sb.toString();
     }
 
     /**
@@ -1022,5 +1040,15 @@ public class HighAvailabilityGroup {
                 roleManagerLatch.countDown();
             }
         }
+
+    }
+
+    private static boolean anyNotNull(Object... params) {
+        for (Object param : params) {
+            if (param != null) {
+                return true;
+            }
+        }
+        return false;
     }
 }

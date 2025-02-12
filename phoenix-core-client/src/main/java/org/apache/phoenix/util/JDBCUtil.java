@@ -27,6 +27,8 @@ import java.util.Properties;
 import javax.annotation.Nullable;
 
 import org.apache.hadoop.hbase.client.Consistency;
+import org.apache.phoenix.jdbc.AbstractRPCConnectionInfo;
+import org.apache.phoenix.jdbc.ClusterRoleRecord;
 import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.jdbc.ZKConnectionInfo;
 import org.apache.phoenix.query.QueryServices;
@@ -207,33 +209,63 @@ public class JDBCUtil {
     }
 
     /**
-     * Get the ZK quorom and root and node part of the URL, which is used by the HA code internally
-     * to identify the clusters.
+     * Get the ZK quorum and root and node part of the URL in case of ZKRegistry and bootstrap nodes for other registry
+     * which is used by the HA code internally to identify the clusters.
      * As we interpret a missing protocol as ZK, this is mostly idempotent for zk quorum strings.
      *
-     * @param jdbcUrl JDBC URL
-     * @return part of the URL determining the ZK quorum and node
+     * @param jdbcUrl JDBC URL with proper protocol present in string
+     * @return part of the URL determining the ZK quorum and node or bootstrapServers
      * @throws RuntimeException if the URL is invalid, or does not resolve to a ZK Registry
      * connection
      */
-    public static String formatZookeeperUrl(String jdbcUrl) {
+    public static String formatUrl(String jdbcUrl) {
         ConnectionInfo connInfo;
         try {
             connInfo = ConnectionInfo.create(jdbcUrl, null, null);
-            // TODO in theory we could support non-ZK registries for HA.
-            // However, as HA already relies on ZK, this wouldn't be particularly useful,
-            // and would require significant changes.
-            if (!(connInfo instanceof ZKConnectionInfo)) {
-                throw new SQLException("HA connections must use ZooKeeper registry. " + jdbcUrl
-                        + " is not a Zookeeper HBase connection");
-            }
-            ZKConnectionInfo zkInfo = (ZKConnectionInfo) connInfo;
             StringBuilder sb = new StringBuilder();
-            sb.append(zkInfo.getZkHosts().replaceAll(":", "\\\\:")).append("::")
-                    .append(zkInfo.getZkRootNode());
+            if (connInfo instanceof AbstractRPCConnectionInfo) {
+                //TODO: check if anything else is needed for RPCRegistry connections and do we need to store them in CRR
+                AbstractRPCConnectionInfo rpcInfo = (AbstractRPCConnectionInfo) connInfo;
+                sb.append(rpcInfo.getBoostrapServers().replaceAll(":", "\\\\:"));
+            } else {
+                ZKConnectionInfo zkInfo = (ZKConnectionInfo) connInfo;
+                sb.append(zkInfo.getZkHosts().replaceAll(":", "\\\\:")).append("::")
+                        .append(zkInfo.getZkRootNode());
+            }
             return sb.toString();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    /**
+     * Get the formatted URL, in case of ZK URL it returns ZK quorum and root and node part of the URL and in case of
+     * Master or RPC URL it returns bootstrap servers with ports
+     * Use this method instead of {@link #formatUrl(String)} if you want to format url specific to a protocol or
+     * for urls coming from roleRecord or urls for fetching roleRecords those don't have protocol in the url and could
+     * be normalized differently based on configs.
+     * @param url
+     * @param registryType
+     * @return
+     */
+    public static String formatUrl(String url, ClusterRoleRecord.RegistryType registryType) {
+        if (!url.startsWith(PhoenixRuntime.JDBC_PROTOCOL)) {
+            switch (registryType) {
+                case ZK:
+                    return formatUrl(PhoenixRuntime.JDBC_PROTOCOL_ZK +
+                            PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + url);
+                case MASTER:
+                    return formatUrl(PhoenixRuntime.JDBC_PROTOCOL_MASTER +
+                            PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + url);
+                case RPC:
+                    return formatUrl(PhoenixRuntime.JDBC_PROTOCOL_RPC +
+                            PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + url);
+                default:
+                    return formatUrl(PhoenixRuntime.JDBC_PROTOCOL +
+                            PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + url);
+
+            }
+        }
+        return formatUrl(url);
     }
 }
