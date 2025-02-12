@@ -49,6 +49,7 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -796,7 +797,7 @@ public class HighAvailabilityGroupIT {
             if (CLUSTERS.getUrl1().compareTo(CLUSTERS.getUrl2()) > 0) {
                 firstClusterUrl = CLUSTERS.getUrl2();
             }
-            assertEquals(firstClusterUrl, ((PhoenixConnection) conn).getURL());
+            assertEquals(PhoenixRuntime.JDBC_PROTOCOL_ZK + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + firstClusterUrl, ((PhoenixConnection) conn).getURL());
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName2);
         }
 
