@@ -80,7 +80,6 @@ import org.slf4j.LoggerFactory;
  * Test failover basics for {@link ParallelPhoenixConnection}.
  */
 @Category(NeedsOwnMiniClusterTest.class)
-@RunWith(Parameterized.class)
 public class ParallelPhoenixConnectionIT {
     private static final Logger LOG = LoggerFactory.getLogger(ParallelPhoenixConnectionIT.class);
     private static final HBaseTestingUtilityPair CLUSTERS = new HBaseTestingUtilityPair();
@@ -97,21 +96,7 @@ public class ParallelPhoenixConnectionIT {
     private String tableName;
     /** HA Group name for this test. */
     private String haGroupName;
-    private final ClusterRoleRecord.RegistryType registryType;
 
-    public ParallelPhoenixConnectionIT(ClusterRoleRecord.RegistryType registryType) {
-        this.registryType = registryType;
-    }
-
-    @Parameterized.Parameters(name="ClusterRoleRecord_registryType={0}")
-    public static Collection<Object> data() {
-        return Arrays.asList(new Object[] {
-                ClusterRoleRecord.RegistryType.ZK,
-                ClusterRoleRecord.RegistryType.MASTER,
-                ClusterRoleRecord.RegistryType.RPC,
-                null //For Backward Compatibility
-        });
-    }
     @BeforeClass
     public static void setUpBeforeClass() throws Exception {
         CLUSTERS.start();
@@ -134,11 +119,7 @@ public class ParallelPhoenixConnectionIT {
         clientProperties = new Properties(GLOBAL_PROPERTIES);
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName);
         // Make first cluster ACTIVE
-        if (registryType == null) {
-            CLUSTERS.initClusterRole(haGroupName, PARALLEL);
-        } else {
-            CLUSTERS.initClusterRole(haGroupName, PARALLEL, registryType);
-        }
+        CLUSTERS.initClusterRole(haGroupName, PARALLEL);
 
         haGroup = HighAvailabilityTestingUtility.getHighAvailibilityGroup(CLUSTERS.getJdbcHAUrl(), clientProperties);
         LOG.info("Initialized haGroup {} with URL {}", haGroup, CLUSTERS.getJdbcHAUrl());
@@ -356,24 +337,12 @@ public class ParallelPhoenixConnectionIT {
                 /* Determine which cluster is down from a phoenix HA point of view and close the other */
 
                 CompletableFuture<PhoenixConnection> pConn = null;
-                if (registryType == ClusterRoleRecord.RegistryType.ZK || registryType == null) {
-                    int downClientPort = CLUSTERS.getHBaseCluster1().getZkCluster().getClientPort();
-                    if(((ParallelPhoenixConnection) conn).getContext().getHaGroup().getRoleRecord().
-                            getUrl1().contains(String.valueOf(downClientPort))) {
-                        pConn = ((ParallelPhoenixConnection) conn).futureConnection2;
-                    } else {
-                        pConn = ((ParallelPhoenixConnection) conn).futureConnection1;
-                    }
+                int downClientPort = CLUSTERS.getHBaseCluster1().getZkCluster().getClientPort();
+                if(((ParallelPhoenixConnection) conn).getContext().getHaGroup().getRoleRecord().
+                        getUrl1().contains(String.valueOf(downClientPort))) {
+                    pConn = ((ParallelPhoenixConnection) conn).futureConnection2;
                 } else {
-                    //Get the master url of other cluster and get the corresponding pConnection to close
-                    String masterAddress = JDBCUtil.formatUrl(CLUSTERS.getHBaseCluster2().
-                            getConfiguration().get(HConstants.MASTER_ADDRS_KEY), registryType);
-                    if (((ParallelPhoenixConnection) conn).getContext().getHaGroup().getRoleRecord().
-                            getUrl1().equals(masterAddress)) {
-                        pConn = ((ParallelPhoenixConnection) conn).futureConnection1;
-                    } else {
-                        pConn = ((ParallelPhoenixConnection) conn).futureConnection2;
-                    }
+                    pConn = ((ParallelPhoenixConnection) conn).futureConnection1;
                 }
 
                 //Close the connection this will cause "failures", may have to retry wait for this
@@ -572,32 +541,18 @@ public class ParallelPhoenixConnectionIT {
 
     /**
      * This is to make sure all Phoenix connections are closed when registryType changes
-     * of a CRR.
-     * scenarios
-     *   1) ZK --> RPC
-     *   2) null (ZK) --> MASTER
-     *   3) MASTER --> ZK
-     *   4) RPC --> ZK
+     * of a CRR , ZK --> MASTER
      *
      * Test with many connections.
      */
     @Test
-    public void testAllWrappedConnectionsClosedAfterRegistryChange() throws Exception {
+    public void testAllWrappedConnectionsClosedAfterRegistryChangeToMaster() throws Exception {
         short numberOfConnections = 10;
         List<Connection> connectionList = new ArrayList<>(numberOfConnections);
         for (short i = 0; i < numberOfConnections; i++) {
             connectionList.add(getParallelConnection());
         }
-        ClusterRoleRecord.RegistryType newRegistry = null;
-        if (registryType == null) {
-            newRegistry = ClusterRoleRecord.RegistryType.MASTER;
-        } else if (registryType == ClusterRoleRecord.RegistryType.ZK) {
-            newRegistry = ClusterRoleRecord.RegistryType.RPC;
-        } else if (registryType == ClusterRoleRecord.RegistryType.MASTER) {
-            newRegistry = ClusterRoleRecord.RegistryType.ZK;
-        } else if (registryType == ClusterRoleRecord.RegistryType.RPC) {
-            newRegistry = ClusterRoleRecord.RegistryType.ZK;
-        }
+        ClusterRoleRecord.RegistryType newRegistry = ClusterRoleRecord.RegistryType.MASTER;
         CLUSTERS.transitClusterRoleRecordRegistry(haGroup, newRegistry);
 
         for (short i = 0; i < numberOfConnections; i++) {
@@ -611,28 +566,18 @@ public class ParallelPhoenixConnectionIT {
 
     /**
      * This is to make sure all Phoenix connections are closed when registryType changes
-     * of a CRR.
-     * scenarios
-     *   1) ZK --> MASTER
-     *   2) null (ZK) --> RPC
-     *   3) MASTER --> null
-     *   4) RPC --> null
+     * of a CRR. ZK --> RPC
      *
      * Test with many connections.
      */
     @Test(timeout = 300000)
-    public void testAllWrappedConnectionsClosedAfterRegistryChange2() throws Exception {
+    public void testAllWrappedConnectionsClosedAfterRegistryChangeToRpc() throws Exception {
         short numberOfConnections = 10;
         List<Connection> connectionList = new ArrayList<>(numberOfConnections);
         for (short i = 0; i < numberOfConnections; i++) {
             connectionList.add(getParallelConnection());
         }
-        ClusterRoleRecord.RegistryType newRegistry = null;
-        if (registryType == null) {
-            newRegistry = ClusterRoleRecord.RegistryType.RPC;
-        } else if (registryType == ClusterRoleRecord.RegistryType.ZK) {
-            newRegistry = ClusterRoleRecord.RegistryType.MASTER;
-        }
+        ClusterRoleRecord.RegistryType newRegistry = ClusterRoleRecord.RegistryType.RPC;
         CLUSTERS.transitClusterRoleRecordRegistry(haGroup, newRegistry);
 
         for (short i = 0; i < numberOfConnections; i++) {

@@ -17,49 +17,46 @@
  */
 package org.apache.phoenix.jdbc;
 
-        import static org.apache.hadoop.test.GenericTestUtils.waitFor;
-        import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair.doTestWhenOneZKDown;
-        import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithConnection;
-        import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
-        import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
-        import static org.junit.Assert.assertEquals;
-        import static org.junit.Assert.assertFalse;
-        import static org.junit.Assert.assertTrue;
-        import static org.junit.Assert.fail;
+import static org.apache.hadoop.test.GenericTestUtils.waitFor;
+import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair.doTestWhenOneZKDown;
+import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithConnection;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
+import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
-        import java.sql.Connection;
-        import java.sql.DriverManager;
-        import java.sql.SQLException;
-        import java.util.ArrayList;
-        import java.util.Arrays;
-        import java.util.Collection;
-        import java.util.List;
-        import java.util.Properties;
-        import java.util.concurrent.ExecutorService;
-        import java.util.concurrent.Executors;
-        import java.util.concurrent.Future;
-        import java.util.concurrent.TimeUnit;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+import java.util.Properties;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
-        import org.apache.commons.lang3.RandomStringUtils;
-        import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-        import org.junit.After;
-        import org.junit.AfterClass;
-        import org.junit.Before;
-        import org.junit.BeforeClass;
-        import org.junit.Rule;
-        import org.junit.Test;
-        import org.junit.experimental.categories.Category;
-        import org.junit.rules.TestName;
-        import org.junit.runner.RunWith;
-        import org.junit.runners.Parameterized;
-        import org.slf4j.Logger;
-        import org.slf4j.LoggerFactory;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.junit.After;
+import org.junit.AfterClass;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
+import org.junit.rules.TestName;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Test failover basics for {@link FailoverPhoenixConnection}.
  */
 @Category(NeedsOwnMiniClusterTest.class)
-@RunWith(Parameterized.class)
 public class FailoverPhoenixConnection2IT {
     private static final Logger LOG = LoggerFactory.getLogger(FailoverPhoenixConnectionIT.class);
     private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS = new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();
@@ -75,21 +72,6 @@ public class FailoverPhoenixConnection2IT {
     private String tableName;
     /** HA Group name for this test. */
     private String haGroupName;
-    private final ClusterRoleRecord.RegistryType registryType;
-
-    public FailoverPhoenixConnection2IT(ClusterRoleRecord.RegistryType registryType) {
-        this.registryType = registryType;
-    }
-
-    @Parameterized.Parameters(name="ClusterRoleRecord_registryType={0}")
-    public static Collection<Object> data() {
-        return Arrays.asList(new Object[] {
-                ClusterRoleRecord.RegistryType.ZK,
-                ClusterRoleRecord.RegistryType.MASTER,
-                ClusterRoleRecord.RegistryType.RPC,
-                null //For Backward Compatibility
-        });
-    }
 
     @BeforeClass
     public static void setUpBeforeClass() throws Exception {
@@ -110,11 +92,7 @@ public class FailoverPhoenixConnection2IT {
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName);
 
         // Make first cluster ACTIVE
-        if (registryType == null) {
-            CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER);
-        } else {
-            CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER, registryType);
-        }
+        CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER);
 
         haGroup = getHighAvailibilityGroup(CLUSTERS.getJdbcHAUrl(), clientProperties);
         LOG.info("Initialized haGroup {} with URL {}", haGroup, CLUSTERS.getJdbcHAUrl());
@@ -279,15 +257,6 @@ public class FailoverPhoenixConnection2IT {
                         CLUSTERS.getZkUrl2(), e);
             }
         });
-
-        // After the second cluster (ACTIVE) ZK restarts, this should still work
-        // For registryType MASTER and RPC this will fail as new miniCluster will
-        // have different port for master refreshing CRR with new url
-        if (registryType == ClusterRoleRecord.RegistryType.RPC ||
-                registryType == ClusterRoleRecord.RegistryType.MASTER) {
-            CLUSTERS.refreshClusterRoleRecordAfterClusterRestart(haGroup,
-                    ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE);
-        }
         try (Connection conn = createFailoverConnection()) {
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
         }
@@ -399,32 +368,18 @@ public class FailoverPhoenixConnection2IT {
 
     /**
      * This is to make sure all Phoenix connections are closed when registryType changes
-     * of a CRR.
-     * scenarios
-     *   1) ZK --> RPC
-     *   2) null (ZK) --> MASTER
-     *   3) MASTER --> ZK
-     *   4) RPC --> ZK
+     * of a CRR. ZK --> MASTER
      *
      * Test with many connections.
      */
     @Test(timeout = 300000)
-    public void testAllWrappedConnectionsClosedAfterRegistryChange() throws Exception {
+    public void testAllWrappedConnectionsClosedAfterRegistryChangeToMaster() throws Exception {
         short numberOfConnections = 10;
         List<Connection> connectionList = new ArrayList<>(numberOfConnections);
         for (short i = 0; i < numberOfConnections; i++) {
             connectionList.add(createFailoverConnection());
         }
-        ClusterRoleRecord.RegistryType newRegistry = null;
-        if (registryType == null) {
-            newRegistry = ClusterRoleRecord.RegistryType.MASTER;
-        } else if (registryType == ClusterRoleRecord.RegistryType.ZK) {
-            newRegistry = ClusterRoleRecord.RegistryType.RPC;
-        } else if (registryType == ClusterRoleRecord.RegistryType.MASTER) {
-            newRegistry = ClusterRoleRecord.RegistryType.ZK;
-        } else if (registryType == ClusterRoleRecord.RegistryType.RPC) {
-            newRegistry = ClusterRoleRecord.RegistryType.ZK;
-        }
+        ClusterRoleRecord.RegistryType newRegistry = ClusterRoleRecord.RegistryType.MASTER;
         CLUSTERS.transitClusterRoleRecordRegistry(haGroup, newRegistry);
 
         for (short i = 0; i < numberOfConnections; i++) {
@@ -437,28 +392,18 @@ public class FailoverPhoenixConnection2IT {
 
     /**
      * This is to make sure all Phoenix connections are closed when registryType changes
-     * of a CRR.
-     * scenarios
-     *   1) ZK --> MASTER
-     *   2) null (ZK) --> RPC
-     *   3) MASTER --> null
-     *   4) RPC --> null
+     * of a CRR. ZK --> RPC
      *
      * Test with many connections.
      */
     @Test(timeout = 300000)
-    public void testAllWrappedConnectionsClosedAfterRegistryChange2() throws Exception {
+    public void testAllWrappedConnectionsClosedAfterRegistryChangeToRpc() throws Exception {
         short numberOfConnections = 10;
         List<Connection> connectionList = new ArrayList<>(numberOfConnections);
         for (short i = 0; i < numberOfConnections; i++) {
             connectionList.add(createFailoverConnection());
         }
-        ClusterRoleRecord.RegistryType newRegistry = null;
-        if (registryType == null) {
-            newRegistry = ClusterRoleRecord.RegistryType.RPC;
-        } else if (registryType == ClusterRoleRecord.RegistryType.ZK) {
-            newRegistry = ClusterRoleRecord.RegistryType.MASTER;
-        }
+        ClusterRoleRecord.RegistryType newRegistry = ClusterRoleRecord.RegistryType.RPC;
         CLUSTERS.transitClusterRoleRecordRegistry(haGroup, newRegistry);
 
         for (short i = 0; i < numberOfConnections; i++) {

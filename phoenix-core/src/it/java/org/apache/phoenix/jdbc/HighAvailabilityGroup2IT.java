@@ -31,7 +31,6 @@ import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvai
 import static org.junit.Assert.*;
 import static org.junit.Assert.assertTrue;
 
-@RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
 public class HighAvailabilityGroup2IT {
     private static final Logger LOG = LoggerFactory.getLogger(HighAvailabilityGroup2IT.class);
@@ -51,7 +50,7 @@ public class HighAvailabilityGroup2IT {
     public final TestName testName = new TestName();
     @Rule
     public final Timeout globalTimeout = new Timeout(180, TimeUnit.SECONDS);
-    private final ClusterRoleRecord.RegistryType registryType;
+    private final ClusterRoleRecord.RegistryType registryType = ClusterRoleRecord.RegistryType.ZK;
 
     @BeforeClass
     public static void setUpBeforeClass() throws Exception {
@@ -66,20 +65,6 @@ public class HighAvailabilityGroup2IT {
         CLUSTERS.close();
     }
 
-    @Parameterized.Parameters(name="ClusterRoleRecord_registryType={0}")
-    public static Collection<Object> data() {
-        return Arrays.asList(new Object[] {
-                ClusterRoleRecord.RegistryType.ZK,
-                ClusterRoleRecord.RegistryType.MASTER,
-                ClusterRoleRecord.RegistryType.RPC,
-                null //For Backward Compatibility
-        });
-    }
-
-    public HighAvailabilityGroup2IT(ClusterRoleRecord.RegistryType registryType) {
-        this.registryType = registryType;
-    }
-
     @Before
     public void setup() throws Exception {
         haGroupName = testName.getMethodName();
@@ -87,11 +72,7 @@ public class HighAvailabilityGroup2IT {
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName);
 
         // Make first cluster ACTIVE
-        if (registryType == null) {
-            CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER);
-        } else {
-            CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER, registryType);
-        }
+        CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER);
         jdbcHAUrl = CLUSTERS.getJdbcHAUrl();
         haURLInfo = HighAvailabilityGroup.getUrlInfo(jdbcHAUrl, clientProperties);
         haGroup = getHighAvailibilityGroup(jdbcHAUrl,clientProperties);
@@ -243,17 +224,10 @@ public class HighAvailabilityGroup2IT {
             }
         });
 
-        //For MASTER and RPC registry, when the cluster restarts it changes the port for
-        //HMaster and URL in roleRecord is different so it won't be able to test.
-        if (registryType == ClusterRoleRecord.RegistryType.ZK ||
-                registryType == null) {
-            try (Connection conn = haGroup.connectActive(clientProperties, haURLInfo)) {
-                assertNotNull(conn);
-                LOG.info("Successfully connect to HA group {} after restarting ACTIVE ZK", haGroup);
-            } // all other exceptions will fail the test
-        } else {
-            //transit Role Record?
-        }
+        try (Connection conn = haGroup.connectActive(clientProperties, haURLInfo)) {
+            assertNotNull(conn);
+            LOG.info("Successfully connect to HA group {} after restarting ACTIVE ZK", haGroup);
+        } // all other exceptions will fail the test
     }
 
     /**

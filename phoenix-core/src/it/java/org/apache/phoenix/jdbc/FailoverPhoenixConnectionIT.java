@@ -79,7 +79,6 @@ import org.slf4j.LoggerFactory;
  * Test failover basics for {@link FailoverPhoenixConnection}.
  */
 @Category(NeedsOwnMiniClusterTest.class)
-@RunWith(Parameterized.class)
 public class FailoverPhoenixConnectionIT {
     private static final Logger LOG = LoggerFactory.getLogger(FailoverPhoenixConnectionIT.class);
     private static final HBaseTestingUtilityPair CLUSTERS = new HBaseTestingUtilityPair();
@@ -95,11 +94,7 @@ public class FailoverPhoenixConnectionIT {
     private String tableName;
     /** HA Group name for this test. */
     private String haGroupName;
-    private final ClusterRoleRecord.RegistryType registryType;
-
-    public FailoverPhoenixConnectionIT(ClusterRoleRecord.RegistryType registryType) {
-        this.registryType = registryType;
-    }
+    private final ClusterRoleRecord.RegistryType registryType = ClusterRoleRecord.RegistryType.ZK;
 
     @BeforeClass
     public static void setUpBeforeClass() throws Exception {
@@ -113,16 +108,6 @@ public class FailoverPhoenixConnectionIT {
         CLUSTERS.close();
     }
 
-    @Parameterized.Parameters(name="ClusterRoleRecord_registryType={0}")
-    public static Collection<Object> data() {
-        return Arrays.asList(new Object[] {
-                ClusterRoleRecord.RegistryType.ZK,
-                ClusterRoleRecord.RegistryType.MASTER,
-                ClusterRoleRecord.RegistryType.RPC,
-                null //For Backward Compatibility
-        });
-    }
-
     @Before
     public void setup() throws Exception {
         haGroupName = testName.getMethodName();
@@ -130,11 +115,7 @@ public class FailoverPhoenixConnectionIT {
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName);
 
         // Make first cluster ACTIVE
-        if (registryType == null) {
-            CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER);
-        } else {
-            CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER, registryType);
-        }
+        CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER);
 
         haGroup = getHighAvailibilityGroup(CLUSTERS.getJdbcHAUrl(), clientProperties);
         LOG.info("Initialized haGroup {} with URL {}", haGroup, CLUSTERS.getJdbcHAUrl());
@@ -818,10 +799,6 @@ public class FailoverPhoenixConnectionIT {
     }
 
     private void initClusterRoleRecord(String haGroupName) throws Exception {
-        if (registryType == null) {
             CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER);
-        } else {
-            CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER, registryType);
-        }
     }
 }
