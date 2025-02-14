@@ -79,8 +79,8 @@ public class ClusterRoleRecord {
     }
 
     /**
-     * Enum for HBaseRegistryType being used in current clusterRoleRecord, final connection url are constructed based
-     * on RegistryType and urls stored in clusterRoleRecord
+     * Enum for HBaseRegistryType being used in current clusterRoleRecord, final connection url
+     * are constructed based on RegistryType and urls stored in clusterRoleRecord
      */
     public enum RegistryType {
         ZK, MASTER, RPC
@@ -99,17 +99,20 @@ public class ClusterRoleRecord {
     public ClusterRoleRecord(@JsonProperty("haGroupName") String haGroupName,
                              @JsonProperty("policy") HighAvailabilityPolicy policy,
                              @JsonProperty("registryType") RegistryType registryType,
-                             @JsonProperty("url1") String url1, @JsonProperty("role1") ClusterRole role1,
-                             @JsonProperty("url2") String url2, @JsonProperty("role2") ClusterRole role2,
+                             @JsonProperty("url1") String url1,
+                             @JsonProperty("role1") ClusterRole role1,
+                             @JsonProperty("url2") String url2,
+                             @JsonProperty("role2") ClusterRole role2,
                              @JsonProperty("version") long version) {
         this.haGroupName = haGroupName;
         this.policy = policy;
-        this.registryType = registryType != null ? registryType : RegistryType.ZK;;
+        this.registryType = registryType != null ? registryType : RegistryType.ZK;
         //Do we really need to normalize here ?
-        //We are normalizing to have urls in specific formats for each registryType for getting accurate comparisons
-        //Passing registryType as these url most probably won't have protocol in url, and it might be normalized based
-        //to wrong registry type as we normalize w.r.t {@link ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY}
-        //but considering source of truth registryType present on roleRecord.
+        //We are normalizing to have urls in specific formats for each registryType for getting
+        //accurate comparisons. We are passing registryType as these url most probably won't have
+        //protocol in url, and it might be normalized based to wrong registry type, as we normalize
+        //w.r.t {@link ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY}
+        //but considering source of truth of registryType is present on roleRecord.
         url1 = JDBCUtil.formatUrl(url1, this.registryType);
         url2 = JDBCUtil.formatUrl(url2, this.registryType);
 

@@ -71,8 +71,8 @@ enum HighAvailabilityPolicy {
 
             //Close connections for Active HBase cluster as there is a change in Registry Type
             if (activeUrl.isPresent()) {
-                LOG.info("Cluster {} has a change in registryType in HA group {}, now closing all its connections",
-                        activeUrl.get(), oldRecord.getRegistryType());
+                LOG.info("Cluster {} has a change in registryType in HA group {}, now closing "
+                        + "all its connections", activeUrl.get(), oldRecord.getRegistryType());
                 closeConnections(haGroup, activeUrl.get(), oldRecord.getRegistryType());
             } else {
                 LOG.info("None of the cluster in HA Group {} is active", haGroup);
@@ -80,7 +80,7 @@ enum HighAvailabilityPolicy {
         }
 
         /**
-         * For FAILOVER Policy if there is a change in active url or no new active url then close all connections..         * old connections or if there is no new Active URL
+         * For FAILOVER Policy if there is a change in active url or no new active url then close all connections.
          * (url1, ACTIVE, url2, STANDBY) --> (url1, ACTIVE, url3, STANDBY) //Nothing is needed
          * (url1, ACTIVE, url2, STANDBY) --> (url3, ACTIVE, url2, STANDBY) //Active url change close connections
          * (url1, ACTIVE, url2, STANDBY) --> (url3, ACTIVE, url4, STANDBY) //Active url change close connections

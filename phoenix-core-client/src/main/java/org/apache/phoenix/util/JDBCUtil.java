@@ -246,7 +246,7 @@ public class JDBCUtil {
      * be normalized differently based on configs.
      * @param url
      * @param registryType
-     * @return
+     * @return formatted url without protocol
      */
     public static String formatUrl(String url, ClusterRoleRecord.RegistryType registryType) {
         if (!url.startsWith(PhoenixRuntime.JDBC_PROTOCOL)) {

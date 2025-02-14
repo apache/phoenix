@@ -32,7 +32,6 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
-import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
 import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -270,9 +269,9 @@ public class HighAvailabilityGroup {
         }
 
         //If additional parameter is only ; then making it null.
-        additionalJDBCParams = additionalJDBCParams != null ?
-                (additionalJDBCParams.equals(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR) ?
-                        null : additionalJDBCParams) : null;
+        additionalJDBCParams = additionalJDBCParams != null
+                ? (additionalJDBCParams.equals(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR)
+                    ? null : additionalJDBCParams) : null;
 
         String name = properties.getProperty(PHOENIX_HA_GROUP_ATTR);
         if (StringUtils.isEmpty(name)) {
@@ -401,8 +400,8 @@ public class HighAvailabilityGroup {
         }
         String fallbackCluster = properties.getProperty(PHOENIX_HA_FALLBACK_CLUSTER_KEY);
         if (StringUtils.isEmpty(fallbackCluster)) {
-            LOG.error("Fallback to single cluster is enabled for the HA group {} but cluster key is empty" +
-                    " per configuration. HA url: '{}'.", haGroupInfo.getName(), url);
+            LOG.error("Fallback to single cluster is enabled for the HA group {} but cluster key is"
+                    + " empty per configuration. HA url: '{}'.", haGroupInfo.getName(), url);
             return Optional.empty();
         }
         LOG.info("Falling back to single cluster '{}' for the HA group {} to serve HA connection "
@@ -681,8 +680,8 @@ public class HighAvailabilityGroup {
             Preconditions.checkArgument(url.length() > PhoenixRuntime.JDBC_PROTOCOL.length(),
                     "The URL '" + url + "' is not a valid Phoenix connection string");
         }
-        //we don't need to normalize here? as we already store url in roleRecord object as normalized,
-        //or we are just normalizing for tests?
+        //we don't need to normalize here? as we already store url in roleRecord object as
+        //normalized, or we are just normalizing for tests?
         url = JDBCUtil.formatUrl(url, roleRecord.getRegistryType());
 
         String jdbcString = getJDBCUrl(url, haurlInfo, roleRecord.getRegistryType());
@@ -695,7 +694,7 @@ public class HighAvailabilityGroup {
                     .buildException();
         }
 
-        // Get driver instead of using PhoenixDriver.INSTANCE since it can be a test or mocked driver
+        //Get driver instead of using PhoenixDriver.INSTANCE since it can be a test or mocked driver
         Driver driver = DriverManager.getDriver(jdbcString);
         Preconditions.checkArgument(driver instanceof PhoenixEmbeddedDriver,
                 "No JDBC driver is registered for Phoenix high availability (HA) framework");
@@ -855,7 +854,8 @@ public class HighAvailabilityGroup {
             Preconditions.checkNotNull(url1);
             Preconditions.checkNotNull(url2);
             this.name = name;
-            //Normalizing these urls with ZK protocol as these are the ZK urls of clusters where roleRecords resides.
+            //Normalizing these urls with ZK protocol as these are the ZK urls of clusters where
+            //roleRecords resides.
             url1 = JDBCUtil.formatUrl(url1, ClusterRoleRecord.RegistryType.ZK);
             url2 = JDBCUtil.formatUrl(url2, ClusterRoleRecord.RegistryType.ZK);
             Preconditions.checkArgument(!url1.equals(url2), "Two clusters have the same ZK!");
@@ -934,7 +934,8 @@ public class HighAvailabilityGroup {
      * @param type Registry Type for which url has to be constructed
      * @return jdbc url in proper format
      */
-    public static String getJDBCUrl(String url, HAURLInfo haURLInfo, ClusterRoleRecord.RegistryType type) {
+    public static String getJDBCUrl(String url, HAURLInfo haURLInfo,
+                                    ClusterRoleRecord.RegistryType type) {
         //Need extra separator for Master and pc connections for principal as no znode path is there
         boolean extraSeparator = false;
         StringBuilder sb = new StringBuilder();
@@ -962,11 +963,12 @@ public class HighAvailabilityGroup {
                     sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR).
                             append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
                 }
-                sb.append(haURLInfo.getPrincipal() == null ? PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR :
-                        PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + haURLInfo.getPrincipal());
+                sb.append(haURLInfo.getPrincipal() == null ? PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR
+                        : PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + haURLInfo.getPrincipal());
             }
             if (anyNotNull(haURLInfo.getAdditionalJDBCParams())) {
-                sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR).append(haURLInfo.getAdditionalJDBCParams());
+                sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR).
+                        append(haURLInfo.getAdditionalJDBCParams());
             }
         }
         return sb.toString();

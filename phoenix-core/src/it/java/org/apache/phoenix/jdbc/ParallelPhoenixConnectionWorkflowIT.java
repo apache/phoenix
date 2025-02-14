@@ -101,7 +101,7 @@ public class ParallelPhoenixConnectionWorkflowIT {
     private ClusterRoleRecord.RegistryType registryType;
 
     @Parameters(name="ParallelPhoenixConnectionWorkflowIT_resultSetType={0}, registryType={1}") // name is used by failsafe as file name in reports
-    public static Collection<Object> data() {
+    public static Collection<Object[]> data() {
         return Arrays.asList( new Object[][]{
                 {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_RESULT_SET.getName(),
                         ClusterRoleRecord.RegistryType.ZK},
