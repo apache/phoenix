@@ -85,6 +85,7 @@ import org.apache.phoenix.filter.EmptyColumnOnlyFilter;
 import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
+import org.apache.phoenix.job.JobManager;
 import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.monitoring.OverAllQueryMetrics;
 import org.apache.phoenix.parse.FilterableStatement;
@@ -111,7 +112,6 @@ import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
-import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ClientUtil;
@@ -1439,6 +1439,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         SQLException toThrow = null;
         final HashCacheClient hashCacheClient = new HashCacheClient(context.getConnection());
         int queryTimeOut = context.getStatement().getQueryTimeoutInMillis();
+        long maxTaskQueueWaitTime = 0;
+        long maxTaskEndToEndTime = 0;
         try {
             submitWork(scan, futures, allIterators, splitSize, isReverse, scanGrouper, maxQueryEndTime);
             boolean clearedCache = false;
@@ -1467,7 +1469,13 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                                     && Bytes.compareTo(scanPair.getFirst().getAttribute(SCAN_START_ROW_SUFFIX), previousScan.getScan().getAttribute(SCAN_START_ROW_SUFFIX))==0)) {
                             continue;
                         }
-                        PeekingResultIterator iterator = scanPair.getSecond().get(timeOutForScan, TimeUnit.MILLISECONDS);
+                        Future<PeekingResultIterator> futureTask = scanPair.getSecond();
+                        PeekingResultIterator iterator = futureTask.get(timeOutForScan,
+                                TimeUnit.MILLISECONDS);
+                        long taskQueueWaitTime = JobManager.getTaskQueueWaitTime(futureTask);
+                        long taskEndToEndTime = JobManager.getTaskEndToEndTime(futureTask);
+                        maxTaskQueueWaitTime = Math.max(maxTaskQueueWaitTime, taskQueueWaitTime);
+                        maxTaskEndToEndTime = Math.max(maxTaskEndToEndTime, taskEndToEndTime);
                         concatIterators.add(iterator);
                         previousScan.setScan(scanPair.getFirst());
                     } catch (ExecutionException e) {
@@ -1571,9 +1579,11 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     }
                 }
             } finally {
+                OverAllQueryMetrics overAllQueryMetrics = context.getOverallQueryMetrics();
+                overAllQueryMetrics.updateQueryWaitTime(maxTaskQueueWaitTime);
+                overAllQueryMetrics.updateQueryTaskEndToEndTime(maxTaskEndToEndTime);
                 if (toThrow != null) {
                     GLOBAL_FAILED_QUERY_COUNTER.increment();
-                    OverAllQueryMetrics overAllQueryMetrics = context.getOverallQueryMetrics();
                     overAllQueryMetrics.queryFailed();
                     if (context.getScanRanges().isPointLookup()) {
                         overAllQueryMetrics.queryPointLookupFailed();

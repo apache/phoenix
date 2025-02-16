@@ -26,6 +26,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_TASK_QUEU
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.RejectedExecutionHandler;
@@ -38,6 +39,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import javax.annotation.Nullable;
 
+import org.apache.phoenix.iterate.PeekingResultIterator;
 import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
 
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -152,6 +154,10 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
         
         public Object getJobId() {
             return jobId;
+        }
+
+        public TaskExecutionMetricsHolder getTaskMetric() {
+            return taskMetric;
         }
     }
     
@@ -299,6 +305,32 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
         private static TaskExecutionMetricsHolder getRequestMetric(Runnable task) {
             return ((JobFutureTask)task).taskMetric;
         }
+    }
+
+    private static <V> TaskExecutionMetricsHolder getTaskMetric(
+            Future<V> futureTask) {
+        if (futureTask instanceof InstrumentedJobFutureTask) {
+            TaskExecutionMetricsHolder taskMetrics =
+                    ((InstrumentedJobFutureTask<V>) futureTask).getTaskMetric();
+            return taskMetrics;
+        }
+        return null;
+    }
+
+    public static <V> long getTaskQueueWaitTime(Future<V> futureTask) {
+        TaskExecutionMetricsHolder taskMetrics = getTaskMetric(futureTask);
+        if (taskMetrics != null) {
+            return taskMetrics.getTaskQueueWaitTime().getValue();
+        }
+        return 0;
+    }
+
+    public static <V> long getTaskEndToEndTime(Future<V> futureTask) {
+        TaskExecutionMetricsHolder taskMetrics = getTaskMetric(futureTask);
+        if (taskMetrics != null) {
+            return taskMetrics.getTaskEndToEndTime().getValue();
+        }
+        return 0;
     }
 }
 
