@@ -207,6 +207,7 @@ public class CompactionScanner implements InternalScanner {
             return false;
         }
     }
+
     private void printRow(List<Cell> result, String title, boolean sort) {
         List<Cell> row;
         if (sort) {
@@ -234,15 +235,18 @@ public class CompactionScanner implements InternalScanner {
             System.out.println(cell);
         }
     }
+
     @Override
     public boolean next(List<Cell> result) throws IOException {
         boolean hasMore = storeScanner.next(result);
         inputCellCount += result.size();
         if (!result.isEmpty()) {
-            // printRow(result, "Input for " + tableName + " " + columnFamilyName, true); // This is for debugging
+            // This is for debugging
+            //printRow(result, "Input for " + tableName + " " + columnFamilyName, true);
             phoenixLevelRowCompactor.compact(result, false);
             outputCellCount += result.size();
-            // printRow(result, "Output for " + tableName + " " + columnFamilyName, true); // This is for debugging
+            // This is for debugging
+            //printRow(result, "Output for " + tableName + " " + columnFamilyName, true);
         }
         return hasMore;
     }
