@@ -2614,6 +2614,15 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     @Override
     public ResultSet getResultSet() throws SQLException {
         ResultSet rs = getLastResultSet();
+        if (!isClosed && rs == null && lastQueryPlan != null) {
+            StatementContext context = lastQueryPlan.getContext();
+            if (context != null) {
+                PhoenixStatement statement = context.getStatement();
+                if (statement != null) {
+                    return statement.getLastResultSet();
+                }
+            }
+        }
         return rs;
     }
 
