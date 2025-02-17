@@ -39,7 +39,6 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import javax.annotation.Nullable;
 
-import org.apache.phoenix.iterate.PeekingResultIterator;
 import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
 
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;

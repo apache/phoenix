@@ -1335,7 +1335,6 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         try(Connection conn = DriverManager.getConnection(getUrl())) {
             PreparedStatement stmt = conn.prepareStatement(upsertRows);
             stmt.execute(creatTableDdl);
-            // Best effort to have 1 row per salt bucket
             for (int i = 1; i <= saltBucketNum; i++) {
                 stmt.setString(1, "VPK1");
                 stmt.setString(2, "VPK2");
@@ -1387,7 +1386,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
     @Test
     public void testPhoenixClientQueueWaitTimeAndEndToEndTimeWithScannerCacheRefill()
             throws Exception {
-        int fetchSize = 2;
+        int fetchSize = 3;
         int saltBucketNum = 8;
         String tableName = generateUniqueName();
         String getRows = "SELECT COL1, COL2, PK4, PK2, PK3 FROM " + tableName
@@ -1395,7 +1394,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         // Send at least 2 batches of scans. The salt buckets are 8 so, even if first batch of
         // scans cover all the salt buckets still only 16 rows will be cached with fetch size of 2.
         // So, setting rows to read per query greater than 16.
-        int taskCount = saltBucketNum * fetchSize + saltBucketNum;
+        int taskCount = saltBucketNum * (fetchSize - 1) + saltBucketNum;
         for (int i = 1; i < taskCount; i++) {
             getRows += ", ?";
         }
@@ -1419,8 +1418,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         try(Connection conn = DriverManager.getConnection(getUrl())) {
             PreparedStatement stmt = conn.prepareStatement(upsertRows);
             stmt.execute(creatTableDdl);
-            // Best effort to have 1 row per salt bucket
-            for (int i = 1; i <= saltBucketNum; i++) {
+            for (int i = 1; i <= 2 * taskCount; i++) {
                 stmt.setString(1, "VPK1");
                 stmt.setString(2, "VPK2");
                 stmt.setLong(3, vpk3);
