@@ -430,6 +430,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                         newResultSet(resultIterator, plan.getProjector(),
                                                 plan.getContext());
                                 // newResultset sets lastResultset
+                                // ExecutableShowCreateTable/ExecutableShowTablesStatement/ExecutableShowSchemasStatement using a delegateStmt
+                                // to compile a queryPlan, the resultSet will set to the delegateStmt, so need set resultSet
+                                // to the origin statement.
+                                setLastResultSet(rs);
                                 setLastQueryPlan(plan);
                                 setLastUpdateCount(NO_UPDATE);
                                 setLastUpdateTable(tableName == null ? TABLE_UNKNOWN : tableName);
