@@ -430,6 +430,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                         newResultSet(resultIterator, plan.getProjector(),
                                                 plan.getContext());
                                 // newResultset sets lastResultset
+                                setLastResultSet(rs);
                                 setLastQueryPlan(plan);
                                 setLastUpdateCount(NO_UPDATE);
                                 setLastUpdateTable(tableName == null ? TABLE_UNKNOWN : tableName);
