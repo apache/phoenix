@@ -48,7 +48,7 @@ public class ServerMetadataCacheTestImpl extends ServerMetadataCacheImpl {
         super(conf);
     }
 
-    public static ServerMetadataCacheTestImpl getInstance(Configuration conf, ServerName serverName) {
+    public static ServerMetadataCacheTestImpl getInstance(Configuration conf, ServerName serverName) throws Exception {
         ServerMetadataCacheTestImpl result = INSTANCES.get(serverName);
         if (result == null) {
             synchronized (ServerMetadataCacheTestImpl.class) {
