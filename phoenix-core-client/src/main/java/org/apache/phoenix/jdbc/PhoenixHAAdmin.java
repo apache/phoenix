@@ -104,7 +104,6 @@ public class PhoenixHAAdmin implements Closeable {
 
         String localZkRoot = conf.get(HConstants.ZOOKEEPER_ZNODE_PARENT,
                 HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
-
         return String.format("%s:%d:%s", localZkQuorum, port, localZkRoot);
     }
 
