@@ -354,7 +354,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private static final long INDEXER_INDEX_WRITE_SLOW_THRESHOLD_DEFAULT = 3_000;
   private static final String INDEXER_PRE_INCREMENT_SLOW_THRESHOLD_KEY = "phoenix.indexer.slow.pre.increment";
   private static final long INDEXER_PRE_INCREMENT_SLOW_THRESHOLD_DEFAULT = 3_000;
-  private static final String CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED = "phoenix.cluster.role.based.mutation.block.enabled";
+  private static final String CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED
+          = "phoenix.cluster.role.based.mutation.block.enabled";
   private static final Boolean DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED = false;
 
   // Index writers get invoked before and after data table updates
@@ -436,7 +437,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           BloomType bloomFilterType = tableDescriptor.getColumnFamilies()[0].getBloomFilterType();
           // when the table descriptor changes, the coproc is reloaded
           this.useBloomFilter = bloomFilterType == BloomType.ROW;
-          this.mutationBlockEnabled = env.getConfiguration().getBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED);
+          this.mutationBlockEnabled
+                  = env.getConfiguration().getBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED,
+                  DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED);
           if(this.mutationBlockEnabled) {
               try {
                   this.serverMetadataCache = ServerMetadataCacheImpl.getInstance(env.getConfiguration());

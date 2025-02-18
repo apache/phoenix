@@ -88,11 +88,12 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
         }
 
         try {
-            String zkUrl = PhoenixHAAdmin.getLocalZkUrl(getConf()); // Admin is created against local ZK cluster
             if (commandLine.hasOption(HELP_OPT.getOpt())) {
                 printUsageMessage();
                 return RET_SUCCESS;
-            } else if (commandLine.hasOption(LIST_OPT.getOpt())) { // list
+            }
+            String zkUrl = PhoenixHAAdmin.getLocalZkUrl(getConf()); // Admin is created against local ZK cluster
+            if (commandLine.hasOption(LIST_OPT.getOpt())) { // list
                 try (PhoenixHAAdmin admin = new PhoenixHAAdmin(zkUrl, getConf(), HighAvailibilityCuratorProvider.INSTANCE)) {
                     List<ClusterRoleRecord> records = admin.listAllClusterRoleRecordsOnZookeeper();
                     JacksonUtil.getObjectWriterPretty().writeValue(System.out, records);

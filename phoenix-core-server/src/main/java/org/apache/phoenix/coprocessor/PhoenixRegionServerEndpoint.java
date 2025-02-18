@@ -65,7 +65,8 @@ public class PhoenixRegionServerEndpoint
         try {
             cache = getServerMetadataCache();
         } catch (Throwable t) {
-            String errorMsg = "Creating ServerMetadataCache FAILED, check exception for specific details";
+            String errorMsg = "Creating ServerMetadataCache FAILED, check exception for " +
+                    "specific details";
             LOGGER.error(errorMsg,  t);
             IOException ioe = ClientUtil.createIOException(errorMsg, t);
             ProtobufUtil.setControllerException(controller, ioe);
@@ -114,7 +115,8 @@ public class PhoenixRegionServerEndpoint
             try {
                 cache = getServerMetadataCache();
             } catch (Throwable t) {
-                String errorMsg = "Creating ServerMetadataCache FAILED, check exception for specific details";
+                String errorMsg = "Creating ServerMetadataCache FAILED, check exception for " +
+                        "specific details";
                 LOGGER.error(errorMsg,  t);
                 IOException ioe = ClientUtil.createIOException(errorMsg, t);
                 ProtobufUtil.setControllerException(controller, ioe);
