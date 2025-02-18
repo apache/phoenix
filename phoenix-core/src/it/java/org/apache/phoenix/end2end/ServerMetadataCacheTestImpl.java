@@ -44,7 +44,7 @@ public class ServerMetadataCacheTestImpl extends ServerMetadataCacheImpl {
     private static volatile Map<ServerName, ServerMetadataCacheTestImpl> INSTANCES = new HashMap<>();
     private Connection connectionForTesting;
 
-    ServerMetadataCacheTestImpl(Configuration conf) {
+    ServerMetadataCacheTestImpl(Configuration conf) throws Exception {
         super(conf);
     }
 
