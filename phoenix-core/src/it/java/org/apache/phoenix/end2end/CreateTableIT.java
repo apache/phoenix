@@ -1850,18 +1850,18 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
-        Long maxLookbackAge = 259200L;
+        Long maxLookbackAge = 2592L;
         createTableWithTableLevelMaxLookbackAge(fullTableName, maxLookbackAge.toString());
-        assertEquals(maxLookbackAge, queryTableLevelMaxLookbackAge(fullTableName));
+        assertEquals((Long) (maxLookbackAge * 1000), queryTableLevelMaxLookbackAge(fullTableName));
         schemaName = generateUniqueName();
         dataTableName = generateUniqueName();
         fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
-        maxLookbackAge = 25920000000L;
+        maxLookbackAge = 25920000L;
         createTableWithTableLevelMaxLookbackAge(fullTableName, maxLookbackAge.toString());
-        assertEquals(maxLookbackAge, queryTableLevelMaxLookbackAge(fullTableName));
+        assertEquals((Long) (maxLookbackAge * 1000), queryTableLevelMaxLookbackAge(fullTableName));
         String indexTableName = generateUniqueName();
         createIndexOnTableWithMaxLookbackAge(indexTableName, fullTableName);
-        assertEquals(maxLookbackAge, queryTableLevelMaxLookbackAge(SchemaUtil.getTableName(schemaName, indexTableName)));
+        assertEquals((Long) (maxLookbackAge * 1000), queryTableLevelMaxLookbackAge(SchemaUtil.getTableName(schemaName, indexTableName)));
     }
 
     @Test
@@ -1878,7 +1878,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCreateTableWithInvalidTableLevelMaxLookbackAge() {
-        String errMsg = "Table level MAX_LOOKBACK_AGE should be a BIGINT value in milli-seconds";
+        String errMsg = "Table level MAX_LOOKBACK_AGE should be a BIGINT value in seconds";
         IllegalArgumentException err = assertThrows(IllegalArgumentException.class,
                 () -> createTableWithTableLevelMaxLookbackAge(
                         SchemaUtil.getTableName(generateUniqueName(), generateUniqueName()), "2.3"));

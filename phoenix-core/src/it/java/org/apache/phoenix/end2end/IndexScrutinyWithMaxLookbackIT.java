@@ -230,7 +230,7 @@ public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
         String dataTableDDL = "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, "
             + "ZIP INTEGER) COLUMN_ENCODED_BYTES=0, VERSIONS=1";
         if (hasTableLevelMaxLookback) {
-            dataTableDDL += ", MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK * 1000;
+            dataTableDDL += ", MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK;
         }
         String indexTableDDL = "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP)";
         testClock = new ManualEnvironmentEdge();
