@@ -32,4 +32,23 @@ public abstract class EnvironmentEdge implements org.apache.hadoop.hbase.util.En
    */
   @Override
   abstract public long currentTime();
+
+  /**
+   * This method can be only be used to measure elapsed time. The method returns a time marker
+   * and if we subtract any two time markers returned by this method, then we get time elapsed
+   * b/w those two markers in nano seconds. For further details refer to documentation of
+   * {@link System#nanoTime()}.
+   * @return a time marker in nano seconds
+   */
+  public long nanoTime() {
+    return convertTimeInMsToNs(currentTime());
+  }
+
+  public static long convertTimeInMsToNs(long value) {
+    return value * 1000000;
+  }
+
+  public static long convertTimeInNsToMs(long value) {
+    return value / 1000000;
+  }
 }
