@@ -19,25 +19,36 @@
 
 package org.apache.phoenix.end2end.index;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ViewTTLIT;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.query.ConfigurationFactory;
+import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.PhoenixTestBuilder;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.util.InstanceResolver;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TableViewFinderResult;
 import org.apache.phoenix.util.ViewUtil;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,14 +65,22 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
+import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_INDEX_SYSTEM_TABLE;
+import static org.apache.phoenix.exception.SQLExceptionCode.MISMATCHED_TOKEN;
 import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.COLUMN_TYPES;
 import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.TENANT_VIEW_COLUMNS;
+import static org.apache.phoenix.query.QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS;
+import static org.apache.phoenix.query.QueryServices.CONNECTION_QUERY_SERVICE_METRICS_ENABLED;
+import static org.apache.phoenix.query.QueryServices.INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS;
+import static org.apache.phoenix.query.QueryServices.SYSTEM_CATALOG_INDEXES_ENABLED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
     static final Logger LOGGER = LoggerFactory.getLogger(ViewTTLIT.class);
     static final int VIEW_TTL_10_SECS = 10;
@@ -94,14 +113,44 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
             "WHERE %s AND \":TABLE_SCHEM\" = '%s' AND \":TABLE_NAME\" = '%s'" ;
 
     private static RegionCoprocessorEnvironment taskRegionEnvironment;
+    private static HBaseTestingUtility hbaseTestUtil;
 
     @BeforeClass
     public static void doSetup() throws Exception {
+        InstanceResolver.clearSingletons();
+        // Override to get required config for static fields loaded that require HBase config
+        InstanceResolver.getSingleton(ConfigurationFactory.class, new ConfigurationFactory() {
+
+            @Override public Configuration getConfiguration() {
+                Configuration conf = HBaseConfiguration.create();
+                conf.set(SYSTEM_CATALOG_INDEXES_ENABLED, String.valueOf(true));
+                return conf;
+            }
+
+            @Override public Configuration getConfiguration(Configuration confToClone) {
+                Configuration conf = HBaseConfiguration.create();
+                conf.set(SYSTEM_CATALOG_INDEXES_ENABLED, String.valueOf(true));
+                Configuration copy = new Configuration(conf);
+                copy.addResource(confToClone);
+                return copy;
+            }
+        });
+        Configuration conf = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+        conf.set(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB,
+                Long.toString(Long.MAX_VALUE));
+        conf.set(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
+                Long.toString(Long.MAX_VALUE));
+        hbaseTestUtil = new HBaseTestingUtility(conf);
+        setUpConfigForMiniCluster(conf);
+        conf.set(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
+                QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        hbaseTestUtil.startMiniCluster();
+
+
         // Turn on the View TTL feature
         Map<String, String> DEFAULT_PROPERTIES = new HashMap<String, String>() {{
+            put(QueryServices.SYSTEM_CATALOG_INDEXES_ENABLED, String.valueOf(true));
             put(QueryServices.PHOENIX_TABLE_TTL_ENABLED, String.valueOf(true));
-            put(QueryServices.LONG_VIEW_INDEX_ENABLED_ATTRIB, String.valueOf(true));
-            put("hbase.procedure.remote.dispatcher.delay.msec", "0");
             // no max lookback
             put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(0));
             put(QueryServices.PHOENIX_VIEW_TTL_ENABLED, Boolean.toString(true));
@@ -123,8 +172,8 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
                         .get(0).getCoprocessorHost()
                         .findCoprocessorEnvironment(TaskRegionObserver.class.getName());
 
-
     }
+
 
 
     void assertSystemCatalogHasIndexTableLinks(String tenantId, String schemaName,
@@ -528,17 +577,22 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
         //Create the SYSTEM.CATALOG index for Index Table links
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Statement stmt = conn.createStatement()) {
-            stmt.execute("CREATE INDEX IF NOT EXISTS SYS_INDEX_TABLE_LINK_IDX ON SYSTEM.CATALOG(TENANT_ID, TABLE_SCHEM, TABLE_NAME, TABLE_TYPE) WHERE TABLE_SCHEM <> 'SYSTEM' AND TABLE_TYPE = 'i' AND LINK_TYPE = 1");
+            stmt.execute("CREATE INDEX IF NOT EXISTS SYS_INDEX_TABLE_LINK_IDX ON SYSTEM.CATALOG(TENANT_ID, TABLE_SCHEM, TABLE_NAME, TABLE_TYPE) WHERE TABLE_TYPE = 'i' AND LINK_TYPE = 1");
             conn.commit();
         }
+        LOGGER.info("Finished creating index: " + "CREATE INDEX IF NOT EXISTS SYS_INDEX_TABLE_LINK_IDX");
 
         // Assert System Catalog index table has been created
+        LOGGER.info("Begin assertSystemCatalogIndexTable: " + "SYS_INDEX_TABLE_LINK_IDX");
         assertSystemCatalogIndexTable("SYS_INDEX_TABLE_LINK_IDX", true);
+        LOGGER.info("assertSystemCatalogIndexTable: " + "SYS_INDEX_TABLE_LINK_IDX");
         // Assert appropriate rows are inserted in the SYSTEM.CATALOG index tables
         assertSystemCatalogIndexHaveIndexTableLinks("SYSTEM.SYS_INDEX_TABLE_LINK_IDX", null, schemaName, globalViewName,
                 true, globalIndexName);
+        LOGGER.info("assertSystemCatalogIndexHaveIndexTableLinks: " + "SYSTEM.SYS_INDEX_TABLE_LINK_IDX");
         assertSystemCatalogIndexHaveIndexTableLinks("SYSTEM.SYS_INDEX_TABLE_LINK_IDX", tenantId, schemaName, tenantViewName,
                 true, tenantIndexName);
+        LOGGER.info("assertSystemCatalogIndexHaveIndexTableLinks: , " + tenantId + ", SYSTEM.SYS_INDEX_TABLE_LINK_IDX");
 
         LOGGER.info("Dropping base table " + fullBaseTableName);
         dropTableWithChildViews(fullBaseTableName, 2);
@@ -627,7 +681,7 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
          * Testing cleanup of SYS_INDEX rows after dropping tables and views
          */
         LOGGER.info("Dropping base table " + fullBaseTableName);
-        dropTableWithChildViews(fullBaseTableName, 1);
+        dropTableWithChildViews(fullBaseTableName, 2);
         // Assert view header rows (link_type IS NULL AND TABLE_TYPE = 'v') does not exist in SYSTEM.CATALOG
         assertSystemCatalogHasViewHeaderRelatedColumns(tenantId, schemaName, tenantViewName,
                 false, VIEW_TTL_120_SECS);
@@ -649,6 +703,39 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
         assertSystemCatalogIndexTable("SYSTEM.SYS_VIEW_HDR_IDX", false);
         assertSystemCatalogIndexTable("SYSTEM.SYS_ROW_KEY_MATCHER_IDX", false);
         assertSystemCatalogIndexTable("SYSTEM.SYS_VIEW_INDEX_HDR_IDX", false);
+    }
+
+    @Test
+    public void testIndexesOnOtherSystemTables() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+            try {
+                stmt.execute("CREATE INDEX IF NOT EXISTS SYS_INDEX_LINK_4_IDX ON SYSTEM.CHILD_LINK(TENANT_ID, TABLE_SCHEM, TABLE_NAME, LINK_TYPE) WHERE LINK_TYPE = 4");
+                fail();
+            } catch (SQLException sqle) {
+                Assert.assertEquals(CANNOT_INDEX_SYSTEM_TABLE.getErrorCode(), sqle.getErrorCode());
+            }
+            try {
+                stmt.execute("CREATE INDEX IF NOT EXISTS SYS_INDEX_STATS_IDX ON SYSTEM.STATS(PHYSICAL_NAME, COLUMN_FAMILY, GUIDE_POST_WIDTH, GUIDE_POSTS_ROW_COUNT) WHERE COLUMN_FAMILY = '4'");
+                fail();
+            } catch (SQLException sqle) {
+                Assert.assertEquals(CANNOT_INDEX_SYSTEM_TABLE.getErrorCode(), sqle.getErrorCode());
+            }
+            try {
+                stmt.execute("CREATE INDEX IF NOT EXISTS SYS_INDEX_LOG_IDX ON SYSTEM.LOG(USER, CLIENT_IP, QUERY) WHERE QUERY_ID = '4'");
+                fail();
+            } catch (SQLException sqle) {
+                Assert.assertEquals(CANNOT_INDEX_SYSTEM_TABLE.getErrorCode(), sqle.getErrorCode());
+            }
+
+            try {
+                stmt.execute("CREATE INDEX IF NOT EXISTS SYS_INDEX_FUNCTION_IDX ON SYSTEM.FUNCTION(CLASS_NAME,JAR_PATH) WHERE FUNCTION_NAME = '4'");
+                fail();
+            } catch (SQLException sqle) {
+                Assert.assertEquals(MISMATCHED_TOKEN.getErrorCode(), sqle.getErrorCode());
+            }
+
+        }
     }
 
 }
