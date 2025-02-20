@@ -87,6 +87,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
 import static org.apache.phoenix.query.QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SKIP_SYSTEM_TABLES_EXISTENCE_CHECK;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE_BYTES;
+import static org.apache.phoenix.query.QueryServices.SYSTEM_CATALOG_INDEXES_ENABLED;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SYSTEM_CATALOG_INDEXES_ENABLED;
 import static org.apache.phoenix.schema.PTable.LinkType.PHYSICAL_TABLE;
 import static org.apache.phoenix.schema.PTable.LinkType.VIEW_INDEX_PARENT_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CDC_INCLUDE_BYTES;
@@ -271,7 +273,6 @@ import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
@@ -2371,7 +2372,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             schemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
             tableName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
             fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-            boolean shouldCheckForSystemTableIndexes = !SchemaUtil.isSystemTable(Bytes.toBytes(fullTableName));
             boolean isNamespaceMapped = MetaDataUtil.isNameSpaceMapped(tableMetadata, GenericKeyValueBuilder.INSTANCE,
                     new ImmutableBytesWritable());
             final IndexType indexType = MetaDataUtil.getIndexType(tableMetadata, GenericKeyValueBuilder.INSTANCE,
@@ -2792,15 +2792,23 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     }
                 }
 
+
+                // Not sure whether this TODO is relevant anymore. PHOENIX-7107 introduces indexes
+                // on system table.
                 // TODO: Switch this to HRegion#batchMutate when we want to support indexes on the
                 // system table. Basically, we get all the locks that we don't already hold for all the
                 // tableMetadata rows. This ensures we don't have deadlock situations (ensuring
                 // primary and then index table locks are held, in that order). For now, we just don't support
                 // indexing on the system table. This is an issue because of the way we manage batch mutation
                 // in the Indexer.
+
+                // Update SYSTEM.CATALOG indexes only for
+                // 1. ordinary table/index mutations (create table/index).
+                // 2. When creating system indexes itself, no further index processing is required.
+                boolean updateCatalogIndexes = !SchemaUtil.isSystemTable(Bytes.toBytes(fullTableName));
                 mutateRowsWithLocks(this.accessCheckEnabled, env, region, localMutations,
                         Collections.<byte[]>emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE,
-                        shouldCheckForSystemTableIndexes, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
+                        updateCatalogIndexes);
 
                 // Invalidate the cache - the next getTable call will add it
                 // TODO: consider loading the table that was just created here, patching up the parent table, and updating the cache
@@ -3133,17 +3141,17 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     }
                     throw new IllegalStateException(msg);
                 }
-
+                // Update SYSTEM.CATALOG indexes only for
+                // 1. ordinary table/index mutations (drop table/index).
+                // 2. When dropping system indexes itself, no further index processing is required.
                 boolean
-                        shouldCheckForSystemTableIndexes =
-                        ((pTableType == INDEX) && (Bytes.toString(schemaName)
-                                .equalsIgnoreCase(PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA))) ?
-                                false :
-                                true;
+                        updateCatalogIndexes =
+                        (pTableType != INDEX) || (!Bytes.toString(schemaName)
+                                .equalsIgnoreCase(PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA));
                 // drop rows from catalog on this region
                 mutateRowsWithLocks(this.accessCheckEnabled, env, region, localMutations,
                         Collections.<byte[]>emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE,
-                        shouldCheckForSystemTableIndexes, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
+                        updateCatalogIndexes);
 
                 long currentTime = MetaDataUtil.getClientTimeStamp(tableMetadata);
                 for (ImmutableBytesPtr ckey : invalidateList) {
@@ -3263,7 +3271,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         try (Table hTable =
                 ServerUtil.getHTableForCoprocessorScan(env,
                     SchemaUtil.getPhysicalTableName(systemTableName, env.getConfiguration()))) {
-            setMetaDataOnMutationsIfCatalogIndexExists(env, Bytes.toString(systemTableName), remoteMutations);
             hTable.batch(remoteMutations, null);
         } catch (Throwable t) {
             LOGGER.error("Unable to write mutations to " + Bytes.toString(systemTableName), t);
@@ -3751,9 +3758,17 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         throw new IllegalStateException(msg);
                     }
                 }
+                // Update SYSTEM.CATALOG indexes only for ordinary table column mutations.
+                // Column mutations of indexes are not allowed. See above
+                // Add column on SYSTEM.CATALOG should not be processed for index updates,
+                // since an index on a future column cannot exist.
+                boolean
+                        updateCatalogIndexes =
+                        !Bytes.toString(schemaName)
+                                .equalsIgnoreCase(PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA);
                 mutateRowsWithLocks(this.accessCheckEnabled, env, region, localMutations,
                         Collections.<byte[]>emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE,
-                        true, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
+                        updateCatalogIndexes);
                 // Invalidate from cache
                 for (ImmutableBytesPtr invalidateKey : invalidateList) {
                     metaDataCache.invalidate(invalidateKey);
@@ -4589,15 +4604,18 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     long serverTimestamp = EnvironmentEdgeManager.currentTimeMillis();
                     tableMetadata.add(MetaDataUtil.getLastDDLTimestampUpdate(
                             key, clientTimeStamp, serverTimestamp));
-                    mutateRowsWithLocks(this.accessCheckEnabled, env, region, tableMetadata,
+                    mutateRowsWithLocks(this.accessCheckEnabled, region, tableMetadata,
                             Collections.<byte[]>emptySet(), HConstants.NO_NONCE,
-                            HConstants.NO_NONCE, false, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
+                            HConstants.NO_NONCE);
                     // Invalidate from cache
                     Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache =
                             GlobalCache.getInstance(this.env).getMetaDataCache();
                     metaDataCache.invalidate(cacheKey);
                     if (dataTableKey != null) {
                         metaDataCache.invalidate(new ImmutableBytesPtr(dataTableKey));
+                        // Ensure that the data table is refreshed back in the cache
+                        doGetTable(tenantId, schemaName, CellUtil.cloneValue(dataTableKV),
+                                HConstants.LATEST_TIMESTAMP, null, request.getClientVersion());
                     }
                     if (setRowKeyOrderOptimizableCell || disableTimeStampKVIndex != -1
                             || currentState.isDisabled() || newState == PIndexState.BUILDING) {
@@ -4841,9 +4859,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 }
                 // Don't store function info for temporary functions.
                 if (!temporaryFunction) {
-                    mutateRowsWithLocks(this.accessCheckEnabled, env, region, functionMetaData,
+                    mutateRowsWithLocks(this.accessCheckEnabled, region, functionMetaData,
                             Collections.<byte[]>emptySet(), HConstants.NO_NONCE,
-                            HConstants.NO_NONCE, false, PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME);
+                            HConstants.NO_NONCE);
                 }
 
                 // Invalidate the cache - the next getFunction call will add it
@@ -4899,9 +4917,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     done.run(MetaDataMutationResult.toProto(result));
                     return;
                 }
-                mutateRowsWithLocks(this.accessCheckEnabled, env, region, functionMetaData,
-                        Collections.<byte[]>emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE,
-                        false, PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME);
+                mutateRowsWithLocks(this.accessCheckEnabled, region, functionMetaData,
+                        Collections.<byte[]>emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE);
 
                 Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
                 long currentTime = MetaDataUtil.getClientTimeStamp(functionMetaData);
@@ -5022,9 +5039,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         return;
                     }
                 }
-                mutateRowsWithLocks(this.accessCheckEnabled, env, region, schemaMutations,
-                        Collections.<byte[]>emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE,
-                        false, null);
+                mutateRowsWithLocks(this.accessCheckEnabled, region, schemaMutations,
+                        Collections.<byte[]>emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE);
 
                 // Invalidate the cache - the next getSchema call will add it
                 Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache =
@@ -5075,9 +5091,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     done.run(MetaDataMutationResult.toProto(result));
                     return;
                 }
-                mutateRowsWithLocks(this.accessCheckEnabled, env, region, schemaMetaData,
-                        Collections.<byte[]>emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE,
-                        false, null);
+                mutateRowsWithLocks(this.accessCheckEnabled, region, schemaMetaData,
+                        Collections.<byte[]>emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE);
                 Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache = GlobalCache.getInstance(this.env)
                         .getMetaDataCache();
                 long currentTime = MetaDataUtil.getClientTimeStamp(schemaMetaData);
@@ -5146,30 +5161,53 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
     /**
      * Perform atomic mutations on rows within a region
+     * additionally set metadata on mutations, if catalog indexes exists
      * @param accessCheckEnabled Use the login user to mutate rows if enabled
-     * @param env
+     * @param env                The RegionCoprocessorEnvironment
      * @param region             Region containing rows to be mutated
      * @param mutations          List of mutations for rows that must be contained within the
      *                           region
      * @param rowsToLock         Rows to lock
      * @param nonceGroup         Optional nonce group of the operation
      * @param nonce              Optional nonce of the operation
-     * @param checkIfSystemCatalogIndexesExists check if Catalog indexes exists
-     * @param systemTableName    The SYSTEM table to apply index mutation
+     * @param updateCatalogIndexes check if Catalog indexes exists
      * @throws IOException
      */
+
     static void mutateRowsWithLocks(final boolean accessCheckEnabled,
             final RegionCoprocessorEnvironment env, final Region region,
             final List<Mutation> mutations, final Set<byte[]> rowsToLock, final long nonceGroup,
-            final long nonce, boolean checkIfSystemCatalogIndexesExists, String systemTableName) throws IOException {
+            final long nonce, boolean updateCatalogIndexes) throws IOException {
 
         try {
-            if ((checkIfSystemCatalogIndexesExists) && (systemTableName != null && !systemTableName.isEmpty())) {
-                setMetaDataOnMutationsIfCatalogIndexExists(env, systemTableName, mutations );
+            Configuration conf = env.getConfiguration();
+            boolean catalogIndexesEnabled = conf.getBoolean(SYSTEM_CATALOG_INDEXES_ENABLED, DEFAULT_SYSTEM_CATALOG_INDEXES_ENABLED);
+            if ((updateCatalogIndexes) && (catalogIndexesEnabled)) {
+                setMetaDataOnMutationsIfCatalogIndexExists(env, mutations );
             }
         } catch (SQLException e) {
             throw new IOException(e);
         }
+
+        mutateRowsWithLocks(accessCheckEnabled, region, mutations, rowsToLock, nonceGroup, nonce);
+    }
+
+
+        /**
+         * Perform atomic mutations on rows within a region
+         * @param accessCheckEnabled Use the login user to mutate rows if enabled
+         * @param region             Region containing rows to be mutated
+         * @param mutations          List of mutations for rows that must be contained within the
+         *                           region
+         * @param rowsToLock         Rows to lock
+         * @param nonceGroup         Optional nonce group of the operation
+         * @param nonce              Optional nonce of the operation
+         * @throws IOException
+         */
+    static void mutateRowsWithLocks(final boolean accessCheckEnabled, final Region region,
+            final List<Mutation> mutations, final Set<byte[]> rowsToLock, final long nonceGroup,
+            final long nonce) throws IOException {
+
         // We need to mutate SYSTEM.CATALOG or SYSTEM.CHILD_LINK with HBase/login user
         // if access is enabled.
         if (accessCheckEnabled) {
@@ -5196,28 +5234,28 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     }
 
     private static void setMetaDataOnMutationsIfCatalogIndexExists(
-            final RegionCoprocessorEnvironment env, String forSystemTableName, final List<Mutation> mutations)
+            final RegionCoprocessorEnvironment env, final List<Mutation> mutations)
             throws SQLException {
-        Properties metaConnectionProps = new Properties();
-        metaConnectionProps.setProperty(INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, FORCE_INDEX_MUTATE_METADATA_AS_ATTRIB);
-        PhoenixConnection connection = getServerConnectionForMetaData(metaConnectionProps, env.getConfiguration())
-                .unwrap(PhoenixConnection.class);
-        if (PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME.compareToIgnoreCase(forSystemTableName) == 0) {
-            PTable systemCatalogPTable = PhoenixRuntime.getTableNoCache(connection, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
-            if ((systemCatalogPTable != null) && (!systemCatalogPTable.getIndexes().isEmpty())) {
-                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-                IndexMaintainer.serialize(systemCatalogPTable, ptr, connection);
-                IndexMetaDataCacheClient.setMetaDataOnMutations(connection, systemCatalogPTable, mutations, ptr);
-            }
+        final byte[] key = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA, PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE);
+        ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(key);
+        Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache = GlobalCache.getInstance(env).getMetaDataCache();
+        PTable systemCatalogPTable = (PTable) metaDataCache.getIfPresent(cacheKey);
+        if (systemCatalogPTable == null) {
+            LOGGER.error("PTable for SYSTEM.CATALOG was not found in GlobalCache: key = {}" , Bytes.toString(key));
+            return;
         }
 
-        if (PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME.compareToIgnoreCase(forSystemTableName) == 0) {
-            PTable childLinkCatalogPTable = PhoenixRuntime.getTableNoCache(connection, PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME);
-            if ((childLinkCatalogPTable != null) && (!childLinkCatalogPTable.getIndexes().isEmpty())) {
-                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-                IndexMaintainer.serialize(childLinkCatalogPTable, ptr, connection);
-                IndexMetaDataCacheClient.setMetaDataOnMutations(connection, childLinkCatalogPTable, mutations, ptr);
-            }
+        if ((systemCatalogPTable.getIndexes().isEmpty())) {
+            LOGGER.debug("No indexes found for SYSTEM.CATALOG: key = {}", Bytes.toString(key));
+            return;
+        }
+        Properties metaConnectionProps = new Properties();
+        metaConnectionProps.setProperty(INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, FORCE_INDEX_MUTATE_METADATA_AS_ATTRIB);
+        try (PhoenixConnection connection = getServerConnectionForMetaData(metaConnectionProps, env.getConfiguration())
+                .unwrap(PhoenixConnection.class)) {
+            ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+            IndexMaintainer.serialize(systemCatalogPTable, ptr, connection);
+            IndexMetaDataCacheClient.setMetaDataOnMutations(connection, systemCatalogPTable, mutations, ptr);
         }
     }
 
