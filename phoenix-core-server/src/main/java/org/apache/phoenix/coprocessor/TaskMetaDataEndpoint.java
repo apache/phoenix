@@ -47,8 +47,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 
-import static org.apache.phoenix.coprocessor.MetaDataEndpointImpl
-    .mutateRowsWithLocks;
+import static org.apache.phoenix.coprocessor.MetaDataEndpointImpl.mutateRowsWithLocks;
 
 /**
  * Phoenix metadata mutations for SYSTEM.TASK flows through this co-processor
@@ -106,9 +105,8 @@ public class TaskMetaDataEndpoint extends TaskMetaDataService
             phoenixAccessCoprocessorHost.preUpsertTaskDetails(fullTableName);
 
             // We do not enable indexes on SYSTEM.TASK yet, so no need to check for it.
-            mutateRowsWithLocks(this.accessCheckEnabled, env, this.env.getRegion(), taskMutations,
-                    Collections.emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE,
-                    false, PhoenixDatabaseMetaData.SYSTEM_TASK_NAME);
+            mutateRowsWithLocks(this.accessCheckEnabled, this.env.getRegion(), taskMutations,
+                    Collections.emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE);
         } catch (Throwable t) {
             LOGGER.error("Unable to write mutations to {}",
                 PhoenixDatabaseMetaData.SYSTEM_TASK_NAME, t);
