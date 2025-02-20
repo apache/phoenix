@@ -4063,6 +4063,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try {
             metaConnection.createStatement().executeUpdate(getCDCStreamDDL());
         } catch (TableAlreadyExistsException ignore) {}
+        try {
+            upgradeSystemCatalogIndexes(metaConnection);
+        } catch (TableAlreadyExistsException ignore) {}
     }
 
     /**
@@ -5055,6 +5058,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return metaConnection;
     }
 
+    private PhoenixConnection upgradeSystemCatalogIndexes(PhoenixConnection metaConnection)
+            throws SQLException {
+        Properties p = PropertiesUtil.deepCopy(metaConnection.getClientInfo());
+        p.remove(PhoenixRuntime.CURRENT_SCN_ATTRIB);
+
+        try (PhoenixConnection conn = new PhoenixConnection(
+                ConnectionQueryServicesImpl.this, metaConnection.getURL(), p)) {
+            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS SYS_INDEX_TABLE_LINK_IDX ON SYSTEM.CATALOG(TENANT_ID, TABLE_SCHEM, TABLE_NAME, TABLE_TYPE) WHERE TABLE_TYPE = 'i' AND LINK_TYPE = 1");
+            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS SYS_VIEW_HDR_IDX ON SYSTEM.CATALOG(TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY) INCLUDE (TABLE_TYPE, VIEW_STATEMENT, TTL, ROW_KEY_MATCHER) WHERE TABLE_TYPE = 'v'");
+            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS SYS_ROW_KEY_MATCHER_IDX ON SYSTEM.CATALOG(ROW_KEY_MATCHER, TTL, TABLE_TYPE, TENANT_ID, TABLE_SCHEM, TABLE_NAME) INCLUDE (VIEW_STATEMENT) WHERE TABLE_TYPE = 'v' AND ROW_KEY_MATCHER IS NOT NULL");
+            //conn.createStatement().execute("CREATE INDEX IF NOT EXISTS SYS_VIEW_INDEX_HDR_IDX ON SYSTEM.CATALOG(DECODE_VIEW_INDEX_ID(VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE), TENANT_ID, TABLE_SCHEM, TABLE_NAME) INCLUDE(TABLE_TYPE, LINK_TYPE, VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE)  WHERE TABLE_TYPE = 'i' AND LINK_TYPE IS NULL AND VIEW_INDEX_ID IS NOT NULL");
+        } catch (TableAlreadyExistsException ignore) {}
+        return metaConnection;
+    }
 
     // Special method for adding the column qualifier column for 4.10. 
     private PhoenixConnection addColumnQualifierColumn(PhoenixConnection oldMetaConnection, Long timestamp) throws SQLException {
