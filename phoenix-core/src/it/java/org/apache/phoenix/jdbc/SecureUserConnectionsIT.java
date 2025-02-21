@@ -33,6 +33,7 @@ import java.util.Properties;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.minikdc.MiniKdc;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -99,6 +100,7 @@ public class SecureUserConnectionsIT {
         conf.set(CommonConfigurationKeys.HADOOP_SECURITY_AUTHENTICATION, "kerberos");
         conf.set(User.HBASE_SECURITY_CONF_KEY, "kerberos");
         conf.setBoolean(User.HBASE_SECURITY_AUTHORIZATION_CONF_KEY, true);
+        conf.set(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, ZKConnectionInfo.ZK_REGISTRY_NAME);
         UserGroupInformation.setConfiguration(conf);
 
         // Clear the cached singletons so we can inject our own.

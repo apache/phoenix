@@ -421,7 +421,7 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
     }
 
     private String getJdbcUrl() {
-        return "jdbc:phoenix:localhost:" + testUtil.getZkCluster().getClientPort() + ":/hbase";
+        return "jdbc:phoenix+zk:localhost:" + testUtil.getZkCluster().getClientPort() + ":/hbase";
     }
 
 }

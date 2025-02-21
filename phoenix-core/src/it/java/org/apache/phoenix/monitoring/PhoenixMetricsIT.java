@@ -1059,7 +1059,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
     public void testGetConnectionsForSameUrlConcurrently()  throws Exception {
         // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
         String zkQuorum = "localhost:" + getUtility().getZkCluster().getClientPort();
-        String url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
+        String url = PhoenixRuntime.JDBC_PROTOCOL_ZK + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
         ExecutorService exec = Executors.newFixedThreadPool(10);
         try {
             GLOBAL_HCONNECTIONS_COUNTER.getMetric().reset();
@@ -1093,7 +1093,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         int maxConnections = attemptedPhoenixConnections -1;
         List<Connection> connections = Lists.newArrayList();
         String zkQuorum = "localhost:" + getUtility().getZkCluster().getClientPort();
-        String url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum +
+        String url = PhoenixRuntime.JDBC_PROTOCOL_ZK + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum +
                 ':' +  CUSTOM_URL_STRING + '=' + "throttletest";
 
         Properties props = new Properties();
@@ -1147,7 +1147,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         int maxConnections = attemptedPhoenixConnections - 4;
         List<Connection> connections = Lists.newArrayList();
         String zkQuorum = "localhost:" + getUtility().getZkCluster().getClientPort();
-        String url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum +
+        String url = PhoenixRuntime.JDBC_PROTOCOL_ZK + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum +
                 ':' +  CUSTOM_URL_STRING + '=' + "FailedCounterTest";
         Properties props = new Properties();
         props.setProperty(QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS, Integer.toString(maxConnections));
@@ -1199,7 +1199,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         props1.setProperty(HBASE_CLIENT_RETRIES_NUMBER, Integer.toString(2));
         props1.setProperty("zookeeper.recovery.retry", Integer.toString(2));
         try {
-            DriverManager.getConnection(PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "jdbcthisIsBadZk", props1);
+            DriverManager.getConnection(PhoenixRuntime.JDBC_PROTOCOL_ZK + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "jdbcthisIsBadZk", props1);
         } catch (Exception e) {
             assertEquals(4, GLOBAL_FAILED_PHOENIX_CONNECTIONS.getMetric().getValue());
             assertEquals(attemptedPhoenixConnections + 1, GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.getMetric().getValue());
@@ -1212,7 +1212,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
     public void testGetConnectionsForDifferentTenantsConcurrently()  throws Exception {
         // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
         String zkQuorum = "localhost:" + getUtility().getZkCluster().getClientPort();
-        String url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
+        String url = PhoenixRuntime.JDBC_PROTOCOL_ZK + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
         ExecutorService exec = Executors.newFixedThreadPool(10);
         try {
             GLOBAL_HCONNECTIONS_COUNTER.getMetric().reset();
@@ -1247,7 +1247,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         ExecutorService exec = Executors.newFixedThreadPool(4);
         // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
         String zkQuorum = "localhost:" + getUtility().getZkCluster().getClientPort();
-        String baseUrl = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
+        String baseUrl = PhoenixRuntime.JDBC_PROTOCOL_ZK + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
         int numConnections = 20;
         List<Callable<Connection>> callables = new ArrayList<>(numConnections);
         List<Future<Connection>> futures = new ArrayList<>(numConnections);

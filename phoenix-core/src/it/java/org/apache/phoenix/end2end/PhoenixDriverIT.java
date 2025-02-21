@@ -40,6 +40,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
+import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -75,7 +76,7 @@ public class PhoenixDriverIT extends BaseTest {
         hbaseTestUtil.startMiniCluster();
         // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
         zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
-        url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
+        url = PhoenixRuntime.JDBC_PROTOCOL_ZK + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
     }
     
@@ -85,12 +86,14 @@ public class PhoenixDriverIT extends BaseTest {
         // force the use of ConnectionQueryServicesImpl instead of ConnectionQueryServicesTestImpl
         props.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
-        if (tenantId!=null)
+        if (tenantId!=null) {
             props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
-        StringBuilder sb = new StringBuilder(url);
-        if (isDifferentClient)
-            sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "Client2");
-        return DriverManager.getConnection(sb.toString(), props);
+        }
+        if (isDifferentClient)  {
+            ConnectionInfo info = ConnectionInfo.createNoLogin(url, null, props);
+            return DriverManager.getConnection(info.withPrincipal(tenantId).toUrl(), props);
+        }
+        return DriverManager.getConnection(url, props);
     }
     
     @Test

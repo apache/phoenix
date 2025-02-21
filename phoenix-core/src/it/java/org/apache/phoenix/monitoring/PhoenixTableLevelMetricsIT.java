@@ -184,7 +184,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         hbaseTestUtil.startMiniCluster(1, 1, null, null, DelayedOrFailingRegionServer.class);
         // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
         String zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
-        url = PhoenixRuntime.JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + zkQuorum;
+        url = PhoenixRuntime.JDBC_PROTOCOL_ZK + JDBC_PROTOCOL_SEPARATOR + zkQuorum;
 
         // Add our own driver
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
