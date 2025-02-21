@@ -145,6 +145,7 @@ import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.applyNew;
 import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.removeColumn;
 import static org.apache.phoenix.index.PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB;
 import static org.apache.phoenix.index.PhoenixIndexBuilderHelper.RETURN_RESULT;
+import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
 /**
@@ -354,9 +355,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private static final long INDEXER_INDEX_WRITE_SLOW_THRESHOLD_DEFAULT = 3_000;
   private static final String INDEXER_PRE_INCREMENT_SLOW_THRESHOLD_KEY = "phoenix.indexer.slow.pre.increment";
   private static final long INDEXER_PRE_INCREMENT_SLOW_THRESHOLD_DEFAULT = 3_000;
-  private static final String CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED
-          = "phoenix.cluster.role.based.mutation.block.enabled";
-  private static final Boolean DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED = false;
+
 
   // Index writers get invoked before and after data table updates
   protected IndexWriter preWriter;
@@ -381,8 +380,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private boolean shouldWALAppend = DEFAULT_PHOENIX_APPEND_METADATA_TO_WAL;
   private boolean isNamespaceEnabled = false;
   private boolean useBloomFilter = false;
-  private boolean mutationBlockEnabled = false;
-  private boolean mutationBlocked = false;
   private long lastTimestamp = 0;
   private List<Set<ImmutableBytesPtr>> batchesWithLastTimestamp = new ArrayList<>();
   private static final int DEFAULT_ROWLOCK_WAIT_DURATION = 30000;
@@ -437,22 +434,14 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           BloomType bloomFilterType = tableDescriptor.getColumnFamilies()[0].getBloomFilterType();
           // when the table descriptor changes, the coproc is reloaded
           this.useBloomFilter = bloomFilterType == BloomType.ROW;
-          this.mutationBlockEnabled
-                  = env.getConfiguration().getBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED,
-                  DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED);
-          if(this.mutationBlockEnabled) {
-              try {
-                  this.serverMetadataCache = ServerMetadataCacheImpl.getInstance(env.getConfiguration());
-              } catch (Throwable t) {
-                  LOG.error("Unable to initialize server metadata cache, blocking mutations as"
-                          + CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED + " " +  "is enabled", t);
-                  mutationBlocked = true;
-              }
-          }
+          this.serverMetadataCache = ServerMetadataCacheImpl.getInstance(env.getConfiguration());
 
       } catch (NoSuchMethodError ex) {
           disabled = true;
           LOG.error("Must be too early a version of HBase. Disabled coprocessor ", ex);
+      } catch (Exception ex) {
+          LOG.error("Unable to initialize index observer", ex);
+          throw new RuntimeException(ex);
       }
   }
 
@@ -540,8 +529,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           return;
       }
       try {
-          if(mutationBlockEnabled && (mutationBlocked || serverMetadataCache.isMutationBlocked())) {
-              throw new IOException("Mutations are blocked because cluster is in ACTIVE_TO_STANDBY state");
+          if(serverMetadataCache.isMutationBlocked()) {
+              throw new IOException("Mutation is blocked as "
+                      + CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED
+                      + " is enabled and one of the HAGroups is in blocking state");
           }
           preBatchMutateWithExceptions(c, miniBatchOp);
           return;
