@@ -20,7 +20,6 @@ package org.apache.phoenix.jdbc;
 import org.apache.hadoop.hbase.StartMiniClusterOption;
 import org.apache.phoenix.end2end.PhoenixRegionServerEndpointTestImpl;
 import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.commons.lang3.RandomUtils;
@@ -35,7 +34,6 @@ import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.replication.ReplicationPeerConfig;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
-import org.apache.phoenix.jdbc.PhoenixHAAdminTool.PhoenixHAAdminHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,6 +61,8 @@ import static org.apache.phoenix.hbase.index.write.AbstractParallelWriterIndexCo
 import static org.apache.phoenix.jdbc.ClusterRoleRecordGeneratorTool.PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT;
 import static org.apache.phoenix.jdbc.FailoverPhoenixConnection.FAILOVER_TIMEOUT_MS_ATTR;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.*;
+import static org.apache.phoenix.jdbc.PhoenixHAAdmin.HighAvailibilityCuratorProvider;
+
 import static org.apache.phoenix.query.QueryServices.COLLECT_REQUEST_LEVEL_METRICS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -86,8 +86,8 @@ public class HighAvailabilityTestingUtility {
         private String url1;
         /** The host\:port::/hbase format of the JDBC string for HBase cluster 2. */
         private String url2;
-        private PhoenixHAAdminHelper haAdmin1;
-        private PhoenixHAAdminHelper haAdmin2;
+        private PhoenixHAAdmin haAdmin1;
+        private PhoenixHAAdmin haAdmin2;
         private Admin admin1;
         private Admin admin2;
         @VisibleForTesting
@@ -121,8 +121,8 @@ public class HighAvailabilityTestingUtility {
             url1 = String.format("%s\\:%d::/hbase", confAddress1, hbaseCluster1.getZkCluster().getClientPort());
             url2 = String.format("%s\\:%d::/hbase", confAddress2, hbaseCluster2.getZkCluster().getClientPort());
 
-            haAdmin1 = new PhoenixHAAdminHelper(getUrl1(), hbaseCluster1.getConfiguration(), PhoenixHAAdminTool.HighAvailibilityCuratorProvider.INSTANCE);
-            haAdmin2 = new PhoenixHAAdminHelper(getUrl2(), hbaseCluster2.getConfiguration(), PhoenixHAAdminTool.HighAvailibilityCuratorProvider.INSTANCE);
+            haAdmin1 = new PhoenixHAAdmin(getUrl1(), hbaseCluster1.getConfiguration(), HighAvailibilityCuratorProvider.INSTANCE);
+            haAdmin2 = new PhoenixHAAdmin(getUrl2(), hbaseCluster2.getConfiguration(), HighAvailibilityCuratorProvider.INSTANCE);
 
             admin1 = hbaseCluster1.getConnection().getAdmin();
             admin2 = hbaseCluster2.getConnection().getAdmin();

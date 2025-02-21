@@ -40,7 +40,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_ATTR_PREFIX;
-import static org.apache.phoenix.jdbc.PhoenixHAAdminTool.getLocalZkUrl;
+import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 
 
 /**

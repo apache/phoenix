@@ -43,6 +43,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.regionserver.BloomType;
+import org.apache.phoenix.cache.ServerMetadataCache;
+import org.apache.phoenix.cache.ServerMetadataCacheImpl;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.CaseExpression;
@@ -143,6 +145,7 @@ import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.applyNew;
 import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.removeColumn;
 import static org.apache.phoenix.index.PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB;
 import static org.apache.phoenix.index.PhoenixIndexBuilderHelper.RETURN_RESULT;
+import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
 /**
@@ -353,6 +356,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private static final String INDEXER_PRE_INCREMENT_SLOW_THRESHOLD_KEY = "phoenix.indexer.slow.pre.increment";
   private static final long INDEXER_PRE_INCREMENT_SLOW_THRESHOLD_DEFAULT = 3_000;
 
+
   // Index writers get invoked before and after data table updates
   protected IndexWriter preWriter;
   protected IndexWriter postWriter;
@@ -364,6 +368,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private Map<ImmutableBytesPtr, PendingRow> pendingRows = new ConcurrentHashMap<>();
 
   private MetricsIndexerSource metricSource;
+  private ServerMetadataCache serverMetadataCache;
 
   private boolean stopped;
   private boolean disabled;
@@ -429,9 +434,14 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           BloomType bloomFilterType = tableDescriptor.getColumnFamilies()[0].getBloomFilterType();
           // when the table descriptor changes, the coproc is reloaded
           this.useBloomFilter = bloomFilterType == BloomType.ROW;
+          this.serverMetadataCache = ServerMetadataCacheImpl.getInstance(env.getConfiguration());
+
       } catch (NoSuchMethodError ex) {
           disabled = true;
           LOG.error("Must be too early a version of HBase. Disabled coprocessor ", ex);
+      } catch (Exception ex) {
+          LOG.error("Unable to initialize index observer", ex);
+          throw new RuntimeException(ex);
       }
   }
 
@@ -519,6 +529,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           return;
       }
       try {
+          if(serverMetadataCache.isMutationBlocked()) {
+              throw new IOException("Mutation is blocked as "
+                      + CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED
+                      + " is enabled and one of the HAGroups is in blocking state");
+          }
           preBatchMutateWithExceptions(c, miniBatchOp);
           return;
       } catch (Throwable t) {

@@ -125,7 +125,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
     /**
      * Get the server metadata cache instance from the endpoint loaded on the region server.
      */
-    private ServerMetadataCacheTestImpl getServerMetadataCache() {
+    private ServerMetadataCacheTestImpl getServerMetadataCache() throws Exception {
         String phoenixRegionServerEndpoint = config.get(REGIONSERVER_COPROCESSOR_CONF_KEY);
         assertNotNull(phoenixRegionServerEndpoint);
         RegionServerCoprocessor coproc = getUtility().getHBaseCluster()
