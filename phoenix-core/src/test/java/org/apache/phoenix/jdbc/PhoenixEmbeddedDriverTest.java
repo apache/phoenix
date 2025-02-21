@@ -42,7 +42,7 @@ public class PhoenixEmbeddedDriverTest {
     public void testGetZKConnectionInfo() throws SQLException {
         Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
         // Need to set explicitly for HBase 3.x
-        config.set("hbase.client.registry.impl",
+        config.set(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY,
             "org.apache.hadoop.hbase.client.ZKConnectionRegistry");
         String defaultQuorum = config.get(HConstants.ZOOKEEPER_QUORUM);
 

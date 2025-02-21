@@ -10,6 +10,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
@@ -72,7 +73,7 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseTest {
         longRunningProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         longRunningProps.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
-        longRunningProps.put("hbase.client.registry.impl", ZKConnectionInfo.ZK_REGISTRY_NAME);
+        longRunningProps.put(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, ZKConnectionInfo.ZK_REGISTRY_NAME);
 
         Connection conn1 = DriverManager.getConnection(url, longRunningProps);
         String url2 = url + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
@@ -139,7 +140,7 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseTest {
         longRunningProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         longRunningProps.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
-        longRunningProps.put("hbase.client.registry.impl", ZKConnectionInfo.ZK_REGISTRY_NAME);
+        longRunningProps.put(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, ZKConnectionInfo.ZK_REGISTRY_NAME);
         Connection conn1 = DriverManager.getConnection(url, longRunningProps);
         String url2 = url + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
         Connection conn2 = DriverManager.getConnection(url2, longRunningProps);
@@ -175,7 +176,7 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseTest {
     public void testUpdateCacheFrequencyWithAddColumn() throws Exception {
         // Create connections 1 and 2
         Properties longRunningProps = new Properties(); // Must update config before starting server
-        longRunningProps.put("hbase.client.registry.impl", ZKConnectionInfo.ZK_REGISTRY_NAME);
+        longRunningProps.put(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, ZKConnectionInfo.ZK_REGISTRY_NAME);
         Connection conn1 = DriverManager.getConnection(url, longRunningProps);
         Connection conn2 = DriverManager.getConnection(url, longRunningProps);
         conn1.setAutoCommit(true);
@@ -223,7 +224,7 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseTest {
         Properties longRunningProps = new Properties();
         longRunningProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
-        longRunningProps.put("hbase.client.registry.impl", ZKConnectionInfo.ZK_REGISTRY_NAME);
+        longRunningProps.put(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, ZKConnectionInfo.ZK_REGISTRY_NAME);
         Connection conn1 = DriverManager.getConnection(url, longRunningProps);
         String url2 = url + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
         Connection conn2 = DriverManager.getConnection(url2, longRunningProps);
@@ -275,7 +276,7 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseTest {
         Properties longRunningProps = new Properties();
         longRunningProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
-        longRunningProps.put("hbase.client.registry.impl", ZKConnectionInfo.ZK_REGISTRY_NAME);
+        longRunningProps.put(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, ZKConnectionInfo.ZK_REGISTRY_NAME);
         Connection conn1 = DriverManager.getConnection(url, longRunningProps);
         String url2 = url + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
         Connection conn2 = DriverManager.getConnection(url2, longRunningProps);
@@ -323,7 +324,7 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseTest {
         Properties longRunningProps = new Properties();
         longRunningProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
-        longRunningProps.put("hbase.client.registry.impl", ZKConnectionInfo.ZK_REGISTRY_NAME);
+        longRunningProps.put(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, ZKConnectionInfo.ZK_REGISTRY_NAME);
         Connection conn1 = DriverManager.getConnection(url, longRunningProps);
         String url2 = url + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
         Connection conn2 = DriverManager.getConnection(url2, longRunningProps);
