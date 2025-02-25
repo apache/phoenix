@@ -17,6 +17,7 @@
 package org.apache.phoenix.jdbc;
 
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Properties;
 import java.util.StringTokenizer;
@@ -59,6 +60,17 @@ public class ZKConnectionInfo extends ConnectionInfo {
         return zkPort;
     }
 
+    public String getZkHostsWithoutPorts() {
+        if (zkHosts == null) {
+            return null;
+        }
+        String[] hostsWithoutPorts = zkHosts.split(",");
+        String[] hosts = Arrays.stream(hostsWithoutPorts)
+                .map(hostsWithoutPort -> hostsWithoutPort.split(":")[0].trim())
+                .toArray(String[]::new);
+        return String.join(",", hosts);
+    }
+
     public String getZkRootNode() {
         return zkRootNode;
     }
@@ -82,6 +94,10 @@ public class ZKConnectionInfo extends ConnectionInfo {
         if (getZkHosts() != null) {
             //This has the highest priority
             connectionProps.put(HConstants.CLIENT_ZOOKEEPER_QUORUM, getZkHosts());
+        }
+        String zkHostsWithoutPorts = getZkHostsWithoutPorts();
+        if (zkHostsWithoutPorts != null) {
+            connectionProps.put(HConstants.ZOOKEEPER_QUORUM, zkHostsWithoutPorts);
         }
         //Port is already normalized into zkHosts
         if (getZkRootNode() != null) {
