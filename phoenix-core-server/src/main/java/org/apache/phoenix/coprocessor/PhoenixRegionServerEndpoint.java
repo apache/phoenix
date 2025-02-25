@@ -18,7 +18,7 @@
 package org.apache.phoenix.coprocessor;
 
 import com.google.protobuf.RpcCallback;
-import com.google.protobuf.RpcController;
+import org.apache.hbase.thirdparty.com.google.protobuf.RpcController;
 import com.google.protobuf.Service;
 
 import java.io.IOException;
@@ -122,7 +122,25 @@ public class PhoenixRegionServerEndpoint
                 ProtobufUtil.setControllerException(controller, ioe);
                 return;
             }
-            cache.invalidate(tenantID, schemaName, tableName);
+            cache.invalidateLastDDLTimestampForTable(tenantID, schemaName, tableName);
+        }
+    }
+
+    @Override
+    public void invalidatePhoenixHACache(RpcController controller,
+            RegionServerEndpointProtos.InvalidatePhoenixHACacheRequest request,
+            RpcCallback<RegionServerEndpointProtos.InvalidatePhoenixHACacheResponse> done) {
+        LOGGER.info("PhoenixRegionServerEndpoint invalidating PhoenixHACache");
+        ServerMetadataCache cache;
+        try {
+            cache = getServerMetadataCache();
+            cache.invalidatePhoenixHACache();
+        } catch (Throwable t) {
+            String errorMsg = "Invalidating PhoenixHACache FAILED, check exception for "
+                    + "specific details";
+            LOGGER.error(errorMsg,  t);
+            IOException ioe = ClientUtil.createIOException(errorMsg, t);
+            ProtobufUtil.setControllerException(controller, ioe);
         }
     }
 

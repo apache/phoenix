@@ -24,6 +24,7 @@ import java.sql.SQLException;
 public interface ServerMetadataCache {
     long getLastDDLTimestampForTable(byte[] tenantID, byte[] schemaName, byte[] tableName)
             throws SQLException;
-    void invalidate(byte[] tenantID, byte[] schemaName, byte[] tableName);
+    void invalidateLastDDLTimestampForTable(byte[] tenantID, byte[] schemaName, byte[] tableName);
     boolean isMutationBlocked() throws Exception;
+    void invalidatePhoenixHACache() throws Exception;
 }

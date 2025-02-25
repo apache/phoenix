@@ -97,6 +97,12 @@ public class PhoenixHACache implements Closeable {
         initializeHACache();
     }
 
+    public void rebuild() throws Exception {
+        for (NodeCache nodeCache : haGroupClusterRoleRecordMap.asMap().values()) {
+            nodeCache.rebuild();
+        }
+    }
+
 
     /**
      * Checks if mutation is blocked.

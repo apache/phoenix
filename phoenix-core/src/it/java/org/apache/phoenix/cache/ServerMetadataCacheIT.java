@@ -39,7 +39,6 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -73,7 +72,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_DDL_TIMESTAMP
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.query.ConnectionQueryServicesImpl.INVALIDATE_SERVER_METADATA_CACHE_EX_MESSAGE;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED;
@@ -289,7 +287,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
                     null, null, tableName);
             assertEquals(pTable.getLastDDLTimestamp().longValue(), lastDDLTimestampFromCache);
             // Invalidate the cache for this table.
-            cache.invalidate(null, null, tableName);
+            cache.invalidateLastDDLTimestampForTable(null, null, tableName);
             assertNull(cache.getLastDDLTimestampForTableFromCacheOnly(null, null, tableName));
         }
     }
@@ -319,7 +317,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
                     null, Bytes.toBytes(schemaName), Bytes.toBytes(tableName));
             assertEquals(pTable.getLastDDLTimestamp().longValue(), lastDDLTimestampFromCache);
             // Invalidate the cache for this table.
-            cache.invalidate(null, Bytes.toBytes(schemaName), Bytes.toBytes(tableName));
+            cache.invalidateLastDDLTimestampForTable(null, Bytes.toBytes(schemaName), Bytes.toBytes(tableName));
             assertNull(cache.getLastDDLTimestampForTableFromCacheOnly(null,
                     Bytes.toBytes(schemaName), Bytes.toBytes(tableName)));
         }
@@ -358,7 +356,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
             assertEquals(tenantViewTable.getLastDDLTimestamp().longValue(),
                     lastDDLTimestampFromCache);
             // Invalidate the cache for this table.
-            cache.invalidate(tenantIDBytes, null, tenantViewNameBytes);
+            cache.invalidateLastDDLTimestampForTable(tenantIDBytes, null, tenantViewNameBytes);
             assertNull(cache.getLastDDLTimestampForTableFromCacheOnly(
                     tenantIDBytes, null, tenantViewNameBytes));
         }

@@ -151,7 +151,7 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
      * @param schemaName schemaName
      * @param tableName tableName
      */
-    public void invalidate(byte[] tenantID, byte[] schemaName, byte[] tableName) {
+    public void invalidateLastDDLTimestampForTable(byte[] tenantID, byte[] schemaName, byte[] tableName) {
         LOGGER.info("Invalidating server metadata cache for tenantID: {}, schema: {},  table: {}",
                 Bytes.toString(tenantID), Bytes.toString(schemaName), Bytes.toString(tableName));
         byte[] tableKey = SchemaUtil.getTableKey(tenantID, schemaName, tableName);
@@ -162,6 +162,13 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
     @Override
     public boolean isMutationBlocked() {
         return mutationBlockEnabled && phoenixHACache != null && phoenixHACache.isAnyClusterInActiveToStandby();
+    }
+
+    @Override
+    public void invalidatePhoenixHACache() throws Exception {
+        if (phoenixHACache != null) {
+            phoenixHACache.rebuild();
+        }
     }
 
     protected Connection getConnection(Properties properties) throws SQLException {
