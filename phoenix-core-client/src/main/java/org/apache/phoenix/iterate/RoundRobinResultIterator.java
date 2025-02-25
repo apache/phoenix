@@ -273,8 +273,9 @@ public class RoundRobinResultIterator implements ResultIterator {
             int i = 0;
             for (Future<Tuple> future : futures) {
                 Tuple tuple = future.get();
-                long taskQueueWaitTime = JobManager.getTaskQueueWaitTime(future);
-                long taskEndToEndTime = JobManager.getTaskEndToEndTime(future);
+                TaskExecutionMetricsHolder taskMetricsHolder = JobManager.getTaskMetrics(future);
+                long taskQueueWaitTime = taskMetricsHolder.getTaskQueueWaitTime().getValue();
+                long taskEndToEndTime = taskMetricsHolder.getTaskEndToEndTime().getValue();
                 maxTaskQueueWaitTime = Math.max(maxTaskQueueWaitTime, taskQueueWaitTime);
                 maxTaskEndToEndTime = Math.max(maxTaskEndToEndTime, taskEndToEndTime);
                 if (tuple != null) {

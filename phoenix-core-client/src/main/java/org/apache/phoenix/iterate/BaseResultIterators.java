@@ -88,6 +88,7 @@ import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.job.JobManager;
 import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.monitoring.OverAllQueryMetrics;
+import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
@@ -1472,8 +1473,11 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         Future<PeekingResultIterator> futureTask = scanPair.getSecond();
                         PeekingResultIterator iterator = futureTask.get(timeOutForScan,
                                 TimeUnit.MILLISECONDS);
-                        long taskQueueWaitTime = JobManager.getTaskQueueWaitTime(futureTask);
-                        long taskEndToEndTime = JobManager.getTaskEndToEndTime(futureTask);
+                        TaskExecutionMetricsHolder taskMetricsHolder =
+                                JobManager.getTaskMetrics(futureTask);
+                        long taskQueueWaitTime =
+                                taskMetricsHolder.getTaskQueueWaitTime().getValue();
+                        long taskEndToEndTime = taskMetricsHolder.getTaskEndToEndTime().getValue();
                         maxTaskQueueWaitTime = Math.max(maxTaskQueueWaitTime, taskQueueWaitTime);
                         maxTaskEndToEndTime = Math.max(maxTaskEndToEndTime, taskEndToEndTime);
                         concatIterators.add(iterator);

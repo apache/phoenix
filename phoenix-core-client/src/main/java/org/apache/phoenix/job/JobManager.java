@@ -306,30 +306,14 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
         }
     }
 
-    private static <V> TaskExecutionMetricsHolder getTaskMetric(
+    public static <V> TaskExecutionMetricsHolder getTaskMetrics(
             Future<V> futureTask) {
         if (futureTask instanceof InstrumentedJobFutureTask) {
             TaskExecutionMetricsHolder taskMetrics =
                     ((InstrumentedJobFutureTask<V>) futureTask).getTaskMetric();
             return taskMetrics;
         }
-        return null;
-    }
-
-    public static <V> long getTaskQueueWaitTime(Future<V> futureTask) {
-        TaskExecutionMetricsHolder taskMetrics = getTaskMetric(futureTask);
-        if (taskMetrics != null) {
-            return taskMetrics.getTaskQueueWaitTime().getValue();
-        }
-        return 0;
-    }
-
-    public static <V> long getTaskEndToEndTime(Future<V> futureTask) {
-        TaskExecutionMetricsHolder taskMetrics = getTaskMetric(futureTask);
-        if (taskMetrics != null) {
-            return taskMetrics.getTaskEndToEndTime().getValue();
-        }
-        return 0;
+        return TaskExecutionMetricsHolder.NO_OP_INSTANCE;
     }
 }
 
