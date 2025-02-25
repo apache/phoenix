@@ -18,7 +18,7 @@
 package org.apache.phoenix.coprocessor;
 
 import com.google.protobuf.RpcCallback;
-import org.apache.hbase.thirdparty.com.google.protobuf.RpcController;
+import com.google.protobuf.RpcController;
 import com.google.protobuf.Service;
 
 import java.io.IOException;
