@@ -1317,6 +1317,8 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         }
         getRows += ")";
         final String upsertRows = "UPSERT INTO " + tableName + " VALUES(?, ?, ?, ?, ?, ?)";
+        // Here simpler schema can also be used as long we ensure that we create required number
+        // scans via salting
         String creatTableDdl = "CREATE TABLE IF NOT EXISTS " + tableName + " (\n" +
                 "    PK1 CHAR(15) NOT NULL,\n" +
                 "    PK2 CHAR(15) NOT NULL,\n" +
@@ -1400,6 +1402,8 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         }
         getRows += ")";
         final String upsertRows = "UPSERT INTO " + tableName + " VALUES(?, ?, ?, ?, ?, ?)";
+        // Here simpler schema can also be used as long we ensure that we create required number
+        // scans via salting
         String creatTableDdl = "CREATE TABLE IF NOT EXISTS " + tableName + " (\n" +
                 "    PK1 CHAR(15) NOT NULL,\n" +
                 "    PK2 CHAR(15) NOT NULL,\n" +
