@@ -126,7 +126,9 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
     static class JobFutureTask<T> extends FutureTask<T> {
         private final Object jobId;
         @Nullable
-        private final TaskExecutionMetricsHolder taskMetric;
+        // TODO: Shift this instance variable to InstrumentedJobFutureTask as task metric
+        //  instrumentation happens only for InstrumentedJobFutureTask.
+        protected final TaskExecutionMetricsHolder taskMetric;
         
         public JobFutureTask(Runnable r, T t) {
             super(r, t);
@@ -153,10 +155,6 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
         
         public Object getJobId() {
             return jobId;
-        }
-
-        public TaskExecutionMetricsHolder getTaskMetric() {
-            return taskMetric;
         }
     }
     
@@ -198,6 +196,9 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
             return taskExecutionStartTime;
         }
 
+        public TaskExecutionMetricsHolder getTaskMetric() {
+            return taskMetric;
+        }
     }
     
     /**
