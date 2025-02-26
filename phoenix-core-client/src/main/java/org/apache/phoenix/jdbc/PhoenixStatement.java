@@ -368,9 +368,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                             clearResultSet();
                             PhoenixResultSet rs = null;
                             QueryPlan plan = null;
-                            long queryPlanCreationTime = 0;
-                            long queryOptimizerTime = 0;
-                            long queryResultSetTime = 0;
                             OverAllQueryMetrics overallQuerymetrics;
                             try {
                                 PhoenixConnection conn = getConnection();
