@@ -757,7 +757,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             // the PTable of views and indexes on views might get updated because a column is added to one of
             // their parents (this won't change the timestamp)
             if (table.getType() != PTableType.TABLE || table.getTimeStamp() != tableTimeStamp) {
-                builder.setTable(PTableImpl.toProto(table));
+                builder.setTable(PTableImpl.toProto(table, request.getClientVersion()));
             }
             done.run(builder.build());
         } catch (Throwable t) {
@@ -973,11 +973,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         PDataType dataType =
                 PDataType.fromTypeId(PInteger.INSTANCE.getCodec().decodeInt(
                         dataTypeKv.getValueArray(), dataTypeKv.getValueOffset(), SortOrder.getDefault()));
+
         if (maxLength == null && dataType == PBinary.INSTANCE) {
-            dataType = PVarbinary.INSTANCE;   // For
+            dataType = PVarbinary.INSTANCE;   // For Backward compatibility
         }
-        // backward
-        // compatibility.
         Cell sortOrderKv = colKeyValues[SORT_ORDER_INDEX];
         SortOrder sortOrder =
                 sortOrderKv == null ? SortOrder.getDefault() : SortOrder.fromSystemValue(PInteger.INSTANCE
@@ -1666,7 +1665,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     || (oldTable != null &&
                     oldTable.getBucketNum() != null && oldTable.getBucketNum() > 0);
                 addColumnToTable(columnCellList, colName, famName, colKeyValues, columns,
-                    isSalted, baseColumnCount, isRegularView, columnTimestamp);
+                        isSalted, baseColumnCount, isRegularView, columnTimestamp);
             }
         }
         if (tableType == INDEX && ! isThisAViewIndex) {
@@ -2395,14 +2394,14 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     if (!isTableDeleted(table)) {
                         builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
                         builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
-                        builder.setTable(PTableImpl.toProto(table));
+                        builder.setTable(PTableImpl.toProto(table, clientVersion));
                         done.run(builder.build());
                         return;
                     }
                 } else {
                     builder.setReturnCode(MetaDataProtos.MutationCode.NEWER_TABLE_FOUND);
                     builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
-                    builder.setTable(PTableImpl.toProto(table));
+                    builder.setTable(PTableImpl.toProto(table, clientVersion));
                     done.run(builder.build());
                     return;
                 }
@@ -2823,7 +2822,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 PTable newTable = buildTable(tableKey, cacheKey, region,
                     clientTimeStamp, clientVersion);
                 if (newTable != null) {
-                    builder.setTable(PTableImpl.toProto(newTable));
+                    builder.setTable(PTableImpl.toProto(newTable, clientVersion));
                 }
 
                 done.run(builder.build());
@@ -4594,7 +4593,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
                 builder.setMutationTime(currentTime);
                 if (returnTable != null) {
-                    builder.setTable(PTableImpl.toProto(returnTable));
+                    builder.setTable(PTableImpl.toProto(returnTable, request.getClientVersion()));
                 }
                 done.run(builder.build());
                 return;

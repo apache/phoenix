@@ -284,7 +284,7 @@ public class CSVCommonsLoader {
 
         @Override
         public void errorOnRecord(CSVRecord csvRecord, Throwable throwable) {
-            LOGGER.error("Error upserting record " + csvRecord, throwable.getMessage());
+            LOGGER.error("Error upserting record " + csvRecord, throwable);
             if (strict) {
                 Throwables.propagate(throwable);
             }

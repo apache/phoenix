@@ -41,6 +41,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_TASK_EXEC
 import static org.apache.phoenix.monitoring.MetricType.COUNT_MILLS_BETWEEN_NEXTS;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_COMMIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.MEMORY_CHUNK_BYTES;
+import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_COMMIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_TIMEOUT_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.TASK_END_TO_END_TIME;
@@ -79,7 +80,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.metrics2.AbstractMetric;
 import org.apache.hbase.thirdparty.com.google.common.base.Joiner;
 import org.apache.hbase.thirdparty.com.google.common.collect.Lists;
@@ -92,7 +92,6 @@ import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -136,7 +135,8 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
     private static final String DELETE_ALL_DML = "DELETE FROM %s";
 
     private static final List<MetricType> mutationMetricsToSkip =
-            Lists.newArrayList(MUTATION_COMMIT_TIME, UPSERT_COMMIT_TIME, DELETE_COMMIT_TIME);
+            Lists.newArrayList(MUTATION_COMMIT_TIME, UPSERT_COMMIT_TIME, DELETE_COMMIT_TIME,
+                    MUTATION_BATCH_COUNTER);
     private static final List<MetricType> readMetricsToSkip =
             Lists.newArrayList(TASK_QUEUE_WAIT_TIME, TASK_EXECUTION_TIME, TASK_END_TO_END_TIME,
                     COUNT_MILLS_BETWEEN_NEXTS);
@@ -380,6 +380,29 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         }
     }
 
+    static void createTableAndRunUpsertSelect(String destTableName, String sourceTableName,
+                                              boolean resetGlobalMetricsAfterTableCreate,
+                                              boolean resetTableMetricsAfterTableCreate,
+                                              boolean commit, Connection conn) throws SQLException {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute(String.format(DDL, destTableName));
+        }
+        conn.commit();
+        if (resetGlobalMetricsAfterTableCreate) {
+            resetGlobalMetrics();
+        }
+
+        if (resetTableMetricsAfterTableCreate) {
+            PhoenixRuntime.clearTableLevelMetrics();
+        }
+        try (Statement stmt = conn.createStatement()) {
+            stmt.executeUpdate(String.format(UPSERT_SELECT_DML, destTableName, sourceTableName));
+        }
+        if (commit) {
+            conn.commit();
+        }
+    }
+
     static void doPointDeleteFromTable(String tableName, Connection conn) throws SQLException {
         try (PreparedStatement stmt = conn.prepareStatement(
                 String.format(POINT_DELETE_DML, tableName))) {
@@ -490,11 +513,12 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
             String t = entry.getKey();
             assertEquals("Table names didn't match!", tableName, t);
             Map<MetricType, Long> p = entry.getValue();
-            assertEquals("There should have been sixteen metrics", 16, p.size());
+            assertEquals("There should have been seventeen metrics", 17, p.size());
             boolean mutationBatchSizePresent = false;
             boolean mutationCommitTimePresent = false;
             boolean mutationBytesPresent = false;
             boolean mutationBatchFailedPresent = false;
+            boolean mutationBatchCounterPresent = false;
             for (Entry<MetricType, Long> metric : p.entrySet()) {
                 MetricType metricType = metric.getKey();
                 long metricValue = metric.getValue();
@@ -511,11 +535,16 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
                     assertEquals("Zero failed mutations expected", 0, metricValue);
                     mutationBatchFailedPresent = true;
                 }
+                else if (metricType.equals(MetricType.MUTATION_BATCH_COUNTER)) {
+                    assertEquals("Mutation batch success count should be greater than zero", 1, metricValue);
+                    mutationBatchCounterPresent = true;
+                }
             }
             assertTrue(mutationBatchSizePresent);
             assertTrue(mutationCommitTimePresent);
             assertTrue(mutationBytesPresent);
             assertTrue(mutationBatchFailedPresent);
+            assertTrue(mutationBatchCounterPresent);
         }
         Map<String, Map<MetricType, Long>> readMetrics = PhoenixRuntime.getReadMetricInfoForMutationsSinceLastReset(pConn);
         assertEquals("Read metrics should be empty", 0, readMetrics.size());
@@ -1037,7 +1066,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
     public void testGetConnectionsForSameUrlConcurrently()  throws Exception {
         // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
         String zkQuorum = "localhost:" + getUtility().getZkCluster().getClientPort();
-        String url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
+        String url = PhoenixRuntime.JDBC_PROTOCOL_ZK + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
         ExecutorService exec = Executors.newFixedThreadPool(10);
         try {
             GLOBAL_HCONNECTIONS_COUNTER.getMetric().reset();
@@ -1071,7 +1100,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         int maxConnections = attemptedPhoenixConnections -1;
         List<Connection> connections = Lists.newArrayList();
         String zkQuorum = "localhost:" + getUtility().getZkCluster().getClientPort();
-        String url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum +
+        String url = PhoenixRuntime.JDBC_PROTOCOL_ZK + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum +
                 ':' +  CUSTOM_URL_STRING + '=' + "throttletest";
 
         Properties props = new Properties();
@@ -1125,7 +1154,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         int maxConnections = attemptedPhoenixConnections - 4;
         List<Connection> connections = Lists.newArrayList();
         String zkQuorum = "localhost:" + getUtility().getZkCluster().getClientPort();
-        String url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum +
+        String url = PhoenixRuntime.JDBC_PROTOCOL_ZK + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum +
                 ':' +  CUSTOM_URL_STRING + '=' + "FailedCounterTest";
         Properties props = new Properties();
         props.setProperty(QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS, Integer.toString(maxConnections));
@@ -1177,7 +1206,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         props1.setProperty(HBASE_CLIENT_RETRIES_NUMBER, Integer.toString(2));
         props1.setProperty("zookeeper.recovery.retry", Integer.toString(2));
         try {
-            DriverManager.getConnection(PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "jdbcthisIsBadZk", props1);
+            DriverManager.getConnection(PhoenixRuntime.JDBC_PROTOCOL_ZK + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "jdbcthisIsBadZk", props1);
         } catch (Exception e) {
             assertEquals(4, GLOBAL_FAILED_PHOENIX_CONNECTIONS.getMetric().getValue());
             assertEquals(attemptedPhoenixConnections + 1, GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.getMetric().getValue());
@@ -1190,7 +1219,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
     public void testGetConnectionsForDifferentTenantsConcurrently()  throws Exception {
         // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
         String zkQuorum = "localhost:" + getUtility().getZkCluster().getClientPort();
-        String url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
+        String url = PhoenixRuntime.JDBC_PROTOCOL_ZK + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
         ExecutorService exec = Executors.newFixedThreadPool(10);
         try {
             GLOBAL_HCONNECTIONS_COUNTER.getMetric().reset();
@@ -1225,7 +1254,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         ExecutorService exec = Executors.newFixedThreadPool(4);
         // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
         String zkQuorum = "localhost:" + getUtility().getZkCluster().getClientPort();
-        String baseUrl = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
+        String baseUrl = PhoenixRuntime.JDBC_PROTOCOL_ZK + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
         int numConnections = 20;
         List<Callable<Connection>> callables = new ArrayList<>(numConnections);
         List<Future<Connection>> futures = new ArrayList<>(numConnections);
