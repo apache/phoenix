@@ -165,7 +165,6 @@ public class OverAllQueryMetricsTest {
         metricsObj.setQueryCompilerTimeNS(delta);
         metricsObj.setQueryOptimizerTimeNS(delta);
         metricsObj.setQueryResultItrSetTimeNs(delta);
-
     }
 
     private void assertPublishedMetrics(
@@ -187,7 +186,6 @@ public class OverAllQueryMetricsTest {
         assertEquals(expectedQueryCompilerTimeNs, (long)metrics.get(QUERY_COMPILER_TIME_NS));
         assertEquals(expectedQueryOptimizerTimeNs, (long)metrics.get(QUERY_OPTIMIZER_TIME_NS));
         assertEquals(expectedQueryResultItrSetTimeNs, (long)metrics.get(QUERY_RESULT_ITR_SET_TIME_NS));
-
     }
 
 }
