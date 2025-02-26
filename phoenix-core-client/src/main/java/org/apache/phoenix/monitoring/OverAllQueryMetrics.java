@@ -17,13 +17,25 @@
  */
 package org.apache.phoenix.monitoring;
 
+import static org.apache.phoenix.monitoring.MetricType.CACHE_REFRESH_SPLITS_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.NUM_PARALLEL_SCANS;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_FAILED_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_POINTLOOKUP_FAILED_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_POINTLOOKUP_TIMEOUT_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_SCAN_FAILED_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_SCAN_TIMEOUT_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_TIMEOUT_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.RESULT_SET_TIME_MS;
+import static org.apache.phoenix.monitoring.MetricType.WALL_CLOCK_TIME_MS;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_COMPILER_TIME_NS;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_OPTIMIZER_TIME_NS;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_RESULT_ITR_SET_TIME_NS;
+
 import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
-
-import static org.apache.phoenix.monitoring.MetricType.*;
 
 /**
  * Class that represents the overall metrics associated with a query being executed by the phoenix.
