@@ -42,6 +42,9 @@ public class PhoenixEmbeddedDriverTest {
     @Test
     public void testGetZKConnectionInfo() throws SQLException {
         Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+        // Need to set explicitly for HBase 3.x
+        config.set(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY,
+            "org.apache.hadoop.hbase.client.ZKConnectionRegistry");
         String defaultQuorum = config.get(HConstants.ZOOKEEPER_QUORUM);
 
         for (String protocol : new String[] { "phoenix", "phoenix+zk" }) {
@@ -131,7 +134,7 @@ public class PhoenixEmbeddedDriverTest {
                 int pos = 0;
                 try {
                     ZKConnectionInfo info =
-                            (ZKConnectionInfo) ConnectionInfo.create(urls[i], null, null);
+                            (ZKConnectionInfo) ConnectionInfo.create(urls[i], config, null, null);
                     String[] parts = partsList[i];
                     if (parts.length > pos) {
                         assertEquals(parts[pos], info.getZkHosts());
