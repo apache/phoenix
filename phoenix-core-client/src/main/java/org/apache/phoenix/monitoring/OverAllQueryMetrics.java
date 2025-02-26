@@ -188,7 +188,6 @@ public class OverAllQueryMetrics {
         queryCompilerTimeNS.reset();
         queryOptimizerTimeNS.reset();
         queryResultItrSetTimeNs.reset();
-
     }
 
     public OverAllQueryMetrics combine(OverAllQueryMetrics metric) {

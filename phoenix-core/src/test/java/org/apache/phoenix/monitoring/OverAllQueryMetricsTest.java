@@ -26,7 +26,16 @@ import org.junit.Test;
 
 import java.util.Map;
 
-import static org.apache.phoenix.monitoring.MetricType.*;
+import static org.apache.phoenix.monitoring.MetricType.CACHE_REFRESH_SPLITS_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.NO_OP_METRIC;
+import static org.apache.phoenix.monitoring.MetricType.NUM_PARALLEL_SCANS;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_FAILED_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_TIMEOUT_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.RESULT_SET_TIME_MS;
+import static org.apache.phoenix.monitoring.MetricType.WALL_CLOCK_TIME_MS;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_COMPILER_TIME_NS;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_OPTIMIZER_TIME_NS;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_RESULT_ITR_SET_TIME_NS;
 import static org.junit.Assert.assertEquals;
 
 public class OverAllQueryMetricsTest {
@@ -36,7 +45,6 @@ public class OverAllQueryMetricsTest {
     private static final long delta = 1000L;
     private static final int queryTimeouts = 5;
     private static final int queryFailures = 8;
-    private static final long queryCompilerTimeNs = 25000;
     private static final int cacheRefreshesDueToSplits = 15;
 
     @Before
