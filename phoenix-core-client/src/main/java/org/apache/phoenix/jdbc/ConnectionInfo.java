@@ -52,7 +52,7 @@ public abstract class ConnectionInfo {
             + " determined. Ignoring realm equivalency check.";
     protected static final String TERMINATOR = "" + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
     protected static final String DELIMITERS = TERMINATOR + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
-    protected static final String CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY =
+    public static final String CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY =
             "hbase.client.registry.impl";
 
     protected static final boolean HAS_MASTER_REGISTRY;
