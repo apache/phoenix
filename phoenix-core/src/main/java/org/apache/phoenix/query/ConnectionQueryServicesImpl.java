@@ -140,6 +140,7 @@ import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.RpcConnectionRegistry;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
@@ -429,6 +430,24 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // Without making a copy of the configuration we cons up, we lose some of our properties
         // on the server side during testing.
         this.config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration(config);
+
+
+        LOGGER.info(
+                "CQS Configs {} = {} , {} = {} , {} = {} , {} = {} , {} = {} , {} = {} , {} = {}",
+                HConstants.ZOOKEEPER_QUORUM,
+                this.config.get(HConstants.ZOOKEEPER_QUORUM), HConstants.CLIENT_ZOOKEEPER_QUORUM,
+                this.config.get(HConstants.CLIENT_ZOOKEEPER_QUORUM),
+                HConstants.CLIENT_ZOOKEEPER_CLIENT_PORT,
+                this.config.get(HConstants.CLIENT_ZOOKEEPER_CLIENT_PORT),
+                HConstants.ZOOKEEPER_CLIENT_PORT,
+                this.config.get(HConstants.ZOOKEEPER_CLIENT_PORT),
+                RpcConnectionRegistry.BOOTSTRAP_NODES,
+                this.config.get(RpcConnectionRegistry.BOOTSTRAP_NODES),
+                HConstants.MASTER_ADDRS_KEY, this.config.get(HConstants.MASTER_ADDRS_KEY),
+                ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY,
+                this.config.get(ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY));
+
+
         // set replication required parameter
         ConfigUtil.setReplicationConfigIfAbsent(this.config);
         this.props = new ReadOnlyProps(this.config.iterator());
