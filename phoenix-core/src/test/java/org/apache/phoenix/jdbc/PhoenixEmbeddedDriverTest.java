@@ -575,7 +575,7 @@ public class PhoenixEmbeddedDriverTest {
                 + "localhost\\:2181,127.23.45.678\\:7634,v3\\:1,host123.48576\\:723:/hbase;"
                 + "test=true", null, null);
         ReadOnlyProps props = connectionInfo.asProps();
-        assertEquals("127.23.45.678,host123.48576,localhost,v3",
+        assertEquals("127.23.45.678:7634,host123.48576:723,localhost:2181,v3:1",
                 props.get(HConstants.ZOOKEEPER_QUORUM));
         assertEquals("127.23.45.678:7634,host123.48576:723,localhost:2181,v3:1",
                 props.get(HConstants.CLIENT_ZOOKEEPER_QUORUM));
@@ -584,7 +584,7 @@ public class PhoenixEmbeddedDriverTest {
                 + "localhost\\:2181,127.23.45.678\\:7634,v3\\:1,host123.48576\\:723:/hbase;"
                 + "test=true", null, null);
         props = connectionInfo.asProps();
-        assertEquals("127.23.45.678,host123.48576,localhost,v3",
+        assertEquals("127.23.45.678:7634,host123.48576:723,localhost:2181,v3:1",
                 props.get(HConstants.ZOOKEEPER_QUORUM));
         assertEquals("127.23.45.678:7634,host123.48576:723,localhost:2181,v3:1",
                 props.get(HConstants.CLIENT_ZOOKEEPER_QUORUM));
@@ -593,7 +593,7 @@ public class PhoenixEmbeddedDriverTest {
                 + "localhost,v3,127.23.45.678,host987:12345:/hbase;"
                 + "test=true", null, null);
         props = connectionInfo.asProps();
-        assertEquals("127.23.45.678,host987,localhost,v3",
+        assertEquals("127.23.45.678:12345,host987:12345,localhost:12345,v3:12345",
                 props.get(HConstants.ZOOKEEPER_QUORUM));
         assertEquals("127.23.45.678:12345,host987:12345,localhost:12345,v3:12345",
                 props.get(HConstants.CLIENT_ZOOKEEPER_QUORUM));
