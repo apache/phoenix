@@ -1490,7 +1490,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
         String dataTableName = generateUniqueName();
         String fullDataTableName = SchemaUtil.getTableName(schemaName, dataTableName);
         String indexTableName = generateUniqueName();
-        int maxLookbackAge = 12000;
+        int maxLookbackAge = 12;
         int delta = 5;
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute("CREATE TABLE " + fullDataTableName
@@ -1525,7 +1525,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
                     mrJobCounters.findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT.name()).getValue());
             assertEquals(0, mrJobCounters.findCounter(
                     BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT.name()).getValue());
-            customEdge.incrementValue(maxLookbackAge + 1);
+            customEdge.incrementValue(maxLookbackAge * 1000 + 1);
             indexTool = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName, null,
                     0, IndexTool.IndexVerifyType.BEFORE);
             mrJobCounters = IndexToolIT.getMRJobCounters(indexTool);

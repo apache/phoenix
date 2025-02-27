@@ -214,7 +214,7 @@ public class PTableImpl implements PTable {
     private final BitSet viewModifiedPropSet;
     private final Long lastDDLTimestamp;
     private final boolean isChangeDetectionEnabled;
-    private Map<String, String> propertyValues;
+    private Map<String, String> propertyValues;  // Map of property name to value for constructing DDL dynamically
     private String schemaVersion;
     private String externalSchemaId;
     private String streamingTopicName;
@@ -720,7 +720,9 @@ public class PTableImpl implements PTable {
 
         public Builder setMaxLookbackAge(Long maxLookbackAge) {
             if (maxLookbackAge != null) {
-                propertyValues.put(MAX_LOOKBACK_AGE, String.valueOf(maxLookbackAge));
+                // The table level max lookback age read from SYSCAT is in milli-seconds but in DDL it should
+                // be specified in seconds.
+                propertyValues.put(MAX_LOOKBACK_AGE, String.valueOf(maxLookbackAge / 1000));
             }
             this.maxLookbackAge = maxLookbackAge;
             return this;
