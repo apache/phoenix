@@ -31,4 +31,9 @@ public class DefaultEnvironmentEdge extends EnvironmentEdge {
     return System.currentTimeMillis();
   }
 
+  @Override
+  public long nanoTime() {
+    return System.nanoTime();
+  }
+
 }
