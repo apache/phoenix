@@ -19,6 +19,7 @@ package org.apache.phoenix.jdbc;
 
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_PHOENIX_CONNECTIONS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTION_TIME;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 
 import java.sql.Connection;
@@ -44,6 +45,7 @@ import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesImpl;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -218,6 +220,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
     
     @Override
     public Connection connect(String url, Properties info) throws SQLException {
+        final long connectionStartTime = EnvironmentEdgeManager.currentTimeMillis();
         GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.increment();
         if (!acceptsURL(url)) {
             GLOBAL_FAILED_PHOENIX_CONNECTIONS.increment();
@@ -237,6 +240,8 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
             throw e;
         } finally {
             unlock(LockMode.READ);
+            GLOBAL_PHOENIX_CONNECTION_TIME.update(
+                    EnvironmentEdgeManager.currentTimeMillis() - connectionStartTime);
         }
     }
     
