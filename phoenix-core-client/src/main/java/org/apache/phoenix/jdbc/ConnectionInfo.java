@@ -29,6 +29,7 @@ import java.util.StringTokenizer;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.VersionInfo;
+import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authentication.util.KerberosUtil;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -493,7 +494,8 @@ public abstract class ConnectionInfo {
                                 LOGGER.info("Trying to connect to a secure cluster as {} "
                                         + "with keytab {}",
                                     principal, keytab);
-                                User.login(principal, keytab);
+                                User.login(keytab,
+                                    SecurityUtil.getServerPrincipal(principal, (String) null));
                                 user = User.getCurrent();
                                 LOGGER.info("Successful login to secure cluster");
                             }
