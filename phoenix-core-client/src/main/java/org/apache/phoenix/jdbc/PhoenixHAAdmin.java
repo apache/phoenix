@@ -331,7 +331,7 @@ public class PhoenixHAAdmin implements Closeable {
      * @return true if the data on ZK is updated otherwise false
      * @throws IOException if it fails to update the cluster role data on ZK
      */
-    boolean createOrUpdateDataOnZookeeper(ClusterRoleRecord record) throws IOException {
+    public boolean createOrUpdateDataOnZookeeper(ClusterRoleRecord record) throws IOException {
         if (!zkUrl.equals(record.getZk1()) && !zkUrl.equals(record.getZk2())) {
             String
                     msg =
@@ -472,7 +472,7 @@ public class PhoenixHAAdmin implements Closeable {
         return ZKPaths.PATH_SEPARATOR + haGroupName;
     }
 
-    String getZkUrl() {
+    public String getZkUrl() {
         return zkUrl;
     }
 

@@ -27,10 +27,7 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.PhoenixRegionServerEndpointTestImpl;
 import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.jdbc.PhoenixResultSet;
-import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.jdbc.*;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
@@ -73,14 +70,11 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
+import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.apache.phoenix.query.ConnectionQueryServicesImpl.INVALIDATE_SERVER_METADATA_CACHE_EX_MESSAGE;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -105,6 +99,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
                 Long.toString(Long.MAX_VALUE));
         props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
                 Long.toString(Long.MAX_VALUE));
+        props.put(QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, Boolean.toString(true));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
         assertEquals(1, getUtility().getHBaseCluster().getNumLiveRegionServers());
         serverName = getUtility().getHBaseCluster().getRegionServer(0).getServerName();
@@ -134,6 +129,82 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         ServerMetadataCache cache = ((PhoenixRegionServerEndpointTestImpl)coproc).getServerMetadataCache();
         assertNotNull(cache);
         return (ServerMetadataCacheTestImpl)cache;
+    }
+
+    /**
+     * This test checks the mutation block enabled feature
+     * 1. Initialize Cache
+     * 2. Create new CRR records with ACTIVE_TO_STANDBY and STANDBY states
+     * 3. Check CRR records are picked up and mutation is blocked
+     * 4. Delete the CRR records
+     * 5. Check now that mutation is NOT blocked
+     * 6. Create CRR records again with ACTIVE and STANDBY states
+     * 7. Check now that mutation is NOT blocked
+     * 8. Update CRR records with ACTIVE_TO_STANDBY and STANDBY states
+     * 9. Check new CRR records mutation is blocked
+     * 10. Delete the CRRs
+     * 11. Check now that mutation is NOT blocked
+     *
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testCacheForMutationBlockEnabled() throws Exception {
+        PhoenixHAAdmin haAdmin = new PhoenixHAAdmin(config);
+        ServerMetadataCacheTestImpl cache = getServerMetadataCache();;
+
+        ClusterRoleRecord crr1 = new ClusterRoleRecord("failover",
+                HighAvailabilityPolicy.FAILOVER, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 2L);
+        ClusterRoleRecord crr2 = new ClusterRoleRecord("parallel",
+                HighAvailabilityPolicy.PARALLEL, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 2L);
+        haAdmin.createOrUpdateDataOnZookeeper(crr1);
+        haAdmin.createOrUpdateDataOnZookeeper(crr2);
+
+        Thread.sleep(1000L);
+        assert cache.isMutationBlocked();
+
+        // Cleanup the cache to delete all entries
+        haAdmin.getCurator().delete().forPath(toPath("failover"));
+        haAdmin.getCurator().delete().forPath(toPath("parallel"));
+
+        Thread.sleep(1000L);
+        assertFalse(cache.isMutationBlocked());
+
+        // Create new entries again
+        crr1 = new ClusterRoleRecord("failover",
+                HighAvailabilityPolicy.FAILOVER, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 1L);
+        crr2 = new ClusterRoleRecord("parallel",
+                HighAvailabilityPolicy.PARALLEL, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 1L);
+        haAdmin.createOrUpdateDataOnZookeeper(crr1);
+        haAdmin.createOrUpdateDataOnZookeeper(crr2);
+
+        Thread.sleep(1000L);
+        assertFalse(cache.isMutationBlocked());
+
+
+        // Create new entries again
+        crr1 = new ClusterRoleRecord("failover",
+                HighAvailabilityPolicy.FAILOVER, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 2L);
+        crr2 = new ClusterRoleRecord("parallel",
+                HighAvailabilityPolicy.PARALLEL, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 2L);
+        haAdmin.createOrUpdateDataOnZookeeper(crr1);
+        haAdmin.createOrUpdateDataOnZookeeper(crr2);
+
+        Thread.sleep(1000L);
+        assert cache.isMutationBlocked();
+
+        // Cleanup the cache to delete all entries
+        haAdmin.getCurator().delete().forPath(toPath("failover"));
+        haAdmin.getCurator().delete().forPath(toPath("parallel"));
+
+        Thread.sleep(1000L);
+        assertFalse(cache.isMutationBlocked());
     }
 
     /**
