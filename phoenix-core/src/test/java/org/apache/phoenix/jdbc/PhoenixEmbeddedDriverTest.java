@@ -34,6 +34,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.HBaseFactoryProvider;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Test;
 
 public class PhoenixEmbeddedDriverTest {
@@ -41,6 +42,9 @@ public class PhoenixEmbeddedDriverTest {
     @Test
     public void testGetZKConnectionInfo() throws SQLException {
         Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+        // Need to set explicitly for HBase 3.x
+        config.set(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY,
+            "org.apache.hadoop.hbase.client.ZKConnectionRegistry");
         String defaultQuorum = config.get(HConstants.ZOOKEEPER_QUORUM);
 
         for (String protocol : new String[] { "phoenix", "phoenix+zk" }) {
@@ -130,7 +134,7 @@ public class PhoenixEmbeddedDriverTest {
                 int pos = 0;
                 try {
                     ZKConnectionInfo info =
-                            (ZKConnectionInfo) ConnectionInfo.create(urls[i], null, null);
+                            (ZKConnectionInfo) ConnectionInfo.create(urls[i], config, null, null);
                     String[] parts = partsList[i];
                     if (parts.length > pos) {
                         assertEquals(parts[pos], info.getZkHosts());
@@ -563,5 +567,42 @@ public class PhoenixEmbeddedDriverTest {
         assertTrue(ConnectionInfo.isSameName("user/foobar@APACHE.ORG", "user/_HOST", "foobar", "APACHE.ORG"));
         assertFalse(ConnectionInfo.isSameName("user/localhost@APACHE.NET", "user/_HOST", "localhost", "APACHE.ORG"));
         assertFalse(ConnectionInfo.isSameName("user/foobar@APACHE.NET", "user/_HOST", "foobar", "APACHE.ORG"));
+    }
+
+    @Test
+    public void testZkQuorumConfigs() throws Exception {
+        ConnectionInfo connectionInfo = ConnectionInfo.create("jdbc:phoenix+zk:"
+                + "localhost\\:2181,127.23.45.678\\:7634,v3\\:1,host123.48576\\:723:/hbase;"
+                + "test=true", null, null);
+        ReadOnlyProps props = connectionInfo.asProps();
+        assertEquals("127.23.45.678:7634,host123.48576:723,localhost:2181,v3:1",
+                props.get(HConstants.ZOOKEEPER_QUORUM));
+        assertEquals("127.23.45.678:7634,host123.48576:723,localhost:2181,v3:1",
+                props.get(HConstants.CLIENT_ZOOKEEPER_QUORUM));
+
+        connectionInfo = ConnectionInfo.create("jdbc:phoenix:"
+                + "localhost\\:2181,127.23.45.678\\:7634,v3\\:1,host123.48576\\:723:/hbase;"
+                + "test=true", null, null);
+        props = connectionInfo.asProps();
+        assertEquals("127.23.45.678:7634,host123.48576:723,localhost:2181,v3:1",
+                props.get(HConstants.ZOOKEEPER_QUORUM));
+        assertEquals("127.23.45.678:7634,host123.48576:723,localhost:2181,v3:1",
+                props.get(HConstants.CLIENT_ZOOKEEPER_QUORUM));
+
+        connectionInfo = ConnectionInfo.create("jdbc:phoenix:"
+                + "localhost,v3,127.23.45.678,host987:12345:/hbase;"
+                + "test=true", null, null);
+        props = connectionInfo.asProps();
+        assertEquals("127.23.45.678:12345,host987:12345,localhost:12345,v3:12345",
+                props.get(HConstants.ZOOKEEPER_QUORUM));
+        assertEquals("127.23.45.678:12345,host987:12345,localhost:12345,v3:12345",
+                props.get(HConstants.CLIENT_ZOOKEEPER_QUORUM));
+
+        connectionInfo = ConnectionInfo.create("jdbc:phoenix+rpc:"
+                + "localhost\\:2181,127.23.45.678\\:7634,v3\\:1,host123.48576\\:723::;"
+                + "test=true", null, null);
+        props = connectionInfo.asProps();
+        assertNull(props.get(HConstants.ZOOKEEPER_QUORUM));
+        assertNull(props.get(HConstants.CLIENT_ZOOKEEPER_QUORUM));
     }
 }

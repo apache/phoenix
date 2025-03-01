@@ -68,7 +68,7 @@
     <!-- Hadoop and Hbase-thirdparty version -->
     <!-- These are expected to be overridden to conform to cluster versions
     along with hbase.version (defined in profiles) -->
-    <hadoop.version>3.3.6</hadoop.version>
+    <hadoop.version>3.4.1</hadoop.version>
 
     <phoenix.thirdparty.version>2.1.0</phoenix.thirdparty.version>
     <hbase.suffix>hbase-${hbase.profile}</hbase.suffix>
@@ -79,7 +79,8 @@
     <hbase-2.4.runtime.version>2.4.18</hbase-2.4.runtime.version>
     <hbase-2.5.0.runtime.version>2.5.3-hadoop3</hbase-2.5.0.runtime.version>
     <hbase-2.5.runtime.version>2.5.10-hadoop3</hbase-2.5.runtime.version>
-    <hbase-2.6.runtime.version>2.6.1-hadoop3</hbase-2.6.runtime.version>
+    <hbase-2.6.0.runtime.version>2.6.1-hadoop3</hbase-2.6.0.runtime.version>
+    <hbase-2.6.runtime.version>2.6.2-hadoop3</hbase-2.6.runtime.version>
 
     <compileSource>1.8</compileSource>
     <maven.compiler.source>${compileSource}</maven.compiler.source>
@@ -744,6 +745,11 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-embedded-hbase-2.6.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-client-lite-hbase-2.4</artifactId>
         <version>${project.version}</version>
       </dependency>
@@ -755,6 +761,11 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-client-lite-hbase-2.5</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-lite-hbase-2.6.0</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -779,6 +790,11 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server-hbase-2.6.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-server-hbase-2.6</artifactId>
         <version>${project.version}</version>
       </dependency>
@@ -795,6 +811,11 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-mapreduce-byo-shaded-hbase-hbase-2.5</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-mapreduce-byo-shaded-hbase-hbase-2.6.0</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -1187,7 +1208,31 @@
           </exclusion>
         </exclusions>
       </dependency>
-
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
+        <version>${hadoop.version}</version>
+        <type>test-jar</type>
+        <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>ch.qos.reload4j</groupId>
+            <artifactId>reload4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-reload4j</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
       <!-- HBase dependencies -->
       <dependency>
         <groupId>org.apache.hbase</groupId>
@@ -1890,6 +1935,7 @@
       <properties>
         <hbase.profile>2.5</hbase.profile>
         <hbase.compat.version>2.5.4</hbase.compat.version>
+        <hadoop.version>3.3.6</hadoop.version>
         <hbase.version>${hbase-2.5.runtime.version}</hbase.version>
       </properties>
     </profile>
@@ -1921,6 +1967,7 @@
       <properties>
         <hbase.profile>2.5</hbase.profile>
         <hbase.compat.version>2.5.4</hbase.compat.version>
+        <hadoop.version>3.3.6</hadoop.version>
         <hbase.version>${hbase-2.5.runtime.version}</hbase.version>
       </properties>
     </profile>
@@ -1936,12 +1983,13 @@
       <properties>
         <hbase.profile>2.5.0</hbase.profile>
         <hbase.compat.version>2.5.0</hbase.compat.version>
+        <hadoop.version>3.3.6</hadoop.version>
         <hbase.version>${hbase-2.5.0.runtime.version}</hbase.version>
       </properties>
     </profile>
     <profile>
       <!-- This WILL work with the public -hadoop3 artifacts -->
-      <id>phoenix-hbase-compat-2.6.0</id>
+      <id>phoenix-hbase-compat-2.6.2</id>
       <activation>
         <property>
           <name>hbase.profile</name>
@@ -1950,8 +1998,25 @@
       </activation>
       <properties>
         <hbase.profile>2.6</hbase.profile>
+        <!-- Same compat version as 2.6.0, but different Hadoop version -->
         <hbase.compat.version>2.6.0</hbase.compat.version>
         <hbase.version>${hbase-2.6.runtime.version}</hbase.version>
+      </properties>
+    </profile>
+    <profile>
+      <!-- This WILL work with the public -hadoop3 artifacts -->
+      <id>phoenix-hbase-compat-2.6.0</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.6.0</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>2.6.0</hbase.profile>
+        <hbase.compat.version>2.6.0</hbase.compat.version>
+        <hadoop.version>3.3.6</hadoop.version>
+        <hbase.version>${hbase-2.6.0.runtime.version}</hbase.version>
       </properties>
     </profile>
     <profile>
