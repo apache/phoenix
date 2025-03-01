@@ -61,7 +61,17 @@ public class PhoenixRegionServerEndpoint
             RegionServerEndpointProtos.ValidateLastDDLTimestampRequest request,
             RpcCallback<RegionServerEndpointProtos.ValidateLastDDLTimestampResponse> done) {
         metricsSource.incrementValidateTimestampRequestCount();
-        ServerMetadataCache cache = getServerMetadataCache();
+        ServerMetadataCache cache;
+        try {
+            cache = getServerMetadataCache();
+        } catch (Throwable t) {
+            String errorMsg = "Creating ServerMetadataCache FAILED, check exception for "
+                    + "specific details";
+            LOGGER.error(errorMsg,  t);
+            IOException ioe = ClientUtil.createIOException(errorMsg, t);
+            ProtobufUtil.setControllerException(controller, ioe);
+            return;
+        }
         for (RegionServerEndpointProtos.LastDDLTimestampRequest lastDDLTimestampRequest
                 : request.getLastDDLTimestampRequestsList()) {
             byte[] tenantID = lastDDLTimestampRequest.getTenantId().toByteArray();
@@ -101,8 +111,36 @@ public class PhoenixRegionServerEndpoint
             String tenantIDStr = Bytes.toString(tenantID);
             LOGGER.info("PhoenixRegionServerEndpoint invalidating the cache for tenantID: {},"
                     + " tableName: {}", tenantIDStr, fullTableName);
-            ServerMetadataCache cache = getServerMetadataCache();
-            cache.invalidate(tenantID, schemaName, tableName);
+            ServerMetadataCache cache;
+            try {
+                cache = getServerMetadataCache();
+            } catch (Throwable t) {
+                String errorMsg = "Creating ServerMetadataCache FAILED, check exception for "
+                        + "specific details";
+                LOGGER.error(errorMsg,  t);
+                IOException ioe = ClientUtil.createIOException(errorMsg, t);
+                ProtobufUtil.setControllerException(controller, ioe);
+                return;
+            }
+            cache.invalidateLastDDLTimestampForTable(tenantID, schemaName, tableName);
+        }
+    }
+
+    @Override
+    public void invalidatePhoenixHACache(RpcController controller,
+            RegionServerEndpointProtos.InvalidatePhoenixHACacheRequest request,
+            RpcCallback<RegionServerEndpointProtos.InvalidatePhoenixHACacheResponse> done) {
+        LOGGER.info("PhoenixRegionServerEndpoint invalidating PhoenixHACache");
+        ServerMetadataCache cache;
+        try {
+            cache = getServerMetadataCache();
+            cache.invalidatePhoenixHACache();
+        } catch (Throwable t) {
+            String errorMsg = "Invalidating PhoenixHACache FAILED, check exception for "
+                    + "specific details";
+            LOGGER.error(errorMsg,  t);
+            IOException ioe = ClientUtil.createIOException(errorMsg, t);
+            ProtobufUtil.setControllerException(controller, ioe);
         }
     }
 
@@ -111,7 +149,7 @@ public class PhoenixRegionServerEndpoint
         return Collections.singletonList(this);
     }
 
-    public ServerMetadataCache getServerMetadataCache() {
+    public ServerMetadataCache getServerMetadataCache() throws Exception {
         return ServerMetadataCacheImpl.getInstance(conf);
     }
 }

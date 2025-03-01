@@ -59,13 +59,13 @@ public class ClusterRoleRecord {
      * take traffic, standby and offline do not, and unknown is used if the state cannot be determined.
      */
     public enum ClusterRole {
-        ACTIVE, STANDBY, OFFLINE, UNKNOWN;
+        ACTIVE, STANDBY, OFFLINE, UNKNOWN, ACTIVE_TO_STANDBY;
 
         /**
          * @return true if a cluster with this role can be connected, otherwise false
          */
         public boolean canConnect() {
-            return this == ACTIVE || this == STANDBY;
+            return this == ACTIVE || this == STANDBY || this == ACTIVE_TO_STANDBY;
         }
 
         public static ClusterRole from(byte[] bytes) {
