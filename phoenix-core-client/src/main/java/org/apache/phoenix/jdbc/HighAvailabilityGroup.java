@@ -439,13 +439,9 @@ public class HighAvailabilityGroup {
         if (jdbcUrl.startsWith(PhoenixRuntime.JDBC_PROTOCOL)) {
             jdbcUrl = jdbcUrl.substring(PhoenixRuntime.JDBC_PROTOCOL.length() + 1);
         }
-        System.out.println("1" + jdbcUrl);
         Preconditions.checkArgument(!StringUtils.isEmpty(jdbcUrl), "JDBC url is empty!");
-        System.out.println("2" + jdbcUrl);
         jdbcUrl = jdbcUrl.replaceAll("\\\\:", "=");
-        System.out.println("3" + jdbcUrl);
         String[] parts = jdbcUrl.split(":");
-        System.out.println("4" + Arrays.toString(parts));
         if (parts.length == 0 || parts.length > 4) {
             throw new IllegalArgumentException("Invalid JDBC url!" + jdbcUrl);
         }

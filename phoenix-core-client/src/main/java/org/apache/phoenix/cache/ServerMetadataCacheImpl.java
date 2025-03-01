@@ -94,11 +94,9 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
                 .build();
         this.mutationBlockEnabled = conf.getBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED,
                 DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED);
-        System.out.println("RG" + this.mutationBlockEnabled);
         // Only initialize this cache if CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is enabled
         if(this.mutationBlockEnabled) {
             this.phoenixHACache = PhoenixHACache.getInstance(conf);
-            System.out.println("RG" + this.phoenixHACache);
         }
     }
 
