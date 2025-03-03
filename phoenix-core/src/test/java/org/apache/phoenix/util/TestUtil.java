@@ -59,22 +59,26 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.stream.Collectors;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.CompactionState;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.CoprocessorDescriptor;
 import org.apache.hadoop.hbase.client.CoprocessorDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Delete;
 
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -220,7 +224,7 @@ public class TestUtil {
     public final static String ROW7 = "00B723122312312";
     public final static String ROW8 = "00B823122312312";
     public final static String ROW9 = "00C923122312312";
-    
+
     public final static String PARENTID1 = "0500x0000000001";
     public final static String PARENTID2 = "0500x0000000002";
     public final static String PARENTID3 = "0500x0000000003";
@@ -230,9 +234,9 @@ public class TestUtil {
     public final static String PARENTID7 = "0500x0000000007";
     public final static String PARENTID8 = "0500x0000000008";
     public final static String PARENTID9 = "0500x0000000009";
-    
+
     public final static List<String> PARENTIDS = Lists.newArrayList(PARENTID1, PARENTID2, PARENTID3, PARENTID4, PARENTID5, PARENTID6, PARENTID7, PARENTID8, PARENTID9);
-    
+
     public final static String ENTITYHISTID1 = "017x00000000001";
     public final static String ENTITYHISTID2 = "017x00000000002";
     public final static String ENTITYHISTID3 = "017x00000000003";
@@ -244,7 +248,7 @@ public class TestUtil {
     public final static String ENTITYHISTID9 = "017x00000000009";
 
     public final static List<String> ENTITYHISTIDS = Lists.newArrayList(ENTITYHISTID1, ENTITYHISTID2, ENTITYHISTID3, ENTITYHISTID4, ENTITYHISTID5, ENTITYHISTID6, ENTITYHISTID7, ENTITYHISTID8, ENTITYHISTID9);
-    
+
     public static final String LOCALHOST = "localhost";
     public static final String PHOENIX_JDBC_URL = JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + LOCALHOST + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
     public static final String PHOENIX_CONNECTIONLESS_JDBC_URL = JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + CONNECTIONLESS + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
@@ -897,7 +901,7 @@ public class TestUtil {
             if (table.isTransactional()) {
                 mutationState.commit();
             }
-        
+
             Admin hbaseAdmin = services.getAdmin();
             hbaseAdmin.flush(TableName.valueOf(tableName));
             hbaseAdmin.majorCompact(TableName.valueOf(tableName));
@@ -910,7 +914,7 @@ public class TestUtil {
                 scan.withStartRow(markerRowKey);
                 scan.withStopRow(Bytes.add(markerRowKey, new byte[]{0}));
                 scan.setRaw(true);
-        
+
                 try (Table htableForRawScan = services.getTable(Bytes.toBytes(tableName))) {
                     ResultScanner scanner = htableForRawScan.getScanner(scan);
                     List<Result> results = Lists.newArrayList(scanner);
@@ -1448,6 +1452,73 @@ public class TestUtil {
         // We cannot use java.nio.file.Files.createTempDirectory(null),
         // because that caches the value of "java.io.tmpdir" on class load.
         return Files.createTempDirectory(Paths.get(System.getProperty("java.io.tmpdir")), null);
+    }
+
+    /**
+     * Split the table at the provided split point.
+     */
+    public static void splitTable(Connection conn, String tableName, byte[] splitPoint)
+            throws Exception {
+        executeHBaseTableRegionOperation(conn, tableName, (admin, regionLocator, nRegions) -> {
+            admin.split(TableName.valueOf(tableName), splitPoint);
+            waitForRegionChange(regionLocator, nRegions);
+        });
+    }
+
+    /**
+     * Merge the given regions of a table.
+     */
+    public static void mergeTableRegions(Connection conn, String tableName, List<String> regions)
+            throws Exception {
+        byte[][] regionsToMerge = regions.stream()
+                .map(String::getBytes)
+                .toArray(byte[][]::new);
+
+        executeHBaseTableRegionOperation(conn, tableName, (admin, regionLocator, nRegions) -> {
+            admin.mergeRegionsAsync(regionsToMerge, true);
+            waitForRegionChange(regionLocator, nRegions);
+        });
+    }
+
+    @FunctionalInterface
+    private interface TableOperation {
+        void execute(Admin admin, RegionLocator regionLocator, int initialRegionCount)
+                throws Exception;
+    }
+
+    private static void executeHBaseTableRegionOperation(Connection conn, String tableName,
+                                                     TableOperation operation) throws Exception {
+        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        Configuration configuration = services.getConfiguration();
+        org.apache.hadoop.hbase.client.Connection hbaseConn
+                = ConnectionFactory.createConnection(configuration);
+        Admin admin = services.getAdmin();
+        RegionLocator regionLocator = hbaseConn.getRegionLocator(TableName.valueOf(tableName));
+        int nRegions = regionLocator.getAllRegionLocations().size();
+        operation.execute(admin, regionLocator, nRegions);
+
+    }
+
+    private static void waitForRegionChange(RegionLocator regionLocator, int initialRegionCount)
+            throws Exception {
+        int retryCount = 0;
+        while (retryCount < 20
+                && regionLocator.getAllRegionLocations().size() == initialRegionCount) {
+            Thread.sleep(5000);
+            retryCount++;
+        }
+        Assert.assertNotEquals(regionLocator.getAllRegionLocations().size(), initialRegionCount);
+    }
+
+    public static List<HRegionLocation> getAllTableRegions(Connection conn, String tableName)
+            throws Exception {
+        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        Configuration configuration = services.getConfiguration();
+        RegionLocator regionLocator;
+        org.apache.hadoop.hbase.client.Connection hbaseConn
+                = ConnectionFactory.createConnection(configuration);
+        regionLocator = hbaseConn.getRegionLocator(TableName.valueOf(tableName));
+        return regionLocator.getAllRegionLocations();
     }
 
 }

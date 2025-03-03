@@ -26,6 +26,7 @@ import java.util.Properties;
 
 import javax.annotation.Nullable;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.phoenix.jdbc.AbstractRPCConnectionInfo;
 import org.apache.phoenix.jdbc.ClusterRoleRecord;

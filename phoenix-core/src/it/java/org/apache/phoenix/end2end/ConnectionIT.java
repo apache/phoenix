@@ -36,6 +36,7 @@ import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
+import org.apache.phoenix.jdbc.ZKConnectionInfo;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.query.ConfigurationFactory;
 import org.apache.phoenix.util.InstanceResolver;
@@ -58,6 +59,7 @@ public class ConnectionIT {
         conf = hbaseTestUtil.getConfiguration();
         setUpConfigForMiniCluster(conf);
         conf.set(HConstants.ZOOKEEPER_ZNODE_PARENT, "/hbase-test");
+        conf.set(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, ZKConnectionInfo.ZK_REGISTRY_NAME);
         hbaseTestUtil.startMiniCluster();
         Class.forName(PhoenixDriver.class.getName());
         DriverManager.registerDriver(new PhoenixTestDriver());

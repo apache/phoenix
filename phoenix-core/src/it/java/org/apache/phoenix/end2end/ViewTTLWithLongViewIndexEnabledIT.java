@@ -90,12 +90,16 @@ public class ViewTTLWithLongViewIndexEnabledIT extends BaseViewTTLIT {
         super.testMajorCompactWithVariousTenantIdTypesAndRegions(PLong.INSTANCE);
     }
     @Test
+    public void testMajorCompactTenantViewsWithVariousPKTypesAndSortOrder() throws Exception {
+        super.testMajorCompactTenantViewsWithVariousPKTypesAndSortOrder();
+    }
+    @Test
     public void testMajorCompactWhenTTLSetForSomeTenants() throws Exception {
         super.testMajorCompactWhenTTLSetForSomeTenants();
     }
     @Test
-    public void testTenantViewsWIthOverlappingRowPrefixes() throws Exception {
-        super.testTenantViewsWIthOverlappingRowPrefixes();
+    public void testTenantViewsWithOverlappingRowPrefixes() throws Exception {
+        super.testTenantViewsWithOverlappingRowPrefixes();
     }
     @Test
     public void testMajorCompactWithGlobalAndTenantViewHierarchy() throws Exception {

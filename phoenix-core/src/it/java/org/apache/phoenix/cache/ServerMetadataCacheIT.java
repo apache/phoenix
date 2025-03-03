@@ -39,6 +39,7 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -66,6 +67,14 @@ import java.util.Properties;
 import java.util.Random;
 
 import static org.apache.hadoop.hbase.coprocessor.CoprocessorHost.REGIONSERVER_COPROCESSOR_CONF_KEY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_DDL_TIMESTAMP;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.query.ConnectionQueryServicesImpl.INVALIDATE_SERVER_METADATA_CACHE_EX_MESSAGE;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -1851,6 +1860,33 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
                     0,
                     newMetricValues.getValidateDDLTimestampRequestsCount()
                             - oldMetricValues.getValidateDDLTimestampRequestsCount());
+        }
+    }
+
+    @Test
+    public void testLastDDLTimestampNotSetOnTable() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String tableName = generateUniqueName();
+        ConnectionQueryServices cqs1 = driver.getConnectionQueryServices(url1, props);
+        try (Connection conn1 = cqs1.connect(url1, props)) {
+            createTable(conn1, tableName);
+            // null out LAST_DDL_TIMESTAMP and clear client/server caches
+            String pkCols = TENANT_ID + ", " + TABLE_SCHEM +
+                    ", " + TABLE_NAME + ", " + COLUMN_NAME + ", " + COLUMN_FAMILY;
+            String upsertSql =
+                    "UPSERT INTO " + SYSTEM_CATALOG_NAME + " (" + pkCols + ", " +
+                            LAST_DDL_TIMESTAMP + ")" + " " +
+                            "SELECT " + pkCols + ", NULL FROM " + SYSTEM_CATALOG_NAME + " " +
+                            "WHERE " + TABLE_NAME + " " + " = '" + tableName + "'";
+            conn1.createStatement().executeUpdate(upsertSql);
+            conn1.commit();
+            conn1.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+
+            // refresh client's cache and query, it should not face NPE
+            PhoenixRuntime.getTableNoCache(conn1, tableName);
+            query(conn1, tableName);
+            Assert.assertNotNull(PhoenixRuntime.getTable(conn1, tableName).getLastDDLTimestamp());
         }
     }
 

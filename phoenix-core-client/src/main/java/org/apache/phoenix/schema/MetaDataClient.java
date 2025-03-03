@@ -985,6 +985,7 @@ public class MetaDataClient {
                 }
                 // only inherit columns view indexes (and not local indexes on regular tables which also have a viewIndexId)
                 if (hasIndexId && parentTable.getType() != PTableType.VIEW) {
+                    result.setTable(getPTableWithAncestorLastDDLTimestampMap(table, parentTable));
                     return false;
                 }
                 // if alwaysAddAncestorColumnsAndIndexes is false we only recalculate if the ancestor table or table
@@ -3655,7 +3656,7 @@ public class MetaDataClient {
 
             if ((rowKeyMatcher == null) ||
                     Bytes.compareTo(rowKeyMatcher, HConstants.EMPTY_BYTE_ARRAY) == 0) {
-                tableUpsert.setNull(38, Types.VARBINARY);
+                tableUpsert.setNull(38, PDataType.VARBINARY_ENCODED_TYPE);
             } else {
                 tableUpsert.setBytes(38, rowKeyMatcher);
             }

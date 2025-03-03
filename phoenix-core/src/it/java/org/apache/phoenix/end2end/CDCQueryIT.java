@@ -21,6 +21,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
+import org.apache.hbase.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -162,11 +163,14 @@ public class CDCQueryIT extends CDCBaseIT {
         return false;
     }
 
-    private void checkIndexPartitionIdCount(Connection conn, String cdcName) throws Exception {
+    private void checkIndexPartitionIdCount(Connection conn,
+                                            String tableName,
+                                            String cdcName) throws Exception {
+        // The number of partitions will be the number of non-empty salt buckets on the data table
+        int saltBuckets = getNonEmptySaltBucketCount(conn, tableName);
         // Verify that we can use retrieve partition ids
         ResultSet rs = conn.createStatement().executeQuery("SELECT PARTITION_ID() FROM "
                 + cdcName + " ORDER BY PARTITION_ID()");
-        int saltBuckets = tableSaltBuckets == null ? 1 : tableSaltBuckets;
         String[] partitionId = new String[saltBuckets];
         int[] countPerPartition = new int[saltBuckets];
         int partitionIndex = 0;
@@ -477,6 +481,11 @@ public class CDCQueryIT extends CDCBaseIT {
             for (Set<ChangeRow> batch: allBatches.get(tenantId)) {
                 changes.addAll(batch);
             }
+            long currentTime = System.currentTimeMillis();
+            long nextTime = changes.get(changes.size() - 1).getTimestamp() + 1;
+            if (nextTime > currentTime) {
+                Thread.sleep(nextTime - currentTime);
+            }
             verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
                     addPartitionInList(conn, cdcFullName,"SELECT * FROM " + cdcFullName)),
                     datatableName, dataColumns, changes, CHANGE_IMG);
@@ -493,8 +502,25 @@ public class CDCQueryIT extends CDCBaseIT {
                             "SELECT /*+ CDC_INCLUDE(CHANGE, PRE, POST) */ * FROM " + cdcFullName)),
                     datatableName, dataColumns, changes, ALL_IMG);
             cdcIndexShouldNotBeUsedForDataTableQueries(conn, tableName, cdcName);
-            checkIndexPartitionIdCount(conn, cdcFullName);
+            checkIndexPartitionIdCount(conn, tableName, cdcFullName);
         }
+    }
+
+    private int getNonEmptySaltBucketCount(Connection conn, String tableName) throws SQLException {
+        if (tableSaltBuckets == null) {
+            return 1;
+        }
+        Set<String> nonEmptySaltBuckets = Sets.newHashSet();
+        String query = "SELECT /*+ NO_INDEX */ ROWKEY_BYTES_STRING() FROM " + tableName;
+        try (ResultSet rs = conn.createStatement().executeQuery(query)) {
+            while (rs.next()) {
+                String rowKey = rs.getString(1); // StringBinary format
+                // the first 4 bytes will have the salt bucket id like "\x02"
+                String bucketID = rowKey.substring(0,4);
+                nonEmptySaltBuckets.add(bucketID);
+            }
+        }
+        return nonEmptySaltBuckets.size();
     }
 
     private void _testSelectCDCImmutable(PTable.ImmutableStorageScheme immutableStorageScheme)
