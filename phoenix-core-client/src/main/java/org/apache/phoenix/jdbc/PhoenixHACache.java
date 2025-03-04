@@ -43,6 +43,8 @@ import java.util.Set;
 import java.util.HashSet;
 
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
+import static org.apache.phoenix.query.QueryServices.HA_CACHE_TTL_MS;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_HA_CACHE_TTL_IN_MS;
 
 /**
  * Write-through cache for PhoenixHA.
@@ -54,8 +56,6 @@ public class PhoenixHACache implements Closeable {
     private final PhoenixHAAdmin phoenixHaAdmin;
     private Cache<String, ClusterRoleRecord> haGroupClusterRoleRecordMap = null;
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixHACache.class);
-    private static final String HA_CACHE_TTL_MS = "phoenix.ha.cache.ttl.ms";
-    private static final long DEFAULT_HA_CACHE_TTL_IN_MS = 10 * 60 * 1000L; // 10 minutes
     private final Set<String> activeToStandbyHAGroups = new HashSet<>();
 
     /**

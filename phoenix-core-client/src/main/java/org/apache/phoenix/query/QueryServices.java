@@ -384,6 +384,7 @@ public interface QueryServices extends SQLCloseable {
     // Enable cluster role based mutation blocking
     public static final String CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED
             = "phoenix.cluster.role.based.mutation.block.enabled";
+    public static final String HA_CACHE_TTL_MS = "phoenix.ha.cache.ttl.ms";
 
     // Before 4.15 when we created a view we included the parent table column metadata in the view
     // metadata. After PHOENIX-3534 we allow SYSTEM.CATALOG to split and no longer store the parent

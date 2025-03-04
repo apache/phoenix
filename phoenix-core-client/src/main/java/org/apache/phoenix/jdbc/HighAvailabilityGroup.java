@@ -49,7 +49,12 @@ import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.*;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -450,7 +455,7 @@ public class HighAvailabilityGroup {
         Preconditions.checkArgument(!StringUtils.isEmpty(jdbcUrl), "JDBC url is empty!");
         jdbcUrl = jdbcUrl.replaceAll("\\\\:", "=");
         String[] parts = jdbcUrl.split(":");
-        if (parts.length == 0 || parts.length > 4) {
+        if (parts.length == 0 || parts.length > 3) {
             throw new IllegalArgumentException("Invalid JDBC url!" + jdbcUrl);
         }
         // The URL is already normalised

@@ -42,6 +42,7 @@ import java.util.*;
  * Helper class to update cluster role record for a ZK cluster.
  * The ZK client this accessor has is confined to a single ZK cluster, but it can be used to operate
  * multiple HA groups that are associated with this cluster.
+ * This is not thread-safe yet. Multiple threads can update CRRs at same time potentially causing inconsistency.
  */
 public class PhoenixHAAdmin implements Closeable {
 
