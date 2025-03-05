@@ -43,6 +43,7 @@ public class PhoenixHACacheIT extends BaseTest {
 
     private final PhoenixHAAdmin haAdmin = new PhoenixHAAdmin(config);
     private static final Long CACHE_TTL_MS = 30*1000L;
+    private static final Long ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS = 1000L;
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -67,7 +68,7 @@ public class PhoenixHACacheIT extends BaseTest {
                 HighAvailabilityPolicy.FAILOVER, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE,
                 "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 1L);
         haAdmin.createOrUpdateDataOnZookeeper(crr);
-        Thread.sleep(1000);
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         assertFalse(phoenixHACache.isClusterInActiveToStandby());
 
         // Now Update CRR so that current cluster has state ACTIVE_TO_STANDBY
@@ -76,7 +77,7 @@ public class PhoenixHACacheIT extends BaseTest {
                 "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 2L);
         haAdmin.createOrUpdateDataOnZookeeper(crr);
 
-        Thread.sleep(1000);
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         // Check that now the cluster should be in ActiveToStandby
         assert phoenixHACache.isClusterInActiveToStandby();
 
@@ -87,7 +88,7 @@ public class PhoenixHACacheIT extends BaseTest {
                 "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 3L);
         haAdmin.createOrUpdateDataOnZookeeper(crr);
 
-        Thread.sleep(1000);
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         assertFalse(phoenixHACache.isClusterInActiveToStandby());
 
 
@@ -97,7 +98,7 @@ public class PhoenixHACacheIT extends BaseTest {
                 "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 4L);
         haAdmin.createOrUpdateDataOnZookeeper(crr);
 
-        Thread.sleep(1000);
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         assert phoenixHACache.isClusterInActiveToStandby();
 
 
@@ -107,7 +108,7 @@ public class PhoenixHACacheIT extends BaseTest {
                 "random-zk-url", ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY, 5L);
         haAdmin.createOrUpdateDataOnZookeeper(crr);
 
-        Thread.sleep(1000);
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         assertFalse(phoenixHACache.isClusterInActiveToStandby());
     }
 
@@ -125,7 +126,7 @@ public class PhoenixHACacheIT extends BaseTest {
         haAdmin.createOrUpdateDataOnZookeeper(crr1);
         haAdmin.createOrUpdateDataOnZookeeper(crr2);
 
-        Thread.sleep(1000);
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         assertFalse(phoenixHACache.isClusterInActiveToStandby());
 
         // Now Update CRR so that current cluster has state ACTIVE_TO_STANDBY for only 1 crr
@@ -138,7 +139,7 @@ public class PhoenixHACacheIT extends BaseTest {
         haAdmin.createOrUpdateDataOnZookeeper(crr1);
         haAdmin.createOrUpdateDataOnZookeeper(crr2);
 
-        Thread.sleep(1000);
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         // Check that now the cluster should be in ActiveToStandby
         assert phoenixHACache.isClusterInActiveToStandby();
 
@@ -153,7 +154,7 @@ public class PhoenixHACacheIT extends BaseTest {
         haAdmin.createOrUpdateDataOnZookeeper(crr1);
         haAdmin.createOrUpdateDataOnZookeeper(crr2);
 
-        Thread.sleep(1000);
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         assertFalse(phoenixHACache.isClusterInActiveToStandby());
 
 
@@ -167,7 +168,7 @@ public class PhoenixHACacheIT extends BaseTest {
         haAdmin.createOrUpdateDataOnZookeeper(crr1);
         haAdmin.createOrUpdateDataOnZookeeper(crr2);
 
-        Thread.sleep(1000);
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         assert phoenixHACache.isClusterInActiveToStandby();
 
 
@@ -181,7 +182,7 @@ public class PhoenixHACacheIT extends BaseTest {
         haAdmin.createOrUpdateDataOnZookeeper(crr1);
         haAdmin.createOrUpdateDataOnZookeeper(crr2);
 
-        Thread.sleep(1000);
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         assertFalse(phoenixHACache.isClusterInActiveToStandby());
     }
 
@@ -196,11 +197,11 @@ public class PhoenixHACacheIT extends BaseTest {
                 "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 1L);
         haAdmin.createOrUpdateDataOnZookeeper(crr1);
         haAdmin.createOrUpdateDataOnZookeeper(crr2);
-        Thread.sleep(1000);
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         assert phoenixHACache.isClusterInActiveToStandby();
         //Now we delete one of the CRR which is in ACTIVE_TO_STANDBY state
         haAdmin.getCurator().delete().forPath(toPath("parallel"));
-        Thread.sleep(1000);
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         assertFalse(phoenixHACache.isClusterInActiveToStandby());
 
 

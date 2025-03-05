@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.cache;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Properties;
@@ -165,7 +166,7 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
     }
 
     @Override
-    public void invalidatePhoenixHACache() throws Exception {
+    public void invalidatePhoenixHACache() throws SQLException, IOException {
         if (phoenixHACache != null) {
             phoenixHACache.rebuild(null);
         }

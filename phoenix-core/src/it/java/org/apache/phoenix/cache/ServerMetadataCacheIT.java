@@ -97,6 +97,7 @@ import static org.mockito.Mockito.verify;
 public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
 
     private final Random RANDOM = new Random(42);
+    private final Long ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS = 1000L;
 
     private static ServerName serverName;
 
@@ -172,14 +173,14 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         haAdmin.createOrUpdateDataOnZookeeper(crr1);
         haAdmin.createOrUpdateDataOnZookeeper(crr2);
 
-        Thread.sleep(1000L);
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         assert cache.isMutationBlocked();
 
         // Cleanup the cache to delete all entries
         haAdmin.getCurator().delete().forPath(toPath("failover"));
         haAdmin.getCurator().delete().forPath(toPath("parallel"));
 
-        Thread.sleep(1000L);
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         assertFalse(cache.isMutationBlocked());
 
         // Create new entries again
@@ -192,7 +193,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         haAdmin.createOrUpdateDataOnZookeeper(crr1);
         haAdmin.createOrUpdateDataOnZookeeper(crr2);
 
-        Thread.sleep(1000L);
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         assertFalse(cache.isMutationBlocked());
 
 
@@ -206,14 +207,14 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         haAdmin.createOrUpdateDataOnZookeeper(crr1);
         haAdmin.createOrUpdateDataOnZookeeper(crr2);
 
-        Thread.sleep(1000L);
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         assert cache.isMutationBlocked();
 
         // Cleanup the cache to delete all entries
         haAdmin.getCurator().delete().forPath(toPath("failover"));
         haAdmin.getCurator().delete().forPath(toPath("parallel"));
 
-        Thread.sleep(1000L);
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         assertFalse(cache.isMutationBlocked());
     }
 
