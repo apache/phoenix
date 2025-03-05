@@ -166,7 +166,7 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
     }
 
     @Override
-    public void invalidatePhoenixHACache() throws SQLException, IOException {
+    public void invalidatePhoenixHACache() throws Exception {
         if (phoenixHACache != null) {
             phoenixHACache.rebuild(null);
         }
