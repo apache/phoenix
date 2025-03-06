@@ -17,13 +17,9 @@
  */
 package org.apache.phoenix.schema;
 
-import java.io.IOException;
 import java.sql.SQLException;
-import java.util.List;
 import java.util.Map;
 
-import org.apache.hadoop.hbase.Cell;
-import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.CreateTableStatement;
 
@@ -63,7 +59,7 @@ public interface TTLExpression {
      * Compile the TTL expression so that it can be evaluated against of a row of cells
      * @param connection Phoenix connection
      * @param table PTable
-     * @return
+     * @return CompiledTTLExpression object
      * @throws SQLException
      */
     CompiledTTLExpression compileTTLExpression(PhoenixConnection connection,
