@@ -103,18 +103,24 @@ public class ClusterRoleRecord {
                              @JsonProperty("role1") ClusterRole role1,
                              @JsonProperty("url2") String url2,
                              @JsonProperty("role2") ClusterRole role2,
-                             @JsonProperty("version") long version) {
+                             @JsonProperty("version") long version,
+                             @JsonProperty("zk1") String zk1, //Deprecated
+                             @JsonProperty("zk2") String zk2) {
         this.haGroupName = haGroupName;
         this.policy = policy;
         this.registryType = registryType != null ? registryType : RegistryType.ZK;
+
+        String resolvedUrl1 = (url1 != null) ? url1 : zk1; //For Backward Compatibility
+        String resolvedUrl2 = (url2 != null) ? url2 : zk2; //For Backward Compatibility
+
         //Do we really need to normalize here ?
         //We are normalizing to have urls in specific formats for each registryType for getting
         //accurate comparisons. We are passing registryType as these url most probably won't have
         //protocol in url, and it might be normalized based to wrong registry type, as we normalize
         //w.r.t {@link ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY}
         //but considering source of truth of registryType is present on roleRecord.
-        url1 = JDBCUtil.formatUrl(url1, this.registryType);
-        url2 = JDBCUtil.formatUrl(url2, this.registryType);
+        url1 = JDBCUtil.formatUrl(resolvedUrl1, this.registryType);
+        url2 = JDBCUtil.formatUrl(resolvedUrl2, this.registryType);
 
         Preconditions.checkArgument(!url1.equals(url2), "Two clusters have the same URLS!");
         // Ignore the given order of url1 and url2
@@ -136,9 +142,16 @@ public class ClusterRoleRecord {
                              String url1, ClusterRole role1,
                              String url2, ClusterRole role2,
                              long version) {
-        this(haGroupName, policy, RegistryType.ZK, url1, role1, url2, role2, version);
+        this(haGroupName, policy, RegistryType.ZK, url1, role1, url2, role2, version, null, null);
     }
 
+    public ClusterRoleRecord(String haGroupName, HighAvailabilityPolicy policy,
+                             RegistryType registryType,
+                             String url1, ClusterRole role1,
+                             String url2, ClusterRole role2,
+                             long version) {
+        this(haGroupName, policy, registryType, url1, role1, url2, role2, version, null, null);
+    }
 
     public static Optional<ClusterRoleRecord> fromJson(byte[] bytes) {
         if (bytes == null) {
@@ -270,9 +283,9 @@ public class ClusterRoleRecord {
                 + "haGroupName='" + haGroupName + '\''
                 + ", policy=" + policy
                 + ", registryType=" + registryType
-                + ", zk1='" + url1 + '\''
+                + ", url1='" + url1 + '\''
                 + ", role1=" + role1
-                + ", zk2='" + url2 + '\''
+                + ", url2='" + url2 + '\''
                 + ", role2=" + role2
                 + ", version=" + version
                 + '}';

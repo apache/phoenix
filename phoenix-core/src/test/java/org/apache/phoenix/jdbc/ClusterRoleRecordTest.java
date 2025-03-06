@@ -24,11 +24,16 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Optional;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.output.ByteArrayOutputStream;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.util.JacksonUtil;
@@ -88,6 +93,20 @@ public class ClusterRoleRecordTest {
         String fileName = createJsonFileWithRecords(record);
         String fileContent = FileUtils.readFileToString(new File(fileName), "UTF-8");
         assertTrue(fileContent.contains(record.getHaGroupName()));
+    }
+
+    @Test
+    public void testOldFormatCompatibility() throws IOException {
+        String oldFormatPath = "json/test_role_record_old_format.json";
+        String newFormatPath = "json/test_role_record.json";
+        byte[] oldFormat = readFile(oldFormatPath);
+        byte[] newFormat = readFile(newFormatPath);
+        assertFalse(Arrays.equals(oldFormat, newFormat));
+
+        ClusterRoleRecord oldFormatCRR = ClusterRoleRecord.fromJson(oldFormat).get();
+        ClusterRoleRecord newFormatCRR = ClusterRoleRecord.fromJson(newFormat).get();
+        assertEquals(oldFormatCRR, newFormatCRR);
+
     }
 
     @Test
@@ -263,5 +282,17 @@ public class ClusterRoleRecordTest {
             default:
                 return url + "::/hbase";
         }
+    }
+
+    private byte[] readFile(String fileName) throws IOException {
+        InputStream inputStream = ClusterRoleRecordTest.class.getClassLoader().getResourceAsStream(fileName);
+        assert inputStream != null;
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        byte[] temp = new byte[1024];
+        int bytesRead;
+        while ((bytesRead = inputStream.read(temp)) != -1) {
+            buffer.write(temp, 0, bytesRead);
+        }
+        return buffer.toByteArray();
     }
 }
