@@ -40,7 +40,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.HashSet;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.apache.phoenix.query.QueryServices.HA_CACHE_TTL_MS;
@@ -54,9 +54,10 @@ public class PhoenixHACache implements Closeable {
 
     private static PhoenixHACache cacheInstance;
     private final PhoenixHAAdmin phoenixHaAdmin;
+    // Thread-Safe as per https://www.javadoc.io/doc/com.google.guava/guava/20.0/com/google/common/cache/Cache.html
     private Cache<String, ClusterRoleRecord> haGroupClusterRoleRecordMap = null;
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixHACache.class);
-    private final Set<String> activeToStandbyHAGroups = new HashSet<>();
+    private final Set<String> activeToStandbyHAGroups = ConcurrentHashMap.newKeySet();
 
     /**
      * Creates/gets an instance of PhoenixHACache.
