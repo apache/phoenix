@@ -266,8 +266,7 @@ public class PhoenixHACacheIT extends BaseTest {
         haAdmin.createOrUpdateDataOnZookeeper(crr2);
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-
-        threadCount = 10;
+        
         final CountDownLatch latch2 = new CountDownLatch(threadCount);
         executor = Executors.newFixedThreadPool(threadCount);
         for (int i = 0; i < threadCount; i++) {
