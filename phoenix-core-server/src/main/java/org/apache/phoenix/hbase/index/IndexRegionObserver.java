@@ -18,16 +18,6 @@
 package org.apache.phoenix.hbase.index;
 
 
-import static org.apache.hadoop.hbase.HConstants.OperationStatusCode.SUCCESS;
-import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.applyNew;
-import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.removeColumn;
-import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.UPSERT_CF;
-import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.UPSERT_STATUS_CQ;
-import static org.apache.phoenix.hbase.index.util.IndexManagementUtil.rethrowIndexingException;
-import static org.apache.phoenix.index.PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB;
-import static org.apache.phoenix.index.PhoenixIndexBuilderHelper.RETURN_RESULT;
-import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
-
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.EOFException;
@@ -147,6 +137,16 @@ import org.apache.phoenix.util.ServerIndexUtil;
 import org.apache.phoenix.util.ServerUtil.ConnectionType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static org.apache.hadoop.hbase.HConstants.OperationStatusCode.SUCCESS;
+import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.applyNew;
+import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.removeColumn;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.UPSERT_CF;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.UPSERT_STATUS_CQ;
+import static org.apache.phoenix.hbase.index.util.IndexManagementUtil.rethrowIndexingException;
+import static org.apache.phoenix.index.PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB;
+import static org.apache.phoenix.index.PhoenixIndexBuilderHelper.RETURN_RESULT;
+import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
 /**
  * Do all the work of managing index updates from a single coprocessor. All Puts/Delets are passed

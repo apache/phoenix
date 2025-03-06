@@ -160,9 +160,9 @@ public interface IndexBuilder extends Stoppable {
   boolean returnResult(Mutation m);
 
   /**
-   * True if mutation has a Condtional TTL expression
+   * True if mutation has a Conditional TTL expression
    * @param m Mutation object
-   * @return True if mutation has a Condtional TTL expression, False otherwise
+   * @return True if mutation has a Conditional TTL expression, False otherwise
    */
   boolean hasConditionalTTL(Mutation m);
 

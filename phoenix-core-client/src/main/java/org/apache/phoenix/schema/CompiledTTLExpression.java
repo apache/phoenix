@@ -66,7 +66,7 @@ public interface CompiledTTLExpression {
 
     /**
      * Serialize the TTLExpression to protobuf
-     * @return
+     * @return Protobuf representation of the ttl expression
      * @throws SQLException
      * @throws IOException
      */

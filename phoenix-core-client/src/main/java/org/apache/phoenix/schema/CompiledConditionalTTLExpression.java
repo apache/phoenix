@@ -148,7 +148,7 @@ public class CompiledConditionalTTLExpression implements CompiledTTLExpression {
      * This is needed to correctly handle updates to the index row when some columns
      * are set to null and thus are not updated but an older version of the same column
      * might have a valid value. Since TTLRegionScanner evaluates the row before GlobalIndexChecker
-     * processes the row we need to maks such columns in TTLRegionScanner also for correctness.
+     * processes the row we need to mask such columns in TTLRegionScanner also for correctness.
      * @return
      */
     private List<Cell> maskOlderCells(List<Cell> cellList) {

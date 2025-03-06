@@ -17,19 +17,6 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import static org.apache.phoenix.coprocessor.CompactionScanner.MatcherType.GLOBAL_INDEXES;
-import static org.apache.phoenix.coprocessor.CompactionScanner.MatcherType.GLOBAL_VIEWS;
-import static org.apache.phoenix.coprocessor.CompactionScanner.MatcherType.TENANT_INDEXES;
-import static org.apache.phoenix.coprocessor.CompactionScanner.MatcherType.TENANT_VIEWS;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAMESPACE_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
-import static org.apache.phoenix.query.QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX;
-import static org.apache.phoenix.query.QueryServices.PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT;
-import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
-import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_DEFINED;
-import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
-
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -111,6 +98,19 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ViewUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static org.apache.phoenix.coprocessor.CompactionScanner.MatcherType.GLOBAL_INDEXES;
+import static org.apache.phoenix.coprocessor.CompactionScanner.MatcherType.GLOBAL_VIEWS;
+import static org.apache.phoenix.coprocessor.CompactionScanner.MatcherType.TENANT_INDEXES;
+import static org.apache.phoenix.coprocessor.CompactionScanner.MatcherType.TENANT_VIEWS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAMESPACE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
+import static org.apache.phoenix.query.QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_DEFINED;
+import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
 /**
  * The store scanner that implements compaction for Phoenix. Phoenix coproc overrides the scan
@@ -1084,9 +1084,10 @@ public class CompactionScanner implements InternalScanner {
                                             viewIndexIdBytes =
                                                     PLong.INSTANCE.toBytes(index.getViewIndexId());
                                         }
+                                        PhoenixConnection pcon =
+                                                tableConnection.unwrap(PhoenixConnection.class);
                                         CompiledTTLExpression indexTTL =
-                                                index.getCompiledTTLExpression(tableConnection
-                                                        .unwrap(PhoenixConnection.class));
+                                                index.getCompiledTTLExpression(pcon);
                                         tableTTLInfoList.add(
                                                 new TableTTLInfo(pTable.getPhysicalName().getBytes(),
                                                         tenantIdBytes, index.getTableName().getBytes(),
@@ -1106,7 +1107,7 @@ public class CompactionScanner implements InternalScanner {
                                                 .unwrap(PhoenixConnection.class));
                                     }
                                 } else {
-                                    compiledExpr = (LiteralTTLExpression)viewTTL;
+                                    compiledExpr = (LiteralTTLExpression) viewTTL;
                                 }
                                 tableTTLInfoList.add(
                                         new TableTTLInfo(physicalTableName.getBytes(),
