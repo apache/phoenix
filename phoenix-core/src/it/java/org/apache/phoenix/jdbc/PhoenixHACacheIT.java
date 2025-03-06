@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.jdbc;
 
-import org.apache.curator.framework.CuratorFramework;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -27,10 +26,12 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.junit.Assert.assertFalse;
@@ -222,11 +223,67 @@ public class PhoenixHACacheIT extends BaseTest {
         assert phoenixHACache.isClusterInActiveToStandby();
     }
 
+    @Test
+    public void testMultiThreadedAccessToHACache() throws Exception {
+        // Setup initial CRRs
+        ClusterRoleRecord crr1 = new ClusterRoleRecord("failover",
+                HighAvailabilityPolicy.FAILOVER, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 1L);
+        ClusterRoleRecord crr2 = new ClusterRoleRecord("parallel",
+                HighAvailabilityPolicy.PARALLEL, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 1L);
+        haAdmin.createOrUpdateDataOnZookeeper(crr1);
+        haAdmin.createOrUpdateDataOnZookeeper(crr2);
 
-    private static CuratorFramework getCurator() throws IOException {
-        String zkurl = "127.0.0.1:" + getZKClientPort(config);
-        return HighAvailabilityGroup.getCurator(zkurl, new Properties());
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+
+        int threadCount = 10;
+        final CountDownLatch latch = new CountDownLatch(threadCount);
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        for (int i = 0; i < threadCount; i++) {
+            executor.submit(() -> {
+                try {
+                    PhoenixHACache phoenixHACache = PhoenixHACache.getInstance(config);
+                    assertFalse(phoenixHACache.isClusterInActiveToStandby());
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+        latch.await(10, TimeUnit.SECONDS);
+        assert latch.getCount() == 0;
+
+        // Update CRRs
+        crr1 = new ClusterRoleRecord("failover",
+                HighAvailabilityPolicy.FAILOVER, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 2L);
+        crr2 = new ClusterRoleRecord("parallel",
+                HighAvailabilityPolicy.PARALLEL, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 2L);
+        haAdmin.createOrUpdateDataOnZookeeper(crr1);
+        haAdmin.createOrUpdateDataOnZookeeper(crr2);
+
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+
+        threadCount = 10;
+        final CountDownLatch latch2 = new CountDownLatch(threadCount);
+        executor = Executors.newFixedThreadPool(threadCount);
+        for (int i = 0; i < threadCount; i++) {
+            executor.submit(() -> {
+                try {
+                    PhoenixHACache phoenixHACache = PhoenixHACache.getInstance(config);
+                    assert phoenixHACache.isClusterInActiveToStandby();
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                } finally {
+                    latch2.countDown();
+                }
+            });
+        }
+        latch2.await(10, TimeUnit.SECONDS);
+        assert latch2.getCount() == 0;
     }
-
 
 }
