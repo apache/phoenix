@@ -185,4 +185,7 @@ public class IndexBuildManager implements Stoppable {
     return delegate.returnResult(m);
   }
 
+  public boolean hasConditionalTTL(Mutation m) {
+    return delegate.hasConditionalTTL(m);
+  }
 }
