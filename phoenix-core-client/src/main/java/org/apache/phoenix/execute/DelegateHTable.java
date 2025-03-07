@@ -23,8 +23,6 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.CompareOperator;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Append;
 import org.apache.hadoop.hbase.client.CheckAndMutate;
@@ -38,13 +36,11 @@ import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Row;
-import org.apache.hadoop.hbase.client.RowMutations;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.coprocessor.Batch.Call;
 import org.apache.hadoop.hbase.client.coprocessor.Batch.Callback;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcChannel;
 import org.apache.phoenix.compat.hbase.CompatDelegateHTable;
 
@@ -70,18 +66,8 @@ public class DelegateHTable extends CompatDelegateHTable implements Table {
     }
 
     @Override
-    public HTableDescriptor getTableDescriptor() throws IOException {
-        return delegate.getTableDescriptor();
-    }
-
-    @Override
     public boolean exists(Get get) throws IOException {
         return delegate.exists(get);
-    }
-
-    @Override
-    public boolean[] existsAll(List<Get> gets) throws IOException {
-        return delegate.existsAll(gets);
     }
 
     @Override
@@ -132,18 +118,6 @@ public class DelegateHTable extends CompatDelegateHTable implements Table {
     }
 
     @Override
-    public boolean checkAndPut(byte[] row, byte[] family, byte[] qualifier, byte[] value, Put put)
-            throws IOException {
-        return delegate.checkAndPut(row, family, qualifier, value, put);
-    }
-
-    @Override
-    public boolean checkAndPut(byte[] row, byte[] family, byte[] qualifier, CompareOp compareOp,
-            byte[] value, Put put) throws IOException {
-        return delegate.checkAndPut(row, family, qualifier, compareOp, value, put);
-    }
-
-    @Override
     public void delete(Delete delete) throws IOException {
         delegate.delete(delete);
     }
@@ -151,18 +125,6 @@ public class DelegateHTable extends CompatDelegateHTable implements Table {
     @Override
     public void delete(List<Delete> deletes) throws IOException {
         delegate.delete(deletes);
-    }
-
-    @Override
-    public boolean checkAndDelete(byte[] row, byte[] family, byte[] qualifier, byte[] value,
-            Delete delete) throws IOException {
-        return delegate.checkAndDelete(row, family, qualifier, value, delete);
-    }
-
-    @Override
-    public boolean checkAndDelete(byte[] row, byte[] family, byte[] qualifier, CompareOp compareOp,
-            byte[] value, Delete delete) throws IOException {
-        return delegate.checkAndDelete(row, family, qualifier, compareOp, value, delete);
     }
 
     @Override
@@ -231,77 +193,8 @@ public class DelegateHTable extends CompatDelegateHTable implements Table {
     }
 
     @Override
-    public boolean checkAndMutate(byte[] row, byte[] family, byte[] qualifier, CompareOp compareOp,
-            byte[] value, RowMutations mutation) throws IOException {
-        return delegate.checkAndMutate(row, family, qualifier, compareOp, value, mutation);
-    }
-
-    @Override
-    public void setOperationTimeout(int operationTimeout) {
-        delegate.setOperationTimeout(operationTimeout);
-    }
-
-    @Override
-    public int getOperationTimeout() {
-        return delegate.getOperationTimeout();
-    }
-
-    @Override
-    public int getRpcTimeout() {
-        return delegate.getRpcTimeout();
-    }
-
-    @Override
-    public void setRpcTimeout(int rpcTimeout) {
-        delegate.setRpcTimeout(rpcTimeout);
-    }
-
-    @Override
     public TableDescriptor getDescriptor() throws IOException {
         return delegate.getDescriptor();
-    }
-
-    @Override
-    public boolean checkAndPut(byte[] row, byte[] family, byte[] qualifier, CompareOperator op,
-            byte[] value, Put put) throws IOException {
-        return delegate.checkAndPut(row, family, qualifier, op, value, put);
-    }
-
-    @Override
-    public boolean checkAndDelete(byte[] row, byte[] family, byte[] qualifier, CompareOperator op,
-            byte[] value, Delete delete) throws IOException {
-        return delegate.checkAndDelete(row, family, qualifier, op, value, delete);
-    }
-
-    @Override
-    public CheckAndMutateBuilder checkAndMutate(byte[] row, byte[] family) {
-        return delegate.checkAndMutate(row, family);
-    }
-
-    @Override
-    public boolean checkAndMutate(byte[] row, byte[] family, byte[] qualifier, CompareOperator op,
-            byte[] value, RowMutations mutation) throws IOException {
-        return delegate.checkAndMutate(row, family, qualifier, op, value, mutation);
-    }
-
-    @Override
-    public int getReadRpcTimeout() {
-        return delegate.getReadRpcTimeout();
-    }
-
-    @Override
-    public void setReadRpcTimeout(int readRpcTimeout) {
-        delegate.setReadRpcTimeout(readRpcTimeout);
-    }
-
-    @Override
-    public int getWriteRpcTimeout() {
-        return delegate.getWriteRpcTimeout();
-    }
-
-    @Override
-    public void setWriteRpcTimeout(int writeRpcTimeout) {
-        delegate.setWriteRpcTimeout(writeRpcTimeout);
     }
 
     @Override
