@@ -21,6 +21,7 @@ import org.apache.phoenix.end2end.ConnectionQueryServicesTestImpl;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.DelegateConnectionQueryServices;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableRef;
@@ -135,6 +136,9 @@ public class PhoenixTestDriverIT extends BaseTest {
              Connection conn2 = QueryUtil.getConnectionOnServer(props, config)) {
             ConnectionQueryServices cqs1 = conn1.unwrap(PhoenixConnection.class).getQueryServices();
             ConnectionQueryServices cqs2 = conn2.unwrap(PhoenixConnection.class).getQueryServices();
+            if (cqs2 instanceof DelegateConnectionQueryServices) {
+                cqs2 = ((DelegateConnectionQueryServices) cqs2).getDelegate();
+            }
             Assert.assertTrue(cqs1 instanceof ConnectionQueryServicesTestImpl);
             Assert.assertTrue(cqs2 instanceof ConnectionQueryServicesTestImpl);
             Assert.assertNotEquals("Server connection should have a different CQS.", cqs1, cqs2);
