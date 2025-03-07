@@ -17,11 +17,10 @@
  */
 package org.apache.phoenix.cache;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Properties;
-import java.util.concurrent.TimeUnit;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -29,16 +28,18 @@ import org.apache.phoenix.coprocessorclient.metrics.MetricsMetadataCachingSource
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixHACache;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
 import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
 import org.apache.phoenix.thirdparty.com.google.common.cache.RemovalListener;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 /**
  * This manages the cache for all the objects(data table, views, indexes) on each region server.
@@ -55,6 +56,8 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
     private static final long DEFAULT_PHOENIX_COPROC_REGIONSERVER_CACHE_SIZE = 10000L;
     private static volatile ServerMetadataCacheImpl cacheInstance;
     private MetricsMetadataCachingSource metricsSource;
+    private boolean mutationBlockEnabled;
+    private PhoenixHACache phoenixHACache;
 
     /**
      * Creates/gets an instance of ServerMetadataCache.
@@ -62,7 +65,7 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
      * @param conf configuration
      * @return cache
      */
-    public static ServerMetadataCacheImpl getInstance(Configuration conf) {
+    public static ServerMetadataCacheImpl getInstance(Configuration conf) throws Exception {
         ServerMetadataCacheImpl result = cacheInstance;
         if (result == null) {
             synchronized (ServerMetadataCacheImpl.class) {
@@ -75,7 +78,7 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
         return result;
     }
 
-    public ServerMetadataCacheImpl(Configuration conf) {
+    public ServerMetadataCacheImpl(Configuration conf) throws Exception {
         this.conf = HBaseConfiguration.create(conf);
         this.metricsSource = MetricsPhoenixCoprocessorSourceFactory
                                 .getInstance().getMetadataCachingSource();
@@ -90,7 +93,14 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
                 // maximum number of entries this cache can handle.
                 .maximumSize(maxSize)
                 .build();
+        this.mutationBlockEnabled = conf.getBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED,
+                DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED);
+        // Only initialize this cache if CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is enabled
+        if(this.mutationBlockEnabled) {
+            this.phoenixHACache = PhoenixHACache.getInstance(conf);
+        }
     }
+
 
     /**
      * Returns the last DDL timestamp from the table.
@@ -142,7 +152,7 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
      * @param schemaName schemaName
      * @param tableName tableName
      */
-    public void invalidate(byte[] tenantID, byte[] schemaName, byte[] tableName) {
+    public void invalidateLastDDLTimestampForTable(byte[] tenantID, byte[] schemaName, byte[] tableName) {
         LOGGER.info("Invalidating server metadata cache for tenantID: {}, schema: {},  table: {}",
                 Bytes.toString(tenantID), Bytes.toString(schemaName), Bytes.toString(tableName));
         byte[] tableKey = SchemaUtil.getTableKey(tenantID, schemaName, tableName);
@@ -150,7 +160,20 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
         lastDDLTimestampMap.invalidate(tableKeyPtr);
     }
 
+    @Override
+    public boolean isMutationBlocked() {
+        return mutationBlockEnabled && phoenixHACache != null && phoenixHACache.isClusterInActiveToStandby();
+    }
+
+    @Override
+    public void invalidatePhoenixHACache() throws Exception {
+        if (phoenixHACache != null) {
+            phoenixHACache.rebuild(null);
+        }
+    }
+
     protected Connection getConnection(Properties properties) throws SQLException {
         return QueryUtil.getConnectionOnServer(properties, this.conf);
     }
+
 }

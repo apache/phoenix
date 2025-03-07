@@ -50,10 +50,20 @@ message InvalidateServerMetadataCacheRequest {
   repeated InvalidateServerMetadataCache invalidateServerMetadataCacheRequests = 1;
 }
 
+message InvalidatePhoenixHACacheRequest {
+}
+
+message InvalidatePhoenixHACacheResponse {
+}
+
 service RegionServerEndpointService {
   rpc validateLastDDLTimestamp(ValidateLastDDLTimestampRequest)
       returns (ValidateLastDDLTimestampResponse);
 
   rpc invalidateServerMetadataCache(InvalidateServerMetadataCacheRequest)
       returns (InvalidateServerMetadataCacheResponse);
+
+  rpc invalidatePhoenixHACache(InvalidatePhoenixHACacheRequest)
+      returns (InvalidatePhoenixHACacheResponse);
+
 }
