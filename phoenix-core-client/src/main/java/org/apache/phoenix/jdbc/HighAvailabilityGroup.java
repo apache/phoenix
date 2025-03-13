@@ -940,13 +940,16 @@ public class HighAvailabilityGroup {
 
     /**
      * Helper method to construct the jdbc url back from the given information for a HAGroup
-     * Url are expected to be passed in correct format i.e. zk1,zk2,zk3,zk5,zk5:port:znode
+     * Url are expected to be passed in correct format i.e. zk1\\:port1,zk2\\:port2,zk3\\:port3,zk4\\:port4,zk5\\:port5::znode
+     * or master1\\:port1,master2\\:port2,master3\\:port3,master4\\:port4,master5\\:port5
      * @param url contains host and port part of jdbc url, to get ha url in jdbc format
      *            this function can be used, but needs url in ha format already i.e. [url1|url2]
      *            for MASTER and RPC registry
      * @param haURLInfo contains principal and additional information
      * @param type Registry Type for which url has to be constructed
-     * @return jdbc url in proper format
+     * @return jdbc url in proper format i.e. jdbc:phoenix+<registry>:url:principal:additionalParam
+     * example :- jdbc:phoenix+zk:zk1\\:port1,zk2\\:port2,zk3\\:port3,zk4\\:port4,zk5\\:port5::znode:principal:additionalParams
+     * or jdbc:phoenix+master:master1\\:port1,master2\\:port2,master3\\:port3,master4\\:port4,master5\\:port5::principal:additionParams
      */
     public static String getJDBCUrl(String url, HAURLInfo haURLInfo,
                                     ClusterRoleRecord.RegistryType type) {
