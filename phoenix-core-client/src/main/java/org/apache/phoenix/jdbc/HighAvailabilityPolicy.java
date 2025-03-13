@@ -80,8 +80,10 @@ enum HighAvailabilityPolicy {
         }
 
         /**
-         * For FAILOVER Policy if there is a change in active url or no new active url then close all connections.
-         * (url1, ACTIVE, url2, STANDBY) --> (url1, ACTIVE, url3, STANDBY) //Nothing is needed
+         * For FAILOVER Policy if there is a change in active url or there is no new active url then close all connections.
+         * In below examples only a portion of CRR is shown, url1, url2 are current urls present in
+         * clusterRoleRecord and url3, url4 are new urls in clusterRoleRecord
+         * (url1, ACTIVE, url2, STANDBY) --> (url1, ACTIVE, url3, STANDBY) //Nothing is needed as only Standby url changed
          * (url1, ACTIVE, url2, STANDBY) --> (url3, ACTIVE, url2, STANDBY) //Active url change close connections
          * (url1, ACTIVE, url2, STANDBY) --> (url3, ACTIVE, url4, STANDBY) //Active url change close connections
          * (url1, ACTIVE, url2, STANDBY) --> (url3, ACTIVE, url1, STANDBY)
@@ -205,7 +207,7 @@ enum HighAvailabilityPolicy {
         }
     };
 
-    private static final Logger LOG = LoggerFactory.getLogger(HighAvailabilityGroup.class);
+    private static final Logger LOG = LoggerFactory.getLogger(HighAvailabilityPolicy.class);
 
     /**
      * Utility to close cqs and all it's connection for specific url of a HAGroup
@@ -266,11 +268,12 @@ enum HighAvailabilityPolicy {
             transitRoleRecordRegistry(haGroup, oldRecord, newRecord);
         } else if (!oldRecord.getUrl1().equals(newRecord.getUrl1()) ||
                 !oldRecord.getUrl2().equals(newRecord.getUrl2())) {
-            //We are closing all the relevant connections when registry is changing so no need to check if url is
-            //changing or not, as most probably they are changing with respect to registry Type. But if registry
-            //is not changing then need to check urls
+            //If registryType is not changing then we need to check if any of the url is changing
+            //as change in registryType closes all the current connections
             transitClusterUrl(haGroup, oldRecord, newRecord);
         } else {
+            //If both registryType and url is not changing then we need to check if there is a
+            //role transition.
             transitClusterRole(haGroup, oldRecord, newRecord);
         }
     }

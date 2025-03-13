@@ -95,6 +95,23 @@ public class ClusterRoleRecord {
     private final ClusterRole role2;
     private final long version;
 
+    /**
+     * To handle backward compatibility with old  ClusterRoleRecords which had zk1 and zk2 as keys
+     * for zk urls, This constructor is only being used {@link ClusterRoleRecord#fromJson} when we
+     * deserialize Cluster Role Record read from ZooKeeper ZNode. If CRR is in old format we will
+     * read zk1 and zk2 and url1 and url2 will be null and if it is in new format zk1 and zk2 will
+     * be null in both cases final url is being stored in url1 and url2
+     * @param haGroupName HighAvailability Group name / CRR name
+     * @param policy Policy used by give CRR
+     * @param registryType {@link RegistryType} to be used for given urls
+     * @param url1 ZK/HMaster url based on registry type for first cluster
+     * @param role1 {@link ClusterRole} which describes the current state of first cluster
+     * @param url2 ZK/HMaster url based on registry type for second cluster
+     * @param role2 {@link ClusterRole} which describes the current state of second cluster
+     * @param version version of a given CRR
+     * @param zk1 ZK url of first cluster when CRR is in old format for backward compatibility
+     * @param zk2 ZK url of second cluster when CRR is in old format for backward compatibility
+     */
     @JsonCreator
     public ClusterRoleRecord(@JsonProperty("haGroupName") String haGroupName,
                              @JsonProperty("policy") HighAvailabilityPolicy policy,
@@ -104,7 +121,7 @@ public class ClusterRoleRecord {
                              @JsonProperty("url2") String url2,
                              @JsonProperty("role2") ClusterRole role2,
                              @JsonProperty("version") long version,
-                             @JsonProperty("zk1") String zk1, //Deprecated
+                             @JsonProperty("zk1") String zk1,
                              @JsonProperty("zk2") String zk2) {
         this.haGroupName = haGroupName;
         this.policy = policy;
@@ -117,8 +134,9 @@ public class ClusterRoleRecord {
         //We are normalizing to have urls in specific formats for each registryType for getting
         //accurate comparisons. We are passing registryType as these url most probably won't have
         //protocol in url, and it might be normalized based to wrong registry type, as we normalize
-        //w.r.t {@link ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY}
-        //but considering source of truth of registryType is present on roleRecord.
+        //w.r.t {@link ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY},
+        //but considering source of truth of registryType is present in CLusterRoleRecord we are
+        //normalizing based on that.
         url1 = JDBCUtil.formatUrl(resolvedUrl1, this.registryType);
         url2 = JDBCUtil.formatUrl(resolvedUrl2, this.registryType);
 

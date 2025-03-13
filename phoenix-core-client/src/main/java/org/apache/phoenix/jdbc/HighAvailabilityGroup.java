@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.jdbc;
 
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
@@ -268,9 +269,11 @@ public class HighAvailabilityGroup {
             }
         }
 
-        //If additional parameter is only ; then making it null.
+        //If additional parameter is only ; then making it null as while building back jdbc url
+        //if we don't have principal we need additional checks to make sure we are not appending
+        //additionalJDBCParams after JDBC_PROTOCOL_SEPARATOR.
         additionalJDBCParams = additionalJDBCParams != null
-                ? (additionalJDBCParams.equals(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR)
+                ? (additionalJDBCParams.equals(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR))
                     ? null : additionalJDBCParams) : null;
 
         String name = properties.getProperty(PHOENIX_HA_GROUP_ATTR);
@@ -402,7 +405,9 @@ public class HighAvailabilityGroup {
         String fallbackCluster = properties.getProperty(PHOENIX_HA_FALLBACK_CLUSTER_KEY);
         if (StringUtils.isEmpty(fallbackCluster)) {
             LOG.error("Fallback to single cluster is enabled for the HA group {} but cluster key is"
-                    + " empty per configuration. HA url: '{}'.", haGroupInfo.getName(), url);
+                    + "empty per configuration 'phoenix.ha.fallback.cluster', and boostrap url "
+                    + "cannot be used as fallback cluster as it can be different that urls present in"
+                    + "ClusterRoleRecords which are source of truth. HA url: '{}'.", haGroupInfo.getName(), url);
             return Optional.empty();
         }
 
@@ -934,7 +939,8 @@ public class HighAvailabilityGroup {
     }
 
     /**
-     * Helper method to construct the jdbc url back from the given information
+     * Helper method to construct the jdbc url back from the given information for a HAGroup
+     * Url are expected to be passed in correct format i.e. zk1,zk2,zk3,zk5,zk5:port:znode
      * @param url contains host and port part of jdbc url, to get ha url in jdbc format
      *            this function can be used, but needs url in ha format already i.e. [url1|url2]
      *            for MASTER and RPC registry
@@ -944,7 +950,7 @@ public class HighAvailabilityGroup {
      */
     public static String getJDBCUrl(String url, HAURLInfo haURLInfo,
                                     ClusterRoleRecord.RegistryType type) {
-        //Need extra separator for Master and pc connections for principal as no znode path is there
+        //Need extra separator for Master and RPC connections for principal as no znode path is there
         boolean extraSeparator = false;
         StringBuilder sb = new StringBuilder();
         switch (type) {
@@ -965,16 +971,17 @@ public class HighAvailabilityGroup {
         sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
         sb.append(url);
         if (haURLInfo != null) {
-            if (anyNotNull(haURLInfo.getPrincipal(), haURLInfo.getAdditionalJDBCParams())) {
+            if (ObjectUtils.anyNotNull(haURLInfo.getPrincipal(), haURLInfo.getAdditionalJDBCParams())) {
                 if (extraSeparator) {
-                    //For Master and RPC connection url we need 2 extra separator
+                    //For Master and RPC connection url we need 2 extra separator between port and
+                    //principal as there is no ZNode
                     sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR).
                             append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
                 }
                 sb.append(haURLInfo.getPrincipal() == null ? PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR
                         : PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + haURLInfo.getPrincipal());
             }
-            if (anyNotNull(haURLInfo.getAdditionalJDBCParams())) {
+            if (ObjectUtils.anyNotNull(haURLInfo.getAdditionalJDBCParams())) {
                 sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR).
                         append(haURLInfo.getAdditionalJDBCParams());
             }
@@ -1051,14 +1058,5 @@ public class HighAvailabilityGroup {
             }
         }
 
-    }
-
-    private static boolean anyNotNull(Object... params) {
-        for (Object param : params) {
-            if (param != null) {
-                return true;
-            }
-        }
-        return false;
     }
 }

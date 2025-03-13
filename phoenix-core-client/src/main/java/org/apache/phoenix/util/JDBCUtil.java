@@ -229,6 +229,9 @@ public class JDBCUtil {
                 AbstractRPCConnectionInfo rpcInfo = (AbstractRPCConnectionInfo) connInfo;
                 sb.append(rpcInfo.getBoostrapServers().replaceAll(":", "\\\\:"));
             } else {
+                //Here we are appending '::' because ZKConnectionInfo.getZKHosts return formatted
+                //ZKQuorum which is in format zk1:port1,zk2:port2.. and we need double separator to
+                //add ZNode
                 ZKConnectionInfo zkInfo = (ZKConnectionInfo) connInfo;
                 sb.append(zkInfo.getZkHosts().replaceAll(":", "\\\\:")).append("::")
                         .append(zkInfo.getZkRootNode());
@@ -243,10 +246,10 @@ public class JDBCUtil {
      * Get the formatted URL, in case of ZK URL it returns ZK quorum and root and node part of the URL and in case of
      * Master or RPC URL it returns bootstrap servers with ports
      * Use this method instead of {@link #formatUrl(String)} if you want to format url specific to a protocol or
-     * for urls coming from roleRecord or urls for fetching roleRecords those don't have protocol in the url and could
+     * for urls coming from roleRecord as urls for fetching roleRecords those don't have protocol in the url and could
      * be normalized differently based on configs.
-     * @param url
-     * @param registryType
+     * @param url that needs to be formatted
+     * @param registryType format based on the given registryType
      * @return formatted url without protocol
      */
     public static String formatUrl(String url, ClusterRoleRecord.RegistryType registryType) {
