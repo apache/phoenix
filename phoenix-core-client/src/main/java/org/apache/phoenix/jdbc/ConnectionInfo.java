@@ -29,6 +29,7 @@ import java.util.StringTokenizer;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.VersionInfo;
+import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authentication.util.KerberosUtil;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -493,11 +494,8 @@ public abstract class ConnectionInfo {
                                 LOGGER.info("Trying to connect to a secure cluster as {} "
                                         + "with keytab {}",
                                     principal, keytab);
-                                final Configuration newConfig = getConfiguration(principal, keytab);
-                                // We are intentionally changing the passed in Configuration object
-                                UserGroupInformation.setConfiguration(newConfig);
-                                User.login(newConfig, QueryServices.HBASE_CLIENT_KEYTAB,
-                                    QueryServices.HBASE_CLIENT_PRINCIPAL, null);
+                                User.login(keytab,
+                                    SecurityUtil.getServerPrincipal(principal, (String) null));
                                 user = User.getCurrent();
                                 LOGGER.info("Successful login to secure cluster");
                             }
@@ -514,30 +512,6 @@ public abstract class ConnectionInfo {
             } else {
                 LOGGER.debug("Principal and keytab not provided, not attempting Kerberos login");
             }
-        }
-
-        private Configuration getConfiguration( String principal, String keytab) {
-            final Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
-            // Add QueryServices properties
-            if (props != null) {
-                for (Entry<String,String> entry : props) {
-                    config.set(entry.getKey(), entry.getValue());
-                }
-            }
-            // Add any user-provided properties (via DriverManager)
-            if (info != null) {
-                for (Object key : info.keySet()) {
-                    config.set((String) key, info.getProperty((String) key));
-                }
-            }
-            // Set the principal and keytab if provided from the URL (overriding those provided in Properties)
-            if (null != principal) {
-                config.set(QueryServices.HBASE_CLIENT_PRINCIPAL, principal);
-            }
-            if (null != keytab) {
-                config.set(QueryServices.HBASE_CLIENT_KEYTAB, keytab);
-            }
-            return config;
         }
 
         protected String normalizeHostsList(String quorum, Integer defaultPort)
