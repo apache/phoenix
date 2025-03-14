@@ -129,7 +129,7 @@
     <jetty.version>9.4.56.v20240826</jetty.version>
     <javax.servlet-api.version>3.1.0</javax.servlet-api.version>
     <json-path.version>2.9.0</json-path.version>
-    <bson.version>4.4.0</bson.version>
+    <bson.version>5.3.1</bson.version>
     <!-- Test Dependencies -->
     <mockito.version>4.11.0</mockito.version>
     <junit.version>4.13.1</junit.version>
