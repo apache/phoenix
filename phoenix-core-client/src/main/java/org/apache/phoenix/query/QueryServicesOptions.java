@@ -454,8 +454,6 @@ public class QueryServicesOptions {
 
     public static final Boolean DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED = false;
 
-    public static final long DEFAULT_HA_CACHE_TTL_IN_MS = 10 * 60 * 1000L; // 10 minutes
-
 
     private final Configuration config;
 
@@ -560,8 +558,7 @@ public class QueryServicesOptions {
             .setIfUnset(MAX_IN_LIST_SKIP_SCAN_SIZE, DEFAULT_MAX_IN_LIST_SKIP_SCAN_SIZE)
             .setIfUnset(CONNECTION_ACTIVITY_LOGGING_ENABLED, DEFAULT_CONNECTION_ACTIVITY_LOGGING_ENABLED)
             .setIfUnset(CONNECTION_ACTIVITY_LOGGING_INTERVAL, DEFAULT_CONNECTION_ACTIVITY_LOGGING_INTERVAL_IN_MINS)
-            .setIfUnset(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED)
-            .setIfUnset(HA_CACHE_TTL_MS, DEFAULT_HA_CACHE_TTL_IN_MS);
+            .setIfUnset(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED);
 
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set

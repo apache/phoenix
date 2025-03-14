@@ -43,8 +43,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.regionserver.BloomType;
-import org.apache.phoenix.cache.ServerMetadataCache;
-import org.apache.phoenix.cache.ServerMetadataCacheImpl;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.CaseExpression;
@@ -368,7 +366,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private Map<ImmutableBytesPtr, PendingRow> pendingRows = new ConcurrentHashMap<>();
 
   private MetricsIndexerSource metricSource;
-  private ServerMetadataCache serverMetadataCache;
 
   private boolean stopped;
   private boolean disabled;
@@ -434,7 +431,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           BloomType bloomFilterType = tableDescriptor.getColumnFamilies()[0].getBloomFilterType();
           // when the table descriptor changes, the coproc is reloaded
           this.useBloomFilter = bloomFilterType == BloomType.ROW;
-          this.serverMetadataCache = ServerMetadataCacheImpl.getInstance(env.getConfiguration());
 
       } catch (NoSuchMethodError ex) {
           disabled = true;
@@ -529,11 +525,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           return;
       }
       try {
-          if(serverMetadataCache.isMutationBlocked()) {
-              throw new IOException("Mutation is blocked as "
-                      + CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED
-                      + " is enabled and one of the HAGroups is in blocking state");
-          }
           preBatchMutateWithExceptions(c, miniBatchOp);
           return;
       } catch (Throwable t) {

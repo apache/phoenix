@@ -18,46 +18,36 @@
 package org.apache.phoenix.jdbc;
 
 
-import org.apache.curator.framework.CuratorFramework;
-import org.apache.curator.framework.api.CuratorWatcher;
-import org.apache.curator.framework.api.GetDataBuilder;
-import org.apache.curator.framework.recipes.cache.NodeCache;
+import org.apache.curator.framework.recipes.cache.ChildData;
+import org.apache.curator.framework.recipes.cache.PathChildrenCache;
+import org.apache.curator.framework.recipes.cache.PathChildrenCacheEvent;
 import org.apache.curator.utils.ZKPaths;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
-import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
-import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
-import org.apache.phoenix.thirdparty.com.google.common.cache.RemovalCause;
-import org.apache.phoenix.thirdparty.com.google.common.cache.RemovalListener;
-import org.apache.zookeeper.WatchedEvent;
-import org.apache.zookeeper.Watcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.time.Duration;
-import java.util.ArrayList;
+import java.util.Objects;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-
-import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
-import static org.apache.phoenix.query.QueryServices.HA_CACHE_TTL_MS;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_HA_CACHE_TTL_IN_MS;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * Write-through cache for PhoenixHA.
- * Uses {@link NodeCache} from {@link org.apache.curator.framework.CuratorFramework}.
+ * Uses {@link PathChildrenCache} from {@link org.apache.curator.framework.CuratorFramework}.
  */
 public class PhoenixHACache implements Closeable {
 
+    private static final long HA_CACHE_INITIALIZATION_TIMEOUT_MS = 1000L;
     private static PhoenixHACache cacheInstance;
     private final PhoenixHAAdmin phoenixHaAdmin;
-    // Thread-Safe as per https://www.javadoc.io/doc/com.google.guava/guava/20.0/com/google/common/cache/Cache.html
-    private Cache<String, ClusterRoleRecord> haGroupClusterRoleRecordMap = null;
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixHACache.class);
     private final Set<String> activeToStandbyHAGroups = ConcurrentHashMap.newKeySet();
+    private final PathChildrenCache pathChildrenCache;
 
     /**
      * Creates/gets an instance of PhoenixHACache.
@@ -78,112 +68,84 @@ public class PhoenixHACache implements Closeable {
         return result;
     }
 
-
     private PhoenixHACache(final Configuration conf) throws Exception {
         this.phoenixHaAdmin = new PhoenixHAAdmin(conf);
-        this.haGroupClusterRoleRecordMap = CacheBuilder.newBuilder()
-                .expireAfterWrite(Duration.ofMillis(conf.getLong(HA_CACHE_TTL_MS, DEFAULT_HA_CACHE_TTL_IN_MS)))
-                .removalListener((RemovalListener<String, ClusterRoleRecord>) notification -> {
-                    String key = notification.getKey();
-                    LOGGER.info("PhoenixHACache HAGroupCRRMap Received event for key {} because of {}", key, notification.getCause().name());
-                    if (notification.getCause() == RemovalCause.EXPIRED) {
-                        ClusterRoleRecord clusterRoleRecord = notification.getValue();
-                        if (clusterRoleRecord != null) {
-                            try {
-                                clusterRoleRecord = getCurrentValue(clusterRoleRecord);
-                                haGroupClusterRoleRecordMap.put(clusterRoleRecord.getHaGroupName(), clusterRoleRecord);
-                                checkAndUpdateMutationBlockingHAGroups(clusterRoleRecord);
-                            } catch (Exception e) {
-                                LOGGER.error("Failed to rebuild NodeCache for haGroupName " + key, e);
-                                throw new RuntimeException(e);
-                            }
+        final PathChildrenCache pathChildrenCache = new PathChildrenCache(phoenixHaAdmin.getCurator(), ZKPaths.PATH_SEPARATOR, true);
+        final CountDownLatch latch = new CountDownLatch(1);
+        pathChildrenCache.getListenable().addListener((client, event) -> {
+            LOGGER.info("PhoenixHACache PathChildrenCache Received event for type {}", event.getType());
+            final ChildData childData = event.getData();
+            if (childData != null) {
+                if (event.getType() == PathChildrenCacheEvent.Type.CHILD_REMOVED) {
+                    final ClusterRoleRecord crr = extractCRROrNull(childData);
+                    if (crr != null && crr.getHaGroupName() != null && !crr.getHaGroupName().isEmpty()) {
+                        activeToStandbyHAGroups.remove(crr.getHaGroupName());
+                    }
+                } else if (event.getType() == PathChildrenCacheEvent.Type.CHILD_ADDED
+                        || event.getType() == PathChildrenCacheEvent.Type.CHILD_UPDATED) {
+                    final ClusterRoleRecord crr = extractCRROrNull(childData);
+                    if (crr != null && crr.getHaGroupName() != null) {
+                        if (crr.getRole(phoenixHaAdmin.getZkUrl()) == ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY) {
+                            activeToStandbyHAGroups.add(crr.getHaGroupName());
+                        } else {
+                            activeToStandbyHAGroups.remove(crr.getHaGroupName());
                         }
                     }
-                })
-                .build();
-
-        // Create a watcher for Parent ZNode Path
-        CuratorWatcher parentWatcher = new CuratorWatcher() {
-            @Override
-            public void process(WatchedEvent event) throws Exception {
-                LOGGER.info("PhoenixHACache ParentWatcher Received event for key {} because of {}", event.getPath(), event.getType());
-                if (event.getType() == Watcher.Event.EventType.NodeChildrenChanged) {
-                    List<String> haGroupNames = phoenixHaAdmin.getCurator().getChildren().usingWatcher(this).forPath(ZKPaths.PATH_SEPARATOR);
-                    List<String> existingKeys = new ArrayList<>(haGroupClusterRoleRecordMap.asMap().keySet());
-                    if (haGroupNames != null && !haGroupNames.equals(existingKeys)) {
-                        rebuild(null);
-                    }
+                } else if (event.getType() == PathChildrenCacheEvent.Type.INITIALIZED) {
+                    latch.countDown();
                 }
+            } else {
+                LOGGER.info("PhoenixHACache PathChildrenCache Received event for type {} but ChildData is null", event.getType());
             }
-        };
-        List<String> haGroupNames = phoenixHaAdmin.getCurator().getChildren().usingWatcher(parentWatcher).forPath(ZKPaths.PATH_SEPARATOR);
-        rebuild(haGroupNames);
+        });
+        pathChildrenCache.start();
+        this.pathChildrenCache = pathChildrenCache;
+        latch.await(HA_CACHE_INITIALIZATION_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        buildActiveToStandbySet();
     }
 
-    // Used for tests to perform maintenance operations on the cache
-    // For e.g. the expired entries don't trigger removal listener immediately(it is opportunistic)
-    @VisibleForTesting
-    void cleanupCache() {
-        haGroupClusterRoleRecordMap.cleanUp();
+    private ClusterRoleRecord extractCRROrNull(final ChildData childData) {
+        if (childData != null) {
+            byte[] data = childData.getData();
+            return ClusterRoleRecord.fromJson(data).orElse(null);
+        }
+        return null;
     }
 
+    private void buildActiveToStandbySet() {
+        List<ClusterRoleRecord> clusterRoleRecords = pathChildrenCache.getCurrentData().stream().map(this::extractCRROrNull)
+                .filter(Objects::nonNull).collect(Collectors.toList());
+        List<String> haGroupNames = clusterRoleRecords.stream().map(ClusterRoleRecord::getHaGroupName).collect(Collectors.toList());
+        for (ClusterRoleRecord crr : clusterRoleRecords) {
+            ClusterRoleRecord.ClusterRole role = crr.getRole(phoenixHaAdmin.getZkUrl());
+            if (role == ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY) {
+                activeToStandbyHAGroups.add(crr.getHaGroupName());
+            } else {
+                activeToStandbyHAGroups.remove(crr.getHaGroupName());
+            }
+        }
+        // In case a CRR is deleted and event is not received,
+        // we can remove it from activeToStandbyHAGroups set now
+        activeToStandbyHAGroups.retainAll(haGroupNames);
+    }
 
-    public void rebuild(List<String> haGroupNames) throws Exception {
+    public void rebuild() throws Exception {
         LOGGER.info("Rebuilding PhoenixHACache for HA groups");
-        haGroupClusterRoleRecordMap.invalidateAll();
-        activeToStandbyHAGroups.clear();
-        CuratorFramework curatorFramework = phoenixHaAdmin.getCurator();
-        if (haGroupNames == null || haGroupNames.isEmpty()) {
-            haGroupNames = curatorFramework.getChildren().forPath(ZKPaths.PATH_SEPARATOR);
-        }
-        for (String haGroupName : haGroupNames) {
-            GetDataBuilder builder = curatorFramework.getData();
-            CuratorWatcher watcher = new CuratorWatcher() {
-                @Override
-                public void process(WatchedEvent event) throws Exception {
-                    LOGGER.info("PhoenixHACache NodeWatcher Received event for " + event.getPath() + " because of " + event.getType());
-                    if (event.getType() != Watcher.Event.EventType.None) {
-                        byte[] currentData = builder.usingWatcher(this).forPath(toPath(haGroupName));
-                        ClusterRoleRecord clusterRoleRecord = ClusterRoleRecord.fromJson(currentData).orElse(null);
-                        if (clusterRoleRecord != null) {
-                            haGroupClusterRoleRecordMap.put(clusterRoleRecord.getHaGroupName(), clusterRoleRecord);
-                            checkAndUpdateMutationBlockingHAGroups(clusterRoleRecord);
-                        }
-                    }
-                }
-            };
-
-            byte[] currentData = builder.usingWatcher(watcher).forPath(toPath(haGroupName));
-            ClusterRoleRecord clusterRoleRecord = ClusterRoleRecord.fromJson(currentData).orElse(null);
-            if (clusterRoleRecord != null) {
-                haGroupClusterRoleRecordMap.put(clusterRoleRecord.getHaGroupName(), clusterRoleRecord);
-                checkAndUpdateMutationBlockingHAGroups(clusterRoleRecord);
-            } else {
-                LOGGER.error("Failed to CRR for load ha group " + haGroupName);
-            }
-        }
-        LOGGER.info("Rebuild Complete for PhoenixHACache for HA groups {}", haGroupClusterRoleRecordMap.asMap().keySet());
-    }
-
-    private ClusterRoleRecord getCurrentValue(ClusterRoleRecord clusterRoleRecord) throws Exception {
-        return ClusterRoleRecord.fromJson(phoenixHaAdmin.getCurator().getData().forPath(toPath(clusterRoleRecord.getHaGroupName()))).orElse(null);
-    }
-
-    private void checkAndUpdateMutationBlockingHAGroups(final ClusterRoleRecord clusterRoleRecord) {
-        if (clusterRoleRecord != null) {
-            final ClusterRoleRecord.ClusterRole clusterRole = clusterRoleRecord.getRole(phoenixHaAdmin.getZkUrl());
-            if (clusterRole == ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY) {
-                activeToStandbyHAGroups.add(clusterRoleRecord.getHaGroupName());
-            } else {
-                activeToStandbyHAGroups.remove(clusterRoleRecord.getHaGroupName());
-            }
-        }
+        // NOTE: this is a BLOCKING method.
+        // Completely rebuild the internal cache by querying for all needed data
+        // WITHOUT generating any events to send to listeners.
+        pathChildrenCache.rebuild();
+        buildActiveToStandbySet();
+        LOGGER.info("Rebuild Complete for PhoenixHACache");
     }
 
 
     @Override
     public void close() throws IOException {
         LOGGER.info("Closing PhoenixHACache");
+        activeToStandbyHAGroups.clear();
+        pathChildrenCache.close();
+        LOGGER.info("Closed PhoenixHACache");
     }
 
     /**

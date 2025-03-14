@@ -43,13 +43,11 @@ import static org.junit.Assert.assertFalse;
 public class PhoenixHACacheIT extends BaseTest {
 
     private final PhoenixHAAdmin haAdmin = new PhoenixHAAdmin(config);
-    private static final Long CACHE_TTL_MS = 30*1000L;
     private static final Long ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS = 1000L;
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        props.put("phoenix.ha.cache.ttl.ms", String.valueOf(CACHE_TTL_MS));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -188,42 +186,6 @@ public class PhoenixHACacheIT extends BaseTest {
     }
 
     @Test
-    public void testHACacheWithCacheExpiration() throws Exception {
-        PhoenixHACache phoenixHACache = PhoenixHACache.getInstance(config);
-        ClusterRoleRecord crr1 = new ClusterRoleRecord("failover",
-                HighAvailabilityPolicy.FAILOVER, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE,
-                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 1L);
-        ClusterRoleRecord crr2 = new ClusterRoleRecord("parallel",
-                HighAvailabilityPolicy.PARALLEL, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
-                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 1L);
-        haAdmin.createOrUpdateDataOnZookeeper(crr1);
-        haAdmin.createOrUpdateDataOnZookeeper(crr2);
-        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        assert phoenixHACache.isClusterInActiveToStandby();
-        //Now we delete one of the CRR which is in ACTIVE_TO_STANDBY state
-        haAdmin.getCurator().delete().forPath(toPath("parallel"));
-        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        assertFalse(phoenixHACache.isClusterInActiveToStandby());
-
-
-        //Now we add 1 new CRR which is in ACTIVE_TO_STANDBY state
-        ClusterRoleRecord crr = new ClusterRoleRecord("newcrr",
-                HighAvailabilityPolicy.PARALLEL, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
-                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 1L);
-        haAdmin.createOrUpdateDataOnZookeeper(crr);
-
-        // We sleep for time greater than CACHE_TTL_MS so that cache is entirely refreshed with any new entries
-        Thread.sleep(CACHE_TTL_MS + (10*1000));
-        phoenixHACache.cleanupCache();
-        assert phoenixHACache.isClusterInActiveToStandby();
-
-        // Now we don't change anything wrt ZK but we still wait for Cache to expire
-        Thread.sleep(CACHE_TTL_MS + (10*1000));
-        phoenixHACache.cleanupCache();
-        assert phoenixHACache.isClusterInActiveToStandby();
-    }
-
-    @Test
     public void testMultiThreadedAccessToHACache() throws Exception {
         // Setup initial CRRs
         ClusterRoleRecord crr1 = new ClusterRoleRecord("failover",
@@ -266,7 +228,7 @@ public class PhoenixHACacheIT extends BaseTest {
         haAdmin.createOrUpdateDataOnZookeeper(crr2);
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        
+
         final CountDownLatch latch2 = new CountDownLatch(threadCount);
         executor = Executors.newFixedThreadPool(threadCount);
         for (int i = 0; i < threadCount; i++) {
@@ -284,5 +246,4 @@ public class PhoenixHACacheIT extends BaseTest {
         latch2.await(10, TimeUnit.SECONDS);
         assert latch2.getCount() == 0;
     }
-
 }
