@@ -27,10 +27,13 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.PhoenixRegionServerEndpointTestImpl;
 import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
-import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.ClusterRoleRecord;
+import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixHAAdmin;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
@@ -39,7 +42,6 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -73,12 +75,13 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_DDL_TIMESTAMP
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
+import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.apache.phoenix.query.ConnectionQueryServicesImpl.INVALIDATE_SERVER_METADATA_CACHE_EX_MESSAGE;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -94,6 +97,7 @@ import static org.mockito.Mockito.verify;
 public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
 
     private final Random RANDOM = new Random(42);
+    private final Long ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS = 1000L;
 
     private static ServerName serverName;
 
@@ -107,6 +111,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
                 Long.toString(Long.MAX_VALUE));
         props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
                 Long.toString(Long.MAX_VALUE));
+        props.put(QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, Boolean.toString(true));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
         assertEquals(1, getUtility().getHBaseCluster().getNumLiveRegionServers());
         serverName = getUtility().getHBaseCluster().getRegionServer(0).getServerName();
@@ -125,7 +130,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
     /**
      * Get the server metadata cache instance from the endpoint loaded on the region server.
      */
-    private ServerMetadataCacheTestImpl getServerMetadataCache() {
+    private ServerMetadataCacheTestImpl getServerMetadataCache() throws Exception {
         String phoenixRegionServerEndpoint = config.get(REGIONSERVER_COPROCESSOR_CONF_KEY);
         assertNotNull(phoenixRegionServerEndpoint);
         RegionServerCoprocessor coproc = getUtility().getHBaseCluster()
@@ -136,6 +141,81 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         ServerMetadataCache cache = ((PhoenixRegionServerEndpointTestImpl)coproc).getServerMetadataCache();
         assertNotNull(cache);
         return (ServerMetadataCacheTestImpl)cache;
+    }
+
+    /**
+     * This test checks the mutation block enabled feature
+     * 1. Initialize Cache
+     * 2. Create new CRR records with ACTIVE_TO_STANDBY and STANDBY states
+     * 3. Check CRR records are picked up and mutation is blocked
+     * 4. Delete the CRR records
+     * 5. Check now that mutation is NOT blocked
+     * 6. Create CRR records again with ACTIVE and STANDBY states
+     * 7. Check now that mutation is NOT blocked
+     * 8. Update CRR records with ACTIVE_TO_STANDBY and STANDBY states
+     * 9. Check new CRR records mutation is blocked
+     * 10. Delete the CRRs
+     * 11. Check now that mutation is NOT blocked
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testCacheForMutationBlockEnabled() throws Exception {
+        PhoenixHAAdmin haAdmin = new PhoenixHAAdmin(config);
+        ServerMetadataCacheTestImpl cache = getServerMetadataCache();;
+
+        ClusterRoleRecord crr1 = new ClusterRoleRecord("failover",
+                HighAvailabilityPolicy.FAILOVER, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 2L);
+        ClusterRoleRecord crr2 = new ClusterRoleRecord("parallel",
+                HighAvailabilityPolicy.PARALLEL, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 2L);
+        haAdmin.createOrUpdateDataOnZookeeper(crr1);
+        haAdmin.createOrUpdateDataOnZookeeper(crr2);
+
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+        assert cache.isMutationBlocked();
+
+        // Cleanup the cache to delete all entries
+        haAdmin.getCurator().delete().forPath(toPath("failover"));
+        haAdmin.getCurator().delete().forPath(toPath("parallel"));
+
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+        assertFalse(cache.isMutationBlocked());
+
+        // Create new entries again
+        crr1 = new ClusterRoleRecord("failover",
+                HighAvailabilityPolicy.FAILOVER, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 1L);
+        crr2 = new ClusterRoleRecord("parallel",
+                HighAvailabilityPolicy.PARALLEL, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 1L);
+        haAdmin.createOrUpdateDataOnZookeeper(crr1);
+        haAdmin.createOrUpdateDataOnZookeeper(crr2);
+
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+        assertFalse(cache.isMutationBlocked());
+
+
+        // Create new entries again
+        crr1 = new ClusterRoleRecord("failover",
+                HighAvailabilityPolicy.FAILOVER, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 2L);
+        crr2 = new ClusterRoleRecord("parallel",
+                HighAvailabilityPolicy.PARALLEL, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 2L);
+        haAdmin.createOrUpdateDataOnZookeeper(crr1);
+        haAdmin.createOrUpdateDataOnZookeeper(crr2);
+
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+        assert cache.isMutationBlocked();
+
+        // Cleanup the cache to delete all entries
+        haAdmin.getCurator().delete().forPath(toPath("failover"));
+        haAdmin.getCurator().delete().forPath(toPath("parallel"));
+
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+        assertFalse(cache.isMutationBlocked());
     }
 
     /**
@@ -289,7 +369,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
                     null, null, tableName);
             assertEquals(pTable.getLastDDLTimestamp().longValue(), lastDDLTimestampFromCache);
             // Invalidate the cache for this table.
-            cache.invalidate(null, null, tableName);
+            cache.invalidateLastDDLTimestampForTable(null, null, tableName);
             assertNull(cache.getLastDDLTimestampForTableFromCacheOnly(null, null, tableName));
         }
     }
@@ -319,7 +399,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
                     null, Bytes.toBytes(schemaName), Bytes.toBytes(tableName));
             assertEquals(pTable.getLastDDLTimestamp().longValue(), lastDDLTimestampFromCache);
             // Invalidate the cache for this table.
-            cache.invalidate(null, Bytes.toBytes(schemaName), Bytes.toBytes(tableName));
+            cache.invalidateLastDDLTimestampForTable(null, Bytes.toBytes(schemaName), Bytes.toBytes(tableName));
             assertNull(cache.getLastDDLTimestampForTableFromCacheOnly(null,
                     Bytes.toBytes(schemaName), Bytes.toBytes(tableName)));
         }
@@ -358,7 +438,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
             assertEquals(tenantViewTable.getLastDDLTimestamp().longValue(),
                     lastDDLTimestampFromCache);
             // Invalidate the cache for this table.
-            cache.invalidate(tenantIDBytes, null, tenantViewNameBytes);
+            cache.invalidateLastDDLTimestampForTable(tenantIDBytes, null, tenantViewNameBytes);
             assertNull(cache.getLastDDLTimestampForTableFromCacheOnly(
                     tenantIDBytes, null, tenantViewNameBytes));
         }

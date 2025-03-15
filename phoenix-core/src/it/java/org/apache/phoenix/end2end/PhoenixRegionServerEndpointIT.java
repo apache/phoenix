@@ -26,6 +26,7 @@ import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
 import org.apache.phoenix.coprocessor.generated.RegionServerEndpointProtos;
 import org.apache.phoenix.exception.StaleMetadataCacheException;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.ClientUtil;
@@ -54,12 +55,13 @@ public class PhoenixRegionServerEndpointIT extends BaseTest {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+        props.put(QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, Boolean.toString(true));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
     // Tests that PhoenixRegionServerEndpoint validates the last ddl timestamp for base table.
     @Test
-    public void testValidateLastDDLTimestampNoException() throws SQLException {
+    public void testValidateLastDDLTimestampNoException() throws Exception {
         HRegionServer regionServer = utility.getMiniHBaseCluster().getRegionServer(0);
         PhoenixRegionServerEndpoint coprocessor = getPhoenixRegionServerEndpoint(regionServer);
         assertNotNull(coprocessor);
@@ -88,7 +90,7 @@ public class PhoenixRegionServerEndpointIT extends BaseTest {
     // Tests that PhoenixRegionServerEndpoint throws StaleMetadataCacheException if client
     // provided last ddl timestamp is less than server maintained last ddl timestamp.
     @Test
-    public void testValidateLastDDLTimestampWithException() throws SQLException {
+    public void testValidateLastDDLTimestampWithException() throws Exception {
         HRegionServer regionServer = utility.getMiniHBaseCluster().getRegionServer(0);
         PhoenixRegionServerEndpoint coprocessor = getPhoenixRegionServerEndpoint(regionServer);
         assertNotNull(coprocessor);
@@ -120,7 +122,7 @@ public class PhoenixRegionServerEndpointIT extends BaseTest {
     // Tests that PhoenixRegionServerEndpoint validates the last ddl timestamp for tenant owned
     // views
     @Test
-    public void testValidateLastDDLTimestampWithTenantID() throws SQLException {
+    public void testValidateLastDDLTimestampWithTenantID() throws Exception {
         HRegionServer regionServer = utility.getMiniHBaseCluster().getRegionServer(0);
         PhoenixRegionServerEndpoint coprocessor = getPhoenixRegionServerEndpoint(regionServer);
         assertNotNull(coprocessor);
@@ -156,6 +158,18 @@ public class PhoenixRegionServerEndpointIT extends BaseTest {
             coprocessor.validateLastDDLTimestamp(controller, request, null);
             assertFalse(controller.failed());
         }
+    }
+
+    @Test
+    public void testInvalidatePhoenixHACache() throws Exception {
+        HRegionServer regionServer = utility.getMiniHBaseCluster().getRegionServer(0);
+        PhoenixRegionServerEndpoint coprocessor = getPhoenixRegionServerEndpoint(regionServer);
+        assertNotNull(coprocessor);
+        ServerRpcController controller = new ServerRpcController();
+        RegionServerEndpointProtos.InvalidatePhoenixHACacheRequest request
+                = RegionServerEndpointProtos.InvalidatePhoenixHACacheRequest.newBuilder().build();
+        coprocessor.invalidatePhoenixHACache(controller, request, null);
+        assertFalse(controller.failed());
     }
 
     private String getCreateTableStmt(String tableName) {
