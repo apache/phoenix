@@ -23,6 +23,7 @@ import org.apache.phoenix.query.PhoenixTestBuilder;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TableOptions;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.LiteralTTLExpression;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Assert;
@@ -136,19 +137,22 @@ public class TTLIT extends ParallelStatsDisabledIT {
      */
 
     private void assertTTLForGivenPTable(PTable table, int ttl) {
-        Assert.assertEquals(ttl, table.getTTL());
+        LiteralTTLExpression expected = new LiteralTTLExpression(ttl);
+        Assert.assertEquals(expected, table.getTTLExpression());
     }
 
 
     private void assertTTLForGivenEntity(Connection connection, String entityName, int ttl) throws SQLException {
         PTable pTable = PhoenixRuntime.getTable(connection, entityName);
-        Assert.assertEquals(ttl,pTable.getTTL());
+        LiteralTTLExpression expected = new LiteralTTLExpression(ttl);
+        Assert.assertEquals(expected, pTable.getTTLExpression());
     }
 
     private void assertTTLForIndexName(Connection connection, String indexName, int ttl) throws SQLException {
         if (!indexName.equals(SKIP_ASSERT)) {
             PTable index = PhoenixRuntime.getTable(connection, indexName);
-            Assert.assertEquals(ttl,index.getTTL());
+            LiteralTTLExpression expected = new LiteralTTLExpression(ttl);
+            Assert.assertEquals(expected, index.getTTLExpression());
         }
     }
 

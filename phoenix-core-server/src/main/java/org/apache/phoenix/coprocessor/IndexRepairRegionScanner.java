@@ -25,6 +25,7 @@ import static org.apache.phoenix.query.QueryConstants.UNGROUPED_AGG_ROW_KEY;
 import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -33,11 +34,10 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.regionserver.ScannerContext;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -48,24 +48,32 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.query.HBaseFactoryProvider;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.parallel.Task;
 import org.apache.phoenix.hbase.index.parallel.TaskBatch;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
+import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.schema.CompiledTTLExpression;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
-import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -79,6 +87,8 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(IndexRepairRegionScanner.class);
 
+    private CompiledTTLExpression dataTableTTLExpr;
+
     public IndexRepairRegionScanner(final RegionScanner innerScanner,
                                      final Region region,
                                      final Scan scan,
@@ -89,14 +99,21 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
 
         byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
         dataHTable = hTableFactory.getTable(new ImmutableBytesPtr(dataTableName));
-        if (BaseScannerRegionObserver.isPhoenixTableTTLEnabled(env.getConfiguration())) {
-            indexTableTTL = ScanUtil.getTTL(scan);
-        } else {
-            indexTableTTL = indexHTable.getDescriptor().getColumnFamilies()[0].getTimeToLive();
-        }
         try (org.apache.hadoop.hbase.client.Connection connection =
                      HBaseFactoryProvider.getHConnectionFactory().createConnection(env.getConfiguration())) {
             regionEndKeys = connection.getRegionLocator(dataHTable.getName()).getEndKeys();
+        }
+        final Configuration config = env.getConfiguration();
+        PName tenant = PNameFactory.newName(this.tenantId);
+        String tableName = SchemaUtil.getTableName(schemaName, logicalTableName);
+        try (PhoenixConnection conn =
+                     QueryUtil.getConnectionOnServer(config).unwrap(PhoenixConnection.class)) {
+            PTable dataTable = conn.getTableNoCache(tenant, tableName);
+            dataTableTTLExpr = dataTable.getCompiledTTLExpression(conn);
+        } catch (SQLException e) {
+            LOGGER.error(
+                    "Unable to get PTable for the data table {}:{}", tenant, tableName, e);
+            throw new IOException(e);
         }
     }
 
@@ -121,7 +138,8 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
                 del.add(cell);
             }
         }
-        List<Mutation> indexMutations = prepareIndexMutationsForRebuild(indexMaintainer, put, del, null);
+        List<Mutation> indexMutations = prepareIndexMutationsForRebuild(indexMaintainer, put, del,
+                null, dataTableTTLExpr);
         Collections.reverse(indexMutations);
         for (Mutation mutation : indexMutations) {
             byte[] indexRowKey = mutation.getRow();

@@ -26,21 +26,25 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.schema.CompiledTTLExpression;
+import org.apache.phoenix.schema.TTLExpressionFactory;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.isPhoenixTableTTLEnabled;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.IS_PHOENIX_TTL_SCAN_TABLE_SYSTEM;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.isPhoenixTableTTLEnabled;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
 
 /**
  *  TTLRegionScanner masks expired rows using the empty column cell timestamp
@@ -59,33 +63,35 @@ public class TTLRegionScanner extends BaseRegionScanner {
     byte[] emptyCQ;
     byte[] emptyCF;
     private boolean initialized = false;
+    private CompiledTTLExpression ttlExpression;
+    long currentTime;
 
     public TTLRegionScanner(final RegionCoprocessorEnvironment env, final Scan scan,
-            final RegionScanner s) {
+            final RegionScanner s) throws IOException {
         super(s);
         this.env = env;
         this.scan = scan;
         this.pageSizeMs = ScanUtil.getPageSizeMsForRegionScanner(scan);
         emptyCQ = scan.getAttribute(EMPTY_COLUMN_QUALIFIER_NAME);
         emptyCF = scan.getAttribute(EMPTY_COLUMN_FAMILY_NAME);
-        long currentTime = scan.getTimeRange().getMax() == HConstants.LATEST_TIMESTAMP ?
-                EnvironmentEdgeManager.currentTimeMillis() : scan.getTimeRange().getMax();
+        currentTime = scan.getTimeRange().getMax() == HConstants.LATEST_TIMESTAMP
+                ? EnvironmentEdgeManager.currentTimeMillis() : scan.getTimeRange().getMax();
         byte[] isSystemTable = scan.getAttribute(IS_PHOENIX_TTL_SCAN_TABLE_SYSTEM);
         if (isPhoenixTableTTLEnabled(env.getConfiguration()) && (isSystemTable == null
                 || !Bytes.toBoolean(isSystemTable))) {
-            ttl = ScanUtil.getTTL(this.scan);
+            ttlExpression = ScanUtil.getTTLExpression(this.scan);
         } else {
-            ttl = env.getRegion().getTableDescriptor().getColumnFamilies()[0].getTimeToLive();
+            ColumnFamilyDescriptor cfd =
+                    env.getRegion().getTableDescriptor().getColumnFamilies()[0];
+            ttlExpression = TTLExpressionFactory.create(cfd.getTimeToLive());
         }
         // Regardless if the Phoenix Table TTL feature is disabled cluster wide or the client is
         // an older client and does not supply the empty column parameters, the masking should not
         // be done here. We also disable masking when TTL is HConstants.FOREVER.
-        isMaskingEnabled = emptyCF != null && emptyCQ != null && ttl != HConstants.FOREVER
+        isMaskingEnabled = emptyCF != null && emptyCQ != null
+                && !ttlExpression.equals(TTL_EXPRESSION_FOREVER)
                 && (isPhoenixTableTTLEnabled(env.getConfiguration()) && (isSystemTable == null
                 || !Bytes.toBoolean(isSystemTable)));
-
-        ttlWindowStart = ttl == HConstants.FOREVER ? 1 : currentTime - ttl * 1000;
-        ttl *= 1000;
     }
 
     private void init() throws IOException {
@@ -99,11 +105,18 @@ public class TTLRegionScanner extends BaseRegionScanner {
         }
     }
 
+    private void setTTLContextForRow(List<Cell> result) {
+        ttl = ttlExpression.getRowTTLForMasking(result, this.scan.isRaw());
+        ttlWindowStart = ttl == HConstants.FOREVER ? 1 : currentTime - ttl * 1000;
+        ttl *= 1000;
+    }
+
     private boolean isExpired(List<Cell> result) throws IOException {
         long maxTimestamp = 0;
         long minTimestamp = Long.MAX_VALUE;
         long ts;
         boolean found = false;
+        setTTLContextForRow(result);
         for (Cell c : result) {
             ts = c.getTimestamp();
             if (!found && ScanUtil.isEmptyColumn(c, emptyCF, emptyCQ)) {
