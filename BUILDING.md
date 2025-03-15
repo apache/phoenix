@@ -127,6 +127,12 @@ To run all available reports (takes a few hours)
 To run OWASP, RAT and Spotbugs, but not Jacoco (takes ~10 minutes)
 `$ mvn clean compile test-compile site -Dspotbugs.site`
 
+It is recommended to request an NVD API [key](https://nvd.nist.gov/developers/request-an-api-key) to
+increase the download speed of CVE data. To use the key append `-DnvdApiKey=<key>` to the maven
+command line.
+
+Note that the dependency check report generation is only enabled when run on Java 11 and later.
+
 The reports are accessible via `target/site/index.html`, under the main project,
 as well as each of the subprojects. (not every project has all reports)
 
