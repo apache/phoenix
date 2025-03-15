@@ -3016,7 +3016,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     Pair<List<PTable>, List<TableInfo>> descendantViews =
                             findAllDescendantViews(hTable, env.getConfiguration(),
                                     tenantIdBytes, schemaName, tableOrViewName, clientTimeStamp,
-                                    true);
+                                    true, true);
                     List<PTable> legitimateChildViews = descendantViews.getFirst();
                     List<TableInfo> orphanChildViews = descendantViews.getSecond();
                     if (!legitimateChildViews.isEmpty()) {
@@ -3406,16 +3406,16 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
      * @param childViews child views of table or parent view. Usually this is an empty list
      *     passed to this method, and this method will add child views retrieved using
      *     {@link ViewUtil#findAllDescendantViews(Table, Configuration, byte[], byte[], byte[],
-     *     long, boolean)}
+     *     long, boolean, boolean)}
      * @param clientVersion client version, used to determine if mutation is allowed.
      * @return Optional.empty() if mutation is allowed on parent table/view. If not allowed,
      *     returned Optional object will contain metaDataMutationResult with MutationCode.
      * @throws IOException if something goes wrong while retrieving child views using
      *     {@link ViewUtil#findAllDescendantViews(Table, Configuration, byte[], byte[], byte[],
-     *     long, boolean)}
+     *     long, boolean, boolean)}
      * @throws SQLException if something goes wrong while retrieving child views using
      *     {@link ViewUtil#findAllDescendantViews(Table, Configuration, byte[], byte[], byte[],
-     *     long, boolean)}
+     *     long, boolean, boolean)}
      */
     private Optional<MetaDataMutationResult> validateIfMutationAllowedOnParent(
             final PTable parentTable,
@@ -3438,7 +3438,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 childViews.addAll(findAllDescendantViews(hTable, sysCat, env.getConfiguration(),
                         tenantId, schemaName, tableOrViewName, clientTimeStamp, new ArrayList<>(),
                         new ArrayList<>(), false,
-                        scanSysCatForTTLDefinedOnAnyChildPair)
+                        scanSysCatForTTLDefinedOnAnyChildPair, true)
                         .getFirst());
             }
 

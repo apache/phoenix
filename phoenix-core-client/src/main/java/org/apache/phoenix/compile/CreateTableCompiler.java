@@ -341,7 +341,7 @@ public class CreateTableCompiler {
             List<PTable> legitimateSiblingViewList =
                     ViewUtil.findAllDescendantViews(childLinkTable, config, parentTenantIdInBytes,
                             parentSchemaNameInBytes, parentToBe.getTableName().getBytes(),
-                            HConstants.LATEST_TIMESTAMP, true).getFirst();
+                            HConstants.LATEST_TIMESTAMP, true,false).getFirst();
             if (!legitimateSiblingViewList.isEmpty()) {
                 PTable siblingView = legitimateSiblingViewList.get(0);
                 Expression siblingViewWhere = getWhereFromView(connection, siblingView);
