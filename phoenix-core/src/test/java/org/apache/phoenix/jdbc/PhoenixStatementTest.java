@@ -265,4 +265,29 @@ public class PhoenixStatementTest extends BaseConnectionlessQueryTest {
         assertTrue(rs41.isClosed());
         assertTrue(rs51.isClosed());
     }
+
+    @Test
+    public void testOnlyCloseStatement() throws SQLException {
+        // After statement closed, the lastResultSet of this statement need be cleared,
+        // and the resultSet got from statement also need be closed.
+        Connection connection = DriverManager.getConnection(getUrl());
+        Statement stmt1 = connection.createStatement();
+        stmt1.executeQuery("select * from atable");
+        ResultSet rs1 = stmt1.getResultSet();
+        stmt1.close();
+        assertTrue(rs1.isClosed());
+        assertNull(stmt1.getResultSet());
+
+        Statement stmt2 = connection.createStatement();
+        stmt2.executeQuery("select * from atable");
+        ResultSet rs21 = stmt2.getResultSet();
+        stmt2.executeQuery("select * from atable");
+        ResultSet rs22 = stmt2.getResultSet();
+        assertTrue(rs21.isClosed());
+        stmt2.close();
+        assertTrue(rs22.isClosed());
+        assertNull(stmt2.getResultSet());
+
+        connection.close();
+    }
 }
