@@ -56,7 +56,7 @@ public class LoggingHAConnectionLimiterIT extends LoggingConnectionLimiterIT {
     /**
      * JDBC connection string for this test HA group.
      */
-    private String jdbcUrl;
+    private String jdbcHAUrl;
     /**
      * HA group for this test.
      */
@@ -86,7 +86,8 @@ public class LoggingHAConnectionLimiterIT extends LoggingConnectionLimiterIT {
         GLOBAL_PROPERTIES.put(PHOENIX_HA_GROUP_ATTR, PARALLEL.name());
 
 
-        CONNECTIONS = Lists.newArrayList(CLUSTERS.getCluster1Connection(), CLUSTERS.getCluster2Connection());
+        CONNECTIONS = Lists.newArrayList(getConnection(CLUSTERS.getJdbcUrl(CLUSTERS.getZkUrl1())),
+                getConnection(CLUSTERS.getJdbcUrl(CLUSTERS.getZkUrl2())));
         LOG.info(String.format("************* Num connections : %d", CONNECTIONS.size()));
 
         for (Connection conn : CONNECTIONS) {
@@ -97,7 +98,7 @@ public class LoggingHAConnectionLimiterIT extends LoggingConnectionLimiterIT {
         }
 
         //preload some data
-        try (Connection connection = CLUSTERS.getCluster1Connection()) {
+        try (Connection connection = getConnection(CLUSTERS.getJdbcUrl(CLUSTERS.getZkUrl1()))) {
             loadData(connection, ORG_ID, GROUP_ID, 100, 20);
         }
     }
@@ -124,10 +125,10 @@ public class LoggingHAConnectionLimiterIT extends LoggingConnectionLimiterIT {
         // Make first cluster ACTIVE
         CLUSTERS.initClusterRole(haGroupName, PARALLEL);
 
-        jdbcUrl = String.format("jdbc:phoenix:[%s|%s]",
-                CLUSTERS.getUrl1(), CLUSTERS.getUrl2());
-        haGroup = HighAvailabilityTestingUtility.getHighAvailibilityGroup(jdbcUrl, clientProperties);
-        LOG.info("Initialized haGroup {} with URL {}", haGroup.getGroupInfo().getName(), jdbcUrl);
+        jdbcHAUrl = String.format("jdbc:phoenix:[%s|%s]",
+                CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2());
+        haGroup = HighAvailabilityTestingUtility.getHighAvailibilityGroup(jdbcHAUrl, clientProperties);
+        LOG.info("Initialized haGroup {} with URL {}", haGroup.getGroupInfo().getName(), jdbcHAUrl);
 
     }
 
@@ -147,9 +148,13 @@ public class LoggingHAConnectionLimiterIT extends LoggingConnectionLimiterIT {
 
     @Override
     protected Connection getConnection() throws SQLException {
-        Connection connection = DriverManager.getConnection(jdbcUrl, clientProperties);
+        Connection connection = DriverManager.getConnection(jdbcHAUrl, clientProperties);
         connection.setAutoCommit(true);
         return connection;
+    }
+
+    private static Connection getConnection(String url) throws SQLException {
+        return DriverManager.getConnection(url, new Properties());
     }
 
 }

@@ -186,8 +186,8 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
         Map<String, List<String>> failedHaGroups = new HashMap<>();
         for (ClusterRoleRecord record : records) {
             String haGroupName = record.getHaGroupName();
-            try (PhoenixHAAdminHelper admin1 = new PhoenixHAAdminHelper(record.getZk1(), getConf(), HighAvailibilityCuratorProvider.INSTANCE);
-                    PhoenixHAAdminHelper admin2 = new PhoenixHAAdminHelper(record.getZk2(), getConf(), HighAvailibilityCuratorProvider.INSTANCE)) {
+            try (PhoenixHAAdminHelper admin1 = new PhoenixHAAdminHelper(record.getUrl1(), getConf(), HighAvailibilityCuratorProvider.INSTANCE);
+                 PhoenixHAAdminHelper admin2 = new PhoenixHAAdminHelper(record.getUrl2(), getConf(), HighAvailibilityCuratorProvider.INSTANCE)) {
                 // Update the cluster previously ACTIVE cluster first.
                 // It reduces the chances of split-brain between clients and clusters.
                 // If can not determine previous ACTIVE cluster, update new STANDBY cluster first.
@@ -335,7 +335,7 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
             Preconditions.checkNotNull(zkUrl);
             Preconditions.checkNotNull(conf);
             Preconditions.checkNotNull(highAvailibilityCuratorProvider);
-            this.zkUrl = JDBCUtil.formatZookeeperUrl(zkUrl);
+            this.zkUrl = JDBCUtil.formatUrl(zkUrl);
             this.conf = conf;
             conf.iterator().forEachRemaining(k -> properties.setProperty(k.getKey(), k.getValue()));
             this.highAvailibilityCuratorProvider = highAvailibilityCuratorProvider;
@@ -431,9 +431,9 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
                     LOG.warn("Unknown cluster role for cluster '{}' in record {}", zkUrl, record);
                     continue;
                 }
-                String remoteZkUrl = record.getZk1().equals(zkUrl)
-                        ? record.getZk2()
-                        : record.getZk1();
+                String remoteZkUrl = record.getUrl1().equals(zkUrl)
+                        ? record.getUrl2()
+                        : record.getUrl1();
                 try (PhoenixHAAdminHelper remoteAdmin = new PhoenixHAAdminHelper(remoteZkUrl, conf, HighAvailibilityCuratorProvider.INSTANCE)) {
                     ClusterRoleRecord remoteRecord;
                     try {
@@ -492,14 +492,6 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
          * @return true if the data on ZK is updated otherwise false
          */
         boolean createOrUpdateDataOnZookeeper(ClusterRoleRecord record) throws IOException {
-            if (!zkUrl.equals(record.getZk1()) && !zkUrl.equals(record.getZk2())) {
-                String msg = String.format("INTERNAL ERROR: "
-                                + "ZK cluster is not associated with cluster role record! "
-                                + "ZK cluster URL: '%s'. Cluster role record: %s",
-                        zkUrl, record);
-                LOG.error(msg);
-                throw new IOException(msg);
-            }
 
             String haGroupName = record.getHaGroupName();
             byte[] data;
