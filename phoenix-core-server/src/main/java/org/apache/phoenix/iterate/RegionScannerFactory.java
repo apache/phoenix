@@ -209,8 +209,15 @@ public abstract class RegionScannerFactory {
 
       @Override
       public boolean next(List<Cell> results) throws IOException {
+        return next(results, null);
+      }
+
+      @Override
+      public boolean next(List<Cell> results, ScannerContext scannerContext) throws IOException {
         try {
-          boolean next = s.next(results);
+          boolean next = (scannerContext == null)
+                  ? s.next(results)
+                  : s.next(results, scannerContext);
           if (ScanUtil.isDummy(results)) {
             return true;
           }
@@ -221,10 +228,6 @@ public abstract class RegionScannerFactory {
         }
       }
 
-      @Override
-      public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
-          throw new IOException("Next with scannerContext should not be called in Phoenix environment");
-      }
 
       @Override
       public void close() throws IOException {
@@ -253,8 +256,15 @@ public abstract class RegionScannerFactory {
 
       @Override
       public boolean nextRaw(List<Cell> result) throws IOException {
+        return nextRaw(result, null);
+      }
+
+      @Override
+      public boolean nextRaw(List<Cell> result, ScannerContext scannerContext) throws IOException {
         try {
-          boolean next = s.nextRaw(result);
+          boolean next = (scannerContext == null)
+                  ? s.nextRaw(result)
+                  : s.nextRaw(result, scannerContext);
           if (ScanUtil.isDummy(result)) {
             return true;
           }
@@ -309,6 +319,10 @@ public abstract class RegionScannerFactory {
               return false;
           }
           // There is a scanattribute set to retrieve the specific array element
+          if (scannerContext != null) {
+            ScannerContextUtil.incrementSizeProgress(scannerContext, result);
+            ScannerContextUtil.updateTimeProgress(scannerContext);
+          }
           return next;
         } catch (Throwable t) {
           ClientUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(), t);
@@ -369,13 +383,6 @@ public abstract class RegionScannerFactory {
         return new Pair<>(tuple, new byte[0]);
       }
 
-      @Override
-      public boolean nextRaw(List<Cell> result, ScannerContext scannerContext)
-          throws IOException {
-        boolean res = next(result);
-        ScannerContextUtil.incrementSizeProgress(scannerContext, result);
-        return res;
-      }
 
       /**
        * When there is a merge in progress while scanning local indexes we might get the key values less than scan start row.

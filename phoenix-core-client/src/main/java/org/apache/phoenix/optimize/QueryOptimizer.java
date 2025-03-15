@@ -195,7 +195,8 @@ public class QueryOptimizer {
                 dataPlan.getContext().getSequenceManager(),
                 true,
                 true,
-                dataPlans);
+                dataPlans,
+                dataPlan.getContext());
         return Collections.singletonList(compiler.compile());
     }
 
