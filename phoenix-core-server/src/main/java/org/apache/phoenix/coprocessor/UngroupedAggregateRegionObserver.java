@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.apache.phoenix.util.ScanUtil.adjustScanFilterForGlobalIndexRegionScanner;
 import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
@@ -61,6 +63,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControllerFactory;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
+import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScanType;
@@ -73,6 +76,8 @@ import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.cache.ServerMetadataCache;
+import org.apache.phoenix.cache.ServerMetadataCacheImpl;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -88,6 +93,7 @@ import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicyHelper;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicyHelper.MutateCommand;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
+import org.apache.phoenix.jdbc.ClusterRoleRecord;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.join.HashJoinInfo;
@@ -1054,5 +1060,22 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     @Override
     protected boolean isRegionObserverFor(Scan scan) {
         return scan.getAttribute(BaseScannerRegionObserverConstants.UNGROUPED_AGG) != null;
+    }
+
+    @Override
+    public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
+                               MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+        Configuration conf = c.getEnvironment().getConfiguration();
+        if(conf.getBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED)) {
+            try {
+                ServerMetadataCache serverMetadataCache = ServerMetadataCacheImpl.getInstance(c.getEnvironment().getConfiguration());
+                if (!serverMetadataCache.getClusterRoleRecordsForClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).isEmpty()) {
+                    throw new IOException("Blocking Mutation as Some CRRs are in ACTIVE_TO_STANDBY state " +
+                            "and CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
+                }
+            } catch (Exception e) {
+                throw new IOException(e);
+            }
+        }
     }
 }

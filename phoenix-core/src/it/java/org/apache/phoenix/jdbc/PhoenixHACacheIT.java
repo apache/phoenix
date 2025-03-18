@@ -35,8 +35,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.fail;
 
 /**
  * Integration tests for {@link PhoenixHACache}
