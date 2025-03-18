@@ -21,6 +21,8 @@ import static org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder.KEEP_
 import static org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder.MAX_VERSIONS;
 import static org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder.REPLICATION_SCOPE;
 import static org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder.TTL;
+import static org.apache.hadoop.hbase.client.MetricsConnection.CLIENT_SIDE_METRICS_ENABLED_KEY;
+import static org.apache.hadoop.hbase.client.MetricsConnection.METRICS_SCOPE_KEY;
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP;
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0;
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0;
@@ -517,6 +519,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     .build();
         }
 
+        if (this.config.getBoolean(CLIENT_SIDE_METRICS_ENABLED_KEY, false)) {
+            this.config.set(METRICS_SCOPE_KEY, config.get(QUERY_SERVICES_NAME));
+        }
 
         if (!QueryUtil.isServerConnection(props)) {
             //Start queryDistruptor everytime as log level can be change at connection level as well, but we can avoid starting for server connections.
