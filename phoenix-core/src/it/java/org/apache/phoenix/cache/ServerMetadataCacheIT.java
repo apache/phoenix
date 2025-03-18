@@ -111,7 +111,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
                 Long.toString(Long.MAX_VALUE));
         props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
                 Long.toString(Long.MAX_VALUE));
-        props.put(QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, Boolean.toString(true));
+        props.put(QueryServices.PHOENIX_HA_CACHE_ENABLED, Boolean.toString(true));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
         assertEquals(1, getUtility().getHBaseCluster().getNumLiveRegionServers());
         serverName = getUtility().getHBaseCluster().getRegionServer(0).getServerName();
@@ -174,14 +174,16 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         haAdmin.createOrUpdateDataOnZookeeper(crr2);
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        assert cache.isMutationBlocked();
+        assert cache.getClusterRoleRecordsForClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).size() == 1;
+        assert cache.getClusterRoleRecordsForClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).size() == 1;
 
         // Cleanup the cache to delete all entries
         haAdmin.getCurator().delete().forPath(toPath("failover"));
         haAdmin.getCurator().delete().forPath(toPath("parallel"));
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        assertFalse(cache.isMutationBlocked());
+        assert cache.getClusterRoleRecordsForClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).isEmpty();
+        assert cache.getClusterRoleRecordsForClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).isEmpty();
 
         // Create new entries again
         crr1 = new ClusterRoleRecord("failover",
@@ -194,7 +196,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         haAdmin.createOrUpdateDataOnZookeeper(crr2);
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        assertFalse(cache.isMutationBlocked());
+        assert cache.getClusterRoleRecordsForClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).size() == 2;
 
 
         // Create new entries again
@@ -208,14 +210,16 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         haAdmin.createOrUpdateDataOnZookeeper(crr2);
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        assert cache.isMutationBlocked();
+        assert cache.getClusterRoleRecordsForClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).size() == 1;
+        assert cache.getClusterRoleRecordsForClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).size() == 1;
 
         // Cleanup the cache to delete all entries
         haAdmin.getCurator().delete().forPath(toPath("failover"));
         haAdmin.getCurator().delete().forPath(toPath("parallel"));
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        assertFalse(cache.isMutationBlocked());
+        assert cache.getClusterRoleRecordsForClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).isEmpty();
+        assert cache.getClusterRoleRecordsForClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).isEmpty();
     }
 
     /**

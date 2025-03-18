@@ -16,7 +16,11 @@
  */
 package org.apache.phoenix.cache;
 
+import org.apache.phoenix.exception.StaleMetadataCacheException;
+import org.apache.phoenix.jdbc.ClusterRoleRecord;
+
 import java.sql.SQLException;
+import java.util.List;
 
 /**
  * Interface for server side metadata cache hosted on each region server.
@@ -25,6 +29,6 @@ public interface ServerMetadataCache {
     long getLastDDLTimestampForTable(byte[] tenantID, byte[] schemaName, byte[] tableName)
             throws SQLException;
     void invalidateLastDDLTimestampForTable(byte[] tenantID, byte[] schemaName, byte[] tableName);
-    boolean isMutationBlocked() throws Exception;
+    List<ClusterRoleRecord> getClusterRoleRecordsForClusterRole(ClusterRoleRecord.ClusterRole role) throws StaleMetadataCacheException;
     void invalidatePhoenixHACache() throws Exception;
 }

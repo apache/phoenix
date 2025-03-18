@@ -18,105 +18,7 @@
 package org.apache.phoenix.query;
 
 import static org.apache.hadoop.hbase.HConstants.DEFAULT_HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD;
-import static org.apache.phoenix.query.QueryServices.ALLOWED_LIST_FOR_TABLE_LEVEL_METRICS;
-import static org.apache.phoenix.query.QueryServices.ALLOW_ONLINE_TABLE_SCHEMA_UPDATE;
-import static org.apache.phoenix.query.QueryServices.ALLOW_VIEWS_ADD_NEW_CF_BASE_TABLE;
-import static org.apache.phoenix.query.QueryServices.AUTO_UPGRADE_ENABLED;
-import static org.apache.phoenix.query.QueryServices.CALL_QUEUE_PRODUCER_ATTRIB_NAME;
-import static org.apache.phoenix.query.QueryServices.CALL_QUEUE_ROUND_ROBIN_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.CLIENT_METRICS_TAG;
-import static org.apache.phoenix.query.QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
-import static org.apache.phoenix.query.QueryServices.COLLECT_REQUEST_LEVEL_METRICS;
-import static org.apache.phoenix.query.QueryServices.COMMIT_STATS_ASYNC;
-import static org.apache.phoenix.query.QueryServices.CONNECTION_ACTIVITY_LOGGING_ENABLED;
-import static org.apache.phoenix.query.QueryServices.CONNECTION_ACTIVITY_LOGGING_INTERVAL;
-import static org.apache.phoenix.query.QueryServices.CONNECTION_QUERY_SERVICE_HISTOGRAM_SIZE_RANGES;
-import static org.apache.phoenix.query.QueryServices.CONNECTION_QUERY_SERVICE_METRICS_ENABLED;
-import static org.apache.phoenix.query.QueryServices.CONNECTION_QUERY_SERVICE_METRICS_PUBLISHER_ENABLED;
-import static org.apache.phoenix.query.QueryServices.CONNECTION_QUERY_SERVICE_METRICS_PUBLISHER_CLASSNAME;
-import static org.apache.phoenix.query.QueryServices.COST_BASED_OPTIMIZER_ENABLED;
-import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.DELAY_FOR_SCHEMA_UPDATE_CHECK;
-import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.EXPLAIN_ROW_COUNT_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.GLOBAL_METRICS_ENABLED;
-import static org.apache.phoenix.query.QueryServices.GROUPBY_MAX_CACHE_SIZE_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILLABLE_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILL_FILES_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.HA_CACHE_TTL_MS;
-import static org.apache.phoenix.query.QueryServices.HBASE_CLIENT_SCANNER_TIMEOUT_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.IMMUTABLE_ROWS_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
-import static org.apache.phoenix.query.QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.INDEX_POPULATION_SLEEP_TIME;
-import static org.apache.phoenix.query.QueryServices.INDEX_REBUILD_TASK_INITIAL_DELAY;
-import static org.apache.phoenix.query.QueryServices.IS_NAMESPACE_MAPPING_ENABLED;
-import static org.apache.phoenix.query.QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE;
-import static org.apache.phoenix.query.QueryServices.KEEP_ALIVE_MS_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.LOG_LEVEL;
-import static org.apache.phoenix.query.QueryServices.LOG_SAMPLE_RATE;
-import static org.apache.phoenix.query.QueryServices.MASTER_INFO_PORT_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.MAX_MEMORY_PERC_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.MAX_MUTATION_SIZE_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN;
-import static org.apache.phoenix.query.QueryServices.MAX_SERVER_CACHE_SIZE_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.MAX_SERVER_METADATA_CACHE_SIZE_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.MAX_SPOOL_TO_DISK_BYTES_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.MAX_TENANT_MEMORY_PERC_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.METRIC_PUBLISHER_CLASS_NAME;
-import static org.apache.phoenix.query.QueryServices.METRIC_PUBLISHER_ENABLED;
-import static org.apache.phoenix.query.QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.NUM_RETRIES_FOR_SCHEMA_UPDATE_CHECK;
-import static org.apache.phoenix.query.QueryServices.PHOENIX_ACLS_ENABLED;
-import static org.apache.phoenix.query.QueryServices.QUERY_SERVICES_NAME;
-import static org.apache.phoenix.query.QueryServices.QUEUE_SIZE_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.REGIONSERVER_INFO_PORT_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.RENEW_LEASE_ENABLED;
-import static org.apache.phoenix.query.QueryServices.RENEW_LEASE_THREAD_POOL_SIZE;
-import static org.apache.phoenix.query.QueryServices.RENEW_LEASE_THRESHOLD_MILLISECONDS;
-import static org.apache.phoenix.query.QueryServices.ROW_KEY_ORDER_SALTED_TABLE_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.RPC_TIMEOUT_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS;
-import static org.apache.phoenix.query.QueryServices.RUN_UPDATE_STATS_ASYNC;
-import static org.apache.phoenix.query.QueryServices.SCAN_CACHE_SIZE_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.SCAN_RESULT_CHUNK_SIZE;
-import static org.apache.phoenix.query.QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.SERVER_MERGE_FOR_UNCOVERED_INDEX;
-import static org.apache.phoenix.query.QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.SKIP_SYSTEM_TABLES_EXISTENCE_CHECK;
-import static org.apache.phoenix.query.QueryServices.SPOOL_DIRECTORY;
-import static org.apache.phoenix.query.QueryServices.STATS_CACHE_THREAD_POOL_SIZE;
-import static org.apache.phoenix.query.QueryServices.STATS_COLLECTION_ENABLED;
-import static org.apache.phoenix.query.QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.STATS_USE_CURRENT_TIME_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.TABLE_LEVEL_METRICS_ENABLED;
-import static org.apache.phoenix.query.QueryServices.THREAD_POOL_SIZE_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.THREAD_TIMEOUT_MS_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.TRACING_BATCH_SIZE;
-import static org.apache.phoenix.query.QueryServices.TRACING_ENABLED;
-import static org.apache.phoenix.query.QueryServices.TRACING_STATS_TABLE_NAME_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.TRACING_THREAD_POOL_SIZE;
-import static org.apache.phoenix.query.QueryServices.TRACING_TRACE_BUFFER_SIZE;
-import static org.apache.phoenix.query.QueryServices.TRANSACTIONS_ENABLED;
-import static org.apache.phoenix.query.QueryServices.UPLOAD_BINARY_DATA_TYPE_ENCODING;
-import static org.apache.phoenix.query.QueryServices.USE_BYTE_BASED_REGEX_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
-import static org.apache.phoenix.query.QueryServices.CLIENT_INDEX_ASYNC_THRESHOLD;
-import static org.apache.phoenix.query.QueryServices.PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED;
-import static org.apache.phoenix.query.QueryServices.MAX_IN_LIST_SKIP_SCAN_SIZE;
-import static org.apache.phoenix.query.QueryServices.WAL_EDIT_CODEC_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.*;
 
 import java.util.Map.Entry;
 
@@ -452,7 +354,7 @@ public class QueryServicesOptions {
 
     public static final int DEFAULT_PHOENIX_STREAMS_GET_TABLE_REGIONS_TIMEOUT = 300000; // 5 minutes
 
-    public static final Boolean DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED = false;
+    public static final Boolean DEFAULT_PHOENIX_HA_CACHE_ENABLED = false;
 
 
     private final Configuration config;
@@ -558,7 +460,7 @@ public class QueryServicesOptions {
             .setIfUnset(MAX_IN_LIST_SKIP_SCAN_SIZE, DEFAULT_MAX_IN_LIST_SKIP_SCAN_SIZE)
             .setIfUnset(CONNECTION_ACTIVITY_LOGGING_ENABLED, DEFAULT_CONNECTION_ACTIVITY_LOGGING_ENABLED)
             .setIfUnset(CONNECTION_ACTIVITY_LOGGING_INTERVAL, DEFAULT_CONNECTION_ACTIVITY_LOGGING_INTERVAL_IN_MINS)
-            .setIfUnset(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED);
+            .setIfUnset(PHOENIX_HA_CACHE_ENABLED, DEFAULT_PHOENIX_HA_CACHE_ENABLED);
 
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set

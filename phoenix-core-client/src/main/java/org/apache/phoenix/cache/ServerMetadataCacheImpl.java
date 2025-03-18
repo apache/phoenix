@@ -17,16 +17,19 @@
  */
 package org.apache.phoenix.cache;
 
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Collections;
+import java.util.List;
 import java.util.Properties;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsMetadataCachingSource;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
+import org.apache.phoenix.exception.StaleMetadataCacheException;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.jdbc.ClusterRoleRecord;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixHACache;
 import org.apache.phoenix.schema.PTable;
@@ -38,8 +41,8 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_HA_CACHE_ENABLED;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_HA_CACHE_ENABLED;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 /**
  * This manages the cache for all the objects(data table, views, indexes) on each region server.
@@ -56,7 +59,7 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
     private static final long DEFAULT_PHOENIX_COPROC_REGIONSERVER_CACHE_SIZE = 10000L;
     private static volatile ServerMetadataCacheImpl cacheInstance;
     private MetricsMetadataCachingSource metricsSource;
-    private boolean mutationBlockEnabled;
+    private boolean phoenixHACacheEnabled;
     private PhoenixHACache phoenixHACache;
 
     /**
@@ -93,10 +96,10 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
                 // maximum number of entries this cache can handle.
                 .maximumSize(maxSize)
                 .build();
-        this.mutationBlockEnabled = conf.getBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED,
-                DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED);
+        this.phoenixHACacheEnabled = conf.getBoolean(PHOENIX_HA_CACHE_ENABLED,
+                DEFAULT_PHOENIX_HA_CACHE_ENABLED);
         // Only initialize this cache if CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is enabled
-        if(this.mutationBlockEnabled) {
+        if(this.phoenixHACacheEnabled) {
             this.phoenixHACache = PhoenixHACache.getInstance(conf);
         }
     }
@@ -161,13 +164,18 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
     }
 
     @Override
-    public boolean isMutationBlocked() {
-        return mutationBlockEnabled && phoenixHACache != null && phoenixHACache.isClusterInActiveToStandby();
+    public List<ClusterRoleRecord> getClusterRoleRecordsForClusterRole(ClusterRoleRecord.ClusterRole role) throws StaleMetadataCacheException {
+        try {
+            return phoenixHACacheEnabled ? phoenixHACache.getCRRsByClusterRole(role) : Collections.emptyList();
+        } catch (IllegalStateException e) {
+            throw new StaleMetadataCacheException("PhoenixHACache is not healthy");
+        }
     }
 
     @Override
     public void invalidatePhoenixHACache() throws Exception {
-        if (phoenixHACache != null) {
+        if (phoenixHACacheEnabled) {
+            phoenixHACache = PhoenixHACache.getInstance(conf);
             phoenixHACache.rebuild();
         }
     }

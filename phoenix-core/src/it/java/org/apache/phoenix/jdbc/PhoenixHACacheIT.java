@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.jdbc;
 
+import org.apache.curator.utils.ZKPaths;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -35,6 +36,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.fail;
 
 /**
  * Integration tests for {@link PhoenixHACache}
@@ -68,7 +70,8 @@ public class PhoenixHACacheIT extends BaseTest {
                 "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 1L);
         haAdmin.createOrUpdateDataOnZookeeper(crr);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        assertFalse(phoenixHACache.isClusterInActiveToStandby());
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).size() == 1;
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).isEmpty();
 
         // Now Update CRR so that current cluster has state ACTIVE_TO_STANDBY
         crr = new ClusterRoleRecord("failover",
@@ -78,7 +81,8 @@ public class PhoenixHACacheIT extends BaseTest {
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         // Check that now the cluster should be in ActiveToStandby
-        assert phoenixHACache.isClusterInActiveToStandby();
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).isEmpty();
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).size() == 1;
 
 
         // Change it back to ACTIVE so that cluster is not in ACTIVE_TO_STANDBY state
@@ -88,7 +92,8 @@ public class PhoenixHACacheIT extends BaseTest {
         haAdmin.createOrUpdateDataOnZookeeper(crr);
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        assertFalse(phoenixHACache.isClusterInActiveToStandby());
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).size() == 1;
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).isEmpty();
 
 
         // Change it again to ACTIVE_TO_STANDBY so that we can validate watcher works repeatedly
@@ -98,7 +103,8 @@ public class PhoenixHACacheIT extends BaseTest {
         haAdmin.createOrUpdateDataOnZookeeper(crr);
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        assert phoenixHACache.isClusterInActiveToStandby();
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).isEmpty();
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).size() == 1;
 
 
         // Change peer cluster to ACTIVE_TO_STANDBY so that we can still process mutation on this cluster
@@ -108,7 +114,8 @@ public class PhoenixHACacheIT extends BaseTest {
         haAdmin.createOrUpdateDataOnZookeeper(crr);
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        assertFalse(phoenixHACache.isClusterInActiveToStandby());
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).size() == 1;
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).isEmpty();
     }
 
 
@@ -126,7 +133,8 @@ public class PhoenixHACacheIT extends BaseTest {
         haAdmin.createOrUpdateDataOnZookeeper(crr2);
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        assertFalse(phoenixHACache.isClusterInActiveToStandby());
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).size() == 2;
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).isEmpty();
 
         // Now Update CRR so that current cluster has state ACTIVE_TO_STANDBY for only 1 crr
         crr1 = new ClusterRoleRecord("failover",
@@ -140,7 +148,8 @@ public class PhoenixHACacheIT extends BaseTest {
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         // Check that now the cluster should be in ActiveToStandby
-        assert phoenixHACache.isClusterInActiveToStandby();
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).size() == 1;
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).size() == 1;
 
 
         // Change it back to ACTIVE so that cluster is not in ACTIVE_TO_STANDBY state
@@ -154,7 +163,8 @@ public class PhoenixHACacheIT extends BaseTest {
         haAdmin.createOrUpdateDataOnZookeeper(crr2);
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        assertFalse(phoenixHACache.isClusterInActiveToStandby());
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).size() == 2;
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).isEmpty();
 
 
         // Change other crr to ACTIVE_TO_STANDBY and one in ACTIVE state so that we can validate watcher works repeatedly
@@ -168,7 +178,8 @@ public class PhoenixHACacheIT extends BaseTest {
         haAdmin.createOrUpdateDataOnZookeeper(crr2);
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        assert phoenixHACache.isClusterInActiveToStandby();
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).size() == 1;
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).size() == 1;
 
 
         // Change peer cluster to ACTIVE_TO_STANDBY so that we can still process mutation on this cluster
@@ -182,11 +193,13 @@ public class PhoenixHACacheIT extends BaseTest {
         haAdmin.createOrUpdateDataOnZookeeper(crr2);
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        assertFalse(phoenixHACache.isClusterInActiveToStandby());
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).size() == 2;
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).isEmpty();
     }
 
     @Test
     public void testMultiThreadedAccessToHACache() throws Exception {
+        PhoenixHACache phoenixHACache = PhoenixHACache.getInstance(config);
         // Setup initial CRRs
         ClusterRoleRecord crr1 = new ClusterRoleRecord("failover",
                 HighAvailabilityPolicy.FAILOVER, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE,
@@ -205,17 +218,15 @@ public class PhoenixHACacheIT extends BaseTest {
         for (int i = 0; i < threadCount; i++) {
             executor.submit(() -> {
                 try {
-                    PhoenixHACache phoenixHACache = PhoenixHACache.getInstance(config);
-                    assertFalse(phoenixHACache.isClusterInActiveToStandby());
+                    assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).size() == 2;
+                    assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).isEmpty();
+                    latch.countDown();
                 } catch (Exception e) {
                     throw new RuntimeException(e);
-                } finally {
-                    latch.countDown();
                 }
             });
         }
-        latch.await(10, TimeUnit.SECONDS);
-        assert latch.getCount() == 0;
+        assert latch.await(10, TimeUnit.SECONDS);
 
         // Update CRRs
         crr1 = new ClusterRoleRecord("failover",
@@ -234,16 +245,48 @@ public class PhoenixHACacheIT extends BaseTest {
         for (int i = 0; i < threadCount; i++) {
             executor.submit(() -> {
                 try {
-                    PhoenixHACache phoenixHACache = PhoenixHACache.getInstance(config);
-                    assert phoenixHACache.isClusterInActiveToStandby();
+                    assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).size() == 1;
+                    assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).size() == 1;
+                    latch2.countDown();
                 } catch (Exception e) {
                     throw new RuntimeException(e);
-                } finally {
-                    latch2.countDown();
                 }
             });
         }
-        latch2.await(10, TimeUnit.SECONDS);
-        assert latch2.getCount() == 0;
+        assert latch2.await(10, TimeUnit.SECONDS);
+    }
+
+    @Test
+    public void testHACacheWithRootPathDeletion() throws Exception {
+        PhoenixHACache phoenixHACache = PhoenixHACache.getInstance(config);
+        ClusterRoleRecord crr1 = new ClusterRoleRecord("failover",
+                HighAvailabilityPolicy.FAILOVER, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 1L);
+        ClusterRoleRecord crr2 = new ClusterRoleRecord("parallel",
+                HighAvailabilityPolicy.PARALLEL, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 1L);
+        haAdmin.createOrUpdateDataOnZookeeper(crr1);
+        haAdmin.createOrUpdateDataOnZookeeper(crr2);
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).size() == 1;
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).size() == 1;
+
+        haAdmin.getCurator().delete().deletingChildrenIfNeeded().forPath(ZKPaths.PATH_SEPARATOR);
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).isEmpty();
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).isEmpty();
+
+
+        crr1 = new ClusterRoleRecord("failover",
+                HighAvailabilityPolicy.FAILOVER, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 2L);
+        crr2 = new ClusterRoleRecord("parallel",
+                HighAvailabilityPolicy.PARALLEL, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 2L);
+        haAdmin.createOrUpdateDataOnZookeeper(crr1);
+        haAdmin.createOrUpdateDataOnZookeeper(crr2);
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).size() == 1;
+        assert phoenixHACache.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).size() == 1;
     }
 }
