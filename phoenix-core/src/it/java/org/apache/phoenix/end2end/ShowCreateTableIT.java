@@ -18,13 +18,13 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.util.SchemaUtil;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.Properties;
 
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
@@ -349,5 +349,25 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         assertTrue("Expected: " + createIndex + "\nResult: " + rs.getString(1),
                 rs.getString(1).contains(createIndex));
+    }
+
+    @Test
+    public void testShowCreateTableUsingGetResultSet() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String schemaName = generateUniqueName();
+        String tableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
+        String ddl = "CREATE TABLE " + tableFullName + "(K VARCHAR NOT NULL PRIMARY KEY, INT INTEGER)";
+        conn.createStatement().execute(ddl);
+        try (Statement statement = conn.createStatement()) {
+            boolean execute = statement.execute("SHOW CREATE TABLE " + tableFullName);
+            if (execute) {
+                try (ResultSet rs = statement.getResultSet()) {
+                    assertTrue(rs.next());
+                    assertTrue(rs.getString(1).contains(tableFullName));
+                }
+            }
+        }
     }
 }
