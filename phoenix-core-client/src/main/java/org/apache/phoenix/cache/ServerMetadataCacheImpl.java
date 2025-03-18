@@ -98,8 +98,8 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
                 .build();
         this.phoenixHACacheEnabled = conf.getBoolean(PHOENIX_HA_CACHE_ENABLED,
                 DEFAULT_PHOENIX_HA_CACHE_ENABLED);
-        // Only initialize this cache if CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is enabled
-        if(this.phoenixHACacheEnabled) {
+        // Only initialize this cache if PhoenixHACacheEnabled is true
+        if (this.phoenixHACacheEnabled) {
             this.phoenixHACache = PhoenixHACache.getInstance(conf);
         }
     }

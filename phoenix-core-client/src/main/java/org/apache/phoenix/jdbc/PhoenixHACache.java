@@ -28,7 +28,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.util.*;
+import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -168,7 +169,9 @@ public class PhoenixHACache implements Closeable {
         try {
             LOGGER.info("Closing PhoenixHACache");
             clusterRoleToCRRMap.clear();
-            pathChildrenCache.close();
+            if (pathChildrenCache != null) {
+                pathChildrenCache.close();
+            }
             LOGGER.info("Closed PhoenixHACache");
         } catch (IOException e) {
             LOGGER.error("Exception closing PhoenixHACache", e);
