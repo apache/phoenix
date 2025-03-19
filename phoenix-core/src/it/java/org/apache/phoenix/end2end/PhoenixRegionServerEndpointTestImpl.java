@@ -39,7 +39,7 @@ public class PhoenixRegionServerEndpointTestImpl extends PhoenixRegionServerEndp
     }
 
     @Override
-    public ServerMetadataCache getServerMetadataCache() throws Exception {
+    public ServerMetadataCache getServerMetadataCache() {
         return ServerMetadataCacheTestImpl.getInstance(conf, serverName);
     }
 }

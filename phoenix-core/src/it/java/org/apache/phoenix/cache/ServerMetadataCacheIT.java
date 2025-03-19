@@ -27,12 +27,9 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.PhoenixRegionServerEndpointTestImpl;
 import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
-import org.apache.phoenix.jdbc.ClusterRoleRecord;
-import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixHAAdmin;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -76,12 +73,10 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
-import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.apache.phoenix.query.ConnectionQueryServicesImpl.INVALIDATE_SERVER_METADATA_CACHE_EX_MESSAGE;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -111,7 +106,6 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
                 Long.toString(Long.MAX_VALUE));
         props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
                 Long.toString(Long.MAX_VALUE));
-        props.put(QueryServices.PHOENIX_HA_CACHE_ENABLED, Boolean.toString(true));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
         assertEquals(1, getUtility().getHBaseCluster().getNumLiveRegionServers());
         serverName = getUtility().getHBaseCluster().getRegionServer(0).getServerName();
@@ -130,7 +124,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
     /**
      * Get the server metadata cache instance from the endpoint loaded on the region server.
      */
-    private ServerMetadataCacheTestImpl getServerMetadataCache() throws Exception {
+    private ServerMetadataCacheTestImpl getServerMetadataCache() {
         String phoenixRegionServerEndpoint = config.get(REGIONSERVER_COPROCESSOR_CONF_KEY);
         assertNotNull(phoenixRegionServerEndpoint);
         RegionServerCoprocessor coproc = getUtility().getHBaseCluster()

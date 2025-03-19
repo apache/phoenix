@@ -40,6 +40,7 @@ import org.junit.experimental.categories.Category;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.Map;
 import java.util.Properties;
 
@@ -59,7 +60,7 @@ public class PhoenixRegionServerEndpointIT extends BaseTest {
 
     // Tests that PhoenixRegionServerEndpoint validates the last ddl timestamp for base table.
     @Test
-    public void testValidateLastDDLTimestampNoException() throws Exception {
+    public void testValidateLastDDLTimestampNoException() throws SQLException {
         HRegionServer regionServer = utility.getMiniHBaseCluster().getRegionServer(0);
         PhoenixRegionServerEndpoint coprocessor = getPhoenixRegionServerEndpoint(regionServer);
         assertNotNull(coprocessor);
@@ -88,7 +89,7 @@ public class PhoenixRegionServerEndpointIT extends BaseTest {
     // Tests that PhoenixRegionServerEndpoint throws StaleMetadataCacheException if client
     // provided last ddl timestamp is less than server maintained last ddl timestamp.
     @Test
-    public void testValidateLastDDLTimestampWithException() throws Exception {
+    public void testValidateLastDDLTimestampWithException() throws SQLException {
         HRegionServer regionServer = utility.getMiniHBaseCluster().getRegionServer(0);
         PhoenixRegionServerEndpoint coprocessor = getPhoenixRegionServerEndpoint(regionServer);
         assertNotNull(coprocessor);
@@ -120,7 +121,7 @@ public class PhoenixRegionServerEndpointIT extends BaseTest {
     // Tests that PhoenixRegionServerEndpoint validates the last ddl timestamp for tenant owned
     // views
     @Test
-    public void testValidateLastDDLTimestampWithTenantID() throws Exception {
+    public void testValidateLastDDLTimestampWithTenantID() throws SQLException {
         HRegionServer regionServer = utility.getMiniHBaseCluster().getRegionServer(0);
         PhoenixRegionServerEndpoint coprocessor = getPhoenixRegionServerEndpoint(regionServer);
         assertNotNull(coprocessor);
@@ -159,7 +160,7 @@ public class PhoenixRegionServerEndpointIT extends BaseTest {
     }
 
     @Test
-    public void testInvalidateHAGroupStoreClient() throws Exception {
+    public void testInvalidateHAGroupStoreClient() {
         HRegionServer regionServer = utility.getMiniHBaseCluster().getRegionServer(0);
         PhoenixRegionServerEndpoint coprocessor = getPhoenixRegionServerEndpoint(regionServer);
         assertNotNull(coprocessor);

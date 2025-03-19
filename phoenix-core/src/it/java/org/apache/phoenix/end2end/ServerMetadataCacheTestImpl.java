@@ -44,11 +44,11 @@ public class ServerMetadataCacheTestImpl extends ServerMetadataCacheImpl {
     private static volatile Map<ServerName, ServerMetadataCacheTestImpl> INSTANCES = new HashMap<>();
     private Connection connectionForTesting;
 
-    ServerMetadataCacheTestImpl(Configuration conf) throws Exception {
+    ServerMetadataCacheTestImpl(Configuration conf) {
         super(conf);
     }
 
-    public static ServerMetadataCacheTestImpl getInstance(Configuration conf, ServerName serverName) throws Exception {
+    public static ServerMetadataCacheTestImpl getInstance(Configuration conf, ServerName serverName) {
         ServerMetadataCacheTestImpl result = INSTANCES.get(serverName);
         if (result == null) {
             synchronized (ServerMetadataCacheTestImpl.class) {
