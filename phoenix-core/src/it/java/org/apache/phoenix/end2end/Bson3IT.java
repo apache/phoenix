@@ -172,9 +172,13 @@ public class Bson3IT extends ParallelStatsDisabledIT {
               .append("$softly", new BsonString("softly")));
 
       query = "SELECT * FROM " + tableName +
-              " WHERE PK1 = 'pk0001' AND C1 = '0002' AND BSON_CONDITION_EXPRESSION(COL, '"
-              + conditionDoc.toJson() + "')";
-      rs = conn.createStatement().executeQuery(query);
+              " WHERE PK1 = ? AND C1 = ? AND BSON_CONDITION_EXPRESSION(COL, ?)";
+      PreparedStatement ps = conn.prepareStatement(query);
+      ps.setString(1, "pk0001");
+      ps.setString(2, "0002");
+      ps.setObject(3, conditionDoc);
+
+      rs = ps.executeQuery();
 
       assertTrue(rs.next());
       assertEquals("pk0001", rs.getString(1));

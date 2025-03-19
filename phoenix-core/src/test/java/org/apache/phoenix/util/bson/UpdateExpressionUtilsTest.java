@@ -18,17 +18,8 @@
 
 package org.apache.phoenix.util.bson;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
 import org.bson.BsonBinaryReader;
 import org.bson.BsonDocument;
-import org.bson.BsonNull;
-import org.bson.BsonNumber;
-import org.bson.BsonString;
-import org.bson.BsonValue;
 import org.bson.RawBsonDocument;
 import org.bson.codecs.BsonDocumentCodec;
 import org.bson.codecs.DecoderContext;
@@ -46,32 +37,8 @@ public class UpdateExpressionUtilsTest {
 
   @Test
   public void testUpdateExpression() {
-    TestFieldsMap map = getTestFieldsMap1();
-    TestFieldsMap comparisonMap = getComparisonValuesMap();
-
-    Assert.assertEquals(TestUtil.getPhoenixFieldMap(
-        TestUtil.getRawBsonBytes(map)), map);
-    Assert.assertEquals(TestUtil.getPhoenixFieldMap(
-        map.toString()), map);
-
-    BsonDocument bsonDocument = TestUtil.getBsonDocument(map);
+    BsonDocument bsonDocument = getDocument1();
     assertDeserializedBsonDoc(bsonDocument);
-
-/*    BsonDocument expressionDoc = getBsonDocument("SET Title = :newTitle, Id = :newId , " +
-            "NestedMap1.ColorList = :ColorList , "
-        + "Id1 = :Id1 , NestedMap1.NList1[0] = :NList1_0 , "
-        + "NestedList1[2][1].ISBN = :NestedList1_ISBN , "
-        + "NestedMap1.NestedMap2.NewID = :newId , "
-        + "NestedMap1.NestedMap2.NList[2] = :NList003 , "
-        + "NestedMap1.NestedMap2.NList[0] = :NList001 ADD AddedId :attr5_0 , "
-        + "NestedMap1.AddedId :attr5_0, NestedMap1.NestedMap2.Id :newIdNeg , "
-        + "NestedList12[2][0] :NestedList12_00 , NestedList12[2][1] :NestedList12_01 ,"
-        + "  Pictures  :AddedPics "
-        + "REMOVE IdS, Id2, NestedMap1.Title , "
-        + "NestedMap1.NestedMap2.InPublication , NestedList1[2][1].TitleSet1 "
-        + "DELETE PictureBinarySet :PictureBinarySet01 , NestedMap1.NSet1 :NSet01 ,"
-        + "  NestedList1[2][1].TitleSet2  :NestedList1TitleSet01", TestUtil.getRawBsonDocument(comparisonMap));
- */
 
     String updateExpression = "{\n" +
             "  \"$SET\": {\n" +
@@ -314,8 +281,7 @@ public class UpdateExpressionUtilsTest {
 
     UpdateExpressionUtils.updateExpression(expressionDoc, bsonDocument);
     Assert.assertEquals("Update expression could not update the map",
-            getTestFieldsMap2(),
-            TestUtil.getPhoenixFieldMap(bsonDocument));
+            getUpdatedDocument(), bsonDocument);
 
     //{
     //  "$SET": {
@@ -357,21 +323,11 @@ public class UpdateExpressionUtilsTest {
             "  }\n" +
             "}";
 
-/*    UpdateExpressionUtils.updateExpression(
-        getBsonDocument("SET NestedList1[0] = NestedList1[0] + :NList001 , "
-            + "NestedList1[3] = :NList003 , NestedList1[4] = :NList004, "
-                + "attr_5[0] = attr_5[0] - :attr5_0, Id1 = :newId",
-            TestUtil.getRawBsonDocument(comparisonMap)), bsonDocument);
- */
     expressionDoc = RawBsonDocument.parse(updateExpression);
     UpdateExpressionUtils.updateExpression(expressionDoc, bsonDocument);
 
     Assert.assertEquals("Update expression could not update the map after second update",
-        getTestFieldsMap3(),
-        TestUtil.getPhoenixFieldMap(bsonDocument));
-
-    Assert.assertEquals(TestUtil.getPhoenixFieldMap(
-        TestUtil.getRawBsonBytes(map)), map);
+        getUpdatedDocument2(), bsonDocument);
   }
 
   private static void assertDeserializedBsonDoc(BsonDocument bsonDocument) {
@@ -387,509 +343,1064 @@ public class UpdateExpressionUtilsTest {
     Assert.assertEquals(bsonDocument, deserializedBsonDocument);
   }
 
-  public static BsonDocument getBsonDocument(String updateExpression,
-      BsonDocument comparisonValue) {
-
-    String setRegExPattern = "SET\\s+(.+?)(?=\\s+(REMOVE|ADD|DELETE)\\b|$)";
-    String removeRegExPattern = "REMOVE\\s+(.+?)(?=\\s+(SET|ADD|DELETE)\\b|$)";
-    String addRegExPattern = "ADD\\s+(.+?)(?=\\s+(SET|REMOVE|DELETE)\\b|$)";
-    String deleteRegExPattern = "DELETE\\s+(.+?)(?=\\s+(SET|REMOVE|ADD)\\b|$)";
-
-    String setString = "";
-    String removeString = "";
-    String addString = "";
-    String deleteString = "";
-
-    Pattern pattern = Pattern.compile(setRegExPattern);
-    Matcher matcher = pattern.matcher(updateExpression);
-    if (matcher.find()) {
-      setString = matcher.group(1).trim();
-    }
-
-    pattern = Pattern.compile(removeRegExPattern);
-    matcher = pattern.matcher(updateExpression);
-    if (matcher.find()) {
-      removeString = matcher.group(1).trim();
-    }
-
-    pattern = Pattern.compile(addRegExPattern);
-    matcher = pattern.matcher(updateExpression);
-    if (matcher.find()) {
-      addString = matcher.group(1).trim();
-    }
-
-    pattern = Pattern.compile(deleteRegExPattern);
-    matcher = pattern.matcher(updateExpression);
-    if (matcher.find()) {
-      deleteString = matcher.group(1).trim();
-    }
-
-    BsonDocument bsonDocument = new BsonDocument();
-    if (!setString.isEmpty()) {
-      BsonDocument setBsonDoc = new BsonDocument();
-      String[] setExpressions = setString.split(",");
-      for (String setExpression : setExpressions) {
-        String[] keyVal = setExpression.split("\\s*=\\s*");
-        if (keyVal.length == 2) {
-          String attributeKey = keyVal[0].trim();
-          String attributeVal = keyVal[1].trim();
-          if (!attributeVal.contains("+") && !attributeVal.contains("-")) {
-            setBsonDoc.put(attributeKey, comparisonValue.get(attributeVal));
-          } else {
-            setBsonDoc.put(attributeKey, getArithmeticExpVal(attributeVal, comparisonValue));
-          }
-        } else {
-          throw new RuntimeException(
-              "SET Expression " + setString + " does not include key value pairs separated by =");
-        }
-      }
-      bsonDocument.put("$SET", setBsonDoc);
-    }
-    if (!removeString.isEmpty()) {
-      String[] removeExpressions = removeString.split(",");
-      BsonDocument unsetBsonDoc = new BsonDocument();
-      for (String removeAttribute : removeExpressions) {
-        String attributeKey = removeAttribute.trim();
-        unsetBsonDoc.put(attributeKey, new BsonNull());
-      }
-      bsonDocument.put("$UNSET", unsetBsonDoc);
-    }
-    if (!addString.isEmpty()) {
-      String[] addExpressions = addString.split(",");
-      BsonDocument addBsonDoc = new BsonDocument();
-      for (String addExpression : addExpressions) {
-        addExpression = addExpression.trim();
-        String[] keyVal = addExpression.split("\\s+");
-        if (keyVal.length == 2) {
-          String attributeKey = keyVal[0].trim();
-          String attributeVal = keyVal[1].trim();
-          addBsonDoc.put(attributeKey, comparisonValue.get(attributeVal));
-        } else {
-          throw new RuntimeException("ADD Expression " + addString
-              + " does not include key value pairs separated by space");
-        }
-      }
-      bsonDocument.put("$ADD", addBsonDoc);
-    }
-    if (!deleteString.isEmpty()) {
-      BsonDocument delBsonDoc = new BsonDocument();
-      String[] deleteExpressions = deleteString.split(",");
-      for (String deleteExpression : deleteExpressions) {
-        deleteExpression = deleteExpression.trim();
-        String[] keyVal = deleteExpression.split("\\s+");
-        if (keyVal.length == 2) {
-          String attributeKey = keyVal[0].trim();
-          String attributeVal = keyVal[1].trim();
-          delBsonDoc.put(attributeKey, comparisonValue.get(attributeVal));
-        } else {
-          throw new RuntimeException("DELETE Expression " + deleteString
-              + " does not include key value pairs separated by space");
-        }
-      }
-      bsonDocument.put("$DELETE_FROM_SET", delBsonDoc);
-    }
-    return bsonDocument;
+  private static BsonDocument getDocument1() {
+    String json = "{\n" +
+            "  \"Pictures\" : {\n" +
+            "    \"$set\" : [ \"123_rear.jpg\", \"xyz_front.jpg\", \"xyz_rear.jpg\", \"123_front.jpg\" ]\n" +
+            "  },\n" +
+            "  \"PictureBinarySet\" : {\n" +
+            "    \"$set\" : [ {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"MTIzX3JlYXIuanBn\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    }, {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"MTIzYWJjX3JlYXIuanBn\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    }, {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"eHl6X3JlYXIuanBn\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    }, {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"eHl6YWJjX3JlYXIuanBn\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    }, {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"MTIzX2Zyb250LmpwZw==\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    }, {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"eHl6X2Zyb250LmpwZw==\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    } ]\n" +
+            "  },\n" +
+            "  \"Title\" : \"Book 101 Title\",\n" +
+            "  \"InPublication\" : false,\n" +
+            "  \"ColorBytes\" : {\n" +
+            "    \"$binary\" : {\n" +
+            "      \"base64\" : \"QmxhY2s=\",\n" +
+            "      \"subType\" : \"00\"\n" +
+            "    }\n" +
+            "  },\n" +
+            "  \"ISBN\" : \"111-1111111111\",\n" +
+            "  \"NestedList1\" : [ -485.34, \"1234abcd\", [ \"xyz0123\", {\n" +
+            "    \"InPublication\" : false,\n" +
+            "    \"BinaryTitleSet\" : {\n" +
+            "      \"$set\" : [ {\n" +
+            "        \"$binary\" : {\n" +
+            "          \"base64\" : \"Qm9vayAxMDExIFRpdGxlIEJpbmFyeQ==\",\n" +
+            "          \"subType\" : \"00\"\n" +
+            "        }\n" +
+            "      }, {\n" +
+            "        \"$binary\" : {\n" +
+            "          \"base64\" : \"Qm9vayAxMDEwIFRpdGxlIEJpbmFyeQ==\",\n" +
+            "          \"subType\" : \"00\"\n" +
+            "        }\n" +
+            "      }, {\n" +
+            "        \"$binary\" : {\n" +
+            "          \"base64\" : \"Qm9vayAxMTExIFRpdGxlIEJpbmFyeQ==\",\n" +
+            "          \"subType\" : \"00\"\n" +
+            "        }\n" +
+            "      } ]\n" +
+            "    },\n" +
+            "    \"TitleSet1\" : {\n" +
+            "      \"$set\" : [ \"Book 1011 Title\", \"Book 1201 Title\", \"Book 1010 Title\", \"Book 1111 Title\", \"Book 1200 Title\" ]\n" +
+            "    },\n" +
+            "    \"ISBN\" : \"111-1111111111\",\n" +
+            "    \"IdSet\" : {\n" +
+            "      \"$set\" : [ 20576024, -3.9457860486939475E7, 204850.69703847595, 4.86906704836275E21, 19306873 ]\n" +
+            "    },\n" +
+            "    \"Title\" : \"Book 101 Title\",\n" +
+            "    \"Id\" : 101.01,\n" +
+            "    \"TitleSet2\" : {\n" +
+            "      \"$set\" : [ \"Book 1011 Title\", \"Book 1201 Title\", \"Book 1010 Title\", \"Book 1111 Title\", \"Book 1200 Title\" ]\n" +
+            "    }\n" +
+            "  } ] ],\n" +
+            "  \"NestedMap1\" : {\n" +
+            "    \"InPublication\" : false,\n" +
+            "    \"ISBN\" : \"111-1111111111\",\n" +
+            "    \"NestedMap2\" : {\n" +
+            "      \"InPublication\" : true,\n" +
+            "      \"NList\" : [ \"NListVal01\", -0.00234 ],\n" +
+            "      \"ISBN\" : \"111-1111111111999\",\n" +
+            "      \"Title\" : \"Book 10122 Title\",\n" +
+            "      \"Id\" : 101.22\n" +
+            "    },\n" +
+            "    \"Title\" : \"Book 101 Title\",\n" +
+            "    \"Id\" : 101.01,\n" +
+            "    \"NList1\" : [ \"NListVal01\", -0.00234, {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"dG9fYmVfcmVtb3ZlZA==\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    } ],\n" +
+            "    \"NSet1\" : {\n" +
+            "      \"$set\" : [ 123.45, -6830.5555, -48695, 9586.7778, -124, 10238 ]\n" +
+            "    }\n" +
+            "  },\n" +
+            "  \"Id2\" : 101.01,\n" +
+            "  \"attr_6\" : {\n" +
+            "    \"n_attr_0\" : \"str_val_0\",\n" +
+            "    \"n_attr_1\" : 1295.03,\n" +
+            "    \"n_attr_2\" : {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"MjA0OHU1bmJsd2plaVdGR1RIKDRiZjkzMA==\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    },\n" +
+            "    \"n_attr_3\" : true,\n" +
+            "    \"n_attr_4\" : null\n" +
+            "  },\n" +
+            "  \"attr_5\" : [ 1234, \"str001\", {\n" +
+            "    \"$binary\" : {\n" +
+            "      \"base64\" : \"AAECAwQF\",\n" +
+            "      \"subType\" : \"00\"\n" +
+            "    }\n" +
+            "  } ],\n" +
+            "  \"NestedList12\" : [ -485.34, \"1234abcd\", [ {\n" +
+            "    \"$set\" : [ \"xyz0123\" ]\n" +
+            "  }, {\n" +
+            "    \"$set\" : [ {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"dmFsMDE=\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    }, {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"dmFsMDM=\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    }, {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"dmFsMDI=\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    } ]\n" +
+            "  } ] ],\n" +
+            "  \"IdS\" : \"101.01\",\n" +
+            "  \"Id\" : 101.01,\n" +
+            "  \"attr_1\" : 1295.03,\n" +
+            "  \"attr_0\" : \"str_val_0\",\n" +
+            "  \"RelatedItems\" : {\n" +
+            "    \"$set\" : [ 123.0948, -485.45582904, 1234, 0.111 ]\n" +
+            "  }\n" +
+            "}";
+    //{
+    //  "Pictures" : {
+    //    "$set" : [ "123_rear.jpg", "xyz_front.jpg", "xyz_rear.jpg", "123_front.jpg" ]
+    //  },
+    //  "PictureBinarySet" : {
+    //    "$set" : [ {
+    //      "$binary" : {
+    //        "base64" : "MTIzX3JlYXIuanBn",
+    //        "subType" : "00"
+    //      }
+    //    }, {
+    //      "$binary" : {
+    //        "base64" : "MTIzYWJjX3JlYXIuanBn",
+    //        "subType" : "00"
+    //      }
+    //    }, {
+    //      "$binary" : {
+    //        "base64" : "eHl6X3JlYXIuanBn",
+    //        "subType" : "00"
+    //      }
+    //    }, {
+    //      "$binary" : {
+    //        "base64" : "eHl6YWJjX3JlYXIuanBn",
+    //        "subType" : "00"
+    //      }
+    //    }, {
+    //      "$binary" : {
+    //        "base64" : "MTIzX2Zyb250LmpwZw==",
+    //        "subType" : "00"
+    //      }
+    //    }, {
+    //      "$binary" : {
+    //        "base64" : "eHl6X2Zyb250LmpwZw==",
+    //        "subType" : "00"
+    //      }
+    //    } ]
+    //  },
+    //  "Title" : "Book 101 Title",
+    //  "InPublication" : false,
+    //  "ColorBytes" : {
+    //    "$binary" : {
+    //      "base64" : "QmxhY2s=",
+    //      "subType" : "00"
+    //    }
+    //  },
+    //  "ISBN" : "111-1111111111",
+    //  "NestedList1" : [ -485.34, "1234abcd", [ "xyz0123", {
+    //    "InPublication" : false,
+    //    "BinaryTitleSet" : {
+    //      "$set" : [ {
+    //        "$binary" : {
+    //          "base64" : "Qm9vayAxMDExIFRpdGxlIEJpbmFyeQ==",
+    //          "subType" : "00"
+    //        }
+    //      }, {
+    //        "$binary" : {
+    //          "base64" : "Qm9vayAxMDEwIFRpdGxlIEJpbmFyeQ==",
+    //          "subType" : "00"
+    //        }
+    //      }, {
+    //        "$binary" : {
+    //          "base64" : "Qm9vayAxMTExIFRpdGxlIEJpbmFyeQ==",
+    //          "subType" : "00"
+    //        }
+    //      } ]
+    //    },
+    //    "TitleSet1" : {
+    //      "$set" : [ "Book 1011 Title", "Book 1201 Title", "Book 1010 Title", "Book 1111 Title", "Book 1200 Title" ]
+    //    },
+    //    "ISBN" : "111-1111111111",
+    //    "IdSet" : {
+    //      "$set" : [ 20576024, -3.9457860486939475E7, 204850.69703847595, 4.86906704836275E21, 19306873 ]
+    //    },
+    //    "Title" : "Book 101 Title",
+    //    "Id" : 101.01,
+    //    "TitleSet2" : {
+    //      "$set" : [ "Book 1011 Title", "Book 1201 Title", "Book 1010 Title", "Book 1111 Title", "Book 1200 Title" ]
+    //    }
+    //  } ] ],
+    //  "NestedMap1" : {
+    //    "InPublication" : false,
+    //    "ISBN" : "111-1111111111",
+    //    "NestedMap2" : {
+    //      "InPublication" : true,
+    //      "NList" : [ "NListVal01", -0.00234 ],
+    //      "ISBN" : "111-1111111111999",
+    //      "Title" : "Book 10122 Title",
+    //      "Id" : 101.22
+    //    },
+    //    "Title" : "Book 101 Title",
+    //    "Id" : 101.01,
+    //    "NList1" : [ "NListVal01", -0.00234, {
+    //      "$binary" : {
+    //        "base64" : "dG9fYmVfcmVtb3ZlZA==",
+    //        "subType" : "00"
+    //      }
+    //    } ],
+    //    "NSet1" : {
+    //      "$set" : [ 123.45, -6830.5555, -48695, 9586.7778, -124, 10238 ]
+    //    }
+    //  },
+    //  "Id2" : 101.01,
+    //  "attr_6" : {
+    //    "n_attr_0" : "str_val_0",
+    //    "n_attr_1" : 1295.03,
+    //    "n_attr_2" : {
+    //      "$binary" : {
+    //        "base64" : "MjA0OHU1bmJsd2plaVdGR1RIKDRiZjkzMA==",
+    //        "subType" : "00"
+    //      }
+    //    },
+    //    "n_attr_3" : true,
+    //    "n_attr_4" : null
+    //  },
+    //  "attr_5" : [ 1234, "str001", {
+    //    "$binary" : {
+    //      "base64" : "AAECAwQF",
+    //      "subType" : "00"
+    //    }
+    //  } ],
+    //  "NestedList12" : [ -485.34, "1234abcd", [ {
+    //    "$set" : [ "xyz0123" ]
+    //  }, {
+    //    "$set" : [ {
+    //      "$binary" : {
+    //        "base64" : "dmFsMDE=",
+    //        "subType" : "00"
+    //      }
+    //    }, {
+    //      "$binary" : {
+    //        "base64" : "dmFsMDM=",
+    //        "subType" : "00"
+    //      }
+    //    }, {
+    //      "$binary" : {
+    //        "base64" : "dmFsMDI=",
+    //        "subType" : "00"
+    //      }
+    //    } ]
+    //  } ] ],
+    //  "IdS" : "101.01",
+    //  "Id" : 101.01,
+    //  "attr_1" : 1295.03,
+    //  "attr_0" : "str_val_0",
+    //  "RelatedItems" : {
+    //    "$set" : [ 123.0948, -485.45582904, 1234, 0.111 ]
+    //  }
+    //}
+    return BsonDocument.parse(json);
   }
 
-  private static BsonString getArithmeticExpVal(String attributeVal,
-      BsonDocument comparisonValuesDocument) {
-    String[] tokens = attributeVal.split("\\s+");
-    //      Pattern pattern = Pattern.compile(":?[a-zA-Z0-9]+");
-    Pattern pattern = Pattern.compile("[#:$]?[^\\s\\n]+");
-    Number newNum = null;
-    StringBuilder val = new StringBuilder();
-    for (String token : tokens) {
-      if (token.equals("+")) {
-        val.append(" + ");
-        continue;
-      } else if (token.equals("-")) {
-        val.append(" - ");
-        continue;
-      }
-      Matcher matcher = pattern.matcher(token);
-      if (matcher.find()) {
-        String operand = matcher.group();
-        if (operand.startsWith(":") || operand.startsWith("$") || operand.startsWith("#")) {
-          BsonValue bsonValue = comparisonValuesDocument.get(operand);
-          if (!bsonValue.isNumber() && !bsonValue.isDecimal128()) {
-            throw new IllegalArgumentException(
-                "Operand " + operand + " is not provided as number type");
-          }
-          Number numVal = UpdateExpressionUtils.getNumberFromBsonNumber((BsonNumber) bsonValue);
-          val.append(numVal);
-        } else {
-          val.append(operand);
-        }
-      }
-    }
-    return new BsonString(val.toString());
+  private static BsonDocument getUpdatedDocument() {
+    String json = "{\n" +
+            "  \"Pictures\": {\n" +
+            "    \"$set\": [\n" +
+            "      \"123_rear.jpg\",\n" +
+            "      \"xyz5@_rear.jpg\",\n" +
+            "      \"xyz_front.jpg\",\n" +
+            "      \"xyz_rear.jpg\",\n" +
+            "      \"123_front.jpg\",\n" +
+            "      \"1235@_rear.jpg\"\n" +
+            "    ]\n" +
+            "  },\n" +
+            "  \"PictureBinarySet\": {\n" +
+            "    \"$set\": [\n" +
+            "      {\n" +
+            "        \"$binary\": {\n" +
+            "          \"base64\": \"MTIzYWJjX3JlYXIuanBn\",\n" +
+            "          \"subType\": \"00\"\n" +
+            "        }\n" +
+            "      },\n" +
+            "      {\n" +
+            "        \"$binary\": {\n" +
+            "          \"base64\": \"eHl6X3JlYXIuanBn\",\n" +
+            "          \"subType\": \"00\"\n" +
+            "        }\n" +
+            "      },\n" +
+            "      {\n" +
+            "        \"$binary\": {\n" +
+            "          \"base64\": \"eHl6YWJjX3JlYXIuanBn\",\n" +
+            "          \"subType\": \"00\"\n" +
+            "        }\n" +
+            "      },\n" +
+            "      {\n" +
+            "        \"$binary\": {\n" +
+            "          \"base64\": \"MTIzX2Zyb250LmpwZw==\",\n" +
+            "          \"subType\": \"00\"\n" +
+            "        }\n" +
+            "      }\n" +
+            "    ]\n" +
+            "  },\n" +
+            "  \"Title\": \"Cycle_1234_new\",\n" +
+            "  \"InPublication\": false,\n" +
+            "  \"ColorBytes\": {\n" +
+            "    \"$binary\": {\n" +
+            "      \"base64\": \"QmxhY2s=\",\n" +
+            "      \"subType\": \"00\"\n" +
+            "    }\n" +
+            "  },\n" +
+            "  \"ISBN\": \"111-1111111111\",\n" +
+            "  \"NestedList1\": [\n" +
+            "    -485.34,\n" +
+            "    \"1234abcd\",\n" +
+            "    [\n" +
+            "      \"xyz0123\",\n" +
+            "      {\n" +
+            "        \"InPublication\": false,\n" +
+            "        \"BinaryTitleSet\": {\n" +
+            "          \"$set\": [\n" +
+            "            {\n" +
+            "              \"$binary\": {\n" +
+            "                \"base64\": \"Qm9vayAxMDExIFRpdGxlIEJpbmFyeQ==\",\n" +
+            "                \"subType\": \"00\"\n" +
+            "              }\n" +
+            "            },\n" +
+            "            {\n" +
+            "              \"$binary\": {\n" +
+            "                \"base64\": \"Qm9vayAxMDEwIFRpdGxlIEJpbmFyeQ==\",\n" +
+            "                \"subType\": \"00\"\n" +
+            "              }\n" +
+            "            },\n" +
+            "            {\n" +
+            "              \"$binary\": {\n" +
+            "                \"base64\": \"Qm9vayAxMTExIFRpdGxlIEJpbmFyeQ==\",\n" +
+            "                \"subType\": \"00\"\n" +
+            "              }\n" +
+            "            }\n" +
+            "          ]\n" +
+            "        },\n" +
+            "        \"ISBN\": \"111-1111111122\",\n" +
+            "        \"IdSet\": {\n" +
+            "          \"$set\": [\n" +
+            "            20576024,\n" +
+            "            -39457860.486939475,\n" +
+            "            204850.69703847595,\n" +
+            "            4.86906704836275e+21,\n" +
+            "            19306873\n" +
+            "          ]\n" +
+            "        },\n" +
+            "        \"Title\": \"Book 101 Title\",\n" +
+            "        \"Id\": 101.01,\n" +
+            "        \"TitleSet2\": {\n" +
+            "          \"$set\": [\n" +
+            "            \"Book 1201 Title\",\n" +
+            "            \"Book 1111 Title\",\n" +
+            "            \"Book 1200 Title\"\n" +
+            "          ]\n" +
+            "        }\n" +
+            "      }\n" +
+            "    ]\n" +
+            "  ],\n" +
+            "  \"NestedMap1\": {\n" +
+            "    \"InPublication\": false,\n" +
+            "    \"ISBN\": \"111-1111111111\",\n" +
+            "    \"NestedMap2\": {\n" +
+            "      \"NList\": [\n" +
+            "        12.22,\n" +
+            "        -0.00234,\n" +
+            "        null\n" +
+            "      ],\n" +
+            "      \"ISBN\": \"111-1111111111999\",\n" +
+            "      \"Title\": \"Book 10122 Title\",\n" +
+            "      \"Id\": -12243.78,\n" +
+            "      \"NewID\": \"12345\"\n" +
+            "    },\n" +
+            "    \"Id\": 101.01,\n" +
+            "    \"NList1\": [\n" +
+            "      {\n" +
+            "        \"$set\": [\n" +
+            "          \"Updated_set_01\",\n" +
+            "          \"Updated_set_02\"\n" +
+            "        ]\n" +
+            "      },\n" +
+            "      -0.00234\n" +
+            "    ],\n" +
+            "    \"NSet1\": {\n" +
+            "      \"$set\": [\n" +
+            "        123.45,\n" +
+            "        9586.7778,\n" +
+            "        -124,\n" +
+            "        10238\n" +
+            "      ]\n" +
+            "    },\n" +
+            "    \"ColorList\": [\n" +
+            "      \"Black\",\n" +
+            "      {\n" +
+            "        \"$binary\": {\n" +
+            "          \"base64\": \"V2hpdGU=\",\n" +
+            "          \"subType\": \"00\"\n" +
+            "        }\n" +
+            "      },\n" +
+            "      \"Silver\"\n" +
+            "    ],\n" +
+            "    \"AddedId\": 10\n" +
+            "  },\n" +
+            "  \"attr_6\": {\n" +
+            "    \"n_attr_0\": \"str_val_0\",\n" +
+            "    \"n_attr_1\": 1295.03,\n" +
+            "    \"n_attr_2\": {\n" +
+            "      \"$binary\": {\n" +
+            "        \"base64\": \"MjA0OHU1bmJsd2plaVdGR1RIKDRiZjkzMA==\",\n" +
+            "        \"subType\": \"00\"\n" +
+            "      }\n" +
+            "    },\n" +
+            "    \"n_attr_3\": true,\n" +
+            "    \"n_attr_4\": null\n" +
+            "  },\n" +
+            "  \"attr_5\": [\n" +
+            "    1234,\n" +
+            "    \"str001\",\n" +
+            "    {\n" +
+            "      \"$binary\": {\n" +
+            "        \"base64\": \"AAECAwQF\",\n" +
+            "        \"subType\": \"00\"\n" +
+            "      }\n" +
+            "    }\n" +
+            "  ],\n" +
+            "  \"NestedList12\": [\n" +
+            "    -485.34,\n" +
+            "    \"1234abcd\",\n" +
+            "    [\n" +
+            "      {\n" +
+            "        \"$set\": [\n" +
+            "          \"xyz01234\",\n" +
+            "          \"xyz0123\",\n" +
+            "          \"abc01234\"\n" +
+            "        ]\n" +
+            "      },\n" +
+            "      {\n" +
+            "        \"$set\": [\n" +
+            "          {\n" +
+            "            \"$binary\": {\n" +
+            "              \"base64\": \"dmFsMDE=\",\n" +
+            "              \"subType\": \"00\"\n" +
+            "            }\n" +
+            "          },\n" +
+            "          {\n" +
+            "            \"$binary\": {\n" +
+            "              \"base64\": \"dmFsMDM=\",\n" +
+            "              \"subType\": \"00\"\n" +
+            "            }\n" +
+            "          },\n" +
+            "          {\n" +
+            "            \"$binary\": {\n" +
+            "              \"base64\": \"dmFsMDI=\",\n" +
+            "              \"subType\": \"00\"\n" +
+            "            }\n" +
+            "          },\n" +
+            "          {\n" +
+            "            \"$binary\": {\n" +
+            "              \"base64\": \"dmFsMDQ=\",\n" +
+            "              \"subType\": \"00\"\n" +
+            "            }\n" +
+            "          }\n" +
+            "        ]\n" +
+            "      },\n" +
+            "      {\n" +
+            "        \"$set\": [\n" +
+            "          -234.56,\n" +
+            "          123,\n" +
+            "          93756.93475960549,\n" +
+            "          293755723028458.6\n" +
+            "        ]\n" +
+            "      }\n" +
+            "    ]\n" +
+            "  ],\n" +
+            "  \"Id\": \"12345\",\n" +
+            "  \"attr_1\": 1295.03,\n" +
+            "  \"attr_0\": \"str_val_0\",\n" +
+            "  \"RelatedItems\": {\n" +
+            "    \"$set\": [\n" +
+            "      123.0948,\n" +
+            "      -485.45582904,\n" +
+            "      1234,\n" +
+            "      0.111\n" +
+            "    ]\n" +
+            "  },\n" +
+            "  \"Id1\": {\n" +
+            "    \"$binary\": {\n" +
+            "      \"base64\": \"SURfMTAx\",\n" +
+            "      \"subType\": \"00\"\n" +
+            "    }\n" +
+            "  },\n" +
+            "  \"AddedId\": 10\n" +
+            "}";
+    //{
+    //  "Pictures": {
+    //    "$set": [
+    //      "123_rear.jpg",
+    //      "xyz5@_rear.jpg",
+    //      "xyz_front.jpg",
+    //      "xyz_rear.jpg",
+    //      "123_front.jpg",
+    //      "1235@_rear.jpg"
+    //    ]
+    //  },
+    //  "PictureBinarySet": {
+    //    "$set": [
+    //      {
+    //        "$binary": {
+    //          "base64": "MTIzYWJjX3JlYXIuanBn",
+    //          "subType": "00"
+    //        }
+    //      },
+    //      {
+    //        "$binary": {
+    //          "base64": "eHl6X3JlYXIuanBn",
+    //          "subType": "00"
+    //        }
+    //      },
+    //      {
+    //        "$binary": {
+    //          "base64": "eHl6YWJjX3JlYXIuanBn",
+    //          "subType": "00"
+    //        }
+    //      },
+    //      {
+    //        "$binary": {
+    //          "base64": "MTIzX2Zyb250LmpwZw==",
+    //          "subType": "00"
+    //        }
+    //      }
+    //    ]
+    //  },
+    //  "Title": "Cycle_1234_new",
+    //  "InPublication": false,
+    //  "ColorBytes": {
+    //    "$binary": {
+    //      "base64": "QmxhY2s=",
+    //      "subType": "00"
+    //    }
+    //  },
+    //  "ISBN": "111-1111111111",
+    //  "NestedList1": [
+    //    -485.34,
+    //    "1234abcd",
+    //    [
+    //      "xyz0123",
+    //      {
+    //        "InPublication": false,
+    //        "BinaryTitleSet": {
+    //          "$set": [
+    //            {
+    //              "$binary": {
+    //                "base64": "Qm9vayAxMDExIFRpdGxlIEJpbmFyeQ==",
+    //                "subType": "00"
+    //              }
+    //            },
+    //            {
+    //              "$binary": {
+    //                "base64": "Qm9vayAxMDEwIFRpdGxlIEJpbmFyeQ==",
+    //                "subType": "00"
+    //              }
+    //            },
+    //            {
+    //              "$binary": {
+    //                "base64": "Qm9vayAxMTExIFRpdGxlIEJpbmFyeQ==",
+    //                "subType": "00"
+    //              }
+    //            }
+    //          ]
+    //        },
+    //        "ISBN": "111-1111111122",
+    //        "IdSet": {
+    //          "$set": [
+    //            20576024,
+    //            -39457860.486939475,
+    //            204850.69703847595,
+    //            4.86906704836275e+21,
+    //            19306873
+    //          ]
+    //        },
+    //        "Title": "Book 101 Title",
+    //        "Id": 101.01,
+    //        "TitleSet2": {
+    //          "$set": [
+    //            "Book 1201 Title",
+    //            "Book 1111 Title",
+    //            "Book 1200 Title"
+    //          ]
+    //        }
+    //      }
+    //    ]
+    //  ],
+    //  "NestedMap1": {
+    //    "InPublication": false,
+    //    "ISBN": "111-1111111111",
+    //    "NestedMap2": {
+    //      "NList": [
+    //        12.22,
+    //        -0.00234,
+    //        null
+    //      ],
+    //      "ISBN": "111-1111111111999",
+    //      "Title": "Book 10122 Title",
+    //      "Id": -12243.78,
+    //      "NewID": "12345"
+    //    },
+    //    "Id": 101.01,
+    //    "NList1": [
+    //      {
+    //        "$set": [
+    //          "Updated_set_01",
+    //          "Updated_set_02"
+    //        ]
+    //      },
+    //      -0.00234
+    //    ],
+    //    "NSet1": {
+    //      "$set": [
+    //        123.45,
+    //        9586.7778,
+    //        -124,
+    //        10238
+    //      ]
+    //    },
+    //    "ColorList": [
+    //      "Black",
+    //      {
+    //        "$binary": {
+    //          "base64": "V2hpdGU=",
+    //          "subType": "00"
+    //        }
+    //      },
+    //      "Silver"
+    //    ],
+    //    "AddedId": 10
+    //  },
+    //  "attr_6": {
+    //    "n_attr_0": "str_val_0",
+    //    "n_attr_1": 1295.03,
+    //    "n_attr_2": {
+    //      "$binary": {
+    //        "base64": "MjA0OHU1bmJsd2plaVdGR1RIKDRiZjkzMA==",
+    //        "subType": "00"
+    //      }
+    //    },
+    //    "n_attr_3": true,
+    //    "n_attr_4": null
+    //  },
+    //  "attr_5": [
+    //    1234,
+    //    "str001",
+    //    {
+    //      "$binary": {
+    //        "base64": "AAECAwQF",
+    //        "subType": "00"
+    //      }
+    //    }
+    //  ],
+    //  "NestedList12": [
+    //    -485.34,
+    //    "1234abcd",
+    //    [
+    //      {
+    //        "$set": [
+    //          "xyz01234",
+    //          "xyz0123",
+    //          "abc01234"
+    //        ]
+    //      },
+    //      {
+    //        "$set": [
+    //          {
+    //            "$binary": {
+    //              "base64": "dmFsMDE=",
+    //              "subType": "00"
+    //            }
+    //          },
+    //          {
+    //            "$binary": {
+    //              "base64": "dmFsMDM=",
+    //              "subType": "00"
+    //            }
+    //          },
+    //          {
+    //            "$binary": {
+    //              "base64": "dmFsMDI=",
+    //              "subType": "00"
+    //            }
+    //          },
+    //          {
+    //            "$binary": {
+    //              "base64": "dmFsMDQ=",
+    //              "subType": "00"
+    //            }
+    //          }
+    //        ]
+    //      },
+    //      {
+    //        "$set": [
+    //          -234.56,
+    //          123,
+    //          93756.93475960549,
+    //          293755723028458.6
+    //        ]
+    //      }
+    //    ]
+    //  ],
+    //  "Id": "12345",
+    //  "attr_1": 1295.03,
+    //  "attr_0": "str_val_0",
+    //  "RelatedItems": {
+    //    "$set": [
+    //      123.0948,
+    //      -485.45582904,
+    //      1234,
+    //      0.111
+    //    ]
+    //  },
+    //  "Id1": {
+    //    "$binary": {
+    //      "base64": "SURfMTAx",
+    //      "subType": "00"
+    //    }
+    //  },
+    //  "AddedId": 10
+    //}
+    return BsonDocument.parse(json);
   }
 
-  private static TestFieldsMap getComparisonValuesMap() {
-    TestFieldsMap comparisonMap = new TestFieldsMap();
-    Map<String, TestFieldValue> map2 = new HashMap<>();
-    map2.put(":newTitle", new TestFieldValue().withS("Cycle_1234_new"));
-    map2.put(":newId", new TestFieldValue().withS("12345"));
-    map2.put(":newIdNeg", new TestFieldValue().withN(-12345));
-    map2.put(":ColorList", new TestFieldValue().withL(
-        new TestFieldValue().withS("Black"),
-        new TestFieldValue().withB(new SerializableBytesPtr(Bytes.toBytes("White"))),
-        new TestFieldValue().withS("Silver")
-    ));
-    map2.put(":Id1",
-        new TestFieldValue().withB(new SerializableBytesPtr(Bytes.toBytes("ID_101"))));
-    map2.put(":NList001", new TestFieldValue().withN(12.22));
-    map2.put(":NList003", new TestFieldValue().withNULL(true));
-    map2.put(":NList004", new TestFieldValue().withBOOL(true));
-    map2.put(":attr5_0", new TestFieldValue().withN(10));
-    map2.put(":NList1_0", new TestFieldValue().withSS("Updated_set_01", "Updated_set_02"));
-    map2.put(":NestedList1_ISBN", new TestFieldValue().withS("111-1111111122"));
-    map2.put(":NestedList12_00", new TestFieldValue().withSS("xyz01234", "abc01234"));
-    map2.put(":NestedList12_01", new TestFieldValue().withBS(
-        new SerializableBytesPtr(Bytes.toBytes("val03")),
-        new SerializableBytesPtr(Bytes.toBytes("val04"))
-    ));
-    map2.put(":AddedPics", new TestFieldValue().withSS(
-        "1235@_rear.jpg",
-        "xyz5@_rear.jpg"));
-    map2.put(":PictureBinarySet01", new TestFieldValue().withBS(
-        new SerializableBytesPtr(Bytes.toBytes("123_rear.jpg")),
-        new SerializableBytesPtr(Bytes.toBytes("xyz_front.jpg")),
-        new SerializableBytesPtr(Bytes.toBytes("xyz_front.jpg_no"))
-    ));
-    map2.put(":NSet01", new TestFieldValue().withNS(-6830.5555, -48695));
-    map2.put(":NestedList1TitleSet01", new TestFieldValue().withSS("Book 1010 Title",
-        "Book 1011 Title"));
-    comparisonMap.setMap(map2);
-    return comparisonMap;
-  }
-
-  private static TestFieldsMap getTestFieldsMap1() {
-    TestFieldsMap testFieldsMap = new TestFieldsMap();
-    Map<String, TestFieldValue> map = new HashMap<>();
-    map.put("attr_0", new TestFieldValue().withS("str_val_0"));
-    map.put("attr_1", new TestFieldValue().withN(1295.03));
-    map.put("attr_5", new TestFieldValue().withL(
-        new TestFieldValue().withN(1234),
-        new TestFieldValue().withS("str001"),
-        new TestFieldValue().withB(new SerializableBytesPtr(
-            new byte[] {0, 1, 2, 3, 4, 5}))));
-    Map<String, TestFieldValue> nMap1 = new HashMap<>();
-    nMap1.put("n_attr_0", new TestFieldValue().withS("str_val_0"));
-    nMap1.put("n_attr_1", new TestFieldValue().withN(1295.03));
-    String bytesAttributeVal1 = "2048u5nblwjeiWFGTH(4bf930";
-    byte[] bytesAttrVal1 = bytesAttributeVal1.getBytes();
-    nMap1.put("n_attr_2", new TestFieldValue().withB(new SerializableBytesPtr(
-        bytesAttrVal1)));
-    nMap1.put("n_attr_3", new TestFieldValue().withBOOL(true));
-    nMap1.put("n_attr_4", new TestFieldValue().withNULL(true));
-    map.put("attr_6", new TestFieldValue().withM(nMap1));
-    map.put("Id", new TestFieldValue().withN(101.01));
-    map.put("IdS", new TestFieldValue().withS("101.01"));
-    map.put("Id2", new TestFieldValue().withN(101.01));
-    map.put("ColorBytes",
-        new TestFieldValue().withB(new SerializableBytesPtr(Bytes.toBytes("Black"))));
-    map.put("RelatedItems",
-        new TestFieldValue().withNS(1234, -485.45582904, 123.0948, 0.111));
-    map.put("Pictures", new TestFieldValue().withSS(
-        "123_rear.jpg",
-        "xyz_rear.jpg",
-        "123_front.jpg",
-        "xyz_front.jpg"
-    ));
-    map.put("PictureBinarySet", new TestFieldValue().withBS(
-        new SerializableBytesPtr(Bytes.toBytes("123_rear.jpg")),
-        new SerializableBytesPtr(Bytes.toBytes("xyz_rear.jpg")),
-        new SerializableBytesPtr(Bytes.toBytes("123_front.jpg")),
-        new SerializableBytesPtr(Bytes.toBytes("xyz_front.jpg")),
-        new SerializableBytesPtr(Bytes.toBytes("123abc_rear.jpg")),
-        new SerializableBytesPtr(Bytes.toBytes("xyzabc_rear.jpg"))
-    ));
-    map.put("Title", new TestFieldValue().withS("Book 101 Title"));
-    map.put("ISBN", new TestFieldValue().withS("111-1111111111"));
-    map.put("InPublication", new TestFieldValue().withBOOL(false));
-    Map<String, TestFieldValue> nestedMap1 = new HashMap<>();
-    nestedMap1.put("Id", new TestFieldValue().withN(101.01));
-    nestedMap1.put("Title", new TestFieldValue().withS("Book 101 Title"));
-    nestedMap1.put("ISBN", new TestFieldValue().withS("111-1111111111"));
-    nestedMap1.put("InPublication", new TestFieldValue().withBOOL(false));
-    nestedMap1.put("NList1",
-        new TestFieldValue().withL(new TestFieldValue().withS("NListVal01"),
-            new TestFieldValue().withN(-0.00234),
-            new TestFieldValue().withB(new SerializableBytesPtr(Bytes.toBytes("to_be_removed")))));
-    Map<String, TestFieldValue> nestedMap2 = new HashMap<>();
-    nestedMap2.put("Id", new TestFieldValue().withN(101.22));
-    nestedMap2.put("Title", new TestFieldValue().withS("Book 10122 Title"));
-    nestedMap2.put("ISBN", new TestFieldValue().withS("111-1111111111999"));
-    nestedMap2.put("InPublication", new TestFieldValue().withBOOL(true));
-    nestedMap2.put("NList",
-        new TestFieldValue().withL(new TestFieldValue().withS("NListVal01"),
-            new TestFieldValue().withN(-0.00234)));
-    nestedMap1.put("NestedMap2",
-        new TestFieldValue().withM(nestedMap2));
-    nestedMap1.put("NSet1",
-        new TestFieldValue().withNS(123.45, 9586.7778, -124, -6830.5555, 10238,
-            -48695));
-    map.put("NestedMap1", new TestFieldValue().withM(nestedMap1));
-    Map<String, TestFieldValue> nestedList1Map1 = new HashMap<>();
-    nestedList1Map1.put("Id", new TestFieldValue().withN(101.01));
-    nestedList1Map1.put("Title", new TestFieldValue().withS("Book 101 Title"));
-    nestedList1Map1.put("ISBN", new TestFieldValue().withS("111-1111111111"));
-    nestedList1Map1.put("InPublication", new TestFieldValue().withBOOL(false));
-    nestedList1Map1.put("IdSet",
-        new TestFieldValue().withNS(204850.69703847596, -39457860.486939476, 20576024,
-            19306873, 4869067048362749590684d));
-    nestedList1Map1.put("TitleSet1",
-        new TestFieldValue().withSS("Book 1010 Title", "Book 1011 Title",
-            "Book 1111 Title", "Book 1200 Title", "Book 1201 Title"));
-    nestedList1Map1.put("TitleSet2",
-        new TestFieldValue().withSS("Book 1010 Title", "Book 1011 Title",
-            "Book 1111 Title", "Book 1200 Title", "Book 1201 Title"));
-    nestedList1Map1.put("BinaryTitleSet", new TestFieldValue().withBS(
-        new SerializableBytesPtr(Bytes.toBytes("Book 1010 Title Binary")),
-        new SerializableBytesPtr(Bytes.toBytes("Book 1011 Title Binary")),
-        new SerializableBytesPtr(Bytes.toBytes("Book 1111 Title Binary"))
-    ));
-    map.put("NestedList1",
-        new TestFieldValue().withL(new TestFieldValue().withN(-485.34),
-            new TestFieldValue().withS("1234abcd"),
-            new TestFieldValue().withL(new TestFieldValue().withS("xyz0123"),
-                new TestFieldValue().withM(nestedList1Map1))));
-    map.put("NestedList12",
-        new TestFieldValue().withL(new TestFieldValue().withN(-485.34),
-            new TestFieldValue().withS("1234abcd"),
-            new TestFieldValue().withL(
-                new TestFieldValue().withSS("xyz0123"),
-                new TestFieldValue().withBS(
-                    new SerializableBytesPtr(Bytes.toBytes("val01")),
-                    new SerializableBytesPtr(Bytes.toBytes("val02")),
-                    new SerializableBytesPtr(Bytes.toBytes("val03"))))));
-    testFieldsMap.setMap(map);
-    return testFieldsMap;
-  }
-
-  private static TestFieldsMap getTestFieldsMap2() {
-    TestFieldsMap testFieldsMap = new TestFieldsMap();
-    Map<String, TestFieldValue> map = new HashMap<>();
-    map.put("attr_0", new TestFieldValue().withS("str_val_0"));
-    map.put("AddedId", new TestFieldValue().withN(10));
-    map.put("attr_1", new TestFieldValue().withN(1295.03));
-    map.put("Id1",
-        new TestFieldValue().withB(new SerializableBytesPtr(Bytes.toBytes("ID_101"))));
-    map.put("attr_5", new TestFieldValue().withL(
-        new TestFieldValue().withN(1234),
-        new TestFieldValue().withS("str001"),
-        new TestFieldValue().withB(new SerializableBytesPtr(
-            new byte[] {0, 1, 2, 3, 4, 5}))));
-    Map<String, TestFieldValue> nMap1 = new HashMap<>();
-    nMap1.put("n_attr_0", new TestFieldValue().withS("str_val_0"));
-    nMap1.put("n_attr_1", new TestFieldValue().withN(1295.03));
-    String bytesAttributeVal1 = "2048u5nblwjeiWFGTH(4bf930";
-    byte[] bytesAttrVal1 = bytesAttributeVal1.getBytes();
-    nMap1.put("n_attr_2", new TestFieldValue().withB(new SerializableBytesPtr(
-        bytesAttrVal1)));
-    nMap1.put("n_attr_3", new TestFieldValue().withBOOL(true));
-    nMap1.put("n_attr_4", new TestFieldValue().withNULL(true));
-    map.put("attr_6", new TestFieldValue().withM(nMap1));
-    map.put("Id", new TestFieldValue().withS("12345"));
-    map.put("ColorBytes",
-        new TestFieldValue().withB(new SerializableBytesPtr(Bytes.toBytes("Black"))));
-    map.put("RelatedItems",
-        new TestFieldValue().withNS(1234, -485.45582904, 123.0948, 0.111));
-    map.put("Pictures", new TestFieldValue().withSS(
-        "123_rear.jpg",
-        "1235@_rear.jpg",
-        "xyz5@_rear.jpg",
-        "xyz_rear.jpg",
-        "123_front.jpg",
-        "xyz_front.jpg"
-    ));
-    map.put("PictureBinarySet", new TestFieldValue().withBS(
-        new SerializableBytesPtr(Bytes.toBytes("xyz_rear.jpg")),
-        new SerializableBytesPtr(Bytes.toBytes("123_front.jpg")),
-        new SerializableBytesPtr(Bytes.toBytes("123abc_rear.jpg")),
-        new SerializableBytesPtr(Bytes.toBytes("xyzabc_rear.jpg"))
-    ));
-    map.put("Title", new TestFieldValue().withS("Cycle_1234_new"));
-    map.put("ISBN", new TestFieldValue().withS("111-1111111111"));
-    map.put("InPublication", new TestFieldValue().withBOOL(false));
-    Map<String, TestFieldValue> nestedMap1 = new HashMap<>();
-    nestedMap1.put("Id", new TestFieldValue().withN(101.01));
-    nestedMap1.put("AddedId", new TestFieldValue().withN(10));
-    nestedMap1.put("ISBN", new TestFieldValue().withS("111-1111111111"));
-    nestedMap1.put("InPublication", new TestFieldValue().withBOOL(false));
-    nestedMap1.put("NList1", new TestFieldValue().withL(
-        new TestFieldValue().withSS("Updated_set_01", "Updated_set_02"),
-        new TestFieldValue().withN(-0.00234)));
-    nestedMap1.put("ColorList", new TestFieldValue().withL(
-        new TestFieldValue().withS("Black"),
-        new TestFieldValue().withB(new SerializableBytesPtr(Bytes.toBytes("White"))),
-        new TestFieldValue().withS("Silver")
-    ));
-    Map<String, TestFieldValue> nestedMap2 = new HashMap<>();
-    nestedMap2.put("Id", new TestFieldValue().withN(-12243.78));
-    nestedMap2.put("NewID", new TestFieldValue().withS("12345"));
-    nestedMap2.put("Title", new TestFieldValue().withS("Book 10122 Title"));
-    nestedMap2.put("ISBN", new TestFieldValue().withS("111-1111111111999"));
-    nestedMap2.put("NList",
-        new TestFieldValue().withL(
-            new TestFieldValue().withN(12.22),
-            new TestFieldValue().withN(-0.00234),
-            new TestFieldValue().withNULL(true)));
-    nestedMap1.put("NestedMap2",
-        new TestFieldValue().withM(nestedMap2));
-    nestedMap1.put("NSet1",
-        new TestFieldValue().withNS(123.45, 9586.7778, -124, 10238));
-    map.put("NestedMap1", new TestFieldValue().withM(nestedMap1));
-    Map<String, TestFieldValue> nestedList1Map1 = new HashMap<>();
-    nestedList1Map1.put("Id", new TestFieldValue().withN(101.01));
-    nestedList1Map1.put("Title", new TestFieldValue().withS("Book 101 Title"));
-    nestedList1Map1.put("ISBN", new TestFieldValue().withS("111-1111111122"));
-    nestedList1Map1.put("InPublication", new TestFieldValue().withBOOL(false));
-    nestedList1Map1.put("IdSet",
-        new TestFieldValue().withNS(204850.69703847596, -39457860.486939476, 20576024,
-            19306873, 4869067048362749590684D));
-    nestedList1Map1.put("TitleSet2",
-        new TestFieldValue().withSS(
-            "Book 1111 Title", "Book 1200 Title", "Book 1201 Title"));
-    nestedList1Map1.put("BinaryTitleSet", new TestFieldValue().withBS(
-        new SerializableBytesPtr(Bytes.toBytes("Book 1010 Title Binary")),
-        new SerializableBytesPtr(Bytes.toBytes("Book 1011 Title Binary")),
-        new SerializableBytesPtr(Bytes.toBytes("Book 1111 Title Binary"))
-    ));
-    map.put("NestedList1",
-        new TestFieldValue().withL(new TestFieldValue().withN(-485.34),
-            new TestFieldValue().withS("1234abcd"),
-            new TestFieldValue().withL(new TestFieldValue().withS("xyz0123"),
-                new TestFieldValue().withM(nestedList1Map1))));
-    map.put("NestedList12",
-        new TestFieldValue().withL(
-            new TestFieldValue().withN(-485.34),
-            new TestFieldValue().withS("1234abcd"),
-            new TestFieldValue().withL(
-                new TestFieldValue().withSS("xyz0123", "xyz01234", "abc01234"),
-                new TestFieldValue().withBS(
-                    new SerializableBytesPtr(Bytes.toBytes("val01")),
-                    new SerializableBytesPtr(Bytes.toBytes("val02")),
-                    new SerializableBytesPtr(Bytes.toBytes("val03")),
-                    new SerializableBytesPtr(Bytes.toBytes("val04"))),
-                new TestFieldValue().withNS(
-                    -234.56,
-                    123,
-                    93756.93475960549,
-                    293755723028458.6))));
-    testFieldsMap.setMap(map);
-    return testFieldsMap;
-  }
-
-  private static TestFieldsMap getTestFieldsMap3() {
-    TestFieldsMap testFieldsMap = new TestFieldsMap();
-    Map<String, TestFieldValue> map = new HashMap<>();
-    map.put("attr_0", new TestFieldValue().withS("str_val_0"));
-    map.put("AddedId", new TestFieldValue().withN(10));
-    map.put("attr_1", new TestFieldValue().withN(1295.03));
-    map.put("Id1", new TestFieldValue().withS("12345"));
-    map.put("attr_5", new TestFieldValue().withL(
-        new TestFieldValue().withN(1224),
-        new TestFieldValue().withS("str001"),
-        new TestFieldValue().withB(new SerializableBytesPtr(
-            new byte[] {0, 1, 2, 3, 4, 5}))));
-    Map<String, TestFieldValue> nMap1 = new HashMap<>();
-    nMap1.put("n_attr_0", new TestFieldValue().withS("str_val_0"));
-    nMap1.put("n_attr_1", new TestFieldValue().withN(1295.03));
-    String bytesAttributeVal1 = "2048u5nblwjeiWFGTH(4bf930";
-    byte[] bytesAttrVal1 = bytesAttributeVal1.getBytes();
-    nMap1.put("n_attr_2", new TestFieldValue().withB(new SerializableBytesPtr(
-        bytesAttrVal1)));
-    nMap1.put("n_attr_3", new TestFieldValue().withBOOL(true));
-    nMap1.put("n_attr_4", new TestFieldValue().withNULL(true));
-    map.put("attr_6", new TestFieldValue().withM(nMap1));
-    map.put("Id", new TestFieldValue().withS("12345"));
-    map.put("ColorBytes",
-        new TestFieldValue().withB(new SerializableBytesPtr(Bytes.toBytes("Black"))));
-    map.put("RelatedItems",
-        new TestFieldValue().withNS(1234, -485.45582904, 123.0948, 0.111));
-    map.put("Pictures", new TestFieldValue().withSS(
-        "123_rear.jpg",
-        "1235@_rear.jpg",
-        "xyz5@_rear.jpg",
-        "xyz_rear.jpg",
-        "123_front.jpg",
-        "xyz_front.jpg"
-    ));
-    map.put("PictureBinarySet", new TestFieldValue().withBS(
-        new SerializableBytesPtr(Bytes.toBytes("xyz_rear.jpg")),
-        new SerializableBytesPtr(Bytes.toBytes("123_front.jpg")),
-        new SerializableBytesPtr(Bytes.toBytes("123abc_rear.jpg")),
-        new SerializableBytesPtr(Bytes.toBytes("xyzabc_rear.jpg"))
-    ));
-    map.put("Title", new TestFieldValue().withS("Cycle_1234_new"));
-    map.put("ISBN", new TestFieldValue().withS("111-1111111111"));
-    map.put("InPublication", new TestFieldValue().withBOOL(false));
-    Map<String, TestFieldValue> nestedMap1 = new HashMap<>();
-    nestedMap1.put("Id", new TestFieldValue().withN(101.01));
-    nestedMap1.put("AddedId", new TestFieldValue().withN(10));
-    nestedMap1.put("ISBN", new TestFieldValue().withS("111-1111111111"));
-    nestedMap1.put("InPublication", new TestFieldValue().withBOOL(false));
-    nestedMap1.put("NList1", new TestFieldValue().withL(
-        new TestFieldValue().withSS("Updated_set_01", "Updated_set_02"),
-        new TestFieldValue().withN(-0.00234)));
-    nestedMap1.put("ColorList", new TestFieldValue().withL(
-        new TestFieldValue().withS("Black"),
-        new TestFieldValue().withB(new SerializableBytesPtr(Bytes.toBytes("White"))),
-        new TestFieldValue().withS("Silver")
-    ));
-    Map<String, TestFieldValue> nestedMap2 = new HashMap<>();
-    nestedMap2.put("Id", new TestFieldValue().withN(-12243.78));
-    nestedMap2.put("NewID", new TestFieldValue().withS("12345"));
-    nestedMap2.put("Title", new TestFieldValue().withS("Book 10122 Title"));
-    nestedMap2.put("ISBN", new TestFieldValue().withS("111-1111111111999"));
-    nestedMap2.put("NList",
-        new TestFieldValue().withL(
-            new TestFieldValue().withN(12.22),
-            new TestFieldValue().withN(-0.00234),
-            new TestFieldValue().withNULL(true)));
-    nestedMap1.put("NestedMap2",
-        new TestFieldValue().withM(nestedMap2));
-    nestedMap1.put("NSet1",
-        new TestFieldValue().withNS(123.45, 9586.7778, -124, 10238));
-    map.put("NestedMap1", new TestFieldValue().withM(nestedMap1));
-    Map<String, TestFieldValue> nestedList1Map1 = new HashMap<>();
-    nestedList1Map1.put("Id", new TestFieldValue().withN(101.01));
-    nestedList1Map1.put("Title", new TestFieldValue().withS("Book 101 Title"));
-    nestedList1Map1.put("ISBN", new TestFieldValue().withS("111-1111111122"));
-    nestedList1Map1.put("InPublication", new TestFieldValue().withBOOL(false));
-    nestedList1Map1.put("IdSet",
-        new TestFieldValue().withNS(204850.69703847596, -39457860.486939476, 20576024,
-            19306873, 4869067048362749590684d));
-    nestedList1Map1.put("TitleSet2",
-        new TestFieldValue().withSS(
-            "Book 1111 Title", "Book 1200 Title", "Book 1201 Title"));
-    nestedList1Map1.put("BinaryTitleSet", new TestFieldValue().withBS(
-        new SerializableBytesPtr(Bytes.toBytes("Book 1010 Title Binary")),
-        new SerializableBytesPtr(Bytes.toBytes("Book 1011 Title Binary")),
-        new SerializableBytesPtr(Bytes.toBytes("Book 1111 Title Binary"))
-    ));
-    map.put("NestedList1",
-        new TestFieldValue().withL(new TestFieldValue().withN(-473.11999999999995),
-            new TestFieldValue().withS("1234abcd"),
-            new TestFieldValue().withL(new TestFieldValue().withS("xyz0123"),
-                new TestFieldValue().withM(nestedList1Map1)),
-            new TestFieldValue().withNULL(true),
-            new TestFieldValue().withBOOL(true)));
-    map.put("NestedList12",
-        new TestFieldValue().withL(
-            new TestFieldValue().withN(-485.34),
-            new TestFieldValue().withS("1234abcd"),
-            new TestFieldValue().withL(
-                new TestFieldValue().withSS("xyz0123", "xyz01234", "abc01234"),
-                new TestFieldValue().withBS(
-                    new SerializableBytesPtr(Bytes.toBytes("val01")),
-                    new SerializableBytesPtr(Bytes.toBytes("val02")),
-                    new SerializableBytesPtr(Bytes.toBytes("val03")),
-                    new SerializableBytesPtr(Bytes.toBytes("val04"))))));
-    testFieldsMap.setMap(map);
-    return testFieldsMap;
+  private static RawBsonDocument getUpdatedDocument2() {
+    String json = "{\n" +
+            "  \"Pictures\" : {\n" +
+            "    \"$set\" : [ \"123_rear.jpg\", \"xyz5@_rear.jpg\", \"xyz_front.jpg\", \"xyz_rear.jpg\", \"123_front.jpg\", \"1235@_rear.jpg\" ]\n" +
+            "  },\n" +
+            "  \"PictureBinarySet\" : {\n" +
+            "    \"$set\" : [ {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"MTIzYWJjX3JlYXIuanBn\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    }, {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"eHl6X3JlYXIuanBn\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    }, {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"eHl6YWJjX3JlYXIuanBn\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    }, {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"MTIzX2Zyb250LmpwZw==\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    } ]\n" +
+            "  },\n" +
+            "  \"Title\" : \"Cycle_1234_new\",\n" +
+            "  \"InPublication\" : false,\n" +
+            "  \"ColorBytes\" : {\n" +
+            "    \"$binary\" : {\n" +
+            "      \"base64\" : \"QmxhY2s=\",\n" +
+            "      \"subType\" : \"00\"\n" +
+            "    }\n" +
+            "  },\n" +
+            "  \"ISBN\" : \"111-1111111111\",\n" +
+            "  \"NestedList1\" : [ -473.11999999999995, \"1234abcd\", [ \"xyz0123\", {\n" +
+            "    \"InPublication\" : false,\n" +
+            "    \"BinaryTitleSet\" : {\n" +
+            "      \"$set\" : [ {\n" +
+            "        \"$binary\" : {\n" +
+            "          \"base64\" : \"Qm9vayAxMDExIFRpdGxlIEJpbmFyeQ==\",\n" +
+            "          \"subType\" : \"00\"\n" +
+            "        }\n" +
+            "      }, {\n" +
+            "        \"$binary\" : {\n" +
+            "          \"base64\" : \"Qm9vayAxMDEwIFRpdGxlIEJpbmFyeQ==\",\n" +
+            "          \"subType\" : \"00\"\n" +
+            "        }\n" +
+            "      }, {\n" +
+            "        \"$binary\" : {\n" +
+            "          \"base64\" : \"Qm9vayAxMTExIFRpdGxlIEJpbmFyeQ==\",\n" +
+            "          \"subType\" : \"00\"\n" +
+            "        }\n" +
+            "      } ]\n" +
+            "    },\n" +
+            "    \"ISBN\" : \"111-1111111122\",\n" +
+            "    \"IdSet\" : {\n" +
+            "      \"$set\" : [ 20576024, -3.9457860486939475E7, 204850.69703847595, 4.86906704836275E21, 19306873 ]\n" +
+            "    },\n" +
+            "    \"Title\" : \"Book 101 Title\",\n" +
+            "    \"Id\" : 101.01,\n" +
+            "    \"TitleSet2\" : {\n" +
+            "      \"$set\" : [ \"Book 1201 Title\", \"Book 1111 Title\", \"Book 1200 Title\" ]\n" +
+            "    }\n" +
+            "  } ], null, true ],\n" +
+            "  \"NestedMap1\" : {\n" +
+            "    \"InPublication\" : false,\n" +
+            "    \"ISBN\" : \"111-1111111111\",\n" +
+            "    \"NestedMap2\" : {\n" +
+            "      \"NList\" : [ 12.22, -0.00234, null ],\n" +
+            "      \"ISBN\" : \"111-1111111111999\",\n" +
+            "      \"Title\" : \"Book 10122 Title\",\n" +
+            "      \"Id\" : -12243.78,\n" +
+            "      \"NewID\" : \"12345\"\n" +
+            "    },\n" +
+            "    \"Id\" : 101.01,\n" +
+            "    \"NList1\" : [ {\n" +
+            "      \"$set\" : [ \"Updated_set_01\", \"Updated_set_02\" ]\n" +
+            "    }, -0.00234 ],\n" +
+            "    \"NSet1\" : {\n" +
+            "      \"$set\" : [ 123.45, 9586.7778, -124, 10238 ]\n" +
+            "    },\n" +
+            "    \"ColorList\" : [ \"Black\", {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"V2hpdGU=\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    }, \"Silver\" ],\n" +
+            "    \"AddedId\" : 10\n" +
+            "  },\n" +
+            "  \"attr_6\" : {\n" +
+            "    \"n_attr_0\" : \"str_val_0\",\n" +
+            "    \"n_attr_1\" : 1295.03,\n" +
+            "    \"n_attr_2\" : {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"MjA0OHU1bmJsd2plaVdGR1RIKDRiZjkzMA==\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    },\n" +
+            "    \"n_attr_3\" : true,\n" +
+            "    \"n_attr_4\" : null\n" +
+            "  },\n" +
+            "  \"attr_5\" : [ 1224, \"str001\", {\n" +
+            "    \"$binary\" : {\n" +
+            "      \"base64\" : \"AAECAwQF\",\n" +
+            "      \"subType\" : \"00\"\n" +
+            "    }\n" +
+            "  } ],\n" +
+            "  \"NestedList12\" : [ -485.34, \"1234abcd\", [ {\n" +
+            "    \"$set\" : [ \"xyz01234\", \"xyz0123\", \"abc01234\" ]\n" +
+            "  }, {\n" +
+            "    \"$set\" : [ {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"dmFsMDE=\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    }, {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"dmFsMDM=\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    }, {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"dmFsMDI=\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    }, {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"dmFsMDQ=\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    } ]\n" +
+            "  } ] ],\n" +
+            "  \"Id\" : \"12345\",\n" +
+            "  \"attr_1\" : 1295.03,\n" +
+            "  \"attr_0\" : \"str_val_0\",\n" +
+            "  \"RelatedItems\" : {\n" +
+            "    \"$set\" : [ 123.0948, -485.45582904, 1234, 0.111 ]\n" +
+            "  },\n" +
+            "  \"Id1\" : \"12345\",\n" +
+            "  \"AddedId\" : 10\n" +
+            "}";
+    //{
+    //  "Pictures" : {
+    //    "$set" : [ "123_rear.jpg", "xyz5@_rear.jpg", "xyz_front.jpg", "xyz_rear.jpg", "123_front.jpg", "1235@_rear.jpg" ]
+    //  },
+    //  "PictureBinarySet" : {
+    //    "$set" : [ {
+    //      "$binary" : {
+    //        "base64" : "MTIzYWJjX3JlYXIuanBn",
+    //        "subType" : "00"
+    //      }
+    //    }, {
+    //      "$binary" : {
+    //        "base64" : "eHl6X3JlYXIuanBn",
+    //        "subType" : "00"
+    //      }
+    //    }, {
+    //      "$binary" : {
+    //        "base64" : "eHl6YWJjX3JlYXIuanBn",
+    //        "subType" : "00"
+    //      }
+    //    }, {
+    //      "$binary" : {
+    //        "base64" : "MTIzX2Zyb250LmpwZw==",
+    //        "subType" : "00"
+    //      }
+    //    } ]
+    //  },
+    //  "Title" : "Cycle_1234_new",
+    //  "InPublication" : false,
+    //  "ColorBytes" : {
+    //    "$binary" : {
+    //      "base64" : "QmxhY2s=",
+    //      "subType" : "00"
+    //    }
+    //  },
+    //  "ISBN" : "111-1111111111",
+    //  "NestedList1" : [ -473.11999999999995, "1234abcd", [ "xyz0123", {
+    //    "InPublication" : false,
+    //    "BinaryTitleSet" : {
+    //      "$set" : [ {
+    //        "$binary" : {
+    //          "base64" : "Qm9vayAxMDExIFRpdGxlIEJpbmFyeQ==",
+    //          "subType" : "00"
+    //        }
+    //      }, {
+    //        "$binary" : {
+    //          "base64" : "Qm9vayAxMDEwIFRpdGxlIEJpbmFyeQ==",
+    //          "subType" : "00"
+    //        }
+    //      }, {
+    //        "$binary" : {
+    //          "base64" : "Qm9vayAxMTExIFRpdGxlIEJpbmFyeQ==",
+    //          "subType" : "00"
+    //        }
+    //      } ]
+    //    },
+    //    "ISBN" : "111-1111111122",
+    //    "IdSet" : {
+    //      "$set" : [ 20576024, -3.9457860486939475E7, 204850.69703847595, 4.86906704836275E21, 19306873 ]
+    //    },
+    //    "Title" : "Book 101 Title",
+    //    "Id" : 101.01,
+    //    "TitleSet2" : {
+    //      "$set" : [ "Book 1201 Title", "Book 1111 Title", "Book 1200 Title" ]
+    //    }
+    //  } ], null, true ],
+    //  "NestedMap1" : {
+    //    "InPublication" : false,
+    //    "ISBN" : "111-1111111111",
+    //    "NestedMap2" : {
+    //      "NList" : [ 12.22, -0.00234, null ],
+    //      "ISBN" : "111-1111111111999",
+    //      "Title" : "Book 10122 Title",
+    //      "Id" : -12243.78,
+    //      "NewID" : "12345"
+    //    },
+    //    "Id" : 101.01,
+    //    "NList1" : [ {
+    //      "$set" : [ "Updated_set_01", "Updated_set_02" ]
+    //    }, -0.00234 ],
+    //    "NSet1" : {
+    //      "$set" : [ 123.45, 9586.7778, -124, 10238 ]
+    //    },
+    //    "ColorList" : [ "Black", {
+    //      "$binary" : {
+    //        "base64" : "V2hpdGU=",
+    //        "subType" : "00"
+    //      }
+    //    }, "Silver" ],
+    //    "AddedId" : 10
+    //  },
+    //  "attr_6" : {
+    //    "n_attr_0" : "str_val_0",
+    //    "n_attr_1" : 1295.03,
+    //    "n_attr_2" : {
+    //      "$binary" : {
+    //        "base64" : "MjA0OHU1bmJsd2plaVdGR1RIKDRiZjkzMA==",
+    //        "subType" : "00"
+    //      }
+    //    },
+    //    "n_attr_3" : true,
+    //    "n_attr_4" : null
+    //  },
+    //  "attr_5" : [ 1224, "str001", {
+    //    "$binary" : {
+    //      "base64" : "AAECAwQF",
+    //      "subType" : "00"
+    //    }
+    //  } ],
+    //  "NestedList12" : [ -485.34, "1234abcd", [ {
+    //    "$set" : [ "xyz01234", "xyz0123", "abc01234" ]
+    //  }, {
+    //    "$set" : [ {
+    //      "$binary" : {
+    //        "base64" : "dmFsMDE=",
+    //        "subType" : "00"
+    //      }
+    //    }, {
+    //      "$binary" : {
+    //        "base64" : "dmFsMDM=",
+    //        "subType" : "00"
+    //      }
+    //    }, {
+    //      "$binary" : {
+    //        "base64" : "dmFsMDI=",
+    //        "subType" : "00"
+    //      }
+    //    }, {
+    //      "$binary" : {
+    //        "base64" : "dmFsMDQ=",
+    //        "subType" : "00"
+    //      }
+    //    } ]
+    //  } ] ],
+    //  "Id" : "12345",
+    //  "attr_1" : 1295.03,
+    //  "attr_0" : "str_val_0",
+    //  "RelatedItems" : {
+    //    "$set" : [ 123.0948, -485.45582904, 1234, 0.111 ]
+    //  },
+    //  "Id1" : "12345",
+    //  "AddedId" : 10
+    //}
+    return RawBsonDocument.parse(json);
   }
 
 }
