@@ -128,10 +128,10 @@ public class PhoenixRegionServerEndpoint
     }
 
     @Override
-    public void invalidatePhoenixHACache(RpcController controller,
-            RegionServerEndpointProtos.InvalidatePhoenixHACacheRequest request,
-            RpcCallback<RegionServerEndpointProtos.InvalidatePhoenixHACacheResponse> done) {
-        LOGGER.info("PhoenixRegionServerEndpoint invalidating PhoenixHACache");
+    public void invalidateHAGroupStoreClient(RpcController controller,
+            RegionServerEndpointProtos.InvalidateHAGroupStoreClientRequest request,
+            RpcCallback<RegionServerEndpointProtos.InvalidateHAGroupStoreClientResponse> done) {
+        LOGGER.info("PhoenixRegionServerEndpoint invalidating HAGroupStoreClient");
         HAGroupStoreManager haGroupStoreManager;
         try {
             haGroupStoreManager = HAGroupStoreManager.getInstance(conf);

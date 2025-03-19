@@ -50,10 +50,10 @@ message InvalidateServerMetadataCacheRequest {
   repeated InvalidateServerMetadataCache invalidateServerMetadataCacheRequests = 1;
 }
 
-message InvalidatePhoenixHACacheRequest {
+message InvalidateHAGroupStoreClientRequest {
 }
 
-message InvalidatePhoenixHACacheResponse {
+message InvalidateHAGroupStoreClientResponse {
 }
 
 service RegionServerEndpointService {
@@ -63,7 +63,6 @@ service RegionServerEndpointService {
   rpc invalidateServerMetadataCache(InvalidateServerMetadataCacheRequest)
       returns (InvalidateServerMetadataCacheResponse);
 
-  rpc invalidatePhoenixHACache(InvalidatePhoenixHACacheRequest)
-      returns (InvalidatePhoenixHACacheResponse);
-
+  rpc InvalidateHAGroupStoreClient(InvalidateHAGroupStoreClientRequest)
+      returns (InvalidateHAGroupStoreClientResponse);
 }

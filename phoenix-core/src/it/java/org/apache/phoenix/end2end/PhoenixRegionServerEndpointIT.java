@@ -159,14 +159,14 @@ public class PhoenixRegionServerEndpointIT extends BaseTest {
     }
 
     @Test
-    public void testInvalidatePhoenixHACache() throws Exception {
+    public void testInvalidateHAGroupStoreClient() throws Exception {
         HRegionServer regionServer = utility.getMiniHBaseCluster().getRegionServer(0);
         PhoenixRegionServerEndpoint coprocessor = getPhoenixRegionServerEndpoint(regionServer);
         assertNotNull(coprocessor);
         ServerRpcController controller = new ServerRpcController();
-        RegionServerEndpointProtos.InvalidatePhoenixHACacheRequest request
-                = RegionServerEndpointProtos.InvalidatePhoenixHACacheRequest.newBuilder().build();
-        coprocessor.invalidatePhoenixHACache(controller, request, null);
+        RegionServerEndpointProtos.InvalidateHAGroupStoreClientRequest request
+                = RegionServerEndpointProtos.InvalidateHAGroupStoreClientRequest.newBuilder().build();
+        coprocessor.invalidateHAGroupStoreClient(controller, request, null);
         assertFalse(controller.failed());
     }
 
