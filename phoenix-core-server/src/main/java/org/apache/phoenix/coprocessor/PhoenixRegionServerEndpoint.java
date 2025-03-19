@@ -33,6 +33,7 @@ import org.apache.phoenix.cache.ServerMetadataCacheImpl;
 import org.apache.phoenix.coprocessor.generated.RegionServerEndpointProtos;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsMetadataCachingSource;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
+import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -131,12 +132,12 @@ public class PhoenixRegionServerEndpoint
             RegionServerEndpointProtos.InvalidatePhoenixHACacheRequest request,
             RpcCallback<RegionServerEndpointProtos.InvalidatePhoenixHACacheResponse> done) {
         LOGGER.info("PhoenixRegionServerEndpoint invalidating PhoenixHACache");
-        ServerMetadataCache cache;
+        HAGroupStoreManager haGroupStoreManager;
         try {
-            cache = getServerMetadataCache();
-            cache.invalidatePhoenixHACache();
+            haGroupStoreManager = HAGroupStoreManager.getInstance(conf);
+            haGroupStoreManager.invalidateHAGroupStoreClient();
         } catch (Throwable t) {
-            String errorMsg = "Invalidating PhoenixHACache FAILED, check exception for "
+            String errorMsg = "Invalidating HAGroupStoreClient FAILED, check exception for "
                     + "specific details";
             LOGGER.error(errorMsg,  t);
             IOException ioe = ClientUtil.createIOException(errorMsg, t);
@@ -152,4 +153,5 @@ public class PhoenixRegionServerEndpoint
     public ServerMetadataCache getServerMetadataCache() throws Exception {
         return ServerMetadataCacheImpl.getInstance(conf);
     }
+
 }

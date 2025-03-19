@@ -26,6 +26,7 @@ import org.apache.curator.utils.ZKPaths;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.PairOfSameType;
+import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.zookeeper.CreateMode;
@@ -49,6 +50,7 @@ import java.util.Properties;
  * multiple HA groups that are associated with this cluster.
  * This is not thread-safe yet. Multiple threads can update CRRs at same time potentially causing inconsistency.
  */
+@VisibleForTesting
 public class PhoenixHAAdmin implements Closeable {
 
     /**

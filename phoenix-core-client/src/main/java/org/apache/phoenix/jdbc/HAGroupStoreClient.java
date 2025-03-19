@@ -42,12 +42,12 @@ import static org.apache.curator.framework.recipes.cache.PathChildrenCacheEvent.
  * Write-through cache for PhoenixHA.
  * Uses {@link PathChildrenCache} from {@link org.apache.curator.framework.CuratorFramework}.
  */
-public class PhoenixHACache implements Closeable {
+public class HAGroupStoreClient implements Closeable {
 
     private static final long HA_CACHE_INITIALIZATION_TIMEOUT_MS = 30000L;
-    private static PhoenixHACache cacheInstance;
+    private static HAGroupStoreClient cacheInstance;
     private final PhoenixHAAdmin phoenixHaAdmin;
-    private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixHACache.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(HAGroupStoreClient.class);
     // Map contains <ClusterRole, Map<HAGroupName(String), ClusterRoleRecord>>
     private final ConcurrentHashMap<ClusterRoleRecord.ClusterRole, ConcurrentHashMap<String, ClusterRoleRecord>> clusterRoleToCRRMap
             = new ConcurrentHashMap<>();
@@ -55,30 +55,30 @@ public class PhoenixHACache implements Closeable {
     private boolean isHealthy;
 
     /**
-     * Creates/gets an instance of PhoenixHACache.
+     * Creates/gets an instance of HAGroupStoreClient.
      *
      * @param conf configuration
      * @return cache
      */
-    public static PhoenixHACache getInstance(Configuration conf) throws Exception {
-        PhoenixHACache result = cacheInstance;
+    public static HAGroupStoreClient getInstance(Configuration conf) throws Exception {
+        HAGroupStoreClient result = cacheInstance;
         if (result == null) {
-            synchronized (PhoenixHACache.class) {
+            synchronized (HAGroupStoreClient.class) {
                 result = cacheInstance;
                 if (result == null) {
-                    cacheInstance = result = new PhoenixHACache(conf);
+                    cacheInstance = result = new HAGroupStoreClient(conf);
                 }
             }
         }
         return result;
     }
 
-    private PhoenixHACache(final Configuration conf) throws Exception {
+    private HAGroupStoreClient(final Configuration conf) throws Exception {
         this.phoenixHaAdmin = new PhoenixHAAdmin(conf);
         final PathChildrenCache pathChildrenCache = new PathChildrenCache(phoenixHaAdmin.getCurator(), ZKPaths.PATH_SEPARATOR, true);
         final CountDownLatch latch = new CountDownLatch(1);
         pathChildrenCache.getListenable().addListener((client, event) -> {
-            LOGGER.info("PhoenixHACache PathChildrenCache Received event for type {}", event.getType());
+            LOGGER.info("HAGroupStoreClient PathChildrenCache Received event for type {}", event.getType());
             final ChildData childData = event.getData();
             if (childData != null || event.getType() == INITIALIZED) {
                 ClusterRoleRecord eventCRR = extractCRROrNull(childData);
@@ -113,7 +113,7 @@ public class PhoenixHACache implements Closeable {
                         LOGGER.warn("Unexpected event type {}, complete event {}", event.getType(), event);
                 }
             } else {
-                LOGGER.info("PhoenixHACache PathChildrenCache Received event for type {} but ChildData is null", event.getType());
+                LOGGER.info("HAGroupStoreClient PathChildrenCache Received event for type {} but ChildData is null", event.getType());
             }
         });
         pathChildrenCache.start(PathChildrenCache.StartMode.POST_INITIALIZED_EVENT);
@@ -154,33 +154,33 @@ public class PhoenixHACache implements Closeable {
     }
 
     public void rebuild() throws Exception {
-        LOGGER.info("Rebuilding PhoenixHACache for HA groups");
+        LOGGER.info("Rebuilding HAGroupStoreClient for HA groups");
         // NOTE: this is a BLOCKING method.
         // Completely rebuild the internal cache by querying for all needed data
         // WITHOUT generating any events to send to listeners.
         pathChildrenCache.rebuild();
         buildClusterRoleToCRRMap();
-        LOGGER.info("Rebuild Complete for PhoenixHACache");
+        LOGGER.info("Rebuild Complete for HAGroupStoreClient");
     }
 
 
     @Override
     public void close() {
         try {
-            LOGGER.info("Closing PhoenixHACache");
+            LOGGER.info("Closing HAGroupStoreClient");
             clusterRoleToCRRMap.clear();
             if (pathChildrenCache != null) {
                 pathChildrenCache.close();
             }
-            LOGGER.info("Closed PhoenixHACache");
+            LOGGER.info("Closed HAGroupStoreClient");
         } catch (IOException e) {
-            LOGGER.error("Exception closing PhoenixHACache", e);
+            LOGGER.error("Exception closing HAGroupStoreClient", e);
         }
     }
 
-    public List<ClusterRoleRecord> getCRRsByClusterRole(ClusterRoleRecord.ClusterRole clusterRole) {
+    public List<ClusterRoleRecord> getCRRsByClusterRole(ClusterRoleRecord.ClusterRole clusterRole) throws IOException {
         if (!isHealthy) {
-            throw new IllegalStateException("PhoenixHACache is not healthy");
+            throw new IOException("HAGroupStoreClient is not healthy");
         }
         return clusterRoleToCRRMap.getOrDefault(clusterRole, new ConcurrentHashMap<>()).values().stream().collect(ImmutableList.toImmutableList());
     }

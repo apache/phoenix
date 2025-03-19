@@ -19,19 +19,14 @@ package org.apache.phoenix.cache;
 
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.Collections;
-import java.util.List;
 import java.util.Properties;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsMetadataCachingSource;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
-import org.apache.phoenix.exception.StaleMetadataCacheException;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.jdbc.ClusterRoleRecord;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixHACache;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
 import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
@@ -41,8 +36,6 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.apache.phoenix.query.QueryServices.PHOENIX_HA_CACHE_ENABLED;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_HA_CACHE_ENABLED;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 /**
  * This manages the cache for all the objects(data table, views, indexes) on each region server.
@@ -59,8 +52,6 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
     private static final long DEFAULT_PHOENIX_COPROC_REGIONSERVER_CACHE_SIZE = 10000L;
     private static volatile ServerMetadataCacheImpl cacheInstance;
     private MetricsMetadataCachingSource metricsSource;
-    private boolean phoenixHACacheEnabled;
-    private PhoenixHACache phoenixHACache;
 
     /**
      * Creates/gets an instance of ServerMetadataCache.
@@ -68,7 +59,7 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
      * @param conf configuration
      * @return cache
      */
-    public static ServerMetadataCacheImpl getInstance(Configuration conf) throws Exception {
+    public static ServerMetadataCacheImpl getInstance(Configuration conf) {
         ServerMetadataCacheImpl result = cacheInstance;
         if (result == null) {
             synchronized (ServerMetadataCacheImpl.class) {
@@ -81,7 +72,7 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
         return result;
     }
 
-    public ServerMetadataCacheImpl(Configuration conf) throws Exception {
+    public ServerMetadataCacheImpl(Configuration conf) {
         this.conf = HBaseConfiguration.create(conf);
         this.metricsSource = MetricsPhoenixCoprocessorSourceFactory
                                 .getInstance().getMetadataCachingSource();
@@ -96,12 +87,6 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
                 // maximum number of entries this cache can handle.
                 .maximumSize(maxSize)
                 .build();
-        this.phoenixHACacheEnabled = conf.getBoolean(PHOENIX_HA_CACHE_ENABLED,
-                DEFAULT_PHOENIX_HA_CACHE_ENABLED);
-        // Only initialize this cache if PhoenixHACacheEnabled is true
-        if (this.phoenixHACacheEnabled) {
-            this.phoenixHACache = PhoenixHACache.getInstance(conf);
-        }
     }
 
 
@@ -161,23 +146,6 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
         byte[] tableKey = SchemaUtil.getTableKey(tenantID, schemaName, tableName);
         ImmutableBytesPtr tableKeyPtr = new ImmutableBytesPtr(tableKey);
         lastDDLTimestampMap.invalidate(tableKeyPtr);
-    }
-
-    @Override
-    public List<ClusterRoleRecord> getClusterRoleRecordsForClusterRole(ClusterRoleRecord.ClusterRole role) throws StaleMetadataCacheException {
-        try {
-            return phoenixHACacheEnabled ? phoenixHACache.getCRRsByClusterRole(role) : Collections.emptyList();
-        } catch (IllegalStateException e) {
-            throw new StaleMetadataCacheException("PhoenixHACache is not healthy");
-        }
-    }
-
-    @Override
-    public void invalidatePhoenixHACache() throws Exception {
-        if (phoenixHACacheEnabled) {
-            phoenixHACache = PhoenixHACache.getInstance(conf);
-            phoenixHACache.rebuild();
-        }
     }
 
     protected Connection getConnection(Properties properties) throws SQLException {

@@ -94,6 +94,7 @@ import org.apache.phoenix.index.PhoenixIndexFailurePolicyHelper;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicyHelper.MutateCommand;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
 import org.apache.phoenix.jdbc.ClusterRoleRecord;
+import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.join.HashJoinInfo;
@@ -1065,17 +1066,15 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     @Override
     public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
                                MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
-        Configuration conf = c.getEnvironment().getConfiguration();
-        if(conf.getBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED)) {
-            try {
-                ServerMetadataCache serverMetadataCache = ServerMetadataCacheImpl.getInstance(c.getEnvironment().getConfiguration());
-                if (!serverMetadataCache.getClusterRoleRecordsForClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).isEmpty()) {
-                    throw new IOException("Blocking Mutation as Some CRRs are in ACTIVE_TO_STANDBY state " +
-                            "and CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
-                }
-            } catch (Exception e) {
-                throw new IOException(e);
+        final Configuration conf = c.getEnvironment().getConfiguration();
+        try {
+            final HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(conf);
+            if(haGroupStoreManager.isMutationBlocked()) {
+                throw new IOException("Blocking Mutation as Some CRRs are in ACTIVE_TO_STANDBY state " +
+                        "and CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
             }
+        } catch (Exception e) {
+            throw new IOException(e);
         }
     }
 }

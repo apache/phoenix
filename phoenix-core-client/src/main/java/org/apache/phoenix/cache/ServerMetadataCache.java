@@ -29,6 +29,4 @@ public interface ServerMetadataCache {
     long getLastDDLTimestampForTable(byte[] tenantID, byte[] schemaName, byte[] tableName)
             throws SQLException;
     void invalidateLastDDLTimestampForTable(byte[] tenantID, byte[] schemaName, byte[] tableName);
-    List<ClusterRoleRecord> getClusterRoleRecordsForClusterRole(ClusterRoleRecord.ClusterRole role) throws StaleMetadataCacheException;
-    void invalidatePhoenixHACache() throws Exception;
 }
