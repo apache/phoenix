@@ -39,7 +39,7 @@ import static org.apache.curator.framework.recipes.cache.PathChildrenCacheEvent.
 
 
 /**
- * Write-through cache for PhoenixHA.
+ * Write-through cache for HAGroupStore.
  * Uses {@link PathChildrenCache} from {@link org.apache.curator.framework.CuratorFramework}.
  */
 public class HAGroupStoreClient implements Closeable {

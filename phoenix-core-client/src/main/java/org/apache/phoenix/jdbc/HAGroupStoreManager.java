@@ -32,9 +32,9 @@ public class HAGroupStoreManager {
     }
 
     private HAGroupStoreManager(final Configuration conf) throws Exception {
-        this.haGroupStoreClient = HAGroupStoreClient.getInstance(conf);
         this.mutationBlockEnabled = conf.getBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED,
                 DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED);
+        this.haGroupStoreClient = HAGroupStoreClient.getInstance(conf);
     }
 
     /**
