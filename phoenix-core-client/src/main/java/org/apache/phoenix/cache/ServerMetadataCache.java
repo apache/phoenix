@@ -16,11 +16,7 @@
  */
 package org.apache.phoenix.cache;
 
-import org.apache.phoenix.exception.StaleMetadataCacheException;
-import org.apache.phoenix.jdbc.ClusterRoleRecord;
-
 import java.sql.SQLException;
-import java.util.List;
 
 /**
  * Interface for server side metadata cache hosted on each region server.

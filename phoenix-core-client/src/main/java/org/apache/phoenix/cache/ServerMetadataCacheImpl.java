@@ -89,7 +89,6 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
                 .build();
     }
 
-
     /**
      * Returns the last DDL timestamp from the table.
      * If not found in cache, then query SYSCAT regionserver.
@@ -151,5 +150,4 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
     protected Connection getConnection(Properties properties) throws SQLException {
         return QueryUtil.getConnectionOnServer(properties, this.conf);
     }
-
 }
