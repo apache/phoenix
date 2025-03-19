@@ -27,6 +27,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -35,6 +36,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 
 /**
  * Integration tests for {@link HAGroupStoreClient}
@@ -286,5 +289,34 @@ public class HAGroupStoreClientIT extends BaseTest {
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         assert haGroupStoreClient.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).size() == 1;
         assert haGroupStoreClient.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).size() == 1;
+    }
+
+    @Test
+    public void testThrowsExceptionWithZKDisconnectionAndThenConnection() throws Exception {
+        HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstance(config);
+        // Setup initial CRRs
+        ClusterRoleRecord crr1 = new ClusterRoleRecord("failover",
+                HighAvailabilityPolicy.FAILOVER, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 1L);
+        ClusterRoleRecord crr2 = new ClusterRoleRecord("parallel",
+                HighAvailabilityPolicy.PARALLEL, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 1L);
+        haAdmin.createOrUpdateDataOnZookeeper(crr1);
+        haAdmin.createOrUpdateDataOnZookeeper(crr2);
+
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+        assert haGroupStoreClient.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).size() == 2;
+
+        utility.shutdownMiniZKCluster();
+
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+        assertThrows(IOException.class, () -> haGroupStoreClient.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE));
+
+        // Start ZK on the same port
+        utility.startMiniZKCluster(1,Integer.parseInt(getZKClientPort(config)));
+
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+
+        assert haGroupStoreClient.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).size() == 2;
     }
 }

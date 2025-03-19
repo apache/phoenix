@@ -80,40 +80,36 @@ public class HAGroupStoreClient implements Closeable {
         pathChildrenCache.getListenable().addListener((client, event) -> {
             LOGGER.info("HAGroupStoreClient PathChildrenCache Received event for type {}", event.getType());
             final ChildData childData = event.getData();
-            if (childData != null || event.getType() == INITIALIZED) {
-                ClusterRoleRecord eventCRR = extractCRROrNull(childData);
-                switch (event.getType()) {
-                    case CHILD_ADDED:
-                    case CHILD_UPDATED:
-                        if (eventCRR != null && eventCRR.getHaGroupName() != null) {
-                            updateClusterRoleRecordMap(eventCRR);
-                        }
-                        break;
-                    case CHILD_REMOVED:
-                        // In case of CHILD_REMOVED, we get the old version of data that was just deleted.
-                        if (eventCRR != null && eventCRR.getHaGroupName() != null
-                                && !eventCRR.getHaGroupName().isEmpty()
-                                && eventCRR.getRole(phoenixHaAdmin.getZkUrl()) != null) {
-                            final ClusterRoleRecord.ClusterRole role = eventCRR.getRole(phoenixHaAdmin.getZkUrl());
-                            clusterRoleToCRRMap.putIfAbsent(role, new ConcurrentHashMap<>());
-                            clusterRoleToCRRMap.get(role).remove(eventCRR.getHaGroupName());
-                        }
-                        break;
-                    case INITIALIZED:
-                        latch.countDown();
-                        break;
-                    case CONNECTION_LOST:
-                    case CONNECTION_SUSPENDED:
-                        isHealthy = false;
-                        break;
-                    case CONNECTION_RECONNECTED:
-                        isHealthy = true;
-                        break;
-                    default:
-                        LOGGER.warn("Unexpected event type {}, complete event {}", event.getType(), event);
-                }
-            } else {
-                LOGGER.info("HAGroupStoreClient PathChildrenCache Received event for type {} but ChildData is null", event.getType());
+            ClusterRoleRecord eventCRR = extractCRROrNull(childData);
+            switch (event.getType()) {
+                case CHILD_ADDED:
+                case CHILD_UPDATED:
+                    if (eventCRR != null && eventCRR.getHaGroupName() != null) {
+                        updateClusterRoleRecordMap(eventCRR);
+                    }
+                    break;
+                case CHILD_REMOVED:
+                    // In case of CHILD_REMOVED, we get the old version of data that was just deleted.
+                    if (eventCRR != null && eventCRR.getHaGroupName() != null
+                            && !eventCRR.getHaGroupName().isEmpty()
+                            && eventCRR.getRole(phoenixHaAdmin.getZkUrl()) != null) {
+                        final ClusterRoleRecord.ClusterRole role = eventCRR.getRole(phoenixHaAdmin.getZkUrl());
+                        clusterRoleToCRRMap.putIfAbsent(role, new ConcurrentHashMap<>());
+                        clusterRoleToCRRMap.get(role).remove(eventCRR.getHaGroupName());
+                    }
+                    break;
+                case INITIALIZED:
+                    latch.countDown();
+                    break;
+                case CONNECTION_LOST:
+                case CONNECTION_SUSPENDED:
+                    isHealthy = false;
+                    break;
+                case CONNECTION_RECONNECTED:
+                    isHealthy = true;
+                    break;
+                default:
+                    LOGGER.warn("Unexpected event type {}, complete event {}", event.getType(), event);
             }
         });
         pathChildrenCache.start(PathChildrenCache.StartMode.POST_INITIALIZED_EVENT);
