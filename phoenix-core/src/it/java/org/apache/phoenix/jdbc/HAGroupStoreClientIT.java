@@ -306,16 +306,18 @@ public class HAGroupStoreClientIT extends BaseTest {
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         assert haGroupStoreClient.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).size() == 2;
 
+        // Shutdown the ZK Cluster to simulate CONNECTION_SUSPENDED event
         utility.shutdownMiniZKCluster();
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+        //Check that HAGroupStoreClient instance is not healthy and throws IOException
         assertThrows(IOException.class, () -> haGroupStoreClient.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE));
 
-        // Start ZK on the same port
+        // Start ZK on the same port to simulate CONNECTION_RECONNECTED event
         utility.startMiniZKCluster(1,Integer.parseInt(getZKClientPort(config)));
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-
+        //Check that HAGroupStoreClient instance is back to healthy and provides correct response
         assert haGroupStoreClient.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).size() == 2;
     }
 }
