@@ -93,6 +93,8 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
+import static org.apache.hadoop.hbase.Cell.Type.DeleteColumn;
+import static org.apache.hadoop.hbase.Cell.Type.DeleteFamily;
 import static org.apache.phoenix.hbase.index.write.AbstractParallelWriterIndexCommitter.INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.BEYOND_MAX_LOOKBACK_INVALID;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.BEYOND_MAX_LOOKBACK_MISSING;
@@ -614,9 +616,40 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     };
 
     private boolean isDeleteFamily(Mutation mutation) {
+        if (!(mutation instanceof Delete)) {
+            return false;
+        }
         for (List<Cell> cells : mutation.getFamilyCellMap().values()) {
             for (Cell cell : cells) {
-                if (cell.getType() == Cell.Type.DeleteFamily) {
+                if (cell.getType() == DeleteFamily) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean isDeleteColumn(Mutation mutation) {
+        if (!(mutation instanceof Delete)) {
+            return false;
+        }
+        for (List<Cell> cells : mutation.getFamilyCellMap().values()) {
+            for (Cell cell : cells) {
+                if (cell.getType() == DeleteColumn) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean isDeleteFamilyOrDeleteColumn(Mutation mutation) {
+        if (!(mutation instanceof Delete)) {
+            return false;
+        }
+        for (List<Cell> cells : mutation.getFamilyCellMap().values()) {
+            for (Cell cell : cells) {
+                if (cell.getType() == DeleteFamily || cell.getType() == DeleteColumn) {
                     return true;
                 }
             }
@@ -738,7 +771,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         while (iterator.hasNext()) {
             Mutation mutation = iterator.next();
             if ((mutation instanceof Put && !isVerified((Put) mutation)) ||
-                    (mutation instanceof Delete && !isDeleteFamily(mutation))) {
+                    (mutation instanceof Delete && !isDeleteFamilyOrDeleteColumn(mutation))) {
                 iterator.remove();
             } else {
                 if (((previous instanceof Put && mutation instanceof Put) ||
@@ -787,6 +820,11 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
      * index rebuilds, the delete family markers are used to delete index rows due to data table row deletes or
      * data table row overwrites.
      *
+     * Delete Column Markers
+     * Delete column markers are generated during read repair, regular table updates and
+     * index rebuilds. The delete column markers are used for any included column in the index
+     * which is set to null.
+     *
      * Verification Algorithm
      *
      * IndexTool verification generates an expected list of index mutations from the data table rows and uses this list
@@ -797,7 +835,9 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
      *
      * Every mutation will include a set of cells with the same timestamp
      * Every mutation has a different timestamp
-     * A delete mutation will include only delete family cells and it is for deleting the entire row and its versions
+     * A delete mutation can either include delete family cells and it is for deleting the entire
+     * row and its versions or delete column cells. The delete column cells are added for those
+     * included columns in the index which are set to null.
      * Every put mutation is verified
      *
      * For both verification types, after the expected list of index mutations is constructed for a given data table,
@@ -807,7 +847,8 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
      * As in the construction for the expected list, the cells are grouped into a put and a delete set. The put and
      * delete sets for a given row are further grouped based on their timestamps into put and delete mutations such that
      * all the cells in a mutation have the timestamps. The put and delete mutations are then sorted within a single
-     * list. Mutations in this list are sorted in ascending order of their timestamp. This list is the actual list.
+     * list. Mutations in this list are sorted in descending order of their timestamp.
+     * This list is the actual list.
      *
      * For the without-repair verification, unverified mutations and family version delete markers are removed from
      * the actual list and then the list is compared with the expected list.
@@ -868,21 +909,21 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
             }
             actual = actualMutationList.get(actualIndex);
             if (expected instanceof Put) {
-                if (previousExpected instanceof Delete) {
-                    // Between an expected delete and put, there can be one or more deletes due to
-                    // concurrent mutations or data table write failures. Skip all of them if any
-                    // There cannot be any actual delete mutation between two expected put mutations.
-                    while (getTimestamp(actual) >= getTimestamp(expected) && actual instanceof Delete) {
-                        actualIndex++;
+                    if (previousExpected instanceof Delete) {
+                        // Between an expected delete and put, there can be one or more deletes due to
+                        // concurrent mutations or data table write failures. Skip all of them if any
+                        // There cannot be any actual delete mutation between two expected put mutations.
+                        while (getTimestamp(actual) >= getTimestamp(expected) && isDeleteFamily(actual)) {
+                            actualIndex++;
+                            if (actualIndex == actualSize) {
+                                break;
+                            }
+                            actual = actualMutationList.get(actualIndex);
+                        }
                         if (actualIndex == actualSize) {
                             break;
                         }
-                        actual = actualMutationList.get(actualIndex);
                     }
-                    if (actualIndex == actualSize) {
-                        break;
-                    }
-                }
                 if (actual instanceof Delete) {
                     break;
                 }
@@ -894,7 +935,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
             } else { // expected instanceof Delete
                 // Between put and delete, delete and delete, or before the first delete, there can be other deletes.
                 // Skip all of them if any
-                while (getTimestamp(actual) > getTimestamp(expected) && actual instanceof Delete) {
+                while (getTimestamp(actual) > getTimestamp(expected) && isDeleteFamily(actual)) {
                     actualIndex++;
                     if (actualIndex == actualSize) {
                         break;
@@ -904,8 +945,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                 if (actualIndex == actualSize) {
                     break;
                 }
-                if (getTimestamp(actual) == getTimestamp(expected) &&
-                        (actual instanceof Delete && isDeleteFamily(actual))) {
+                if (isMatchingMutation(expected, actual)) {
                     expectedIndex++;
                     actualIndex++;
                     continue;
@@ -1179,7 +1219,8 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     };
 
     public static List<Mutation> getMutationsWithSameTS(Put put, Delete del) {
-        // Reorder the mutations on the same row so that delete comes before put when they have the same timestamp
+        // Reorder the mutations on the same row so that put comes before delete when they
+        // have the same timestamp
         return getMutationsWithSameTS(put, del, MUTATION_TS_COMPARATOR);
     }
 
@@ -1277,7 +1318,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
      * uncovered partial indexes.
      * pendingMutations is a sorted list of data table mutations that are used to replay index
      * table mutations. This list is sorted in ascending order by the tuple of row key, timestamp
-     * and mutation type where delete comes after put.
+     * and mutation type where put comes before delete.
      */
     public static List<Mutation> prepareIndexMutationsForRebuild(IndexMaintainer indexMaintainer,
             Put dataPut, Delete dataDel, byte[] encodedRegionName) throws IOException {
@@ -1343,6 +1384,10 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                     Put indexPut = prepareIndexPutForRebuild(indexMaintainer, rowKeyPtr,
                             nextDataRowVG, ts, encodedRegionName);
                     indexMutations.add(indexPut);
+                    Delete deleteColumn = indexMaintainer.buildDeleteColumnMutation(indexPut, ts);
+                    if (deleteColumn != null) {
+                        indexMutations.add(deleteColumn);
+                    }
                     // Delete the current index row if the new index key is different than the current one
                     if (indexRowKeyForCurrentDataRow != null) {
                         if (Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0) {
@@ -1401,6 +1446,10 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                     Put indexPut = prepareIndexPutForRebuild(indexMaintainer, rowKeyPtr,
                             nextDataRowVG, ts, encodedRegionName);
                     indexMutations.add(indexPut);
+                    Delete deleteColumn = indexMaintainer.buildDeleteColumnMutation(indexPut, ts);
+                    if (deleteColumn != null) {
+                        indexMutations.add(deleteColumn);
+                    }
                     // Delete the current index row if the new index key is different than the current one
                     if (indexRowKeyForCurrentDataRow != null) {
                         if (Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0) {
@@ -1439,7 +1488,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
             List<Mutation> mutationList = indexMutationMap.get(indexRowKey);
             if (mutationList == null) {
                 if (!mostRecentDone) {
-                    if (mutation instanceof Put) {
+                    if (mutation instanceof Put || isDeleteColumn(mutation)) {
                         mostRecentIndexRowKeys.add(indexRowKey);
                         mostRecentDone = true;
                     }

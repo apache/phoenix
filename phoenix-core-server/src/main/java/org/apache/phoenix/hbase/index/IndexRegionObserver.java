@@ -210,6 +210,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private static boolean failPreIndexUpdatesForTesting = false;
   private static boolean failPostIndexUpdatesForTesting = false;
   private static boolean failDataTableUpdatesForTesting = false;
+  private static boolean ignoreWritingDeleteColumnsToIndex = false;
 
   public static void setIgnoreIndexRebuildForTesting(boolean ignore) { ignoreIndexRebuildForTesting = ignore; }
 
@@ -219,6 +220,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
   public static void setFailDataTableUpdatesForTesting(boolean fail) {
       failDataTableUpdatesForTesting = fail;
+  }
+
+  public static void setIgnoreWritingDeleteColumnsToIndex(boolean ignore) {
+      ignoreWritingDeleteColumnsToIndex = ignore;
   }
 
   public enum BatchMutatePhase {
@@ -1024,6 +1029,14 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                             QueryConstants.UNVERIFIED_BYTES);
                     context.indexUpdates.put(hTableInterfaceReference,
                             new Pair<Mutation, byte[]>(indexPut, rowKeyPtr.get()));
+                    if (!ignoreWritingDeleteColumnsToIndex) {
+                        Delete deleteColumn =
+                                indexMaintainer.buildDeleteColumnMutation(indexPut, ts);
+                        if (deleteColumn != null) {
+                            context.indexUpdates.put(hTableInterfaceReference,
+                                    new Pair<Mutation, byte[]>(deleteColumn, rowKeyPtr.get()));
+                        }
+                    }
                     // Delete the current index row if the new index key is different from the
                     // current one and the index is not a CDC index
                     if (currentDataRowState != null) {
