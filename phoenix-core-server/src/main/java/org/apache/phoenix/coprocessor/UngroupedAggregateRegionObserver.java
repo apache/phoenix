@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.apache.phoenix.util.ScanUtil.adjustScanFilterForGlobalIndexRegionScanner;
 import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
@@ -93,7 +91,6 @@ import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicyHelper;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicyHelper.MutateCommand;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
-import org.apache.phoenix.jdbc.ClusterRoleRecord;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
