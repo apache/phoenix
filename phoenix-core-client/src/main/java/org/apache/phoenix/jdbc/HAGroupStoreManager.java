@@ -23,7 +23,7 @@ import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 
 public class HAGroupStoreManager {
-    private static HAGroupStoreManager cacheInstance;
+    private static volatile HAGroupStoreManager haGroupStoreManagerInstance;
     private final HAGroupStoreClient haGroupStoreClient;
     private final boolean mutationBlockEnabled;
 
@@ -31,19 +31,17 @@ public class HAGroupStoreManager {
      * Creates/gets an instance of HAGroupStoreManager.
      *
      * @param conf configuration
-     * @return cache
+     * @return HAGroupStoreManager instance
      */
     public static HAGroupStoreManager getInstance(Configuration conf) throws Exception {
-        HAGroupStoreManager result = cacheInstance;
-        if (result == null) {
-            synchronized (HAGroupStoreClient.class) {
-                result = cacheInstance;
-                if (result == null) {
-                    cacheInstance = result = new HAGroupStoreManager(conf);
+        if (haGroupStoreManagerInstance == null) {
+            synchronized (HAGroupStoreManager.class) {
+                if (haGroupStoreManagerInstance == null) {
+                    haGroupStoreManagerInstance = new HAGroupStoreManager(conf);
                 }
             }
         }
-        return result;
+        return haGroupStoreManagerInstance;
     }
 
     private HAGroupStoreManager(final Configuration conf) throws Exception {

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.jdbc;
 
+import org.apache.curator.framework.recipes.cache.PathChildrenCacheListener;
 import org.apache.curator.utils.ZKPaths;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.query.BaseTest;
@@ -28,11 +29,14 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
@@ -63,7 +67,7 @@ public class HAGroupStoreClientIT extends BaseTest {
     }
 
     @Test
-    public void testHACacheWithSingleCRR() throws Exception {
+    public void testHAGroupStoreClientWithSingleCRR() throws Exception {
         HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstance(config);
         ClusterRoleRecord crr = new ClusterRoleRecord("failover",
                 HighAvailabilityPolicy.FAILOVER, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE,
@@ -120,7 +124,7 @@ public class HAGroupStoreClientIT extends BaseTest {
 
 
     @Test
-    public void testHACacheWithMultipleCRRs() throws Exception {
+    public void testHAGroupStoreClientWithMultipleCRRs() throws Exception {
         HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstance(config);
         // Setup initial CRRs
         ClusterRoleRecord crr1 = new ClusterRoleRecord("failover",
@@ -257,7 +261,7 @@ public class HAGroupStoreClientIT extends BaseTest {
     }
 
     @Test
-    public void testHACacheWithRootPathDeletion() throws Exception {
+    public void testHAGroupStoreClientWithRootPathDeletion() throws Exception {
         HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstance(config);
         ClusterRoleRecord crr1 = new ClusterRoleRecord("failover",
                 HighAvailabilityPolicy.FAILOVER, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
@@ -320,4 +324,103 @@ public class HAGroupStoreClientIT extends BaseTest {
         //Check that HAGroupStoreClient instance is back to healthy and provides correct response
         assert haGroupStoreClient.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).size() == 2;
     }
+
+
+    @Test
+    public void testHAGroupStoreClientWithDifferentZKURLFormats() throws Exception {
+        HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstance(config);
+        final String zkClientPort = getZKClientPort(config);
+        // Setup initial CRRs
+        final String format1 = "127.0.0.1\\:"+zkClientPort+"::/hbase"; // 127.0.0.1\:53228::/hbase
+        final String format2 = "127.0.0.1:"+zkClientPort+"::/hbase"; //   127.0.0.1:53228::/hbase
+        final String format3 = "127.0.0.1\\:"+zkClientPort+":/hbase";   // 127.0.0.1\:53228:/hbase
+
+        ClusterRoleRecord crr1 = new ClusterRoleRecord("parallel1",
+                HighAvailabilityPolicy.PARALLEL, format1, ClusterRoleRecord.ClusterRole.ACTIVE,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 1L);
+        haAdmin.createOrUpdateDataOnZookeeper(crr1);
+
+        ClusterRoleRecord crr2 = new ClusterRoleRecord("parallel2",
+                HighAvailabilityPolicy.PARALLEL, format2, ClusterRoleRecord.ClusterRole.STANDBY,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 1L);
+        haAdmin.createOrUpdateDataOnZookeeper(crr2);
+
+        ClusterRoleRecord crr3 = new ClusterRoleRecord("parallel3",
+                HighAvailabilityPolicy.PARALLEL, format3, ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 1L);
+        haAdmin.createOrUpdateDataOnZookeeper(crr3);
+
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+        assert haGroupStoreClient.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).size() == 1;
+        assert haGroupStoreClient.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).size() == 1;
+        assert haGroupStoreClient.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.STANDBY).size() == 1;
+    }
+
+
+    /**
+     * This test verifies that the updates coming via PathChildrenCacheListener are in order in which updates are sent to ZK
+     * @throws Exception
+     */
+    @Test
+    public void testHAGroupStoreClientWithMultiThreadedUpdates() throws Exception {
+        // Number of threads to execute
+        int threadCount = 50;
+
+        // Capture versions of crr in a list(crrEventVersions)  in order they are received.
+        List<Integer> crrEventVersions = new ArrayList<>();
+        CountDownLatch eventsLatch = new CountDownLatch(threadCount);
+        PathChildrenCacheListener pathChildrenCacheListener = (client, event) -> {
+            if(event.getData() != null && event.getData().getData() != null && ClusterRoleRecord.fromJson(event.getData().getData()).isPresent()) {
+                    ClusterRoleRecord crr = ClusterRoleRecord.fromJson(event.getData().getData()).get();
+                    crrEventVersions.add((int)crr.getVersion());
+                    eventsLatch.countDown();
+            }
+        };
+
+        // Start a new HAGroupStoreClient.
+        new HAGroupStoreClient(config, pathChildrenCacheListener);
+
+        // Create multiple threads for update to ZK.
+        final CountDownLatch updateLatch = new CountDownLatch(threadCount);
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+
+        // List captures the order of events that are sent.
+        List<Integer> updateList = new ArrayList<>();
+
+        // Create a queue which can be polled to send updates to ZK.
+        ConcurrentLinkedQueue<ClusterRoleRecord> updateQueue = new ConcurrentLinkedQueue<>();
+        for(int i = 0; i < threadCount; i++) {
+            updateQueue.add(createCRR(i+1));
+            updateList.add(i+1);
+        }
+
+        // Submit updates to ZK.
+        for (int i = 0; i < threadCount; i++) {
+            executor.submit(() -> {
+                try {
+                    synchronized (HAGroupStoreClientIT.class) {
+                        haAdmin.createOrUpdateDataOnZookeeper(Objects.requireNonNull(updateQueue.poll()));
+                    }
+                    updateLatch.countDown();
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        }
+
+        // Check if updates are sent and updates are received.
+        assert eventsLatch.await(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS*threadCount, TimeUnit.MILLISECONDS);
+        assert updateLatch.await(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS*threadCount, TimeUnit.MILLISECONDS);
+
+        // Assert that the order of updates is same as order of events.
+        assert updateList.equals(crrEventVersions);
+    }
+
+    private ClusterRoleRecord createCRR(Integer version) {
+        return new ClusterRoleRecord("parallel",
+                HighAvailabilityPolicy.PARALLEL, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE,
+                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, version);
+    }
+
+
 }
