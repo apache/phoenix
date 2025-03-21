@@ -1904,8 +1904,6 @@ public class PTableImpl implements PTable {
         PName schemaName = PNameFactory.newName(table.getSchemaNameBytes().toByteArray());
         PName tableName = PNameFactory.newName(table.getTableNameBytes().toByteArray());
 
-        System.out.println("in createFromProto: " + tableName);
-
         PName physicalTableName = null;
         if (table.getPhysicalTableNameBytes() != null) {
             physicalTableName = PNameFactory.newName(table.getPhysicalTableNameBytes().toByteArray());
@@ -2206,7 +2204,6 @@ public class PTableImpl implements PTable {
         List<PColumn> columns = table.getColumns();
         int columnSize = columns.size();
         // check whether we need the backward compatibility check.
-        System.out.println(String.format("In toProto: %s, %d, %d", table, clientVersion, MetaDataProtocol.MIN_VERSION_ALLOW_VBE_COLUMNS));
         boolean
                 checkBackwardCompatibility =
                 (clientVersion < MetaDataProtocol.MIN_VERSION_ALLOW_VBE_COLUMNS)
