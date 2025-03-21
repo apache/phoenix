@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.jdbc;
 
-import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.apache.hadoop.hbase.GenericTestUtils.waitFor;
 import static org.apache.phoenix.jdbc.PhoenixHAAdminTool.RET_REPAIR_FOUND_INCONSISTENCIES;
 import static org.apache.phoenix.jdbc.PhoenixHAAdminTool.RET_SUCCESS;
@@ -86,8 +85,8 @@ public class PhoenixHAAdminToolIT {
         haGroupName = testName.getMethodName();
         recordV1 = new ClusterRoleRecord(
                 haGroupName, HighAvailabilityPolicy.FAILOVER,
-                CLUSTERS.getUrl1(), ClusterRole.ACTIVE,
-                CLUSTERS.getUrl2(), ClusterRole.STANDBY,
+                CLUSTERS.getZkUrl1(), ClusterRole.ACTIVE,
+                CLUSTERS.getZkUrl2(), ClusterRole.STANDBY,
                 1);
         String jsonFileName = ClusterRoleRecordTest.createJsonFileWithRecords(recordV1);
         int ret = admin.run(new String[]{"-m", jsonFileName});
@@ -97,8 +96,8 @@ public class PhoenixHAAdminToolIT {
         // the V2 record is for the same HA group; it is created but not populated yet
         recordV2 = new ClusterRoleRecord(
                 haGroupName, HighAvailabilityPolicy.FAILOVER,
-                CLUSTERS.getUrl1(), ClusterRole.STANDBY,
-                CLUSTERS.getUrl2(), ClusterRole.ACTIVE,
+                CLUSTERS.getZkUrl1(), ClusterRole.STANDBY,
+                CLUSTERS.getZkUrl2(), ClusterRole.ACTIVE,
                 2);
     }
 
@@ -148,8 +147,8 @@ public class PhoenixHAAdminToolIT {
         String haGroupName2 = haGroupName + 2;
         ClusterRoleRecord record2 = new ClusterRoleRecord(
                 haGroupName2, HighAvailabilityPolicy.FAILOVER,
-                CLUSTERS.getUrl1(), ClusterRole.ACTIVE,
-                CLUSTERS.getUrl2(), ClusterRole.STANDBY,
+                CLUSTERS.getZkUrl1(), ClusterRole.ACTIVE,
+                CLUSTERS.getZkUrl2(), ClusterRole.STANDBY,
                 1);
         // For haGroupName it's update and for haGroupName2 it's create.
         String jsonFileName = ClusterRoleRecordTest.createJsonFileWithRecords(recordV2, record2);
@@ -193,8 +192,8 @@ public class PhoenixHAAdminToolIT {
 
         ClusterRoleRecord recordV3 = new ClusterRoleRecord(
                 haGroupName, HighAvailabilityPolicy.FAILOVER,
-                CLUSTERS.getUrl1(), ClusterRole.ACTIVE,
-                CLUSTERS.getUrl2(), ClusterRole.STANDBY,
+                CLUSTERS.getZkUrl1(), ClusterRole.ACTIVE,
+                CLUSTERS.getZkUrl2(), ClusterRole.STANDBY,
                 3);
         getCurator2().setData().forPath(zpath, ClusterRoleRecord.toJson(recordV3));
         doVerifyClusterRole(getCurator1(), recordV2);
@@ -215,8 +214,8 @@ public class PhoenixHAAdminToolIT {
         try {
             ClusterRoleRecord recordDifferent = new ClusterRoleRecord(
                     haGroupName, HighAvailabilityPolicy.PARALLEL,
-                    CLUSTERS.getUrl1(), ClusterRole.STANDBY,
-                    CLUSTERS.getUrl2(), ClusterRole.STANDBY,
+                    CLUSTERS.getZkUrl1(), ClusterRole.STANDBY,
+                    CLUSTERS.getZkUrl2(), ClusterRole.STANDBY,
                     1);
             getCurator1().setData().forPath(zpath, ClusterRoleRecord.toJson(recordDifferent));
             doVerifyClusterRole(getCurator1(), recordDifferent);
@@ -315,10 +314,10 @@ public class PhoenixHAAdminToolIT {
     }
 
     private static CuratorFramework getCurator1() throws IOException {
-        return HighAvailabilityGroup.getCurator(CLUSTERS.getUrl1(), new Properties());
+        return HighAvailabilityGroup.getCurator(CLUSTERS.getZkUrl1(), new Properties());
     }
 
     private static CuratorFramework getCurator2() throws IOException {
-        return HighAvailabilityGroup.getCurator(CLUSTERS.getUrl2(), new Properties());
+        return HighAvailabilityGroup.getCurator(CLUSTERS.getZkUrl2(), new Properties());
     }
 }

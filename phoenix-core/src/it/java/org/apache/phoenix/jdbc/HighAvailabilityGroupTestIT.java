@@ -56,10 +56,7 @@ import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.*;
 import org.junit.experimental.categories.Category;
 import org.junit.rules.TestName;
 import org.junit.rules.Timeout;
@@ -82,6 +79,7 @@ public class HighAvailabilityGroupTestIT {
     private static final Logger LOG = LoggerFactory.getLogger(HighAvailabilityGroupTestIT.class);
     private static final String ZK1 = "zk1-1\\:2181,zk1-2\\:2181::/hbase";
     private static final String ZK2 = "zk2-1\\:2181,zk2-2\\:2181::/hbase";
+    private static final String DUMMY_URL = "jdbc:phoenix:dummyhost";
     private static final PhoenixEmbeddedDriver DRIVER = mock(PhoenixEmbeddedDriver.class);
 
     /** The client properties to create a JDBC connection. */
@@ -122,8 +120,11 @@ public class HighAvailabilityGroupTestIT {
         // By default the HA policy is FAILOVER
         when(record.getPolicy()).thenReturn(HighAvailabilityPolicy.FAILOVER);
         when(record.getHaGroupName()).thenReturn(haGroupName);
+        when(record.getRegistryType()).thenReturn(ClusterRoleRecord.RegistryType.ZK);
         // Make ZK1 ACTIVE
         when(record.getActiveUrl()).thenReturn(Optional.of(ZK1));
+        when(record.getUrl1()).thenReturn(ZK1);
+        when(record.getUrl2()).thenReturn(ZK2);
         when(record.getRole(eq(ZK1))).thenReturn(ClusterRole.ACTIVE);
 
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName);
@@ -221,10 +222,15 @@ public class HighAvailabilityGroupTestIT {
     /**
      * Test {@link HighAvailabilityGroup#connectToOneCluster} with invalid connection string.
      */
-    @Test (expected = IllegalArgumentException.class)
+    @Test
     public void testConnectToOneClusterShouldFailWithNonHAJdbcString() throws SQLException {
         final String jdbcString = "jdbc:phoenix:dummyhost";
-        haGroup.connectToOneCluster(jdbcString, clientProperties, haURLInfo);
+        when(record.getRole(eq("dummyhost\\:2181::/hbase"))).thenReturn(ClusterRole.UNKNOWN);
+        try {
+            haGroup.connectToOneCluster(jdbcString, clientProperties, haURLInfo);
+        } catch (SQLException e) {
+            Assert.assertEquals(SQLExceptionCode.HA_CLUSTER_CAN_NOT_CONNECT.getErrorCode(), e.getErrorCode());
+        }
         verify(DRIVER, never()).getConnectionQueryServices(anyString(), eq(clientProperties));
     }
 
