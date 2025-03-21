@@ -234,8 +234,21 @@ public class SchemaToolSynthesisIT {
                 "(ORGANIZATION_ID CHAR(15) NOT NULL,\n" +
                 "NETWORK_ID CHAR(15) NOT NULL\n" +
                 "CONSTRAINT PK PRIMARY KEY (ORGANIZATION_ID))\n" +
-                "UPDATE_CACHE_FREQUENCY=172800000,DISABLE_BACKUP=true,MULTI_TENANT=true,REPLICATION_SCOPE=1,\"phoenix.max.lookback.age.seconds\"=0,VERSIONS=1";
+                "BLOOMFILTER='ROW',UPDATE_CACHE_FREQUENCY=172800000,DISABLE_BACKUP=true,MULTI_TENANT=true,REPLICATION_SCOPE=1,\"phoenix.max.lookback.age.seconds\"=0,VERSIONS=1";
         String baseDDL = filePath+"/escape_property.sql";
+        runAndVerify(expected, baseDDL);
+    }
+
+    @Test
+    public void testEscapedColumnName() throws Exception {
+        String expected = "CREATE TABLE IF NOT EXISTS ABC\n" +
+                "(NID CHAR(15) NOT NULL,\n" +
+                "DATA VARCHAR,\n" +
+                "\"a\".\"_\" CHAR(1),\n" +
+                "\"b\".\"_\" CHAR(1)\n" +
+                "CONSTRAINT PK PRIMARY KEY (NID))\n" +
+                "BLOOMFILTER='ROW',UPDATE_CACHE_FREQUENCY=172800000,DISABLE_BACKUP=true,MULTI_TENANT=true,REPLICATION_SCOPE=1,\"phoenix.max.lookback.age.seconds\"=0,VERSIONS=1";
+        String baseDDL = filePath+"/escape_column.sql";
         runAndVerify(expected, baseDDL);
     }
 }
