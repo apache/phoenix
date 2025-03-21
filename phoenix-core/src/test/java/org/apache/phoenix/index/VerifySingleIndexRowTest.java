@@ -69,7 +69,6 @@ import static org.mockito.Mockito.when;
 
 public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
 
-    private static final int INDEX_TABLE_EXPIRY_SEC = 1;
     private static final String UNEXPECTED_COLUMN = "0:UNEXPECTED_COLUMN";
     public static final String FIRST_ID = "FIRST_ID";
     public static final String SECOND_ID = "SECOND_ID";
@@ -272,10 +271,8 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
     }
 
     private void initializeRebuildScannerAttributes() throws SQLException {
-        when(rebuildScanner.setIndexTableTTL(ArgumentMatchers.anyInt())).thenCallRealMethod();
         when(rebuildScanner.setIndexMaintainer(ArgumentMatchers.<IndexMaintainer>any())).thenCallRealMethod();
         when(rebuildScanner.setMaxLookBackInMills(ArgumentMatchers.anyLong())).thenCallRealMethod();
-        rebuildScanner.setIndexTableTTL(HConstants.FOREVER);
         indexMaintainer = pIndexTable.getIndexMaintainer(pDataTable, pconn);
         rebuildScanner.setIndexMaintainer(indexMaintainer);
         // set the maxLookBack to infinite to avoid the compaction
@@ -364,26 +361,6 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
                     indexKeyToMutationMap.get(indexRow.getRow()), mostRecentIndexRowKeys, Collections.EMPTY_LIST, actualPR, true);
 
             assertEquals(actualPR, expectedPR);
-        }
-    }
-
-    @Test
-    public void testVerifySingleIndexRow_expiredIndexRowCount_nonZero() throws IOException {
-        IndexToolVerificationResult.PhaseResult
-                expectedPR = new IndexToolVerificationResult.PhaseResult(0, 1, 0, 0, 0, 0, 0, 0, 0, 0);
-        try {
-            for (Map.Entry<byte[], List<Mutation>>
-                    entry : indexKeyToMutationMap.entrySet()) {
-                initializeLocalMockitoSetup(entry, TestType.EXPIRED);
-                expireThisRow();
-                //test code
-                rebuildScanner.verifySingleIndexRow(indexRow.getRow(), actualMutationList,
-                        indexKeyToMutationMap.get(indexRow.getRow()), mostRecentIndexRowKeys, Collections.EMPTY_LIST, actualPR, true);
-
-                assertEquals(actualPR, expectedPR);
-            }
-        } finally {
-            EnvironmentEdgeManager.reset();
         }
     }
 
@@ -745,12 +722,6 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
                 CellUtil.cloneFamily(c), Bytes.toBytes(INCLUDED_COLUMN),
                 c.getTimestamp(), Cell.Type.Put,
                 Bytes.toBytes("zxcv"));
-    }
-
-    private void expireThisRow() {
-        rebuildScanner.setIndexTableTTL(INDEX_TABLE_EXPIRY_SEC);
-        UnitTestClock expiryClock = new UnitTestClock(5000);
-        EnvironmentEdgeManager.injectEdge(expiryClock);
     }
 
     private Mutation getDeleteMutation(Mutation orig, Long ts) {

@@ -27,7 +27,6 @@ import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -99,11 +98,6 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
                           UngroupedAggregateRegionObserver ungroupedAggregateRegionObserver) throws IOException {
         super(innerScanner, region, scan, env, ungroupedAggregateRegionObserver);
         indexHTable = hTableFactory.getTable(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
-        if (BaseScannerRegionObserver.isPhoenixTableTTLEnabled(env.getConfiguration())) {
-            indexTableTTL = ScanUtil.getTTL(scan);
-        } else {
-            indexTableTTL = indexHTable.getDescriptor().getColumnFamilies()[0].getTimeToLive();
-        }
         pool = new WaitForCompletionTaskRunner(ThreadPoolManager.getExecutor(
                 new ThreadPoolBuilder("IndexVerify",
                         env.getConfiguration()).setMaxThread(NUM_CONCURRENT_INDEX_VERIFY_THREADS_CONF_KEY,
@@ -174,16 +168,6 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
                 byte[] qualifier = CellUtil.cloneQualifier(expectedCell);
                 Cell actualCell = indexRow.getColumnLatestCell(family, qualifier);
                 if (actualCell == null) {
-                    // Check if cell expired as per the current server's time and data table ttl
-                    // Index table should have the same ttl as the data table, hence we might not
-                    // get a value back from index if it has already expired between our rebuild and
-                    // verify
-
-                    // or if cell timestamp is beyond maxlookback
-                    if (isTimestampBeforeTTL(indexTableTTL, currentTime, expectedCell.getTimestamp())) {
-                        continue;
-                    }
-
                     return false;
                 }
                 if (actualCell.getTimestamp() < ts) {
@@ -232,19 +216,6 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
             }
         } catch (Throwable t) {
             ClientUtil.throwIOException(indexHTable.getName().toString(), t);
-        }
-        // Check if any expected rows from index(which we didn't get) are already expired due to TTL
-        if (!perTaskDataKeyToDataPutMap.isEmpty()) {
-            Iterator<Entry<byte[], Put>> itr = perTaskDataKeyToDataPutMap.entrySet().iterator();
-            long currentTime = EnvironmentEdgeManager.currentTime();
-            while(itr.hasNext()) {
-                Entry<byte[], Put> entry = itr.next();
-                long ts = IndexUtil.getMaxTimestamp(entry.getValue());
-                if (isTimestampBeforeTTL(indexTableTTL, currentTime, ts)) {
-                    itr.remove();
-                    verificationPhaseResult.setExpiredIndexRowCount(verificationPhaseResult.getExpiredIndexRowCount()+1);
-                }
-            }
         }
         // Check if any expected rows from index(which we didn't get) are beyond max look back and have been compacted away
         if (!perTaskDataKeyToDataPutMap.isEmpty()) {
