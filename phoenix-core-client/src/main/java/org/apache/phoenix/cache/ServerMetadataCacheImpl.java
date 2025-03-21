@@ -139,7 +139,7 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
      * @param schemaName schemaName
      * @param tableName tableName
      */
-    public void invalidateLastDDLTimestampForTable(byte[] tenantID, byte[] schemaName, byte[] tableName) {
+    public void invalidate(byte[] tenantID, byte[] schemaName, byte[] tableName) {
         LOGGER.info("Invalidating server metadata cache for tenantID: {}, schema: {},  table: {}",
                 Bytes.toString(tenantID), Bytes.toString(schemaName), Bytes.toString(tableName));
         byte[] tableKey = SchemaUtil.getTableKey(tenantID, schemaName, tableName);

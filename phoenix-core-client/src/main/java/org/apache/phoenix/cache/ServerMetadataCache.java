@@ -24,5 +24,5 @@ import java.sql.SQLException;
 public interface ServerMetadataCache {
     long getLastDDLTimestampForTable(byte[] tenantID, byte[] schemaName, byte[] tableName)
             throws SQLException;
-    void invalidateLastDDLTimestampForTable(byte[] tenantID, byte[] schemaName, byte[] tableName);
+    void invalidate(byte[] tenantID, byte[] schemaName, byte[] tableName);
 }

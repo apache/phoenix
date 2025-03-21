@@ -288,7 +288,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
                     null, null, tableName);
             assertEquals(pTable.getLastDDLTimestamp().longValue(), lastDDLTimestampFromCache);
             // Invalidate the cache for this table.
-            cache.invalidateLastDDLTimestampForTable(null, null, tableName);
+            cache.invalidate(null, null, tableName);
             assertNull(cache.getLastDDLTimestampForTableFromCacheOnly(null, null, tableName));
         }
     }
@@ -318,7 +318,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
                     null, Bytes.toBytes(schemaName), Bytes.toBytes(tableName));
             assertEquals(pTable.getLastDDLTimestamp().longValue(), lastDDLTimestampFromCache);
             // Invalidate the cache for this table.
-            cache.invalidateLastDDLTimestampForTable(null, Bytes.toBytes(schemaName), Bytes.toBytes(tableName));
+            cache.invalidate(null, Bytes.toBytes(schemaName), Bytes.toBytes(tableName));
             assertNull(cache.getLastDDLTimestampForTableFromCacheOnly(null,
                     Bytes.toBytes(schemaName), Bytes.toBytes(tableName)));
         }
@@ -357,7 +357,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
             assertEquals(tenantViewTable.getLastDDLTimestamp().longValue(),
                     lastDDLTimestampFromCache);
             // Invalidate the cache for this table.
-            cache.invalidateLastDDLTimestampForTable(tenantIDBytes, null, tenantViewNameBytes);
+            cache.invalidate(tenantIDBytes, null, tenantViewNameBytes);
             assertNull(cache.getLastDDLTimestampForTableFromCacheOnly(
                     tenantIDBytes, null, tenantViewNameBytes));
         }
