@@ -134,26 +134,26 @@ public class ViewUtil {
     public static Pair<List<PTable>, List<TableInfo>> findAllDescendantViews(
             Table sysCatOrsysChildLink, Configuration serverSideConfig, byte[] tenantId,
             byte[] schemaName, byte[] tableOrViewName, long clientTimeStamp,
-            boolean findJustOneLegitimateChildView)
+            boolean findJustOneLegitimateChildView, boolean isServerConnection)
             throws IOException, SQLException {
         List<PTable> legitimateChildViews = new ArrayList<>();
         List<TableInfo> orphanChildViews = new ArrayList<>();
 
         return findAllDescendantViews(sysCatOrsysChildLink, serverSideConfig, tenantId, schemaName,
                 tableOrViewName, clientTimeStamp, legitimateChildViews, orphanChildViews,
-                findJustOneLegitimateChildView);
+                findJustOneLegitimateChildView, isServerConnection);
     }
 
     public static Pair<List<PTable>, List<TableInfo>> findAllDescendantViews(Table sysCatOrsysChildLink,
            Configuration serverSideConfig, byte[] parentTenantId, byte[] parentSchemaName,
            byte[] parentTableOrViewName, long clientTimeStamp, List<PTable> legitimateChildViews,
-           List<TableInfo> orphanChildViews, boolean findJustOneLegitimateChildView)
+           List<TableInfo> orphanChildViews, boolean findJustOneLegitimateChildView, boolean isServerConnection)
            throws IOException, SQLException{
 
          return findAllDescendantViews(sysCatOrsysChildLink, null, serverSideConfig,
                  parentTenantId, parentSchemaName, parentTableOrViewName, clientTimeStamp,
                  legitimateChildViews, orphanChildViews, findJustOneLegitimateChildView,
-                 new Pair<>(false, false));
+                 new Pair<>(false, false), isServerConnection);
 
     }
 
@@ -208,7 +208,7 @@ public class ViewUtil {
             byte[] parentTenantId, byte[] parentSchemaName, byte[] parentTableOrViewName,
             long clientTimeStamp, List<PTable> legitimateChildViews,
             List<TableInfo> orphanChildViews, boolean findJustOneLegitimateChildView,
-            Pair<Boolean, Boolean> scanSysCatForTTLDefinedOnAnyChildPair)
+            Pair<Boolean, Boolean> scanSysCatForTTLDefinedOnAnyChildPair, boolean isServerConnection)
             throws IOException, SQLException {
         TableViewFinderResult currentResult =
                 findImmediateRelatedViews(sysCatOrsysChildLink, sysCat, parentTenantId,
@@ -226,9 +226,11 @@ public class ViewUtil {
             if (clientTimeStamp != HConstants.LATEST_TIMESTAMP) {
                 props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(clientTimeStamp));
             }
-            try (PhoenixConnection connection =
-                    QueryUtil.getConnectionOnServer(props, serverSideConfig)
-                            .unwrap(PhoenixConnection.class)) {
+            try (PhoenixConnection connection = ((isServerConnection) ?
+                            QueryUtil.getConnectionOnServer(props, serverSideConfig)
+                            .unwrap(PhoenixConnection.class) :
+                            QueryUtil.getConnection(props, serverSideConfig)
+                            .unwrap(PhoenixConnection.class))){
                 try {
                     view = connection.getTableNoCache(
                             SchemaUtil.getTableName(viewSchemaName, viewName));
@@ -257,7 +259,7 @@ public class ViewUtil {
                             viewInfo.getTenantId(), viewInfo.getSchemaName(),
                             viewInfo.getTableName(), clientTimeStamp, legitimateChildViews,
                             orphanChildViews, findJustOneLegitimateChildView,
-                            scanSysCatForTTLDefinedOnAnyChildPair);
+                            scanSysCatForTTLDefinedOnAnyChildPair, isServerConnection);
                 } else {
                     logger.error("Found an orphan parent->child link keyed by this parent."
                             + " Parent Tenant Id: '" + Bytes.toString(parentTenantId)
@@ -285,7 +287,7 @@ public class ViewUtil {
      * Returns relatives in a breadth-first fashion. Note that this is not resilient to orphan
      * linking rows and we also do not try to resolve any of the views to ensure they are valid.
      * Use {@link ViewUtil#findAllDescendantViews(Table, Configuration, byte[], byte[], byte[],
-     * long, boolean)} if you are only interested in {@link LinkType#CHILD_TABLE} and need to be
+     * long, boolean, boolean)} if you are only interested in {@link LinkType#CHILD_TABLE} and need to be
      * resilient to orphan linking rows.
      *
      * @param sysCatOrsysChildLink Table corresponding to either SYSTEM.CATALOG or SYSTEM.CHILD_LINK
