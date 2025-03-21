@@ -33,6 +33,7 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PSmallint;
+import org.apache.phoenix.util.ByteUtil;
 
 import java.sql.Types;
 import java.util.List;
@@ -117,6 +118,10 @@ public class DecodeViewIndexIdFunction extends ScalarFunction {
 
         Cell viewIndexIdCell = tuple.getValue(viewIndexIdCF, viewIndexIdCQ);
         Cell viewIndexIdDataTypeCell = tuple.getValue(viewIndexIdTypeCF, viewIndexIdTypeCQ);
+        if ((viewIndexIdCell != null) && (viewIndexIdCell.getValueLength() == 0)) {
+            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+            return true;
+        }
 
 
         /*
@@ -136,12 +141,15 @@ public class DecodeViewIndexIdFunction extends ScalarFunction {
         if (viewIndexIdCell != null) {
             int type = NULL_DATA_TYPE_VALUE;
             if (viewIndexIdDataTypeCell != null) {
-                type = (Integer) PInteger.INSTANCE.toObject(
+                Object typeObject = PInteger.INSTANCE.toObject(
                         viewIndexIdDataTypeCell.getValueArray(),
                         viewIndexIdDataTypeCell.getValueOffset(),
                         viewIndexIdDataTypeCell.getValueLength(),
                         PInteger.INSTANCE,
                         SortOrder.ASC);
+                if (typeObject != null) {
+                    type = (Integer) typeObject;
+                }
             }
 
             ImmutableBytesWritable columnValue =
