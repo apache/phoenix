@@ -27,10 +27,10 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.PhoenixRegionServerEndpointTestImpl;
 import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
@@ -92,7 +92,6 @@ import static org.mockito.Mockito.verify;
 public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
 
     private final Random RANDOM = new Random(42);
-    private final Long ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS = 1000L;
 
     private static ServerName serverName;
 
