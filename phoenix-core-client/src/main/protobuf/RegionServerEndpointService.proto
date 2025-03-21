@@ -63,6 +63,6 @@ service RegionServerEndpointService {
   rpc invalidateServerMetadataCache(InvalidateServerMetadataCacheRequest)
       returns (InvalidateServerMetadataCacheResponse);
 
-  rpc InvalidateHAGroupStoreClient(InvalidateHAGroupStoreClientRequest)
+  rpc invalidateHAGroupStoreClient(InvalidateHAGroupStoreClientRequest)
       returns (InvalidateHAGroupStoreClientResponse);
 }

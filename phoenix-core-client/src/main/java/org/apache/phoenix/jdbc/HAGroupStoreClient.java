@@ -91,10 +91,11 @@ public class HAGroupStoreClient implements Closeable {
                         }
                         break;
                     case CHILD_REMOVED:
-                        // In case of CHILD_REMOVED, we get the old version of data that was just deleted.
+                        // In case of CHILD_REMOVED, we get the old version of data that was just deleted in event.
                         if (eventCRR != null && eventCRR.getHaGroupName() != null
                                 && !eventCRR.getHaGroupName().isEmpty()
                                 && eventCRR.getRole(phoenixHaAdmin.getZkUrl()) != null) {
+                            LOGGER.info("Received CHILD_REMOVED event, Removing CRR {} from existing CRR Map {}", eventCRR, clusterRoleToCRRMap);
                             final ClusterRoleRecord.ClusterRole role = eventCRR.getRole(phoenixHaAdmin.getZkUrl());
                             clusterRoleToCRRMap.putIfAbsent(role, new ConcurrentHashMap<>());
                             clusterRoleToCRRMap.get(role).remove(eventCRR.getHaGroupName());
@@ -130,18 +131,20 @@ public class HAGroupStoreClient implements Closeable {
     }
 
     private void updateClusterRoleRecordMap(final ClusterRoleRecord crr) {
-        ClusterRoleRecord.ClusterRole role = crr.getRole(phoenixHaAdmin.getZkUrl());
-        if (role != null) {
+        if (crr != null && crr.getHaGroupName() != null && crr.getRole(phoenixHaAdmin.getZkUrl()) != null) {
+            ClusterRoleRecord.ClusterRole role = crr.getRole(phoenixHaAdmin.getZkUrl());
             LOGGER.info("Updating Existing CRR Map {} with new CRR {}", clusterRoleToCRRMap, crr);
             clusterRoleToCRRMap.putIfAbsent(role, new ConcurrentHashMap<>());
             clusterRoleToCRRMap.get(role).put(crr.getHaGroupName(), crr);
             LOGGER.info("Added new CRR {} to CRR Map", crr);
             // Remove any pre-existing mapping with any other role for this HAGroupName
-            LOGGER.info("Remove any pre-existing mapping with any other role for HAGroupName {}", crr.getHaGroupName());
-            for(ClusterRoleRecord.ClusterRole mapRole : clusterRoleToCRRMap.keySet()) {
+            for (ClusterRoleRecord.ClusterRole mapRole : clusterRoleToCRRMap.keySet()) {
                 if (mapRole != role) {
                     ConcurrentHashMap<String, ClusterRoleRecord> roleWiseMap = clusterRoleToCRRMap.get(mapRole);
-                    roleWiseMap.remove(crr.getHaGroupName());
+                    if (roleWiseMap.containsKey(crr.getHaGroupName())) {
+                        LOGGER.info("Removing any pre-existing mapping with role {} for HAGroupName {}", mapRole, crr.getHaGroupName());
+                        roleWiseMap.remove(crr.getHaGroupName());
+                    }
                 }
             }
             LOGGER.info("Final Updated CRR Map {}", clusterRoleToCRRMap);
