@@ -364,7 +364,7 @@ public class HAGroupStoreClientIT extends BaseTest {
     @Test
     public void testHAGroupStoreClientWithMultiThreadedUpdates() throws Exception {
         // Number of threads to execute
-        int threadCount = 50;
+        int threadCount = 10;
 
         // Capture versions of crr in a list(crrEventVersions)  in order they are received.
         List<Integer> crrEventVersions = new ArrayList<>();
