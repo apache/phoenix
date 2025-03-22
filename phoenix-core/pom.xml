@@ -364,6 +364,10 @@
             <artifactId>curator-framework</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.apache.curator</groupId>
+            <artifactId>curator-recipes</artifactId>
+        </dependency>
 
 
         <!-- Other test dependencies -->

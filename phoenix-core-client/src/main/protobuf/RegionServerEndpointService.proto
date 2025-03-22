@@ -50,10 +50,19 @@ message InvalidateServerMetadataCacheRequest {
   repeated InvalidateServerMetadataCache invalidateServerMetadataCacheRequests = 1;
 }
 
+message InvalidateHAGroupStoreClientRequest {
+}
+
+message InvalidateHAGroupStoreClientResponse {
+}
+
 service RegionServerEndpointService {
   rpc validateLastDDLTimestamp(ValidateLastDDLTimestampRequest)
       returns (ValidateLastDDLTimestampResponse);
 
   rpc invalidateServerMetadataCache(InvalidateServerMetadataCacheRequest)
       returns (InvalidateServerMetadataCacheResponse);
+
+  rpc invalidateHAGroupStoreClient(InvalidateHAGroupStoreClientRequest)
+      returns (InvalidateHAGroupStoreClientResponse);
 }

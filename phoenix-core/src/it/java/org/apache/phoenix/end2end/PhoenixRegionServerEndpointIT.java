@@ -32,7 +32,6 @@ import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.ServerUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -156,6 +155,18 @@ public class PhoenixRegionServerEndpointIT extends BaseTest {
             coprocessor.validateLastDDLTimestamp(controller, request, null);
             assertFalse(controller.failed());
         }
+    }
+
+    @Test
+    public void testInvalidateHAGroupStoreClient() {
+        HRegionServer regionServer = utility.getMiniHBaseCluster().getRegionServer(0);
+        PhoenixRegionServerEndpoint coprocessor = getPhoenixRegionServerEndpoint(regionServer);
+        assertNotNull(coprocessor);
+        ServerRpcController controller = new ServerRpcController();
+        RegionServerEndpointProtos.InvalidateHAGroupStoreClientRequest request
+                = RegionServerEndpointProtos.InvalidateHAGroupStoreClientRequest.newBuilder().build();
+        coprocessor.invalidateHAGroupStoreClient(controller, request, null);
+        assertFalse(controller.failed());
     }
 
     private String getCreateTableStmt(String tableName) {
