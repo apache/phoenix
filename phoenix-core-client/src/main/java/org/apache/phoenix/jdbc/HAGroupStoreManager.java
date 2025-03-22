@@ -33,7 +33,7 @@ public class HAGroupStoreManager {
      * @param conf configuration
      * @return HAGroupStoreManager instance
      */
-    public static HAGroupStoreManager getInstance(Configuration conf) throws Exception {
+    public static HAGroupStoreManager getInstance(Configuration conf) {
         if (haGroupStoreManagerInstance == null) {
             synchronized (HAGroupStoreManager.class) {
                 if (haGroupStoreManagerInstance == null) {
@@ -44,7 +44,7 @@ public class HAGroupStoreManager {
         return haGroupStoreManagerInstance;
     }
 
-    private HAGroupStoreManager(final Configuration conf) throws Exception {
+    private HAGroupStoreManager(final Configuration conf) {
         this.mutationBlockEnabled = conf.getBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED,
                 DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED);
         this.haGroupStoreClient = HAGroupStoreClient.getInstance(conf);

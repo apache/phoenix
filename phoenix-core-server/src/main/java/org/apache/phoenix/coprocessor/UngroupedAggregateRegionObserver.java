@@ -1060,13 +1060,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
 
     @Override
     public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-                               MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+                               MiniBatchOperationInProgress<Mutation> miniBatchOp)
+            throws IOException {
         final Configuration conf = c.getEnvironment().getConfiguration();
         try {
             final HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(conf);
             if (haGroupStoreManager.isMutationBlocked()) {
-                throw new IOException("Blocking Mutation as Some CRRs are in ACTIVE_TO_STANDBY state " +
-                        "and CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
+                throw new IOException("Blocking Mutation as Some CRRs are in ACTIVE_TO_STANDBY "
+                        + "state and CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
             }
         } catch (Exception e) {
             throw new IOException(e);

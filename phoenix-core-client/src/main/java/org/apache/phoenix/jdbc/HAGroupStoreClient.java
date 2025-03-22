@@ -46,13 +46,13 @@ public class HAGroupStoreClient implements Closeable {
 
     private static final long HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS = 30000L;
     private static volatile HAGroupStoreClient haGroupStoreClientInstance;
-    private final PhoenixHAAdmin phoenixHaAdmin;
+    private PhoenixHAAdmin phoenixHaAdmin;
     private static final Logger LOGGER = LoggerFactory.getLogger(HAGroupStoreClient.class);
     // Map contains <ClusterRole, Map<HAGroupName(String), ClusterRoleRecord>>
     private final ConcurrentHashMap<ClusterRoleRecord.ClusterRole, ConcurrentHashMap<String, ClusterRoleRecord>> clusterRoleToCRRMap
             = new ConcurrentHashMap<>();
-    private final PathChildrenCache pathChildrenCache;
-    private boolean isHealthy;
+    private PathChildrenCache pathChildrenCache;
+    private volatile boolean isHealthy;
 
     /**
      * Creates/gets an instance of HAGroupStoreClient.
@@ -60,7 +60,7 @@ public class HAGroupStoreClient implements Closeable {
      * @param conf configuration
      * @return HAGroupStoreClient instance
      */
-    public static HAGroupStoreClient getInstance(Configuration conf) throws Exception {
+    public static HAGroupStoreClient getInstance(Configuration conf) {
         if (haGroupStoreClientInstance == null) {
             synchronized (HAGroupStoreClient.class) {
                 if (haGroupStoreClientInstance == null) {
@@ -72,54 +72,60 @@ public class HAGroupStoreClient implements Closeable {
     }
 
     @VisibleForTesting
-    HAGroupStoreClient(final Configuration conf, final PathChildrenCacheListener pathChildrenCacheListener) throws Exception {
-        this.phoenixHaAdmin = new PhoenixHAAdmin(conf);
-        final PathChildrenCache pathChildrenCache = new PathChildrenCache(phoenixHaAdmin.getCurator(), ZKPaths.PATH_SEPARATOR, true);
-        final CountDownLatch latch = new CountDownLatch(1);
-        if (pathChildrenCacheListener != null) {
-            pathChildrenCache.getListenable().addListener(pathChildrenCacheListener);
-        } else {
-            pathChildrenCache.getListenable().addListener((client, event) -> {
-                LOGGER.info("HAGroupStoreClient PathChildrenCache Received event for type {}", event.getType());
-                final ChildData childData = event.getData();
-                ClusterRoleRecord eventCRR = extractCRROrNull(childData);
-                switch (event.getType()) {
-                    case CHILD_ADDED:
-                    case CHILD_UPDATED:
-                        if (eventCRR != null && eventCRR.getHaGroupName() != null) {
-                            updateClusterRoleRecordMap(eventCRR);
-                        }
-                        break;
-                    case CHILD_REMOVED:
-                        // In case of CHILD_REMOVED, we get the old version of data that was just deleted in event.
-                        if (eventCRR != null && eventCRR.getHaGroupName() != null
-                                && !eventCRR.getHaGroupName().isEmpty()
-                                && eventCRR.getRole(phoenixHaAdmin.getZkUrl()) != null) {
-                            LOGGER.info("Received CHILD_REMOVED event, Removing CRR {} from existing CRR Map {}", eventCRR, clusterRoleToCRRMap);
-                            final ClusterRoleRecord.ClusterRole role = eventCRR.getRole(phoenixHaAdmin.getZkUrl());
-                            clusterRoleToCRRMap.putIfAbsent(role, new ConcurrentHashMap<>());
-                            clusterRoleToCRRMap.get(role).remove(eventCRR.getHaGroupName());
-                        }
-                        break;
-                    case INITIALIZED:
-                        latch.countDown();
-                        break;
-                    case CONNECTION_LOST:
-                    case CONNECTION_SUSPENDED:
-                        isHealthy = false;
-                        break;
-                    case CONNECTION_RECONNECTED:
-                        isHealthy = true;
-                        break;
-                    default:
-                        LOGGER.warn("Unexpected event type {}, complete event {}", event.getType(), event);
-                }
-            });
+    HAGroupStoreClient(final Configuration conf, final PathChildrenCacheListener pathChildrenCacheListener) {
+        try {
+            this.phoenixHaAdmin = new PhoenixHAAdmin(conf);
+            final PathChildrenCache pathChildrenCache;
+                pathChildrenCache = new PathChildrenCache(phoenixHaAdmin.getCurator(), ZKPaths.PATH_SEPARATOR, true);
+            final CountDownLatch latch = new CountDownLatch(1);
+            if (pathChildrenCacheListener != null) {
+                pathChildrenCache.getListenable().addListener(pathChildrenCacheListener);
+            } else {
+                pathChildrenCache.getListenable().addListener((client, event) -> {
+                    LOGGER.info("HAGroupStoreClient PathChildrenCache Received event for type {}", event.getType());
+                    final ChildData childData = event.getData();
+                    ClusterRoleRecord eventCRR = extractCRROrNull(childData);
+                    switch (event.getType()) {
+                        case CHILD_ADDED:
+                        case CHILD_UPDATED:
+                            if (eventCRR != null && eventCRR.getHaGroupName() != null) {
+                                updateClusterRoleRecordMap(eventCRR);
+                            }
+                            break;
+                        case CHILD_REMOVED:
+                            // In case of CHILD_REMOVED, we get the old version of data that was just deleted in event.
+                            if (eventCRR != null && eventCRR.getHaGroupName() != null
+                                    && !eventCRR.getHaGroupName().isEmpty()
+                                    && eventCRR.getRole(phoenixHaAdmin.getZkUrl()) != null) {
+                                LOGGER.info("Received CHILD_REMOVED event, Removing CRR {} from existing CRR Map {}", eventCRR, clusterRoleToCRRMap);
+                                final ClusterRoleRecord.ClusterRole role = eventCRR.getRole(phoenixHaAdmin.getZkUrl());
+                                clusterRoleToCRRMap.putIfAbsent(role, new ConcurrentHashMap<>());
+                                clusterRoleToCRRMap.get(role).remove(eventCRR.getHaGroupName());
+                            }
+                            break;
+                        case INITIALIZED:
+                            latch.countDown();
+                            break;
+                        case CONNECTION_LOST:
+                        case CONNECTION_SUSPENDED:
+                            isHealthy = false;
+                            break;
+                        case CONNECTION_RECONNECTED:
+                            isHealthy = true;
+                            break;
+                        default:
+                            LOGGER.warn("Unexpected event type {}, complete event {}", event.getType(), event);
+                    }
+                });
+            }
+            pathChildrenCache.start(PathChildrenCache.StartMode.POST_INITIALIZED_EVENT);
+            this.pathChildrenCache = pathChildrenCache;
+            isHealthy = latch.await(HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            buildClusterRoleToCRRMap();
+        } catch (Exception e) {
+            isHealthy = false;
+            LOGGER.error("Unexpected error occurred while initializing HAGroupStoreClient, marking cache as unhealthy", e);
         }
-        pathChildrenCache.start(PathChildrenCache.StartMode.POST_INITIALIZED_EVENT);
-        this.pathChildrenCache = pathChildrenCache;
-        isHealthy = latch.await(HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-        buildClusterRoleToCRRMap();
     }
 
     private ClusterRoleRecord extractCRROrNull(final ChildData childData) {
@@ -160,6 +166,9 @@ public class HAGroupStoreClient implements Closeable {
     }
 
     public void rebuild() throws Exception {
+        if (!isHealthy) {
+            throw new IOException("HAGroupStoreClient is not healthy");
+        }
         LOGGER.info("Rebuilding HAGroupStoreClient for HA groups");
         // NOTE: this is a BLOCKING method.
         // Completely rebuild the internal cache by querying for all needed data
