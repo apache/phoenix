@@ -112,7 +112,13 @@ public class SchemaSQLUtil {
     }
 
     private static String getColumnInfoString(ColumnDef cDef) {
+        String colFam = cDef.getColumnDefName().getFamilyName();
+        String colDefName = cDef.getColumnDefName().getColumnName();
         String colName = cDef.getColumnDefName().toString();
+        if (colFam != null) {
+            colName = SchemaUtil.getEscapedArgument(colFam)
+                    + "." + SchemaUtil.getEscapedArgument(colDefName);
+        }
         boolean isArrayType = cDef.getDataType().isArrayType();
         String type = cDef.getDataType().getSqlTypeName();
         Integer maxLength = cDef.getMaxLength();
@@ -169,8 +175,13 @@ public class SchemaSQLUtil {
                 if (prop.contains(".")) {
                     prop = SchemaUtil.getEscapedArgument(prop);
                 }
-                sb.append(prop).append("=")
-                        .append(entry.getValue().getSecond());
+                if (prop.equals("BLOOMFILTER")) {
+                    sb.append(prop).append("=")
+                            .append("'").append(entry.getValue().getSecond()).append("'");
+                } else {
+                    sb.append(prop).append("=")
+                            .append(entry.getValue().getSecond());
+                }
                 sb.append(",");
             }
             sb.deleteCharAt(sb.length()-1);
