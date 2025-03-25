@@ -52,6 +52,15 @@ def tryDecode(input):
     except:
         return input
 
+def tryQuote(unquoted_input):
+    """ Python 2/3 compatibility hack
+    """
+    try:
+        from shlex import quote as cmd_quote
+    except ImportError:
+        from pipes import quote as cmd_quote
+    return cmd_quote(unquoted_input)
+
 def findFileInPathWithoutRecursion(pattern, path):
     if not os.path.exists(path):
         return ""
@@ -221,8 +230,7 @@ def shell_quote(args):
         return subprocess.list2cmdline(args)
     else:
         # pipes module isn't available on Windows
-        import pipes
-        return " ".join([pipes.quote(tryDecode(v)) for v in args])
+        return " ".join([tryQuote(tryDecode(v)) for v in args])
 
 def __set_java():
     global java_home
