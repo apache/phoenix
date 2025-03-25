@@ -934,9 +934,24 @@ public interface PTable extends PMetaDataEntity {
     Map<String, String> getDefaultPropertyValues();
 
     /**
-     * @return The TTL duration associated with the entity when Phoenix level TTL is enabled.
+     * @return The TTL expression associated with the entity when Phoenix level TTL is enabled.
+     * The expression can be a Literal value or a boolean Condition.
      */
-    int getTTL();
+    TTLExpression getTTLExpression();
+
+    /**
+     * @return Returns the compiled TTL expression associated with the entity when Phoenix
+     * level TTL is enabled. For Literal expressions there is no difference between getTTL()
+     * and getCompiledTTLExpression(). For Conditional TTL, getTTL() returns the expression as
+     * stored in syscat and the compiled version returns the expression that has been compiled
+     * taking into account re-writing the expression for indexes.
+     */
+    CompiledTTLExpression getCompiledTTLExpression(PhoenixConnection connection) throws SQLException;
+
+    /**
+     * @return Returns true if table has conditional TTL set
+     */
+    boolean hasConditionalTTL();
 
     /**
      * @return the last timestamp at which this entity had its data shape created or modified (e
