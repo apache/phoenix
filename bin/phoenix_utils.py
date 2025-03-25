@@ -52,14 +52,14 @@ def tryDecode(input):
     except:
         return input
 
-def tryQuote(input):
+def tryQuote(unquoted_input):
     """ Python 2/3 compatibility hack
     """
     try:
         from shlex import quote as cmd_quote
     except ImportError:
         from pipes import quote as cmd_quote
-    return cmd_quote(input)
+    return cmd_quote(unquoted_input)
 
 def findFileInPathWithoutRecursion(pattern, path):
     if not os.path.exists(path):
