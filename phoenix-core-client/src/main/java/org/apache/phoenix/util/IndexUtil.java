@@ -191,8 +191,12 @@ public class IndexUtil {
         return name.substring(name.indexOf(INDEX_COLUMN_NAME_SEP) + 1);
     }
 
-    public static String getDataColumnFamilyName(String name) {
-        return name.substring(0,name.indexOf(INDEX_COLUMN_NAME_SEP));
+    public static String getDataColumnFamilyName(String name) throws ColumnNotFoundException {
+        int idxOfSeparator = name.indexOf(INDEX_COLUMN_NAME_SEP);
+        if (idxOfSeparator == -1){
+            throw new ColumnNotFoundException(name);
+        }
+        return name.substring(0, idxOfSeparator);
     }
 
     public static String getActualColumnFamilyName(String name) {
@@ -202,7 +206,7 @@ public class IndexUtil {
         return name;
     }
 
-    public static String getCaseSensitiveDataColumnFullName(String name) {
+    public static String getCaseSensitiveDataColumnFullName(String name) throws ColumnNotFoundException {
         int index = name.indexOf(INDEX_COLUMN_NAME_SEP) ;
         return SchemaUtil.getCaseSensitiveColumnDisplayName(getDataColumnFamilyName(name), name.substring(index+1));
     }
@@ -242,7 +246,7 @@ public class IndexUtil {
         return getLocalIndexColumnFamily(dataCF).getBytes(StandardCharsets.UTF_8);
     }
     
-    public static PColumn getDataColumn(PTable dataTable, String indexColumnName) {
+    public static PColumn getDataColumn(PTable dataTable, String indexColumnName) throws ColumnNotFoundException {
         PColumn column = getDataColumnOrNull(dataTable, indexColumnName);
         if (column == null) {
             throw new IllegalArgumentException("Could not find column \"" + SchemaUtil.getColumnName(getDataColumnFamilyName(indexColumnName), getDataColumnName(indexColumnName)) + " in " + dataTable);
@@ -266,6 +270,8 @@ public class IndexUtil {
         try {
             family = dataTable.getColumnFamily(getDataColumnFamilyName(indexColumnName));                
         } catch (ColumnFamilyNotFoundException e) {
+            return null;
+        } catch (ColumnNotFoundException e) {
             return null;
         }
         try {
@@ -587,7 +593,7 @@ public class IndexUtil {
         result.add(keyValue);
     }
 
-    public static String getIndexColumnExpressionStr(PColumn col) {
+    public static String getIndexColumnExpressionStr(PColumn col) throws ColumnNotFoundException {
         return col.getExpressionStr() == null ? IndexUtil.getCaseSensitiveDataColumnFullName(col.getName().getString())
                 : col.getExpressionStr();
     }
