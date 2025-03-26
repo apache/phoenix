@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.hadoop.hbase.Cell.Type.DeleteColumn;
+import static org.apache.hadoop.hbase.Cell.Type.DeleteFamily;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.LOCAL_INDEX_BUILD;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.LOCAL_INDEX_BUILD_PROTO;
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.PHOENIX_MAJOR_VERSION;
@@ -49,6 +51,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.CoprocessorDescriptorBuilder;
+import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.index.PhoenixIndexCodec;
@@ -903,6 +906,38 @@ public class IndexUtil {
             }
         }
         return columns;
+    }
+
+    public static boolean isDeleteFamily(Mutation mutation) {
+        if (!(mutation instanceof Delete)) {
+            return false;
+        }
+        for (List<Cell> cells : mutation.getFamilyCellMap().values()) {
+            for (Cell cell : cells) {
+                if (cell.getType() == DeleteFamily) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public static boolean isDeleteColumn(Mutation mutation) {
+        if (!(mutation instanceof Delete)) {
+            return false;
+        }
+        for (List<Cell> cells : mutation.getFamilyCellMap().values()) {
+            for (Cell cell : cells) {
+                if (cell.getType() == DeleteColumn) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public static boolean isDeleteFamilyOrDeleteColumn(Mutation mutation) {
+        return isDeleteFamily(mutation) || isDeleteColumn(mutation);
     }
 
     public static class SimpleValueGetter implements ValueGetter {

@@ -1115,7 +1115,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                     if (m instanceof Put) {
                         // This will be done before the data table row is updated (i.e., in the first write phase)
                         context.preIndexUpdates.put(hTableInterfaceReference, m);
-                    } else {
+                    } else if (IndexUtil.isDeleteFamily(m)) {
+                        // DeleteColumn is always accompanied by a Put so no need to make the index
+                        // row unverified again. Only do this for DeleteFamily
                         // Set the status of the index row to "unverified"
                         Put unverifiedPut = new Put(m.getRow());
                         unverifiedPut.addColumn(

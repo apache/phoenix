@@ -615,48 +615,6 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         }
     };
 
-    private boolean isDeleteFamily(Mutation mutation) {
-        if (!(mutation instanceof Delete)) {
-            return false;
-        }
-        for (List<Cell> cells : mutation.getFamilyCellMap().values()) {
-            for (Cell cell : cells) {
-                if (cell.getType() == DeleteFamily) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    private boolean isDeleteColumn(Mutation mutation) {
-        if (!(mutation instanceof Delete)) {
-            return false;
-        }
-        for (List<Cell> cells : mutation.getFamilyCellMap().values()) {
-            for (Cell cell : cells) {
-                if (cell.getType() == DeleteColumn) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    private boolean isDeleteFamilyOrDeleteColumn(Mutation mutation) {
-        if (!(mutation instanceof Delete)) {
-            return false;
-        }
-        for (List<Cell> cells : mutation.getFamilyCellMap().values()) {
-            for (Cell cell : cells) {
-                if (cell.getType() == DeleteFamily || cell.getType() == DeleteColumn) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
     private void updateUnverifiedIndexRowCounters(Put actual, long expectedTs, List<Mutation> indexRowsToBeDeleted,
                                                   IndexToolVerificationResult.PhaseResult verificationPhaseResult) {
         // Get the empty column of the given index row
@@ -771,7 +729,8 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         while (iterator.hasNext()) {
             Mutation mutation = iterator.next();
             if ((mutation instanceof Put && !isVerified((Put) mutation)) ||
-                    (mutation instanceof Delete && !isDeleteFamilyOrDeleteColumn(mutation))) {
+                    (mutation instanceof Delete &&
+                            !IndexUtil.isDeleteFamilyOrDeleteColumn(mutation))) {
                 iterator.remove();
             } else {
                 if (((previous instanceof Put && mutation instanceof Put) ||
@@ -913,7 +872,8 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                         // Between an expected delete and put, there can be one or more deletes due to
                         // concurrent mutations or data table write failures. Skip all of them if any
                         // There cannot be any actual delete mutation between two expected put mutations.
-                        while (getTimestamp(actual) >= getTimestamp(expected) && isDeleteFamily(actual)) {
+                        while (getTimestamp(actual) >= getTimestamp(expected) &&
+                                IndexUtil.isDeleteFamily(actual)) {
                             actualIndex++;
                             if (actualIndex == actualSize) {
                                 break;
@@ -933,9 +893,13 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                     continue;
                 }
             } else { // expected instanceof Delete
-                // Between put and delete, delete and delete, or before the first delete, there can be other deletes.
-                // Skip all of them if any
-                while (getTimestamp(actual) > getTimestamp(expected) && isDeleteFamily(actual)) {
+                // Between put and delete, delete and delete, or before the first delete, there can
+                // be other deletes. Skip all of them if any. This can happen when there are
+                // unverified index rows on a deleted row and read-repair will put a DeleteFamily
+                // marker. Those delete family markers will be visible until compaction runs on the
+                // index table.
+                while (getTimestamp(actual) > getTimestamp(expected) &&
+                        IndexUtil.isDeleteFamily(actual)) {
                     actualIndex++;
                     if (actualIndex == actualSize) {
                         break;
@@ -1488,7 +1452,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
             List<Mutation> mutationList = indexMutationMap.get(indexRowKey);
             if (mutationList == null) {
                 if (!mostRecentDone) {
-                    if (mutation instanceof Put || isDeleteColumn(mutation)) {
+                    if (mutation instanceof Put || IndexUtil.isDeleteColumn(mutation)) {
                         mostRecentIndexRowKeys.add(indexRowKey);
                         mostRecentDone = true;
                     }
