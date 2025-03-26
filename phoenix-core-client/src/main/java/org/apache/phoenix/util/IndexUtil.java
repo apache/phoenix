@@ -191,10 +191,8 @@ public class IndexUtil {
         return name.substring(name.indexOf(INDEX_COLUMN_NAME_SEP) + 1);
     }
 
-    public static String getDataColumnFamilyName(String name) throws ColumnNotFoundException {
-        int idxOfSeparator = name.indexOf(INDEX_COLUMN_NAME_SEP);
-        if(idxOfSeparator == -1) throw new ColumnNotFoundException(name);
-        return name.substring(0,idxOfSeparator);
+    public static String getDataColumnFamilyName(String name) {
+        return name.substring(0,name.indexOf(INDEX_COLUMN_NAME_SEP));
     }
 
     public static String getActualColumnFamilyName(String name) {
