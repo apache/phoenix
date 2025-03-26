@@ -868,22 +868,22 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
             }
             actual = actualMutationList.get(actualIndex);
             if (expected instanceof Put) {
-                    if (previousExpected instanceof Delete) {
-                        // Between an expected delete and put, there can be one or more deletes due to
-                        // concurrent mutations or data table write failures. Skip all of them if any
-                        // There cannot be any actual delete mutation between two expected put mutations.
-                        while (getTimestamp(actual) >= getTimestamp(expected) &&
-                                IndexUtil.isDeleteFamily(actual)) {
-                            actualIndex++;
-                            if (actualIndex == actualSize) {
-                                break;
-                            }
-                            actual = actualMutationList.get(actualIndex);
-                        }
+                if (previousExpected instanceof Delete) {
+                    // Between an expected delete and put, there can be one or more deletes due to
+                    // concurrent mutations or data table write failures. Skip all of them if any
+                    // There cannot be any actual delete mutation between two expected put mutations.
+                    while (getTimestamp(actual) >= getTimestamp(expected) &&
+                            IndexUtil.isDeleteFamily(actual)) {
+                        actualIndex++;
                         if (actualIndex == actualSize) {
                             break;
                         }
+                        actual = actualMutationList.get(actualIndex);
                     }
+                    if (actualIndex == actualSize) {
+                        break;
+                    }
+                }
                 if (actual instanceof Delete) {
                     break;
                 }

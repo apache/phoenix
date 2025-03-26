@@ -205,26 +205,26 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           return lastContext;
       }
     }
-
-  private static boolean ignoreIndexRebuildForTesting  = false;
-  private static boolean failPreIndexUpdatesForTesting = false;
-  private static boolean failPostIndexUpdatesForTesting = false;
-  private static boolean failDataTableUpdatesForTesting = false;
-  private static boolean ignoreWritingDeleteColumnsToIndex = false;
-
-  public static void setIgnoreIndexRebuildForTesting(boolean ignore) { ignoreIndexRebuildForTesting = ignore; }
-
-  public static void setFailPreIndexUpdatesForTesting(boolean fail) { failPreIndexUpdatesForTesting = fail; }
-
-  public static void setFailPostIndexUpdatesForTesting(boolean fail) { failPostIndexUpdatesForTesting = fail; }
-
-  public static void setFailDataTableUpdatesForTesting(boolean fail) {
-      failDataTableUpdatesForTesting = fail;
-  }
-
-  public static void setIgnoreWritingDeleteColumnsToIndex(boolean ignore) {
-      ignoreWritingDeleteColumnsToIndex = ignore;
-  }
+    private static boolean ignoreIndexRebuildForTesting  = false;
+    private static boolean failPreIndexUpdatesForTesting = false;
+    private static boolean failPostIndexUpdatesForTesting = false;
+    private static boolean failDataTableUpdatesForTesting = false;
+    private static boolean ignoreWritingDeleteColumnsToIndex = false;
+    public static void setIgnoreIndexRebuildForTesting(boolean ignore) {
+        ignoreIndexRebuildForTesting = ignore;
+    }
+    public static void setFailPreIndexUpdatesForTesting(boolean fail) {
+        failPreIndexUpdatesForTesting = fail;
+    }
+    public static void setFailPostIndexUpdatesForTesting(boolean fail) {
+        failPostIndexUpdatesForTesting = fail;
+    }
+    public static void setFailDataTableUpdatesForTesting(boolean fail) {
+        failDataTableUpdatesForTesting = fail;
+    }
+    public static void setIgnoreWritingDeleteColumnsToIndex(boolean ignore) {
+        ignoreWritingDeleteColumnsToIndex = ignore;
+    }
 
   public enum BatchMutatePhase {
       PRE, POST, FAILED
