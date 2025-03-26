@@ -24,6 +24,7 @@ import java.sql.SQLException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.BaseIndexTest;
 import org.apache.phoenix.parse.HintNode.Hint;
+import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
@@ -42,7 +43,7 @@ public class IndexColumnNamesTest extends BaseIndexTest {
             "CREATE INDEX PRECISION_NAME_IDX_TEST ON PRECISION_NAME_TEST(VARCHAR_TEST) INCLUDE (CHAR_TEST,DECIMAL_TEST,BINARY_TEST,VARCHAR_UNSPEC,DEC_UNSPEC)";
 
     @Test
-    public void testGetColumnNames() {
+    public void testGetColumnNames() throws ColumnNotFoundException {
         IndexColumnNames indexColumnNames = new IndexColumnNames(pDataTable, pIndexTable);
         assertEquals("[ID, PK_PART2, 0.NAME, 0.ZIP]", indexColumnNames.getDataColNames().toString());
         assertEquals("[:ID, :PK_PART2, 0:NAME, 0:ZIP]", indexColumnNames.getIndexColNames().toString()); //index column names, leading with the data table pk
