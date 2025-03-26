@@ -24,8 +24,8 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CLUSTER_ROLE
 
 public class HAGroupStoreManager {
     private static volatile HAGroupStoreManager haGroupStoreManagerInstance;
-    private final HAGroupStoreClient haGroupStoreClient;
     private final boolean mutationBlockEnabled;
+    private final Configuration conf;
 
     /**
      * Creates/gets an instance of HAGroupStoreManager.
@@ -47,7 +47,7 @@ public class HAGroupStoreManager {
     private HAGroupStoreManager(final Configuration conf) {
         this.mutationBlockEnabled = conf.getBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED,
                 DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED);
-        this.haGroupStoreClient = HAGroupStoreClient.getInstance(conf);
+        this.conf = conf;
     }
 
     /**
@@ -55,8 +55,14 @@ public class HAGroupStoreManager {
      * @throws IOException when HAGroupStoreClient is not healthy.
      */
     public boolean isMutationBlocked() throws IOException {
-        return mutationBlockEnabled
-                && !haGroupStoreClient.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).isEmpty();
+        if (mutationBlockEnabled) {
+            HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstance(conf);
+            if (haGroupStoreClient != null) {
+                return !haGroupStoreClient.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).isEmpty();
+            }
+            throw new IOException("HAGroupStoreClient is not initialized");
+        }
+        return false;
     }
 
     /**
@@ -64,6 +70,11 @@ public class HAGroupStoreManager {
      * @throws Exception
      */
     public void invalidateHAGroupStoreClient() throws Exception {
-        haGroupStoreClient.rebuild();
+        HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstance(conf);
+        if (haGroupStoreClient != null) {
+            haGroupStoreClient.rebuild();
+        } else {
+            throw new IOException("HAGroupStoreClient is not initialized");
+        }
     }
 }

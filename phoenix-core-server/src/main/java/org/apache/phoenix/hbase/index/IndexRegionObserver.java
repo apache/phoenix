@@ -47,6 +47,7 @@ import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
+import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
@@ -160,6 +161,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     private static final OperationStatus NOWRITE = new OperationStatus(SUCCESS);
     public static final String PHOENIX_APPEND_METADATA_TO_WAL = "phoenix.append.metadata.to.wal";
     public static final boolean DEFAULT_PHOENIX_APPEND_METADATA_TO_WAL = false;
+
     /**
      * Class to represent pending data table rows
      * */
@@ -1305,6 +1307,16 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
     public void preBatchMutateWithExceptions(ObserverContext<RegionCoprocessorEnvironment> c,
                                              MiniBatchOperationInProgress<Mutation> miniBatchOp) throws Throwable {
+        final Configuration conf = c.getEnvironment().getConfiguration();
+        try {
+            final HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(conf);
+            if (haGroupStoreManager.isMutationBlocked()) {
+                throw new IOException("Blocking Mutation as Some CRRs are in ACTIVE_TO_STANDBY "
+                        + "state and CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
+            }
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
         PhoenixIndexMetaData indexMetaData = getPhoenixIndexMetaData(c, miniBatchOp);
         BatchMutateContext context = new BatchMutateContext(indexMetaData.getClientVersion());
         setBatchMutateContext(c, context);

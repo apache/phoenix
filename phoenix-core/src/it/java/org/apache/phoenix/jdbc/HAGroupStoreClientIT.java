@@ -40,6 +40,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 
 /**

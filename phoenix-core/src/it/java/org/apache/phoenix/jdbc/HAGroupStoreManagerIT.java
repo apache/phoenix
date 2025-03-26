@@ -56,7 +56,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
     }
 
     @Test
-    public void testHACacheWithSingleCRR() throws Exception {
+    public void testHAGroupStoreManagerWithSingleCRR() throws Exception {
         HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(config);
         // Setup initial CRRs
         ClusterRoleRecord crr1 = new ClusterRoleRecord("failover",

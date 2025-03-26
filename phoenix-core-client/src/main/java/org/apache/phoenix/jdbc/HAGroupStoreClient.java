@@ -56,15 +56,20 @@ public class HAGroupStoreClient implements Closeable {
 
     /**
      * Creates/gets an instance of HAGroupStoreClient.
+     * Can return null instance if unable to initialize.
      *
      * @param conf configuration
      * @return HAGroupStoreClient instance
      */
     public static HAGroupStoreClient getInstance(Configuration conf) {
-        if (haGroupStoreClientInstance == null) {
+        if (haGroupStoreClientInstance == null || !haGroupStoreClientInstance.isHealthy) {
             synchronized (HAGroupStoreClient.class) {
-                if (haGroupStoreClientInstance == null) {
+                if (haGroupStoreClientInstance == null || !haGroupStoreClientInstance.isHealthy) {
                     haGroupStoreClientInstance = new HAGroupStoreClient(conf, null);
+                    if (!haGroupStoreClientInstance.isHealthy) {
+                        haGroupStoreClientInstance.close();
+                        haGroupStoreClientInstance = null;
+                    }
                 }
             }
         }
