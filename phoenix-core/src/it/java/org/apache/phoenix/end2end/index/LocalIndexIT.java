@@ -20,12 +20,7 @@ package org.apache.phoenix.end2end.index;
 import static org.apache.phoenix.end2end.ExplainPlanWithStatsEnabledIT.getByteRowEstimates;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceName;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceSchemaName;
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -69,11 +64,8 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -240,8 +232,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         String tableName = schemaName + "." + generateUniqueName();
         String indexName = "IDX_" + generateUniqueName();
         String indexTableName = schemaName + "." + indexName;
-        Connection conn1 = getConnection();
-        try {
+        try (Connection conn1 = getConnection()) {
             if (isNamespaceMapped) {
                 conn1.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
             }
@@ -252,23 +243,17 @@ public class LocalIndexIT extends BaseLocalIndexIT {
                     "v1 VARCHAR,\n" +
                     "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2))\n";
             conn1.createStatement().execute(ddl);
-            conn1.createStatement().execute("UPSERT INTO " + tableName + " values('b',1,2,4,'z')");
-            conn1.createStatement().execute("UPSERT INTO " + tableName + " values('f',1,2,3,'a')");
-            conn1.createStatement().execute("UPSERT INTO " + tableName + " values('j',2,4,2,'a')");
-            conn1.createStatement().execute("UPSERT INTO " + tableName + " values('q',3,1,1,'c')");
             conn1.commit();
             conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(V1)");
             conn1.commit();
-            //            assertEquals(PIndexState.ACTIVE, TestUtil.getIndexState(conn1, indexTableName));
             assertEquals(4, TestUtil.getRowCount(conn1, indexTableName));
             ResultSet rs = conn1.createStatement()
                     .executeQuery("SELECT * FROM " + indexTableName + " WHERE \":T_ID\" = \"f\"");
             assertTrue(rs.next());
             fail();
-        } catch (SQLException e) { // Expected
-            assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(),e.getErrorCode());
-        } finally {
-            conn1.close();
+        } catch (ColumnNotFoundException e) { // Expected
+            assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
+            assertEquals(new ColumnNotFoundException("f"), e);
         }
     }
 
