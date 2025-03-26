@@ -191,9 +191,9 @@ public class IndexUtil {
         return name.substring(name.indexOf(INDEX_COLUMN_NAME_SEP) + 1);
     }
 
-    public static String getDataColumnFamilyName(String name) throws ColumnNotFoundException {
+    public static String getDataColumnFamilyName(String name) {
         int idxOfSeparator = name.indexOf(INDEX_COLUMN_NAME_SEP);
-        if(idxOfSeparator == -1) throw new ColumnNotFoundException(name);
+        if(idxOfSeparator == -1) throw new IllegalArgumentException("Could not find index column name separator '" + INDEX_COLUMN_NAME_SEP + "' in column name \"" + name + "\"");;
         return name.substring(0,idxOfSeparator);
     }
 
