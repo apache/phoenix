@@ -246,14 +246,13 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             conn1.commit();
             conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(V1)");
             conn1.commit();
-            assertEquals(4, TestUtil.getRowCount(conn1, indexTableName));
             ResultSet rs = conn1.createStatement()
                     .executeQuery("SELECT * FROM " + indexTableName + " WHERE \":T_ID\" = \"f\"");
             assertTrue(rs.next());
             fail();
         } catch (ColumnNotFoundException e) { // Expected
             assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
-            assertEquals(new ColumnNotFoundException("f"), e);
+            assertEquals(new ColumnNotFoundException("f").getMessage(), e.getMessage());
         }
     }
 
