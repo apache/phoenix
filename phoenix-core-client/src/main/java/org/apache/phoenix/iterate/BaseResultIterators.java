@@ -96,6 +96,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
+import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
@@ -746,7 +747,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         private long lastUpdated = Long.MAX_VALUE;
     }
 
-    private int computeColumnsInCommon() {
+    private int computeColumnsInCommon() throws ColumnNotFoundException {
         PTable dataTable;
         if ((dataTable=dataPlan.getTableRef().getTable()).getBucketNum() != null) { // unable to compute prefix range for salted data table
             return 0;
