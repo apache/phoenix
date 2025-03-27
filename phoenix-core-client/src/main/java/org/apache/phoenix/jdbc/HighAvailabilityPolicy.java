@@ -233,7 +233,9 @@ enum HighAvailabilityPolicy {
             } finally {
                 if (cqs != null) {
                     // CQS is closed, but it is not invalidated from global cache in PhoenixDriver
-                    // so that any new connection will get error instead of creating a new CQS
+                    // so that any new connection will get error instead of creating a new CQS,
+                    // CQS entry will stay in map until the cache expires and repopulated in cases
+                    // of URL and registryType changes
                     LOG.info("Closing CQS after clusterRoleRecord change for '{}'", url);
                     cqs.close();
                     LOG.info("Successfully closed CQS after clusterRoleRecord change for '{}'", url);

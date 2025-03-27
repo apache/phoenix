@@ -96,7 +96,7 @@ public class FailoverPhoenixConnection2IT {
 
         haGroup = getHighAvailibilityGroup(CLUSTERS.getJdbcHAUrl(), clientProperties);
         LOG.info("Initialized haGroup {} with URL {}", haGroup, CLUSTERS.getJdbcHAUrl());
-        tableName = RandomStringUtils.randomAlphabetic(10).toUpperCase();
+        tableName = testName.getMethodName().toUpperCase();
         CLUSTERS.createTableOnClusterPair(haGroup, tableName);
     }
 

@@ -101,6 +101,9 @@ public class ClusterRoleRecord {
      * deserialize Cluster Role Record read from ZooKeeper ZNode. If CRR is in old format we will
      * read zk1 and zk2 and url1 and url2 will be null and if it is in new format zk1 and zk2 will
      * be null in both cases final url is being stored in url1 and url2
+     * url will be stored in normalized forms which looks like zk1\\:port1,zk2\\:port2,zk3\\:port3,
+     * zk4\\:port4,zk5\\:port5::znode or master1\\:port1,master2\\:port2,master3\\:port3,
+     * master4\\:port4,master5\\:port5
      * @param haGroupName HighAvailability Group name / CRR name
      * @param policy Policy used by give CRR
      * @param registryType {@link RegistryType} to be used for given urls
@@ -137,10 +140,15 @@ public class ClusterRoleRecord {
         //w.r.t {@link ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY},
         //but considering source of truth of registryType is present in CLusterRoleRecord we are
         //normalizing based on that.
+        //url will be in form :- zk1\\:port1,zk2\\:port2,zk3\\:port3,zk4\\:port4,zk5\\:port5::znode
+        //or master1\\:port1,master2\\:port2,master3\\:port3,master4\\:port4,master5\\:port5
         url1 = JDBCUtil.formatUrl(resolvedUrl1, this.registryType);
         url2 = JDBCUtil.formatUrl(resolvedUrl2, this.registryType);
 
         Preconditions.checkArgument(!url1.equals(url2), "Two clusters have the same URLS!");
+        Preconditions.checkNotNull(role1, "Role of a cluster cannot be null!");
+        Preconditions.checkNotNull(role2, "Role of a cluster cannot be null!");
+
         // Ignore the given order of url1 and url2
         if (url1.compareTo(url2) < 0) {
             this.url1 = url1;

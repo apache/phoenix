@@ -123,7 +123,7 @@ public class ParallelPhoenixConnectionIT {
 
         haGroup = HighAvailabilityTestingUtility.getHighAvailibilityGroup(CLUSTERS.getJdbcHAUrl(), clientProperties);
         LOG.info("Initialized haGroup {} with URL {}", haGroup, CLUSTERS.getJdbcHAUrl());
-        tableName = RandomStringUtils.randomAlphabetic(10);
+        tableName = testName.getMethodName().toUpperCase();
         CLUSTERS.createTableOnClusterPair(haGroup, tableName);
     }
 

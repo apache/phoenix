@@ -110,6 +110,23 @@ public class ClusterRoleRecordTest {
     }
 
     @Test
+    public void testUrlNullInRoleRecord() throws IOException {
+        String wrongFormatPath = "json/test_role_record_wrong_format.json";
+        String wrongFormatForRolePath = "json/test_role_record_wrong_role_format.json";
+        byte[] roleRecord = readFile(wrongFormatPath);
+        byte[] roleRecordWithWrongRole = readFile(wrongFormatForRolePath);
+
+        Optional<ClusterRoleRecord> record = ClusterRoleRecord.fromJson(roleRecord);
+        //We should get empty object as url is missing in ClusterRoleRecord
+        assertEquals(record, Optional.empty());
+
+
+        Optional<ClusterRoleRecord> recordWithNullRole = ClusterRoleRecord.fromJson(roleRecordWithWrongRole);
+        //We should get empty object as role is missing in ClusterRoleRecord
+        assertEquals(record, Optional.empty());
+    }
+
+    @Test
     public void testToAndFromJson() throws IOException {
         ClusterRoleRecord record = getClusterRoleRecord(testName.getMethodName(),
                 HighAvailabilityPolicy.FAILOVER, URL1, ClusterRole.ACTIVE,
