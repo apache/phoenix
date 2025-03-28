@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,46 +22,46 @@ import java.util.List;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class ParseContext {
-    private boolean isAggregate;
-    private boolean hasSequences;
-    
-    public ParseContext() {
+  private boolean isAggregate;
+  private boolean hasSequences;
+
+  public ParseContext() {
+  }
+
+  public boolean isAggregate() {
+    return isAggregate;
+  }
+
+  public void setAggregate(boolean isAggregate) {
+    this.isAggregate |= isAggregate;
+  }
+
+  public boolean hasSequences() {
+    return hasSequences;
+  }
+
+  public void hasSequences(boolean hasSequences) {
+    this.hasSequences |= hasSequences;
+  }
+
+  public static class Stack {
+    private final List<ParseContext> stack = Lists.newArrayListWithExpectedSize(5);
+
+    public void push(ParseContext context) {
+      stack.add(context);
     }
 
-    public boolean isAggregate() {
-        return isAggregate;
+    public ParseContext pop() {
+      return stack.remove(stack.size() - 1);
     }
 
-    public void setAggregate(boolean isAggregate) {
-        this.isAggregate |= isAggregate;
+    public ParseContext peek() {
+      return stack.get(stack.size() - 1);
     }
 
-    public boolean hasSequences() {
-        return hasSequences;
+    public boolean isEmpty() {
+      return stack.isEmpty();
     }
+  }
 
-    public void hasSequences(boolean hasSequences) {
-        this.hasSequences |= hasSequences;
-    }
-
-    public static class Stack {
-        private final List<ParseContext> stack = Lists.newArrayListWithExpectedSize(5);
-        
-        public void push(ParseContext context) {
-            stack.add(context);
-        }
-        
-        public ParseContext pop() {
-            return stack.remove(stack.size()-1);
-        }
-        
-        public ParseContext peek() {
-            return stack.get(stack.size()-1);
-        }
-        
-        public boolean isEmpty() {
-            return stack.isEmpty();
-        }
-    }
-    
 }

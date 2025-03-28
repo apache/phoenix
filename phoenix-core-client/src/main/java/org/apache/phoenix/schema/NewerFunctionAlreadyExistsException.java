@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,20 +20,20 @@ package org.apache.phoenix.schema;
 import org.apache.phoenix.parse.PFunction;
 
 public class NewerFunctionAlreadyExistsException extends FunctionAlreadyExistsException {
-    private static final long serialVersionUID = 1L;
-    private final PFunction function;
+  private static final long serialVersionUID = 1L;
+  private final PFunction function;
 
-    public NewerFunctionAlreadyExistsException(String functionName) {
-        this(functionName, null);
-    }
+  public NewerFunctionAlreadyExistsException(String functionName) {
+    this(functionName, null);
+  }
 
-    public NewerFunctionAlreadyExistsException(String functionName, PFunction function) {
-        super(functionName);
-        this.function = function;
-    }
+  public NewerFunctionAlreadyExistsException(String functionName, PFunction function) {
+    super(functionName);
+    this.function = function;
+  }
 
-    public PFunction getFunction() {
-        return this.function;
-    }
+  public PFunction getFunction() {
+    return this.function;
+  }
 
 }

@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -37,45 +37,43 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PVarchar;
 
-
 public enum QueryLogInfo {
-    
-    CLIENT_IP_I(CLIENT_IP, LogLevel.INFO, PVarchar.INSTANCE),
-    QUERY_I(QUERY, LogLevel.INFO,PVarchar.INSTANCE),
-    BIND_PARAMETERS_I(BIND_PARAMETERS, LogLevel.TRACE,PVarchar.INSTANCE),
-    QUERY_ID_I(QUERY_ID, LogLevel.INFO,PVarchar.INSTANCE),
-    TENANT_ID_I(TENANT_ID, LogLevel.INFO,PVarchar.INSTANCE),
-    START_TIME_I(START_TIME, LogLevel.INFO,PTimestamp.INSTANCE),
-    USER_I(USER, LogLevel.INFO,PVarchar.INSTANCE),
-    EXPLAIN_PLAN_I(EXPLAIN_PLAN,LogLevel.DEBUG,PVarchar.INSTANCE),
-    GLOBAL_SCAN_DETAILS_I(GLOBAL_SCAN_DETAILS, LogLevel.DEBUG,PVarchar.INSTANCE),
-    NO_OF_RESULTS_ITERATED_I(NO_OF_RESULTS_ITERATED, LogLevel.INFO,PLong.INSTANCE),
-    EXCEPTION_TRACE_I(EXCEPTION_TRACE, LogLevel.DEBUG,PVarchar.INSTANCE),
-    QUERY_STATUS_I(QUERY_STATUS, LogLevel.INFO,PVarchar.INSTANCE),
-    SCAN_METRICS_JSON_I(SCAN_METRICS_JSON, LogLevel.TRACE,PVarchar.INSTANCE), 
-    TABLE_NAME_I(TABLE_NAME, LogLevel.DEBUG,PVarchar.INSTANCE);
-    
-    public final String columnName;
-    public final LogLevel logLevel;
-    public final PDataType dataType;
 
-    private QueryLogInfo(String columnName, LogLevel logLevel, PDataType dataType) {
-        this.columnName = columnName;
-        this.logLevel=logLevel;
-        this.dataType=dataType;
-    }
+  CLIENT_IP_I(CLIENT_IP, LogLevel.INFO, PVarchar.INSTANCE),
+  QUERY_I(QUERY, LogLevel.INFO, PVarchar.INSTANCE),
+  BIND_PARAMETERS_I(BIND_PARAMETERS, LogLevel.TRACE, PVarchar.INSTANCE),
+  QUERY_ID_I(QUERY_ID, LogLevel.INFO, PVarchar.INSTANCE),
+  TENANT_ID_I(TENANT_ID, LogLevel.INFO, PVarchar.INSTANCE),
+  START_TIME_I(START_TIME, LogLevel.INFO, PTimestamp.INSTANCE),
+  USER_I(USER, LogLevel.INFO, PVarchar.INSTANCE),
+  EXPLAIN_PLAN_I(EXPLAIN_PLAN, LogLevel.DEBUG, PVarchar.INSTANCE),
+  GLOBAL_SCAN_DETAILS_I(GLOBAL_SCAN_DETAILS, LogLevel.DEBUG, PVarchar.INSTANCE),
+  NO_OF_RESULTS_ITERATED_I(NO_OF_RESULTS_ITERATED, LogLevel.INFO, PLong.INSTANCE),
+  EXCEPTION_TRACE_I(EXCEPTION_TRACE, LogLevel.DEBUG, PVarchar.INSTANCE),
+  QUERY_STATUS_I(QUERY_STATUS, LogLevel.INFO, PVarchar.INSTANCE),
+  SCAN_METRICS_JSON_I(SCAN_METRICS_JSON, LogLevel.TRACE, PVarchar.INSTANCE),
+  TABLE_NAME_I(TABLE_NAME, LogLevel.DEBUG, PVarchar.INSTANCE);
 
-    public String getColumnName() {
-        return columnName;
-    }
+  public final String columnName;
+  public final LogLevel logLevel;
+  public final PDataType dataType;
 
-    public LogLevel getLogLevel() {
-        return logLevel;
-    }
+  private QueryLogInfo(String columnName, LogLevel logLevel, PDataType dataType) {
+    this.columnName = columnName;
+    this.logLevel = logLevel;
+    this.dataType = dataType;
+  }
 
-    public PDataType getDataType() {
-        return dataType;
-    }
-    
-    
+  public String getColumnName() {
+    return columnName;
+  }
+
+  public LogLevel getLogLevel() {
+    return logLevel;
+  }
+
+  public PDataType getDataType() {
+    return dataType;
+  }
+
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,8 +17,9 @@
  */
 package org.apache.hadoop.hbase.ipc;
 
-import java.io.IOException;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_INVALIDATE_CACHE_HANDLER_COUNT;
 
+import java.io.IOException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
 import org.apache.phoenix.compat.hbase.CompatPhoenixRpcScheduler;
@@ -27,234 +28,235 @@ import org.apache.phoenix.query.QueryServicesOptions;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_INVALIDATE_CACHE_HANDLER_COUNT;
-
 /**
- * {@link RpcScheduler} that first checks to see if this is an index or metadata update before passing off the
- * call to the delegate {@link RpcScheduler}.
+ * {@link RpcScheduler} that first checks to see if this is an index or metadata update before
+ * passing off the call to the delegate {@link RpcScheduler}.
  */
 public class PhoenixRpcScheduler extends CompatPhoenixRpcScheduler {
+  // copied from org.apache.hadoop.hbase.ipc.SimpleRpcScheduler in HBase 0.98.4
+  private static final String CALL_QUEUE_HANDLER_FACTOR_CONF_KEY =
+    "ipc.server.callqueue.handler.factor";
+  private static final String CALLQUEUE_LENGTH_CONF_KEY = "ipc.server.max.callqueue.length";
+  private static final int DEFAULT_MAX_CALLQUEUE_LENGTH_PER_HANDLER = 10;
+
+  private int indexPriority;
+  private int metadataPriority;
+  private int serverSidePriority;
+  private int invalidateMetadataCachePriority;
+  private RpcExecutor indexCallExecutor;
+  private RpcExecutor metadataCallExecutor;
+  private RpcExecutor serverSideCallExecutor;
+  // Executor for invalidating server side metadata cache RPCs.
+  private RpcExecutor invalidateMetadataCacheCallExecutor;
+  private int port;
+
+  public PhoenixRpcScheduler(Configuration conf, RpcScheduler delegate, int indexPriority,
+    int metadataPriority, int serversidePriority, int invalidateMetadataCachePriority,
+    PriorityFunction priorityFunction, Abortable abortable) {
     // copied from org.apache.hadoop.hbase.ipc.SimpleRpcScheduler in HBase 0.98.4
-    private static final String CALL_QUEUE_HANDLER_FACTOR_CONF_KEY = "ipc.server.callqueue.handler.factor";
-    private static final String CALLQUEUE_LENGTH_CONF_KEY = "ipc.server.max.callqueue.length";
-    private static final int DEFAULT_MAX_CALLQUEUE_LENGTH_PER_HANDLER = 10;
+    int indexHandlerCount = conf.getInt(QueryServices.INDEX_HANDLER_COUNT_ATTRIB,
+      QueryServicesOptions.DEFAULT_INDEX_HANDLER_COUNT);
+    int metadataHandlerCount = conf.getInt(QueryServices.METADATA_HANDLER_COUNT_ATTRIB,
+      QueryServicesOptions.DEFAULT_METADATA_HANDLER_COUNT);
+    int serverSideHandlerCount = conf.getInt(QueryServices.SERVER_SIDE_HANDLER_COUNT_ATTRIB,
+      QueryServicesOptions.DEFAULT_SERVERSIDE_HANDLER_COUNT);
+    int invalidateMetadataCacheHandlerCount = conf.getInt(
+      QueryServices.INVALIDATE_CACHE_HANDLER_COUNT_ATTRIB, DEFAULT_INVALIDATE_CACHE_HANDLER_COUNT);
+    int maxIndexQueueLength = conf.getInt(CALLQUEUE_LENGTH_CONF_KEY,
+      indexHandlerCount * DEFAULT_MAX_CALLQUEUE_LENGTH_PER_HANDLER);
+    int maxMetadataQueueLength = conf.getInt(CALLQUEUE_LENGTH_CONF_KEY,
+      metadataHandlerCount * DEFAULT_MAX_CALLQUEUE_LENGTH_PER_HANDLER);
+    int maxServerSideQueueLength = conf.getInt(CALLQUEUE_LENGTH_CONF_KEY,
+      serverSideHandlerCount * DEFAULT_MAX_CALLQUEUE_LENGTH_PER_HANDLER);
+    int maxInvalidateMetadataCacheQueueLength = conf.getInt(CALLQUEUE_LENGTH_CONF_KEY,
+      invalidateMetadataCacheHandlerCount * DEFAULT_MAX_CALLQUEUE_LENGTH_PER_HANDLER);
 
-    private int indexPriority;
-    private int metadataPriority;
-    private int serverSidePriority;
-    private int invalidateMetadataCachePriority;
-    private RpcExecutor indexCallExecutor;
-    private RpcExecutor metadataCallExecutor;
-    private RpcExecutor serverSideCallExecutor;
-    // Executor for invalidating server side metadata cache RPCs.
-    private RpcExecutor invalidateMetadataCacheCallExecutor;
-    private int port;
-    
+    this.indexPriority = indexPriority;
+    this.metadataPriority = metadataPriority;
+    this.serverSidePriority = serversidePriority;
+    this.invalidateMetadataCachePriority = invalidateMetadataCachePriority;
+    this.delegate = delegate;
+    this.indexCallExecutor = new BalancedQueueRpcExecutor("Index", indexHandlerCount,
+      maxIndexQueueLength, priorityFunction, conf, abortable);
+    this.metadataCallExecutor = new BalancedQueueRpcExecutor("Metadata", metadataHandlerCount,
+      maxMetadataQueueLength, priorityFunction, conf, abortable);
+    this.serverSideCallExecutor = new BalancedQueueRpcExecutor("ServerSide", serverSideHandlerCount,
+      maxServerSideQueueLength, priorityFunction, conf, abortable);
+    this.invalidateMetadataCacheCallExecutor =
+      new BalancedQueueRpcExecutor("InvalidateMetadataCache", invalidateMetadataCacheHandlerCount,
+        maxInvalidateMetadataCacheQueueLength, priorityFunction, conf, abortable);
+  }
 
-    public PhoenixRpcScheduler(Configuration conf, RpcScheduler delegate, int indexPriority,
-                               int metadataPriority, int serversidePriority,
-                               int invalidateMetadataCachePriority,
-                               PriorityFunction priorityFunction, Abortable abortable) {
-        // copied from org.apache.hadoop.hbase.ipc.SimpleRpcScheduler in HBase 0.98.4
-    	int indexHandlerCount = conf.getInt(QueryServices.INDEX_HANDLER_COUNT_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_HANDLER_COUNT);
-        int metadataHandlerCount = conf.getInt(QueryServices.METADATA_HANDLER_COUNT_ATTRIB, QueryServicesOptions.DEFAULT_METADATA_HANDLER_COUNT);
-        int serverSideHandlerCount = conf.getInt(QueryServices.SERVER_SIDE_HANDLER_COUNT_ATTRIB, QueryServicesOptions.DEFAULT_SERVERSIDE_HANDLER_COUNT);
-        int invalidateMetadataCacheHandlerCount = conf.getInt(
-                QueryServices.INVALIDATE_CACHE_HANDLER_COUNT_ATTRIB,
-                DEFAULT_INVALIDATE_CACHE_HANDLER_COUNT);
-        int maxIndexQueueLength =  conf.getInt(CALLQUEUE_LENGTH_CONF_KEY, indexHandlerCount*DEFAULT_MAX_CALLQUEUE_LENGTH_PER_HANDLER);
-        int maxMetadataQueueLength =  conf.getInt(CALLQUEUE_LENGTH_CONF_KEY, metadataHandlerCount*DEFAULT_MAX_CALLQUEUE_LENGTH_PER_HANDLER);
-        int maxServerSideQueueLength =  conf.getInt(CALLQUEUE_LENGTH_CONF_KEY, serverSideHandlerCount*DEFAULT_MAX_CALLQUEUE_LENGTH_PER_HANDLER);
-        int maxInvalidateMetadataCacheQueueLength =  conf.getInt(CALLQUEUE_LENGTH_CONF_KEY,
-                invalidateMetadataCacheHandlerCount * DEFAULT_MAX_CALLQUEUE_LENGTH_PER_HANDLER);
+  @Override
+  public void init(Context context) {
+    delegate.init(context);
+    this.port = context.getListenerAddress().getPort();
+  }
 
+  @Override
+  public void start() {
+    delegate.start();
+    indexCallExecutor.start(port);
+    metadataCallExecutor.start(port);
+    serverSideCallExecutor.start(port);
+    invalidateMetadataCacheCallExecutor.start(port);
+  }
 
-        this.indexPriority = indexPriority;
-        this.metadataPriority = metadataPriority;
-        this.serverSidePriority = serversidePriority;
-        this.invalidateMetadataCachePriority = invalidateMetadataCachePriority;
-        this.delegate = delegate;
-        this.indexCallExecutor = new BalancedQueueRpcExecutor("Index", indexHandlerCount, maxIndexQueueLength, priorityFunction,conf,abortable);
-        this.metadataCallExecutor = new BalancedQueueRpcExecutor("Metadata", metadataHandlerCount, maxMetadataQueueLength, priorityFunction,conf,abortable);
-        this.serverSideCallExecutor = new BalancedQueueRpcExecutor("ServerSide", serverSideHandlerCount, maxServerSideQueueLength, priorityFunction,conf,abortable);
-        this.invalidateMetadataCacheCallExecutor = new BalancedQueueRpcExecutor(
-                "InvalidateMetadataCache", invalidateMetadataCacheHandlerCount,
-                maxInvalidateMetadataCacheQueueLength, priorityFunction, conf, abortable);
+  @Override
+  public void stop() {
+    delegate.stop();
+    indexCallExecutor.stop();
+    metadataCallExecutor.stop();
+    serverSideCallExecutor.stop();
+    invalidateMetadataCacheCallExecutor.stop();
+  }
+
+  @Override
+  public boolean compatDispatch(CallRunner callTask) throws IOException, InterruptedException {
+    RpcCall call = callTask.getRpcCall();
+    int priority = call.getHeader().getPriority();
+    if (indexPriority == priority) {
+      return indexCallExecutor.dispatch(callTask);
+    } else if (metadataPriority == priority) {
+      return metadataCallExecutor.dispatch(callTask);
+    } else if (serverSidePriority == priority) {
+      return serverSideCallExecutor.dispatch(callTask);
+    } else if (invalidateMetadataCachePriority == priority) {
+      return invalidateMetadataCacheCallExecutor.dispatch(callTask);
+    } else {
+      return delegate.dispatch(callTask);
     }
+  }
 
-    @Override
-    public void init(Context context) {
-        delegate.init(context);
-        this.port = context.getListenerAddress().getPort();
-    }
+  @Override
+  public CallQueueInfo getCallQueueInfo() {
+    return delegate.getCallQueueInfo();
+  }
 
-    @Override
-    public void start() {
-        delegate.start();
-        indexCallExecutor.start(port);
-        metadataCallExecutor.start(port);
-        serverSideCallExecutor.start(port);
-        invalidateMetadataCacheCallExecutor.start(port);
-    }
+  @Override
+  public int getGeneralQueueLength() {
+    // not the best way to calculate, but don't have a better way to hook
+    // into metrics at the moment
+    return this.delegate.getGeneralQueueLength() + this.indexCallExecutor.getQueueLength()
+      + this.metadataCallExecutor.getQueueLength() + this.serverSideCallExecutor.getQueueLength()
+      + this.invalidateMetadataCacheCallExecutor.getQueueLength();
+  }
 
-    @Override
-    public void stop() {
-        delegate.stop();
-        indexCallExecutor.stop();
-        metadataCallExecutor.stop();
-        serverSideCallExecutor.stop();
-        invalidateMetadataCacheCallExecutor.stop();
-    }
+  @Override
+  public int getPriorityQueueLength() {
+    return this.delegate.getPriorityQueueLength();
+  }
 
-    @Override
-    public boolean compatDispatch(CallRunner callTask) throws IOException, InterruptedException {
-        RpcCall call = callTask.getRpcCall();
-        int priority = call.getHeader().getPriority();
-        if (indexPriority == priority) {
-            return indexCallExecutor.dispatch(callTask);
-        } else if (metadataPriority == priority) {
-            return metadataCallExecutor.dispatch(callTask);
-        } else if (serverSidePriority == priority) {
-            return serverSideCallExecutor.dispatch(callTask);
-        } else if (invalidateMetadataCachePriority == priority) {
-            return invalidateMetadataCacheCallExecutor.dispatch(callTask);
-        } else {
-            return delegate.dispatch(callTask);
-        }
-    }
+  @Override
+  public int getReplicationQueueLength() {
+    return this.delegate.getReplicationQueueLength();
+  }
 
-    @Override
-    public CallQueueInfo getCallQueueInfo() {
-        return delegate.getCallQueueInfo();
-    }
+  @Override
+  public int getActiveRpcHandlerCount() {
+    return this.delegate.getActiveRpcHandlerCount() + this.indexCallExecutor.getActiveHandlerCount()
+      + this.metadataCallExecutor.getActiveHandlerCount()
+      + this.serverSideCallExecutor.getActiveHandlerCount()
+      + this.invalidateMetadataCacheCallExecutor.getActiveHandlerCount();
+  }
 
-    @Override
-    public int getGeneralQueueLength() {
-        // not the best way to calculate, but don't have a better way to hook
-        // into metrics at the moment
-        return this.delegate.getGeneralQueueLength()
-                + this.indexCallExecutor.getQueueLength()
-                + this.metadataCallExecutor.getQueueLength()
-                + this.serverSideCallExecutor.getQueueLength()
-                + this.invalidateMetadataCacheCallExecutor.getQueueLength();
-    }
+  @Override
+  public long getNumGeneralCallsDropped() {
+    return delegate.getNumGeneralCallsDropped();
+  }
 
-    @Override
-    public int getPriorityQueueLength() {
-        return this.delegate.getPriorityQueueLength();
-    }
+  @Override
+  public long getNumLifoModeSwitches() {
+    return delegate.getNumLifoModeSwitches();
+  }
 
-    @Override
-    public int getReplicationQueueLength() {
-        return this.delegate.getReplicationQueueLength();
-    }
+  @VisibleForTesting
+  public void setIndexExecutorForTesting(RpcExecutor executor) {
+    this.indexCallExecutor = executor;
+  }
 
-    @Override
-    public int getActiveRpcHandlerCount() {
-        return this.delegate.getActiveRpcHandlerCount()
-                + this.indexCallExecutor.getActiveHandlerCount()
-                + this.metadataCallExecutor.getActiveHandlerCount()
-                + this.serverSideCallExecutor.getActiveHandlerCount()
-                + this.invalidateMetadataCacheCallExecutor.getActiveHandlerCount();
-    }
+  @VisibleForTesting
+  public void setMetadataExecutorForTesting(RpcExecutor executor) {
+    this.metadataCallExecutor = executor;
+  }
 
-    @Override
-    public long getNumGeneralCallsDropped() {
-        return delegate.getNumGeneralCallsDropped();
-    }
+  @VisibleForTesting
+  public void setInvalidateMetadataCacheExecutorForTesting(RpcExecutor executor) {
+    this.invalidateMetadataCacheCallExecutor = executor;
+  }
 
-    @Override
-    public long getNumLifoModeSwitches() {
-        return delegate.getNumLifoModeSwitches();
-    }
+  @VisibleForTesting
+  public void setServerSideExecutorForTesting(RpcExecutor executor) {
+    this.serverSideCallExecutor = executor;
+  }
 
-    @VisibleForTesting
-    public void setIndexExecutorForTesting(RpcExecutor executor) {
-        this.indexCallExecutor = executor;
-    }
-    
-    @VisibleForTesting
-    public void setMetadataExecutorForTesting(RpcExecutor executor) {
-        this.metadataCallExecutor = executor;
-    }
+  @VisibleForTesting
+  public RpcExecutor getIndexExecutorForTesting() {
+    return this.indexCallExecutor;
+  }
 
-    @VisibleForTesting
-    public void setInvalidateMetadataCacheExecutorForTesting(RpcExecutor executor) {
-        this.invalidateMetadataCacheCallExecutor = executor;
-    }
+  @VisibleForTesting
+  public RpcExecutor getMetadataExecutorForTesting() {
+    return this.metadataCallExecutor;
+  }
 
-    @VisibleForTesting
-    public void setServerSideExecutorForTesting(RpcExecutor executor) {
-        this.serverSideCallExecutor = executor;
-    }
+  @VisibleForTesting
+  public RpcExecutor getServerSideExecutorForTesting() {
+    return this.serverSideCallExecutor;
+  }
 
-    @VisibleForTesting
-    public RpcExecutor getIndexExecutorForTesting() {
-        return this.indexCallExecutor;
-    }
+  @Override
+  public int getWriteQueueLength() {
+    return delegate.getWriteQueueLength();
+  }
 
-    @VisibleForTesting
-    public RpcExecutor getMetadataExecutorForTesting() {
-        return this.metadataCallExecutor;
-    }
+  @Override
+  public int getReadQueueLength() {
+    return delegate.getReadQueueLength();
+  }
 
-    @VisibleForTesting
-    public RpcExecutor getServerSideExecutorForTesting() {
-        return this.serverSideCallExecutor;
-    }
+  @Override
+  public int getScanQueueLength() {
+    return delegate.getScanQueueLength();
+  }
 
-    @Override
-    public int getWriteQueueLength() {
-        return delegate.getWriteQueueLength();
-    }
+  @Override
+  public int getActiveWriteRpcHandlerCount() {
+    return delegate.getActiveWriteRpcHandlerCount();
+  }
 
-    @Override
-    public int getReadQueueLength() {
-        return delegate.getReadQueueLength();
-    }
+  @Override
+  public int getActiveReadRpcHandlerCount() {
+    return delegate.getActiveReadRpcHandlerCount();
+  }
 
-    @Override
-    public int getScanQueueLength() {
-        return delegate.getScanQueueLength();
-    }
+  @Override
+  public int getActiveScanRpcHandlerCount() {
+    return delegate.getActiveScanRpcHandlerCount();
+  }
 
-    @Override
-    public int getActiveWriteRpcHandlerCount() {
-        return delegate.getActiveWriteRpcHandlerCount();
-    }
+  @Override
+  public int getMetaPriorityQueueLength() {
+    return this.delegate.getMetaPriorityQueueLength();
+  }
 
-    @Override
-    public int getActiveReadRpcHandlerCount() {
-        return delegate.getActiveReadRpcHandlerCount();
-    }
+  @Override
+  public int getActiveGeneralRpcHandlerCount() {
+    return this.delegate.getActiveGeneralRpcHandlerCount();
+  }
 
-    @Override
-    public int getActiveScanRpcHandlerCount() {
-        return delegate.getActiveScanRpcHandlerCount();
-    }
+  @Override
+  public int getActivePriorityRpcHandlerCount() {
+    return this.delegate.getActivePriorityRpcHandlerCount();
+  }
 
-    @Override
-    public int getMetaPriorityQueueLength() {
-        return this.delegate.getMetaPriorityQueueLength();
-    }
+  @Override
+  public int getActiveMetaPriorityRpcHandlerCount() {
+    return this.delegate.getActiveMetaPriorityRpcHandlerCount();
+  }
 
-    @Override
-    public int getActiveGeneralRpcHandlerCount() {
-        return this.delegate.getActiveGeneralRpcHandlerCount();
-    }
-
-    @Override
-    public int getActivePriorityRpcHandlerCount() {
-        return this.delegate.getActivePriorityRpcHandlerCount();
-    }
-
-    @Override
-    public int getActiveMetaPriorityRpcHandlerCount() {
-        return this.delegate.getActiveMetaPriorityRpcHandlerCount();
-    }
-
-    @Override
-    public int getActiveReplicationRpcHandlerCount() {
-        return this.delegate.getActiveReplicationRpcHandlerCount();
-    }
+  @Override
+  public int getActiveReplicationRpcHandlerCount() {
+    return this.delegate.getActiveReplicationRpcHandlerCount();
+  }
 }

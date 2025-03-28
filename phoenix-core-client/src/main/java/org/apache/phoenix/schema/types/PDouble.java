@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,6 @@ package org.apache.phoenix.schema.types;
 
 import java.math.BigDecimal;
 import java.sql.Types;
-
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 
@@ -35,15 +34,15 @@ public class PDouble extends PRealNumber<Double> {
 
   @Override
   public int compareTo(Object lhs, Object rhs, PDataType rhsType) {
-      if (lhs == rhs) {
-          return 0;
-      }
-      if (lhs == null) {
-          return -1;
-      }
-      if (rhs == null) {
-          return 1;
-      }
+    if (lhs == rhs) {
+      return 0;
+    }
+    if (lhs == null) {
+      return -1;
+    }
+    if (rhs == null) {
+      return 1;
+    }
     if (rhsType == PDecimal.INSTANCE) {
       return -((BigDecimal) rhs).compareTo(BigDecimal.valueOf(((Number) lhs).doubleValue()));
     }
@@ -92,8 +91,7 @@ public class PDouble extends PRealNumber<Double> {
     if (object == null) {
       throw newIllegalDataException(this + " may not be null");
     }
-    return this.getCodec().encodeDouble(((Number) object).doubleValue(),
-        bytes, offset);
+    return this.getCodec().encodeDouble(((Number) object).doubleValue(), bytes, offset);
   }
 
   @Override
@@ -139,15 +137,17 @@ public class PDouble extends PRealNumber<Double> {
   }
 
   @Override
-  public Double toObject(byte[] b, int o, int l, PDataType actualType,
-      SortOrder sortOrder, Integer maxLength, Integer scale) {
+  public Double toObject(byte[] b, int o, int l, PDataType actualType, SortOrder sortOrder,
+    Integer maxLength, Integer scale) {
     if (l <= 0) {
       return null;
     }
-    if (equalsAny(actualType, PDouble.INSTANCE, PUnsignedDouble.INSTANCE, PFloat.INSTANCE,
+    if (
+      equalsAny(actualType, PDouble.INSTANCE, PUnsignedDouble.INSTANCE, PFloat.INSTANCE,
         PUnsignedFloat.INSTANCE, PLong.INSTANCE, PUnsignedLong.INSTANCE, PInteger.INSTANCE,
         PUnsignedInt.INSTANCE, PSmallint.INSTANCE, PUnsignedSmallint.INSTANCE, PTinyint.INSTANCE,
-        PUnsignedTinyint.INSTANCE)) {
+        PUnsignedTinyint.INSTANCE)
+    ) {
       return actualType.getCodec().decodeDouble(b, o, sortOrder);
     } else if (actualType == PDecimal.INSTANCE) {
       BigDecimal bd = (BigDecimal) actualType.toObject(b, o, l, actualType, sortOrder);
@@ -164,13 +164,10 @@ public class PDouble extends PRealNumber<Double> {
       if (targetType.equals(PUnsignedDouble.INSTANCE)) {
         return d >= 0;
       } else if (targetType.equals(PFloat.INSTANCE)) {
-        return Double.isNaN(d)
-            || d == Double.POSITIVE_INFINITY
-            || d == Double.NEGATIVE_INFINITY
-            || (d >= -Float.MAX_VALUE && d <= Float.MAX_VALUE);
+        return Double.isNaN(d) || d == Double.POSITIVE_INFINITY || d == Double.NEGATIVE_INFINITY
+          || (d >= -Float.MAX_VALUE && d <= Float.MAX_VALUE);
       } else if (targetType.equals(PUnsignedFloat.INSTANCE)) {
-        return Double.isNaN(d) || d == Double.POSITIVE_INFINITY
-            || (d >= 0 && d <= Float.MAX_VALUE);
+        return Double.isNaN(d) || d == Double.POSITIVE_INFINITY || (d >= 0 && d <= Float.MAX_VALUE);
       } else if (targetType.equals(PUnsignedLong.INSTANCE)) {
         return (d >= 0 && d <= Long.MAX_VALUE);
       } else if (targetType.equals(PLong.INSTANCE)) {
@@ -209,7 +206,7 @@ public class PDouble extends PRealNumber<Double> {
       double v = decodeDouble(b, o, sortOrder);
       if (v < Long.MIN_VALUE || v > Long.MAX_VALUE) {
         throw newIllegalDataException(
-            "Value " + v + " cannot be cast to Long without changing its value");
+          "Value " + v + " cannot be cast to Long without changing its value");
       }
       return (long) v;
     }
@@ -219,7 +216,7 @@ public class PDouble extends PRealNumber<Double> {
       double v = decodeDouble(b, o, sortOrder);
       if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE) {
         throw newIllegalDataException(
-            "Value " + v + " cannot be cast to Integer without changing its value");
+          "Value " + v + " cannot be cast to Integer without changing its value");
       }
       return (int) v;
     }
@@ -229,7 +226,7 @@ public class PDouble extends PRealNumber<Double> {
       double v = decodeDouble(b, o, sortOrder);
       if (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) {
         throw newIllegalDataException(
-            "Value " + v + " cannot be cast to Byte without changing its value");
+          "Value " + v + " cannot be cast to Byte without changing its value");
       }
       return (byte) v;
     }
@@ -239,7 +236,7 @@ public class PDouble extends PRealNumber<Double> {
       double v = decodeDouble(b, o, sortOrder);
       if (v < Short.MIN_VALUE || v > Short.MAX_VALUE) {
         throw newIllegalDataException(
-            "Value " + v + " cannot be cast to Short without changing its value");
+          "Value " + v + " cannot be cast to Short without changing its value");
       }
       return (short) v;
     }
@@ -250,15 +247,15 @@ public class PDouble extends PRealNumber<Double> {
       checkForSufficientLength(bytes, o, Bytes.SIZEOF_LONG);
       long l;
       if (sortOrder == SortOrder.DESC) {
-          // Copied from Bytes.toLong(), but without using the toLongUnsafe
-          // TODO: would it be possible to use the toLongUnsafe?
-          l = 0;
-          for(int i = o; i < o + Bytes.SIZEOF_LONG; i++) {
-            l <<= 8;
-            l ^= (bytes[i] ^ 0xff) & 0xFF;
-          }
+        // Copied from Bytes.toLong(), but without using the toLongUnsafe
+        // TODO: would it be possible to use the toLongUnsafe?
+        l = 0;
+        for (int i = o; i < o + Bytes.SIZEOF_LONG; i++) {
+          l <<= 8;
+          l ^= (bytes[i] ^ 0xff) & 0xFF;
+        }
       } else {
-          l = Bytes.toLong(bytes, o);
+        l = Bytes.toLong(bytes, o);
       }
       l--;
       l ^= (~l >> Long.SIZE - 1) | Long.MIN_VALUE;
@@ -268,13 +265,14 @@ public class PDouble extends PRealNumber<Double> {
     @Override
     public float decodeFloat(byte[] b, int o, SortOrder sortOrder) {
       double v = decodeDouble(b, o, sortOrder);
-      if (Double.isNaN(v) || v == Double.NEGATIVE_INFINITY
-          || v == Double.POSITIVE_INFINITY
-          || (v >= -Float.MAX_VALUE && v <= Float.MAX_VALUE)) {
+      if (
+        Double.isNaN(v) || v == Double.NEGATIVE_INFINITY || v == Double.POSITIVE_INFINITY
+          || (v >= -Float.MAX_VALUE && v <= Float.MAX_VALUE)
+      ) {
         return (float) v;
       } else {
         throw newIllegalDataException(
-            "Value " + v + " cannot be cast to Float without changing its value");
+          "Value " + v + " cannot be cast to Float without changing its value");
       }
 
     }

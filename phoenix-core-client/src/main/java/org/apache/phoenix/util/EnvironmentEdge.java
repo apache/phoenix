@@ -1,5 +1,4 @@
 /*
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,15 +18,13 @@
 package org.apache.phoenix.util;
 
 /**
- * Has some basic interaction with the environment. Alternate implementations
- * can be used where required (eg in tests).
- *
+ * Has some basic interaction with the environment. Alternate implementations can be used where
+ * required (eg in tests).
  * @see EnvironmentEdgeManager
  */
 public abstract class EnvironmentEdge implements org.apache.hadoop.hbase.util.EnvironmentEdge {
   /**
    * Returns the currentTime.
-   *
    * @return Current time.
    */
   @Override

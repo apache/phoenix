@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,17 +19,13 @@ package org.apache.phoenix.iterate;
 
 import java.sql.SQLException;
 import java.util.List;
-
 import org.apache.phoenix.query.KeyRange;
-
 
 /**
  * Interface for strategies determining how to split regions in ParallelIterators.
- * 
- * 
  */
 public interface ParallelIteratorRegionSplitter {
 
-    public List<KeyRange> getSplits() throws SQLException;
+  public List<KeyRange> getSplits() throws SQLException;
 
 }

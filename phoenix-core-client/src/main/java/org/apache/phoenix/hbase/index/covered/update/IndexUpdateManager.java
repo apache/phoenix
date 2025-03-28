@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,7 +25,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.TreeSet;
-
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -46,8 +45,7 @@ public class IndexUpdateManager {
 
   public Comparator<Mutation> COMPARATOR = new MutationComparator();
 
-  private static class MutationComparator implements Comparator<Mutation>,
-      Serializable {
+  private static class MutationComparator implements Comparator<Mutation>, Serializable {
 
     @Override
     public int compare(Mutation o1, Mutation o2) {
@@ -80,8 +78,7 @@ public class IndexUpdateManager {
       }
 
       throw new RuntimeException(
-          "Got unexpected mutation types! Can only be Put or Delete, but got: " + o1 + ", and "
-              + o2);
+        "Got unexpected mutation types! Can only be Put or Delete, but got: " + o1 + ", and " + o2);
     }
 
     private int comparePuts(Put p1, Put p2) {
@@ -103,7 +100,7 @@ public class IndexUpdateManager {
   private static final byte[] TRUE_MARKER = new byte[] { 1 };
 
   protected final Map<ImmutableBytesPtr, Collection<Mutation>> map =
-      new HashMap<ImmutableBytesPtr, Collection<Mutation>>();
+    new HashMap<ImmutableBytesPtr, Collection<Mutation>>();
   private IndexMetaData indexMetaData;
 
   public IndexUpdateManager(IndexMetaData indexMetaData) {
@@ -113,8 +110,6 @@ public class IndexUpdateManager {
 
   /**
    * Add an index update. Keeps the latest {@link Put} for a given timestamp
-   * @param tableName
-   * @param m
    */
   public void addIndexUpdate(byte[] tableName, Mutation m) {
     // we only keep the most recent update
@@ -135,7 +130,6 @@ public class IndexUpdateManager {
   /**
    * Fix up the current updates, given the pending mutation.
    * @param updates current updates
-   * @param pendingMutation
    */
   protected void fixUpCurrentUpdates(Collection<Mutation> updates, Mutation pendingMutation) {
     // need to check for each entry to see if we have a duplicate
@@ -185,10 +179,10 @@ public class IndexUpdateManager {
       }
     }
     if (toRemove != null) {
-        updates.remove(toRemove);
+      updates.remove(toRemove);
     }
     if (pendingMutation != null) {
-        updates.add(pendingMutation);
+      updates.add(pendingMutation);
     }
   }
 
@@ -213,7 +207,6 @@ public class IndexUpdateManager {
   }
 
   /**
-   * @param updates
    */
   public void addAll(Collection<Pair<Mutation, String>> updates) {
     for (Pair<Mutation, String> update : updates) {
@@ -236,8 +229,8 @@ public class IndexUpdateManager {
         if (shouldBeRemoved(m)) {
           sb.append("[REMOVED]");
         }
-        sb.append(m.getClass().getSimpleName() + ":"
-            + ((m instanceof Put) ? m.getTimestamp() + " " : ""));
+        sb.append(
+          m.getClass().getSimpleName() + ":" + ((m instanceof Put) ? m.getTimestamp() + " " : ""));
         sb.append(" row=" + Bytes.toStringBinary(m.getRow()));
         sb.append("\n");
         if (m.getFamilyCellMap().isEmpty()) {
@@ -245,8 +238,8 @@ public class IndexUpdateManager {
         }
         for (List<Cell> kvs : m.getFamilyCellMap().values()) {
           for (Cell kv : kvs) {
-            sb.append("\t\t" + kv.toString() + "/value=" + Bytes.toStringBinary(kv.getValueArray(), 
-            		kv.getValueOffset(), kv.getValueLength()));
+            sb.append("\t\t" + kv.toString() + "/value="
+              + Bytes.toStringBinary(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength()));
             sb.append("\n");
           }
         }

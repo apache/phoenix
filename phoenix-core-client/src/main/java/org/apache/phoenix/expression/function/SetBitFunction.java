@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,6 @@ package org.apache.phoenix.expression.function;
 
 import java.sql.SQLException;
 import java.util.List;
-
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
@@ -32,53 +31,52 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarbinary;
 
 @BuiltInFunction(name = SetBitFunction.NAME,
-        args = { @Argument(allowedTypes = { PBinary.class, PVarbinary.class }),
-                @Argument(allowedTypes = { PInteger.class }),
-                @Argument(allowedTypes = { PInteger.class }) })
+    args = { @Argument(allowedTypes = { PBinary.class, PVarbinary.class }),
+      @Argument(allowedTypes = { PInteger.class }), @Argument(allowedTypes = { PInteger.class }) })
 public class SetBitFunction extends ScalarFunction {
 
-    public static final String NAME = "SET_BIT";
+  public static final String NAME = "SET_BIT";
 
-    public SetBitFunction() {
-    }
+  public SetBitFunction() {
+  }
 
-    public SetBitFunction(List<Expression> children) throws SQLException {
-        super(children);
-    }
+  public SetBitFunction(List<Expression> children) throws SQLException {
+    super(children);
+  }
 
-    @Override
-    public String getName() {
-        return NAME;
-    }
+  @Override
+  public String getName() {
+    return NAME;
+  }
 
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        // get offset parameter
-        Expression offsetExpr = children.get(1);
-        if (!offsetExpr.evaluate(tuple, ptr)) return false;
-        if (ptr.getLength()==0) return true;
-        int offset = (Integer) PInteger.INSTANCE.toObject(ptr, offsetExpr.getSortOrder());
-        // get newValue parameter
-        Expression newValueExpr = children.get(2);
-        if (!newValueExpr.evaluate(tuple, ptr)) return false;
-        if (ptr.getLength()==0) return true;
-        int newValue = (Integer) PInteger.INSTANCE.toObject(ptr, newValueExpr.getSortOrder());
-        byte newByteValue = (byte) (newValue & 0x1);
-        // get binary data parameter
-        Expression dataExpr = children.get(0);
-        if (!dataExpr.evaluate(tuple, ptr)) return false;
-        if (ptr.getLength()==0) return true;
-        if (ptr.getLength() == 0) return true;
-        int len = ptr.getLength() * Byte.SIZE;
-        offset = (offset % len + len) % len;
-        // set result
-        ((PBinaryBase) dataExpr.getDataType()).setBit(ptr, dataExpr.getSortOrder(), offset,
-            newByteValue, ptr);
-        return true;
-    }
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    // get offset parameter
+    Expression offsetExpr = children.get(1);
+    if (!offsetExpr.evaluate(tuple, ptr)) return false;
+    if (ptr.getLength() == 0) return true;
+    int offset = (Integer) PInteger.INSTANCE.toObject(ptr, offsetExpr.getSortOrder());
+    // get newValue parameter
+    Expression newValueExpr = children.get(2);
+    if (!newValueExpr.evaluate(tuple, ptr)) return false;
+    if (ptr.getLength() == 0) return true;
+    int newValue = (Integer) PInteger.INSTANCE.toObject(ptr, newValueExpr.getSortOrder());
+    byte newByteValue = (byte) (newValue & 0x1);
+    // get binary data parameter
+    Expression dataExpr = children.get(0);
+    if (!dataExpr.evaluate(tuple, ptr)) return false;
+    if (ptr.getLength() == 0) return true;
+    if (ptr.getLength() == 0) return true;
+    int len = ptr.getLength() * Byte.SIZE;
+    offset = (offset % len + len) % len;
+    // set result
+    ((PBinaryBase) dataExpr.getDataType()).setBit(ptr, dataExpr.getSortOrder(), offset,
+      newByteValue, ptr);
+    return true;
+  }
 
-    @Override
-    public PDataType getDataType() {
-        return children.get(0).getDataType();
-    }
+  @Override
+  public PDataType getDataType() {
+    return children.get(0).getDataType();
+  }
 }

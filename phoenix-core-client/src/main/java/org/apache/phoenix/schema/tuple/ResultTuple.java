@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,7 +18,6 @@
 package org.apache.phoenix.schema.tuple;
 
 import java.util.Collections;
-
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
@@ -28,77 +27,75 @@ import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 
 /**
- * 
  * Wrapper around {@link Result} that implements Phoenix's {@link Tuple} interface.
- *
  */
 public class ResultTuple extends BaseTuple {
-    private final Result result;
-    public static final ResultTuple EMPTY_TUPLE = new ResultTuple(Result.create(Collections.<Cell>emptyList()));
-    public ResultTuple(Result result) {
-        this.result = result;
-    }
-    
-    public Result getResult() {
-        return this.result;
-    }
+  private final Result result;
+  public static final ResultTuple EMPTY_TUPLE =
+    new ResultTuple(Result.create(Collections.<Cell> emptyList()));
 
-    @Override
-    public void getKey(ImmutableBytesWritable ptr) {
-        ptr.set(result.getRow());
-    }
+  public ResultTuple(Result result) {
+    this.result = result;
+  }
 
-    @Override
-    public boolean isImmutable() {
-        return true;
-    }
+  public Result getResult() {
+    return this.result;
+  }
 
-    @Override
-    public Cell getValue(byte[] family, byte[] qualifier) {
-        return PhoenixKeyValueUtil.getColumnLatest(GenericKeyValueBuilder.INSTANCE, 
-          result.rawCells(), family, qualifier);
-    }
+  @Override
+  public void getKey(ImmutableBytesWritable ptr) {
+    ptr.set(result.getRow());
+  }
 
-    @Override
-    public String toString() {
-      StringBuilder sb = new StringBuilder();
-      sb.append("keyvalues=");
-      if(this.result == null || this.result.isEmpty()) {
-        sb.append("NONE");
-        return sb.toString();
-      }
-      sb.append("{");
-      boolean moreThanOne = false;
-      for(Cell kv : this.result.listCells()) {
-        if(moreThanOne) {
-          sb.append(", \n");
-        } else {
-          moreThanOne = true;
-        }
-        sb.append(kv.toString()+"/value="+Bytes.toString(kv.getValueArray(), 
-          kv.getValueOffset(), kv.getValueLength()));
-      }
-      sb.append("}\n");
+  @Override
+  public boolean isImmutable() {
+    return true;
+  }
+
+  @Override
+  public Cell getValue(byte[] family, byte[] qualifier) {
+    return PhoenixKeyValueUtil.getColumnLatest(GenericKeyValueBuilder.INSTANCE, result.rawCells(),
+      family, qualifier);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("keyvalues=");
+    if (this.result == null || this.result.isEmpty()) {
+      sb.append("NONE");
       return sb.toString();
     }
-
-    @Override
-    public int size() {
-        return result.size();
+    sb.append("{");
+    boolean moreThanOne = false;
+    for (Cell kv : this.result.listCells()) {
+      if (moreThanOne) {
+        sb.append(", \n");
+      } else {
+        moreThanOne = true;
+      }
+      sb.append(kv.toString() + "/value="
+        + Bytes.toString(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength()));
     }
+    sb.append("}\n");
+    return sb.toString();
+  }
 
-    @Override
-    public KeyValue getValue(int index) {
-        return  PhoenixKeyValueUtil.maybeCopyCell(result.rawCells()[index]);
-    }
+  @Override
+  public int size() {
+    return result.size();
+  }
 
-    @Override
-    public boolean getValue(byte[] family, byte[] qualifier,
-            ImmutableBytesWritable ptr) {
-        Cell kv = getValue(family, qualifier);
-        if (kv == null)
-            return false;
-        ptr.set(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
-        return true;
-    }
+  @Override
+  public KeyValue getValue(int index) {
+    return PhoenixKeyValueUtil.maybeCopyCell(result.rawCells()[index]);
+  }
+
+  @Override
+  public boolean getValue(byte[] family, byte[] qualifier, ImmutableBytesWritable ptr) {
+    Cell kv = getValue(family, qualifier);
+    if (kv == null) return false;
+    ptr.set(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
+    return true;
+  }
 }

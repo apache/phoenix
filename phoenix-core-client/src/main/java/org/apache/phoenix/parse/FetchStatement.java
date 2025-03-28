@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,33 +20,33 @@ package org.apache.phoenix.parse;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 
 public class FetchStatement implements BindableStatement {
-    private final CursorName cursorName;
-    private final boolean isNext;
-    private final int fetchSize;
+  private final CursorName cursorName;
+  private final boolean isNext;
+  private final int fetchSize;
 
-    public FetchStatement(CursorName cursorName, boolean isNext, int fetchSize){
-        this.cursorName = cursorName;
-        this.isNext = isNext;
-        this.fetchSize = fetchSize;
-    }
+  public FetchStatement(CursorName cursorName, boolean isNext, int fetchSize) {
+    this.cursorName = cursorName;
+    this.isNext = isNext;
+    this.fetchSize = fetchSize;
+  }
 
-    public CursorName getCursorName(){
-        return cursorName;
-    }
+  public CursorName getCursorName() {
+    return cursorName;
+  }
 
-    public boolean isNext(){
-        return isNext;
-    }
+  public boolean isNext() {
+    return isNext;
+  }
 
-    public int getBindCount(){
-        return 0;
-    }
+  public int getBindCount() {
+    return 0;
+  }
 
-    public Operation getOperation(){
-        return Operation.QUERY;
-    }
-    
-    public int getFetchSize(){
-    	return fetchSize;
-    }
+  public Operation getOperation() {
+    return Operation.QUERY;
+  }
+
+  public int getFetchSize() {
+    return fetchSize;
+  }
 }

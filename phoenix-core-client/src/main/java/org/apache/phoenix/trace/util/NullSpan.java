@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,7 +20,6 @@ package org.apache.phoenix.trace.util;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-
 import org.apache.htrace.Span;
 import org.apache.htrace.TimelineAnnotation;
 import org.apache.phoenix.util.StringUtil;

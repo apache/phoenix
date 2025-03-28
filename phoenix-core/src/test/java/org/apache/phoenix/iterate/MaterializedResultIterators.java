@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,54 +20,50 @@ package org.apache.phoenix.iterate;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
-
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.phoenix.compile.ExplainPlanAttributes
-    .ExplainPlanAttributesBuilder;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.query.KeyRange;
 
 /**
- * 
  * ResultIteraors implementation backed by in-memory list of PeekingResultIterator
- *
  */
 public class MaterializedResultIterators implements ResultIterators {
-    private final List<PeekingResultIterator> results;
+  private final List<PeekingResultIterator> results;
 
-    public MaterializedResultIterators(List<PeekingResultIterator> results) {
-        this.results = results;
-    }
+  public MaterializedResultIterators(List<PeekingResultIterator> results) {
+    this.results = results;
+  }
 
-    @Override
-    public List<PeekingResultIterator> getIterators() throws SQLException {
-        return results;
-    }
+  @Override
+  public List<PeekingResultIterator> getIterators() throws SQLException {
+    return results;
+  }
 
-    @Override
-    public void explain(List<String> planSteps,
-            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
-    }
+  @Override
+  public void explain(List<String> planSteps,
+    ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+  }
 
-    @Override
-    public int size() {
-        return results.size();
-    }
+  @Override
+  public int size() {
+    return results.size();
+  }
 
-    @Override
-    public void explain(List<String> planSteps) {
-    }
+  @Override
+  public void explain(List<String> planSteps) {
+  }
 
-    @Override
-    public List<KeyRange> getSplits() {
-    	return Collections.emptyList();
-    }
+  @Override
+  public List<KeyRange> getSplits() {
+    return Collections.emptyList();
+  }
 
-    @Override
-    public List<List<Scan>> getScans() {
-    	return Collections.emptyList();
-    }
+  @Override
+  public List<List<Scan>> getScans() {
+    return Collections.emptyList();
+  }
 
-    @Override
-    public void close() throws SQLException {
-    }
+  @Override
+  public void close() throws SQLException {
+  }
 }

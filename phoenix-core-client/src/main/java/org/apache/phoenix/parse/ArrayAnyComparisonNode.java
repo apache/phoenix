@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,27 +21,27 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-/** 
- * The Expression a = ANY(b) where b is of type array is rewritten in this
- * node as ANY(a = b(n))
+
+/**
+ * The Expression a = ANY(b) where b is of type array is rewritten in this node as ANY(a = b(n))
  */
 public class ArrayAnyComparisonNode extends ArrayAllAnyComparisonNode {
 
-    ArrayAnyComparisonNode(ParseNode rhs, ComparisonParseNode compareNode) {
-        super(Arrays.<ParseNode>asList(rhs, compareNode));
-    }
-    
-    @Override
-    public String getType() {
-        return "ANY";
-    }
+  ArrayAnyComparisonNode(ParseNode rhs, ComparisonParseNode compareNode) {
+    super(Arrays.<ParseNode> asList(rhs, compareNode));
+  }
 
-    @Override
-    public <T> T accept(ParseNodeVisitor<T> visitor) throws SQLException {
-        List<T> l = Collections.emptyList();
-        if (visitor.visitEnter(this)) {
-            l = acceptChildren(visitor);
-        }
-        return visitor.visitLeave(this, l);
+  @Override
+  public String getType() {
+    return "ANY";
+  }
+
+  @Override
+  public <T> T accept(ParseNodeVisitor<T> visitor) throws SQLException {
+    List<T> l = Collections.emptyList();
+    if (visitor.visitEnter(this)) {
+      l = acceptChildren(visitor);
     }
+    return visitor.visitLeave(this, l);
+  }
 }
