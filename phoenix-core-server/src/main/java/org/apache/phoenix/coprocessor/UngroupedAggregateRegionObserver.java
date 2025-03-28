@@ -61,6 +61,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControllerFactory;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
+import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScanType;
@@ -88,6 +89,7 @@ import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicyHelper;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicyHelper.MutateCommand;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
+import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.join.HashJoinInfo;
@@ -1054,5 +1056,21 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     @Override
     protected boolean isRegionObserverFor(Scan scan) {
         return scan.getAttribute(BaseScannerRegionObserverConstants.UNGROUPED_AGG) != null;
+    }
+
+    @Override
+    public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
+                               MiniBatchOperationInProgress<Mutation> miniBatchOp)
+            throws IOException {
+        final Configuration conf = c.getEnvironment().getConfiguration();
+        try {
+            final HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(conf);
+            if (haGroupStoreManager.isMutationBlocked()) {
+                throw new IOException("Blocking Mutation as Some CRRs are in ACTIVE_TO_STANDBY "
+                        + "state and CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
+            }
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
     }
 }

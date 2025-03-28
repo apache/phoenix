@@ -33,6 +33,7 @@ import org.apache.phoenix.cache.ServerMetadataCacheImpl;
 import org.apache.phoenix.coprocessor.generated.RegionServerEndpointProtos;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsMetadataCachingSource;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
+import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -107,6 +108,24 @@ public class PhoenixRegionServerEndpoint
     }
 
     @Override
+    public void invalidateHAGroupStoreClient(RpcController controller,
+            RegionServerEndpointProtos.InvalidateHAGroupStoreClientRequest request,
+            RpcCallback<RegionServerEndpointProtos.InvalidateHAGroupStoreClientResponse> done) {
+        LOGGER.info("PhoenixRegionServerEndpoint invalidating HAGroupStoreClient");
+        HAGroupStoreManager haGroupStoreManager;
+        try {
+            haGroupStoreManager = HAGroupStoreManager.getInstance(conf);
+            haGroupStoreManager.invalidateHAGroupStoreClient();
+        } catch (Throwable t) {
+            String errorMsg = "Invalidating HAGroupStoreClient FAILED, check exception for "
+                    + "specific details";
+            LOGGER.error(errorMsg,  t);
+            IOException ioe = ClientUtil.createIOException(errorMsg, t);
+            ProtobufUtil.setControllerException(controller, ioe);
+        }
+    }
+
+    @Override
     public Iterable<Service> getServices() {
         return Collections.singletonList(this);
     }
@@ -114,4 +133,5 @@ public class PhoenixRegionServerEndpoint
     public ServerMetadataCache getServerMetadataCache() {
         return ServerMetadataCacheImpl.getInstance(conf);
     }
+
 }
