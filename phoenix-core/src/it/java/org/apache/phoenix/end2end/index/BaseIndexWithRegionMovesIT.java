@@ -22,7 +22,6 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -1028,7 +1027,7 @@ public abstract class BaseIndexWithRegionMovesIT extends ParallelStatsDisabledWi
             conn.commit();
 
             // the index table is one row
-            HTable table = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices()
+            Table table = conn.unwrap(PhoenixConnection.class).getQueryServices()
                     .getTable(fullTableName.getBytes());
             ResultScanner resultScanner = table.getScanner(new Scan());
             for (Result result : resultScanner) {
