@@ -729,8 +729,8 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         while (iterator.hasNext()) {
             Mutation mutation = iterator.next();
             if ((mutation instanceof Put && !isVerified((Put) mutation)) ||
-                    (mutation instanceof Delete &&
-                            !IndexUtil.isDeleteFamilyOrDeleteColumn(mutation))) {
+                    (mutation instanceof Delete
+                            && !IndexUtil.isDeleteFamilyOrDeleteColumn(mutation))) {
                 iterator.remove();
             } else {
                 if (((previous instanceof Put && mutation instanceof Put) ||
@@ -872,8 +872,8 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                     // Between an expected delete and put, there can be one or more deletes due to
                     // concurrent mutations or data table write failures. Skip all of them if any
                     // There cannot be any actual delete mutation between two expected put mutations.
-                    while (getTimestamp(actual) >= getTimestamp(expected) &&
-                            IndexUtil.isDeleteFamily(actual)) {
+                    while (getTimestamp(actual) >= getTimestamp(expected)
+                            && IndexUtil.isDeleteFamily(actual)) {
                         actualIndex++;
                         if (actualIndex == actualSize) {
                             break;
@@ -898,8 +898,8 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                 // unverified index rows on a deleted row and read-repair will put a DeleteFamily
                 // marker. Those delete family markers will be visible until compaction runs on the
                 // index table.
-                while (getTimestamp(actual) > getTimestamp(expected) &&
-                        IndexUtil.isDeleteFamily(actual)) {
+                while (getTimestamp(actual) > getTimestamp(expected)
+                        && IndexUtil.isDeleteFamily(actual)) {
                     actualIndex++;
                     if (actualIndex == actualSize) {
                         break;
