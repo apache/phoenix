@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,7 +18,6 @@
 package org.apache.phoenix.hbase.index.util;
 
 import java.io.IOException;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeepDeletedCells;
@@ -48,7 +47,6 @@ public class TestIndexManagementUtil {
 
   /**
    * Compressed WALs are supported when we have the WALEditCodec installed
-   * @throws Exception
    */
   @Test
   public void testCompressedWALWithCodec() throws Exception {
@@ -61,7 +59,6 @@ public class TestIndexManagementUtil {
 
   /**
    * We cannot support WAL Compression with the IndexedHLogReader
-   * @throws Exception
    */
   @Test(expected = IllegalStateException.class)
   public void testCompressedWALWithHLogReader() throws Exception {
@@ -74,9 +71,8 @@ public class TestIndexManagementUtil {
 
   /**
    * Create the specified index table with the necessary columns
-   * @param admin {@link Admin} to use when creating the table
+   * @param admin      {@link Admin} to use when creating the table
    * @param indexTable name of the index table.
-   * @throws IOException
    */
   public static void createIndexTable(Admin admin, String indexTable) throws IOException {
     createIndexTable(admin, TableDescriptorBuilder.newBuilder(TableName.valueOf(indexTable)));
@@ -86,10 +82,11 @@ public class TestIndexManagementUtil {
    * @param admin to create the table
    * @param index descriptor to update before creating table
    */
-  public static void createIndexTable(Admin admin, TableDescriptorBuilder indexBuilder) throws IOException {
-        indexBuilder.setColumnFamily(
-                ColumnFamilyDescriptorBuilder.newBuilder(CoveredColumnIndexCodec.INDEX_ROW_COLUMN_FAMILY)
-                        .setKeepDeletedCells(KeepDeletedCells.TRUE).build());
+  public static void createIndexTable(Admin admin, TableDescriptorBuilder indexBuilder)
+    throws IOException {
+    indexBuilder.setColumnFamily(
+      ColumnFamilyDescriptorBuilder.newBuilder(CoveredColumnIndexCodec.INDEX_ROW_COLUMN_FAMILY)
+        .setKeepDeletedCells(KeepDeletedCells.TRUE).build());
     admin.createTable(indexBuilder.build());
   }
 }

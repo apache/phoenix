@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,7 +20,6 @@ package org.apache.phoenix.schema.stats;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.List;
-
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -34,50 +33,49 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
  */
 public interface StatisticsCollector extends Closeable {
 
-    /** Constant used if no max timestamp is available */
-    long NO_TIMESTAMP = -1;
+  /** Constant used if no max timestamp is available */
+  long NO_TIMESTAMP = -1;
 
-    /**
-     * Returns the maximum timestamp of all cells encountered while collecting statistics.
-     */
-    long getMaxTimeStamp();
+  /**
+   * Returns the maximum timestamp of all cells encountered while collecting statistics.
+   */
+  long getMaxTimeStamp();
 
-    /**
-     * Write the collected statistics for the given region over the scan provided.
-     */
-    void updateStatistics(Region region, Scan scan);
+  /**
+   * Write the collected statistics for the given region over the scan provided.
+   */
+  void updateStatistics(Region region, Scan scan);
 
-    /**
-     * Collect statistics for the given list of cells. This method can be called multiple times
-     * during collection of statistics.
-     */
-    void collectStatistics(List<Cell> results);
+  /**
+   * Collect statistics for the given list of cells. This method can be called multiple times during
+   * collection of statistics.
+   */
+  void collectStatistics(List<Cell> results);
 
-    /**
-     * Called before beginning the collection of statistics through {@link #collectStatistics(List)}
-     * @throws IOException 
-     */
-    void init() throws IOException;
+  /**
+   * Called before beginning the collection of statistics through {@link #collectStatistics(List)}
+   */
+  void init() throws IOException;
 
-    /**
-     * Retrieve the calculated guide post info for the given column family.
-     */
-    GuidePostsInfo getGuidePosts(ImmutableBytesPtr fam);
+  /**
+   * Retrieve the calculated guide post info for the given column family.
+   */
+  GuidePostsInfo getGuidePosts(ImmutableBytesPtr fam);
 
-    /**
-     * Retrieve the guide post depth during stats collection
-     */
-    long getGuidePostDepth();
+  /**
+   * Retrieve the guide post depth during stats collection
+   */
+  long getGuidePostDepth();
 
-    /**
-     * Retrieve the object that manages statistics persistence
-     */
-    StatisticsWriter getStatisticsWriter();
+  /**
+   * Retrieve the object that manages statistics persistence
+   */
+  StatisticsWriter getStatisticsWriter();
 
-    /**
-     * Wrap a compaction scanner with a scanner that will collect statistics using this instance.
-     */
-    InternalScanner createCompactionScanner(RegionCoprocessorEnvironment env, Store store,
-                                            InternalScanner delegate);
+  /**
+   * Wrap a compaction scanner with a scanner that will collect statistics using this instance.
+   */
+  InternalScanner createCompactionScanner(RegionCoprocessorEnvironment env, Store store,
+    InternalScanner delegate);
 
 }

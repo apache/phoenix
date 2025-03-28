@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,61 +17,44 @@
  */
 package org.apache.phoenix.schema;
 
-
 /**
  * Definition of a Phoenix column
- *
- * 
  * @since 0.1
  */
 public interface PColumn extends PDatum {
 
-    /**
-     * @return the name of the column
-     */
-    PName getName();
+  /** Returns the name of the column */
+  PName getName();
 
-    /**
-     * @return the name of the column family
-     */
-    PName getFamilyName();
+  /** Returns the name of the column family */
+  PName getFamilyName();
 
-    /**
-     * @return the zero-based ordinal position of the column
-     */
-    int getPosition();
-    
-    /**
-     * @return the declared array size or zero if this is not an array
-     */
-    Integer getArraySize();
-    
-    byte[] getViewConstant();
-    
-    boolean isViewReferenced();
-    
-    int getEstimatedSize();
-    
-    String getExpressionStr();
+  /** Returns the zero-based ordinal position of the column */
+  int getPosition();
 
-    /**
-     * @return the cell timestamp associated with this PColumn
-     */
-    long getTimestamp();
+  /** Returns the declared array size or zero if this is not an array */
+  Integer getArraySize();
 
-    /**
-     * @return is the column derived from some other table / view or not
-     */
-    boolean isDerived();
+  byte[] getViewConstant();
 
-    boolean isExcluded();
-    
-    /**
-     * @return whether this column represents/stores the hbase cell timestamp.
-     */
-    boolean isRowTimestamp();
-    
-    boolean isDynamic();
-    
-    byte[] getColumnQualifierBytes();
+  boolean isViewReferenced();
+
+  int getEstimatedSize();
+
+  String getExpressionStr();
+
+  /** Returns the cell timestamp associated with this PColumn */
+  long getTimestamp();
+
+  /** Returns is the column derived from some other table / view or not */
+  boolean isDerived();
+
+  boolean isExcluded();
+
+  /** Returns whether this column represents/stores the hbase cell timestamp. */
+  boolean isRowTimestamp();
+
+  boolean isDynamic();
+
+  byte[] getColumnQualifierBytes();
 }

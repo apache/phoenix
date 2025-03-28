@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,53 +15,52 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.parse;
 
 import org.apache.phoenix.util.SchemaUtil;
 
 public class NamedNode {
-    private final String name;
-    private final boolean isCaseSensitive;
-    
-    public static NamedNode caseSensitiveNamedNode(String name) {
-        return new NamedNode(name,true);
-    }
+  private final String name;
+  private final boolean isCaseSensitive;
 
-    NamedNode(String name, boolean isCaseSensitive) {
-        this.name = name;
-        this.isCaseSensitive = isCaseSensitive;
-    }
+  public static NamedNode caseSensitiveNamedNode(String name) {
+    return new NamedNode(name, true);
+  }
 
-    NamedNode(String name) {
-        this.name = SchemaUtil.normalizeIdentifier(name);
-        this.isCaseSensitive = name == null ? false : SchemaUtil.isCaseSensitive(name);
-    }
+  NamedNode(String name, boolean isCaseSensitive) {
+    this.name = name;
+    this.isCaseSensitive = isCaseSensitive;
+  }
 
-    public String getName() {
-        return name;
-    }
+  NamedNode(String name) {
+    this.name = SchemaUtil.normalizeIdentifier(name);
+    this.isCaseSensitive = name == null ? false : SchemaUtil.isCaseSensitive(name);
+  }
 
-    public boolean isCaseSensitive() {
-        return isCaseSensitive;
-    }
-    
-    @Override
-    public int hashCode() {
-        return name.hashCode();
-    }
+  public String getName() {
+    return name;
+  }
 
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null) return false;
-        if (getClass() != obj.getClass()) return false;
-        NamedNode other = (NamedNode)obj;
-        return name.equals(other.name);
-    }
-    
-    @Override
-    public String toString() {
-        return (isCaseSensitive ? "\"" : "" ) + name + (isCaseSensitive ? "\"" : "" );
-    }
+  public boolean isCaseSensitive() {
+    return isCaseSensitive;
+  }
+
+  @Override
+  public int hashCode() {
+    return name.hashCode();
+  }
+
+  @Override
+  public boolean equals(Object obj) {
+    if (this == obj) return true;
+    if (obj == null) return false;
+    if (getClass() != obj.getClass()) return false;
+    NamedNode other = (NamedNode) obj;
+    return name.equals(other.name);
+  }
+
+  @Override
+  public String toString() {
+    return (isCaseSensitive ? "\"" : "") + name + (isCaseSensitive ? "\"" : "");
+  }
 }

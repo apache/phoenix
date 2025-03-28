@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,6 @@ package org.apache.phoenix.schema.types;
 
 import java.math.BigDecimal;
 import java.sql.Types;
-
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 
@@ -62,22 +61,24 @@ public class PInteger extends PWholeNumber<Integer> {
     long l = (Long) o;
     if (l < Integer.MIN_VALUE || l > Integer.MAX_VALUE) {
       throw newIllegalDataException(
-          actualType + " value " + l + " cannot be cast to Integer without changing its value");
+        actualType + " value " + l + " cannot be cast to Integer without changing its value");
     }
     int v = (int) l;
     return v;
   }
 
   @Override
-  public Integer toObject(byte[] b, int o, int l, PDataType actualType,
-      SortOrder sortOrder, Integer maxLength, Integer scale) {
+  public Integer toObject(byte[] b, int o, int l, PDataType actualType, SortOrder sortOrder,
+    Integer maxLength, Integer scale) {
     if (l == 0) {
       return null;
     }
-    if (equalsAny(actualType, PLong.INSTANCE, PUnsignedLong.INSTANCE, PInteger.INSTANCE,
+    if (
+      equalsAny(actualType, PLong.INSTANCE, PUnsignedLong.INSTANCE, PInteger.INSTANCE,
         PUnsignedInt.INSTANCE, PSmallint.INSTANCE, PUnsignedSmallint.INSTANCE, PTinyint.INSTANCE,
         PUnsignedTinyint.INSTANCE, PFloat.INSTANCE, PUnsignedFloat.INSTANCE, PDouble.INSTANCE,
-        PUnsignedDouble.INSTANCE)) {
+        PUnsignedDouble.INSTANCE)
+    ) {
       return actualType.getCodec().decodeInt(b, o, sortOrder);
     } else if (actualType == PDecimal.INSTANCE) {
       BigDecimal bd = (BigDecimal) actualType.toObject(b, o, l, actualType, sortOrder);
@@ -91,8 +92,10 @@ public class PInteger extends PWholeNumber<Integer> {
   public boolean isCoercibleTo(PDataType targetType, Object value) {
     if (value != null) {
       int i;
-      if (equalsAny(targetType, PUnsignedDouble.INSTANCE, PUnsignedFloat.INSTANCE,
-          PUnsignedLong.INSTANCE, PUnsignedInt.INSTANCE)) {
+      if (
+        equalsAny(targetType, PUnsignedDouble.INSTANCE, PUnsignedFloat.INSTANCE,
+          PUnsignedLong.INSTANCE, PUnsignedInt.INSTANCE)
+      ) {
         i = (Integer) value;
         return i >= 0;
       } else if (targetType.equals(PUnsignedSmallint.INSTANCE)) {
@@ -172,8 +175,7 @@ public class PInteger extends PWholeNumber<Integer> {
     }
 
     @Override
-    public double decodeDouble(byte[] b, int o,
-        SortOrder sortOrder) {
+    public double decodeDouble(byte[] b, int o, SortOrder sortOrder) {
       return decodeInt(b, o, sortOrder);
     }
 
@@ -210,7 +212,7 @@ public class PInteger extends PWholeNumber<Integer> {
     public int encodeFloat(float v, byte[] b, int o) {
       if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE) {
         throw newIllegalDataException(
-            "Value " + v + " cannot be encoded as an Integer without changing its value");
+          "Value " + v + " cannot be encoded as an Integer without changing its value");
       }
       return encodeInt((int) v, b, o);
     }
@@ -219,7 +221,7 @@ public class PInteger extends PWholeNumber<Integer> {
     public int encodeDouble(double v, byte[] b, int o) {
       if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE) {
         throw newIllegalDataException(
-            "Value " + v + " cannot be encoded as an Integer without changing its value");
+          "Value " + v + " cannot be encoded as an Integer without changing its value");
       }
       return encodeInt((int) v, b, o);
     }
@@ -228,7 +230,7 @@ public class PInteger extends PWholeNumber<Integer> {
     public int encodeLong(long v, byte[] b, int o) {
       if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE) {
         throw newIllegalDataException(
-            "Value " + v + " cannot be encoded as an Integer without changing its value");
+          "Value " + v + " cannot be encoded as an Integer without changing its value");
       }
       return encodeInt((int) v, b, o);
     }
@@ -238,7 +240,7 @@ public class PInteger extends PWholeNumber<Integer> {
       int v = decodeInt(b, o, sortOrder);
       if (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) {
         throw newIllegalDataException(
-            "Value " + v + " cannot be cast to Byte without changing its value");
+          "Value " + v + " cannot be cast to Byte without changing its value");
       }
       return (byte) v;
     }
@@ -248,7 +250,7 @@ public class PInteger extends PWholeNumber<Integer> {
       int v = decodeInt(b, o, sortOrder);
       if (v < Short.MIN_VALUE || v > Short.MAX_VALUE) {
         throw newIllegalDataException(
-            "Value " + v + " cannot be cast to Short without changing its value");
+          "Value " + v + " cannot be cast to Short without changing its value");
       }
       return (short) v;
     }

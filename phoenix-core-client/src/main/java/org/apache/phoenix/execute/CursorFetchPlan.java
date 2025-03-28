@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.execute;
 
 import java.sql.SQLException;
@@ -31,47 +30,48 @@ import org.apache.phoenix.iterate.ResultIterator;
 
 public class CursorFetchPlan extends DelegateQueryPlan {
 
-    private CursorResultIterator resultIterator;
-    private int fetchSize;
-    private boolean isAggregate;
-    private String cursorName;
+  private CursorResultIterator resultIterator;
+  private int fetchSize;
+  private boolean isAggregate;
+  private String cursorName;
 
-	public CursorFetchPlan(QueryPlan cursorQueryPlan,String cursorName) {
-		super(cursorQueryPlan);
-        this.isAggregate = delegate.getStatement().isAggregate() || delegate.getStatement().isDistinct();
-        this.cursorName = cursorName;
-	}
+  public CursorFetchPlan(QueryPlan cursorQueryPlan, String cursorName) {
+    super(cursorQueryPlan);
+    this.isAggregate =
+      delegate.getStatement().isAggregate() || delegate.getStatement().isDistinct();
+    this.cursorName = cursorName;
+  }
 
-	@Override
-	public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
-		StatementContext context = delegate.getContext();
-		if (resultIterator == null) {
-			context.getOverallQueryMetrics().startQuery();
-			resultIterator = new CursorResultIterator(LookAheadResultIterator.wrap(delegate.iterator(scanGrouper, scan)),cursorName);
-		}
-	    return resultIterator;
-	}
+  @Override
+  public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
+    StatementContext context = delegate.getContext();
+    if (resultIterator == null) {
+      context.getOverallQueryMetrics().startQuery();
+      resultIterator = new CursorResultIterator(
+        LookAheadResultIterator.wrap(delegate.iterator(scanGrouper, scan)), cursorName);
+    }
+    return resultIterator;
+  }
 
-	@Override
-	public <T> T accept(QueryPlanVisitor<T> visitor) {
-		return visitor.visit(this);
-	}
+  @Override
+  public <T> T accept(QueryPlanVisitor<T> visitor) {
+    return visitor.visit(this);
+  }
 
+  @Override
+  public ExplainPlan getExplainPlan() throws SQLException {
+    return delegate.getExplainPlan();
+  }
 
-	@Override
-	public ExplainPlan getExplainPlan() throws SQLException {
-		return delegate.getExplainPlan();
-	}
-	
-	public void setFetchSize(int fetchSize){
-	    this.fetchSize = fetchSize;	
-	}
+  public void setFetchSize(int fetchSize) {
+    this.fetchSize = fetchSize;
+  }
 
-	public int getFetchSize() {
-		return fetchSize;
-	}
+  public int getFetchSize() {
+    return fetchSize;
+  }
 
-	public boolean isAggregate(){
-	    return this.isAggregate;
-	}
+  public boolean isAggregate() {
+    return this.isAggregate;
+  }
 }

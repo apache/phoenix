@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,28 +18,25 @@
 package org.apache.phoenix.memory;
 
 /**
- * 
  * Exception thrown by MemoryManager when insufficient memory is available
- *
- * 
  * @since 0.1
  */
 public class InsufficientMemoryException extends RuntimeException {
-	private static final long serialVersionUID = 1L;
+  private static final long serialVersionUID = 1L;
 
-    public InsufficientMemoryException() {
-    }
+  public InsufficientMemoryException() {
+  }
 
-    public InsufficientMemoryException(String message) {
-        super(message);
-    }
+  public InsufficientMemoryException(String message) {
+    super(message);
+  }
 
-    public InsufficientMemoryException(Throwable cause) {
-        super(cause);
-    }
+  public InsufficientMemoryException(Throwable cause) {
+    super(cause);
+  }
 
-    public InsufficientMemoryException(String message, Throwable cause) {
-        super(message, cause);
-    }
+  public InsufficientMemoryException(String message, Throwable cause) {
+    super(message, cause);
+  }
 
 }

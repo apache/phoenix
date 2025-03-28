@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,8 +21,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-
-import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.Stoppable;
@@ -34,13 +32,15 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.ReplayWrite;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
+import org.apache.phoenix.hbase.index.covered.data.CachedLocalTable;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.hbase.index.covered.data.CachedLocalTable;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
 import org.apache.phoenix.util.IndexUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 
 /**
  * Manage the building of index updates from primary table updates.
@@ -54,7 +54,7 @@ public class IndexBuildManager implements Stoppable {
 
   /**
    * @param env environment in which <tt>this</tt> is running. Used to setup the
-   *          {@link IndexBuilder} and executor
+   *            {@link IndexBuilder} and executor
    * @throws IOException if an {@link IndexBuilder} cannot be correctly steup
    */
   public IndexBuildManager(RegionCoprocessorEnvironment env) throws IOException {
@@ -63,68 +63,68 @@ public class IndexBuildManager implements Stoppable {
     this.delegate = getIndexBuilder(env);
     this.regionCoprocessorEnvironment = env;
   }
-  
+
   private static IndexBuilder getIndexBuilder(RegionCoprocessorEnvironment e) throws IOException {
     Configuration conf = e.getConfiguration();
     Class<? extends IndexBuilder> builderClass =
-        conf.getClass(IndexUtil.INDEX_BUILDER_CONF_KEY, null, IndexBuilder.class);
+      conf.getClass(IndexUtil.INDEX_BUILDER_CONF_KEY, null, IndexBuilder.class);
     try {
       IndexBuilder builder = builderClass.newInstance();
       builder.setup(e);
       return builder;
     } catch (InstantiationException e1) {
-      throw new IOException("Couldn't instantiate index builder:" + builderClass
-          + ", disabling indexing on table " + e.getRegion().getTableDescriptor().getTableName().getNameAsString());
+      throw new IOException(
+        "Couldn't instantiate index builder:" + builderClass + ", disabling indexing on table "
+          + e.getRegion().getTableDescriptor().getTableName().getNameAsString());
     } catch (IllegalAccessException e1) {
-      throw new IOException("Couldn't instantiate index builder:" + builderClass
-          + ", disabling indexing on table " + e.getRegion().getTableDescriptor().getTableName().getNameAsString());
+      throw new IOException(
+        "Couldn't instantiate index builder:" + builderClass + ", disabling indexing on table "
+          + e.getRegion().getTableDescriptor().getTableName().getNameAsString());
     }
   }
 
-  public IndexMetaData getIndexMetaData(MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
-      return this.delegate.getIndexMetaData(miniBatchOp);
+  public IndexMetaData getIndexMetaData(MiniBatchOperationInProgress<Mutation> miniBatchOp)
+    throws IOException {
+    return this.delegate.getIndexMetaData(miniBatchOp);
   }
 
-  public void getIndexUpdates(ListMultimap<HTableInterfaceReference, Pair<Mutation, byte[]>> indexUpdates,
-      MiniBatchOperationInProgress<Mutation> miniBatchOp,
-      Collection<? extends Mutation> mutations,
-      IndexMetaData indexMetaData) throws Throwable {
+  public void getIndexUpdates(
+    ListMultimap<HTableInterfaceReference, Pair<Mutation, byte[]>> indexUpdates,
+    MiniBatchOperationInProgress<Mutation> miniBatchOp, Collection<? extends Mutation> mutations,
+    IndexMetaData indexMetaData) throws Throwable {
     // notify the delegate that we have started processing a batch
     this.delegate.batchStarted(miniBatchOp, indexMetaData);
-    CachedLocalTable cachedLocalTable =
-            CachedLocalTable.build(
-                    mutations,
-                    (PhoenixIndexMetaData)indexMetaData,
-                    this.regionCoprocessorEnvironment.getRegion());
+    CachedLocalTable cachedLocalTable = CachedLocalTable.build(mutations,
+      (PhoenixIndexMetaData) indexMetaData, this.regionCoprocessorEnvironment.getRegion());
     // Avoid the Object overhead of the executor when it's not actually parallelizing anything.
     for (Mutation m : mutations) {
-      Collection<Pair<Mutation, byte[]>> updates = delegate.getIndexUpdate(m, indexMetaData, cachedLocalTable);
+      Collection<Pair<Mutation, byte[]>> updates =
+        delegate.getIndexUpdate(m, indexMetaData, cachedLocalTable);
       for (Pair<Mutation, byte[]> update : updates) {
-        indexUpdates.put(new HTableInterfaceReference(new ImmutableBytesPtr(update.getSecond())), new Pair<>(update.getFirst(), m.getRow()));
+        indexUpdates.put(new HTableInterfaceReference(new ImmutableBytesPtr(update.getSecond())),
+          new Pair<>(update.getFirst(), m.getRow()));
       }
     }
   }
 
   public Collection<Pair<Mutation, byte[]>> getIndexUpdate(
-          MiniBatchOperationInProgress<Mutation> miniBatchOp,
-          Collection<? extends Mutation> mutations) throws Throwable {
+    MiniBatchOperationInProgress<Mutation> miniBatchOp, Collection<? extends Mutation> mutations)
+    throws Throwable {
     // notify the delegate that we have started processing a batch
     final IndexMetaData indexMetaData = this.delegate.getIndexMetaData(miniBatchOp);
     this.delegate.batchStarted(miniBatchOp, indexMetaData);
 
-    CachedLocalTable cachedLocalTable =
-            CachedLocalTable.build(
-                    mutations,
-                    (PhoenixIndexMetaData)indexMetaData,
-                    this.regionCoprocessorEnvironment.getRegion());
+    CachedLocalTable cachedLocalTable = CachedLocalTable.build(mutations,
+      (PhoenixIndexMetaData) indexMetaData, this.regionCoprocessorEnvironment.getRegion());
     // Avoid the Object overhead of the executor when it's not actually parallelizing anything.
     ArrayList<Pair<Mutation, byte[]>> results = new ArrayList<>(mutations.size());
     for (Mutation m : mutations) {
-      Collection<Pair<Mutation, byte[]>> updates = delegate.getIndexUpdate(m, indexMetaData, cachedLocalTable);
+      Collection<Pair<Mutation, byte[]>> updates =
+        delegate.getIndexUpdate(m, indexMetaData, cachedLocalTable);
       if (PhoenixIndexMetaData.isIndexRebuild(m.getAttributesMap())) {
         for (Pair<Mutation, byte[]> update : updates) {
           update.getFirst().setAttribute(BaseScannerRegionObserverConstants.REPLAY_WRITES,
-                  BaseScannerRegionObserverConstants.REPLAY_INDEX_REBUILD_WRITES);
+            BaseScannerRegionObserverConstants.REPLAY_INDEX_REBUILD_WRITES);
         }
       }
       results.addAll(updates);
@@ -132,8 +132,8 @@ public class IndexBuildManager implements Stoppable {
     return results;
   }
 
-  public Collection<Pair<Mutation, byte[]>> getIndexUpdateForFilteredRows(
-      Collection<Cell> filtered, IndexMetaData indexMetaData) throws IOException {
+  public Collection<Pair<Mutation, byte[]>> getIndexUpdateForFilteredRows(Collection<Cell> filtered,
+    IndexMetaData indexMetaData) throws IOException {
     // this is run async, so we can take our time here
     return delegate.getIndexUpdateForFilteredRows(filtered, indexMetaData);
   }
@@ -142,8 +142,8 @@ public class IndexBuildManager implements Stoppable {
     delegate.batchCompleted(miniBatchOp);
   }
 
-  public void batchStarted(MiniBatchOperationInProgress<Mutation> miniBatchOp, IndexMetaData indexMetaData)
-      throws IOException {
+  public void batchStarted(MiniBatchOperationInProgress<Mutation> miniBatchOp,
+    IndexMetaData indexMetaData) throws IOException {
     delegate.batchStarted(miniBatchOp, indexMetaData);
   }
 
@@ -156,9 +156,9 @@ public class IndexBuildManager implements Stoppable {
   }
 
   public List<Mutation> executeAtomicOp(Increment inc) throws IOException {
-      return delegate.executeAtomicOp(inc);
+    return delegate.executeAtomicOp(inc);
   }
-  
+
   @Override
   public void stop(String why) {
     if (stopped) {

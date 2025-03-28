@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,11 +23,9 @@ import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_BYTES_ATT
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -43,92 +41,95 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.util.ServerUtil;
+
 /*
  * Scanner to read data store and regenerate the local index data
  */
 public class DataTableLocalIndexRegionScanner extends DelegateRegionScanner {
-    MultiKeyValueTuple result = new MultiKeyValueTuple();
-    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-    KeyValueBuilder kvBuilder = GenericKeyValueBuilder.INSTANCE;
-    private List<IndexMaintainer> indexMaintainers;
-    private byte[] startKey;
-    private byte[] endKey;
-    private byte[] localIndexFamily;
-    private Region region;
-    long maxBatchSizeBytes;
-    int maxBatchSize;
-    private MutationList mutationList;
-    
-    
-    /**
-     * @param scanner Scanner for data table stores 
-     * @param region 
-     * @param indexMaintainers Maintainer of local Indexes which needs to built
-     * @param localIndexFamily LocalIndex family needs to be built.
-     * @param conf
-     * @throws IOException
-     */
-    public DataTableLocalIndexRegionScanner(RegionScanner scanner, Region region,
-            List<IndexMaintainer> indexMaintainers, byte[] localIndexFamily,Configuration conf) throws IOException {
-        super(scanner);
-        this.indexMaintainers = indexMaintainers;
-        this.startKey = region.getRegionInfo().getStartKey();
-        this.endKey = region.getRegionInfo().getEndKey();
-        this.localIndexFamily = localIndexFamily;
-        this.region=region;
-        maxBatchSize = conf.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
-        maxBatchSizeBytes = conf.getLongBytes(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
-            QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE_BYTES);
-        mutationList=new UngroupedAggregateRegionObserver.MutationList(maxBatchSize);   
-    }
+  MultiKeyValueTuple result = new MultiKeyValueTuple();
+  ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+  KeyValueBuilder kvBuilder = GenericKeyValueBuilder.INSTANCE;
+  private List<IndexMaintainer> indexMaintainers;
+  private byte[] startKey;
+  private byte[] endKey;
+  private byte[] localIndexFamily;
+  private Region region;
+  long maxBatchSizeBytes;
+  int maxBatchSize;
+  private MutationList mutationList;
 
-    @Override
-    public boolean next(List<Cell> outResult, ScannerContext scannerContext) throws IOException {
-        return next(outResult);
-    }
+  /**
+   * @param scanner          Scanner for data table stores
+   * @param indexMaintainers Maintainer of local Indexes which needs to built
+   * @param localIndexFamily LocalIndex family needs to be built.
+   */
+  public DataTableLocalIndexRegionScanner(RegionScanner scanner, Region region,
+    List<IndexMaintainer> indexMaintainers, byte[] localIndexFamily, Configuration conf)
+    throws IOException {
+    super(scanner);
+    this.indexMaintainers = indexMaintainers;
+    this.startKey = region.getRegionInfo().getStartKey();
+    this.endKey = region.getRegionInfo().getEndKey();
+    this.localIndexFamily = localIndexFamily;
+    this.region = region;
+    maxBatchSize =
+      conf.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
+    maxBatchSizeBytes = conf.getLongBytes(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
+      QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE_BYTES);
+    mutationList = new UngroupedAggregateRegionObserver.MutationList(maxBatchSize);
+  }
 
-    @Override
-    public boolean next(List<Cell> results) throws IOException {
-        List<Cell> dataTableResults = new ArrayList<Cell>();
-        boolean next = super.next(dataTableResults);
-        addMutations(dataTableResults);
-        if (ServerUtil.readyToCommit(mutationList.size(), mutationList.byteSize(), maxBatchSize, maxBatchSizeBytes)||!next) {
-            region.batchMutate(mutationList.toArray(new Mutation[mutationList.size()]));
-            mutationList.clear();
-        }
-        return next;
-    }
+  @Override
+  public boolean next(List<Cell> outResult, ScannerContext scannerContext) throws IOException {
+    return next(outResult);
+  }
 
-    private void addMutations(List<Cell> dataTableResults) throws IOException {
-        if (!dataTableResults.isEmpty()) {
-            result.setKeyValues(dataTableResults);
-            for (IndexMaintainer maintainer : indexMaintainers) {
-                result.getKey(ptr);
-                ValueGetter valueGetter = maintainer
-                        .createGetterFromKeyValues(ImmutableBytesPtr.copyBytesIfNecessary(ptr), dataTableResults);
-                List<Cell> list = maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr,
-                        dataTableResults.get(0).getTimestamp(), startKey, endKey, false)
-                        .getFamilyCellMap().get(localIndexFamily);
-                Put put = null;
-                Delete del = null;
-                for (Cell cell : list) {
-                    if (cell.getType() == Cell.Type.Put) {
-                        if (put == null) {
-                            put = new Put(CellUtil.cloneRow(cell));
-                            mutationList.add(put);
-                        }
-                        put.add(cell);
-                    } else {
-                        if (del == null) {
-                            del = new Delete(CellUtil.cloneRow(cell));
-                            mutationList.add(del);
-                        }
-                        del.add(cell);
-                    }
-                }
+  @Override
+  public boolean next(List<Cell> results) throws IOException {
+    List<Cell> dataTableResults = new ArrayList<Cell>();
+    boolean next = super.next(dataTableResults);
+    addMutations(dataTableResults);
+    if (
+      ServerUtil.readyToCommit(mutationList.size(), mutationList.byteSize(), maxBatchSize,
+        maxBatchSizeBytes) || !next
+    ) {
+      region.batchMutate(mutationList.toArray(new Mutation[mutationList.size()]));
+      mutationList.clear();
+    }
+    return next;
+  }
+
+  private void addMutations(List<Cell> dataTableResults) throws IOException {
+    if (!dataTableResults.isEmpty()) {
+      result.setKeyValues(dataTableResults);
+      for (IndexMaintainer maintainer : indexMaintainers) {
+        result.getKey(ptr);
+        ValueGetter valueGetter = maintainer
+          .createGetterFromKeyValues(ImmutableBytesPtr.copyBytesIfNecessary(ptr), dataTableResults);
+        List<Cell> list =
+          maintainer
+            .buildUpdateMutation(kvBuilder, valueGetter, ptr,
+              dataTableResults.get(0).getTimestamp(), startKey, endKey, false)
+            .getFamilyCellMap().get(localIndexFamily);
+        Put put = null;
+        Delete del = null;
+        for (Cell cell : list) {
+          if (cell.getType() == Cell.Type.Put) {
+            if (put == null) {
+              put = new Put(CellUtil.cloneRow(cell));
+              mutationList.add(put);
             }
+            put.add(cell);
+          } else {
+            if (del == null) {
+              del = new Delete(CellUtil.cloneRow(cell));
+              mutationList.add(del);
+            }
+            del.add(cell);
+          }
         }
+      }
     }
-    
+  }
 
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,37 +20,31 @@ package org.apache.phoenix.parse;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
-
 import org.apache.phoenix.compile.ColumnResolver;
 
-
-
 /**
- * 
  * Node representing the NOT in SQL
- *
- * 
  * @since 0.1
  */
 public class NotParseNode extends UnaryParseNode {
 
-    NotParseNode(ParseNode expr) {
-        super(expr);
-    }
+  NotParseNode(ParseNode expr) {
+    super(expr);
+  }
 
-    @Override
-    public <T> T accept(ParseNodeVisitor<T> visitor) throws SQLException {
-        List<T> l = Collections.emptyList();
-        if (visitor.visitEnter(this)) {
-            l = acceptChildren(visitor);
-        }
-        return visitor.visitLeave(this, l);
+  @Override
+  public <T> T accept(ParseNodeVisitor<T> visitor) throws SQLException {
+    List<T> l = Collections.emptyList();
+    if (visitor.visitEnter(this)) {
+      l = acceptChildren(visitor);
     }
+    return visitor.visitLeave(this, l);
+  }
 
-    @Override
-    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
-        List<ParseNode> children = getChildren();
-        buf.append(" NOT ");
-        children.get(0).toSQL(resolver, buf);
-    }
+  @Override
+  public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+    List<ParseNode> children = getChildren();
+    buf.append(" NOT ");
+    children.get(0).toSQL(resolver, buf);
+  }
 }

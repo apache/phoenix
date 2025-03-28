@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,7 +20,6 @@ package org.apache.phoenix.trace;
 import java.io.IOException;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
-
 import org.apache.htrace.Span;
 import org.apache.htrace.SpanReceiver;
 import org.apache.phoenix.metrics.MetricInfo;
@@ -56,47 +55,48 @@ import org.slf4j.LoggerFactory;
  * This allows us to make the updates in batches. We might have spans that finish before other spans
  * (for instance in the same parent). By batching the updates we can lessen the overhead on the
  * client, which is also busy doing 'real' work. <br>
- * This class is custom implementation of metrics queue and handles batch writes to the Phoenix Table
- * via another thread. Batch size and number of threads are configurable.
+ * This class is custom implementation of metrics queue and handles batch writes to the Phoenix
+ * Table via another thread. Batch size and number of threads are configurable.
  * <p>
  */
 public class TraceSpanReceiver implements SpanReceiver {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(TraceSpanReceiver.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(TraceSpanReceiver.class);
 
-    private static final int CAPACITY = QueryServicesOptions.withDefaults().getTracingTraceBufferSize();
+  private static final int CAPACITY =
+    QueryServicesOptions.withDefaults().getTracingTraceBufferSize();
 
-    private BlockingQueue<Span> spanQueue = null;
+  private BlockingQueue<Span> spanQueue = null;
 
-    public TraceSpanReceiver() {
-        this.spanQueue = new ArrayBlockingQueue<Span>(CAPACITY);
+  public TraceSpanReceiver() {
+    this.spanQueue = new ArrayBlockingQueue<Span>(CAPACITY);
+  }
+
+  @Override
+  public void receiveSpan(Span span) {
+    if (span.getTraceId() != 0 && spanQueue.offer(span)) {
+      if (LOGGER.isTraceEnabled()) {
+        LOGGER.trace("Span buffered to queue " + span.toJson());
+      }
+    } else if (span.getTraceId() != 0 && LOGGER.isDebugEnabled()) {
+      LOGGER.debug("Span NOT buffered due to overflow in queue " + span.toJson());
     }
+  }
 
-    @Override
-    public void receiveSpan(Span span) {
-        if (span.getTraceId() != 0 && spanQueue.offer(span)) {
-            if (LOGGER.isTraceEnabled()) {
-                LOGGER.trace("Span buffered to queue " + span.toJson());
-            }
-        } else if (span.getTraceId() != 0 && LOGGER.isDebugEnabled()) {
-                LOGGER.debug("Span NOT buffered due to overflow in queue " + span.toJson());
-        }
-    }
+  @Override
+  public void close() throws IOException {
+    // noop
+  }
 
-    @Override
-    public void close() throws IOException {
-        // noop
-    }
+  boolean isSpanAvailable() {
+    return spanQueue.isEmpty();
+  }
 
-    boolean isSpanAvailable() {
-        return spanQueue.isEmpty();
-    }
+  Span getSpan() {
+    return spanQueue.poll();
+  }
 
-    Span getSpan() {
-        return spanQueue.poll();
-    }
-
-    int getNumSpans() {
-        return spanQueue.size();
-    }
+  int getNumSpans() {
+    return spanQueue.size();
+  }
 }

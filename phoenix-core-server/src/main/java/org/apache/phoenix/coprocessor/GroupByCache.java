@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,22 +18,20 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.Closeable;
-
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
- * 
- * Interface to abstract the way in which distinct group by
- * elements are cached
- *
- * 
+ * Interface to abstract the way in which distinct group by elements are cached
  * @since 3.0.0
  */
 public interface GroupByCache extends Closeable {
-    long size();
-    Aggregator[] cache(ImmutableBytesPtr key);
-    RegionScanner getScanner(RegionScanner s);
-    void cacheAggregateRowKey(ImmutableBytesPtr value, ImmutableBytesPtr rowKey);
+  long size();
+
+  Aggregator[] cache(ImmutableBytesPtr key);
+
+  RegionScanner getScanner(RegionScanner s);
+
+  void cacheAggregateRowKey(ImmutableBytesPtr value, ImmutableBytesPtr rowKey);
 }

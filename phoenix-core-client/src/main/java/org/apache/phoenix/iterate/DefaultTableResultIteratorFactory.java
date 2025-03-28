@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,6 @@ package org.apache.phoenix.iterate;
 
 import java.sql.SQLException;
 import java.util.Map;
-
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.QueryPlan;
@@ -30,13 +29,13 @@ import org.apache.phoenix.schema.TableRef;
 
 public class DefaultTableResultIteratorFactory implements TableResultIteratorFactory {
 
-       @Override
-    public TableResultIterator newIterator(MutationState mutationState, TableRef tableRef,
-            Scan scan, ScanMetricsHolder scanMetricsHolder, long renewLeaseThreshold,
-            QueryPlan plan, ParallelScanGrouper scanGrouper, Map<ImmutableBytesPtr,ServerCache> caches,
-            long maxQueryEndTime) throws SQLException {
-        return new TableResultIterator(mutationState, scan, scanMetricsHolder, renewLeaseThreshold,
-                plan, scanGrouper, caches, maxQueryEndTime);
-    }
+  @Override
+  public TableResultIterator newIterator(MutationState mutationState, TableRef tableRef, Scan scan,
+    ScanMetricsHolder scanMetricsHolder, long renewLeaseThreshold, QueryPlan plan,
+    ParallelScanGrouper scanGrouper, Map<ImmutableBytesPtr, ServerCache> caches,
+    long maxQueryEndTime) throws SQLException {
+    return new TableResultIterator(mutationState, scan, scanMetricsHolder, renewLeaseThreshold,
+      plan, scanGrouper, caches, maxQueryEndTime);
+  }
 
 }

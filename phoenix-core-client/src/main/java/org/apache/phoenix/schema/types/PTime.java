@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,7 +23,6 @@ import java.sql.Time;
 import java.sql.Types;
 import java.text.Format;
 import java.time.ZoneOffset;
-
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.DateUtil;
@@ -48,13 +47,15 @@ public class PTime extends PDataType<Time> {
 
   @Override
   public java.sql.Time toObject(byte[] b, int o, int l, PDataType actualType, SortOrder sortOrder,
-      Integer maxLength, Integer scale) {
+    Integer maxLength, Integer scale) {
     if (l == 0) {
       return null;
     }
-    if (equalsAny(actualType, PTimestamp.INSTANCE, PUnsignedTimestamp.INSTANCE, PDate.INSTANCE,
+    if (
+      equalsAny(actualType, PTimestamp.INSTANCE, PUnsignedTimestamp.INSTANCE, PDate.INSTANCE,
         PUnsignedDate.INSTANCE, PTime.INSTANCE, PUnsignedTime.INSTANCE, PLong.INSTANCE,
-        PUnsignedLong.INSTANCE)) {
+        PUnsignedLong.INSTANCE)
+    ) {
       return new java.sql.Time(DateUtil.getCodecFor(actualType).decodeLong(b, o, sortOrder));
     } else if (actualType == PDecimal.INSTANCE) {
       BigDecimal bd = (BigDecimal) actualType.toObject(b, o, l, actualType, sortOrder);
@@ -87,41 +88,38 @@ public class PTime extends PDataType<Time> {
 
   @Override
   public Object toObject(byte[] bytes, int offset, int length, PDataType actualType,
-          SortOrder sortOrder, Integer maxLength, Integer scale, Class jdbcType)
-          throws SQLException {
-      java.sql.Time sqlTime =
-              toObject(bytes, offset, length, actualType, sortOrder, maxLength, scale);
-      return timeToClass(sqlTime, actualType, jdbcType);
+    SortOrder sortOrder, Integer maxLength, Integer scale, Class jdbcType) throws SQLException {
+    java.sql.Time sqlTime =
+      toObject(bytes, offset, length, actualType, sortOrder, maxLength, scale);
+    return timeToClass(sqlTime, actualType, jdbcType);
   }
 
   Object timeToClass(java.sql.Time sqlTime, PDataType actualType, Class jdbcType)
-          throws SQLException {
-      if (jdbcType == java.time.LocalTime.class) {
-          // FIXME this does a lot of unnecessary computation.
-          return java.time.LocalDateTime
-                  .ofInstant(java.time.Instant.ofEpochMilli(sqlTime.getTime()), ZoneOffset.UTC)
-                  .toLocalTime();
-      } else if (jdbcType == java.time.LocalDateTime.class) {
-          // This is NOT JDBC compliant
-          // We cannot use toInstant(), as that nulls the time fields.
-          return java.time.LocalDateTime
-                  .ofInstant(java.time.Instant.ofEpochMilli(sqlTime.getTime()), ZoneOffset.UTC);
-      } else if (jdbcType == java.time.LocalDate.class) {
-          // This is NOT JDBC compliant
-          // FIXME this does a lot of unnecessary computation.
-          return java.time.LocalDateTime
-                  .ofInstant(java.time.Instant.ofEpochMilli(sqlTime.getTime()), ZoneOffset.UTC)
-                  .toLocalDate();
-      } else if (jdbcType == java.sql.Time.class) {
-          return sqlTime;
-      } else if (jdbcType == java.sql.Date.class) {
-          return new java.sql.Date(sqlTime.getTime());
-      } else if (jdbcType == java.sql.Timestamp.class) {
-          return new java.sql.Timestamp(sqlTime.getTime());
-      } else if (jdbcType == java.util.Date.class) {
-          return new java.util.Date(sqlTime.getTime());
-      }
-      throw newMismatchException(actualType, jdbcType);
+    throws SQLException {
+    if (jdbcType == java.time.LocalTime.class) {
+      // FIXME this does a lot of unnecessary computation.
+      return java.time.LocalDateTime
+        .ofInstant(java.time.Instant.ofEpochMilli(sqlTime.getTime()), ZoneOffset.UTC).toLocalTime();
+    } else if (jdbcType == java.time.LocalDateTime.class) {
+      // This is NOT JDBC compliant
+      // We cannot use toInstant(), as that nulls the time fields.
+      return java.time.LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(sqlTime.getTime()),
+        ZoneOffset.UTC);
+    } else if (jdbcType == java.time.LocalDate.class) {
+      // This is NOT JDBC compliant
+      // FIXME this does a lot of unnecessary computation.
+      return java.time.LocalDateTime
+        .ofInstant(java.time.Instant.ofEpochMilli(sqlTime.getTime()), ZoneOffset.UTC).toLocalDate();
+    } else if (jdbcType == java.sql.Time.class) {
+      return sqlTime;
+    } else if (jdbcType == java.sql.Date.class) {
+      return new java.sql.Date(sqlTime.getTime());
+    } else if (jdbcType == java.sql.Timestamp.class) {
+      return new java.sql.Timestamp(sqlTime.getTime());
+    } else if (jdbcType == java.util.Date.class) {
+      return new java.util.Date(sqlTime.getTime());
+    }
+    throw newMismatchException(actualType, jdbcType);
   }
 
   @Override
@@ -164,15 +162,16 @@ public class PTime extends PDataType<Time> {
 
   @Override
   public boolean isBytesComparableWith(PDataType otherType) {
-    return super.isBytesComparableWith(otherType) || otherType == PDate.INSTANCE || otherType == PTimestamp.INSTANCE || otherType == PLong.INSTANCE;
+    return super.isBytesComparableWith(otherType) || otherType == PDate.INSTANCE
+      || otherType == PTimestamp.INSTANCE || otherType == PLong.INSTANCE;
   }
 
   @Override
   public String toStringLiteral(Object o, Format formatter) {
-      if (formatter == null) {
-          formatter = DateUtil.DEFAULT_TIME_FORMATTER;
-        }
-        return "'" + super.toStringLiteral(o, formatter) + "'";
+    if (formatter == null) {
+      formatter = DateUtil.DEFAULT_TIME_FORMATTER;
+    }
+    return "'" + super.toStringLiteral(o, formatter) + "'";
   }
 
   @Override

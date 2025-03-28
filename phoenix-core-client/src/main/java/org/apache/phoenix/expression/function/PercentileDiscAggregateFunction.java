@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,9 +18,7 @@
 package org.apache.phoenix.expression.function;
 
 import java.util.List;
-
 import org.apache.hadoop.conf.Configuration;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.DistinctValueWithCountClientAggregator;
@@ -28,43 +26,42 @@ import org.apache.phoenix.expression.aggregator.DistinctValueWithCountServerAggr
 import org.apache.phoenix.expression.aggregator.PercentileDiscClientAggregator;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDecimal;
 
 /**
- * 
- * Built-in function for {@code PERCENTILE_DISC(<expression>) WITHIN GROUP (ORDER BY <expression> ASC/DESC) aggregate function }
- *
- * 
+ * Built-in function for
+ * {@code PERCENTILE_DISC(<expression>) WITHIN GROUP (ORDER BY <expression> ASC/DESC) aggregate function }
  * @since 1.2.1
  */
-@BuiltInFunction(name = PercentileDiscAggregateFunction.NAME, args = { @Argument(allowedTypes = { PDecimal.class }),
-        @Argument(allowedTypes = { PBoolean.class }, isConstant = true),
-        @Argument(allowedTypes = { PDecimal.class }, isConstant = true, minValue = "0", maxValue = "1") })
+@BuiltInFunction(name = PercentileDiscAggregateFunction.NAME, args = {
+  @Argument(allowedTypes = { PDecimal.class }),
+  @Argument(allowedTypes = { PBoolean.class }, isConstant = true),
+  @Argument(allowedTypes = { PDecimal.class }, isConstant = true, minValue = "0", maxValue = "1") })
 public class PercentileDiscAggregateFunction extends DistinctValueWithCountAggregateFunction {
 
-	public static final String NAME = "PERCENTILE_DISC";
+  public static final String NAME = "PERCENTILE_DISC";
 
-	public PercentileDiscAggregateFunction() {
-	}
+  public PercentileDiscAggregateFunction() {
+  }
 
-	public PercentileDiscAggregateFunction(List<Expression> childern) {
-		super(childern);
-	}
-	
-	@Override
-	public Aggregator newServerAggregator(Configuration conf) {
-		return new DistinctValueWithCountServerAggregator(conf);
-	}
-	
-	@Override
-	public DistinctValueWithCountClientAggregator newClientAggregator() {
-		return new PercentileDiscClientAggregator(children, getAggregatorExpression().getSortOrder());
-	}
+  public PercentileDiscAggregateFunction(List<Expression> childern) {
+    super(childern);
+  }
 
-	@Override
-	public String getName() {
-		return NAME;
-	}
-	
+  @Override
+  public Aggregator newServerAggregator(Configuration conf) {
+    return new DistinctValueWithCountServerAggregator(conf);
+  }
+
+  @Override
+  public DistinctValueWithCountClientAggregator newClientAggregator() {
+    return new PercentileDiscClientAggregator(children, getAggregatorExpression().getSortOrder());
+  }
+
+  @Override
+  public String getName() {
+    return NAME;
+  }
+
 }

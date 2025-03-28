@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -30,7 +30,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
@@ -105,7 +104,8 @@ public class TestWALRecoveryCaching {
   // -----------------------------------------------------------------------------------------------
   private static CountDownLatch allowIndexTableToRecover;
 
-  public static class IndexTableBlockingReplayObserver implements RegionObserver, RegionCoprocessor {
+  public static class IndexTableBlockingReplayObserver
+    implements RegionObserver, RegionCoprocessor {
 
     @Override
     public Optional<RegionObserver> getRegionObserver() {
@@ -113,10 +113,11 @@ public class TestWALRecoveryCaching {
     }
 
     @Override
-        public void preWALRestore(
-                org.apache.hadoop.hbase.coprocessor.ObserverContext<? extends RegionCoprocessorEnvironment> ctx,
-                org.apache.hadoop.hbase.client.RegionInfo info, WALKey logKey,
-                org.apache.hadoop.hbase.wal.WALEdit logEdit) throws IOException {
+    public void preWALRestore(
+      org.apache.hadoop.hbase.coprocessor.ObserverContext<
+        ? extends RegionCoprocessorEnvironment> ctx,
+      org.apache.hadoop.hbase.client.RegionInfo info, WALKey logKey,
+      org.apache.hadoop.hbase.wal.WALEdit logEdit) throws IOException {
       try {
         LOGGER.debug("Restoring logs for index table");
         if (allowIndexTableToRecover != null) {
@@ -132,7 +133,6 @@ public class TestWALRecoveryCaching {
   public static class ReleaseLatchOnFailurePolicy extends StoreFailuresInCachePolicy {
 
     /**
-     * @param failedIndexEdits
      */
     public ReleaseLatchOnFailurePolicy(PerRegionIndexWriteCache failedIndexEdits) {
       super(failedIndexEdits);
@@ -140,7 +140,7 @@ public class TestWALRecoveryCaching {
 
     @Override
     public void handleFailure(Multimap<HTableInterfaceReference, Mutation> attempted,
-        Exception cause) throws IOException {
+      Exception cause) throws IOException {
       LOGGER.debug("Found index update failure!");
       if (allowIndexTableToRecover != null) {
         LOGGER.info("failed index write on WAL recovery - allowing index table to be restored.");
@@ -151,9 +151,9 @@ public class TestWALRecoveryCaching {
 
   }
 
-  //TODO: Jesse to fix
+  // TODO: Jesse to fix
   @SuppressWarnings("deprecation")
-@Ignore("Configuration issue - valid test, just needs fixing")
+  @Ignore("Configuration issue - valid test, just needs fixing")
   @Test
   public void testWaitsOnIndexRegionToReload() throws Exception {
     HBaseTestingUtility util = new HBaseTestingUtility();
@@ -182,30 +182,31 @@ public class TestWALRecoveryCaching {
     builder.addIndexGroup(columns);
 
     // create the primary table w/ indexing enabled
-    TableDescriptor primaryTable = TableDescriptorBuilder.newBuilder(TableName.valueOf(testTable.getTableName()))
-                .addColumnFamily(ColumnFamilyDescriptorBuilder.of(family))
-                .addColumnFamily(ColumnFamilyDescriptorBuilder.of(nonIndexedFamily)).build();
+    TableDescriptor primaryTable =
+      TableDescriptorBuilder.newBuilder(TableName.valueOf(testTable.getTableName()))
+        .addColumnFamily(ColumnFamilyDescriptorBuilder.of(family))
+        .addColumnFamily(ColumnFamilyDescriptorBuilder.of(nonIndexedFamily)).build();
     builder.addArbitraryConfigForTesting(Indexer.RecoveryFailurePolicyKeyForTesting,
       ReleaseLatchOnFailurePolicy.class.getName());
     builder.build(primaryTable);
     admin.createTable(primaryTable);
 
     // create the index table
-    TableDescriptorBuilder indexTableBuilder = TableDescriptorBuilder
-                .newBuilder(TableName.valueOf(Bytes.toBytes(getIndexTableName())))
-                .addCoprocessor(IndexTableBlockingReplayObserver.class.getName());
+    TableDescriptorBuilder indexTableBuilder =
+      TableDescriptorBuilder.newBuilder(TableName.valueOf(Bytes.toBytes(getIndexTableName())))
+        .addCoprocessor(IndexTableBlockingReplayObserver.class.getName());
     TestIndexManagementUtil.createIndexTable(admin, indexTableBuilder);
 
     // figure out where our tables live
-    ServerName shared =
-        ensureTablesLiveOnSameServer(util.getMiniHBaseCluster(), Bytes.toBytes(indexedTableName),
-          testTable.getTableName());
+    ServerName shared = ensureTablesLiveOnSameServer(util.getMiniHBaseCluster(),
+      Bytes.toBytes(indexedTableName), testTable.getTableName());
 
     // load some data into the table
     Put p = new Put(Bytes.toBytes("row"));
     p.addColumn(family, qual, Bytes.toBytes("value"));
     Connection hbaseConn = ConnectionFactory.createConnection(conf);
-    Table primary = hbaseConn.getTable(org.apache.hadoop.hbase.TableName.valueOf(testTable.getTableName()));
+    Table primary =
+      hbaseConn.getTable(org.apache.hadoop.hbase.TableName.valueOf(testTable.getTableName()));
     primary.put(p);
 
     // turn on the recovery latch
@@ -214,8 +215,8 @@ public class TestWALRecoveryCaching {
     // kill the server where the tables live - this should trigger distributed log splitting
     // find the regionserver that matches the passed server
     List<HRegion> online = new ArrayList<HRegion>();
-    online.addAll(getRegionsFromServerForTable(util.getMiniHBaseCluster(), shared,
-      testTable.getTableName()));
+    online.addAll(
+      getRegionsFromServerForTable(util.getMiniHBaseCluster(), shared, testTable.getTableName()));
     online.addAll(getRegionsFromServerForTable(util.getMiniHBaseCluster(), shared,
       Bytes.toBytes(indexedTableName)));
 
@@ -228,7 +229,7 @@ public class TestWALRecoveryCaching {
         LOGGER.info("\t== Offline: " + server.getServerName());
         continue;
       }
-      
+
       List<HRegion> regions = server.getRegions();
       LOGGER.info("\t" + server.getServerName() + " regions: " + regions);
     }
@@ -247,7 +248,8 @@ public class TestWALRecoveryCaching {
     // make a second put that (1), isn't indexed, so we can be sure of the index state and (2)
     // ensures that our table is back up
     Put p2 = new Put(p.getRow());
-    p2.addColumn(nonIndexedFamily, Bytes.toBytes("Not indexed"), Bytes.toBytes("non-indexed value"));
+    p2.addColumn(nonIndexedFamily, Bytes.toBytes("Not indexed"),
+      Bytes.toBytes("non-indexed value"));
     primary.put(p2);
 
     // make sure that we actually failed the write once (within a 5 minute window)
@@ -257,7 +259,8 @@ public class TestWALRecoveryCaching {
     // scan the index to make sure it has the one entry, (that had to be replayed from the WAL,
     // since we hard killed the server)
     Scan s = new Scan();
-    Table index = hbaseConn.getTable(org.apache.hadoop.hbase.TableName.valueOf(getIndexTableName()));
+    Table index =
+      hbaseConn.getTable(org.apache.hadoop.hbase.TableName.valueOf(getIndexTableName()));
     ResultScanner scanner = index.getScanner(s);
     int count = 0;
     for (Result r : scanner) {
@@ -275,31 +278,24 @@ public class TestWALRecoveryCaching {
   }
 
   /**
-   * @param cluster
-   * @param server
-   * @param table
-   * @return
    */
   private List<HRegion> getRegionsFromServerForTable(MiniHBaseCluster cluster, ServerName server,
-      byte[] table) {
+    byte[] table) {
     List<HRegion> online = Collections.emptyList();
     for (RegionServerThread rst : cluster.getRegionServerThreads()) {
       // if its the server we are going to kill, get the regions we want to reassign
       if (rst.getRegionServer().getServerName().equals(server)) {
-          online = rst.getRegionServer().getRegions(org.apache.hadoop.hbase.TableName.valueOf(table));
-          break;
+        online = rst.getRegionServer().getRegions(org.apache.hadoop.hbase.TableName.valueOf(table));
+        break;
       }
     }
     return online;
   }
 
   /**
-   * @param cluster
-   * @param indexTable
-   * @param primaryTable
    */
   private ServerName ensureTablesLiveOnSameServer(MiniHBaseCluster cluster, byte[] indexTable,
-      byte[] primaryTable) throws Exception {
+    byte[] primaryTable) throws Exception {
 
     ServerName shared = getSharedServer(cluster, indexTable, primaryTable);
     boolean tryIndex = true;
@@ -346,14 +342,9 @@ public class TestWALRecoveryCaching {
   }
 
   /**
-   * @param cluster
-   * @param indexTable
-   * @param primaryTable
-   * @return
-   * @throws Exception
    */
   private ServerName getSharedServer(MiniHBaseCluster cluster, byte[] indexTable,
-      byte[] primaryTable) throws Exception {
+    byte[] primaryTable) throws Exception {
     Set<ServerName> indexServers = getServersForTable(cluster, indexTable);
     Set<ServerName> primaryServers = getServersForTable(cluster, primaryTable);
 
@@ -368,17 +359,18 @@ public class TestWALRecoveryCaching {
         }
       }
       throw new RuntimeException(
-          "Couldn't find a matching server on which both the primary and index table live, "
-              + "even though they have overlapping server sets");
+        "Couldn't find a matching server on which both the primary and index table live, "
+          + "even though they have overlapping server sets");
     }
     return null;
   }
 
   private Set<ServerName> getServersForTable(MiniHBaseCluster cluster, byte[] table)
-      throws Exception {
+    throws Exception {
     Set<ServerName> indexServers = new HashSet<ServerName>();
     for (Region region : cluster.getRegions(table)) {
-      indexServers.add(cluster.getServerHoldingRegion(null, region.getRegionInfo().getRegionName()));
+      indexServers
+        .add(cluster.getServerHoldingRegion(null, region.getRegionInfo().getRegionName()));
     }
     return indexServers;
   }

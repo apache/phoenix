@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,7 +22,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -48,7 +47,8 @@ public class IndexWriter implements Stoppable {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(IndexWriter.class);
   public static final String INDEX_COMMITTER_CONF_KEY = "phoenix.index.writer.commiter.class";
-  public static final String INDEX_FAILURE_POLICY_CONF_KEY = "phoenix.index.writer.failurepolicy.class";
+  public static final String INDEX_FAILURE_POLICY_CONF_KEY =
+    "phoenix.index.writer.failurepolicy.class";
   private AtomicBoolean stopped = new AtomicBoolean(false);
   private IndexCommitter writer;
   private IndexFailurePolicy failurePolicy;
@@ -62,29 +62,32 @@ public class IndexWriter implements Stoppable {
 
   /**
    * @throws IOException if the {@link IndexWriter} or {@link IndexFailurePolicy} cannot be
-   *           instantiated
+   *                     instantiated
    */
   public IndexWriter(RegionCoprocessorEnvironment env, String name) throws IOException {
     this(getCommitter(env), getFailurePolicy(env), env, name, true);
   }
 
-  public IndexWriter(RegionCoprocessorEnvironment env, String name, boolean disableIndexOnFailure) throws IOException {
+  public IndexWriter(RegionCoprocessorEnvironment env, String name, boolean disableIndexOnFailure)
+    throws IOException {
     this(getCommitter(env), getFailurePolicy(env), env, name, disableIndexOnFailure);
   }
-  public IndexWriter(RegionCoprocessorEnvironment env, IndexCommitter indexCommitter, String name, boolean disableIndexOnFailure) throws IOException {
+
+  public IndexWriter(RegionCoprocessorEnvironment env, IndexCommitter indexCommitter, String name,
+    boolean disableIndexOnFailure) throws IOException {
     this(indexCommitter, getFailurePolicy(env), env, name, disableIndexOnFailure);
   }
 
   public static IndexCommitter getCommitter(RegionCoprocessorEnvironment env) throws IOException {
-      return getCommitter(env,TrackingParallelWriterIndexCommitter.class);
+    return getCommitter(env, TrackingParallelWriterIndexCommitter.class);
   }
-  
-  public static IndexCommitter getCommitter(RegionCoprocessorEnvironment env, Class<? extends IndexCommitter> defaultClass) throws IOException {
+
+  public static IndexCommitter getCommitter(RegionCoprocessorEnvironment env,
+    Class<? extends IndexCommitter> defaultClass) throws IOException {
     Configuration conf = env.getConfiguration();
     try {
       IndexCommitter committer =
-          conf.getClass(INDEX_COMMITTER_CONF_KEY, defaultClass,
-            IndexCommitter.class).newInstance();
+        conf.getClass(INDEX_COMMITTER_CONF_KEY, defaultClass, IndexCommitter.class).newInstance();
       return committer;
     } catch (InstantiationException e) {
       throw new IOException(e);
@@ -94,12 +97,11 @@ public class IndexWriter implements Stoppable {
   }
 
   public static IndexFailurePolicy getFailurePolicy(RegionCoprocessorEnvironment env)
-      throws IOException {
+    throws IOException {
     Configuration conf = env.getConfiguration();
     try {
-      IndexFailurePolicy committer =
-          conf.getClass(INDEX_FAILURE_POLICY_CONF_KEY, PhoenixIndexFailurePolicy.class,
-            IndexFailurePolicy.class).newInstance();
+      IndexFailurePolicy committer = conf.getClass(INDEX_FAILURE_POLICY_CONF_KEY,
+        PhoenixIndexFailurePolicy.class, IndexFailurePolicy.class).newInstance();
       return committer;
     } catch (InstantiationException e) {
       throw new IOException(e);
@@ -109,20 +111,18 @@ public class IndexWriter implements Stoppable {
   }
 
   public IndexWriter(IndexCommitter committer, IndexFailurePolicy policy,
-                     RegionCoprocessorEnvironment env, String name, boolean disableIndexOnFailure) {
+    RegionCoprocessorEnvironment env, String name, boolean disableIndexOnFailure) {
     this(committer, policy);
     this.writer.setup(this, env, name, disableIndexOnFailure);
     this.failurePolicy.setup(this, env);
   }
+
   /**
    * Directly specify the {@link IndexCommitter} and {@link IndexFailurePolicy}. Both are expected
    * to be fully setup before calling.
-   * @param committer
-   * @param policy
-   * @param env
    */
   public IndexWriter(IndexCommitter committer, IndexFailurePolicy policy,
-      RegionCoprocessorEnvironment env, String name) {
+    RegionCoprocessorEnvironment env, String name) {
     this(committer, policy);
     this.writer.setup(this, env, name, true);
     this.failurePolicy.setup(this, env);
@@ -132,7 +132,7 @@ public class IndexWriter implements Stoppable {
    * Create an {@link IndexWriter} with an already setup {@link IndexCommitter} and
    * {@link IndexFailurePolicy}.
    * @param committer to write updates
-   * @param policy to handle failures
+   * @param policy    to handle failures
    */
   IndexWriter(IndexCommitter committer, IndexFailurePolicy policy) {
     this.writer = committer;
@@ -141,11 +141,9 @@ public class IndexWriter implements Stoppable {
 
   /**
    * see #writeAndHandleFailure(Collection).
-   * @param toWrite
-   * @throws IOException
    */
-    public void writeAndHandleFailure(Multimap<HTableInterfaceReference, Mutation> toWrite,
-                                      boolean allowLocalUpdates, int clientVersion) throws IOException {
+  public void writeAndHandleFailure(Multimap<HTableInterfaceReference, Mutation> toWrite,
+    boolean allowLocalUpdates, int clientVersion) throws IOException {
     try {
       write(toWrite, allowLocalUpdates, clientVersion);
       if (LOGGER.isTraceEnabled()) {
@@ -166,15 +164,14 @@ public class IndexWriter implements Stoppable {
    * then decides how to handle the failure. By default, we use a {@link KillServerOnFailurePolicy},
    * which ensures that the server crashes when an index write fails, ensuring that we get WAL
    * replay of the index edits.
-   * @param indexUpdates Updates to write
+   * @param indexUpdates  Updates to write
    * @param clientVersion version of the client
-   * @throws IOException
    */
   public void writeAndHandleFailure(Collection<Pair<Mutation, byte[]>> indexUpdates,
-                                    boolean allowLocalUpdates, int clientVersion) throws IOException {
-      // convert the strings to htableinterfaces to which we can talk and group by TABLE
-      Multimap<HTableInterfaceReference, Mutation> toWrite = resolveTableReferences(indexUpdates);
-      writeAndHandleFailure(toWrite, allowLocalUpdates, clientVersion);
+    boolean allowLocalUpdates, int clientVersion) throws IOException {
+    // convert the strings to htableinterfaces to which we can talk and group by TABLE
+    Multimap<HTableInterfaceReference, Mutation> toWrite = resolveTableReferences(indexUpdates);
+    writeAndHandleFailure(toWrite, allowLocalUpdates, clientVersion);
   }
 
   /**
@@ -190,24 +187,24 @@ public class IndexWriter implements Stoppable {
    * to ensure a timely recovery of the failed index writes.
    * @param toWrite Updates to write
    * @throws IndexWriteException if we cannot successfully write to the index. Whether or not we
-   *           stop early depends on the {@link IndexCommitter}.
+   *                             stop early depends on the {@link IndexCommitter}.
    */
-    public void write(Collection<Pair<Mutation, byte[]>> toWrite, int clientVersion) throws IOException {
-    	write(resolveTableReferences(toWrite), false, clientVersion);
-    }
+  public void write(Collection<Pair<Mutation, byte[]>> toWrite, int clientVersion)
+    throws IOException {
+    write(resolveTableReferences(toWrite), false, clientVersion);
+  }
 
-    public void write(Collection<Pair<Mutation, byte[]>> toWrite, boolean allowLocalUpdates, int clientVersion) throws IOException {
-    	write(resolveTableReferences(toWrite), allowLocalUpdates, clientVersion);
-    }
-    
-    /**
+  public void write(Collection<Pair<Mutation, byte[]>> toWrite, boolean allowLocalUpdates,
+    int clientVersion) throws IOException {
+    write(resolveTableReferences(toWrite), allowLocalUpdates, clientVersion);
+  }
+
+  /**
    * see #write(Collection)
-   * @param toWrite
-   * @throws IndexWriteException
    */
-  public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, boolean allowLocalUpdates, int clientVersion)
-	      throws IOException {
-	  this.writer.write(toWrite, allowLocalUpdates, clientVersion);
+  public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, boolean allowLocalUpdates,
+    int clientVersion) throws IOException {
+    this.writer.write(toWrite, allowLocalUpdates, clientVersion);
   }
 
   /**
@@ -215,13 +212,13 @@ public class IndexWriter implements Stoppable {
    * @param indexUpdates from the index builder
    * @return pairs that can then be written by an {@link IndexWriter}.
    */
-  protected Multimap<HTableInterfaceReference, Mutation> resolveTableReferences(
-      Collection<Pair<Mutation, byte[]>> indexUpdates) {
-    Multimap<HTableInterfaceReference, Mutation> updates = ArrayListMultimap
-        .<HTableInterfaceReference, Mutation> create();
+  protected Multimap<HTableInterfaceReference, Mutation>
+    resolveTableReferences(Collection<Pair<Mutation, byte[]>> indexUpdates) {
+    Multimap<HTableInterfaceReference, Mutation> updates =
+      ArrayListMultimap.<HTableInterfaceReference, Mutation> create();
     // simple map to make lookups easy while we build the map of tables to create
     Map<ImmutableBytesPtr, HTableInterfaceReference> tables =
-        new HashMap<ImmutableBytesPtr, HTableInterfaceReference>(updates.size());
+      new HashMap<ImmutableBytesPtr, HTableInterfaceReference>(updates.size());
     for (Pair<Mutation, byte[]> entry : indexUpdates) {
       byte[] tableName = entry.getSecond();
       ImmutableBytesPtr ptr = new ImmutableBytesPtr(tableName);
