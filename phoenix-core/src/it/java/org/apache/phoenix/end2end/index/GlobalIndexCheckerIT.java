@@ -32,11 +32,13 @@ import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.SCA
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -47,6 +49,8 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.mapreduce.CounterGroup;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.end2end.IndexToolIT;
@@ -657,18 +661,36 @@ public class GlobalIndexCheckerIT extends BaseTest {
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
                     dataTableName + " (val1) include (val2, val3)" + this.indexDDLOptions);
-            conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val2) values ('a', 'ab', 'abcc')");
+            // For immutable tables updating columns to null is ignored
+            conn.createStatement().execute(
+                    "upsert into " + dataTableName + " (id, val1, val2, val3) " +
+                            "values ('a', 'ab', 'abcc', null)");
             conn.commit();
             String selectSql = "SELECT * from " + dataTableName + " WHERE val1  = 'ab'";
             // Verify that we will read from the index table
             assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
-            ResultSet rs = conn.createStatement().executeQuery(selectSql);
-            assertTrue(rs.next());
-            assertEquals("a", rs.getString(1));
-            assertEquals("ab", rs.getString(2));
-            assertEquals("abcc", rs.getString(3));
-            assertEquals("abcd", rs.getString(4));
-            assertFalse(rs.next());
+            try (ResultSet rs = conn.createStatement().executeQuery(selectSql)) {
+                assertTrue(rs.next());
+                assertEquals("a", rs.getString(1));
+                assertEquals("ab", rs.getString(2));
+                assertEquals("abcc", rs.getString(3));
+                assertEquals("abcd", rs.getString(4));
+                assertFalse(rs.next());
+            }
+
+            // now read the same row from data table
+            selectSql = "SELECT * from " + dataTableName + " WHERE id  = 'a'";
+            try (ResultSet rs = conn.createStatement().executeQuery(selectSql)){
+                PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
+                String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
+                assertTrue(explainPlan.contains(dataTableName));
+                assertTrue(rs.next());
+                assertEquals("a", rs.getString(1));
+                assertEquals("ab", rs.getString(2));
+                assertEquals("abcc", rs.getString(3));
+                assertEquals("abcd", rs.getString(4));
+                assertFalse(rs.next());
+            }
         }
     }
 
@@ -1217,6 +1239,166 @@ public class GlobalIndexCheckerIT extends BaseTest {
                 assertEquals("bcde", rs.getString("val3"));
                 assertFalse(rs.next());
             } catch (AssertionError e) {
+                TestUtil.dumpTable(conn, TableName.valueOf(indexName));
+                throw e;
+            }
+        }
+    }
+
+    @Test
+    public void testIndexRowWithNullIncludedColumnAndFilter() throws Exception {
+        if (async) {
+            // No need to run the same test twice one for async = true and the other for async = false
+            return;
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            String indexName = generateUniqueName();
+            // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
+            populateTable(dataTableName);
+            conn.createStatement().execute("CREATE INDEX " + indexName + " on " +
+                   dataTableName + "  (val1) include (val2, val3)" + indexDDLOptions);
+            conn.commit();
+            // update row ('a', 'ab', 'abc', 'abcd') -> ('a', 'ab', 'abc', null)
+            conn.createStatement().execute(
+                    "upsert into " + dataTableName + " (id, val3) values ('a', null)");
+            conn.commit();
+
+            String dql = String.format(
+                    "select id, val2 from %s where val1='ab' and val3='abcd'", dataTableName);
+            try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
+                PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
+                String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
+                assertTrue(explainPlan.contains(indexName));
+                assertFalse(rs.next());
+            }
+
+            dql = String.format(
+                    "select id, val2 from %s where val1='ab' and val3 is null", dataTableName);
+            try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
+                PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
+                String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
+                assertTrue(explainPlan.contains(indexName));
+                assertTrue(rs.next());
+                assertEquals("abc", rs.getString("val2"));
+            }
+
+            // update row ('a', 'ab', 'abc', null) -> ('a', 'ac', null, null)
+            conn.createStatement().execute(
+                    "upsert into " + dataTableName + " values ('a', 'ac', null, null)");
+            conn.commit();
+
+            dql = String.format(
+                    "select id, val2 from %s where val1='ac' and val3 is null", dataTableName);
+            try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
+                PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
+                String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
+                assertTrue(explainPlan.contains(indexName));
+                assertTrue(rs.next());
+                assertNull(rs.getString("val2"));
+            }
+            TestUtil.dumpTable(conn, TableName.valueOf(dataTableName));
+            TestUtil.dumpTable(conn, TableName.valueOf(indexName));
+        }
+    }
+
+    @Test
+    public void testIndexToolWithNullIncludedColumn() throws Exception {
+        if (async) {
+            // No need to run the same test twice one for async = true and the other for async = false
+            return;
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            String indexName = generateUniqueName();
+            // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
+            populateTable(dataTableName);
+            conn.createStatement().execute("CREATE INDEX " + indexName + " on " +
+                    dataTableName + "  (val1) include (val2, val3)" + indexDDLOptions);
+            conn.commit();
+            IndexRegionObserver.setIgnoreWritingDeleteColumnsToIndex(true);
+            // update row ('a', 'ab', 'abc', 'abcd') -> ('a', 'ab', 'abc', null)
+            conn.createStatement().execute(
+                    "upsert into " + dataTableName + " (id, val3) values ('a', null)");
+            conn.commit();
+            // insert a new partial row
+            conn.createStatement().execute("upsert into " + dataTableName +
+                    " (id, val1, val2) values ('c', 'cd', 'cde')");
+            conn.commit();
+            IndexRegionObserver.setIgnoreWritingDeleteColumnsToIndex(false);
+            IndexTool it = IndexToolIT.runIndexTool(false, null, dataTableName, indexName, null,
+                    0, IndexTool.IndexVerifyType.BEFORE);
+            CounterGroup mrJobCounters = IndexToolIT.getMRJobCounters(it);
+            IndexToolIT.dumpMRJobCounters(mrJobCounters);
+            try {
+                // single cell index doesn't have an issue with null values
+                assertEquals(encoded ? 0: 2, mrJobCounters.findCounter(
+                    BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT.name()).getValue());
+                assertEquals(encoded ? 0 : 2, mrJobCounters.findCounter(
+                        REBUILT_INDEX_ROW_COUNT.name()).getValue());
+            } catch (AssertionError e) {
+                TestUtil.dumpTable(conn, TableName.valueOf(dataTableName));
+                TestUtil.dumpTable(conn, TableName.valueOf(indexName));
+                throw e;
+            }
+        }
+    }
+
+    @Test
+    public void testIndexToolWithMultipleDeleteFamilyMarkers() throws Exception {
+        if (async) {
+            // No need to run the same test twice one for async = true and the other for async = false
+            return;
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            String indexName = generateUniqueName();
+            // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
+            populateTable(dataTableName);
+            conn.createStatement().execute("CREATE INDEX " + indexName + " on " +
+                    dataTableName + "  (val1) include (val2, val3)" + indexDDLOptions);
+            conn.commit();
+            String delete = String.format("DELETE FROM %s where id = 'a'", dataTableName);
+            conn.createStatement().execute(delete);
+            conn.commit();
+            // skip phase2, inserts an unverified row in index
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+            String dml = "upsert into " + dataTableName +
+                    " (id, val1, val3) values ('a', 'ab', ?)";
+            try (PreparedStatement ps = conn.prepareStatement(dml)) {
+                for (int i = 0; i < 5; ++i) {
+                    ps.setString(1, "val3_ " + i);
+                    ps.executeUpdate();
+                    commitWithException(conn);
+                    // trigger a read repair of the unverified row
+                    // since the data table row has been deleted the read repair will insert a
+                    // delete family marker on the unverified index row
+                    String dql = String.format(
+                            "select id, val2, val3 from %s where val1='ab'", dataTableName);
+                    try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
+                        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
+                        String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
+                        assertTrue(explainPlan.contains(indexName));
+                        assertFalse(rs.next());
+                    }
+                }
+            }
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+            // update row ('a', 'ab', 'abc', 'abcd') -> ('a', 'ab', 'abc', null)
+            conn.createStatement().execute(
+                    "upsert into " + dataTableName + " (id, val1, val3) values ('a', 'ab', null)");
+            conn.commit();
+            IndexTool it = IndexToolIT.runIndexTool(false, null, dataTableName, indexName, null,
+                    0, IndexTool.IndexVerifyType.ONLY);
+            CounterGroup mrJobCounters = IndexToolIT.getMRJobCounters(it);
+            IndexToolIT.dumpMRJobCounters(mrJobCounters);
+            try {
+                assertEquals(2, mrJobCounters.findCounter(
+                        BEFORE_REBUILD_VALID_INDEX_ROW_COUNT.name()).getValue());
+                assertEquals(0, mrJobCounters.findCounter(
+                        REBUILT_INDEX_ROW_COUNT.name()).getValue());
+            } catch (AssertionError e) {
+                TestUtil.dumpTable(conn, TableName.valueOf(dataTableName));
                 TestUtil.dumpTable(conn, TableName.valueOf(indexName));
                 throw e;
             }

@@ -20,6 +20,8 @@ package org.apache.phoenix.index;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
@@ -37,6 +39,7 @@ import java.util.Set;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -50,8 +53,11 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -63,7 +69,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
     private static final String DEFAULT_SCHEMA_NAME = "";
     private static final String DEFAULT_TABLE_NAME = "rkTest";
-    
+
     private void testIndexRowKeyBuilding(String dataColumns, String pk, String indexColumns, Object[] values) throws Exception {
         testIndexRowKeyBuilding(DEFAULT_SCHEMA_NAME, DEFAULT_TABLE_NAME, dataColumns, pk, indexColumns, values, "", "", "");
     }
@@ -88,10 +94,10 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
 			public byte[] getRowKey() {
 				return row;
 			}
-            
+
         };
     }
-    
+
     private void testIndexRowKeyBuilding(String schemaName, String tableName, String dataColumns, String pk, String indexColumns, Object[] values, String includeColumns, String dataProps, String indexProps) throws Exception {
         KeyValueBuilder builder = GenericKeyValueBuilder.INSTANCE;
         testIndexRowKeyBuilding(schemaName, tableName, dataColumns, pk, indexColumns, values, includeColumns, dataProps, indexProps, builder);
@@ -114,7 +120,7 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
             List<IndexMaintainer> c1 = IndexMaintainer.deserialize(ptr, builder, true);
             assertEquals(1,c1.size());
             IndexMaintainer im1 = c1.get(0);
-            
+
             StringBuilder buf = new StringBuilder("UPSERT INTO " + fullTableName  + " VALUES(");
             for (int i = 0; i < values.length; i++) {
                 buf.append("?,");
@@ -136,7 +142,7 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
                 dataMutation.add(kv);
             }
             ValueGetter valueGetter = newValueGetter(row, valueMap);
-            
+
             List<Mutation> indexMutations = IndexTestUtil.generateIndexData(index, table, dataMutation, ptr, builder);
             assertEquals(1,indexMutations.size());
             assertTrue(indexMutations.get(0) instanceof Put);
@@ -165,19 +171,19 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
     public void testRowKeyVarOnlyIndex() throws Exception {
         testIndexRowKeyBuilding("k1 VARCHAR, k2 DECIMAL", "k1,k2", "k2, k1", new Object [] {"a",1.1});
     }
- 
+
     @Test
     public void testVarFixedndex() throws Exception {
         testIndexRowKeyBuilding("k1 VARCHAR, k2 INTEGER NOT NULL, v VARCHAR", "k1,k2", "k2, k1", new Object [] {"a",1.1});
     }
- 
-    
+
+
     @Test
     public void testCompositeRowKeyVarFixedIndex() throws Exception {
         // TODO: using 1.1 for INTEGER didn't give error
         testIndexRowKeyBuilding("k1 VARCHAR, k2 INTEGER NOT NULL, v VARCHAR", "k1,k2", "k2, k1", new Object [] {"a",1});
     }
- 
+
     @Test
     public void testCompositeRowKeyVarFixedAtEndIndex() throws Exception {
         // Forces trailing zero in index key for fixed length
@@ -185,32 +191,32 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
             testIndexRowKeyBuilding("k1 VARCHAR, k2 INTEGER NOT NULL, k3 VARCHAR, v VARCHAR", "k1,k2,k3", "k1, k3, k2", new Object [] {"a",i, "b"});
         }
     }
- 
+
    @Test
     public void testSingleKeyValueIndex() throws Exception {
         testIndexRowKeyBuilding("k1 VARCHAR, k2 INTEGER, v VARCHAR", "k1", "v", new Object [] {"a",1,"b"});
     }
- 
+
     @Test
     public void testMultiKeyValueIndex() throws Exception {
         testIndexRowKeyBuilding("k1 CHAR(1) NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, v2 CHAR(2), v3 BIGINT", "k1, k2", "v2, k2, v1", new Object [] {"a",1,2.2,"bb"});
     }
- 
+
     @Test
     public void testMultiKeyValueCoveredIndex() throws Exception {
         testIndexRowKeyBuilding("k1 CHAR(1) NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, v2 CHAR(2), v3 BIGINT, v4 CHAR(10)", "k1, k2", "v2, k2, v1", new Object [] {"a",1,2.2,"bb"}, "v3, v4");
     }
- 
+
     @Test
     public void testSingleKeyValueDescIndex() throws Exception {
         testIndexRowKeyBuilding("k1 VARCHAR, k2 INTEGER, v VARCHAR", "k1", "v DESC", new Object [] {"a",1,"b"});
     }
- 
+
     @Test
     public void testCompositeRowKeyVarFixedDescIndex() throws Exception {
         testIndexRowKeyBuilding("k1 VARCHAR, k2 INTEGER NOT NULL, v VARCHAR", "k1,k2", "k2 DESC, k1", new Object [] {"a",1});
     }
- 
+
     @Test
     public void testCompositeRowKeyTimeIndex() throws Exception {
         long timeInMillis = System.currentTimeMillis();
@@ -219,7 +225,7 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
         ts.setNanos((int) (timeInNanos % 1000000000));
         testIndexRowKeyBuilding("ts1 DATE NOT NULL, ts2 TIME NOT NULL, ts3 TIMESTAMP NOT NULL", "ts1,ts2,ts3", "ts2, ts1", new Object [] {new Date(timeInMillis), new Time(timeInMillis), ts});
     }
- 
+
     @Test
     public void testCompositeRowKeyBytesIndex() throws Exception {
         long timeInMillis = System.currentTimeMillis();
@@ -228,79 +234,79 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
         ts.setNanos((int) (timeInNanos % 1000000000));
         testIndexRowKeyBuilding("b1 BINARY(3) NOT NULL, v VARCHAR", "b1,v", "v, b1", new Object [] {new byte[] {41,42,43}, "foo"});
     }
- 
+
     @Test
     public void testCompositeDescRowKeyVarFixedDescIndex() throws Exception {
         testIndexRowKeyBuilding("k1 VARCHAR, k2 INTEGER NOT NULL, v VARCHAR", "k1, k2 DESC", "k2 DESC, k1", new Object [] {"a",1});
     }
- 
+
     @Test
     public void testCompositeDescRowKeyVarDescIndex() throws Exception {
         testIndexRowKeyBuilding("k1 VARCHAR, k2 DECIMAL NOT NULL, v VARCHAR", "k1, k2 DESC", "k2 DESC, k1", new Object [] {"a",1.1,"b"});
     }
- 
+
     @Test
     public void testCompositeDescRowKeyVarAscIndex() throws Exception {
         testIndexRowKeyBuilding("k1 VARCHAR, k2 DECIMAL NOT NULL, v VARCHAR", "k1, k2 DESC", "k2, k1", new Object [] {"a",1.1,"b"});
     }
- 
+
     @Test
     public void testCompositeDescRowKeyVarFixedDescSaltedIndex() throws Exception {
         testIndexRowKeyBuilding("k1 VARCHAR, k2 INTEGER NOT NULL, v VARCHAR", "k1, k2 DESC", "k2 DESC, k1", new Object [] {"a",1}, "", "", "SALT_BUCKETS=4");
     }
- 
+
     @Test
     public void testCompositeDescRowKeyVarFixedDescSaltedIndexSaltedTable() throws Exception {
         testIndexRowKeyBuilding("k1 VARCHAR, k2 INTEGER NOT NULL, v VARCHAR", "k1, k2 DESC", "k2 DESC, k1", new Object [] {"a",1}, "", "SALT_BUCKETS=3", "SALT_BUCKETS=3");
     }
- 
+
     @Test
     public void testMultiKeyValueCoveredSaltedIndex() throws Exception {
         testIndexRowKeyBuilding("k1 CHAR(1) NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, v2 CHAR(2), v3 BIGINT, v4 CHAR(10)", "k1, k2", "v2 DESC, k2 DESC, v1", new Object [] {"a",1,2.2,"bb"}, "v3, v4", "", "SALT_BUCKETS=4");
     }
- 
+
     @Test
     public void tesIndexWithBigInt() throws Exception {
         testIndexRowKeyBuilding(
                 "k1 CHAR(1) NOT NULL, k2 INTEGER NOT NULL, v1 BIGINT, v2 CHAR(2), v3 BIGINT, v4 CHAR(10)", "k1, k2",
                 "v1 DESC, k2 DESC", new Object[] { "a", 1, 2.2, "bb" });
     }
-    
+
     @Test
     public void tesIndexWithAscBoolean() throws Exception {
         testIndexRowKeyBuilding(
                 "k1 CHAR(1) NOT NULL, k2 INTEGER NOT NULL, v1 BOOLEAN, v2 CHAR(2), v3 BIGINT, v4 CHAR(10)", "k1, k2",
                 "v1, k2 DESC", new Object[] { "a", 1, true, "bb" });
     }
-    
+
     @Test
     public void tesIndexWithAscNullBoolean() throws Exception {
         testIndexRowKeyBuilding(
                 "k1 CHAR(1) NOT NULL, k2 INTEGER NOT NULL, v1 BOOLEAN, v2 CHAR(2), v3 BIGINT, v4 CHAR(10)", "k1, k2",
                 "v1, k2 DESC", new Object[] { "a", 1, null, "bb" });
     }
-    
+
     @Test
     public void tesIndexWithAscFalseBoolean() throws Exception {
         testIndexRowKeyBuilding(
                 "k1 CHAR(1) NOT NULL, k2 INTEGER NOT NULL, v1 BOOLEAN, v2 CHAR(2), v3 BIGINT, v4 CHAR(10)", "k1, k2",
                 "v1, k2 DESC", new Object[] { "a", 1, false, "bb" });
     }
-    
+
     @Test
     public void tesIndexWithDescBoolean() throws Exception {
         testIndexRowKeyBuilding(
                 "k1 CHAR(1) NOT NULL, k2 INTEGER NOT NULL, v1 BOOLEAN, v2 CHAR(2), v3 BIGINT, v4 CHAR(10)", "k1, k2",
                 "v1 DESC, k2 DESC", new Object[] { "a", 1, true, "bb" });
     }
-    
+
     @Test
     public void tesIndexWithDescFalseBoolean() throws Exception {
         testIndexRowKeyBuilding(
                 "k1 CHAR(1) NOT NULL, k2 INTEGER NOT NULL, v1 BOOLEAN, v2 CHAR(2), v3 BIGINT, v4 CHAR(10)", "k1, k2",
                 "v1 DESC, k2 DESC", new Object[] { "a", 1, false, "bb" });
     }
-    
+
     @Test
     public void tesIndexedExpressionSerialization() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
@@ -320,6 +326,83 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
             assertEquals("Unexpected Number of indexed columns ", indexedColumns.size(), 4);
         } finally {
             conn.close();
+        }
+    }
+
+    @Test
+    public void testDeleteColumnMutation() throws Exception {
+        String tableName = "T_" + generateUniqueName();
+        String indexName1 = "I_" + generateUniqueName();
+        String indexName2 = "I_" + generateUniqueName();
+        String ddl = String.format("create table %s (id varchar primary key, " +
+                "col1 varchar, col2 varchar, col3 bigint)", tableName);
+        String index1 = String.format("create index %s on %s (col2) include (col1) ",
+                indexName1, tableName);
+        String index2 = String.format("create index %s on %s (col2) include (col1) " +
+                "COLUMN_ENCODED_BYTES=2, IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS",
+                indexName2, tableName);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute(index1);
+            conn.createStatement().execute(index2);
+            PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+            PTable table = pconn.getTable(tableName);
+            ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+            table.getIndexMaintainers(ptr, pconn);
+            List<IndexMaintainer> ims = IndexMaintainer.deserialize(ptr,
+                    GenericKeyValueBuilder.INSTANCE, true);
+            assertEquals(2, ims.size());
+            String dml = String.format("upsert into %s values ('a', 'ab', 'abc', 2)", tableName);
+            assertDeleteColumnMutation(tableName, dml, false, pconn, ims);
+            pconn.getMutationState().rollback();
+            dml = String.format("upsert into %s (id, col2) values  ('a', 'ab')", tableName);
+            assertDeleteColumnMutation(tableName, dml, true, pconn, ims);
+            pconn.getMutationState().rollback();
+        }
+    }
+
+    private static void assertDeleteColumnMutation(String tableName,
+                                                   String dml,
+                                                   boolean isPartialUpdate,
+                                                   PhoenixConnection pconn,
+                                                   List<IndexMaintainer> ims) throws Exception {
+        pconn.createStatement().execute(dml);
+        Iterator<Pair<byte[], List<Mutation>>> iterator =
+                pconn.getMutationState().toMutations();
+        while (iterator.hasNext()) {
+            Pair<byte[], List<Mutation>> mutationPair = iterator.next();
+            List<Mutation> batchMutations = mutationPair.getSecond();
+            assertEquals(1, batchMutations.size());
+            assertTrue(batchMutations.get(0) instanceof Put);
+            Put dataRow = (Put) batchMutations.get(0);
+            ValueGetter nextDataRowVG = new IndexUtil.SimpleValueGetter(dataRow);
+            long ts = EnvironmentEdgeManager.currentTimeMillis();
+            ImmutableBytesPtr rowKey = new ImmutableBytesPtr(dataRow.getRow());
+            for (IndexMaintainer im : ims) {
+                Put indexPut = im.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
+                        nextDataRowVG, rowKey, ts, null, null, false);
+                if (indexPut == null) {
+                    // No covered column. Just prepare an index row with the empty column
+                    byte[] indexRowKey = im.buildRowKey(nextDataRowVG, rowKey,
+                            null, null, ts);
+                    indexPut = new Put(indexRowKey);
+                }
+                indexPut.addColumn(
+                        im.getEmptyKeyValueFamily().copyBytesIfNecessary(),
+                        im.getEmptyKeyValueQualifier(), ts,
+                        QueryConstants.UNVERIFIED_BYTES);
+                Delete deleteCol = im.buildDeleteColumnMutation(indexPut, ts);
+                if (im.getIndexStorageScheme() ==
+                        PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+                    assertNull(deleteCol);
+                } else {
+                    if (isPartialUpdate) {
+                        assertNotNull(deleteCol);
+                    } else {
+                        assertNull(deleteCol);
+                    }
+                }
+            }
         }
     }
 }

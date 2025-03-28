@@ -44,6 +44,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -71,6 +72,7 @@ import org.apache.phoenix.expression.visitor.KeyValueExpressionVisitor;
 import org.apache.phoenix.hbase.index.AbstractValueGetter;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -1343,6 +1345,50 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             }
         }
         return put;
+    }
+
+    /**
+     * For mutable covered indexes, an index update is a full update. However, if some included
+     * columns are set to null in the upsert statement we need to write a DeleteColumn cell
+     * to such columns.
+     * @param indexUpdate Put mutation updating index which includes at a minimum the empty column
+     * @param ts The update timestamp
+     * @return Delete mutation with DeleteColumn cells for all covered columns that are missing
+     * in the indexUpdate Put mutation
+     * @throws IOException
+     */
+    public Delete buildDeleteColumnMutation(Put indexUpdate, long ts) throws IOException {
+        if (getIndexStorageScheme() == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+            // for single cell storage format no need to build a delete column mutation
+            return null;
+        }
+        if (coveredColumnsMap == null || coveredColumnsMap.isEmpty()) {
+            // no covered columns in the index no need to build a delete mutation
+            return null;
+        }
+        int colsSet = indexUpdate.getFamilyCellMap()
+                .values().stream().mapToInt(elem -> elem.size()).sum();
+        if (coveredColumnsMap.size() + 1 == colsSet) { // add 1 for the empty column
+            // Index row update is always a full update except when some columns are explicitly
+            // set to null. Do a quick size check to determine if some covered columns are being
+            // set to null or not.
+            return null;
+        }
+        ImmutableBytesPtr rowKey = new ImmutableBytesPtr(indexUpdate.getRow());
+        Delete delete = new Delete(rowKey.get());
+        for (Entry<ColumnReference, ColumnReference> coveredCol : coveredColumnsMap.entrySet()) {
+            ColumnReference indexCol = coveredCol.getValue();
+            if (!indexUpdate.has(indexCol.getFamily(), indexCol.getQualifier())) {
+                KeyValue kv = GenericKeyValueBuilder.INSTANCE.buildDeleteColumns(
+                        rowKey,
+                        indexCol.getFamilyWritable(),
+                        indexCol.getQualifierWritable(),
+                        ts);
+                delete.add(kv);
+            }
+        }
+        assert !delete.isEmpty();
+        return delete;
     }
 
     public enum DeleteType {SINGLE_VERSION, ALL_VERSIONS};
