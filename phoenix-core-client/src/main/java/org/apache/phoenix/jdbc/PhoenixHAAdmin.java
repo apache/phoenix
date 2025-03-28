@@ -338,16 +338,6 @@ public class PhoenixHAAdmin implements Closeable {
      * @throws IOException if it fails to update the cluster role data on ZK
      */
     public boolean createOrUpdateDataOnZookeeper(ClusterRoleRecord record) throws IOException {
-        if (!zkUrl.equals(record.getUrl1()) && !zkUrl.equals(record.getUrl2())) {
-            String
-                    msg =
-                    String.format(
-                            "INTERNAL ERROR: " + "ZK cluster is not associated with cluster role record! " + "ZK cluster URL: '%s'. Cluster role record: %s",
-                            zkUrl, record);
-            LOG.error(msg);
-            throw new IOException(msg);
-        }
-
         String haGroupName = record.getHaGroupName();
         byte[] data;
         try {
