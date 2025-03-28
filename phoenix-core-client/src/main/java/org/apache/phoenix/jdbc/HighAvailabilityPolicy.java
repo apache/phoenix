@@ -50,6 +50,11 @@ enum HighAvailabilityPolicy {
         @Override
         void transitClusterRole(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
                 ClusterRoleRecord newRecord) throws SQLException {
+            if (newRecord.getRole1() == ACTIVE && newRecord.getRole2() == ACTIVE) {
+                LOG.warn("Both cluster roles are ACTIVE which is invalid state for FailoverPolicy" +
+                        "Doing nothing for Cluster Role Change");
+                return;
+            }
             if (oldRecord.getRole1() == ACTIVE && newRecord.getRole1() == STANDBY) {
                 transitStandby(haGroup, oldRecord.getUrl1(), oldRecord.getRegistryType());
             }
