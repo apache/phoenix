@@ -38,7 +38,7 @@ import org.slf4j.LoggerFactory;
 /**
  * An HighAvailabilityGroup provides a JDBC connection from given connection string and properties.
  */
-enum HighAvailabilityPolicy {
+public enum HighAvailabilityPolicy {
     FAILOVER {
         @Override
         public Connection provide(HighAvailabilityGroup haGroup, Properties info,

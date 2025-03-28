@@ -31,7 +31,6 @@ import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.replication.ReplicationPeerConfig;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
-import org.apache.phoenix.jdbc.PhoenixHAAdminTool.PhoenixHAAdminHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,6 +58,8 @@ import static org.apache.phoenix.hbase.index.write.AbstractParallelWriterIndexCo
 import static org.apache.phoenix.jdbc.ClusterRoleRecordGeneratorTool.PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT;
 import static org.apache.phoenix.jdbc.FailoverPhoenixConnection.FAILOVER_TIMEOUT_MS_ATTR;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.*;
+import static org.apache.phoenix.jdbc.PhoenixHAAdmin.HighAvailibilityCuratorProvider;
+
 import static org.apache.phoenix.query.QueryServices.COLLECT_REQUEST_LEVEL_METRICS;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_MASTER;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_RPC;
@@ -85,8 +86,8 @@ public class HighAvailabilityTestingUtility {
         private String zkUrl1;
         /** The host\:port::/hbase format of the JDBC string for HBase cluster 2. */
         private String zkUrl2;
-        private PhoenixHAAdminHelper haAdmin1;
-        private PhoenixHAAdminHelper haAdmin2;
+        private PhoenixHAAdmin haAdmin1;
+        private PhoenixHAAdmin haAdmin2;
         private Admin admin1;
         private Admin admin2;
         @VisibleForTesting
@@ -120,8 +121,8 @@ public class HighAvailabilityTestingUtility {
             zkUrl1 = String.format("%s\\:%d::/hbase", confAddress1, hbaseCluster1.getZkCluster().getClientPort());
             zkUrl2 = String.format("%s\\:%d::/hbase", confAddress2, hbaseCluster2.getZkCluster().getClientPort());
 
-            haAdmin1 = new PhoenixHAAdminHelper(getZkUrl1(), hbaseCluster1.getConfiguration(), PhoenixHAAdminTool.HighAvailibilityCuratorProvider.INSTANCE);
-            haAdmin2 = new PhoenixHAAdminHelper(getZkUrl2(), hbaseCluster2.getConfiguration(), PhoenixHAAdminTool.HighAvailibilityCuratorProvider.INSTANCE);
+            haAdmin1 = new PhoenixHAAdmin(getZkUrl1(), hbaseCluster1.getConfiguration(), HighAvailibilityCuratorProvider.INSTANCE);
+            haAdmin2 = new PhoenixHAAdmin(getZkUrl2(), hbaseCluster2.getConfiguration(), HighAvailibilityCuratorProvider.INSTANCE);
 
             admin1 = hbaseCluster1.getConnection().getAdmin();
             admin2 = hbaseCluster2.getConnection().getAdmin();
@@ -599,7 +600,7 @@ public class HighAvailabilityTestingUtility {
 
                 zkUrl1 = String.format("%s\\:%d::/hbase", confAddress, hbaseCluster1.getZkCluster().getClientPort());
 
-                haAdmin1 = new PhoenixHAAdminHelper(getZkUrl1(), hbaseCluster1.getConfiguration(), PhoenixHAAdminTool.HighAvailibilityCuratorProvider.INSTANCE);
+                haAdmin1 = new PhoenixHAAdmin(getZkUrl1(), hbaseCluster1.getConfiguration(), HighAvailibilityCuratorProvider.INSTANCE);
 
                 admin1 = hbaseCluster1.getConnection().getAdmin();
             }
@@ -618,7 +619,7 @@ public class HighAvailabilityTestingUtility {
 
                 zkUrl2 = String.format("%s\\:%d::/hbase", confAddress, hbaseCluster2.getZkCluster().getClientPort());
 
-                haAdmin2 = new PhoenixHAAdminHelper(getZkUrl2(), hbaseCluster2.getConfiguration(), PhoenixHAAdminTool.HighAvailibilityCuratorProvider.INSTANCE);
+                haAdmin2 = new PhoenixHAAdmin(getZkUrl2(), hbaseCluster2.getConfiguration(), HighAvailibilityCuratorProvider.INSTANCE);
 
                 admin2 = hbaseCluster2.getConnection().getAdmin();
             }

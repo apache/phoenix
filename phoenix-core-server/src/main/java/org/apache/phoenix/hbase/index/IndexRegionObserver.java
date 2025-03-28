@@ -47,6 +47,7 @@ import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
+import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
@@ -160,6 +161,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     private static final OperationStatus NOWRITE = new OperationStatus(SUCCESS);
     public static final String PHOENIX_APPEND_METADATA_TO_WAL = "phoenix.append.metadata.to.wal";
     public static final boolean DEFAULT_PHOENIX_APPEND_METADATA_TO_WAL = false;
+
     /**
      * Class to represent pending data table rows
      * */
@@ -512,6 +514,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       }
   }
 
+    /*
+     * Also checks for mutationBlockEnabled if CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is enabled.
+     */
   @Override
   public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
       MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
@@ -519,6 +524,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           return;
       }
       try {
+          final Configuration conf = c.getEnvironment().getConfiguration();
+          final HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(conf);
+          if (haGroupStoreManager.isMutationBlocked()) {
+              throw new IOException("Blocking Mutation as Some CRRs are in ACTIVE_TO_STANDBY "
+                      + "state and CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
+          }
           preBatchMutateWithExceptions(c, miniBatchOp);
           return;
       } catch (Throwable t) {
@@ -1303,6 +1314,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             return ts;
         }
     }
+
     public void preBatchMutateWithExceptions(ObserverContext<RegionCoprocessorEnvironment> c,
                                              MiniBatchOperationInProgress<Mutation> miniBatchOp) throws Throwable {
         PhoenixIndexMetaData indexMetaData = getPhoenixIndexMetaData(c, miniBatchOp);
