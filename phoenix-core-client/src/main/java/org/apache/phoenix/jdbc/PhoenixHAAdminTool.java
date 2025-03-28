@@ -155,7 +155,6 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
         }
     }
 
-
     /**
      * Parses the commandline arguments, throw exception if validation fails.
      *

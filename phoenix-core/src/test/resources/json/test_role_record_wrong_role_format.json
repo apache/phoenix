@@ -1,0 +1,9 @@
+{
+  "haGroupName" : "testReadRecordsFromFileJson",
+  "policy" : "FAILOVER",
+  "registryType" : "ZK",
+  "url1" : "zk1\\:2181::/hbase",
+  "url2" : "zk2\\:2181::/hbase",
+  "role2" : "STANDBY",
+  "version" : 1
+}

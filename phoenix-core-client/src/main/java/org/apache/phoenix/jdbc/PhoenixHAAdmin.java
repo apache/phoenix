@@ -90,7 +90,7 @@ public class PhoenixHAAdmin implements Closeable {
         Preconditions.checkNotNull(zkUrl);
         Preconditions.checkNotNull(conf);
         Preconditions.checkNotNull(highAvailibilityCuratorProvider);
-        this.zkUrl = JDBCUtil.formatZookeeperUrl(zkUrl);
+        this.zkUrl = JDBCUtil.formatUrl(zkUrl);
         this.conf = conf;
         conf.iterator().forEachRemaining(k -> properties.setProperty(k.getKey(), k.getValue()));
         this.highAvailibilityCuratorProvider = highAvailibilityCuratorProvider;
@@ -219,8 +219,8 @@ public class PhoenixHAAdmin implements Closeable {
         Map<String, List<String>> failedHaGroups = new HashMap<>();
         for (ClusterRoleRecord record : records) {
             String haGroupName = record.getHaGroupName();
-            try (PhoenixHAAdmin admin1 = new PhoenixHAAdmin(record.getZk1(), conf, HighAvailibilityCuratorProvider.INSTANCE);
-                    PhoenixHAAdmin admin2 = new PhoenixHAAdmin(record.getZk2(), conf, HighAvailibilityCuratorProvider.INSTANCE)) {
+            try (PhoenixHAAdmin admin1 = new PhoenixHAAdmin(record.getUrl1(), conf, HighAvailibilityCuratorProvider.INSTANCE);
+                    PhoenixHAAdmin admin2 = new PhoenixHAAdmin(record.getUrl2(), conf, HighAvailibilityCuratorProvider.INSTANCE)) {
                 // Update the cluster previously ACTIVE cluster first.
                 // It reduces the chances of split-brain between clients and clusters.
                 // If can not determine previous ACTIVE cluster, update new STANDBY cluster first.
@@ -277,7 +277,7 @@ public class PhoenixHAAdmin implements Closeable {
                         zkUrl, record);
                 continue;
             }
-            String remoteZkUrl = record.getZk1().equals(zkUrl) ? record.getZk2() : record.getZk1();
+            String remoteZkUrl = record.getUrl1().equals(zkUrl) ? record.getUrl2() : record.getUrl1();
             try (PhoenixHAAdmin remoteAdmin = new PhoenixHAAdmin(remoteZkUrl, conf,
                     HighAvailibilityCuratorProvider.INSTANCE)) {
                 ClusterRoleRecord remoteRecord;
@@ -338,16 +338,6 @@ public class PhoenixHAAdmin implements Closeable {
      * @throws IOException if it fails to update the cluster role data on ZK
      */
     public boolean createOrUpdateDataOnZookeeper(ClusterRoleRecord record) throws IOException {
-        if (!zkUrl.equals(record.getZk1()) && !zkUrl.equals(record.getZk2())) {
-            String
-                    msg =
-                    String.format(
-                            "INTERNAL ERROR: " + "ZK cluster is not associated with cluster role record! " + "ZK cluster URL: '%s'. Cluster role record: %s",
-                            zkUrl, record);
-            LOG.error(msg);
-            throw new IOException(msg);
-        }
-
         String haGroupName = record.getHaGroupName();
         byte[] data;
         try {

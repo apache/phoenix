@@ -206,25 +206,6 @@ public class PhoenixHAAdminToolTest {
     }
 
     /**
-     * Test that agent rejects to deal with the record if it is not associated to this ZK.
-     */
-    @Test
-    public void testFailWithUnrelatedRecord() {
-        ClusterRoleRecord record2 = new ClusterRoleRecord(
-                haGroupName, HighAvailabilityPolicy.FAILOVER,
-                ZK1 + RandomStringUtils.random(3), ClusterRole.ACTIVE,  // unrelated ZK
-                ZK2 + RandomStringUtils.random(3), ClusterRole.STANDBY, // unrelated ZK
-                1);
-        try {
-            admin.createOrUpdateDataOnZookeeper(record2);
-        } catch (IOException e) {
-            LOG.info("Got expected exception since the record is not totally related to this ZK");
-            assertTrue(e.getMessage().contains("INTERNAL ERROR"));
-        }
-        verify(curator, never()).getData();  // not even try to read the znode
-    }
-
-    /**
      * Test that agent rejects to update the record if its version is lower.
      */
     @Test

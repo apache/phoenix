@@ -17,38 +17,41 @@
  */
 package org.apache.phoenix.jdbc;
 
-        import static org.apache.hadoop.test.GenericTestUtils.waitFor;
-        import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair.doTestWhenOneZKDown;
-        import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithConnection;
-        import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
-        import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
-        import static org.junit.Assert.assertEquals;
-        import static org.junit.Assert.assertFalse;
-        import static org.junit.Assert.assertTrue;
-        import static org.junit.Assert.fail;
+import static org.apache.hadoop.test.GenericTestUtils.waitFor;
+import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair.doTestWhenOneZKDown;
+import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithConnection;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
+import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
-        import java.sql.Connection;
-        import java.sql.DriverManager;
-        import java.sql.SQLException;
-        import java.util.ArrayList;
-        import java.util.List;
-        import java.util.Properties;
-        import java.util.concurrent.ExecutorService;
-        import java.util.concurrent.Executors;
-        import java.util.concurrent.Future;
-        import java.util.concurrent.TimeUnit;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+import java.util.Properties;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
-        import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-        import org.junit.After;
-        import org.junit.AfterClass;
-        import org.junit.Before;
-        import org.junit.BeforeClass;
-        import org.junit.Rule;
-        import org.junit.Test;
-        import org.junit.experimental.categories.Category;
-        import org.junit.rules.TestName;
-        import org.slf4j.Logger;
-        import org.slf4j.LoggerFactory;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.junit.After;
+import org.junit.AfterClass;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
+import org.junit.rules.TestName;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Test failover basics for {@link FailoverPhoenixConnection}.
@@ -94,7 +97,7 @@ public class FailoverPhoenixConnection2IT {
         haGroup = getHighAvailibilityGroup(CLUSTERS.getJdbcHAUrl(), clientProperties);
         LOG.info("Initialized haGroup {} with URL {}", haGroup, CLUSTERS.getJdbcHAUrl());
         tableName = testName.getMethodName().toUpperCase();
-        CLUSTERS.createTableOnClusterPair(tableName);
+        CLUSTERS.createTableOnClusterPair(haGroup, tableName);
     }
 
     @After
@@ -102,10 +105,10 @@ public class FailoverPhoenixConnection2IT {
         try {
             haGroup.close();
             PhoenixDriver.INSTANCE
-                    .getConnectionQueryServices(CLUSTERS.getJdbcUrl1(), haGroup.getProperties())
+                    .getConnectionQueryServices(CLUSTERS.getJdbcUrl1(haGroup), haGroup.getProperties())
                     .close();
             PhoenixDriver.INSTANCE
-                    .getConnectionQueryServices(CLUSTERS.getJdbcUrl2(), haGroup.getProperties())
+                    .getConnectionQueryServices(CLUSTERS.getJdbcUrl2(haGroup), haGroup.getProperties())
                     .close();
         } catch (Exception e) {
             LOG.error("Fail to tear down the HA group and the CQS. Will ignore", e);
@@ -134,7 +137,7 @@ public class FailoverPhoenixConnection2IT {
 
             try (Connection conn = createFailoverConnection()) {
                 FailoverPhoenixConnection failoverConn = (FailoverPhoenixConnection) conn;
-                assertEquals(CLUSTERS.getJdbcUrl2(), failoverConn.getWrappedConnection().getURL());
+                assertEquals(CLUSTERS.getJdbcUrl2(haGroup), failoverConn.getWrappedConnection().getURL());
                 doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
             }
         });
@@ -155,7 +158,7 @@ public class FailoverPhoenixConnection2IT {
             // Try to make a connection to current ACTIVE cluster, which should fail.
             try {
                 createFailoverConnection();
-                fail("Should have failed since ACTIVE ZK '" + CLUSTERS.getUrl1() + "' is down");
+                fail("Should have failed since ACTIVE ZK '" + CLUSTERS.getZkUrl1() + "' is down");
             } catch (SQLException e) {
                 LOG.info("Got expected exception when ACTIVE ZK cluster is down", e);
             }
@@ -167,7 +170,7 @@ public class FailoverPhoenixConnection2IT {
 
             try (Connection conn = createFailoverConnection()) {
                 FailoverPhoenixConnection failoverConn = (FailoverPhoenixConnection) conn;
-                assertEquals(CLUSTERS.getJdbcUrl2(), failoverConn.getWrappedConnection().getURL());
+                assertEquals(CLUSTERS.getJdbcUrl2(haGroup), failoverConn.getWrappedConnection().getURL());
                 doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
             }
         });
@@ -216,7 +219,7 @@ public class FailoverPhoenixConnection2IT {
         LOG.info("Testing failover connection when both clusters are up and running");
         try (Connection conn = createFailoverConnection()) {
             FailoverPhoenixConnection failoverConn = conn.unwrap(FailoverPhoenixConnection.class);
-            assertEquals(CLUSTERS.getJdbcUrl2(), failoverConn.getWrappedConnection().getURL());
+            assertEquals(CLUSTERS.getJdbcUrl2(haGroup), failoverConn.getWrappedConnection().getURL());
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
         }
 
@@ -251,11 +254,9 @@ public class FailoverPhoenixConnection2IT {
                 fail("Should have failed since ACTIVE ZK cluster was shutdown");
             } catch (SQLException e) {
                 LOG.info("Got expected exception when ACTIVE ZK cluster {} was shutdown",
-                        CLUSTERS.getUrl2(), e);
+                        CLUSTERS.getZkUrl2(), e);
             }
         });
-
-        // After the second cluster (ACTIVE) ZK restarts, this should still work
         try (Connection conn = createFailoverConnection()) {
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
         }
@@ -286,7 +287,7 @@ public class FailoverPhoenixConnection2IT {
                 fail("Should have failed since ACTIVE ZK cluster was shutdown");
             } catch (SQLException e) {
                 LOG.info("Got expected exception when ACTIVE ZK cluster {} was shutdown",
-                        CLUSTERS.getUrl2(), e);
+                        CLUSTERS.getZkUrl2(), e);
             }
 
             // So on-call engineer comes into play, and triggers a failover
@@ -354,7 +355,7 @@ public class FailoverPhoenixConnection2IT {
                 try {
                     Connection c = future.get(100, TimeUnit.MILLISECONDS);
                     PhoenixConnection pc = ((FailoverPhoenixConnection) c).getWrappedConnection();
-                    if (!pc.isClosed() && !pc.getURL().equals(CLUSTERS.getUrl2())) {
+                    if (!pc.isClosed() && !pc.getURL().equals(CLUSTERS.getZkUrl2())) {
                         fail("Found one connection to cluster1 but it is not closed");
                     }
                 } catch (Exception e) {
@@ -363,6 +364,110 @@ public class FailoverPhoenixConnection2IT {
             }
             return true;
         }, 100, 120_000);
+    }
+
+    /**
+     * This is to make sure all Phoenix connections are closed when registryType changes
+     * of a CRR. ZK --> MASTER
+     *
+     * Test with many connections.
+     */
+    @Test(timeout = 300000)
+    public void testAllWrappedConnectionsClosedAfterRegistryChangeToMaster() throws Exception {
+        short numberOfConnections = 10;
+        List<Connection> connectionList = new ArrayList<>(numberOfConnections);
+        for (short i = 0; i < numberOfConnections; i++) {
+            connectionList.add(createFailoverConnection());
+        }
+        ClusterRoleRecord.RegistryType newRegistry = ClusterRoleRecord.RegistryType.MASTER;
+        CLUSTERS.transitClusterRoleRecordRegistry(haGroup, newRegistry);
+
+        for (short i = 0; i < numberOfConnections; i++) {
+            LOG.info("Asserting connection number {}", i);
+            FailoverPhoenixConnection conn = ((FailoverPhoenixConnection) connectionList.get(i));
+            assertFalse(conn.isClosed());
+            assertTrue(conn.getWrappedConnection().isClosed());
+        }
+    }
+
+    /**
+     * This is to make sure all Phoenix connections are closed when registryType changes
+     * of a CRR. ZK --> RPC
+     *
+     * Test with many connections.
+     */
+    @Test(timeout = 300000)
+    public void testAllWrappedConnectionsClosedAfterRegistryChangeToRpc() throws Exception {
+        short numberOfConnections = 10;
+        List<Connection> connectionList = new ArrayList<>(numberOfConnections);
+        for (short i = 0; i < numberOfConnections; i++) {
+            connectionList.add(createFailoverConnection());
+        }
+        ClusterRoleRecord.RegistryType newRegistry = ClusterRoleRecord.RegistryType.RPC;
+        CLUSTERS.transitClusterRoleRecordRegistry(haGroup, newRegistry);
+
+        for (short i = 0; i < numberOfConnections; i++) {
+            LOG.info("Asserting connection number {}", i);
+            FailoverPhoenixConnection conn = ((FailoverPhoenixConnection) connectionList.get(i));
+            assertFalse(conn.isClosed());
+            assertTrue(conn.getWrappedConnection().isClosed());
+        }
+    }
+
+    /**
+     * Testing connection closure for roleRecord change from
+     * (URL1, ACTIVE, URL2, STANDBY) -> (URL3, ACTIVE, URL2, STANDBY)
+     * All wrapped connections should have been closed
+     */
+    @Test(timeout = 300000)
+    public void testAllWrappedConnectionsClosedAfterActiveURLChange() throws Exception {
+        short numberOfConnections = 10;
+        //Create FailoverPhoenixConnections with default urls
+        List<Connection> connectionList = new ArrayList<>(numberOfConnections);
+        for (short i = 0; i < numberOfConnections; i++) {
+            connectionList.add(createFailoverConnection());
+        }
+
+        //Restart Cluster 1 with new ports
+        CLUSTERS.restartCluster1();
+        //Basically applying new url for cluster 1
+        CLUSTERS.refreshClusterRoleRecordAfterClusterRestart(haGroup,
+                ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY);
+        for (short i = 0; i < numberOfConnections; i++) {
+            LOG.info("Asserting connection number {}", i);
+            FailoverPhoenixConnection conn = ((FailoverPhoenixConnection) connectionList.get(i));
+            assertFalse(conn.isClosed());
+            assertTrue(conn.getWrappedConnection().isClosed());
+            conn.close();
+        }
+    }
+
+    /**
+     * Testing connection closure for roleRecord change from
+     * (URL1, ACTIVE, URL2, STANDBY) -> (URL1, ACTIVE, URL3, STANDBY)
+     * It should not have affected connections at all
+     */
+    @Test(timeout = 300000)
+    public void testAllWrappedConnectionsNotClosedAfterStandbyURLChange() throws Exception {
+        short numberOfConnections = 10;
+        //Create FailoverPhoenixConnections with default urls
+        List<Connection> connectionList = new ArrayList<>(numberOfConnections);
+        for (short i = 0; i < numberOfConnections; i++) {
+            connectionList.add(createFailoverConnection());
+        }
+
+        //Restart Cluster 2 with new ports
+        CLUSTERS.restartCluster2();
+        //Basically applying new url for cluster 2
+        CLUSTERS.refreshClusterRoleRecordAfterClusterRestart(haGroup,
+                ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY);
+        for (short i = 0; i < numberOfConnections; i++) {
+            LOG.info("Asserting connection number {}", i);
+            FailoverPhoenixConnection conn = ((FailoverPhoenixConnection) connectionList.get(i));
+            assertFalse(conn.isClosed());
+            assertFalse(conn.getWrappedConnection().isClosed());
+            conn.close();
+        }
     }
 
     /**
