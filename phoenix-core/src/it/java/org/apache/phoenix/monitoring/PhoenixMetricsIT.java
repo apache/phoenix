@@ -75,6 +75,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.metrics2.AbstractMetric;
@@ -84,6 +85,7 @@ import org.apache.hbase.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.iterate.RoundRobinResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
@@ -143,6 +145,8 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
             + " %s WHERE A='keyA1' AND B='keyB1' AND C='keyC1' AND D='keyD1'";
     static final String RANGE_SCAN_SELECT_QUERY = "SELECT A, B, C FROM"
             + " %s WHERE A='keyA1' AND B='keyB1' AND C > 'keyC0'";
+    static final int[] TASK_QUEUE_WAIT_TIME_ARR = {10, 5, 20, 7};
+    static final int[] TASK_E2E_TIME_ARR = {20, 15, 41, 16};
 
     private static class MyClock extends EnvironmentEdge {
         private long time;
@@ -486,7 +490,9 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         Statement stmt = conn.createStatement();
         ResultSet rs = stmt.executeQuery(query);
         PhoenixResultSet resultSetBeingTested = rs.unwrap(PhoenixResultSet.class);
-        changeInternalStateForTesting(resultSetBeingTested);
+        // TODO use a spy ?
+        ReadMetricQueue testMetricsQueue = new TestReadMetricsQueue(LogLevel.OFF,true);
+        changeInternalStateForTesting(resultSetBeingTested, testMetricsQueue);
         while (resultSetBeingTested.next()) {}
         resultSetBeingTested.close();
         Set<String> expectedTableNames = Sets.newHashSet(tableName);
@@ -955,12 +961,9 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         }
     }
 
-    private void changeInternalStateForTesting(PhoenixResultSet rs) throws NoSuchFieldException,
-            SecurityException, IllegalArgumentException, IllegalAccessException {
+    private void changeInternalStateForTesting(PhoenixResultSet rs,
+                                               ReadMetricQueue testMetricsQueue) throws Exception {
         // get and set the internal state for testing purposes.
-        // TODO use a spy ?
-        ReadMetricQueue testMetricsQueue = new TestReadMetricsQueue(LogLevel.OFF,true);
-
         Field rsQueueField = PhoenixResultSet.class.getDeclaredField("readMetricsQueue");
         rsQueueField.setAccessible(true);
         rsQueueField.set(rs, testMetricsQueue);
@@ -1298,5 +1301,220 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         }
     }
 
+    private void createSaltedTable(String tableName, int saltBucketNum) throws Exception {
+        // Here simpler schema can also be used as long we ensure that we create required number
+        // scans via salting
+        String creatTableDdl = "CREATE TABLE IF NOT EXISTS " + tableName + " (\n" +
+                "    PK1 CHAR(15) NOT NULL,\n" +
+                "    PK2 CHAR(15) NOT NULL,\n" +
+                "    PK3 DECIMAL NOT NULL,\n" +
+                "    PK4 CHAR(32) NOT NULL,\n" +
+                "    COL1 VARCHAR NOT NULL,\n" +
+                "    COL2 VARCHAR NOT NULL,\n" +
+                "    CONSTRAINT PK PRIMARY KEY (\n" +
+                "        PK1,\n" +
+                "        PK2,\n" +
+                "        PK3,\n" +
+                "        PK4\n" +
+                "    )\n" +
+                ") MULTI_TENANT=true, IMMUTABLE_ROWS=TRUE, SALT_BUCKETS=" + saltBucketNum;
+        try(Connection conn = DriverManager.getConnection(getUrl());
+            Statement stmt = conn.createStatement()) {
+            stmt.execute(creatTableDdl);
+        }
+    }
+
+    private String createQueryWithControlledTasksInPhoenixClientThreadPool(
+            String tableName, int taskCount) throws Exception {
+        String getRows = "SELECT COL1, COL2, PK4, PK2, PK3 FROM " + tableName
+                + " WHERE PK1=? AND PK2=? AND PK3=? AND PK4 IN (?";
+        for (int i = 1; i < taskCount; i++) {
+            getRows += ", ?";
+        }
+        getRows += ")";
+        return getRows;
+    }
+
+    @Test
+    public void testPhoenixClientQueueWaitTimeAndEndToEndTime() throws Exception {
+        int saltBucketNum = 8;
+        String tableName = generateUniqueName();
+        // Send at least 4 tasks in Phoenix client thread pool and we will assert also on this
+        // later while actually querying data.
+        int taskCount = 4;
+        createSaltedTable(tableName, saltBucketNum);
+        final String upsertRows = "UPSERT INTO " + tableName + " VALUES(?, ?, ?, ?, ?, ?)";
+        long vpk3 = 1000;
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            PreparedStatement stmt = conn.prepareStatement(upsertRows);
+            for (int i = 1; i <= saltBucketNum; i++) {
+                stmt.setString(1, "VPK1");
+                stmt.setString(2, "VPK2");
+                stmt.setLong(3, vpk3);
+                stmt.setString(4, "VPK4_" + i);
+                stmt.setString(5, "{i:" + i + "}");
+                stmt.setString(6, "{o:" + i + "}");
+                stmt.executeUpdate();
+            }
+            conn.commit();
+        }
+        String getRows = createQueryWithControlledTasksInPhoenixClientThreadPool(tableName,
+                taskCount);
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            PreparedStatement stmt = conn.prepareStatement(getRows);
+            stmt.setString(1, "VPK1");
+            stmt.setString(2, "VPK2");
+            stmt.setLong(3, vpk3);
+            for (int i = 4; i < taskCount + 4; i++) {
+                stmt.setString(i, "VPK4_" + i);
+            }
+            ResultSet rs = stmt.executeQuery();
+            PhoenixResultSet phoenixResultSet = rs.unwrap(PhoenixResultSet.class);
+            ReadMetricQueue readMetricQueue = new TestTaskReadMetricsQueue(LogLevel.OFF,
+                    true, TASK_QUEUE_WAIT_TIME_ARR, TASK_E2E_TIME_ARR);
+            changeInternalStateForTesting(phoenixResultSet, readMetricQueue);
+            while(rs.next()) {}
+            Map<MetricType, Long> overallQueryMetrics =
+                    PhoenixRuntime.getOverAllReadRequestMetricInfo(rs);
+            Map<MetricType, Long> readMetrics =
+                    PhoenixRuntime.getRequestReadMetricInfo(rs).get(tableName);
+            // Sent 4 tasks in Phoenix client thread pool. So, that we do see the max task
+            // queue time and max task end to end time.
+            assertEquals(4, (long) readMetrics.get(TASK_EXECUTED_COUNTER));
+            assertEquals(20, (long) overallQueryMetrics.get(
+                    MetricType.WALL_CLOCK_QUERY_WAIT_TIME));
+            assertEquals(41, (long) overallQueryMetrics.get(
+                    MetricType.WALL_CLOCK_QUERY_TASK_END_TO_END_TIME));
+        }
+    }
+
+    /**
+     * This test aims to test that when scanner cache of first batch of scans is exhausted
+     * in RoundRobinResultItr and next batch of scans is submitted then overall query wait
+     * time and query end to end task time is updated correctly.
+     */
+    @Test
+    public void testPhoenixClientQueueWaitTimeAndEndToEndTimeWithScannerCacheRefill()
+            throws Exception {
+        int fetchSize = 3;
+        int saltBucketNum = 8;
+        String tableName = generateUniqueName();
+        // Send at least 2 batches of scans. The salt buckets are 8 so, even if first batch of
+        // scans cover all the salt buckets still only 16 rows will be cached with fetch size of 2.
+        // So, setting rows to read per query greater than 16.
+        int taskCount = saltBucketNum * (fetchSize - 1) + saltBucketNum;
+        createSaltedTable(tableName, saltBucketNum);
+        final String upsertRows = "UPSERT INTO " + tableName + " VALUES(?, ?, ?, ?, ?, ?)";
+        long vpk3 = 1000;
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            PreparedStatement stmt = conn.prepareStatement(upsertRows);
+            for (int i = 1; i <= 2 * taskCount; i++) {
+                stmt.setString(1, "VPK1");
+                stmt.setString(2, "VPK2");
+                stmt.setLong(3, vpk3);
+                stmt.setString(4, "VPK4_" + i);
+                stmt.setString(5, "{i:" + i + "}");
+                stmt.setString(6, "{o:" + i + "}");
+                stmt.executeUpdate();
+            }
+            conn.commit();
+        }
+        String getRows = createQueryWithControlledTasksInPhoenixClientThreadPool(
+                tableName, taskCount);
+        String url = getUrl("TEST");
+        Properties props = new Properties();
+        props.setProperty(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, String.valueOf(false));
+        try(Connection conn = DriverManager.getConnection(url, props)) {
+            PreparedStatement stmt = conn.prepareStatement(getRows);
+            stmt.setFetchSize(fetchSize);
+            stmt.setString(1, "VPK1");
+            stmt.setString(2, "VPK2");
+            stmt.setLong(3, vpk3);
+            for (int i = 4; i < taskCount + 4; i++) {
+                stmt.setString(i, "VPK4_" + i);
+            }
+            ResultSet rs = stmt.executeQuery();
+            PhoenixResultSet phoenixResultSet = rs.unwrap(PhoenixResultSet.class);
+            // Make sure we are using RoundRobinResultItr. as it refills scanner cache
+            assertTrue(phoenixResultSet.getUnderlyingIterator()
+                    instanceof RoundRobinResultIterator);
+            RoundRobinResultIterator itr =
+                    (RoundRobinResultIterator) phoenixResultSet.getUnderlyingIterator();
+            ReadMetricQueue readMetricQueue = new TestTaskReadMetricsQueue(LogLevel.OFF,
+                    true, TASK_QUEUE_WAIT_TIME_ARR, TASK_E2E_TIME_ARR);
+            changeInternalStateForTesting(phoenixResultSet, readMetricQueue);
+            while(rs.next()) {}
+            Map<MetricType, Long> overallQueryMetrics =
+                    PhoenixRuntime.getOverAllReadRequestMetricInfo(rs);
+            Map<MetricType, Long> readMetrics =
+                    PhoenixRuntime.getRequestReadMetricInfo(rs).get(tableName);
+            // Make sure scanner cache was refilled once
+            assertEquals(1, itr.getNumberOfParallelFetches());
+            assertEquals(40,
+                    (long) overallQueryMetrics.get(MetricType.WALL_CLOCK_QUERY_WAIT_TIME));
+            assertEquals(82, (long) overallQueryMetrics.get(
+                    MetricType.WALL_CLOCK_QUERY_TASK_END_TO_END_TIME));
+            long totalTasksExecuted = readMetrics.get(TASK_EXECUTED_COUNTER);
+            assertEquals(totalTasksExecuted * TASK_EXECUTION_TIME_DELTA,
+                    (long) readMetrics.get(TASK_EXECUTION_TIME));
+        }
+    }
+
+    private class TestTaskReadMetricsQueue extends ReadMetricQueue {
+
+        int taskQueueWaitTimeIndex = 0;
+        int taskEndToEndTimeIndex = 0;
+        int[] taskQueueWaitTime;
+        int[] taskEndToEndTime;
+        // To make test predictable
+        final Object lock = new Object();
+
+        public TestTaskReadMetricsQueue(LogLevel connectionLogLevel,
+                                      boolean isRequestMetricsEnabled, int[] taskQueueWaitTime,
+                                        int[] taskEndToEndTime) {
+            super(isRequestMetricsEnabled, connectionLogLevel);
+            this.taskQueueWaitTime = taskQueueWaitTime;
+            this.taskEndToEndTime = taskEndToEndTime;
+        }
+
+        @Override
+        public CombinableMetric getMetric(MetricType type) {
+            switch (type) {
+                case TASK_QUEUE_WAIT_TIME:
+                    return new CombinableMetricImpl(type) {
+
+                        @Override
+                        public void change(long delta) {
+                            synchronized (lock) {
+                                super.change(taskQueueWaitTime[taskQueueWaitTimeIndex]);
+                                taskQueueWaitTimeIndex++;
+                                taskQueueWaitTimeIndex %= taskQueueWaitTime.length;
+                            }
+                        }
+                    };
+                case TASK_END_TO_END_TIME:
+                    return new CombinableMetricImpl(type) {
+
+                        @Override
+                        public void change(long delta) {
+                            synchronized (lock) {
+                                super.change(taskEndToEndTime[taskEndToEndTimeIndex]);
+                                taskEndToEndTimeIndex++;
+                                taskEndToEndTimeIndex %= taskEndToEndTime.length;
+                            }
+                        }
+                    };
+                case TASK_EXECUTION_TIME:
+                    return new CombinableMetricImpl(type) {
+
+                        @Override
+                        public void change(long delta) {
+                            super.change(TASK_EXECUTION_TIME_DELTA);
+                        }
+                    };
+            }
+            return super.getMetric(type);
+        }
+    }
 
 }
