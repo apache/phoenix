@@ -207,21 +207,26 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           return lastContext;
       }
     }
-
-  private static boolean ignoreIndexRebuildForTesting  = false;
-  private static boolean failPreIndexUpdatesForTesting = false;
-  private static boolean failPostIndexUpdatesForTesting = false;
-  private static boolean failDataTableUpdatesForTesting = false;
-
-  public static void setIgnoreIndexRebuildForTesting(boolean ignore) { ignoreIndexRebuildForTesting = ignore; }
-
-  public static void setFailPreIndexUpdatesForTesting(boolean fail) { failPreIndexUpdatesForTesting = fail; }
-
-  public static void setFailPostIndexUpdatesForTesting(boolean fail) { failPostIndexUpdatesForTesting = fail; }
-
-  public static void setFailDataTableUpdatesForTesting(boolean fail) {
-      failDataTableUpdatesForTesting = fail;
-  }
+    private static boolean ignoreIndexRebuildForTesting  = false;
+    private static boolean failPreIndexUpdatesForTesting = false;
+    private static boolean failPostIndexUpdatesForTesting = false;
+    private static boolean failDataTableUpdatesForTesting = false;
+    private static boolean ignoreWritingDeleteColumnsToIndex = false;
+    public static void setIgnoreIndexRebuildForTesting(boolean ignore) {
+        ignoreIndexRebuildForTesting = ignore;
+    }
+    public static void setFailPreIndexUpdatesForTesting(boolean fail) {
+        failPreIndexUpdatesForTesting = fail;
+    }
+    public static void setFailPostIndexUpdatesForTesting(boolean fail) {
+        failPostIndexUpdatesForTesting = fail;
+    }
+    public static void setFailDataTableUpdatesForTesting(boolean fail) {
+        failDataTableUpdatesForTesting = fail;
+    }
+    public static void setIgnoreWritingDeleteColumnsToIndex(boolean ignore) {
+        ignoreWritingDeleteColumnsToIndex = ignore;
+    }
 
   public enum BatchMutatePhase {
       PRE, POST, FAILED
@@ -1035,6 +1040,14 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                             QueryConstants.UNVERIFIED_BYTES);
                     context.indexUpdates.put(hTableInterfaceReference,
                             new Pair<Mutation, byte[]>(indexPut, rowKeyPtr.get()));
+                    if (!ignoreWritingDeleteColumnsToIndex) {
+                        Delete deleteColumn =
+                                indexMaintainer.buildDeleteColumnMutation(indexPut, ts);
+                        if (deleteColumn != null) {
+                            context.indexUpdates.put(hTableInterfaceReference,
+                                    new Pair<Mutation, byte[]>(deleteColumn, rowKeyPtr.get()));
+                        }
+                    }
                     // Delete the current index row if the new index key is different from the
                     // current one and the index is not a CDC index
                     if (currentDataRowState != null) {
@@ -1113,7 +1126,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                     if (m instanceof Put) {
                         // This will be done before the data table row is updated (i.e., in the first write phase)
                         context.preIndexUpdates.put(hTableInterfaceReference, m);
-                    } else {
+                    } else if (IndexUtil.isDeleteFamily(m)) {
+                        // DeleteColumn is always accompanied by a Put so no need to make the index
+                        // row unverified again. Only do this for DeleteFamily
                         // Set the status of the index row to "unverified"
                         Put unverifiedPut = new Put(m.getRow());
                         unverifiedPut.addColumn(
