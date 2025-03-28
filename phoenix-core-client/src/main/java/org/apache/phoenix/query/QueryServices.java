@@ -54,7 +54,9 @@ public interface QueryServices extends SQLCloseable {
             "phoenix.query.client.join.spooling.enabled";
     public static final String SERVER_ORDERBY_SPOOLING_ENABLED_ATTRIB =
             "phoenix.query.server.orderBy.spooling.enabled";
+    @Deprecated
     public static final String HBASE_CLIENT_KEYTAB = "hbase.myclient.keytab";
+    @Deprecated
     public static final String HBASE_CLIENT_PRINCIPAL = "hbase.myclient.principal";
     String QUERY_SERVICES_NAME = "phoenix.query.services.name";
     public static final String SPOOL_DIRECTORY = "phoenix.spool.directory";
