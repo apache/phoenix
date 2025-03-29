@@ -273,6 +273,7 @@ import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
@@ -2815,6 +2816,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
                 if (parentTableKey != null) {
                     metaDataCache.invalidate(new ImmutableBytesPtr(parentTableKey));
+                    if ((tableType == INDEX) && SchemaUtil.isSystemTable(Bytes.toBytes(fullTableName))) {
+                        // Ensure that the data table is refreshed back in the cache
+                        doGetTable(tenantIdBytes, parentSchemaName, parentTableName,
+                                HConstants.LATEST_TIMESTAMP, null, request.getClientVersion());
+                    }
                 }
                 metaDataCache.invalidate(cacheKey);
                 // Get timeStamp from mutations - the above method sets it if it's unset
@@ -5184,6 +5190,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             boolean catalogIndexesEnabled = conf.getBoolean(SYSTEM_CATALOG_INDEXES_ENABLED, DEFAULT_SYSTEM_CATALOG_INDEXES_ENABLED);
             if ((updateCatalogIndexes) && (catalogIndexesEnabled)) {
                 setMetaDataOnMutationsIfCatalogIndexExists(env, mutations );
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("Setting metadata on mutations :" + mutations);
+                }
             }
         } catch (SQLException e) {
             throw new IOException(e);
@@ -5235,14 +5244,22 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
     private static void setMetaDataOnMutationsIfCatalogIndexExists(
             final RegionCoprocessorEnvironment env, final List<Mutation> mutations)
-            throws SQLException {
+            throws SQLException, IOException {
         final byte[] key = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA, PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE);
         ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(key);
         Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache = GlobalCache.getInstance(env).getMetaDataCache();
         PTable systemCatalogPTable = (PTable) metaDataCache.getIfPresent(cacheKey);
         if (systemCatalogPTable == null) {
-            LOGGER.error("PTable for SYSTEM.CATALOG was not found in GlobalCache: key = {}" , Bytes.toString(key));
-            return;
+            try (PhoenixConnection connection = getServerConnectionForMetaData(new Properties(), env.getConfiguration())
+                    .unwrap(PhoenixConnection.class)) {
+                systemCatalogPTable = PhoenixRuntime.getTableNoCache(connection, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
+            } catch (SQLException sqle) {
+                throw new IOException(String.format("Failed to get PTable for SYSTEM.CATALOG via getTableNoCache() : key = %s" , Bytes.toString(key)), sqle);
+            }
+        }
+
+        if (systemCatalogPTable == null) {
+            throw new IOException(String.format("Failed to get PTable for SYSTEM.CATALOG via getTableNoCache() and  GlobalCache: key = %s" , Bytes.toString(key)));
         }
 
         if ((systemCatalogPTable.getIndexes().isEmpty())) {
