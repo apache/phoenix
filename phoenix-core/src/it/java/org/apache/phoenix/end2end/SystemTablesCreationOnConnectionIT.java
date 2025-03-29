@@ -23,6 +23,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMIL
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_HBASE_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_FOR_MUTEX;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -44,6 +45,7 @@ import java.util.Set;
 import java.util.concurrent.TimeoutException;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.NamespaceNotFoundException;
@@ -60,18 +62,24 @@ import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.UpgradeRequiredException;
+import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.jdbc.PhoenixHAExecutorServiceProvider;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.ConfigurationFactory;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
+import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesTestImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.InstanceResolver;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.UpgradeUtil;
@@ -112,12 +120,16 @@ public class SystemTablesCreationOnConnectionIT {
     private static final Set<String> PHOENIX_SYSTEM_TABLES = new HashSet<>(Arrays.asList(
             "SYSTEM.CATALOG", "SYSTEM.SEQUENCE", "SYSTEM.STATS", "SYSTEM.FUNCTION",
             "SYSTEM.MUTEX", "SYSTEM.LOG", "SYSTEM.CHILD_LINK", "SYSTEM.TASK","SYSTEM.TRANSFORM",
-            "SYSTEM.CDC_STREAM_STATUS", "SYSTEM.CDC_STREAM"));
+            "SYSTEM.CDC_STREAM_STATUS", "SYSTEM.CDC_STREAM", "SYSTEM.SYS_INDEX_TABLE_LINK_IDX",
+            "SYSTEM.SYS_VIEW_HDR_IDX", "SYSTEM.SYS_ROW_KEY_MATCHER_IDX",
+            "SYSTEM.SYS_VIEW_INDEX_HDR_IDX"));
 
     private static final Set<String> PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES = new HashSet<>(
             Arrays.asList("SYSTEM:CATALOG", "SYSTEM:SEQUENCE", "SYSTEM:STATS", "SYSTEM:FUNCTION",
                     "SYSTEM:MUTEX", "SYSTEM:LOG", "SYSTEM:CHILD_LINK", "SYSTEM:TASK", "SYSTEM:TRANSFORM",
-                    "SYSTEM:CDC_STREAM_STATUS", "SYSTEM:CDC_STREAM"));
+                    "SYSTEM:CDC_STREAM_STATUS", "SYSTEM:CDC_STREAM", "SYSTEM:SYS_INDEX_TABLE_LINK_IDX",
+                    "SYSTEM:SYS_VIEW_HDR_IDX", "SYSTEM:SYS_ROW_KEY_MATCHER_IDX",
+                    "SYSTEM:SYS_VIEW_INDEX_HDR_IDX"));
 
     private static class PhoenixSysCatCreationServices extends ConnectionQueryServicesImpl {
 
@@ -678,6 +690,9 @@ public class SystemTablesCreationOnConnectionIT {
         // Avoid multiple clusters trying to bind to the master's info port (16010)
         conf.setInt(HConstants.MASTER_INFO_PORT, -1);
         conf.set(REGIONSERVER_COPROCESSOR_CONF_KEY, PhoenixRegionServerEndpointTestImpl.class.getName());
+        conf.set(IndexManagementUtil.WAL_EDIT_CODEC_CLASS_KEY,
+                "org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec");
+
         testUtil.startMiniCluster(1);
     }
 
