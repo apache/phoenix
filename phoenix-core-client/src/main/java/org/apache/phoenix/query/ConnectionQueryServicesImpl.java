@@ -1782,8 +1782,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             TableDescriptorBuilder newDesc = generateTableDescriptor(physicalTableName, parentPhysicalTableName, existingDesc, tableType, props, families,
                     splits, isNamespaceMapped);
 
-            if (LOGGER.isInfoEnabled()) {
-                LOGGER.info(String.format("ensureTableCreated " +
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug(String.format("ensureTableCreated " +
                                 "physicalTableName = %s, " +
                                 "parentPhysicalTableName = %s, " +
                                 "isUpgradeRequired = %s, " +
@@ -4712,6 +4712,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // so that any failures here can be handled/continued out of band.
         metaConnection = upgradeSystemChildLink(metaConnection, moveChildLinks,
                 systemTableToSnapshotMap);
+        metaConnection = upgradeSystemCatalogIndexes(metaConnection);
         return metaConnection;
     }
 
@@ -5065,10 +5066,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
         try (PhoenixConnection conn = new PhoenixConnection(
                 ConnectionQueryServicesImpl.this, metaConnection.getURL(), p)) {
-            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS SYS_INDEX_TABLE_LINK_IDX_2 ON SYSTEM.CATALOG(TENANT_ID, TABLE_SCHEM, TABLE_NAME, TABLE_TYPE) WHERE TABLE_TYPE = 'i' AND LINK_TYPE = 1");
-            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS SYS_VIEW_HDR_IDX_2 ON SYSTEM.CATALOG(TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY) INCLUDE (TABLE_TYPE, VIEW_STATEMENT, TTL, ROW_KEY_MATCHER) WHERE TABLE_TYPE = 'v'");
-            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS SYS_ROW_KEY_MATCHER_IDX_2 ON SYSTEM.CATALOG(ROW_KEY_MATCHER, TTL, TABLE_TYPE, TENANT_ID, TABLE_SCHEM, TABLE_NAME) INCLUDE (VIEW_STATEMENT) WHERE TABLE_TYPE = 'v' AND ROW_KEY_MATCHER IS NOT NULL");
-            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS SYS_VIEW_INDEX_HDR_IDX_2 ON SYSTEM.CATALOG(DECODE_VIEW_INDEX_ID(VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE), TENANT_ID, TABLE_SCHEM, TABLE_NAME) INCLUDE(TABLE_TYPE, LINK_TYPE, VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE)  WHERE TABLE_TYPE = 'i' AND LINK_TYPE IS NULL AND VIEW_INDEX_ID IS NOT NULL");
+            conn.setRunningUpgrade(metaConnection.isRunningUpgrade());
+            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS SYS_INDEX_TABLE_LINK_IDX ON SYSTEM.CATALOG(TENANT_ID, TABLE_SCHEM, TABLE_NAME, TABLE_TYPE) WHERE TABLE_TYPE = 'i' AND LINK_TYPE = 1 ASYNC");
+            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS SYS_VIEW_HDR_IDX ON SYSTEM.CATALOG(TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY) INCLUDE (TABLE_TYPE, VIEW_STATEMENT, TTL, ROW_KEY_MATCHER) WHERE TABLE_TYPE = 'v' ASYNC");
+            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS SYS_ROW_KEY_MATCHER_IDX ON SYSTEM.CATALOG(ROW_KEY_MATCHER, TTL, TABLE_TYPE, TENANT_ID, TABLE_SCHEM, TABLE_NAME) INCLUDE (VIEW_STATEMENT) WHERE TABLE_TYPE = 'v' AND ROW_KEY_MATCHER IS NOT NULL ASYNC");
+            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS SYS_VIEW_INDEX_HDR_IDX ON SYSTEM.CATALOG(DECODE_VIEW_INDEX_ID(VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE), TENANT_ID, TABLE_SCHEM, TABLE_NAME) INCLUDE(TABLE_TYPE, LINK_TYPE, VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE)  WHERE TABLE_TYPE = 'i' AND LINK_TYPE IS NULL AND VIEW_INDEX_ID IS NOT NULL ASYNC");
         } catch (TableAlreadyExistsException ignore) {}
         return metaConnection;
     }
