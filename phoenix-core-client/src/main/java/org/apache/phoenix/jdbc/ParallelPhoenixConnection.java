@@ -69,14 +69,13 @@ public class ParallelPhoenixConnection implements PhoenixMonitoredConnection {
     CompletableFuture<PhoenixConnection> futureConnection2;
     public ParallelPhoenixConnection(ParallelPhoenixContext context) throws SQLException {
         this.context = context;
-        LOG.trace("First Url: {} Second Url: {}", context.getHaGroup().getGroupInfo().
-                        getJDBCUrl1(context.getHaurlInfo()), context.getHaGroup().getGroupInfo().
-                        getJDBCUrl2(context.getHaurlInfo()));
+        LOG.trace("First Url: {} Second Url: {}", context.getHaGroup().getRoleRecord().getUrl1(),
+                context.getHaGroup().getRoleRecord().getUrl2());
         futureConnection1 = context.chainOnConn1(() -> getConnection(context.getHaGroup(),
-                context.getHaGroup().getGroupInfo().getJDBCUrl1(context.getHaurlInfo()),
+                context.getHaGroup().getRoleRecord().getUrl1(),
                 context.getProperties(), context.getHaurlInfo()));
         futureConnection2 = context.chainOnConn2(() -> getConnection(context.getHaGroup(),
-                context.getHaGroup().getGroupInfo().getJDBCUrl2(context.getHaurlInfo()),
+                context.getHaGroup().getRoleRecord().getUrl2(),
                 context.getProperties(), context.getHaurlInfo()));
 
         // Ensure one connection is successful before returning

@@ -44,10 +44,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.Instant;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
-import java.util.Properties;
+import java.util.*;
 
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
 import static org.apache.phoenix.jdbc.HighAvailabilityPolicy.PARALLEL;
@@ -93,16 +90,38 @@ public class ParallelPhoenixConnectionWorkflowIT {
     /**
      * JDBC connection string for this test HA group.
      */
-    private String jdbcUrl;
+    private String jdbcHAUrl;
     /**
      * HA group for this test.
      */
     private HighAvailabilityGroup haGroup;
+    /**
+     * registry Type to use in CRR
+     */
+    private ClusterRoleRecord.RegistryType registryType;
 
-    @Parameters(name="ParallelPhoenixConnectionWorkflowIT_resultSetType={0}") // name is used by failsafe as file name in reports
-    public static Collection<String> data() {
-        return Arrays.asList(ParallelPhoenixResultSetType.PARALLEL_PHOENIX_RESULT_SET.getName(),
-            ParallelPhoenixResultSetType.PARALLEL_PHOENIX_NULL_COMPARING_RESULT_SET.getName());
+    @Parameters(name="ParallelPhoenixConnectionWorkflowIT_resultSetType={0}, registryType={1}") // name is used by failsafe as file name in reports
+    public static Collection<Object[]> data() {
+        return Arrays.asList( new Object[][]{
+                {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_RESULT_SET.getName(),
+                        ClusterRoleRecord.RegistryType.ZK},
+                {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_NULL_COMPARING_RESULT_SET.getName(),
+                        ClusterRoleRecord.RegistryType.ZK},
+                {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_RESULT_SET.getName(),
+                        ClusterRoleRecord.RegistryType.MASTER},
+                {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_NULL_COMPARING_RESULT_SET.getName(),
+                        ClusterRoleRecord.RegistryType.MASTER},
+                {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_RESULT_SET.getName(),
+                        ClusterRoleRecord.RegistryType.RPC},
+                {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_NULL_COMPARING_RESULT_SET.getName(),
+                        ClusterRoleRecord.RegistryType.RPC},
+                {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_RESULT_SET.getName(),
+                        null},
+                {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_NULL_COMPARING_RESULT_SET.getName(),
+                        null}
+
+        });
+
     }
 
     @BeforeClass
@@ -131,7 +150,8 @@ public class ParallelPhoenixConnectionWorkflowIT {
                 "  )  \n" +
                 ") IMMUTABLE_ROWS=true, VERSIONS=1, REPLICATION_SCOPE=1", tableName);
 
-        CONNECTIONS = Lists.newArrayList(CLUSTERS.getCluster1Connection(), CLUSTERS.getCluster2Connection());
+        CONNECTIONS = Lists.newArrayList(getConnection(CLUSTERS.getJdbcUrl(CLUSTERS.getZkUrl1())),
+                getConnection(CLUSTERS.getJdbcUrl(CLUSTERS.getZkUrl2())));
 
         for (Connection conn : CONNECTIONS) {
             try (Statement statement = conn.createStatement()) {
@@ -143,7 +163,7 @@ public class ParallelPhoenixConnectionWorkflowIT {
         CLUSTERS.checkReplicationComplete();
 
         //preload some data
-        try (Connection connection = CLUSTERS.getCluster1Connection()) {
+        try (Connection connection = getConnection(CLUSTERS.getJdbcUrl(CLUSTERS.getZkUrl1()))) {
             loadData(connection, USER_ID, WORK_ID, 100, 20);
         }
         CLUSTERS.checkReplicationComplete();
@@ -187,8 +207,10 @@ public class ParallelPhoenixConnectionWorkflowIT {
         }
     }
 
-    public ParallelPhoenixConnectionWorkflowIT(String resultSetType) {
+    public ParallelPhoenixConnectionWorkflowIT(String resultSetType,
+                                               ClusterRoleRecord.RegistryType registryType) {
         GLOBAL_PROPERTIES.setProperty(ParallelPhoenixResultSetFactory.PHOENIX_PARALLEL_RESULTSET_TYPE, resultSetType);
+        this.registryType = registryType;
     }
 
     @Before
@@ -198,11 +220,15 @@ public class ParallelPhoenixConnectionWorkflowIT {
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName);
 
         // Make first cluster ACTIVE
-        CLUSTERS.initClusterRole(haGroupName, PARALLEL);
+        if (registryType == null) {
+            CLUSTERS.initClusterRole(haGroupName, PARALLEL);
+        } else {
+            CLUSTERS.initClusterRole(haGroupName, PARALLEL, registryType);
+        }
 
-        jdbcUrl = CLUSTERS.getJdbcHAUrl();
-        haGroup = HighAvailabilityTestingUtility.getHighAvailibilityGroup(jdbcUrl, clientProperties);
-        LOG.info("Initialized haGroup {} with URL {}", haGroup.getGroupInfo().getName(), jdbcUrl);
+        jdbcHAUrl = CLUSTERS.getJdbcHAUrl();
+        haGroup = HighAvailabilityTestingUtility.getHighAvailibilityGroup(jdbcHAUrl, clientProperties);
+        LOG.info("Initialized haGroup {} with URL {}", haGroup.getGroupInfo().getName(), jdbcHAUrl);
     }
 
     @Test
@@ -268,7 +294,7 @@ public class ParallelPhoenixConnectionWorkflowIT {
     public void testSingleDelete() throws SQLException {
         String userId = StringUtils.rightPad(BaseTest.generateUniqueName(), 15).substring(0, 15);
         String workId = testName.getMethodName();
-        loadData(CLUSTERS.getCluster1Connection(), userId, workId, 10, 10);
+        loadData(CLUSTERS.getCluster1Connection(haGroup), userId, workId, 10, 10);
         CLUSTERS.checkReplicationComplete();
 
         for (Connection conn : CONNECTIONS) {
@@ -306,7 +332,7 @@ public class ParallelPhoenixConnectionWorkflowIT {
     public void testBatchDelete() throws SQLException {
         String userId = StringUtils.rightPad(BaseTest.generateUniqueName(), 15).substring(0, 15);
         String workId = testName.getMethodName();
-        loadData(CLUSTERS.getCluster1Connection(), userId, workId, 10, 10);
+        loadData(CLUSTERS.getCluster1Connection(haGroup), userId, workId, 10, 10);
         CLUSTERS.checkReplicationComplete();
 
         //delete batch
@@ -340,9 +366,9 @@ public class ParallelPhoenixConnectionWorkflowIT {
     public void testGroupDelete() throws SQLException {
         String userId = StringUtils.rightPad(BaseTest.generateUniqueName(), 15).substring(0, 15);
         String workId1 = testName.getMethodName();
-        loadData(CLUSTERS.getCluster1Connection(), userId, workId1, 10, 10);
+        loadData(CLUSTERS.getCluster1Connection(haGroup), userId, workId1, 10, 10);
         String workId2 = testName.getMethodName() + "2";
-        loadData(CLUSTERS.getCluster1Connection(), userId, workId2, 10, 10);
+        loadData(CLUSTERS.getCluster1Connection(haGroup), userId, workId2, 10, 10);
         CLUSTERS.checkReplicationComplete();
 
         //delete group
@@ -460,9 +486,13 @@ public class ParallelPhoenixConnectionWorkflowIT {
      * @throws SQLException
      */
     private Connection getParallelConnection() throws SQLException {
-        Connection connection = DriverManager.getConnection(jdbcUrl, clientProperties);
+        Connection connection = DriverManager.getConnection(jdbcHAUrl, clientProperties);
         connection.setAutoCommit(true);
         return connection;
+    }
+
+    private static Connection getConnection(String url) throws SQLException {
+        return DriverManager.getConnection(url, new Properties());
     }
 
 }
