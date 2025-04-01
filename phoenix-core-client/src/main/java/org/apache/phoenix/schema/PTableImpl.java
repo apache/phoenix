@@ -2495,9 +2495,9 @@ public class PTableImpl implements PTable {
                 // SYSTEM.CDC_STREAM.PARTITION_END_KEY
                 || (tableName.equalsIgnoreCase(PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_TABLE)
                 && column.getName().getString().equalsIgnoreCase(PhoenixDatabaseMetaData.PARTITION_END_KEY))
-                || (tableName.equalsIgnoreCase("SYS_ROW_KEY_MATCHER_IDX_2")
+                || (tableName.equalsIgnoreCase("SYS_ROW_KEY_MATCHER_IDX")
                 && column.getName().getString().equalsIgnoreCase("0:" + PhoenixDatabaseMetaData.ROW_KEY_MATCHER))
-                || (tableName.equalsIgnoreCase("SYS_VIEW_HDR_IDX_2")
+                || (tableName.equalsIgnoreCase("SYS_VIEW_HDR_IDX")
                 && column.getName().getString().equalsIgnoreCase("0:" + PhoenixDatabaseMetaData.ROW_KEY_MATCHER))
         ) {
             return new PColumnImpl(column.getName(),
@@ -2518,7 +2518,7 @@ public class PTableImpl implements PTable {
                     column.getTimestamp());
         }
 
-        if ((tableName.equalsIgnoreCase("SYS_VIEW_INDEX_HDR_IDX_2")
+        if ((tableName.equalsIgnoreCase("SYS_VIEW_INDEX_HDR_IDX")
                 && column.getName().getString().equalsIgnoreCase(": DECODE_VIEW_INDEX_ID(VIEW_INDEX_ID,VIEW_INDEX_ID_DATA_TYPE)"))) {
             return new PColumnImpl(PNameFactory.newName(":VIEW_INDEX_ID"),
                     column.getFamilyName(),
