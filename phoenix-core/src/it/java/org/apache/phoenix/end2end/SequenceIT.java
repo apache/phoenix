@@ -48,12 +48,12 @@ import org.apache.phoenix.query.QueryServicesTestImpl;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
 import org.apache.phoenix.schema.SequenceNotFoundException;
-import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SequenceUtil;
+import org.apache.phoenix.util.TestClock;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -100,19 +100,6 @@ public class SequenceIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
     }
 
-    private static class MyClock extends EnvironmentEdge {
-        public volatile long time;
-
-        public MyClock(long time) {
-            this.time = time;
-        }
-
-        @Override
-        public long currentTime() {
-            return time;
-        }
-    }
-
     @Test
     public void testDuplicateSequences() throws Exception {
         String sequenceName = generateSequenceNameWithSchema();
@@ -130,7 +117,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDuplicateSequencesAtSameTimestamp() throws Exception {
-        final MyClock clock = new MyClock(1000);
+        final TestClock clock = new TestClock(1000);
         EnvironmentEdgeManager.injectEdge(clock);
         try {
             String sequenceName = generateSequenceNameWithSchema();
