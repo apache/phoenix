@@ -334,17 +334,19 @@ public enum TableProperty {
     MAX_LOOKBACK_AGE(PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE, true, false, false) {
         @Override
         public Object getValue(Object value) {
+            // User provides table level max lookback age in seconds in DDL and
+            // we convert to milli-seconds before storing in SYSCAT
             if (value == null) {
                 return null;
             }
             else if (value instanceof Integer) {
-                return Long.valueOf((Integer) value);
+                return Long.valueOf((Integer) value) * 1000;
             }
             else if (value instanceof Long) {
-                return value;
+                return (Long) value * 1000;
             }
             else {
-                throw new IllegalArgumentException("Table level MAX_LOOKBACK_AGE should be a " + PLong.INSTANCE.getSqlTypeName() + " value in milli-seconds");
+                throw new IllegalArgumentException("Table level MAX_LOOKBACK_AGE should be a " + PLong.INSTANCE.getSqlTypeName() + " value in seconds");
             }
         }
 
