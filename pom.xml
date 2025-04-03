@@ -55,7 +55,7 @@
   <parent>
     <groupId>org.apache</groupId>
     <artifactId>apache</artifactId>
-    <version>30</version>
+    <version>34</version>
   </parent>
 
   <scm>
@@ -2294,6 +2294,7 @@
       </properties>
     </profile>
     <profile>
+      <id>run-owasp</id>
       <activation>
         <jdk>[11,)</jdk>
       </activation>
@@ -2318,6 +2319,17 @@
           </plugin>
         </plugins>
       </reporting>
+    </profile>
+    <profile>
+      <!-- The apache parent plugin sets maven.compiler.release, which won't let us access
+      sun.misc and friends. This profile overrides the parent plugin -->
+      <id>jdk9+</id>
+      <activation>
+        <jdk>[9,)</jdk>
+      </activation>
+      <properties>
+        <maven.compiler.release/>
+      </properties>
     </profile>
   </profiles>
   <reporting>
