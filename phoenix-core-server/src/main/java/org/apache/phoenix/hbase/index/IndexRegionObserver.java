@@ -17,50 +17,15 @@
  */
 package org.apache.phoenix.hbase.index;
 
-
-import static org.apache.hadoop.hbase.HConstants.OperationStatusCode.SUCCESS;
-import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.UPSERT_CF;
-import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.UPSERT_STATUS_CQ;
-import static org.apache.phoenix.hbase.index.util.IndexManagementUtil.rethrowIndexingException;
-
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
-import java.io.EOFException;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.TreeSet;
-import java.util.concurrent.ConcurrentHashMap;
-
-import org.apache.hadoop.hbase.CellScanner;
-import org.apache.hadoop.hbase.client.TableDescriptor;
-import org.apache.hadoop.hbase.regionserver.BloomType;
-import org.apache.phoenix.coprocessor.generated.PTableProtos;
-import org.apache.phoenix.execute.MutationState;
-import org.apache.phoenix.expression.CaseExpression;
-import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
-import org.apache.phoenix.jdbc.HAGroupStoreManager;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
+import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
@@ -69,11 +34,13 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.OperationStatus;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -88,7 +55,11 @@ import org.apache.htrace.Trace;
 import org.apache.htrace.TraceScope;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
+import org.apache.phoenix.coprocessor.generated.PTableProtos;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
+import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
@@ -109,19 +80,30 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.LazyParallelWriterIndexCommitter;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
+import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.CompiledConditionalTTLExpression;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
+import org.apache.phoenix.schema.TTLExpressionFactory;
 import org.apache.phoenix.schema.transform.TransformMaintainer;
+import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
 import org.apache.phoenix.util.ByteUtil;
@@ -136,12 +118,32 @@ import org.apache.phoenix.util.ServerUtil.ConnectionType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.EOFException;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import static org.apache.hadoop.hbase.HConstants.OperationStatusCode.SUCCESS;
 import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.applyNew;
 import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.removeColumn;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.UPSERT_CF;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.UPSERT_STATUS_CQ;
+import static org.apache.phoenix.hbase.index.util.IndexManagementUtil.rethrowIndexingException;
 import static org.apache.phoenix.index.PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB;
 import static org.apache.phoenix.index.PhoenixIndexBuilderHelper.RETURN_RESULT;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
@@ -227,124 +229,130 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     public static void setIgnoreWritingDeleteColumnsToIndex(boolean ignore) {
         ignoreWritingDeleteColumnsToIndex = ignore;
     }
+    public enum BatchMutatePhase {
+        PRE, POST, FAILED
+    }
 
-  public enum BatchMutatePhase {
-      PRE, POST, FAILED
-  }
+    // Hack to get around not being able to save any state between
+    // coprocessor calls. TODO: remove after HBASE-18127 when available
 
-  // Hack to get around not being able to save any state between
-  // coprocessor calls. TODO: remove after HBASE-18127 when available
+    /*
+    * The concurrent batch of mutations is a set such that every pair of batches in this set has at
+    * least one common row. Since a BatchMutateContext object of a batch is modified only after the
+    * row locks for all the rows that are mutated by this batch are acquired, there can be only one
+    * thread can acquire the locks for its batch and safely access all the batch contexts in the
+    * set of concurrent batches. Because of this, we do not read atomic variables or additional
+    * locks to serialize the access to the BatchMutateContext objects.
+    */
+    public static class BatchMutateContext {
+        private volatile BatchMutatePhase currentPhase = BatchMutatePhase.PRE;
+        // The max of reference counts on the pending rows of this batch at the time this
+        // batch arrives.
+        private int maxPendingRowCount = 0;
+        private final int clientVersion;
+        // The collection of index mutations that will be applied before the data table mutations.
+        // The empty column (i.e. the verified column) will have the value false ("unverified")
+        // on these mutations.
+        private ListMultimap<HTableInterfaceReference, Mutation> preIndexUpdates;
+        // The collection of index mutations that will be applied after the data table mutations.
+        // The empty column (i.e. the verified column) will have the value true ("verified")
+        // on the put mutations.
+        private ListMultimap<HTableInterfaceReference, Mutation> postIndexUpdates;
+        // The collection of candidate index mutations that will be applied after the data table
+        // mutations.
+        private ListMultimap<HTableInterfaceReference, Pair<Mutation, byte[]>> indexUpdates;
+        private List<RowLock> rowLocks =
+                Lists.newArrayListWithExpectedSize(QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
+        // TreeSet to improve locking efficiency and avoid deadlock (PHOENIX-6871 and HBASE-17924)
+        private Set<ImmutableBytesPtr> rowsToLock = new TreeSet<>();
+        // The current and next states of the data rows corresponding to the pending mutations
+        private HashMap<ImmutableBytesPtr, Pair<Put, Put>> dataRowStates;
+        // The previous concurrent batch contexts
+        private HashMap<ImmutableBytesPtr, BatchMutateContext> lastConcurrentBatchContext = null;
+        // The latches of the threads waiting for this batch to complete
+        private List<CountDownLatch> waitList = null;
+        private Map<ImmutableBytesPtr, MultiMutation> multiMutationMap;
+        // store current cells into a map where the key is ColumnReference of the column family and
+        // column qualifier, and value is a pair of cell and a boolean. The value of the boolean
+        // will be true if the expression is CaseExpression and Else-clause is evaluated to be
+        // true, will be null if there is no expression on this column, otherwise false
+        // This is only initialized for single row atomic mutation.
+        private Map<ColumnReference, Pair<Cell, Boolean>> currColumnCellExprMap;
+        // list containing the original mutations from the MiniBatchOperationInProgress. Contains
+        // any annotations we were sent by the client, and can be used in hooks that don't get
+        // passed MiniBatchOperationInProgress, like preWALAppend()
+        private List<Mutation> originalMutations;
+        private boolean hasAtomic;
+        private boolean hasRowDelete;
+        // Has uncovered global indexes which are not CDC Indexes
+        private boolean hasUncoveredIndex;
+        private boolean hasGlobalIndex; // Covered global index
+        private boolean hasLocalIndex;
+        private boolean hasTransform;
+        private boolean returnResult;
+        private boolean hasConditionalTTL; // table has Conditional TTL
 
-  /**
-   * The concurrent batch of mutations is a set such that every pair of batches in this set has at least one common row.
-   * Since a BatchMutateContext object of a batch is modified only after the row locks for all the rows that are mutated
-   * by this batch are acquired, there can be only one thread can acquire the locks for its batch and safely access
-   * all the batch contexts in the set of concurrent batches. Because of this, we do not read atomic variables or
-   * additional locks to serialize the access to the BatchMutateContext objects.
-   */
+        public BatchMutateContext() {
+            this.clientVersion = 0;
+        }
 
-  public static class BatchMutateContext {
-      private volatile BatchMutatePhase currentPhase = BatchMutatePhase.PRE;
-      // The max of reference counts on the pending rows of this batch at the time this batch arrives
-      private int maxPendingRowCount = 0;
-      private final int clientVersion;
-      // The collection of index mutations that will be applied before the data table mutations. The empty column (i.e.,
-      // the verified column) will have the value false ("unverified") on these mutations
-      private ListMultimap<HTableInterfaceReference, Mutation> preIndexUpdates;
-      // The collection of index mutations that will be applied after the data table mutations. The empty column (i.e.,
-      // the verified column) will have the value true ("verified") on the put mutations
-      private ListMultimap<HTableInterfaceReference, Mutation> postIndexUpdates;
-      // The collection of candidate index mutations that will be applied after the data table mutations
-      private ListMultimap<HTableInterfaceReference, Pair<Mutation, byte[]>> indexUpdates;
-      private List<RowLock> rowLocks = Lists.newArrayListWithExpectedSize(QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
-      //  TreeSet to improve locking efficiency and avoid deadlock (PHOENIX-6871 and HBASE-17924) 
-      private Set<ImmutableBytesPtr> rowsToLock = new TreeSet<>();
-      // The current and next states of the data rows corresponding to the pending mutations
-      private HashMap<ImmutableBytesPtr, Pair<Put, Put>> dataRowStates;
-      // The previous concurrent batch contexts
-      private HashMap<ImmutableBytesPtr, BatchMutateContext> lastConcurrentBatchContext = null;
-      // The latches of the threads waiting for this batch to complete
-      private List<CountDownLatch> waitList = null;
-      private Map<ImmutableBytesPtr, MultiMutation> multiMutationMap;
-      // store current cells into a map where the key is ColumnReference of the column family and
-      // column qualifier, and value is a pair of cell and a boolean. The value of the boolean
-      // will be true if the expression is CaseExpression and Else-clause is evaluated to be
-      // true, will be null if there is no expression on this column, otherwise false
-      // This is only initialized for single row atomic mutation.
-      private Map<ColumnReference, Pair<Cell, Boolean>> currColumnCellExprMap;
-
-      //list containing the original mutations from the MiniBatchOperationInProgress. Contains
-      // any annotations we were sent by the client, and can be used in hooks that don't get
-      // passed MiniBatchOperationInProgress, like preWALAppend()
-      private List<Mutation> originalMutations;
-      private boolean hasAtomic;
-      private boolean hasRowDelete;
-      private boolean hasUncoveredIndex; // Has uncovered global indexes which are not CDC Indexes
-      private boolean hasGlobalIndex; // Covered global index
-      private boolean hasLocalIndex;
-      private boolean hasTransform;
-      private boolean returnResult;
-
-      public BatchMutateContext() {
-          this.clientVersion = 0;
-      }
-      public BatchMutateContext(int clientVersion) {
+        public BatchMutateContext(int clientVersion) {
           this.clientVersion = clientVersion;
-      }
+        }
 
-      public void populateOriginalMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp) {
-          originalMutations = new ArrayList<Mutation>(miniBatchOp.size());
-          for (int k = 0; k < miniBatchOp.size(); k++) {
-              originalMutations.add(miniBatchOp.getOperation(k));
-          }
-      }
-      public List<Mutation> getOriginalMutations() {
-          return originalMutations;
-      }
+        public void populateOriginalMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp) {
+            originalMutations = new ArrayList<Mutation>(miniBatchOp.size());
+            for (int k = 0; k < miniBatchOp.size(); k++) {
+                originalMutations.add(miniBatchOp.getOperation(k));
+            }
+        }
 
-      public BatchMutatePhase getCurrentPhase() {
-          return currentPhase;
-      }
+        public List<Mutation> getOriginalMutations() {
+            return originalMutations;
+        }
 
-      public Put getNextDataRowState(ImmutableBytesPtr rowKeyPtr) {
-          Pair<Put, Put> rowState = dataRowStates.get(rowKeyPtr);
-          if (rowState != null) {
-              return rowState.getSecond();
-          }
-          return null;
-      }
+        public BatchMutatePhase getCurrentPhase() {
+            return currentPhase;
+        }
 
-      public CountDownLatch getCountDownLatch() {
-          synchronized (this) {
-              if (currentPhase != BatchMutatePhase.PRE) {
-                  return null;
-              }
-              if (waitList == null) {
-                  waitList = new ArrayList<>();
-              }
-              CountDownLatch countDownLatch = new CountDownLatch(1);
-              waitList.add(countDownLatch);
-              return countDownLatch;
-          }
-      }
+        public Put getNextDataRowState(ImmutableBytesPtr rowKeyPtr) {
+            Pair<Put, Put> rowState = dataRowStates.get(rowKeyPtr);
+            if (rowState != null) {
+                return rowState.getSecond();
+            }
+            return null;
+        }
 
-      public void countDownAllLatches() {
-          synchronized (this) {
-              if (waitList != null) {
-                  for (CountDownLatch countDownLatch : waitList) {
-                      countDownLatch.countDown();
-                  }
-              }
-          }
-      }
+        public CountDownLatch getCountDownLatch() {
+            synchronized (this) {
+                if (currentPhase != BatchMutatePhase.PRE) {
+                    return null;
+                }
+                if (waitList == null) {
+                    waitList = new ArrayList<>();
+                }
+                CountDownLatch countDownLatch = new CountDownLatch(1);
+                waitList.add(countDownLatch);
+                return countDownLatch;
+            }
+        }
 
-      public int getMaxPendingRowCount() {
-          return maxPendingRowCount;
-      }
-  }
+        public void countDownAllLatches() {
+            synchronized (this) {
+                if (waitList != null) {
+                    for (CountDownLatch countDownLatch : waitList) {
+                        countDownLatch.countDown();
+                    }
+                }
+            }
+        }
 
-  private ThreadLocal<BatchMutateContext> batchMutateContext =
-          new ThreadLocal<BatchMutateContext>();
+        public int getMaxPendingRowCount() {
+            return maxPendingRowCount;
+        }
+    }
+    private ThreadLocal<BatchMutateContext> batchMutateContext =
+            new ThreadLocal<BatchMutateContext>();
 
   /**
    * Configuration key for if the indexer should check the version of HBase is running. Generally,
@@ -548,8 +556,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           BatchMutateContext context) {
       for (int i = 0; i < miniBatchOp.size(); i++) {
           Mutation m = miniBatchOp.getOperation(i);
-          if (this.builder.isAtomicOp(m) || context.returnResult ||
-                  this.builder.isEnabled(m)) {
+          if (this.builder.isAtomicOp(m) || context.returnResult
+                  || this.builder.isEnabled(m) || this.builder.hasConditionalTTL(m)) {
               ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
               context.rowsToLock.add(row);
           }
@@ -632,6 +640,109 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       }
   }
 
+    /**
+     * If the table has conditional TTL, then before making any update to a row we need to evaluate
+     * the ttl expression to check if the current row version has expired. If the current row
+     * version has expired then the incoming mutation has to be treated like inserting a new row.
+     * This means that when making an update over an expired row, any columns that are not being
+     * updated in the new incoming mutation have to be explicitly masked so that the existing
+     * column versions are not visible. This is achieved by creating a new Delete mutation and
+     * adding DeleteColumn cells for all the columns that have to be masked. This new mutation is
+     * then attached to the batch as an additional coproc mutation.
+     */
+    private void updateMutationsForConditionalTTL(
+            MiniBatchOperationInProgress<Mutation> miniBatchOp,
+            BatchMutateContext context) throws IOException {
+        // mapping from row key to indices in mini batch
+        Map<ImmutableBytesPtr, List<Integer>> expiredVersions = Maps.newHashMap();
+        Set<ImmutableBytesPtr> notExpiredVersions = Sets.newHashSet();
+        for (int i = 0; i < miniBatchOp.size(); i++) {
+            Mutation m = miniBatchOp.getOperation(i);
+            if (!builder.hasConditionalTTL(m)) {
+                continue;
+            }
+            if (IndexUtil.isDeleteFamily(m)) {
+                // no need to fix DeleteFamily mutation
+                continue;
+            }
+            ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
+            Pair<Put, Put> dataRowState = context.dataRowStates.get(row);
+            if (dataRowState == null) {
+                continue;
+            }
+            Put currentVersion = dataRowState.getFirst();
+            if (currentVersion == null) {
+                continue;
+            }
+            if (notExpiredVersions.contains(row)) {
+                continue;
+            }
+            List<Integer> positions = expiredVersions.get(row);
+            if (positions != null) {
+                positions.add(i);
+                continue;
+            }
+            byte[] ttl = m.getAttribute(BaseScannerRegionObserverConstants.TTL);
+            CompiledConditionalTTLExpression ttlExpr =
+                    (CompiledConditionalTTLExpression) TTLExpressionFactory.create(ttl);
+            List<Cell> currentRow = flattenCells(currentVersion);
+            // isRaw is false because we are looking at a Put mutation
+            if (ttlExpr.isExpired(currentRow, false)) {
+                // current version is expired
+                positions = Lists.newArrayListWithExpectedSize(2);
+                positions.add(i);
+                expiredVersions.put(row, positions);
+            } else {
+                notExpiredVersions.add(row);
+            }
+        }
+        for (Map.Entry<ImmutableBytesPtr, List<Integer>> entry : expiredVersions.entrySet()) {
+            ImmutableBytesPtr key = entry.getKey();
+            List<Integer> positions = entry.getValue();
+            Pair<Put, Put> dataRowState = context.dataRowStates.get(key);
+            Put currentVersion = dataRowState.getFirst();
+            // keep track of all the columns that have be masked using DeleteColumn
+            List<ColumnReference> colsToBeMasked = Lists.newArrayList();
+            for (List<Cell> cells : currentVersion.getFamilyCellMap().values()) {
+                for (Cell cell : cells) {
+                    boolean masked = true;
+                    for (Integer pos : positions) {
+                        Mutation m = miniBatchOp.getOperation(pos);
+                        if (m.has(cell.getFamilyArray(), cell.getQualifierArray())) {
+                            masked = false;
+                            break;
+                        }
+                    }
+                    if (masked) {
+                        ColumnReference colRef = new ColumnReference(CellUtil.cloneFamily(cell),
+                                CellUtil.cloneQualifier(cell));
+                        colsToBeMasked.add(colRef);
+                    }
+                }
+            }
+            if (!colsToBeMasked.isEmpty()) {
+                Mutation m = miniBatchOp.getOperation(positions.get(0));
+                // create a new Delete mutation that will have DeleteColumn cells for all the columns
+                // that have to be masked.
+                Delete masked = new Delete(m.getRow());
+                for (ColumnReference col : colsToBeMasked) {
+                    // build a DeleteColumn cell and it to the new Delete mutation
+                    KeyValue kv = GenericKeyValueBuilder.INSTANCE.buildDeleteColumns(
+                            key,
+                            col.getFamilyWritable(),
+                            col.getQualifierWritable(),
+                            HConstants.LATEST_TIMESTAMP);
+                    masked.add(kv);
+                }
+                // attach the Delete mutation as an additional coproc mutation to the mini batch
+                miniBatchOp.addOperationsFromCP(positions.get(0), new Mutation[] {masked});
+            }
+            // Since the current version has expired update the in-memory state so that
+            // this row is treated as a new row
+            context.dataRowStates.put(key, null);
+        }
+    }
+
   private void lockRows(BatchMutateContext context) throws IOException {
       for (ImmutableBytesPtr rowKey : context.rowsToLock) {
           context.rowLocks.add(lockManager.lockRow(rowKey, rowLockWaitDuration));
@@ -681,11 +792,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                 continue;
             }
             Mutation m = miniBatchOp.getOperation(i);
-            // skip this mutation if we aren't enabling indexing or not an atomic op
-            // or if it is an atomic op and its timestamp is already set(not LATEST)
-            if (!builder.isEnabled(m) &&
-                    !((builder.isAtomicOp(m) || builder.returnResult(m)) &&
-                            IndexUtil.getMaxTimestamp(m) == HConstants.LATEST_TIMESTAMP)) {
+            // skip this mutation if we aren't enabling indexing or Conditional TTL
+            // or not an atomic op or if it is an atomic op
+            // and its timestamp is already set(not LATEST)
+            if (!builder.isEnabled(m) && !builder.hasConditionalTTL(m)
+                    && !((builder.isAtomicOp(m) || builder.returnResult(m))
+                    && IndexUtil.getMaxTimestamp(m) == HConstants.LATEST_TIMESTAMP)) {
                 continue;
             }
             setTimestampOnMutation(m, ts);
@@ -1205,6 +1317,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             if (this.builder.returnResult(m) && miniBatchOp.size() == 1) {
                 context.returnResult = true;
             }
+            if (this.builder.hasConditionalTTL(m)) {
+                context.hasConditionalTTL = true;
+            }
             if (this.builder.isAtomicOp(m) || this.builder.returnResult(m)) {
                 context.hasAtomic = true;
                 if (context.hasRowDelete) {
@@ -1355,18 +1470,30 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         lockRows(context);
         long onDupCheckTime = 0;
 
-        if (context.hasAtomic || context.returnResult || context.hasGlobalIndex ||
-                context.hasUncoveredIndex || context.hasTransform) {
+        if (context.hasAtomic || context.returnResult || context.hasGlobalIndex
+                || context.hasUncoveredIndex || context.hasTransform
+                || context.hasConditionalTTL) {
             // Retrieve the current row states from the data table while holding the lock.
             // This is needed for both atomic mutations and global indexes
             long start = EnvironmentEdgeManager.currentTimeMillis();
-            context.dataRowStates = new HashMap<ImmutableBytesPtr, Pair<Put, Put>>(context.rowsToLock.size());
-            if (context.hasGlobalIndex || context.hasTransform || context.hasAtomic ||
-                    context.returnResult || context.hasRowDelete || (context.hasUncoveredIndex &&
-                    isPartialUncoveredIndexMutation(indexMetaData, miniBatchOp))) {
+            context.dataRowStates =
+                    new HashMap<ImmutableBytesPtr, Pair<Put, Put>>(context.rowsToLock.size());
+            if (context.hasGlobalIndex || context.hasTransform || context.hasAtomic
+                    || context.returnResult || context.hasRowDelete || context.hasConditionalTTL
+                    || (context.hasUncoveredIndex
+                    && isPartialUncoveredIndexMutation(indexMetaData, miniBatchOp))) {
                 getCurrentRowStates(c, context);
             }
             onDupCheckTime += (EnvironmentEdgeManager.currentTimeMillis() - start);
+        }
+
+        if (context.hasConditionalTTL) {
+            // If the table has conditional TTL, then before making any update to a row
+            // we need to evaluate the ttl expression to check if the current row version has
+            // expired. If the current row version has expired then the incoming mutation has to
+            // be treated like inserting a new row. Do this before applying atomic upserts since
+            // this can affect ON DUPLICATE KEY clauses in the upsert statement.
+            updateMutationsForConditionalTTL(miniBatchOp, context);
         }
 
         if (context.hasAtomic || context.returnResult) {

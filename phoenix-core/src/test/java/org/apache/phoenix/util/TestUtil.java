@@ -132,6 +132,7 @@ import org.apache.phoenix.filter.SingleKeyValueComparisonFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.SQLParser;
@@ -151,6 +152,8 @@ import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TTLExpression;
+import org.apache.phoenix.schema.TTLExpressionFactory;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
@@ -977,7 +980,6 @@ public class TestUtil {
     }
 
     public static int getRawRowCount(Table table) throws IOException {
-        dumpTable(table);
         return getRowCount(table, true);
     }
 
@@ -1006,30 +1008,54 @@ public class TestUtil {
                 Cell current = null;
                 while (cellScanner.advance()) {
                     current = cellScanner.current();
-                    cellCount.addCell(Bytes.toString(CellUtil.cloneRow(current)));
+                    cellCount.addOrUpdateCell(Bytes.toString(CellUtil.cloneRow(current)));
                 }
             }
         }
         return cellCount;
     }
 
-    static class CellCount {
+    public static class CellCount {
         private Map<String, Integer> rowCountMap = new HashMap<String, Integer>();
 
-        void addCell(String key) {
+        public void addOrUpdateCell(String key) {
+            addOrUpdateCells(key, 1);
+        }
+
+        public void addOrUpdateCells(String key, int count) {
             if (rowCountMap.containsKey(key)) {
-                rowCountMap.put(key, rowCountMap.get(key) + 1);
+                rowCountMap.put(key, rowCountMap.get(key) + count);
             } else {
-                rowCountMap.put(key, 1);
+                insertRow(key, count);
             }
         }
 
-        int getCellCount(String key) {
+        public void insertRow(String key, int count) {
+            rowCountMap.put(key, count);
+        }
+
+        public void removeRow(String key) {
+            rowCountMap.remove(key);
+        }
+
+        public int getCellCount(String key) {
             if (rowCountMap.containsKey(key)) {
                 return rowCountMap.get(key);
             } else {
                 return 0;
             }
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            CellCount other = (CellCount) o;
+            return rowCountMap.equals(other.rowCountMap);
         }
     }
 
@@ -1210,6 +1236,28 @@ public class TestUtil {
         return rs.getLong(1);
     }
 
+    public static long getRowCount(Connection conn, String tableName, boolean skipIndex)
+            throws SQLException {
+        String query = String.format("SELECT %s count(*) FROM %s",
+                (skipIndex ? "/*+ NO_INDEX */" : ""), tableName);
+        try(ResultSet rs = conn.createStatement().executeQuery(query)) {
+            assertTrue(rs.next());
+            return rs.getLong(1);
+        }
+    }
+
+    public static long getRowCountFromIndex(Connection conn, String tableName, String indexName)
+            throws SQLException {
+        String query = String.format("SELECT count(*) FROM %s", tableName);
+        try(ResultSet rs = conn.createStatement().executeQuery(query)) {
+            PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
+            String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
+            assertTrue(explainPlan.contains(indexName));
+            assertTrue(rs.next());
+            return rs.getLong(1);
+        }
+    }
+
     public static void addCoprocessor(Connection conn, String tableName, Class coprocessorClass) throws Exception {
         int priority = QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY + 100;
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
@@ -1358,14 +1406,16 @@ public class TestUtil {
 
     public static void assertTableHasTtl(Connection conn, TableName tableName, int ttl, boolean phoenixTTLEnabled)
         throws SQLException, IOException {
-        long tableTTL = -1;
+        TTLExpression tableTTL;
         if (phoenixTTLEnabled) {
             tableTTL = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,
-                    tableName.getNameAsString())).getTTL();
+                    tableName.getNameAsString())).getTTLExpression();
         } else {
-            tableTTL = getColumnDescriptor(conn, tableName).getTimeToLive();
+            tableTTL = TTLExpressionFactory.create(
+                    getColumnDescriptor(conn, tableName).getTimeToLive());
         }
-        Assert.assertEquals(ttl, tableTTL);
+        TTLExpression expectedTTL = TTLExpressionFactory.create(ttl);
+        Assert.assertEquals(expectedTTL, tableTTL);
     }
 
     public static void assertTableHasVersions(Connection conn, TableName tableName, int versions)
@@ -1401,6 +1451,14 @@ public class TestUtil {
         CellCount cellCount = getCellCount(table, true);
         return cellCount.getCellCount(Bytes.toString(row));
     }
+
+    public static CellCount getRawCellCount(Connection conn, TableName tableName)
+            throws IOException, SQLException {
+        ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        Table table = cqs.getTable(tableName.getName());
+        return getCellCount(table, true);
+    }
+
     public static void assertRawCellCount(Connection conn, TableName tableName,
                                           byte[] row, int expectedCellCount)
         throws SQLException, IOException {
@@ -1519,6 +1577,18 @@ public class TestUtil {
                 = ConnectionFactory.createConnection(configuration);
         regionLocator = hbaseConn.getRegionLocator(TableName.valueOf(tableName));
         return regionLocator.getAllRegionLocations();
+    }
+
+    public static String retainSingleQuotes(String input) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < input.length(); ++i) {
+            char ch = input.charAt(i);
+            sb.append(ch);
+            if (ch == '\'') {
+                sb.append('\'');
+            }
+        }
+        return sb.toString();
     }
 
 }

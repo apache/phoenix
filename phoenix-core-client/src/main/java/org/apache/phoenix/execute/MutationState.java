@@ -127,6 +127,7 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.SQLCloseable;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SizedUtil;
 import org.apache.phoenix.util.TransactionUtil;
@@ -1417,6 +1418,9 @@ public class MutationState implements SQLCloseable {
                 final ServerCache cache = tableInfo.isDataTable() ?
                         IndexMetaDataCacheClient.setMetaDataOnMutations(connection, table,
                                 mutationList, indexMetaDataPtr) : null;
+                // no-op if table doesn't have Conditional TTL
+                ScanUtil.annotateMutationWithConditionalTTL(connection, tableInfo.getPTable(),
+                        mutationList);
                 // If we haven't retried yet, retry for this case only, as it's possible that
                 // a split will occur after we send the index metadata cache to all known
                 // region servers.
