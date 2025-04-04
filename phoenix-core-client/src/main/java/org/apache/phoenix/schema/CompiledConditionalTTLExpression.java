@@ -64,22 +64,14 @@ public class CompiledConditionalTTLExpression implements CompiledTTLExpression {
     // columns referenced in the ttl expression to be added to scan
     private final Set<ColumnReference> conditionExprColumns;
 
-    // Since DeleteColumn updates are not propagated to indexes we mask older columns
-    // within GlobalIndexChecker. We need to do the same masking in TTLRegionScanner
-    // before we evaluate the ttl expression on the row. We apply this masking on server
-    // maintained indexes.
-    private final boolean maskOlderCells;
-
     public CompiledConditionalTTLExpression(String ttlExpr,
                                             Expression compiledExpression,
-                                            Set<ColumnReference> conditionExprColumns,
-                                            boolean maskOlderCells) {
+                                            Set<ColumnReference> conditionExprColumns) {
         Preconditions.checkNotNull(compiledExpression);
         Preconditions.checkNotNull(conditionExprColumns);
         this.ttlExpr = ttlExpr;
         this.compiledExpr = compiledExpression;
         this.conditionExprColumns = conditionExprColumns;
-        this.maskOlderCells = maskOlderCells;
     }
 
     @Override
@@ -143,47 +135,6 @@ public class CompiledConditionalTTLExpression implements CompiledTTLExpression {
         return latestRowVersion;
     }
 
-    /**
-     * This logic has been borrowed from GlobalIndexChecker#removeOlderCells
-     * This is needed to correctly handle updates to the index row when some columns
-     * are set to null and thus are not updated but an older version of the same column
-     * might have a valid value. Since TTLRegionScanner evaluates the row before GlobalIndexChecker
-     * processes the row we need to mask such columns in TTLRegionScanner also for correctness.
-     * @return
-     */
-    private List<Cell> maskOlderCells(List<Cell> cellList) {
-        Iterator<Cell> cellIterator = cellList.iterator();
-        if (!cellIterator.hasNext()) {
-            return cellList;
-        }
-        Cell cell = cellIterator.next();
-        long maxTs = cell.getTimestamp();
-        long ts;
-        boolean allTheSame = true;
-        while (cellIterator.hasNext()) {
-            cell = cellIterator.next();
-            ts = cell.getTimestamp();
-            if (ts != maxTs) {
-                if (ts > maxTs) {
-                    maxTs = ts;
-                }
-                allTheSame = false;
-            }
-        }
-        if (allTheSame) {
-            return cellList;
-        }
-        List<Cell> result = Lists.newArrayListWithExpectedSize(cellList.size());
-        cellIterator = cellList.iterator();
-        while (cellIterator.hasNext()) {
-            cell = cellIterator.next();
-            if (cell.getTimestamp() == maxTs) {
-                result.add(cell);
-            }
-        }
-        return result;
-    }
-
     @Override
     /**
      * @param result row to be evaluated against the conditional ttl expression. The cells
@@ -219,10 +170,6 @@ public class CompiledConditionalTTLExpression implements CompiledTTLExpression {
         }
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         List<Cell> latestRowVersion = !isRaw ? result : getLatestRowVersion(result);
-        if (maskOlderCells) {
-            // check and remove older cells for index scans
-            latestRowVersion = maskOlderCells(latestRowVersion);
-        }
         if (latestRowVersion.isEmpty()) {
             return false;
         }
@@ -240,11 +187,6 @@ public class CompiledConditionalTTLExpression implements CompiledTTLExpression {
      */
     public Set<ColumnReference> getColumnsReferenced() {
         return conditionExprColumns;
-    }
-
-    @VisibleForTesting
-    public boolean isMaskingOlderCells() {
-        return maskOlderCells;
     }
 
     private static byte[] serializeExpression(Expression condTTLExpr) throws IOException {
@@ -279,12 +221,10 @@ public class CompiledConditionalTTLExpression implements CompiledTTLExpression {
                     colRefFromProto.getFamily().toByteArray(),
                     colRefFromProto.getQualifier().toByteArray()));
         }
-        boolean removeOlderCells = condition.getRemoveOlderCells();
         return new CompiledConditionalTTLExpression(
                 ttlExpr,
                 compiledExpression,
-                conditionExprColumns,
-                removeOlderCells);
+                conditionExprColumns);
     }
 
     @Override
@@ -300,7 +240,6 @@ public class CompiledConditionalTTLExpression implements CompiledTTLExpression {
             cRefBuilder.setQualifier(ByteStringer.wrap(colRef.getQualifier()));
             condition.addTtlExpressionColumns(cRefBuilder.build());
         }
-        condition.setRemoveOlderCells(maskOlderCells);
         ttl.setCondition(condition.build());
         return ttl.build();
     }

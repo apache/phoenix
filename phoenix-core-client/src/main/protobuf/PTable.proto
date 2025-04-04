@@ -139,7 +139,6 @@ message ConditionTTL {
   required string ttlExpression = 1;
   required bytes compiledExpression = 2;
   repeated ColumnReference ttlExpressionColumns = 3;
-  required bool removeOlderCells = 4;
 }
 
 message TTLExpression {

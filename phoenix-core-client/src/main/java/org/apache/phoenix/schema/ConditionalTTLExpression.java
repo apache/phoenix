@@ -112,17 +112,10 @@ public class ConditionalTTLExpression implements TTLExpression {
                                               PTable table) throws SQLException {
 
         Pair<Expression, Set<ColumnReference>> exprAndCols = buildExpression(connection, table);
-        // Since DeleteColumn updates are not propagated to indexes we mask older columns
-        // within GlobalIndexChecker. We need to do the same masking in TTLRegionScanner
-        // before we evaluate the ttl expression on the row. We apply this masking on server
-        // maintained indexes.
-        boolean maskOlderCells = table.getType() == INDEX
-                && IndexUtil.isGlobalIndex(table) && !table.isImmutableRows();
         return new CompiledConditionalTTLExpression(
                 ttlExpr,
                 exprAndCols.getFirst(),
-                exprAndCols.getSecond(),
-                maskOlderCells);
+                exprAndCols.getSecond());
     }
 
     private Pair<Expression, Set<ColumnReference>> buildExpression(

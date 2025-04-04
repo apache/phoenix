@@ -64,16 +64,6 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
         assertEquals(expected, table.getTTLExpression());
     }
 
-    private static void assertMaskingOlderCellsForIndex(Connection conn,
-                                                     String tableName,
-                                                     boolean expected) throws SQLException {
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        PTable table = pconn.getTable(tableName);
-        CompiledConditionalTTLExpression compiledCondExpression =
-                (CompiledConditionalTTLExpression) table.getCompiledTTLExpression(pconn);
-        assertEquals(expected, compiledCondExpression.isMaskingOlderCells());
-    }
-
     private void validateScan(Connection conn,
                               String tableName,
                               String query,
@@ -232,42 +222,6 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
                     indexName, tableName);
             conn.createStatement().execute(ddl);
             assertConditonTTL(conn, indexName, ttl);
-        }
-    }
-
-    @Test
-    public void testMaskingOlderCellsOfIndex() throws SQLException {
-        boolean[] mutable = { true, false};
-        for (boolean isMutable : mutable) {
-            String ddlTemplate = "create table %s (k1 bigint not null, k2 bigint not null," +
-                    "col1 varchar, col2 date constraint pk primary key (k1,k2 desc)) TTL = '%s'" +
-                    (!isMutable ? ", IMMUTABLE_ROWS=true" : "");
-            String ttl = "col1 = 'expired' AND col2 + 10 > CURRENT_DATE()";
-            String tableName = "T_" + generateUniqueName();
-            String ddl = String.format(ddlTemplate, tableName, retainSingleQuotes(ttl));
-            try (Connection conn = DriverManager.getConnection(getUrl())) {
-                conn.createStatement().execute(ddl);
-                assertMaskingOlderCellsForIndex(conn, tableName, false); // table
-                // create view
-                String viewName = "GV_" + generateUniqueName();
-                ddl = String.format("create view %s (col3 varchar) as " +
-                        "select * from %s where k1 = 2", viewName, tableName);
-                conn.createStatement().execute(ddl);
-                assertMaskingOlderCellsForIndex(conn, viewName, false); // view
-                // create global index
-                String indexName = "I_" + generateUniqueName();
-                ddl = String.format("create index %s on %s (col2) include(col1)",
-                        indexName, tableName);
-                conn.createStatement().execute(ddl);
-                // only mutable global index
-                assertMaskingOlderCellsForIndex(conn, indexName, isMutable);
-                // create local index
-                indexName = "L_" + generateUniqueName();
-                ddl = String.format("create local index %s on %s (col2) include(col1)",
-                        indexName, tableName);
-                conn.createStatement().execute(ddl);
-                assertMaskingOlderCellsForIndex(conn, indexName, false); // local index
-            }
         }
     }
 
