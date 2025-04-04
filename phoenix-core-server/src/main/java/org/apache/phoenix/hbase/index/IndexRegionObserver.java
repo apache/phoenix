@@ -229,125 +229,130 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     public static void setIgnoreWritingDeleteColumnsToIndex(boolean ignore) {
         ignoreWritingDeleteColumnsToIndex = ignore;
     }
+    public enum BatchMutatePhase {
+        PRE, POST, FAILED
+    }
 
-  public enum BatchMutatePhase {
-      PRE, POST, FAILED
-  }
+    // Hack to get around not being able to save any state between
+    // coprocessor calls. TODO: remove after HBASE-18127 when available
 
-  // Hack to get around not being able to save any state between
-  // coprocessor calls. TODO: remove after HBASE-18127 when available
+    /*
+    * The concurrent batch of mutations is a set such that every pair of batches in this set has at
+    * least one common row. Since a BatchMutateContext object of a batch is modified only after the
+    * row locks for all the rows that are mutated by this batch are acquired, there can be only one
+    * thread can acquire the locks for its batch and safely access all the batch contexts in the
+    * set of concurrent batches. Because of this, we do not read atomic variables or additional
+    * locks to serialize the access to the BatchMutateContext objects.
+    */
+    public static class BatchMutateContext {
+        private volatile BatchMutatePhase currentPhase = BatchMutatePhase.PRE;
+        // The max of reference counts on the pending rows of this batch at the time this
+        // batch arrives.
+        private int maxPendingRowCount = 0;
+        private final int clientVersion;
+        // The collection of index mutations that will be applied before the data table mutations.
+        // The empty column (i.e. the verified column) will have the value false ("unverified")
+        // on these mutations.
+        private ListMultimap<HTableInterfaceReference, Mutation> preIndexUpdates;
+        // The collection of index mutations that will be applied after the data table mutations.
+        // The empty column (i.e. the verified column) will have the value true ("verified")
+        // on the put mutations.
+        private ListMultimap<HTableInterfaceReference, Mutation> postIndexUpdates;
+        // The collection of candidate index mutations that will be applied after the data table
+        // mutations.
+        private ListMultimap<HTableInterfaceReference, Pair<Mutation, byte[]>> indexUpdates;
+        private List<RowLock> rowLocks =
+                Lists.newArrayListWithExpectedSize(QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
+        // TreeSet to improve locking efficiency and avoid deadlock (PHOENIX-6871 and HBASE-17924)
+        private Set<ImmutableBytesPtr> rowsToLock = new TreeSet<>();
+        // The current and next states of the data rows corresponding to the pending mutations
+        private HashMap<ImmutableBytesPtr, Pair<Put, Put>> dataRowStates;
+        // The previous concurrent batch contexts
+        private HashMap<ImmutableBytesPtr, BatchMutateContext> lastConcurrentBatchContext = null;
+        // The latches of the threads waiting for this batch to complete
+        private List<CountDownLatch> waitList = null;
+        private Map<ImmutableBytesPtr, MultiMutation> multiMutationMap;
+        // store current cells into a map where the key is ColumnReference of the column family and
+        // column qualifier, and value is a pair of cell and a boolean. The value of the boolean
+        // will be true if the expression is CaseExpression and Else-clause is evaluated to be
+        // true, will be null if there is no expression on this column, otherwise false
+        // This is only initialized for single row atomic mutation.
+        private Map<ColumnReference, Pair<Cell, Boolean>> currColumnCellExprMap;
+        // list containing the original mutations from the MiniBatchOperationInProgress. Contains
+        // any annotations we were sent by the client, and can be used in hooks that don't get
+        // passed MiniBatchOperationInProgress, like preWALAppend()
+        private List<Mutation> originalMutations;
+        private boolean hasAtomic;
+        private boolean hasRowDelete;
+        // Has uncovered global indexes which are not CDC Indexes
+        private boolean hasUncoveredIndex;
+        private boolean hasGlobalIndex; // Covered global index
+        private boolean hasLocalIndex;
+        private boolean hasTransform;
+        private boolean returnResult;
+        private boolean hasConditionalTTL; // table has Conditional TTL
 
-  /**
-   * The concurrent batch of mutations is a set such that every pair of batches in this set has at least one common row.
-   * Since a BatchMutateContext object of a batch is modified only after the row locks for all the rows that are mutated
-   * by this batch are acquired, there can be only one thread can acquire the locks for its batch and safely access
-   * all the batch contexts in the set of concurrent batches. Because of this, we do not read atomic variables or
-   * additional locks to serialize the access to the BatchMutateContext objects.
-   */
+        public BatchMutateContext() {
+            this.clientVersion = 0;
+        }
 
-  public static class BatchMutateContext {
-      private volatile BatchMutatePhase currentPhase = BatchMutatePhase.PRE;
-      // The max of reference counts on the pending rows of this batch at the time this batch arrives
-      private int maxPendingRowCount = 0;
-      private final int clientVersion;
-      // The collection of index mutations that will be applied before the data table mutations. The empty column (i.e.,
-      // the verified column) will have the value false ("unverified") on these mutations
-      private ListMultimap<HTableInterfaceReference, Mutation> preIndexUpdates;
-      // The collection of index mutations that will be applied after the data table mutations. The empty column (i.e.,
-      // the verified column) will have the value true ("verified") on the put mutations
-      private ListMultimap<HTableInterfaceReference, Mutation> postIndexUpdates;
-      // The collection of candidate index mutations that will be applied after the data table mutations
-      private ListMultimap<HTableInterfaceReference, Pair<Mutation, byte[]>> indexUpdates;
-      private List<RowLock> rowLocks = Lists.newArrayListWithExpectedSize(QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
-      //  TreeSet to improve locking efficiency and avoid deadlock (PHOENIX-6871 and HBASE-17924) 
-      private Set<ImmutableBytesPtr> rowsToLock = new TreeSet<>();
-      // The current and next states of the data rows corresponding to the pending mutations
-      private HashMap<ImmutableBytesPtr, Pair<Put, Put>> dataRowStates;
-      // The previous concurrent batch contexts
-      private HashMap<ImmutableBytesPtr, BatchMutateContext> lastConcurrentBatchContext = null;
-      // The latches of the threads waiting for this batch to complete
-      private List<CountDownLatch> waitList = null;
-      private Map<ImmutableBytesPtr, MultiMutation> multiMutationMap;
-      // store current cells into a map where the key is ColumnReference of the column family and
-      // column qualifier, and value is a pair of cell and a boolean. The value of the boolean
-      // will be true if the expression is CaseExpression and Else-clause is evaluated to be
-      // true, will be null if there is no expression on this column, otherwise false
-      // This is only initialized for single row atomic mutation.
-      private Map<ColumnReference, Pair<Cell, Boolean>> currColumnCellExprMap;
-
-      //list containing the original mutations from the MiniBatchOperationInProgress. Contains
-      // any annotations we were sent by the client, and can be used in hooks that don't get
-      // passed MiniBatchOperationInProgress, like preWALAppend()
-      private List<Mutation> originalMutations;
-      private boolean hasAtomic;
-      private boolean hasRowDelete;
-      private boolean hasUncoveredIndex; // Has uncovered global indexes which are not CDC Indexes
-      private boolean hasGlobalIndex; // Covered global index
-      private boolean hasLocalIndex;
-      private boolean hasTransform;
-      private boolean returnResult;
-      private boolean hasConditionalTTL; // table has Conditional TTL
-
-      public BatchMutateContext() {
-          this.clientVersion = 0;
-      }
-      public BatchMutateContext(int clientVersion) {
+        public BatchMutateContext(int clientVersion) {
           this.clientVersion = clientVersion;
-      }
+        }
 
-      public void populateOriginalMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp) {
-          originalMutations = new ArrayList<Mutation>(miniBatchOp.size());
-          for (int k = 0; k < miniBatchOp.size(); k++) {
-              originalMutations.add(miniBatchOp.getOperation(k));
-          }
-      }
-      public List<Mutation> getOriginalMutations() {
-          return originalMutations;
-      }
+        public void populateOriginalMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp) {
+            originalMutations = new ArrayList<Mutation>(miniBatchOp.size());
+            for (int k = 0; k < miniBatchOp.size(); k++) {
+                originalMutations.add(miniBatchOp.getOperation(k));
+            }
+        }
 
-      public BatchMutatePhase getCurrentPhase() {
-          return currentPhase;
-      }
+        public List<Mutation> getOriginalMutations() {
+            return originalMutations;
+        }
 
-      public Put getNextDataRowState(ImmutableBytesPtr rowKeyPtr) {
-          Pair<Put, Put> rowState = dataRowStates.get(rowKeyPtr);
-          if (rowState != null) {
-              return rowState.getSecond();
-          }
-          return null;
-      }
+        public BatchMutatePhase getCurrentPhase() {
+            return currentPhase;
+        }
 
-      public CountDownLatch getCountDownLatch() {
-          synchronized (this) {
-              if (currentPhase != BatchMutatePhase.PRE) {
-                  return null;
-              }
-              if (waitList == null) {
-                  waitList = new ArrayList<>();
-              }
-              CountDownLatch countDownLatch = new CountDownLatch(1);
-              waitList.add(countDownLatch);
-              return countDownLatch;
-          }
-      }
+        public Put getNextDataRowState(ImmutableBytesPtr rowKeyPtr) {
+            Pair<Put, Put> rowState = dataRowStates.get(rowKeyPtr);
+            if (rowState != null) {
+                return rowState.getSecond();
+            }
+            return null;
+        }
 
-      public void countDownAllLatches() {
-          synchronized (this) {
-              if (waitList != null) {
-                  for (CountDownLatch countDownLatch : waitList) {
-                      countDownLatch.countDown();
-                  }
-              }
-          }
-      }
+        public CountDownLatch getCountDownLatch() {
+            synchronized (this) {
+                if (currentPhase != BatchMutatePhase.PRE) {
+                    return null;
+                }
+                if (waitList == null) {
+                    waitList = new ArrayList<>();
+                }
+                CountDownLatch countDownLatch = new CountDownLatch(1);
+                waitList.add(countDownLatch);
+                return countDownLatch;
+            }
+        }
 
-      public int getMaxPendingRowCount() {
-          return maxPendingRowCount;
-      }
-  }
+        public void countDownAllLatches() {
+            synchronized (this) {
+                if (waitList != null) {
+                    for (CountDownLatch countDownLatch : waitList) {
+                        countDownLatch.countDown();
+                    }
+                }
+            }
+        }
 
-  private ThreadLocal<BatchMutateContext> batchMutateContext =
-          new ThreadLocal<BatchMutateContext>();
+        public int getMaxPendingRowCount() {
+            return maxPendingRowCount;
+        }
+    }
+    private ThreadLocal<BatchMutateContext> batchMutateContext =
+            new ThreadLocal<BatchMutateContext>();
 
   /**
    * Configuration key for if the indexer should check the version of HBase is running. Generally,
@@ -635,25 +640,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       }
   }
 
-  private boolean isDeleteFamilyMutation(Mutation m) throws IOException {
-      boolean result = false;
-      if (! (m instanceof Delete)) {
-          return result;
-      }
-      if (m.isEmpty()) {
-          result = true;
-      } else {
-          CellScanner scanner = m.cellScanner();
-          while (scanner.advance()) {
-              if (scanner.current().getType() == Cell.Type.DeleteFamily) {
-                  result = true;
-                  break;
-              }
-          }
-      }
-      return result;
-  }
-
     /**
      * If the table has conditional TTL, then before making any update to a row we need to evaluate
      * the ttl expression to check if the current row version has expired. If the current row
@@ -664,99 +650,98 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
      * adding DeleteColumn cells for all the columns that have to be masked. This new mutation is
      * then attached to the batch as an additional coproc mutation.
      */
-  private void updateMutationsForConditionalTTL(MiniBatchOperationInProgress<Mutation> miniBatchOp,
-                                                BatchMutateContext context) throws IOException {
-
-      // mapping from row key to indices in mini batch
-      Map<ImmutableBytesPtr, List<Integer>> expiredVersions = Maps.newHashMap();
-      Set<ImmutableBytesPtr> notExpiredVersions = Sets.newHashSet();
-      for (int i = 0; i < miniBatchOp.size(); i++) {
-          Mutation m = miniBatchOp.getOperation(i);
-          if (!builder.hasConditionalTTL(m)) {
-              continue;
-          }
-          if (isDeleteFamilyMutation(m)) {
-              // no need to fix DeleteFamily mutation
-              continue;
-          }
-          ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
-          Pair<Put, Put> dataRowState = context.dataRowStates.get(row);
-          if (dataRowState == null) {
-              continue;
-          }
-          Put currentVersion = dataRowState.getFirst();
-          if (currentVersion == null) {
-              continue;
-          }
-          if (notExpiredVersions.contains(row)) {
-              continue;
-          }
-          List<Integer> positions = expiredVersions.get(row);
-          if (positions != null) {
-              positions.add(i);
-              continue;
-          }
-          byte[] ttl = m.getAttribute(BaseScannerRegionObserverConstants.TTL);
-          CompiledConditionalTTLExpression ttlExpr =
-                  (CompiledConditionalTTLExpression) TTLExpressionFactory.create(ttl);
-          List<Cell> currentRow = flattenCells(currentVersion);
-          // isRaw is false because we are looking at a Put mutation
-          if (ttlExpr.isExpired(currentRow, false)) {
-              // current version is expired
-              positions = Lists.newArrayListWithExpectedSize(2);
-              positions.add(i);
-              expiredVersions.put(row, positions);
-          } else {
-              notExpiredVersions.add(row);
-          }
-      }
-
-      for (Map.Entry<ImmutableBytesPtr, List<Integer>> entry : expiredVersions.entrySet()) {
-          ImmutableBytesPtr key = entry.getKey();
-          List<Integer> positions = entry.getValue();
-          Pair<Put, Put> dataRowState = context.dataRowStates.get(key);
-          Put currentVersion = dataRowState.getFirst();
-          // keep track of all the columns that have be masked using DeleteColumn
-          List<ColumnReference> colsToBeMasked = Lists.newArrayList();
-          for (List<Cell> cells : currentVersion.getFamilyCellMap().values()) {
-              for (Cell cell : cells) {
-                  boolean masked = true;
-                  for (Integer pos : positions) {
-                      Mutation m = miniBatchOp.getOperation(pos);
-                      if (m.has(cell.getFamilyArray(), cell.getQualifierArray())) {
-                          masked = false;
-                          break;
-                      }
-                  }
-                  if (masked) {
-                      ColumnReference colRef = new ColumnReference(CellUtil.cloneFamily(cell),
-                              CellUtil.cloneQualifier(cell));
-                      colsToBeMasked.add(colRef);
-                  }
-              }
-          }
-          if (!colsToBeMasked.isEmpty()) {
-              Mutation m = miniBatchOp.getOperation(positions.get(0));
-              // create a new Delete mutation that will have DeleteColumn cells for all the columns
-              // that have to be masked.
-              Delete masked = new Delete(m.getRow());
-              for (ColumnReference col : colsToBeMasked) {
-                  // build a DeleteColumn cell and it to the new Delete mutation
-                  KeyValue kv = GenericKeyValueBuilder.INSTANCE.buildDeleteColumns(
-                          key,
-                          col.getFamilyWritable(),
-                          col.getQualifierWritable(),
-                          HConstants.LATEST_TIMESTAMP);
-                  masked.add(kv);
-              }
-              // attach the Delete mutation as an additional coproc mutation to the mini batch
-              miniBatchOp.addOperationsFromCP(positions.get(0), new Mutation[] {masked});
-          }
-          // Since the current version has expired update the in-memory state so that
-          // this row is treated as a new row
-          context.dataRowStates.put(key, null);
-      }
-  }
+    private void updateMutationsForConditionalTTL(
+            MiniBatchOperationInProgress<Mutation> miniBatchOp,
+            BatchMutateContext context) throws IOException {
+        // mapping from row key to indices in mini batch
+        Map<ImmutableBytesPtr, List<Integer>> expiredVersions = Maps.newHashMap();
+        Set<ImmutableBytesPtr> notExpiredVersions = Sets.newHashSet();
+        for (int i = 0; i < miniBatchOp.size(); i++) {
+            Mutation m = miniBatchOp.getOperation(i);
+            if (!builder.hasConditionalTTL(m)) {
+                continue;
+            }
+            if (IndexUtil.isDeleteFamily(m)) {
+                // no need to fix DeleteFamily mutation
+                continue;
+            }
+            ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
+            Pair<Put, Put> dataRowState = context.dataRowStates.get(row);
+            if (dataRowState == null) {
+                continue;
+            }
+            Put currentVersion = dataRowState.getFirst();
+            if (currentVersion == null) {
+                continue;
+            }
+            if (notExpiredVersions.contains(row)) {
+                continue;
+            }
+            List<Integer> positions = expiredVersions.get(row);
+            if (positions != null) {
+                positions.add(i);
+                continue;
+            }
+            byte[] ttl = m.getAttribute(BaseScannerRegionObserverConstants.TTL);
+            CompiledConditionalTTLExpression ttlExpr =
+                    (CompiledConditionalTTLExpression) TTLExpressionFactory.create(ttl);
+            List<Cell> currentRow = flattenCells(currentVersion);
+            // isRaw is false because we are looking at a Put mutation
+            if (ttlExpr.isExpired(currentRow, false)) {
+                // current version is expired
+                positions = Lists.newArrayListWithExpectedSize(2);
+                positions.add(i);
+                expiredVersions.put(row, positions);
+            } else {
+                notExpiredVersions.add(row);
+            }
+        }
+        for (Map.Entry<ImmutableBytesPtr, List<Integer>> entry : expiredVersions.entrySet()) {
+            ImmutableBytesPtr key = entry.getKey();
+            List<Integer> positions = entry.getValue();
+            Pair<Put, Put> dataRowState = context.dataRowStates.get(key);
+            Put currentVersion = dataRowState.getFirst();
+            // keep track of all the columns that have be masked using DeleteColumn
+            List<ColumnReference> colsToBeMasked = Lists.newArrayList();
+            for (List<Cell> cells : currentVersion.getFamilyCellMap().values()) {
+                for (Cell cell : cells) {
+                    boolean masked = true;
+                    for (Integer pos : positions) {
+                        Mutation m = miniBatchOp.getOperation(pos);
+                        if (m.has(cell.getFamilyArray(), cell.getQualifierArray())) {
+                            masked = false;
+                            break;
+                        }
+                    }
+                    if (masked) {
+                        ColumnReference colRef = new ColumnReference(CellUtil.cloneFamily(cell),
+                                CellUtil.cloneQualifier(cell));
+                        colsToBeMasked.add(colRef);
+                    }
+                }
+            }
+            if (!colsToBeMasked.isEmpty()) {
+                Mutation m = miniBatchOp.getOperation(positions.get(0));
+                // create a new Delete mutation that will have DeleteColumn cells for all the columns
+                // that have to be masked.
+                Delete masked = new Delete(m.getRow());
+                for (ColumnReference col : colsToBeMasked) {
+                    // build a DeleteColumn cell and it to the new Delete mutation
+                    KeyValue kv = GenericKeyValueBuilder.INSTANCE.buildDeleteColumns(
+                            key,
+                            col.getFamilyWritable(),
+                            col.getQualifierWritable(),
+                            HConstants.LATEST_TIMESTAMP);
+                    masked.add(kv);
+                }
+                // attach the Delete mutation as an additional coproc mutation to the mini batch
+                miniBatchOp.addOperationsFromCP(positions.get(0), new Mutation[] {masked});
+            }
+            // Since the current version has expired update the in-memory state so that
+            // this row is treated as a new row
+            context.dataRowStates.put(key, null);
+        }
+    }
 
   private void lockRows(BatchMutateContext context) throws IOException {
       for (ImmutableBytesPtr rowKey : context.rowsToLock) {
