@@ -182,13 +182,15 @@ public class ServerUtil {
 
     public static class ConnectionFactory {
         
-        private static Map<ConnectionType, Connection> connections =
-                new ConcurrentHashMap<ConnectionType, Connection>();
+        private static Map<String, Connection> connections =
+                new ConcurrentHashMap<String, Connection>();
 
         public static Connection getConnection(final ConnectionType connectionType, final RegionCoprocessorEnvironment env) {
-            return connections.computeIfAbsent(connectionType, new Function<ConnectionType, Connection>() {
+            final String key = String.format("%s-%s", env.getServerName(), connectionType.name().toLowerCase());
+            LOGGER.info("Connecting to {}", key);
+            return connections.computeIfAbsent(key, new Function<String, Connection>() {
                 @Override
-                    public Connection apply(ConnectionType t) {
+                    public Connection apply(String t) {
                     try {
                         return CompatUtil.createShortCircuitConnection(getTypeSpecificConfiguration(connectionType, env.getConfiguration()), env);
                     } catch (IOException e) {
