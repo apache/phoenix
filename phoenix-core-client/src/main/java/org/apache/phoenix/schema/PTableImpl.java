@@ -1903,6 +1903,7 @@ public class PTableImpl implements PTable {
         }
         PName schemaName = PNameFactory.newName(table.getSchemaNameBytes().toByteArray());
         PName tableName = PNameFactory.newName(table.getTableNameBytes().toByteArray());
+
         PName physicalTableName = null;
         if (table.getPhysicalTableNameBytes() != null) {
             physicalTableName = PNameFactory.newName(table.getPhysicalTableNameBytes().toByteArray());
@@ -2493,7 +2494,12 @@ public class PTableImpl implements PTable {
                 && column.getName().getString().equalsIgnoreCase(PhoenixDatabaseMetaData.PARTITION_START_KEY))
                 // SYSTEM.CDC_STREAM.PARTITION_END_KEY
                 || (tableName.equalsIgnoreCase(PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_TABLE)
-                && column.getName().getString().equalsIgnoreCase(PhoenixDatabaseMetaData.PARTITION_END_KEY))) {
+                && column.getName().getString().equalsIgnoreCase(PhoenixDatabaseMetaData.PARTITION_END_KEY))
+                || (tableName.equalsIgnoreCase("SYS_ROW_KEY_MATCHER_IDX")
+                && column.getName().getString().equalsIgnoreCase("0:" + PhoenixDatabaseMetaData.ROW_KEY_MATCHER))
+                || (tableName.equalsIgnoreCase("SYS_VIEW_HDR_IDX")
+                && column.getName().getString().equalsIgnoreCase("0:" + PhoenixDatabaseMetaData.ROW_KEY_MATCHER))
+        ) {
             return new PColumnImpl(column.getName(),
                     column.getFamilyName(),
                     PVarbinary.INSTANCE,
@@ -2511,6 +2517,27 @@ public class PTableImpl implements PTable {
                     column.getColumnQualifierBytes(),
                     column.getTimestamp());
         }
+
+        if ((tableName.equalsIgnoreCase("SYS_VIEW_INDEX_HDR_IDX")
+                && column.getName().getString().equalsIgnoreCase(": DECODE_VIEW_INDEX_ID(VIEW_INDEX_ID,VIEW_INDEX_ID_DATA_TYPE)"))) {
+            return new PColumnImpl(PNameFactory.newName(":VIEW_INDEX_ID"),
+                    column.getFamilyName(),
+                    MetaDataUtil.getViewIndexIdDataType(),
+                    column.getMaxLength(),
+                    column.getScale(),
+                    false,
+                    column.getPosition(),
+                    column.getSortOrder(),
+                    column.getArraySize(),
+                    column.getViewConstant(),
+                    column.isViewReferenced(),
+                    column.getExpressionStr(),
+                    column.isRowTimestamp(),
+                    column.isDynamic(),
+                    column.getColumnQualifierBytes(),
+                    column.getTimestamp());
+        }
+
         return column;
     }
 

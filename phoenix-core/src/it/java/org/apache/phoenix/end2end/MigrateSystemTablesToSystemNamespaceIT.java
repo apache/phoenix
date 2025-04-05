@@ -45,6 +45,7 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.exception.UpgradeInProgressException;
+import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
@@ -100,6 +101,8 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
         testUtil = new HBaseTestingUtility();
         Configuration conf = testUtil.getConfiguration();
         conf.set(REGIONSERVER_COPROCESSOR_CONF_KEY, PhoenixRegionServerEndpointTestImpl.class.getName());
+        conf.set(IndexManagementUtil.WAL_EDIT_CODEC_CLASS_KEY,
+                "org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec");
         enableNamespacesOnServer(conf, systemMappingEnabled);
         configureRandomHMasterPort(conf);
         testUtil.startMiniCluster(1);

@@ -96,7 +96,7 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
 
             // From 4.15 the parent->child links are stored in a separate table SYSTEM.CHILD_LINK
             mutateRowsWithLocks(this.accessCheckEnabled, this.env.getRegion(), childLinkMutations,
-                Collections.<byte[]>emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE);
+                    Collections.<byte[]>emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE);
 
         } catch (Throwable t) {
             LOGGER.error("Unable to write mutations to " +
