@@ -111,25 +111,40 @@ public class CompiledConditionalTTLExpression implements CompiledTTLExpression {
     private List<Cell> getLatestRowVersion(List<Cell> result) {
         List<Cell> latestRowVersion = new ArrayList<>();
         Cell currentColumnCell = null;
-        long maxDeleteFamilyTS = 0;
+        Cell maxDeleteFamily = null;
+        Cell maxDeleteFamilyVersion = null;
         for (Cell cell : result) {
+            if (cell.getType() == Cell.Type.DeleteFamily) {
+                if (maxDeleteFamily == null) {
+                    maxDeleteFamily = cell;
+                }
+                // no need to add the DeleteFamily cell since it can't be part of
+                // an expression
+                continue;
+            }
+            if (cell.getType() == Cell.Type.DeleteFamilyVersion) {
+                if (maxDeleteFamilyVersion == null) {
+                    maxDeleteFamilyVersion = cell;
+                }
+                // no need to add the DeleteFamilyVersion cell since it can't be part of
+                // an expression
+                continue;
+            }
             if (currentColumnCell == null ||
                     !CellUtil.matchingColumn(cell, currentColumnCell)) {
-                // found a new column cell which has the latest timestamp
-                currentColumnCell = cell;
-                if (currentColumnCell.getType() == Cell.Type.DeleteFamily ||
-                        currentColumnCell.getType() == Cell.Type.DeleteFamilyVersion) {
-                    // DeleteFamily will be first in the lexicographically ordering because
-                    // it has no qualifier
-                    maxDeleteFamilyTS = currentColumnCell.getTimestamp();
-                    // no need to add the DeleteFamily cell since it can't be part of
-                    // an expression
+                if (maxDeleteFamilyVersion != null &&
+                        cell.getTimestamp() == maxDeleteFamilyVersion.getTimestamp()) {
+                    // only add the cell if it is not masked by the DeleteFamilyVersion
                     continue;
                 }
-                if (currentColumnCell.getTimestamp() > maxDeleteFamilyTS) {
+                // found a new column cell which has the latest timestamp
+                currentColumnCell = cell;
+                if (maxDeleteFamily != null &&
+                        cell.getTimestamp() <= maxDeleteFamily.getTimestamp()) {
                     // only add the cell if it is not masked by the DeleteFamily
-                    latestRowVersion.add(currentColumnCell);
+                    continue;
                 }
+                latestRowVersion.add(currentColumnCell);
             }
         }
         return latestRowVersion;

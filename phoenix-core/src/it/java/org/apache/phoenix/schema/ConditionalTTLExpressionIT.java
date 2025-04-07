@@ -23,6 +23,8 @@ import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEF
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_VALID_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
@@ -30,6 +32,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -58,12 +61,15 @@ import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.OtherOptions;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TableOptions;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -71,6 +77,7 @@ import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -141,11 +148,13 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
-        Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
+        Map<String, String> props = Maps.newHashMapWithExpectedSize(3);
         // disabling global max lookback, will use table level max lookback
         props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
                 Integer.toString(0));
         props.put("hbase.procedure.remote.dispatcher.delay.msec", "0");
+        props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB,
+                Long.toString(0));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -668,6 +677,129 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
                 IndexToolIT.dumpMRJobCounters(mrJobCounters);
                 throw e;
             }
+        }
+    }
+
+    @Test
+    public void testUnverifiedRows() throws Exception {
+        if (tableLevelMaxLookback != 0) {
+            return;
+        }
+        String ttlCol = "VAL5";
+        String ttlExpression = String.format("%s=TRUE", ttlCol);
+        createTable(ttlExpression);
+        String fullDataTableName = schemaBuilder.getEntityTableName();
+        String schemaName = SchemaUtil.getSchemaNameFromFullName(fullDataTableName);
+        String tableName = SchemaUtil.getTableNameFromFullName(fullDataTableName);
+        List<String> indexedColumns = Lists.newArrayList("VAL1");
+        List<String> includedColumns = Lists.newArrayList(ttlCol, "VAL2");
+        String fullIndexName = createIndex(indexedColumns, includedColumns, false);
+        String indexName = SchemaUtil.getTableNameFromFullName(fullIndexName);
+        injectEdge();
+        int rowCount = 2;
+        long actual;
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            populateTable(conn, rowCount);
+            // populate index row key map
+            populateRowPosToRowKey(conn, true);
+            ResultSet rs = readRow(conn, 0);
+            assertTrue(rs.next());
+            String val1_0 = rs.getString("VAL1");
+            rs = readRow(conn, 1);
+            assertTrue(rs.next());
+            String val1_1 = rs.getString("VAL1");
+            deleteRow(conn, 0);
+            int val2 = 4567;
+            updateColumns(conn, 0,
+                    Lists.newArrayList("VAL1", "VAL2", ttlCol),
+                    Lists.newArrayList(val1_0, val2, false));
+            deleteRow(conn, 1);
+            updateColumns(conn, 1,
+                   Lists.newArrayList("VAL1", "VAL2", ttlCol),
+                   Lists.newArrayList(val1_1, val2, true)); // expired row
+            // make the index row unverified
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+            try {
+                updateColumns(conn, 0,
+                        Lists.newArrayList("VAL1", "VAL2", ttlCol),
+                        Lists.newArrayList(val1_0, 2345, false));
+                fail("An exception should have been thrown");
+            } catch (Exception ignored) {
+                // Ignore the exception
+            } finally {
+                IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+            }
+            // make the index row unverified
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+            try {
+                updateColumns(conn, 1,
+                        Lists.newArrayList("VAL1", "VAL2", ttlCol),
+                        Lists.newArrayList(val1_1, 2345, false));
+                fail("An exception should have been thrown");
+            } catch (Exception ignored) {
+                // Ignore the exception
+            } finally {
+                IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+            }
+            injectEdge.incrementValue(10);
+            TestUtil.dumpTable(conn, TableName.valueOf(fullIndexName));
+            // Read the unverified rows to trigger read repair
+            actual = TestUtil.getRowCountFromIndex(conn, fullDataTableName, fullIndexName);
+            TestUtil.dumpTable(conn, TableName.valueOf(fullIndexName));
+            assertEquals(rowCount - 1, actual);
+            // First read row 0 which is not expired
+            String dql = String.format("select VAL2, VAL5 from %s where VAL1='%s'",
+                    fullDataTableName, val1_0);
+            try (ResultSet rs1 = conn.createStatement().executeQuery(dql)) {
+                PhoenixResultSet prs = rs1.unwrap(PhoenixResultSet.class);
+                String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
+                assertTrue(explainPlan.contains(fullIndexName));
+                assertTrue(rs1.next());
+                assertEquals(rs1.getInt("VAL2"), val2);
+                assertFalse(rs1.getBoolean(ttlCol));
+            }
+            // row 1 is expired
+            dql = String.format("select VAL2, VAL5 from %s where VAL1='%s'",
+                    fullDataTableName, val1_1);
+            try (ResultSet rs1 = conn.createStatement().executeQuery(dql)) {
+                PhoenixResultSet prs = rs1.unwrap(PhoenixResultSet.class);
+                String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
+                assertTrue(explainPlan.contains(fullIndexName));
+                assertFalse(rs1.next());
+            }
+            // run the reverse index verification tool
+            IndexTool it = IndexToolIT.runIndexTool(false, schemaName, tableName, indexName,
+                    null, 0, IndexTool.IndexVerifyType.ONLY, "-fi");
+            CounterGroup mrJobCounters = IndexToolIT.getMRJobCounters(it);
+            try {
+                assertEquals(1, // 1 row is expired
+                        mrJobCounters.findCounter(SCANNED_DATA_ROW_COUNT.name()).getValue());
+                assertEquals(0,
+                        mrJobCounters.findCounter(REBUILT_INDEX_ROW_COUNT.name()).getValue());
+                assertEquals(1,
+                        mrJobCounters.findCounter(
+                                BEFORE_REBUILD_VALID_INDEX_ROW_COUNT.name()).getValue());
+                assertEquals(0,
+                        mrJobCounters.findCounter(
+                                BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT.name()).getValue());
+                assertEquals(0,
+                        mrJobCounters.findCounter(
+                                BEFORE_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT.name()).getValue());
+                assertEquals(0,
+                        mrJobCounters.findCounter(
+                                BEFORE_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT.name()).getValue());
+            } catch (AssertionError e) {
+                IndexToolIT.dumpMRJobCounters(mrJobCounters);
+                throw e;
+            }
+            // TODO: Broken because of PHOENIX-7574
+            //doMajorCompaction(fullIndexName);
+            //TestUtil.dumpTable(conn, TableName.valueOf(fullIndexName));
+            //actual = TestUtil.getRowCountFromIndex(conn, fullDataTableName, fullIndexName);
+            //assertEquals(rowCount - 1, actual);
+            //CellCount expectedCellCount = new CellCount();
+            //expectedCellCount.insertRow(indexRowPosToKey.get(0), 2);
+            //validateTable(conn, fullIndexName, expectedCellCount, indexRowPosToKey.values());
         }
     }
 
