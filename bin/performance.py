@@ -65,10 +65,13 @@ phoenix_utils.setPath()
 
 java_cmd = phoenix_utils.java
 
-execute = ('%s %s $HBASE_OPTS $PHOENIX_OPTS -cp "%s%s%s%s%s"-Dlog4j2.configurationFile=file:' +
-           os.path.join(phoenix_utils.current_dir, "log4j2.properties") +
+opts = os.getenv('PHOENIX_OPTS') or os.getenv('HBASE_OPTS') or ''
+
+execute = ('%s %s ' + opts + ' -cp "%s%s%s%s%s%s%s"' +
+           ('' if '-Dlog4j2.configurationFile' in opts else ' -Dlog4j2.configurationFile=file:'
+           + os.path.join(phoenix_utils.current_dir, "log4j2.properties")) +
            ' org.apache.phoenix.util.PhoenixRuntime -t %s %s ') % \
-    (java_cmd, phoenix_utils.jvm_module_flags, hbase_config_path, os.pathsep,
+    (java_cmd, phoenix_utils.jvm_module_flags, phoenix_utils.hbase_conf_dir, os.pathsep,
      phoenix_utils.slf4j_backend_jar, os.pathsep,
      phoenix_utils.logging_jar, os.pathsep, phoenix_utils.phoenix_client_embedded_jar,
      table, zookeeper)

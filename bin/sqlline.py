@@ -90,15 +90,18 @@ if os.uname()[4].startswith('ppc'):
 else:
     disable_jna = ""
 
+opts = os.getenv('PHOENIX_OPTS') or os.getenv('HBASE_OPTS') or ''
+
 java_cmd = phoenix_utils.java + ' ' + phoenix_utils.jvm_module_flags + \
-    ' $HBASE_OPTS $PHOENIX_OPTS ' + \
+    ' ' + opts + \
     ' -cp "' + phoenix_utils.hbase_conf_dir + os.pathsep + \
     phoenix_utils.hadoop_conf + os.pathsep + \
     phoenix_utils.sqlline_with_deps_jar + os.pathsep + \
     phoenix_utils.slf4j_backend_jar + os.pathsep + \
     phoenix_utils.logging_jar + os.pathsep + \
-    phoenix_utils.phoenix_client_embedded_jar + \
-    '" -Dlog4j.configuration=file:' + os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
+    phoenix_utils.phoenix_client_embedded_jar + '"' + \
+    ('' if '-Dlog4j2.configurationFile' in opts else ' -Dlog4j2.configurationFile=file:'
+        + os.path.join(phoenix_utils.current_dir, "log4j2.properties")) + \
     disable_jna + \
     " sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver" + \
     (not args.noconnect and " -u " + phoenix_utils.shell_quote([jdbc_url]) or "") + \
