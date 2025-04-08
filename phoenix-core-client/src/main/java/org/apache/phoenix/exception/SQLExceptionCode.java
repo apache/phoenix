@@ -207,7 +207,13 @@ public enum SQLExceptionCode {
     INVALID_JSON_DATA(540, "42916", "Invalid json data."),
     JSON_FRAGMENT_NOT_ALLOWED_IN_INDEX_EXPRESSION(541, "42917",
             "Functions returning JSON fragments are not allowed in Index Expression."),
+    AGGREGATE_EXPRESSION_NOT_ALLOWED_IN_CONDITIONAL_TTL(542, "42918",
+            "Aggregate expression not allowed in a conditional TTL expression."),
+    CANNOT_SET_CONDITIONAL_TTL_ON_TABLE_WITH_MULTIPLE_COLUMN_FAMILIES(543, "42919",
+            "Cannot set conditional TTL on table with multiple column families."),
 
+    CANNOT_DROP_COL_REFERENCED_IN_CONDITIONAL_TTL(544, "42920",
+            "Cannot drop column referenced in conditional TTL expression."),
     /**
      * HBase and Phoenix specific implementation defined sub-classes.
      * Column family related exceptions.

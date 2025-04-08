@@ -22,7 +22,6 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
-
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -36,12 +35,12 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.execute.MutationState;
-import org.apache.phoenix.hbase.index.IndexRegionObserver;
-import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.filter.SkipScanFilter;
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
+import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.parallel.EarlyExitFailure;
 import org.apache.phoenix.hbase.index.parallel.TaskBatch;
 import org.apache.phoenix.hbase.index.parallel.TaskRunner;
@@ -51,8 +50,8 @@ import org.apache.phoenix.hbase.index.parallel.WaitForCompletionTaskRunner;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
+import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -61,22 +60,22 @@ import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
 import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.CompiledConditionalTTLExpression;
+import org.apache.phoenix.schema.CompiledTTLExpression;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.ClientUtil;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -93,8 +92,6 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
-import static org.apache.hadoop.hbase.Cell.Type.DeleteColumn;
-import static org.apache.hadoop.hbase.Cell.Type.DeleteFamily;
 import static org.apache.phoenix.hbase.index.write.AbstractParallelWriterIndexCommitter.INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.BEYOND_MAX_LOOKBACK_INVALID;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.BEYOND_MAX_LOOKBACK_MISSING;
@@ -174,6 +171,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     protected byte[] logicalTableName;
     protected byte[] tableType;
     protected byte[] lastDdlTimestamp;
+    private final CompiledTTLExpression ttlExpression;
 
     // This relies on Hadoop Configuration to handle warning about deprecated configs and
     // to set the correct non-deprecated configs when an old one shows up.
@@ -221,6 +219,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         tableType = scan.getAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString());
         lastDdlTimestamp = scan.getAttribute(
                 MutationState.MutationMetadataType.TIMESTAMP.toString());
+        ttlExpression = ScanUtil.getTTLExpression(scan);
         byte[] transforming = scan.getAttribute(BaseScannerRegionObserverConstants.DO_TRANSFORMING);
         List<IndexMaintainer> maintainers = null;
         if (transforming == null) {
@@ -433,12 +432,6 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
             this.pool.stop("GlobalIndexRegionScanner is closing");
             closeTables();
         }
-    }
-
-    @VisibleForTesting
-    public int setIndexTableTTL(int ttl) {
-        indexTableTTL = ttl;
-        return 0;
     }
 
     @VisibleForTesting
@@ -857,15 +850,6 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         while (expectedIndex < expectedSize && actualIndex <actualSize) {
             previousExpected = expected;
             expected = expectedMutationList.get(expectedIndex);
-            // Check if cell expired as per the current server's time and data table ttl
-            // Index table should have the same ttl as the data table, hence we might not
-            // get a value back from index if it has already expired between our rebuild and
-            // verify
-            // TODO: have a metric to update for these cases
-            if (isTimestampBeforeTTL(indexTableTTL, currentTime, getTimestamp(expected))) {
-                verificationPhaseResult.setExpiredIndexRowCount(verificationPhaseResult.getExpiredIndexRowCount() + 1);
-                return true;
-            }
             actual = actualMutationList.get(actualIndex);
             if (expected instanceof Put) {
                 if (previousExpected instanceof Delete) {
@@ -1001,21 +985,6 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                 ClientUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
             }
         }
-        List<byte[]> expiredIndexRows = new ArrayList<>();
-        // Check if any expected rows from index(which we didn't get) are already expired due to TTL
-        // TODO: metrics for expired rows
-        long currentTime = EnvironmentEdgeManager.currentTimeMillis();
-        for (Map.Entry<byte[], List<Mutation>> entry: expectedIndexMutationMap.entrySet()) {
-            List<Mutation> mutationList = entry.getValue();
-            if (isTimestampBeforeTTL(indexTableTTL, currentTime, getTimestamp(mutationList.get(mutationList.size() - 1)))) {
-                verificationPhaseResult.setExpiredIndexRowCount(verificationPhaseResult.getExpiredIndexRowCount() + 1);
-                expiredIndexRows.add(entry.getKey());
-            }
-        }
-        // Remove the expired rows from indexMutationMap
-        for (byte[] indexKey : expiredIndexRows) {
-            expectedIndexMutationMap.remove(indexKey);
-        }
         // Count and log missing rows
         for (Map.Entry<byte[], List<Mutation>> entry: expectedIndexMutationMap.entrySet()) {
             byte[] indexKey = entry.getKey();
@@ -1024,7 +993,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
             if (mutation instanceof Delete) {
                 continue;
             }
-            currentTime = EnvironmentEdgeManager.currentTimeMillis();
+            long currentTime = EnvironmentEdgeManager.currentTimeMillis();
             String errorMsg;
             IndexVerificationOutputRepository.IndexVerificationErrorType errorType;
             if (isTimestampBeyondMaxLookBack(maxLookBackInMills, currentTime, getTimestamp(mutation))){
@@ -1284,8 +1253,13 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
      * table mutations. This list is sorted in ascending order by the tuple of row key, timestamp
      * and mutation type where put comes before delete.
      */
-    public static List<Mutation> prepareIndexMutationsForRebuild(IndexMaintainer indexMaintainer,
-            Put dataPut, Delete dataDel, byte[] encodedRegionName) throws IOException {
+    public static List<Mutation> prepareIndexMutationsForRebuild(
+            IndexMaintainer indexMaintainer,
+            Put dataPut,
+            Delete dataDel,
+            byte[] encodedRegionName,
+            CompiledTTLExpression ttlExpr) throws IOException {
+        boolean isCondTTL = ttlExpr instanceof CompiledConditionalTTLExpression;
         List<Mutation> dataMutations = getMutationsWithSameTS(dataPut, dataDel);
         List<Mutation> indexMutations = Lists.newArrayListWithExpectedSize(dataMutations.size());
         // The row key ptr of the data table row for which we will build index rows here
@@ -1297,6 +1271,18 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         byte[] indexRowKeyForCurrentDataRow = null;
         int dataMutationListSize = dataMutations.size();
         for (int i = 0; i < dataMutationListSize; i++) {
+            if (isCondTTL && currentDataRowState != null) {
+                CompiledConditionalTTLExpression condExpr =
+                        (CompiledConditionalTTLExpression) ttlExpr;
+                List<Cell> currentRow = flattenCells(currentDataRowState);
+                // isRaw is false because we are looking at a Put mutation
+                if (condExpr.isExpired(currentRow, false)) {
+                    // an update on an expired version is like a new row
+                    // reset the state before applying the new version
+                    currentDataRowState = null;
+                    indexRowKeyForCurrentDataRow = null;
+                }
+            }
             Mutation mutation = dataMutations.get(i);
             long ts = getTimestamp(mutation);
             Delete deleteToApply = null;
@@ -1433,13 +1419,21 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         return indexMutations;
     }
 
+    private static List<Cell> flattenCells(Mutation m) {
+        List<Cell> flattenedCells = Lists.newArrayList();
+        for (List<Cell> cells : m.getFamilyCellMap().values()) {
+            flattenedCells.addAll(cells);
+        }
+        return flattenedCells;
+    }
+
     @VisibleForTesting
     public int prepareIndexMutations(Put put, Delete del, Map<byte[], List<Mutation>> indexMutationMap,
                                      Set<byte[]> mostRecentIndexRowKeys) throws IOException {
         List<Mutation> indexMutations;
 
         indexMutations = prepareIndexMutationsForRebuild(indexMaintainer, put, del,
-                region.getRegionInfo().getEncodedNameAsBytes());
+                region.getRegionInfo().getEncodedNameAsBytes(), ttlExpression);
         Collections.reverse(indexMutations);
 
         boolean mostRecentDone = false;

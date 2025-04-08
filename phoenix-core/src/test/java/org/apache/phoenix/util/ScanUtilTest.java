@@ -34,6 +34,7 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.LiteralTTLExpression;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
@@ -55,6 +56,7 @@ import org.junit.runners.Parameterized.Parameters;
 import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Arrays;
@@ -486,7 +488,7 @@ public class ScanUtilTest {
     public static class PhoenixTTLScanUtilTest extends BaseConnectionlessQueryTest {
 
         @Test
-        public void testPhoenixTTLUtilMethods() throws SQLException {
+        public void testPhoenixTTLUtilMethods() throws SQLException, IOException {
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             try (Connection conn = driver.connect(getUrl(), props)) {
                 PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
@@ -536,7 +538,9 @@ public class ScanUtilTest {
 
                 long timestamp44 = 44L;
                 Scan testScan = new Scan();
-                testScan.setAttribute(BaseScannerRegionObserverConstants.TTL, Bytes.toBytes(1L));
+                LiteralTTLExpression ttl = new LiteralTTLExpression(1);
+                byte[] ttlBytes = ttl.serialize();
+                testScan.setAttribute(BaseScannerRegionObserverConstants.TTL, ttlBytes);
                 // Test isTTLExpired
                 Assert.assertTrue(ScanUtil.isTTLExpired(cell42, testScan, timestamp44));
                 Assert.assertFalse(ScanUtil.isTTLExpired(cell43, testScan, timestamp44));
