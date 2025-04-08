@@ -445,6 +445,8 @@ public class CDCStreamIT extends CDCBaseIT {
                 .map(HRegionLocation::getRegion)
                 .map(RegionInfo::getEncodedName)
                 .collect(Collectors.toList()));
+        // compact to remove merge qualifier from merged regions i.e. clear references to parents
+        TestUtil.doMajorCompaction(conn, tableName);
         // merge the two regions
         regions = TestUtil.getAllTableRegions(conn, tableName);
         TestUtil.mergeTableRegions(conn, tableName, regions.stream()
