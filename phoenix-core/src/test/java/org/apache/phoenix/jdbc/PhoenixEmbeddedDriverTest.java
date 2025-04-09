@@ -570,6 +570,65 @@ public class PhoenixEmbeddedDriverTest {
     }
 
     @Test
+    public void testZkIPv6() throws Exception {
+        ConnectionInfo connectionInfo = ConnectionInfo.create("jdbc:phoenix+zk:"
+                + "[::1],127.23.45.678\\:7634,v3\\:1,host123.48576\\:723:/hbase;"
+                + "test=true", null, null);
+        ReadOnlyProps props = connectionInfo.asProps();
+        assertEquals("127.23.45.678:7634,[::1]:2181,host123.48576:723,v3:1",
+                props.get(HConstants.ZOOKEEPER_QUORUM));
+
+        connectionInfo = ConnectionInfo.create("jdbc:phoenix+zk:"
+                + "[::1]\\:2181,127.23.45.678\\:7634,v3\\:1,host123.48576\\:723:/hbase;"
+                + "test=true", null, null);
+        props = connectionInfo.asProps();
+        assertEquals("127.23.45.678:7634,[::1]:2181,host123.48576:723,v3:1",
+
+                props.get(HConstants.ZOOKEEPER_QUORUM));
+        connectionInfo = ConnectionInfo.create("jdbc:phoenix+zk:"
+                + "[fe:80::],127.23.45.678\\:7634,v3\\:1,host123.48576\\:723:/hbase;"
+                + "test=true", null, null);
+        props = connectionInfo.asProps();
+        assertEquals("127.23.45.678:7634,[fe:80::]:2181,host123.48576:723,v3:1",
+                props.get(HConstants.ZOOKEEPER_QUORUM));
+
+        connectionInfo = ConnectionInfo.create("jdbc:phoenix+zk:"
+                + "[fe:80::]\\:2181,127.23.45.678\\:7634,v3\\:1,host123.48576\\:723:/hbase;"
+                + "test=true", null, null);
+        props = connectionInfo.asProps();
+        assertEquals("127.23.45.678:7634,[fe:80::]:2181,host123.48576:723,v3:1",
+                props.get(HConstants.ZOOKEEPER_QUORUM));
+
+        connectionInfo = ConnectionInfo.create("jdbc:phoenix+zk:"
+                + "[fe\\:80\\:\\:],127.23.45.678\\:7634,v3\\:1,host123.48576\\:723:/hbase;"
+                + "test=true", null, null);
+        props = connectionInfo.asProps();
+        assertEquals("127.23.45.678:7634,[fe:80::]:2181,host123.48576:723,v3:1",
+                props.get(HConstants.ZOOKEEPER_QUORUM));
+
+        connectionInfo = ConnectionInfo.create("jdbc:phoenix+zk:"
+                + "[fe\\:80\\:\\:]\\:2181,127.23.45.678\\:7634,v3\\:1,host123.48576\\:723:/hbase;"
+                + "test=true", null, null);
+        props = connectionInfo.asProps();
+        assertEquals("127.23.45.678:7634,[fe:80::]:2181,host123.48576:723,v3:1",
+                props.get(HConstants.ZOOKEEPER_QUORUM));
+
+        connectionInfo = ConnectionInfo.create("jdbc:phoenix+zk:"
+                + "[fe:80::2]\\:2181,[2001:db8:3c4d:15::1a2f:1a2b]\\:7634,v3\\:1,host123.48576\\:723:/hbase;"
+                + "test=true", null, null);
+        props = connectionInfo.asProps();
+        assertEquals("[2001:db8:3c4d:15::1a2f:1a2b]:7634,[fe:80::2]:2181,host123.48576:723,v3:1",
+                props.get(HConstants.ZOOKEEPER_QUORUM));
+
+        connectionInfo = ConnectionInfo.create("jdbc:phoenix+zk:"
+                + "[fe:80::2]\\:2181,[2001\\:db8\\:3c4d\\:15\\:\\:1a2f\\:1a2b]\\:7634,v3\\:1,host123.48576\\:723:/hbase;"
+                + "test=true", null, null);
+        props = connectionInfo.asProps();
+        assertEquals("[2001:db8:3c4d:15::1a2f:1a2b]:7634,[fe:80::2]:2181,host123.48576:723,v3:1",
+                props.get(HConstants.ZOOKEEPER_QUORUM));
+    }
+
+    @Test
     public void testZkQuorumConfigs() throws Exception {
         ConnectionInfo connectionInfo = ConnectionInfo.create("jdbc:phoenix+zk:"
                 + "localhost\\:2181,127.23.45.678\\:7634,v3\\:1,host123.48576\\:723:/hbase;"
