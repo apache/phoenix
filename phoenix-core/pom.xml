@@ -236,6 +236,11 @@
             <artifactId>hbase-mapreduce</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-compression-aircompressor</artifactId>
+            <scope>test</scope>
+        </dependency>
 
         <!-- HBase Adjacent Dependencies -->
         <dependency>
