@@ -1,0 +1,550 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.phoenix.replication.log;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.EOFException;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import org.apache.commons.io.IOUtils;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.PositionedReadable;
+import org.apache.hadoop.fs.Seekable;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+public class LogFormatTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(LogFormatTest.class);
+
+    private Configuration conf;
+    private ByteArrayOutputStream writerBaos;
+    private DataOutputStream writerDos;
+    private LogReaderContext readerContext;
+    private LogFormatReader formatReader;
+    private LogWriterContext writerContext;
+    private LogFormatWriter formatWriter;
+
+    @Before
+    public void setUp() {
+        conf = HBaseConfiguration.create();
+        readerContext = new LogReaderContext(conf)
+            .setSkipCorruptBlocks(true); // Enable skipping for corruption tests
+        formatReader = new LogFormatReader();
+        writerBaos = new ByteArrayOutputStream();
+        writerDos = new DataOutputStream(writerBaos);
+        writerContext = new LogWriterContext(conf);
+        formatWriter = new LogFormatWriter();
+    }
+
+    @After
+    public void tearDown() throws IOException {
+      IOUtils.closeQuietly(formatReader);
+      IOUtils.closeQuietly(formatWriter);
+      IOUtils.closeQuietly(writerDos);
+      IOUtils.closeQuietly(writerBaos);
+    }
+
+    @Test
+    public void testFormatSingleBlock() throws IOException {
+        initWriter();
+        Log.Record r1 = newRecord("TBL1", 1L, "row1", 10L, 1);
+        Log.Record r2 = newRecord("TBL1", 2L, "row2", 11L, 1);
+
+        formatWriter.append(r1);
+        formatWriter.append(r2);
+        formatWriter.close(); // Writes block and trailer
+
+        byte[] data = writerBaos.toByteArray();
+        initReader(data);
+
+        assertEquals("Major version mismatch", Log.VERSION_MAJOR,
+            formatReader.getHeader().getMajorVersion());
+        assertEquals("Minor version mismatch", Log.VERSION_MINOR,
+            formatReader.getHeader().getMinorVersion());
+
+        Log.Record decoded1 = formatReader.next(null);
+        assertNotNull("First record should not be null", decoded1);
+        assertEquals("First record mismatch", r1, decoded1);
+
+        Log.Record decoded2 = formatReader.next(null);
+        assertNotNull("Second record should not be null", decoded2);
+        assertEquals("Second record mismatch", r2, decoded2);
+
+        assertNull("Should be no more records", formatReader.next(null));
+
+        Log.Trailer trailer = formatReader.getTrailer();
+        assertNotNull("Trailer should exist", trailer);
+        assertEquals("Trailer record count mismatch", 2, trailer.getRecordCount());
+        assertEquals("Trailer block count mismatch", 1, trailer.getBlockCount());
+        assertTrue("Blocks start offset should be positive", trailer.getBlocksStartOffset() > 0);
+        assertTrue("Trailer start offset should be > blocks start offset",
+            trailer.getTrailerStartOffset() >= trailer.getBlocksStartOffset());
+
+        assertEquals("Reader context record count mismatch", 2, readerContext.getRecordsRead());
+        assertEquals("Reader context block count mismatch", 1, readerContext.getBlocksRead());
+    }
+
+    @Test
+    public void testFormatMultipleBlocks() throws IOException {
+        initWriter();
+        List<Log.Record> originals = new ArrayList<>();
+        // Write enough records to cause multiple blocks
+        // This has the nice property of writing a large number of blocks compared with the other
+        // tests in this unit.
+        for (int i = 0; i < 100_000; i++) {
+            Log.Record r = newRecord("TBLMULTI", (long)i, "row" + i, 100L + i, 2);
+            originals.add(r);
+            formatWriter.append(r);
+        }
+        formatWriter.close();
+
+        byte[] data = writerBaos.toByteArray();
+        initReader(data);
+
+        List<Log.Record> decoded = new ArrayList<>();
+        Log.Record r;
+        while ((r = formatReader.next(null)) != null) {
+            decoded.add(r);
+        }
+
+        assertEquals("Number of records mismatch", originals.size(), decoded.size());
+        for (int i = 0; i < originals.size(); i++) {
+            assertEquals("Record " + i + " mismatch", originals.get(i), decoded.get(i));
+        }
+
+        Log.Trailer trailer = formatReader.getTrailer();
+        assertNotNull("Trailer should exist", trailer);
+        assertEquals("Trailer record count mismatch", originals.size(), trailer.getRecordCount());
+        assertTrue("Trailer block count should be > 1", trailer.getBlockCount() > 1);
+        assertEquals("Reader context record count mismatch", originals.size(),
+            readerContext.getRecordsRead());
+        assertEquals("Reader context block count mismatch", trailer.getBlockCount(),
+            readerContext.getBlocksRead());
+    }
+
+    @Test
+    public void testFormatHeaderTrailerOnly() throws IOException {
+        // Write header and trailer, no blocks
+        initWriter();
+        formatWriter.close();
+        byte[] data = writerBaos.toByteArray();
+        initReader(data);
+        assertEquals("Major version mismatch", Log.VERSION_MAJOR,
+            formatReader.getHeader().getMajorVersion());
+        assertNull("Should be no records", formatReader.next(null));
+        LogTrailer trailer = (LogTrailer) formatReader.getTrailer();
+        assertNotNull("Trailer should exist", trailer);
+        assertEquals("Trailer record count should be 0", 0, trailer.getRecordCount());
+        assertEquals("Trailer block count should be 0", 0, trailer.getBlockCount());
+        // blocksStartOffset might be equal to trailerStartOffset if no blocks written
+        assertEquals("Blocks start offset should equal trailer start offset",
+            trailer.getBlocksStartOffset(), trailer.getTrailerStartOffset());
+    }
+
+    @Test
+    public void testCorruptionInvalidBlockMagic() throws IOException {
+        initWriter();
+        List<Log.Record> block1Records = writeBlock(formatWriter, "B1",  0, 10);
+        List<Log.Record> block2Records = writeBlock(formatWriter, "B2", 10, 10);
+        List<Log.Record> block3Records = writeBlock(formatWriter, "B3", 20, 10);
+        formatWriter.close();
+
+        byte[] data = writerBaos.toByteArray();
+
+        int block1End = findBlockEndOffset(data, (int)formatWriter.getBlocksStartOffset());
+        data[(int)block1End] = (byte) 'X'; // Corrupt the first byte of 'PBLK'
+
+        initReader(data);
+
+        List<Log.Record> decoded = readRecords(formatReader);
+
+        int shouldHave = block1Records.size() + block3Records.size();
+        int have = decoded.size();
+        // Should read block 1 and block 3, skipping block 2
+        assertEquals("Should read records from block 1 and 3", shouldHave, have);
+        // Verify first block records
+        for (int i = 0; i < block1Records.size(); i++) {
+            assertEquals("Block 1 record " + i + " mismatch", block1Records.get(i),
+                decoded.get(i));
+        }
+        // Verify third block records (offset by block1 size)
+        for (int i = 0; i < block3Records.size(); i++) {
+            assertEquals("Block 3 record " + i + " mismatch", block3Records.get(i),
+                decoded.get(i + block1Records.size()));
+        }
+
+        assertEquals("Should have skipped 1 corrupt block", 1,
+            readerContext.getCorruptBlocksSkipped());
+    }
+
+    @Test
+    public void testCorruptionBadBlockChecksum() throws IOException {
+        initWriter();
+        List<Log.Record> block1Records = writeBlock(formatWriter, "B1",  0, 5);
+        List<Log.Record> block2Records = writeBlock(formatWriter, "B2",  5, 5);
+        List<Log.Record> block3Records = writeBlock(formatWriter, "B3", 10, 5);
+        formatWriter.close();
+
+        byte[] data = writerBaos.toByteArray();
+
+        // Find offset of second block's checksum and corrupt it
+        long block1End = findBlockEndOffset(data, (int)formatWriter.getBlocksStartOffset());
+        long block2End = findBlockEndOffset(data, (int)block1End);
+        int block2ChecksumOffset = (int) (block2End - Log.CHECKSUM_SIZE);
+        data[block2ChecksumOffset] ^= 0xFF; // Flip some bits in the checksum
+
+        initReader(data);
+
+        List<Log.Record> decoded = readRecords(formatReader);
+
+        // Should read block 1 and block 3, skipping block 2
+        int shouldHave = block1Records.size() + block3Records.size();
+        int have = decoded.size();
+        assertEquals("Should read records from block 1 and 3", shouldHave, have);
+        // Verify first block records
+        for (int i = 0; i < block1Records.size(); i++) {
+            assertEquals("Block 1 record " + i + " mismatch", block1Records.get(i),
+                decoded.get(i));
+        }
+        // Verify third block records (offset by block1 size)
+        for (int i = 0; i < block3Records.size(); i++) {
+            assertEquals("Block 3 record " + i + " mismatch", block3Records.get(i),
+                decoded.get(i + block1Records.size()));
+        }
+
+        assertEquals("Should have skipped 1 corrupt block", 1,
+            readerContext.getCorruptBlocksSkipped());
+    }
+
+    @Test
+    public void testCorruptionBadRecord() throws IOException {
+        initWriter();
+        List<Log.Record> block1Records = writeBlock(formatWriter, "B1",  0, 10);
+        List<Log.Record> block2Records = writeBlock(formatWriter, "B2", 10, 10);
+        List<Log.Record> block3Records = writeBlock(formatWriter, "B3", 20, 10);
+        formatWriter.close();
+
+        byte[] data = writerBaos.toByteArray();
+
+        // Find offset of second block's first record and corrupt it
+        long block1End = findBlockEndOffset(data, (int)formatWriter.getBlocksStartOffset());
+        long block2Start = block1End + LogBlockHeader.HEADER_SIZE;
+        data[(int)block2Start + 1] ^= 0xFF;
+
+        initReader(data);
+
+        List<Log.Record> decoded = readRecords(formatReader);
+
+        // Should read block 1 and block 3, skipping block 2
+        int shouldHave = block1Records.size() + block3Records.size();
+        int have = decoded.size();
+        assertEquals("Should read records from block 1 and 3", shouldHave, have);
+        // Verify first block records
+        for (int i = 0; i < block1Records.size(); i++) {
+            assertEquals("Block 1 record " + i + " mismatch", block1Records.get(i),
+                decoded.get(i));
+        }
+        // Verify third block records (offset by block1 size)
+        for (int i = 0; i < block3Records.size(); i++) {
+            assertEquals("Block 3 record " + i + " mismatch", block3Records.get(i),
+                decoded.get(i + block1Records.size()));
+        }
+
+        assertEquals("Should have skipped 1 corrupt block", 1,
+            readerContext.getCorruptBlocksSkipped());
+    }
+
+    @Test
+    public void testCorruptionTruncatedFinalBlock() throws IOException {
+        initWriter();
+        List<Log.Record> block1Records = writeBlock(formatWriter, "B1",  0, 10);
+        List<Log.Record> block2Records = writeBlock(formatWriter, "B2", 10, 10);
+        // Don't close the writer, simulate truncation within the last block
+        // Get the current position which is somewhere inside block 2's data
+        long truncationPoint = formatWriter.getPosition() - 10; // Truncate 10 bytes before end
+
+        byte[] data = writerBaos.toByteArray();
+        byte[] truncatedData = Arrays.copyOf(data, (int) truncationPoint);
+
+        initReader(truncatedData);
+
+        List<Log.Record> decoded = new ArrayList<>();
+        Log.Record r;
+        try {
+            while ((r = formatReader.next(null)) != null) {
+                decoded.add(r);
+            }
+            // Depending on where truncation happened, next() might throw or return null.
+            // If it returns null cleanly, the counts should still be checked.
+        } catch (IOException e) {
+            // Expecting an EOF or similar if truncation happened mid-record/header/checksum
+        }
+
+        // Should have read only block 1 completely. Block 2 read might fail or be partial.
+        assertEquals("Should read records only from block 1", block1Records.size(),
+            decoded.size());
+        for (int i = 0; i < block1Records.size(); i++) {
+            assertEquals("Block 1 record " + i + " mismatch", block1Records.get(i),
+                decoded.get(i));
+        }
+
+        // Depending on where the truncation happens, the block might be detected as corrupt or
+        // just end early.
+        assertTrue("Corrupt blocks skipped should be 0 or 1",
+            readerContext.getCorruptBlocksSkipped() <= 1);
+        assertEquals("Blocks read count should be 1 (Block 1)", 1, readerContext.getBlocksRead());
+        assertEquals("Records read count mismatch", block1Records.size(),
+            readerContext.getRecordsRead());
+        assertNull("Trailer should not be present", formatReader.getTrailer());
+    }
+
+    @Test
+    public void testCorruptionMissingTrailer() throws IOException {
+        initWriter();
+        List<Log.Record> block1Records = writeBlock(formatWriter, "B1", 0, 5);
+        // Don't close the writer, simulate missing trailer
+        long trailerStartOffset = formatWriter.getPosition(); // Position before trailer write
+
+        byte[] data = writerBaos.toByteArray();
+        byte[] truncatedData = Arrays.copyOf(data, (int) trailerStartOffset);
+
+        // Re-initialize reader with truncated data
+        PositionedByteArrayInputStream bais = new PositionedByteArrayInputStream(truncatedData);
+        FSDataInputStream fsis = new FSDataInputStream(bais);
+        readerContext.setFileSize(truncatedData.length);
+        // This init should log a warning but succeed
+        formatReader.init(readerContext, fsis);
+
+        List<Log.Record> decoded = readRecords(formatReader);
+
+        assertEquals("Should read all records from block 1", block1Records.size(), decoded.size());
+        for (int i = 0; i < block1Records.size(); i++) {
+            assertEquals("Block 1 record " + i + " mismatch", block1Records.get(i),
+                decoded.get(i));
+        }
+
+        assertNull("Trailer should be null", formatReader.getTrailer());
+        assertEquals("Corrupt blocks skipped should be 0", 0,
+            readerContext.getCorruptBlocksSkipped());
+        assertEquals("Blocks read count mismatch", 1, readerContext.getBlocksRead());
+        assertEquals("Records read count mismatch", block1Records.size(),
+            readerContext.getRecordsRead());
+    }
+
+    static class PositionedByteArrayInputStream extends ByteArrayInputStream
+            implements Seekable, PositionedReadable {
+
+        public PositionedByteArrayInputStream(byte[] buf) {
+            super(buf);
+        }
+
+        public PositionedByteArrayInputStream(byte[] buf, int offset, int length) {
+            super(buf, offset, length);
+        }
+
+        @Override
+        public void seek(long pos) throws IOException {
+            if (pos < 0) {
+                throw new IOException("Cannot seek to negative position");
+            }
+            if (pos > Integer.MAX_VALUE) {
+                throw new IllegalArgumentException("Cannot seek beyond Integer.MAX_VALUE");
+            }
+            if (pos >= count) {
+                this.pos = count; // Position at the end
+                if (pos > count) {
+                    throw new EOFException("Seek position is past the end of the stream");
+                }
+            } else {
+                this.pos = (int) pos;
+            }
+        }
+
+        @Override
+        public long getPos() throws IOException {
+            return pos;
+        }
+
+        @Override
+        public boolean seekToNewSource(long pos) throws IOException {
+          seek(pos);
+          return false;
+        }
+
+        @Override
+        public int read(long position, byte[] buffer, int offset, int length) throws IOException {
+            if (buffer == null) {
+                throw new NullPointerException();
+            }
+            if (offset < 0 || length < 0 || offset + length > buffer.length) {
+                throw new IndexOutOfBoundsException(String.format(
+                    "Offset %d or length %d is invalid for buffer of size %d", offset, length,
+                        buffer.length));
+            }
+            if (position < 0) {
+                throw new IOException("Position cannot be negative");
+            }
+            if (position > Integer.MAX_VALUE) {
+                throw new IllegalArgumentException("Position cannot exceed Integer.MAX_VALUE");
+            }
+            if (length == 0) {
+                return 0;
+            }
+            int pos = (int) position;
+            if (pos >= count) {
+                return -1;
+            }
+            int avail = count - pos;
+            int n = Math.min(length, avail);
+            System.arraycopy(buf, pos, buffer, offset, n);
+            return n;
+        }
+
+        @Override
+        public void readFully(long position, byte[] buffer, int offset, int length)
+                throws IOException {
+            if (buffer == null) {
+                throw new NullPointerException("Buffer cannot be null");
+            }
+            if (offset < 0 || length < 0 || offset + length > buffer.length) {
+                throw new IndexOutOfBoundsException(String.format(
+                    "Offset %d or length %d is invalid for buffer of size %d", offset, length,
+                        buffer.length));
+            }
+            if (position < 0) {
+                throw new IOException("Position cannot be negative");
+            }
+            if (position > Integer.MAX_VALUE) {
+                throw new IllegalArgumentException("Position cannot exceed Integer.MAX_VALUE");
+            }
+            if (length == 0) {
+                return;
+            }
+            int pos = (int) position;
+            if (pos >= count) {
+                throw new EOFException("Read position is at or past the end of the stream");
+            }
+            int avail = count - pos;
+            if (length > avail) {
+                throw new EOFException(String.format(
+                    "Premature EOF from stream: expected %d bytes, but only %d available", length,
+                        avail));
+            }
+            System.arraycopy(buf, pos, buffer, offset, length);
+        }
+
+        @Override
+        public void readFully(long position, byte[] buffer) throws IOException {
+            readFully(position, buffer, 0, buffer.length);
+        }
+    }
+
+    private void initReader(byte[] data) throws IOException {
+        FSDataInputStream fsis = new FSDataInputStream(new PositionedByteArrayInputStream(data));
+        readerContext.setFileSize(data.length);
+        formatReader.init(readerContext, fsis);
+    }
+
+    private void initWriter() throws IOException {
+        FSDataOutputStream fsos = new FSDataOutputStream(writerDos, null) {
+            @Override
+            public long getPos() {
+                return writerDos.size();
+            }
+            @Override
+            public void hflush() throws IOException {
+                writerDos.flush();
+            }
+            @Override
+            public void hsync() throws IOException {
+                writerDos.flush();
+            }
+        };
+        formatWriter.init(writerContext, fsos);
+    }
+
+    private Log.Record newRecord(String table, long commitId, String rowKey, long ts, int numCols) {
+        Log.Record record = new LogRecord()
+            .setMutationType(Log.MutationType.PUT)
+            .setSchemaObjectName(table)
+            .setCommitId(commitId)
+            .setRowKey(Bytes.toBytes(rowKey))
+            .setTimestamp(ts);
+        for (int i = 0; i < numCols; i++) {
+            record.addColumnValue(Bytes.toBytes("col" + i), Bytes.toBytes("v" + i + "_" + rowKey));
+        }
+        return record;
+    }
+
+    private int findBlockEndOffset(byte[] data, int startOffset) throws IOException {
+        ByteArrayInputStream bais = new ByteArrayInputStream(data);
+        DataInputStream dis = new DataInputStream(bais);
+        // Skip to where the block header should start
+        dis.skipBytes(startOffset);
+        LOG.info("Reading header at " + startOffset);
+        LogBlockHeader header = new LogBlockHeader();
+        header.readFields(dis);
+        int payloadSize = header.getCompressedSize();
+        int endOffset = startOffset + header.getSerializedLength() + payloadSize + Log.CHECKSUM_SIZE;
+        LOG.info("Block ending offset is " + endOffset);
+        return endOffset;
+    }
+
+    private List<Log.Record> readRecords(LogFormatReader reader) throws IOException {
+        List<Log.Record> decoded = new ArrayList<>();
+        Log.Record r;
+        while ((r = reader.next(null)) != null) {
+            decoded.add(r);
+        }
+        return decoded;
+    }
+
+    private List<Log.Record> writeBlock(LogFormatWriter writer, String tablePrefix,
+            long startCommitId, int numRecords) throws IOException {
+        List<Log.Record> records = new ArrayList<>();
+        for (int i = 0; i < numRecords; i++) {
+            Log.Record r = newRecord(tablePrefix, startCommitId + i, "row" + (startCommitId + i),
+                1000L + i, 1);
+            records.add(r);
+            writer.append(r);
+        }
+        writer.closeBlock();
+        LOG.info("Next block start position is " + writer.getPosition());
+        writer.startBlock();
+        return records;
+    }
+
+}
