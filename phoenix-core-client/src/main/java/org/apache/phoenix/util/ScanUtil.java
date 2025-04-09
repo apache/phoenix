@@ -28,6 +28,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_TTL;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
@@ -40,6 +41,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
+import java.util.Set;
 import java.util.TreeMap;
 
 import org.apache.hadoop.conf.Configuration;
@@ -80,6 +82,7 @@ import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.filter.MultiEncodedCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.index.CDCTableInfo;
@@ -91,6 +94,9 @@ import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.CompiledConditionalTTLExpression;
+import org.apache.phoenix.schema.CompiledTTLExpression;
+import org.apache.phoenix.schema.ConditionalTTLExpression;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
@@ -101,6 +107,9 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TTLExpression;
+import org.apache.phoenix.schema.LiteralTTLExpression;
+import org.apache.phoenix.schema.TTLExpressionFactory;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.transform.SystemTransformRecord;
@@ -109,7 +118,6 @@ import org.apache.phoenix.schema.transform.TransformClient;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -1147,12 +1155,25 @@ public class ScanUtil {
     }
 
 
-    public static int getTTL(Scan scan) {
+    public static int getTTL(Scan scan) throws IOException {
         byte[] phoenixTTL = scan.getAttribute(BaseScannerRegionObserverConstants.TTL);
         if (phoenixTTL == null) {
             return DEFAULT_TTL;
         }
-        return Bytes.readAsInt(phoenixTTL, 0, phoenixTTL.length);
+        CompiledTTLExpression ttlExpression = TTLExpressionFactory.create(phoenixTTL);
+        if (ttlExpression instanceof  LiteralTTLExpression) {
+            LiteralTTLExpression literal = (LiteralTTLExpression)ttlExpression;
+            return literal.getTTLValue();
+        }
+        return DEFAULT_TTL;
+    }
+
+    public static CompiledTTLExpression getTTLExpression(Scan scan) throws IOException {
+        byte[] phoenixTTL = scan.getAttribute(BaseScannerRegionObserverConstants.TTL);
+        if (phoenixTTL == null) {
+            return TTL_EXPRESSION_FOREVER;
+        }
+        return TTLExpressionFactory.create(phoenixTTL);
     }
 
     public static boolean isPhoenixTableTTLEnabled(Configuration conf) {
@@ -1193,7 +1214,7 @@ public class ScanUtil {
         return maxTs;
     }
 
-    public static boolean isTTLExpired(Cell cell, Scan scan, long nowTS) {
+    public static boolean isTTLExpired(Cell cell, Scan scan, long nowTS) throws IOException {
         long ts = cell.getTimestamp();
         int ttl = ScanUtil.getTTL(scan);
         return ts + ttl < nowTS;
@@ -1424,7 +1445,13 @@ public class ScanUtil {
                 return;
             }
         }
-        if (dataTable.getTTL() != 0) {
+        // we want to compile the expression every time we pass it as a scan attribute. This is
+        // needed so that any stateless expressions like CURRENT_TIME() are always evaluated.
+        // Otherwise, we can cache stale values and keep reusing the stale values which can give
+        // incorrect results.
+        CompiledTTLExpression ttlExpr = table.getCompiledTTLExpression(phoenixConnection);
+        byte[] ttlForScan = ttlExpr.serialize();
+        if (ttlForScan != null) {
             byte[] emptyColumnFamilyName = SchemaUtil.getEmptyColumnFamily(table);
             byte[] emptyColumnName =
                     table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
@@ -1434,8 +1461,7 @@ public class ScanUtil {
                     Bytes.toBytes(tableName));
             scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME, emptyColumnFamilyName);
             scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME, emptyColumnName);
-            scan.setAttribute(BaseScannerRegionObserverConstants.TTL,
-                    Bytes.toBytes(Integer.valueOf(dataTable.getTTL())));
+            scan.setAttribute(BaseScannerRegionObserverConstants.TTL, ttlForScan);
             if (!ScanUtil.isDeleteTTLExpiredRows(scan)) {
                 scan.setAttribute(BaseScannerRegionObserverConstants.MASK_PHOENIX_TTL_EXPIRED, PDataType.TRUE_BYTES);
             }
@@ -1707,6 +1733,25 @@ public class ScanUtil {
         if (table.getLastDDLTimestamp() != null) {
             mutation.setAttribute(MutationState.MutationMetadataType.TIMESTAMP.toString(),
                     Bytes.toBytes(table.getLastDDLTimestamp()));
+        }
+    }
+
+    public static void annotateMutationWithConditionalTTL(
+            PhoenixConnection connection, PTable table,
+            List<? extends Mutation> mutations) throws SQLException {
+
+        if (!table.hasConditionalTTL()) {
+            return;
+        }
+        if (table.isImmutableRows()) {
+            // optimization for immutable tables since we don't need to read the current row
+            // before writing
+            return;
+        }
+        CompiledTTLExpression ttlExpr = table.getCompiledTTLExpression(connection);
+        byte[] ttl = ttlExpr.serialize();
+        for (Mutation mutation : mutations) {
+            mutation.setAttribute(BaseScannerRegionObserverConstants.TTL, ttl);
         }
     }
 
