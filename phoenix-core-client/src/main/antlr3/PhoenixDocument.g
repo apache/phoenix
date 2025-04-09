@@ -410,14 +410,6 @@ DIVIDE
     :   '/'
     ;
 
-PERCENT
-    :   '%'
-    ;
-
-OUTER_JOIN
-    : '(' '+' ')'
-    ;
-
 BIND_VALUE
 @init{ StringBuilder sb = new StringBuilder(); }
     :   ( COLON { sb.append(":"); } | '$' { sb.append("$"); } | '#' { sb.append("#"); } )
@@ -475,11 +467,6 @@ CHAR
     :   ( ~('\'' | '\\') )
     ;
 
-fragment
-DBL_QUOTE_CHAR
-    :   ( ~('\"') )+
-    ;
-
 // escape sequence inside a string literal
 fragment
 CHAR_ESC
@@ -497,14 +484,4 @@ CHAR_ESC
         |       { setText("\\"); }
         )
     |   '\'\''  { setText("\'"); }
-    ;
-
-EOL
-    :  ('\r' | '\n')
-    { skip(); }
-    ;
-
-// whitespace (skip)
-WS
-    :   ( ' ' | '\t' | '\u2002' ) { $channel=HIDDEN; }
     ;
