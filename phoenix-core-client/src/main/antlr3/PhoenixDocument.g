@@ -58,36 +58,7 @@ package org.apache.phoenix.parse;
 ///CLOVER:OFF
 import org.apache.hadoop.hbase.CompareOperator;
 import java.lang.Boolean;
-import java.util.Arrays;
-import java.util.Set;
-import java.util.Stack;
-import java.sql.SQLException;
-import org.apache.phoenix.expression.function.CountAggregateFunction;
-import org.apache.phoenix.expression.LiteralExpression;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.parse.PFunction;
-import org.apache.phoenix.parse.PFunction.FunctionArgument;
-import org.apache.phoenix.parse.UDFParseNode;
-import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.IllegalDataException;
-import org.apache.phoenix.schema.PIndexState;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.PTable.CDCChangeScope;
-import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDate;
-import org.apache.phoenix.schema.types.PTime;
-import org.apache.phoenix.schema.types.PTimestamp;
-import org.apache.phoenix.schema.types.PUnsignedDate;
-import org.apache.phoenix.schema.types.PUnsignedTime;
-import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.parse.LikeParseNode.LikeType;
-import org.apache.phoenix.trace.util.Tracing;
-import org.apache.phoenix.parse.AddJarsStatement;
-import org.apache.phoenix.parse.ExplainType;
 }
 
 @lexer::header {
