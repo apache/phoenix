@@ -2221,19 +2221,21 @@ public class CompactionScanner implements InternalScanner {
         }
 
         /**
-         * Skip the remaining cells of the current column and only retain delete markers if the compaction is not a
-         * major compaction
+         * Skip the remaining cells of the current column and only retain delete markers if the
+         * compaction is not a major compaction
          * @param result The list of cells (input)
          * @param currentColumnCell The cell indicates the current column (input)
          * @param retainedCells The list of cells to be retained (output)
          * @param index The index of the current cell in result (input)
-         * @return the index of the last skipped cell or the unchanged inputted index value if no cell to skip
+         * @return the index of the last skipped cell or the unchanged inputted index value if no
+         *          cell to skip
          */
-        private int skipColumn(List<Cell> result, Cell currentColumnCell, List<Cell> retainedCells, int index) {
+        private int skipColumn(List<Cell> result, Cell currentColumnCell, List<Cell> retainedCells,
+                               int index) {
             for (int i = index + 1; i < result.size(); i++) {
                 Cell cell = result.get(i);
                 if (CellUtil.matchingColumn(cell, currentColumnCell)) {
-                    index = index + 1;
+                    index++;
                     if (cell.getType() != Cell.Type.Put && !major) {
                         retainedCells.add(cell);
                     }
@@ -2250,14 +2252,15 @@ public class CompactionScanner implements InternalScanner {
          * @param currentColumnCell The cell indicates the current column (input)
          * @param index The index of the current cell in result (input)
          * @param emptyColumn The list of empty column cells (output)
-         * @return the index of the last empty column cell or the unchanged inputted index value if no empty column
-         *          cells to add
+         * @return the index of the last empty column cell or the unchanged inputted index value
+         *          if no empty column cells to add
          */
-        private int addEmptyColumn(List<Cell> result, Cell currentColumnCell, int index, List<Cell> emptyColumn) {
+        private int addEmptyColumn(List<Cell> result, Cell currentColumnCell, int index,
+                                   List<Cell> emptyColumn) {
             for (int i = index + 1; i < result.size(); i++) {
                 Cell cell = result.get(i);
                 if (CellUtil.matchingColumn(cell, currentColumnCell)) {
-                    index = index + 1;
+                    index++;
                     emptyColumn.add(cell);
                 } else {
                     return index;
@@ -2266,11 +2269,12 @@ public class CompactionScanner implements InternalScanner {
             return index;
         }
         /**
-         * This method retains all the cells within the max lookback window and the last row version visible at the
-         * lower edge of the max lookback window. The last row version can have zero or more cells at the lower edge
-         * of the window and/or zero or more cells outside the window. It also retains all delete markers outside the
-         * window if the compaction is not a major compaction, and returns the remaining cells (outside the max
-         * lookback window) of the empty colum.
+         * This method retains all the cells within the max lookback window and the last row version
+         * visible at the lower edge of the max lookback window. The last row version can have zero
+         * or more cells at the lower edge of the window and/or zero or more cells outside the
+         * window. It also retains all delete markers outside the window if the compaction is not a
+         * major compaction, and returns the remaining cells (outside the max lookback window) of
+         * the empty colum.
          *
          * The cells of the row (i.e., result) read from HBase store are lexicographically ordered
          * for tables using the key part of the cells which includes row, family, qualifier,
@@ -2288,26 +2292,29 @@ public class CompactionScanner implements InternalScanner {
             for (int index = 0; index < result.size(); index++) {
                 Cell cell = result.get(index);
                 if (cell.getTimestamp() > maxLookbackWindowStart) {
-                    // All cells within the max lookback window are retained. Here we retain all except the ones at the
-                    // lower edge of the window. Those will be included in the last row version in the rest of the
-                    // body of the loop
+                    // All cells within the max lookback window are retained. Here we retain all
+                    // except the ones at the lower edge of the window. Those will be included in
+                    // the last row version in the rest of the body of the loop
                     retainedCells.add(cell);
                     continue;
                 }
-                // The following section of the for loop processes an entire column in each iteration, that is, all cell
-                // versions for a given column will be processed in each iteration. Please note delete family markers
-                // (DeleteFamily and DeleteFamilyVersion) has their own column with the null column qualifier. The
-                // delete family column cells always forms the first column in a row of cells for a given column family.
+                // The following section of the for loop processes an entire column in each
+                // iteration, that is, all cell versions for a given column will be processed in
+                // each iteration. Please note delete family markers (DeleteFamily and
+                // DeleteFamilyVersion) has their own column with the null column qualifier. The
+                // delete family column cells always forms the first column in a row of cells for a
+                // given column family
                 if (currentColumnCell == null) {
-                    // This is the first column. If the row has any delete family markers, they will be in the first
-                    // column
+                    // This is the first column. If the row has any delete family markers, they will
+                    // be in the first column
                     currentColumnCell = cell;
                     if (cell.getType() == Cell.Type.DeleteFamily) {
-                        // The first delete family marker at the edge or outside the max lookback window is
-                        // DeleteFamily.
+                        // The first delete family marker at the edge or outside the max lookback
+                        // window is DeleteFamily.
                         deleteFamilyCell = cell;
                         if (cell.getTimestamp() == maxLookbackWindowStart) {
-                            // it is at the edge of the window.So we need to include it in the last row version
+                            // it is at the edge of the window.So we need to include it in the last
+                            // row version
                             lastRowVersion.add(cell);
                         } else if (!major) {
                             // Retain the delete markers if the compaction is not major
@@ -2324,22 +2331,25 @@ public class CompactionScanner implements InternalScanner {
                             // Retain the delete markers if the compaction is not major
                             retainedCells.add(cell);
                         }
-                        // Each DeleteFamilyVersion can delete at most one row version. There can be multiple of them,
-                        // and we need to process each separately, and thus we need to track them in a list
+                        // Each DeleteFamilyVersion can delete at most one row version. There can be
+                        // multiple of them, and we need to process each separately, and thus we
+                        // need to track them in a list
                         for (int i = index + 1; i < result.size(); i++) {
                             cell = result.get(i);
                             if (cell.getType() == Cell.Type.DeleteFamilyVersion) {
-                                index = index + 1;
+                                index++;
                                 deleteFamilyVersionCellList.add(cell);
                                 if (!major) {
-                                    // Delete markers are retained if the compaction is not a major compaction
+                                    // Delete markers are retained if the compaction is not a major
+                                    // compaction
                                     retainedCells.add(cell);
                                 }
                             } else if (cell.getType() == Cell.Type.DeleteFamily) {
-                                // After one or more DeleteFamilyVersion markers, there is a DeleteFamily marker. This
-                                // marker deletes the rest of the cells and thus no need to process further delete
-                                // family markers. Thus, we skip them using skipColumn
-                                index = index + 1;
+                                // After one or more DeleteFamilyVersion markers, there is a
+                                // DeleteFamily marker. This marker deletes the rest of the cells
+                                // and thus no need to process further delete family markers. Thus,
+                                // we skip them using skipColumn
+                                index++;
                                 deleteFamilyCell = cell;
                                 if (!major) {
                                     retainedCells.add(cell);
@@ -2348,8 +2358,8 @@ public class CompactionScanner implements InternalScanner {
                                 index = skipColumn(result, currentColumnCell, retainedCells, index);
                                 continue top;
                             } else {
-                                // Column changed as the current cell is not a delete family cell. Go back to the
-                                // beginning of the for loop
+                                // Column changed as the current cell is not a delete family cell.
+                                // Go back to the beginning of the for loop
                                 continue top;
                             }
                         }
@@ -2357,15 +2367,16 @@ public class CompactionScanner implements InternalScanner {
                         break top;
                     }
                 }
-                // All delete family markers are scanned and recorded above if there was any. Please note when we do
-                // region level compaction, each column family will have their owm delete family markers. Phoenix
-                // inserts the same set of delete markers to each column family. So, we need to keep track of the
-                // delete family markers of the first column family but apply these delete markers to all column
-                // families
+                // All delete family markers are scanned and recorded above if there was any. Please
+                // note when we do region level compaction, each column family will have their owm
+                // delete family markers. Phoenix inserts the same set of delete markers to each
+                // column family. So, we need to keep track of the delete family markers of the
+                // first column family but apply these delete markers to all column families
                 currentColumnCell = cell;
                 // Is this cell masked by a delete column family version
                 if (!deleteFamilyVersionCellList.isEmpty()) {
-                    // There could be back to back delete family version markers and thus we need a loop to check it
+                    // There could be back to back delete family version markers and thus we need a
+                    // loop to check it
                     for (Cell deleteFamilyVersionCell : deleteFamilyVersionCellList) {
                         if (cell.getTimestamp() > deleteFamilyVersionCell.getTimestamp()) {
                             break;
@@ -2384,11 +2395,12 @@ public class CompactionScanner implements InternalScanner {
                             if (!CellUtil.matchingColumn(cell, currentColumnCell)) {
                                 continue top;
                             }
-                            index = index + 1;
+                            index++;
                         }
                     }
                 }
-                if (deleteFamilyCell != null && deleteFamilyCell.getTimestamp() >= cell.getTimestamp()) {
+                if (deleteFamilyCell != null
+                        && deleteFamilyCell.getTimestamp() >= cell.getTimestamp()) {
                     // This column is deleted by a delete family marker. Skip this column
                     if (cell.getType() != Cell.Type.Put) {
                         if (cell.getTimestamp() == maxLookbackWindowStart) {
@@ -2401,8 +2413,9 @@ public class CompactionScanner implements InternalScanner {
                     index = skipColumn(result, currentColumnCell, retainedCells, index);
                     continue top;
                 }
-                // Process back-to-back deleted cell versions. Phoenix currently does not use delete cell version
-                // markers. This processing should not happen and is added for completeness
+                // Process back-to-back deleted cell versions. Phoenix currently does not use delete
+                // cell version markers. This processing should not happen and is added for
+                // completeness
                 while (cell.getType() == Cell.Type.Delete) {
                     if (cell.getTimestamp() == maxLookbackWindowStart) {
                         lastRowVersion.add(cell);
@@ -2413,10 +2426,13 @@ public class CompactionScanner implements InternalScanner {
                     if (!CellUtil.matchingColumn(currentColumnCell, nextCell)) {
                         continue top;
                     }
-                    if (nextCell.getType() == Cell.Type.Put && cell.getTimestamp() == nextCell.getTimestamp()) {
+                    // Increment index by one as the delete cell should be consumed
+                    index++;
+                    if (nextCell.getType() == Cell.Type.Put
+                            && cell.getTimestamp() == nextCell.getTimestamp()) {
                         // This put cell is masked by the delete marker
-                        index = index + 1;
-                        cell = nextCell;
+                        index++;
+                        cell = result.get(index);
                     }
                 }
                 if (cell.getType() == Cell.Type.DeleteColumn) {
@@ -2436,6 +2452,17 @@ public class CompactionScanner implements InternalScanner {
                     } else {
                         index = skipColumn(result, currentColumnCell, retainedCells, index);
                     }
+                    continue top;
+                }
+                // We can visit another delete family column for another column family if we are
+                // doing region level compaction. In that case, we should also retain delete family
+                // markers from that column family here. So we need to check if the cell type is
+                // DeleteFamily or DeleteFamilyVersion, the column family is the store under
+                // compaction and the compaction is not a major compaction.
+                if (!major && CellUtil.matchingFamily(cell, storeColumnFamily) &&
+                        (cell.getType() == Cell.Type.DeleteFamily
+                                || cell.getType() == Cell.Type.DeleteFamilyVersion)) {
+                    index = skipColumn(result, currentColumnCell, retainedCells, index);
                 }
             }
         }
@@ -2528,7 +2555,8 @@ public class CompactionScanner implements InternalScanner {
                 // deleted and thus should not be visible to the scn queries
                 rowContext.getNextRowVersionTimestamps(lastRow, storeColumnFamily);
             }
-            if ((firstCell.getType() == Cell.Type.DeleteFamily && firstCell.getTimestamp() >= rowContext.maxTimestamp)
+            if ((firstCell.getType() == Cell.Type.DeleteFamily
+                    && firstCell.getTimestamp() >= rowContext.maxTimestamp)
                     || (firstCell.getType() == Cell.Type.DeleteFamilyVersion
                     && firstCell.getTimestamp() == rowContext.maxTimestamp)) {
                 // This means that the row version outside the max lookback window is

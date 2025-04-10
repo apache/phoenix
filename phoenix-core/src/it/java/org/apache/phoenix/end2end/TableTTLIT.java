@@ -50,11 +50,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
@@ -477,6 +473,18 @@ public class TableTTLIT extends BaseTest {
                     indexName, tableName);
             conn.createStatement().execute(indexDDL);
             updateRow(conn, tableName, "a1");
+            String indexColumnValue;
+            String expectedValue;
+            String dql = "select val1, val2 from " + tableName + " where id = 'a1'";
+            try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
+                PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
+                String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
+                assertFalse(explainPlan.contains(indexName));
+                assertTrue(rs.next());
+                indexColumnValue = rs.getString(1);
+                expectedValue = rs.getString(2);
+                assertFalse(rs.next());
+            }
             // Insert an orphan index row by failing data table update
             IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
             try {
@@ -501,14 +509,14 @@ public class TableTTLIT extends BaseTest {
             }
             TestUtil.dumpTable(conn, TableName.valueOf(indexName));
             // do a read on the index which should trigger a read repair
-            String dql = "select count(*) from " + tableName;
+            dql = "select val2 from " + tableName + " where val1 = '" + indexColumnValue + "'";
             try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
                 PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
                 String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
                 assertTrue(explainPlan.contains(indexName));
-                while (rs.next()) {
-                    assertEquals(1, rs.getInt(1));
-                }
+                assertTrue(rs.next());
+                assertEquals(rs.getString(1), expectedValue);
+                assertFalse(rs.next());
             }
             TestUtil.dumpTable(conn, TableName.valueOf(indexName));
             flush(TableName.valueOf(indexName));
@@ -519,9 +527,9 @@ public class TableTTLIT extends BaseTest {
                 PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
                 String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
                 assertTrue(explainPlan.contains(indexName));
-                while (rs.next()) {
-                    assertEquals(1, rs.getInt(1));
-                }
+                assertTrue(rs.next());
+                assertEquals(rs.getString(1), expectedValue);
+                assertFalse(rs.next());
             }
         }
     }
