@@ -1533,7 +1533,7 @@ public class TestUtil {
                 .toArray(byte[][]::new);
 
         executeHBaseTableRegionOperation(conn, tableName, (admin, regionLocator, nRegions) -> {
-            admin.mergeRegionsAsync(regionsToMerge, true);
+            admin.mergeRegionsAsync(regionsToMerge, true).get();
             waitForRegionChange(regionLocator, nRegions);
         });
     }
