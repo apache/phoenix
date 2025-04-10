@@ -202,6 +202,6 @@ public class HAGroupStoreClient implements Closeable {
         if (!isHealthy) {
             throw new IOException("HAGroupStoreClient is not healthy");
         }
-        return clusterRoleToCRRMap.getOrDefault(clusterRole, new ConcurrentHashMap<>()).values().stream().collect(ImmutableList.toImmutableList());
+        return ImmutableList.copyOf(clusterRoleToCRRMap.getOrDefault(clusterRole, new ConcurrentHashMap<>()).values());
     }
 }
