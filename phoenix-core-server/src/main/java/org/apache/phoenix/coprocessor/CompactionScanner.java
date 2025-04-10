@@ -2280,7 +2280,7 @@ public class CompactionScanner implements InternalScanner {
          */
         private void getLastRowVersionInMaxLookbackWindow(List<Cell> result,
                 List<Cell> lastRowVersion, List<Cell> retainedCells, List<Cell> emptyColumn) {
-            long maxLookbackWindowStart = rowTracker.getRowContext().getMaxLookbackWindowStart();
+            long maxLookbackWindowStart = rowContext.getMaxLookbackWindowStart();
             Cell currentColumnCell = null;
             Cell deleteFamilyCell = null;
             deleteFamilyVersionCellList.clear();
