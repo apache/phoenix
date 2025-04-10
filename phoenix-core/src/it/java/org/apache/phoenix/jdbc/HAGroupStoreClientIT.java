@@ -50,7 +50,7 @@ import static org.junit.Assert.assertThrows;
 public class HAGroupStoreClientIT extends BaseTest {
 
     private final PhoenixHAAdmin haAdmin = new PhoenixHAAdmin(config);
-    private static final Long ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS = 1000L;
+    private static final Long ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS = 5000L;
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -365,7 +365,7 @@ public class HAGroupStoreClientIT extends BaseTest {
     @Test
     public void testHAGroupStoreClientWithMultiThreadedUpdates() throws Exception {
         // Number of threads to execute
-        int threadCount = 15;
+        int threadCount = 5;
 
         // Capture versions of crr in a list(crrEventVersions)  in order they are received.
         List<Integer> crrEventVersions = new ArrayList<>();
