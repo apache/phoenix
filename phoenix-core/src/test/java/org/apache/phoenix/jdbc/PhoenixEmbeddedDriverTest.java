@@ -570,6 +570,47 @@ public class PhoenixEmbeddedDriverTest {
     }
 
     @Test
+    public void testMasterIPv6() throws SQLException {
+        assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.3.0") >= 0);
+        try {
+            Configuration config =
+                    HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+            config.set("hbase.client.registry.impl",
+                    "org.apache.hadoop.hbase.client.MasterRegistry");
+            ConnectionInfo.create("jdbc:phoenix+master", config, null, null);
+            fail("Should have thrown exception");
+        } catch (SQLException e) {
+        }
+
+        Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+        config.set("hbase.client.registry.impl", "org.apache.hadoop.hbase.client.MasterRegistry");
+        config.set("hbase.master.port", "17000");
+        MasterConnectionInfo info =
+                (MasterConnectionInfo) ConnectionInfo.create(
+                        "jdbc:phoenix+master:[::1],[\\:\\:2]", config, null, null);
+        assertEquals(info.getBoostrapServers(), "[::1]:17000,[::2]:17000");
+
+        config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+        config.set("hbase.client.registry.impl", "org.apache.hadoop.hbase.client.MasterRegistry");
+        info =
+                (MasterConnectionInfo) ConnectionInfo.create(
+                        "jdbc:phoenix+master:[::1]\\:123,[\\:\\:2]\\:234", config, null, null);
+        assertEquals(info.getBoostrapServers(), "[::1]:123,[::2]:234");
+    }
+
+    @Test
+    public void testRPCIPv6() throws SQLException{
+        Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+        config.set("hbase.client.registry.impl",
+                "org.apache.hadoop.hbase.client.RpcConnectionRegistry");
+        RPCConnectionInfo info =
+                (RPCConnectionInfo) ConnectionInfo.create(
+                        "jdbc:phoenix+rpc:[::1]\\:123,[\\:\\:2]\\::234", config,
+                        null, null);
+        assertEquals("[::1]:123,[::2]:234", info.getBoostrapServers());
+    }
+
+    @Test
     public void testZkIPv6() throws Exception {
         ConnectionInfo connectionInfo = ConnectionInfo.create("jdbc:phoenix+zk:"
                 + "[::1],127.23.45.678\\:7634,v3\\:1,host123.48576\\:723:/hbase;"
