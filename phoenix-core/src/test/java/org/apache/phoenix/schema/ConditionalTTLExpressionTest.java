@@ -29,22 +29,37 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
 
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparator;
+import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.PhoenixParserException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.junit.Test;
 
 
@@ -638,5 +653,148 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
             query = String.format("select col1, col2 from %s where k1 > 3", tableName);
             validateScan(conn, tableName, query, ttl, false, Lists.newArrayList("col1", "col2"));
         }
+    }
+
+    @Test
+    public void testLatestRowVersion() throws Exception {
+        String ddlTemplate = "create table %s (id varchar not null primary key, " +
+                "col1 integer, col2 integer, col3 varchar) TTL = '%s'";
+        String tableName = generateUniqueName();
+        String ttl = "col2 > 100 AND col3='expired'";
+        long currentTS = EnvironmentEdgeManager.currentTimeMillis();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String ddl = String.format(ddlTemplate, tableName, retainSingleQuotes(ttl));
+            conn.createStatement().execute(ddl);
+            PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+            PTable table = pconn.getTable(tableName);
+            int updateCount = 5;
+            String id = "a";
+            ImmutableBytesPtr rowKey = new ImmutableBytesPtr(Bytes.toBytes(id));
+            List<Cell> updates = new ArrayList<>();
+            for (int i = 0; i < updateCount; ++i) {
+                updates.addAll(generateUpdate(id, i, i*i, "val_" + i, currentTS + i*10));
+            }
+            // updates [
+            // lastUpdateTS - 40,
+            // lastUpdateTS - 30,
+            // lastUpdateTS - 20,
+            // lastUpdateTS - 10,
+            // lastUpdateTS
+            // ]
+            long lastupdateTS = currentTS + (updateCount - 1)* 10;
+
+            CompiledConditionalTTLExpression ttlExpr =
+                    (CompiledConditionalTTLExpression) table.getCompiledTTLExpression(pconn);
+
+            // case 1: no Deletes just multiple Put mutations
+            List<Cell> row = Lists.newArrayList(updates);
+            row.sort(CellComparator.getInstance());
+            List<Cell> latestRowVersion = ttlExpr.getLatestRowVersion(row);
+            assertEquals(3, latestRowVersion.size()); // 3 columns
+            for (Cell cell : latestRowVersion) {
+                assertEquals(lastupdateTS, cell.getTimestamp());
+            }
+
+            // case 2 insert DeleteFamily at the top
+            row = Lists.newArrayList(updates);
+            KeyValue df = new KeyValue(Bytes.toBytes(id), Bytes.toBytes("f"), null,
+                    lastupdateTS + 5, KeyValue.Type.DeleteFamily, null);
+            row.add(df);
+            row.sort(CellComparator.getInstance());
+            latestRowVersion = ttlExpr.getLatestRowVersion(row);
+            assertTrue(latestRowVersion.isEmpty());
+
+            // case 3 insert DeleteFamilyVersion at last TS
+            row = Lists.newArrayList(updates);
+            KeyValue dfv = new KeyValue(Bytes.toBytes(id), Bytes.toBytes("f"), null, lastupdateTS,
+                    KeyValue.Type.DeleteFamilyVersion, null);
+            row.add(dfv);
+            row.sort(CellComparator.getInstance());
+            latestRowVersion = ttlExpr.getLatestRowVersion(row);
+            assertEquals(3, latestRowVersion.size()); // 3 columns
+            for (Cell cell : latestRowVersion) {
+                assertEquals(lastupdateTS - 10, cell.getTimestamp());
+            }
+
+            // case 4 insert DeleteFamilyVersion at last TS, DeleteFamily in the middle
+            row = Lists.newArrayList(updates);
+            df = new KeyValue(Bytes.toBytes(id), Bytes.toBytes("f"), null,
+                    lastupdateTS - 25, KeyValue.Type.DeleteFamily, null);
+            row.add(df);
+            row.add(dfv);
+            row.sort(CellComparator.getInstance());
+            latestRowVersion = ttlExpr.getLatestRowVersion(row);
+            assertEquals(3, latestRowVersion.size()); // 3 columns
+            for (Cell cell : latestRowVersion) {
+                assertEquals(lastupdateTS - 10, cell.getTimestamp());
+            }
+
+            // case 5 multiple DeleteFamilyVersions
+            row = Lists.newArrayList(updates);
+            row.add(dfv);
+            dfv = new KeyValue(Bytes.toBytes(id), Bytes.toBytes("f"), null, lastupdateTS - 10,
+                    KeyValue.Type.DeleteFamilyVersion, null);
+            row.add(dfv);
+            row.sort(CellComparator.getInstance());
+            latestRowVersion = ttlExpr.getLatestRowVersion(row);
+            assertEquals(3, latestRowVersion.size()); // 3 columns
+            for (Cell cell : latestRowVersion) {
+                assertEquals(lastupdateTS - 20, cell.getTimestamp());
+            }
+
+            // case 6 DeleteFamily in the middle
+            row = Lists.newArrayList(updates);
+            df = new KeyValue(Bytes.toBytes(id), Bytes.toBytes("f"), null,
+                    lastupdateTS - 5, KeyValue.Type.DeleteFamily, null);
+            row.add(df);
+            row.sort(CellComparator.getInstance());
+            latestRowVersion = ttlExpr.getLatestRowVersion(row);
+            assertEquals(3, latestRowVersion.size()); // 3 columns
+            for (Cell cell : latestRowVersion) {
+                assertEquals(lastupdateTS, cell.getTimestamp());
+            }
+
+            // case 7 DeleteColumn
+            row = Lists.newArrayList(updates);
+            row.addAll(generateUpdate(id, 12, null, null, lastupdateTS + 10));
+            row.sort(CellComparator.getInstance());
+            latestRowVersion = ttlExpr.getLatestRowVersion(row);
+            assertEquals(1, latestRowVersion.size()); // 1 column is non null
+            for (Cell cell : latestRowVersion) {
+                assertEquals(lastupdateTS + 10, cell.getTimestamp());
+            }
+        }
+    }
+
+    private List<Cell> generateUpdate(String id, Integer col1, Integer col2, String col3, long ts) {
+        List<Cell> update = Lists.newArrayList();
+        if (col1 != null) {
+            KeyValue kv = new KeyValue(Bytes.toBytes(id), Bytes.toBytes("f"), Bytes.toBytes("col1"),
+                    ts, KeyValue.Type.Put, Bytes.toBytes(col1));
+            update.add(kv);
+        } else {
+            KeyValue kv = new KeyValue(Bytes.toBytes(id), Bytes.toBytes("f"), Bytes.toBytes("col1"),
+                    ts, KeyValue.Type.DeleteColumn, null);
+            update.add(kv);
+        }
+        if (col2 != null) {
+            KeyValue kv = new KeyValue(Bytes.toBytes(id), Bytes.toBytes("f"), Bytes.toBytes("col2"),
+                    ts, KeyValue.Type.Put, Bytes.toBytes(col2));
+            update.add(kv);
+        } else {
+            KeyValue kv = new KeyValue(Bytes.toBytes(id), Bytes.toBytes("f"), Bytes.toBytes("col2"),
+                    ts, KeyValue.Type.DeleteColumn, null);
+            update.add(kv);
+        }
+        if (col3 != null) {
+            KeyValue kv = new KeyValue(Bytes.toBytes(id), Bytes.toBytes("f"), Bytes.toBytes("col3"),
+                    ts, KeyValue.Type.Put, Bytes.toBytes(col3));
+            update.add(kv);
+        } else {
+            KeyValue kv = new KeyValue(Bytes.toBytes(id), Bytes.toBytes("f"), Bytes.toBytes("col3"),
+                    ts, KeyValue.Type.DeleteColumn, null);
+            update.add(kv);
+        }
+        return update;
     }
 }
