@@ -26,6 +26,8 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 
+import java.text.Format;
+
 /**
  * <p>
  * A Phoenix data type to represent Bson. The Bson can represent Scalar types as well as
@@ -125,6 +127,11 @@ public class PBson extends PVarbinary {
     @Override
     public boolean isBytesComparableWith(@SuppressWarnings("rawtypes") PDataType otherType) {
         return otherType == PVarbinary.INSTANCE;
+    }
+
+    @Override
+    public String toStringLiteral(Object o, Format formatter) {
+        return ((BsonDocument) o).toJson();
     }
 
     @Override

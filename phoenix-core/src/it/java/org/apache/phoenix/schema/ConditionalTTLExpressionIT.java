@@ -44,7 +44,6 @@ import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -82,9 +81,10 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.apache.phoenix.util.TestUtil.CellCount;
-import org.apache.phoenix.util.bson.TestFieldValue;
-import org.apache.phoenix.util.bson.TestFieldsMap;
+import org.bson.BsonBoolean;
 import org.bson.BsonDocument;
+import org.bson.BsonInt32;
+import org.bson.BsonString;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -1247,15 +1247,13 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
     }
 
     private BsonDocument generateBsonDocument(int rowPosition) {
-        Map<String, TestFieldValue> map = new HashMap<>();
+        BsonDocument bsonDocument = new BsonDocument();
         if (rowPosition % 2 != 0) {
-            map.put("attr_0", new TestFieldValue().withS("str_val_" + rowPosition));
+            bsonDocument.put("attr_0", new BsonString("str_val_" + rowPosition));
         }
-        map.put("attr_1", new TestFieldValue().withN(rowPosition * rowPosition));
-        map.put("attr_2", new TestFieldValue().withBOOL(rowPosition % 2 == 0));
-        TestFieldsMap testFieldsMap = new TestFieldsMap();
-        testFieldsMap.setMap(map);
-        return org.apache.phoenix.util.bson.TestUtil.getBsonDocument(testFieldsMap);
+        bsonDocument.put("attr_1", new BsonInt32(rowPosition * rowPosition));
+        bsonDocument.put("attr_2", new BsonBoolean(rowPosition % 2 == 0));
+        return bsonDocument;
     }
 
     private List<Object> generateRow(int rowPosition) {
