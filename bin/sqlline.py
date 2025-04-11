@@ -104,6 +104,7 @@ java_cmd = phoenix_utils.java + ' ' + phoenix_utils.jvm_module_flags + \
     ('' if '-Dlog4j2.configurationFile' in opts else ' -Dlog4j2.configurationFile=file:'
         + os.path.join(phoenix_utils.current_dir, "log4j2.properties")) + \
     disable_jna + \
+    " -Dfile.encoding=UTF-8 " + \
     " sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver" + \
     (not args.noconnect and " -u " + phoenix_utils.shell_quote([jdbc_url]) or "") + \
     " -n none -p none --color=" + \
