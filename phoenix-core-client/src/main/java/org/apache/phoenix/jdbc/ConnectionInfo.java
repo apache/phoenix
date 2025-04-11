@@ -537,12 +537,12 @@ public abstract class ConnectionInfo {
             String[] quorumParts = quorum.split(",");
             String[] normalizedParts = new String[quorumParts.length];
             for (int i = 0; i < quorumParts.length; i++) {
-                int urlHasPort = quorumParts[i].trim().split(":").length;
-                quorumParts[i] = quorumParts[i].replace('~', ':');
-                if (urlHasPort == 1) {
-                    normalizedParts[i] = quorumParts[i].trim().toLowerCase() + ":" + defaultPort;
-                } else if (urlHasPort == 2) {
-                    normalizedParts[i] = quorumParts[i].trim().toLowerCase();
+                String[] hostAndPort = quorumParts[i].trim().split(":");
+                hostAndPort[0] = hostAndPort[0].replace('~', ':');
+                if (hostAndPort.length == 1) {
+                    normalizedParts[i] = hostAndPort[0].trim().toLowerCase() + ":" + defaultPort;
+                } else if (hostAndPort.length == 2) {
+                    normalizedParts[i] = String.join(":", hostAndPort).trim().toLowerCase();
                 } else {
                     throw getMalFormedUrlException(url);
                 }
