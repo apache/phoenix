@@ -19,12 +19,12 @@ package org.apache.phoenix.iterate;
 
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_QUERY_COUNTER;
+import static org.apache.phoenix.job.JobManager.JobCallable;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 
@@ -32,7 +32,10 @@ import org.apache.phoenix.compile.ExplainPlanAttributes
     .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.job.JobManager;
 import org.apache.phoenix.monitoring.OverAllQueryMetrics;
+import org.apache.phoenix.monitoring.ReadMetricQueue;
+import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ClientUtil;
@@ -167,7 +170,7 @@ public class RoundRobinResultIterator implements ResultIterator {
     }
 
     @VisibleForTesting
-    int getNumberOfParallelFetches() {
+    public int getNumberOfParallelFetches() {
         return numParallelFetches;
     }
 
@@ -230,6 +233,8 @@ public class RoundRobinResultIterator implements ResultIterator {
         Collections.shuffle(openIterators);
         boolean success = false;
         SQLException toThrow = null;
+        long maxTaskQueueWaitTime = 0;
+        long maxTaskEndToEndTime = 0;
         try {
             StatementContext context = plan.getContext();
             final ConnectionQueryServices services = context.getConnection().getQueryServices();
@@ -238,12 +243,29 @@ public class RoundRobinResultIterator implements ResultIterator {
             if (LOGGER.isDebugEnabled()) {
                 LOGGER.debug("Performing parallel fetch for " + openIterators.size() + " iterators. ");
             }
+            String physicalTableName = plan.getTableRef().getTable().getPhysicalName().getString();
             for (final RoundRobinIterator itr : openIterators) {
-                Future<Tuple> future = executor.submit(new Callable<Tuple>() {
+                ReadMetricQueue readMetricQueue = context.getReadMetricsQueue();
+                TaskExecutionMetricsHolder taskMetrics =
+                        new TaskExecutionMetricsHolder(readMetricQueue, physicalTableName);
+                Future<Tuple> future = executor.submit(new JobCallable<Tuple>() {
                     @Override
                     public Tuple call() throws Exception {
                         // Read the next record to refill the scanner's cache.
                         return itr.next();
+                    }
+
+                    @Override
+                    public Object getJobId() {
+                        // Prior to using JobCallable, every callable refilling the scanner cache
+                        // was treated as a separate producer in JobManager queue so, keeping
+                        // that same. Should this be changed to ResultIterators.this ?
+                        return this;
+                    }
+
+                    @Override
+                    public TaskExecutionMetricsHolder getTaskExecutionMetric() {
+                        return taskMetrics;
                     }
                 });
                 futures.add(future);
@@ -251,6 +273,11 @@ public class RoundRobinResultIterator implements ResultIterator {
             int i = 0;
             for (Future<Tuple> future : futures) {
                 Tuple tuple = future.get();
+                TaskExecutionMetricsHolder taskMetricsHolder = JobManager.getTaskMetrics(future);
+                long taskQueueWaitTime = taskMetricsHolder.getTaskQueueWaitTime().getValue();
+                long taskEndToEndTime = taskMetricsHolder.getTaskEndToEndTime().getValue();
+                maxTaskQueueWaitTime = Math.max(maxTaskQueueWaitTime, taskQueueWaitTime);
+                maxTaskEndToEndTime = Math.max(maxTaskEndToEndTime, taskEndToEndTime);
                 if (tuple != null) {
                     results.add(new RoundRobinIterator(openIterators.get(i).delegate, tuple));
                 } else {
@@ -279,9 +306,12 @@ public class RoundRobinResultIterator implements ResultIterator {
                     }
                 }
             } finally {
+                OverAllQueryMetrics overAllQueryMetrics =
+                        plan.getContext().getOverallQueryMetrics();
+                overAllQueryMetrics.updateQueryWaitTime(maxTaskQueueWaitTime);
+                overAllQueryMetrics.updateQueryTaskEndToEndTime(maxTaskEndToEndTime);
                 if (toThrow != null) {
                     GLOBAL_FAILED_QUERY_COUNTER.increment();
-                    OverAllQueryMetrics overAllQueryMetrics = plan.getContext().getOverallQueryMetrics();
                     overAllQueryMetrics.queryFailed();
                     if (plan.getContext().getScanRanges().isPointLookup()) {
                         overAllQueryMetrics.queryPointLookupFailed();
