@@ -431,6 +431,7 @@ public interface QueryServices extends SQLCloseable {
     // As opposed to a copy and async (out of band) delete.
     public static final String MOVE_CHILD_LINKS_DURING_UPGRADE_ENABLED = "phoenix.move.child_link.during.upgrade";
 
+    String SYSTEM_CATALOG_INDEXES_ENABLED = "phoenix.system.catalog.indexes.enabled";
     /**
      * Parameter to indicate the source of operation attribute.
      * It can include metadata about the customer, service, etc.

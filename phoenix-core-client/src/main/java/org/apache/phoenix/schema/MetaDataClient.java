@@ -1824,9 +1824,11 @@ public class MetaDataClient {
             }
 
             Configuration config = connection.getQueryServices().getConfiguration();
+            // Do descendant view validation only when enabled and not a SYSTEM table/index
             if (!connection.getQueryServices().getProps()
                 .getBoolean(DISABLE_VIEW_SUBTREE_VALIDATION,
-                    DEFAULT_DISABLE_VIEW_SUBTREE_VALIDATION)) {
+                    DEFAULT_DISABLE_VIEW_SUBTREE_VALIDATION) &&
+                    !QueryConstants.SYSTEM_SCHEMA_NAME.equals(dataTable.getSchemaName().getString())) {
                 verifyIfDescendentViewsExtendPk(dataTable, config);
             }
             // for view indexes

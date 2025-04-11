@@ -23,6 +23,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMIL
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_HBASE_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_FOR_MUTEX;
+import static org.apache.phoenix.query.QueryServices.SYSTEM_CATALOG_INDEXES_ENABLED;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SYSTEM_CATALOG_INDEXES_ENABLED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -168,6 +170,7 @@ public class SystemTablesCreationOnConnectionIT {
                                                                                Properties info) throws SQLException {
             QueryServicesTestImpl qsti = new QueryServicesTestImpl(getDefaultProps(), overrideProps);
             if (cqs == null) {
+                info.put(SYSTEM_CATALOG_INDEXES_ENABLED, "false");
                 cqs = new PhoenixSysCatCreationServices(qsti, ConnectionInfo.create(url, qsti.getProps(), info), info);
                 cqs.init(url, info);
             }
@@ -493,6 +496,7 @@ public class SystemTablesCreationOnConnectionIT {
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
         startMiniClusterWithToggleNamespaceMapping(Boolean.FALSE.toString());
         Properties propsDoNotUpgradeSet = new Properties();
+        propsDoNotUpgradeSet.setProperty(SYSTEM_CATALOG_INDEXES_ENABLED, "false");
         // Set doNotUpgradeProperty to true
         UpgradeUtil.doNotUpgradeOnFirstConnection(propsDoNotUpgradeSet);
 
@@ -569,7 +573,10 @@ public class SystemTablesCreationOnConnectionIT {
         // Register the vanilla PhoenixDriver
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
         startMiniClusterWithToggleNamespaceMapping(Boolean.FALSE.toString());
-        try (Connection ignored = DriverManager.getConnection(getJdbcUrl());
+        Properties props = new Properties();
+        props.setProperty(SYSTEM_CATALOG_INDEXES_ENABLED, "false");
+
+        try (Connection ignored = DriverManager.getConnection(getJdbcUrl(), props);
              Admin admin = testUtil.getAdmin()) {
             TableDescriptor htd = admin.getDescriptor(SYSTEM_MUTEX_HBASE_TABLE_NAME);
             ColumnFamilyDescriptor hColDesc = htd.getColumnFamily(SYSTEM_MUTEX_FAMILY_NAME_BYTES);
@@ -586,6 +593,8 @@ public class SystemTablesCreationOnConnectionIT {
         String tableName = "HBASE_SYNTH_TEST";
         startMiniClusterWithToggleNamespaceMapping(Boolean.FALSE.toString());
         Properties propsDoNotUpgradePropSet = new Properties();
+        propsDoNotUpgradePropSet.setProperty(SYSTEM_CATALOG_INDEXES_ENABLED, "false");
+
         // Create a dummy connection to make sure we have all system tables in place
         try (Connection con1 = DriverManager.getConnection(getJdbcUrl(), propsDoNotUpgradePropSet);
              Statement stmt1 = con1.createStatement()) {
@@ -675,6 +684,8 @@ public class SystemTablesCreationOnConnectionIT {
         testUtil = new HBaseTestingUtility();
         Configuration conf = testUtil.getConfiguration();
         conf.set(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, isNamespaceMappingEnabled);
+        conf.set(SYSTEM_CATALOG_INDEXES_ENABLED, "false");
+
         // Avoid multiple clusters trying to bind to the master's info port (16010)
         conf.setInt(HConstants.MASTER_INFO_PORT, -1);
         conf.set(REGIONSERVER_COPROCESSOR_CONF_KEY, PhoenixRegionServerEndpointTestImpl.class.getName());
@@ -704,6 +715,8 @@ public class SystemTablesCreationOnConnectionIT {
                 Boolean.valueOf(nsMappingEnabled).toString());
         clientProps.setProperty(QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE,
                 Boolean.valueOf(systemTableMappingEnabled).toString());
+        clientProps.setProperty(SYSTEM_CATALOG_INDEXES_ENABLED, "false");
+
         return clientProps;
     }
 
