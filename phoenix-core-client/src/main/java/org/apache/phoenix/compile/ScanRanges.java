@@ -280,7 +280,8 @@ public class ScanRanges {
                     // These is the start of the next bucket in byte[], without the PK suffix
                     nextBucketByte = new byte[] { nextBucketStart[0] };
                 }
-                if (lastBucket || Bytes.compareTo(originalStopKey, nextBucketStart) <= 0) {
+                if (lastBucket || (originalStopKey.length > 0
+                        && Bytes.compareTo(originalStopKey, nextBucketStart) <= 0)) {
                     // either we don't need to add synthetic guideposts, or we already have, and
                     // are at the last bucket of the original scan
                     addIfNotNull(newScans, intersectScan(scan, wrkStartKey, originalStopKey,
