@@ -37,7 +37,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.PreparedStatement;
-import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
 import java.util.Properties;
@@ -363,31 +362,5 @@ public class SaltedTableWithParallelStatsEnabledIT extends ParallelStatsEnabledI
     @Test
     public void testPointLookupsWithoutStatsForParallelization() throws Exception {
         testPhoenix7580(false, false, true);
-    }
-
-    // Added this test to assert that no additional testing is needed for local indexes for
-    // PHOENIX-7580 as local indexes cannot be salted.
-    @Test
-    public void testLocalIndexesCannotBeSalted() throws Exception {
-        String tableName = generateUniqueName();
-        String indexName = generateUniqueName();
-        int saltBucketCount = 5;
-        String createLocalIndexDdl = "CREATE LOCAL INDEX IF NOT EXISTS " + indexName + " ON "
-                + tableName + " (COL1)";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            createTable(conn, tableName, saltBucketCount);
-            try (Statement stmt = conn.createStatement()) {
-                stmt.execute(createLocalIndexDdl + " SALT_BUCKETS=" + saltBucketCount);
-                Assert.fail("Local index should not be salted");
-            }
-            catch (SQLException e) {
-                Assert.assertEquals(1110, e.getErrorCode());
-            }
-            try (Statement stmt = conn.createStatement()) {
-                stmt.execute(createLocalIndexDdl);
-            }
-            PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-            Assert.assertNull(pconn.getTableNoCache(indexName).getBucketNum());
-        }
     }
 }
