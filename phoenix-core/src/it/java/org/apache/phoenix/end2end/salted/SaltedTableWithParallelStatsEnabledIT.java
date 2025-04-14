@@ -29,6 +29,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsEnabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.SaltingUtil;
 import org.junit.Test;
 import org.junit.Assert;
 import org.junit.experimental.categories.Category;
@@ -82,9 +83,8 @@ public class SaltedTableWithParallelStatsEnabledIT extends ParallelStatsEnabledI
         int saltBucketCount = 5;
         int rowsToInsert = saltBucketCount * 10;
         String primaryKeyPrefix = "pk1_1";
-        // First 3 values are from salt bucket 0, next 3 are from salt bucket 1 and so on
-        // till the last salt bucket. These values have been specifically selected so that
-        // we have values from all the 5 salt buckets.
+        // These values have been specifically selected so that we have values from all the 5 salt
+        // buckets. Ordering of the values is not important.
         int[] pk2ValuesForPointLookups = new int[]
                 { 4, 9, 13, 0, 5, 14, 1, 6, 10, 2, 7, 11, 3, 8, 12 };
         int pointLookupsPerSaltBkt = pk2ValuesForPointLookups.length / saltBucketCount;
@@ -213,16 +213,15 @@ public class SaltedTableWithParallelStatsEnabledIT extends ParallelStatsEnabledI
         byte[] rowKey = new byte[primaryKeyPrefix.length() + 3];
         System.arraycopy(Bytes.toBytes(primaryKeyPrefix), 0, rowKey, 1,
                 rowKey.length - 3);
-        for (int i = 0; i < saltBucketCount; i++) {
-            for (int j = i * rowsPerSaltBkt; j < (i + 1) * rowsPerSaltBkt; j++) {
-                rowKey[0] = (byte) i;
-                byte[] rowKeySuffix = Bytes.toBytes(String.format("%02d", pk2Values[j]));
-                rowKey[rowKey.length - 2] = rowKeySuffix[0];
-                rowKey[rowKey.length - 1] = rowKeySuffix[1];
-                Get get = new Get(rowKey);
-                if (!hTable.get(get).isEmpty()) {
-                    rowCountFromHBase++;
-                }
+        for (int pk2Value : pk2Values) {
+            byte[] rowKeySuffix = Bytes.toBytes(String.format("%02d", pk2Value));
+            rowKey[rowKey.length - 2] = rowKeySuffix[0];
+            rowKey[rowKey.length - 1] = rowKeySuffix[1];
+            rowKey[0] = SaltingUtil.getSaltingByte(rowKey, 1, rowKey.length - 1,
+                    saltBucketCount);
+            Get get = new Get(rowKey);
+            if (!hTable.get(get).isEmpty()) {
+                rowCountFromHBase++;
             }
         }
         // Assert all point lookups are visible from HBase
