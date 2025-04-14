@@ -44,6 +44,8 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 
 @Category(ParallelStatsEnabledIT.class)
@@ -93,7 +95,8 @@ public class SaltedTableWithParallelStatsEnabledIT extends ParallelStatsEnabledI
                 withStatsForParallelization ? Boolean.TRUE.toString() : Boolean.FALSE.toString());
         try (Connection conn = DriverManager.getConnection(getUrl(connProfile), props)) {
             createTable(conn, tableName, saltBucketCount);
-            addRows(conn, tableName, primaryKeyPrefix, rowsToInsert);
+            addRows(conn, tableName, primaryKeyPrefix, IntStream.range(0, rowsToInsert).toArray(),
+                    false);
 
             // Run COUNT(*) range query on Phoenix with row key prefix as {@code primaryKeyPrefix}.
             // Assert that count of rows reported by Phoenix is same as count of rows in HBase.
@@ -249,16 +252,7 @@ public class SaltedTableWithParallelStatsEnabledIT extends ParallelStatsEnabledI
     private void triggerPhoenix7580(Connection conn, String tableName, int saltBucketCount,
                                     String primaryKeyPrefixForNewRows, int[] pk2ValuesForNewRows)
             throws Exception {
-        String upsertDml = "UPSERT INTO " + tableName + " VALUES (?,?,?)";
-        try (PreparedStatement stmt = conn.prepareStatement(upsertDml)) {
-            for (int i: pk2ValuesForNewRows) {
-                stmt.setString(1, primaryKeyPrefixForNewRows);
-                stmt.setString(2, String.format("pk2_%02d", i));
-                stmt.setString(3, "col1_" + i);
-                stmt.executeUpdate();
-            }
-            conn.commit();
-        }
+        addRows(conn, tableName, primaryKeyPrefixForNewRows, pk2ValuesForNewRows, true);
 
         byte[] expectedEndKeyPrefixAfterSplit;
         // Compute split key for splitting region corresponding to the second last salt bucket.
@@ -341,22 +335,24 @@ public class SaltedTableWithParallelStatsEnabledIT extends ParallelStatsEnabledI
     }
 
     private void addRows(Connection conn, String tableName, String primaryKeyPrefix,
-                         int rowsToInsert) throws Exception {
+                         int[] pk2Values, boolean skipUpdateStats) throws Exception {
         String upsertDml = "UPSERT INTO " + tableName + " VALUES (?,?,?)";
         // Insert rows in the table with row key prefix at HBase level being
         // {@code primaryKeyPrefix}.
         try (PreparedStatement upsertStmt = conn.prepareStatement(upsertDml)) {
-            for (int i = 0; i < rowsToInsert; i++) {
+            for (int i = 0; i < pk2Values.length; i++) {
                 upsertStmt.setString(1, primaryKeyPrefix);
-                upsertStmt.setString(2, String.format("pk2_%02d", i));
+                upsertStmt.setString(2, String.format("pk2_%02d", pk2Values[i]));
                 upsertStmt.setString(3, "col1_" + i);
                 upsertStmt.executeUpdate();
             }
             conn.commit();
         }
 
-        try (Statement stmt = conn.createStatement()) {
-            stmt.execute("UPDATE STATISTICS " + tableName);
+        if (!skipUpdateStats) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("UPDATE STATISTICS " + tableName);
+            }
         }
     }
 }
