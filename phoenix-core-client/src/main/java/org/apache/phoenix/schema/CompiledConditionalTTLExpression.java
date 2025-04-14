@@ -29,7 +29,6 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -38,7 +37,6 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.ByteStringer;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos;
@@ -49,7 +47,6 @@ import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,6 +60,10 @@ public class CompiledConditionalTTLExpression implements CompiledTTLExpression {
     private final Expression compiledExpr;
     // columns referenced in the ttl expression to be added to scan
     private final Set<ColumnReference> conditionExprColumns;
+    // used to determine the latest version of a row in case of raw scan
+    List<Cell> latestRowVersion = new ArrayList<>();
+    // record DeleteFamilyVersion cells in a row
+    List<Cell> deleteFamilyVersionCells = new ArrayList<>();
 
     public CompiledConditionalTTLExpression(String ttlExpr,
                                             Expression compiledExpression,
@@ -108,46 +109,67 @@ public class CompiledConditionalTTLExpression implements CompiledTTLExpression {
      * the oldest. The method leverages this ordering and groups the cells into their columns
      * based on the pair of family name and column qualifier.
      */
-    private List<Cell> getLatestRowVersion(List<Cell> result) {
-        List<Cell> latestRowVersion = new ArrayList<>();
-        Cell currentColumnCell = null;
-        Cell maxDeleteFamily = null;
-        Cell maxDeleteFamilyVersion = null;
-        for (Cell cell : result) {
+    @VisibleForTesting
+    public List<Cell> getLatestRowVersion(List<Cell> result) {
+        latestRowVersion.clear();
+        deleteFamilyVersionCells.clear();
+        Cell maxDeleteFamily = null; // record the DeleteFamily cell with the highest timestamp
+        int index = 0;
+        while (index < result.size()) {
+            Cell cell = result.get(index);
             if (cell.getType() == Cell.Type.DeleteFamily) {
-                if (maxDeleteFamily == null) {
-                    maxDeleteFamily = cell;
-                }
-                // no need to add the DeleteFamily cell since it can't be part of
-                // an expression
-                continue;
+                // record the first DeleteFamily cell
+                maxDeleteFamily = cell;
+                // we can now skip the delete family column
+                index = skipColumn(result, cell, index);
             }
-            if (cell.getType() == Cell.Type.DeleteFamilyVersion) {
-                if (maxDeleteFamilyVersion == null) {
-                    maxDeleteFamilyVersion = cell;
-                }
-                // no need to add the DeleteFamilyVersion cell since it can't be part of
-                // an expression
-                continue;
+            else if (cell.getType() == Cell.Type.DeleteFamilyVersion) {
+                // record and skip this cell
+                deleteFamilyVersionCells.add(cell);
+                index++;
             }
-            if (currentColumnCell == null ||
-                    !CellUtil.matchingColumn(cell, currentColumnCell)) {
-                if (maxDeleteFamilyVersion != null &&
-                        cell.getTimestamp() == maxDeleteFamilyVersion.getTimestamp()) {
-                    // only add the cell if it is not masked by the DeleteFamilyVersion
-                    continue;
-                }
-                // found a new column cell which has the latest timestamp
-                currentColumnCell = cell;
-                if (maxDeleteFamily != null &&
+            else if (cell.getType() == Cell.Type.DeleteColumn) {
+                // we can skip all the remaining cells of this column
+                index = skipColumn(result, cell, index);
+            } else if (cell.getType() == Cell.Type.Delete) {
+                index++;
+            } else if (cell.getType() == Cell.Type.Put) {
+                // check if this cell is masked by DeleteFamilyVersion
+                if (deleteFamilyVersionCells.stream().anyMatch(deleteFamilyCell ->
+                                cell.getTimestamp() == deleteFamilyCell.getTimestamp())) {
+                    // skip the cell
+                    index++;
+                } else if (maxDeleteFamily != null &&
                         cell.getTimestamp() <= maxDeleteFamily.getTimestamp()) {
-                    // only add the cell if it is not masked by the DeleteFamily
-                    continue;
+                    // this cell is masked by the DeleteFamily
+                    index = skipColumn(result, cell, index);
+                } else {
+                    latestRowVersion.add(cell);
+                    // we have found the latest cell, skip the remaining cells of this column
+                    index = skipColumn(result, cell, index);
                 }
-                latestRowVersion.add(currentColumnCell);
             }
         }
         return latestRowVersion;
+    }
+
+    /**
+     * Skip the remaining cells of the current column
+     * @param result The list of cells (input)
+     * @param currentColumnCell The cell indicates the current column (input)
+     * @param index The index of the current cell in result (input)
+     * @return the index of the first cell of the next column
+     */
+    private int skipColumn(List<Cell> result, Cell currentColumnCell, int index) {
+        int next = index + 1;
+        while (next < result.size()) {
+            Cell cell = result.get(next);
+            if (!CellUtil.matchingColumn(cell, currentColumnCell)) {
+                break;
+            }
+            next++;
+        }
+        return next;
     }
 
     @Override
@@ -184,11 +206,11 @@ public class CompiledConditionalTTLExpression implements CompiledTTLExpression {
             return false;
         }
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        List<Cell> latestRowVersion = !isRaw ? result : getLatestRowVersion(result);
-        if (latestRowVersion.isEmpty()) {
+        List<Cell> latestRow = !isRaw ? result : getLatestRowVersion(result);
+        if (latestRow.isEmpty()) {
             return false;
         }
-        MultiKeyValueTuple row = new MultiKeyValueTuple(latestRowVersion);
+        MultiKeyValueTuple row = new MultiKeyValueTuple(latestRow);
         if (!compiledExpr.evaluate(row, ptr)) {
             LOGGER.info("Expression evaluation failed for expr {}", ttlExpr);
             return false;

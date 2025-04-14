@@ -748,7 +748,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             TestUtil.dumpTable(conn, TableName.valueOf(fullIndexName));
             assertEquals(rowCount - 1, actual);
             // First read row 0 which is not expired
-            String dql = String.format("select VAL2, VAL5 from %s where VAL1='%s'",
+            String dql = String.format("select VAL2, VAL5 from %s where VAL1='%s' AND ID2=0",
                     fullDataTableName, val1_0);
             try (ResultSet rs1 = conn.createStatement().executeQuery(dql)) {
                 PhoenixResultSet prs = rs1.unwrap(PhoenixResultSet.class);
@@ -759,7 +759,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
                 assertFalse(rs1.getBoolean(ttlCol));
             }
             // row 1 is expired
-            dql = String.format("select VAL2, VAL5 from %s where VAL1='%s'",
+            dql = String.format("select VAL2, VAL5 from %s where VAL1='%s' AND ID2=1",
                     fullDataTableName, val1_1);
             try (ResultSet rs1 = conn.createStatement().executeQuery(dql)) {
                 PhoenixResultSet prs = rs1.unwrap(PhoenixResultSet.class);
@@ -792,14 +792,13 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
                 IndexToolIT.dumpMRJobCounters(mrJobCounters);
                 throw e;
             }
-            // TODO: Broken because of PHOENIX-7574
-            //doMajorCompaction(fullIndexName);
-            //TestUtil.dumpTable(conn, TableName.valueOf(fullIndexName));
-            //actual = TestUtil.getRowCountFromIndex(conn, fullDataTableName, fullIndexName);
-            //assertEquals(rowCount - 1, actual);
-            //CellCount expectedCellCount = new CellCount();
-            //expectedCellCount.insertRow(indexRowPosToKey.get(0), 2);
-            //validateTable(conn, fullIndexName, expectedCellCount, indexRowPosToKey.values());
+            doMajorCompaction(fullIndexName);
+            TestUtil.dumpTable(conn, TableName.valueOf(fullIndexName));
+            actual = TestUtil.getRowCountFromIndex(conn, fullDataTableName, fullIndexName);
+            assertEquals(rowCount - 1, actual);
+            CellCount expectedCellCount = new CellCount();
+            expectedCellCount.insertRow(indexRowPosToKey.get(0), includedColumns.size() + 1);
+            validateTable(conn, fullIndexName, expectedCellCount, indexRowPosToKey.values());
         }
     }
 
