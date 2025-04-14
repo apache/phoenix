@@ -32,22 +32,50 @@ import org.apache.phoenix.query.QueryServices;
 import org.junit.Test;
 import org.junit.Assert;
 import org.junit.experimental.categories.Category;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
 
 @Category(ParallelStatsEnabledIT.class)
+@RunWith(Parameterized.class)
 public class SaltedTableWithParallelStatsEnabledIT extends ParallelStatsEnabledIT {
 
-    private void testPhoenix7580(boolean withStatsForParallelization, boolean withFullTableScan,
-                                 boolean withPointLookups)
-            throws Exception {
+    private final boolean withStatsForParallelization;
+    private final boolean withFullTableScan;
+    private final boolean withPointLookups;
+
+    public SaltedTableWithParallelStatsEnabledIT(boolean withStatsForParallelization,
+                                          boolean withFullTableScan, boolean withPointLookups) {
+        this.withStatsForParallelization = withStatsForParallelization;
+        this.withFullTableScan = withFullTableScan;
+        this.withPointLookups = withPointLookups;
+    }
+
+    @Parameterized.Parameters(name =
+            "SaltedTableWithParallelStatsEnabledIT_withStatsForParallelization={0}, "
+                    + "withFullTableScan={1}, withPointLookups={2}")
+    public static synchronized Collection<Object[]> data() {
+        return Arrays.asList(new Object[][] {
+                { true, false, false },
+                { false, false, false },
+                { true, true, false },
+                { false, true, false },
+                { true, false, true },
+                { false, false, true }});
+    }
+
+    @Test
+    public void testPhoenix7580() throws Exception {
         String tableName = generateUniqueName();
         int saltBucketCount = 5;
         int rowsToInsert = saltBucketCount * 10;
@@ -332,35 +360,5 @@ public class SaltedTableWithParallelStatsEnabledIT extends ParallelStatsEnabledI
         try (Statement stmt = conn.createStatement()) {
             stmt.execute("UPDATE STATISTICS " + tableName);
         }
-    }
-
-    @Test
-    public void testRangeScanForPhoenix7580WithStatsForParallelization() throws Exception {
-        testPhoenix7580(true, false, false);
-    }
-
-    @Test
-    public void testRangeScanForPhoenix7580WithoutStatsForParallelization() throws Exception {
-        testPhoenix7580(false, false, false);
-    }
-
-    @Test
-    public void testFullTableScanWithStatsForParallelization() throws Exception {
-        testPhoenix7580(true, true, false);
-    }
-
-    @Test
-    public void testFullTableScanWithoutStatsForParallelization() throws Exception {
-        testPhoenix7580(false, true, false);
-    }
-
-    @Test
-    public void testPointLookupsWithStatsForParallelization() throws Exception {
-        testPhoenix7580(true, false, true);
-    }
-
-    @Test
-    public void testPointLookupsWithoutStatsForParallelization() throws Exception {
-        testPhoenix7580(false, false, true);
     }
 }
