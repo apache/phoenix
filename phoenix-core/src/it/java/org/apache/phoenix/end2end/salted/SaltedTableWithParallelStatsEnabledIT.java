@@ -269,11 +269,9 @@ public class SaltedTableWithParallelStatsEnabledIT extends ParallelStatsEnabledI
         // Doing minus 2 from salt bucket count to get second last bucket.
         // Salt buckets are 0 indexed.
         rowKeyPrefix[0] = (byte) (saltBucketCount - 2);
-        expectedEndKeyPrefixAfterSplit = new byte[rowKeyPrefix.length];
         // Save this and will be used to verify that conditions to trigger PHOENIX-7580 are
         // being met at the end of this method call.
-        System.arraycopy(rowKeyPrefix, 0,
-                expectedEndKeyPrefixAfterSplit, 0, rowKeyPrefix.length);
+        expectedEndKeyPrefixAfterSplit = Bytes.copy(rowKeyPrefix);
         Table hTable = conn.unwrap(PhoenixConnection.class)
                 .getQueryServices().getTable(tableName.getBytes());
         Scan scan = new Scan();
