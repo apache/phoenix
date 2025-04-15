@@ -21,7 +21,7 @@ package org.apache.phoenix.expression.util.bson;
 import org.apache.phoenix.parse.AndParseNode;
 import org.apache.phoenix.parse.BetweenParseNode;
 import org.apache.phoenix.parse.DocumentFieldExistsParseNode;
-import org.apache.phoenix.parse.DocumentParser;
+import org.apache.phoenix.parse.BsonExpressionParser;
 import org.apache.phoenix.parse.EqualParseNode;
 import org.apache.phoenix.parse.GreaterThanOrEqualParseNode;
 import org.apache.phoenix.parse.GreaterThanParseNode;
@@ -53,6 +53,14 @@ public final class SQLComparisonExpressionUtils {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(SQLComparisonExpressionUtils.class);
 
+  /**
+   * Evaluate the given condition expression on the BSON Document.
+   *
+   * @param conditionExpression The condition expression consisting of operands, operators.
+   * @param rawBsonDocument The BSON Document on which the condition expression is evaluated.
+   * @param comparisonValuesDocument The BSON Document consisting of place-holder key-value pairs.
+   * @return True if the evaluation is successful, False otherwise.
+   */
   public static boolean evaluateConditionExpression(final String conditionExpression,
                                                     final RawBsonDocument rawBsonDocument,
                                                     final BsonDocument comparisonValuesDocument) {
@@ -65,13 +73,21 @@ public final class SQLComparisonExpressionUtils {
     return evaluateExpression(conditionExpression, rawBsonDocument, comparisonValuesDocument);
   }
 
+  /**
+   * Generates ParseNode based tree and performs the condition expression evaluation on it.
+   *
+   * @param conditionExpression The condition expression consisting of operands, operators.
+   * @param rawBsonDocument The BSON Document on which the condition expression is evaluated.
+   * @param comparisonValuesDocument The BSON Document consisting of place-holder key-value pairs.
+   * @return True if the evaluation is successful, False otherwise.
+   */
   private static boolean evaluateExpression(final String conditionExpression,
                                             final RawBsonDocument rawBsonDocument,
                                             final BsonDocument comparisonValuesDocument) {
-    DocumentParser documentParser = new DocumentParser(conditionExpression);
+    BsonExpressionParser bsonExpressionParser = new BsonExpressionParser(conditionExpression);
     ParseNode parseNode;
     try {
-      parseNode = documentParser.parseExpression();
+      parseNode = bsonExpressionParser.parseExpression();
     } catch (SQLException e) {
       LOGGER.error("Expression {} could not be evaluated.", conditionExpression, e);
       throw new RuntimeException("Expression could not be evaluated: " + conditionExpression, e);
@@ -79,9 +95,25 @@ public final class SQLComparisonExpressionUtils {
     return evaluateExpression(parseNode, rawBsonDocument, comparisonValuesDocument);
   }
 
+  /**
+   * Evaluate the parseNode directly.
+   *
+   * @param parseNode The root ParseNode of the parse tree.
+   * @param rawBsonDocument BSON Document value of the Cell.
+   * @param comparisonValuesDocument BSON Document with place-holder values.
+   * @return True if the evaluation is successful, False otherwise.
+   */
   private static boolean evaluateExpression(final ParseNode parseNode,
                                             final RawBsonDocument rawBsonDocument,
                                             final BsonDocument comparisonValuesDocument) {
+    // In Phoenix, usually every ParseNode has corresponding Expression class. The expression
+    // is evaluated on the Tuple. However, the expression requires data type of PDataType instance.
+    // This case is different: we need to evaluate the parse node on the document, not on Tuple.
+    // Therefore, for the purpose of evaluating the BSON Condition Expression, we cannot rely on
+    // existing Expression based framework.
+    // Here, we directly perform the evaluation on the parse nodes. AND, OR, NOT logical operators
+    // need to evaluate the parseNodes in loop/recursion similar to how AndExpression, OrExpression,
+    // NotExpression logical expressions evaluate.
     if (parseNode instanceof DocumentFieldExistsParseNode) {
       final DocumentFieldExistsParseNode documentFieldExistsParseNode =
               (DocumentFieldExistsParseNode) parseNode;

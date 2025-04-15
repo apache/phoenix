@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-grammar PhoenixDocument;
+grammar PhoenixBsonExpression;
 
 tokens
 {
@@ -30,8 +30,8 @@ tokens
     BETWEEN='between';
     ATTR = 'attribute_exists';
     ATTR_NOT = 'attribute_not_exists';
-    FILD = 'field_exists';
-    FILD_NOT = 'field_not_exists';
+    FIELD = 'field_exists';
+    FIELD_NOT = 'field_not_exists';
 }
 
 @parser::header {
@@ -211,9 +211,9 @@ and_expression returns [ParseNode ret]
 not_expression returns [ParseNode ret]
     :   (NOT? boolean_expression ) => n=NOT? e=boolean_expression { $ret = n == null ? e : factory.not(e); }
     |   n=NOT? LPAREN e=expression RPAREN { $ret = n == null ? e : factory.not(e); }
-    |   (ATTR | FILD) ( LPAREN t=DOCUMENT_FIELD RPAREN {$ret = factory.documentFieldExists(
+    |   (ATTR | FIELD) ( LPAREN t=DOCUMENT_FIELD RPAREN {$ret = factory.documentFieldExists(
     factory.literal(t.getText()), true); } )
-    |   (ATTR_NOT | FILD_NOT) ( LPAREN t=DOCUMENT_FIELD RPAREN {$ret = factory.documentFieldExists(
+    |   (ATTR_NOT | FIELD_NOT) ( LPAREN t=DOCUMENT_FIELD RPAREN {$ret = factory.documentFieldExists(
     factory.literal(t.getText()), false); } )
     ;
 

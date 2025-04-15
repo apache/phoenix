@@ -17,7 +17,7 @@
 
 package org.apache.phoenix.compile;
 
-import org.apache.phoenix.parse.DocumentParser;
+import org.apache.phoenix.parse.BsonExpressionParser;
 import org.apache.phoenix.parse.ParseNode;
 import org.junit.Test;
 
@@ -27,40 +27,40 @@ public class DocumentCompilerTest {
 
     @Test
     public void testDocParser() throws Exception {
-        DocumentParser documentParser =
-                new DocumentParser("organization_id IN (:s, :ab12 ) AND entity_id " +
+        BsonExpressionParser bsonExpressionParser =
+                new BsonExpressionParser("organization_id IN (:s, :ab12 ) AND entity_id " +
                         "IN (:ab, :1, :09, :8a, :a1, $x07, $1jr, '$abc')");
-        ParseNode parseNode = documentParser.parseExpression();
+        ParseNode parseNode = bsonExpressionParser.parseExpression();
         assertEquals("('organization_id' IN(':s',':ab12') AND 'entity_id' IN(':ab',':1',':09',"
                 + "':8a',':a1','$x07','$1jr','$abc'))", parseNode.toString());
 
-        documentParser = new DocumentParser("((8a0 = :0) AND (81 = :1) AND (82 = :2)) AND " +
+        bsonExpressionParser = new BsonExpressionParser("((8a0 = :0) AND (81 = :1) AND (82 = :2)) AND " +
                 "(((attribute_not_exists(83) AND attribute_not_exists(84)) OR " +
                 "attribute_exists(85)) OR (86 = :3))");
-        parseNode = documentParser.parseExpression();
+        parseNode = bsonExpressionParser.parseExpression();
         assertEquals("(('8a0' = ':0' AND '81' = ':1' AND '82' = ':2') AND (((field_not_exists"
                         + "('83') AND field_not_exists('84')) OR field_exists('85')) OR "
                         + "'86' = ':3'))",
                 parseNode.toString());
 
-        documentParser = new DocumentParser("((8a0 = :0) AND (81 = :1) AND (82 = :2)) AND " +
+        bsonExpressionParser = new BsonExpressionParser("((8a0 = :0) AND (81 = :1) AND (82 = :2)) AND " +
                 "(((attribute_not_exists(ab) AND attribute_not_exists(3df)) OR " +
                 "attribute_exists(ab9)) OR (86 = :3))");
-        parseNode = documentParser.parseExpression();
+        parseNode = bsonExpressionParser.parseExpression();
         assertEquals("(('8a0' = ':0' AND '81' = ':1' AND '82' = ':2') AND (((field_not_exists"
                         + "('ab') AND field_not_exists('3df')) OR field_exists('ab9')) OR "
                         + "'86' = ':3'))",
                 parseNode.toString());
 
-        documentParser =
-                new DocumentParser("12SBRHwe2e4J.NestedList1[0] >= :NestedList1_4850 AND " +
+        bsonExpressionParser =
+                new BsonExpressionParser("12SBRHwe2e4J.NestedList1[0] >= :NestedList1_4850 AND " +
                         "NestedList1[1] <= " +
                         ":NestedList1_10 AND NestedList1[2][0] >= :NestedList1_xyz0123 AND " +
                         "4NestedList1[2][1].Id >= :Id10 AND IdS >= :Ids10 AND Id2 <= :Id20 AND " +
                         "NestedMap1.NList1[2] <= :NestedMap1_NList1_30 AND " +
                         "(NestedMap1.NList1[2] = :NestedMap1_NList1_30 OR NestedList1[0] BETWEEN " +
                         ":NestedList1_4850 AND :Id2)");
-        parseNode = documentParser.parseExpression();
+        parseNode = bsonExpressionParser.parseExpression();
         assertEquals("('12SBRHwe2e4J.NestedList1[0]' >= ':NestedList1_4850' AND 'NestedList1[1]' " +
                 "<= ':NestedList1_10' AND 'NestedList1[2][0]' >= ':NestedList1_xyz0123' AND " +
                 "'4NestedList1[2][1].Id' >= ':Id10' AND 'IdS' >= ':Ids10' AND 'Id2' <= ':Id20' " +
@@ -68,15 +68,15 @@ public class DocumentCompilerTest {
                 ".NList1[2]' = ':NestedMap1_NList1_30' OR 'NestedList1[0]' BETWEEN " +
                 "':NestedList1_4850' AND ':Id2'))", parseNode.toString());
 
-        documentParser =
-                new DocumentParser("NestedList1[0] >= $NestedList1_4850 AND NestedList1[1] <= " +
+        bsonExpressionParser =
+                new BsonExpressionParser("NestedList1[0] >= $NestedList1_4850 AND NestedList1[1] <= " +
                         "#NestedList1_10 AND NestedList1[2][0] >= #NestedList1_xyz0123 AND " +
                         "NestedMap1.NList1[0] IN ($Id,  $Id1, $Id20, #NMap1_NList1) AND " +
                         "NestedMap1.NList1[2] <= $NestedMap1_NList1_30 AND " +
                         "(NestedMap1.NList1[2] = $NestedMap1_NList1_30 OR NestedList1[0] BETWEEN " +
                         "$NestedList1_4850 AND $Id2) AND NOT NestedMap1.InPublication " +
                         "IN ($Id, $Id1, $Id20, $Id21)");
-        parseNode = documentParser.parseExpression();
+        parseNode = bsonExpressionParser.parseExpression();
         assertEquals("('NestedList1[0]' >= '$NestedList1_4850' AND 'NestedList1[1]' <= " +
                         "'#NestedList1_10' AND 'NestedList1[2][0]' >= '#NestedList1_xyz0123' AND " +
                         "'NestedMap1.NList1[0]' IN('$Id','$Id1','$Id20','#NMap1_NList1') AND " +
@@ -87,11 +87,11 @@ public class DocumentCompilerTest {
                         "IN('$Id','$Id1','$Id20','$Id21'))",
                 parseNode.toString());
 
-        documentParser =
-                new DocumentParser("result[2].location.coordinates.latitude > $latitude OR " +
+        bsonExpressionParser =
+                new BsonExpressionParser("result[2].location.coordinates.latitude > $latitude OR " +
                         "(field_exists(result[1].location) AND result[1].location.state != $state" +
                         " AND field_exists(result[4].emails[1]))");
-        parseNode = documentParser.parseExpression();
+        parseNode = bsonExpressionParser.parseExpression();
         assertEquals("('result[2].location.coordinates.latitude' > '$latitude' OR (field_exists" +
                 "('result[1].location') AND 'result[1].location.state' != '$state' AND " +
                 "field_exists('result[4].emails[1]')))", parseNode.toString());

@@ -28,26 +28,26 @@ import java.io.Reader;
 import java.io.StringReader;
 import java.sql.SQLException;
 
-public class DocumentParser {
+public class BsonExpressionParser {
 
     private static final ParseNodeFactory DEFAULT_NODE_FACTORY = new ParseNodeFactory();
 
-    private final PhoenixDocumentParser parser;
+    private final PhoenixBsonExpressionParser parser;
 
-    public DocumentParser(String query) {
+    public BsonExpressionParser(String query) {
         this(query, DEFAULT_NODE_FACTORY);
     }
 
-    public DocumentParser(String query, ParseNodeFactory factory) {
-        PhoenixDocumentLexer lexer;
+    public BsonExpressionParser(String query, ParseNodeFactory factory) {
+        PhoenixBsonExpressionLexer lexer;
         try {
-            lexer = new PhoenixDocumentLexer(
-                    new DocumentParser.CaseInsensitiveReaderStream(new StringReader(query)));
+            lexer = new PhoenixBsonExpressionLexer(
+                    new BsonExpressionParser.CaseInsensitiveReaderStream(new StringReader(query)));
         } catch (IOException e) {
             throw new RuntimeException(e); // Impossible
         }
         CommonTokenStream cts = new CommonTokenStream(lexer);
-        parser = new PhoenixDocumentParser(cts);
+        parser = new PhoenixBsonExpressionParser(cts);
         parser.setParseNodeFactory(factory);
     }
 
