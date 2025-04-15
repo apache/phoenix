@@ -25,6 +25,8 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.StringTokenizer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.security.User;
@@ -116,6 +118,20 @@ public abstract class ConnectionInfo {
         return escaped.replaceAll("\\\\:", "=");
     }
 
+    protected static String escapeIPv6Literals(String unescaped) {
+        String regex = "(\\[.*?\\])";
+        Pattern pattern = Pattern.compile(regex);
+        Matcher matcher = pattern.matcher(unescaped);
+        StringBuffer result = new StringBuffer();
+        while (matcher.find()) {
+            String matchedText = matcher.group(1);
+            String modifiedText = matchedText.replace(":", "~");
+            matcher.appendReplacement(result, modifiedText);
+        }
+        matcher.appendTail(result);
+        return result.toString();
+    }
+
     public static ConnectionInfo createNoLogin(String url, ReadOnlyProps props, Properties info)
             throws SQLException {
         return create(url, getCachedConfiguration(), props, info, true);
@@ -140,7 +156,8 @@ public abstract class ConnectionInfo {
             ReadOnlyProps props, Properties info, boolean doNotLogin) throws SQLException {
         // registry-independent URL preprocessing
         url = url == null ? "" : url;
-        url = unescape(url);
+        boolean isIPv6 = url.contains("[") && url.contains("]");
+        url = isIPv6 ? unescape(escapeIPv6Literals(url)) : unescape(url);
 
         // Assume missing prefix
         if (url.isEmpty()) {
@@ -509,10 +526,11 @@ public abstract class ConnectionInfo {
             String[] normalizedParts = new String[quorumParts.length];
             for (int i = 0; i < quorumParts.length; i++) {
                 String[] hostAndPort = quorumParts[i].trim().split(":");
+                hostAndPort[0] = hostAndPort[0].replace('~', ':');
                 if (hostAndPort.length == 1) {
                     normalizedParts[i] = hostAndPort[0].trim().toLowerCase() + ":" + defaultPort;
                 } else if (hostAndPort.length == 2) {
-                    normalizedParts[i] = quorumParts[i].trim().toLowerCase();
+                    normalizedParts[i] = String.join(":", hostAndPort).trim().toLowerCase();
                 } else {
                     throw getMalFormedUrlException(url);
                 }
