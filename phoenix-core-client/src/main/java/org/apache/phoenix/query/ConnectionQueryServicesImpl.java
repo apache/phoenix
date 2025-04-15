@@ -1786,21 +1786,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     splits, isNamespaceMapped);
 
             if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug(String.format("ensureTableCreated " +
-                                "physicalTableName = %s, " +
-                                "parentPhysicalTableName = %s, " +
-                                "isUpgradeRequired = %s, " +
-                                "isAutoUpgradeEnabled = %s, " +
-                                "isDoNotUpgradePropSet = %s, " +
-                                "isNamespaceMapped = %s, " +
-                                "createdNamespace = %s",
+                LOGGER.debug("ensureTableCreated " +
+                                "physicalTableName = {}, " +
+                                "parentPhysicalTableName = {}, " +
+                                "isUpgradeRequired = {}, " +
+                                "isAutoUpgradeEnabled = {}, " +
+                                "isDoNotUpgradePropSet = {}, " +
+                                "isNamespaceMapped = {}, " +
+                                "createdNamespace = {}",
                         Bytes.toString(physicalTableName),
                         Bytes.toString(parentPhysicalTableName),
                         isUpgradeRequired(),
                         isAutoUpgradeEnabled,
                         isDoNotUpgradePropSet,
                         isNamespaceMapped,
-                        createdNamespace));
+                        createdNamespace);
             }
 
             if (!tableExist) {
