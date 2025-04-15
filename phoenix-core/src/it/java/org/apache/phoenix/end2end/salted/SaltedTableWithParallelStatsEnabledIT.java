@@ -83,10 +83,8 @@ public class SaltedTableWithParallelStatsEnabledIT extends ParallelStatsEnabledI
         int saltBucketCount = 5;
         int rowsToInsert = saltBucketCount * 10;
         String primaryKeyPrefix = "pk1_1";
-        // These values have been specifically selected so that we have values from all the 5 salt
-        // buckets. Ordering of the values is not important.
-        int[] pk2ValuesForPointLookups = new int[]
-                { 4, 9, 13, 0, 5, 14, 1, 6, 10, 2, 7, 11, 3, 8, 12 };
+        // The values of this array is such that we have 3 values from each of the 5 salt buckets.
+        int[] pk2ValuesForPointLookups = IntStream.range(0, 15).toArray();
         int pointLookupsPerSaltBkt = pk2ValuesForPointLookups.length / saltBucketCount;
 
         String connProfile = "testRangeScanForPhoenix7580" + withStatsForParallelization;
