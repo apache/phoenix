@@ -431,6 +431,13 @@ public abstract class BaseTest {
         }
         return url;
     }
+
+    protected static String getUrl(String principal) throws Exception {
+        if (!clusterInitialized) {
+            throw new IllegalStateException("Cluster must be initialized before attempting to get the URL");
+        }
+        return getLocalClusterUrl(utility, principal);
+    }
     
     protected static String checkClusterInitialized(ReadOnlyProps serverProps) throws Exception {
         if (!clusterInitialized) {
@@ -555,6 +562,13 @@ public abstract class BaseTest {
 
     protected static String getLocalClusterUrl(HBaseTestingUtility util) throws Exception {
         String url = QueryUtil.getConnectionUrl(new Properties(), util.getConfiguration());
+        return url + PHOENIX_TEST_DRIVER_URL_PARAM;
+    }
+
+    protected static String getLocalClusterUrl(HBaseTestingUtility util, String principal)
+            throws Exception {
+        String url = QueryUtil.getConnectionUrl(new Properties(), util.getConfiguration(),
+                principal);
         return url + PHOENIX_TEST_DRIVER_URL_PARAM;
     }
     
