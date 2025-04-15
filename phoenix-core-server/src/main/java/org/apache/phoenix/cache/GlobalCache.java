@@ -114,10 +114,6 @@ public class GlobalCache extends TenantCacheImpl {
                                 }
                             })
                             .removalListener(notification -> {
-                                String key = Bytes.toString(notification.getKey().get());
-                                LOGGER.debug("Global Cache : Expiring " + key + " because of "
-                                        + notification.getCause().name());
-
                                 if (this.metricsSource != null) {
                                     if (notification.wasEvicted()) {
                                         metricsSource.incrementMetadataCacheEvictionCount();
