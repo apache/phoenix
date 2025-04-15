@@ -22,15 +22,13 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.ManualEnvironmentEdge;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.TestUtil;
+import org.apache.phoenix.util.*;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -53,12 +51,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
@@ -444,6 +437,82 @@ public class TableTTLIT extends BaseTest {
             }
         }
     }
+
+    @Test
+    public void testDeleteFamilyVersion() throws Exception {
+        if (multiCF == true) {
+            return;
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = "T_" + generateUniqueName();
+            createTable(tableName);
+            String indexName = "I_" + generateUniqueName();
+            String indexDDL = String.format("create index %s on %s (val1) include (val2, val3)",
+                    indexName, tableName);
+            conn.createStatement().execute(indexDDL);
+            updateRow(conn, tableName, "a1");
+            String indexColumnValue;
+            String expectedValue;
+            String dql = "select val1, val2 from " + tableName + " where id = 'a1'";
+            try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
+                PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
+                String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
+                assertFalse(explainPlan.contains(indexName));
+                assertTrue(rs.next());
+                indexColumnValue = rs.getString(1);
+                expectedValue = rs.getString(2);
+                assertFalse(rs.next());
+            }
+            // Insert an orphan index row by failing data table update
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+            try {
+                updateColumn(conn, tableName, "a1", 2, "col2_xyz");
+                conn.commit();
+                fail("An exception should have been thrown");
+            } catch (Exception ignored) {
+                // Ignore the exception
+            } finally {
+                IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+            }
+            // Insert another orphan index row
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+            try {
+                updateColumn(conn, tableName, "a1", 2, "col2_abc");
+                conn.commit();
+                fail("An exception should have been thrown");
+            } catch (Exception ignored) {
+                // Ignore the exception
+            } finally {
+                IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+            }
+            TestUtil.dumpTable(conn, TableName.valueOf(indexName));
+            // do a read on the index which should trigger a read repair
+            dql = "select val2 from " + tableName + " where val1 = '" + indexColumnValue + "'";
+            try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
+                PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
+                String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
+                assertTrue(explainPlan.contains(indexName));
+                assertTrue(rs.next());
+                assertEquals(rs.getString(1), expectedValue);
+                assertFalse(rs.next());
+            }
+            Thread.sleep(MAX_LOOKBACK_AGE * 1000);
+            TestUtil.dumpTable(conn, TableName.valueOf(indexName));
+            flush(TableName.valueOf(indexName));
+            majorCompact(TableName.valueOf(indexName));
+            TestUtil.dumpTable(conn, TableName.valueOf(indexName));
+            // run the same query again after compaction
+            try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
+                PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
+                String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
+                assertTrue(explainPlan.contains(indexName));
+                assertTrue(rs.next());
+                assertEquals(rs.getString(1), expectedValue);
+                assertFalse(rs.next());
+            }
+        }
+    }
+
 
     private void flush(TableName table) throws IOException {
         Admin admin = getUtility().getAdmin();
