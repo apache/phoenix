@@ -3166,6 +3166,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         updateCatalogIndexes =
                         (pTableType != INDEX) || (!Bytes.toString(schemaName)
                                 .equalsIgnoreCase(PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA));
+
                 // drop rows from catalog on this region
                 mutateRowsWithLocks(this.accessCheckEnabled, env, region, localMutations,
                         Collections.<byte[]>emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE,
@@ -3785,6 +3786,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         updateCatalogIndexes =
                         !Bytes.toString(schemaName)
                                 .equalsIgnoreCase(PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA);
+
                 mutateRowsWithLocks(this.accessCheckEnabled, env, region, localMutations,
                         Collections.<byte[]>emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE,
                         updateCatalogIndexes);
@@ -4623,9 +4625,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     long serverTimestamp = EnvironmentEdgeManager.currentTimeMillis();
                     tableMetadata.add(MetaDataUtil.getLastDDLTimestampUpdate(
                             key, clientTimeStamp, serverTimestamp));
-                    mutateRowsWithLocks(this.accessCheckEnabled, region, tableMetadata,
+                    boolean updateCatalogIndexes = !Bytes.toString(schemaName)
+                            .equalsIgnoreCase(PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA);
+
+                    mutateRowsWithLocks(this.accessCheckEnabled, env, region, tableMetadata,
                             Collections.<byte[]>emptySet(), HConstants.NO_NONCE,
-                            HConstants.NO_NONCE);
+                            HConstants.NO_NONCE, updateCatalogIndexes);
                     // Invalidate from cache
                     Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache =
                             GlobalCache.getInstance(this.env).getMetaDataCache();
