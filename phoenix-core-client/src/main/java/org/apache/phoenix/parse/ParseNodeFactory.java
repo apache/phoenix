@@ -294,6 +294,10 @@ public class ParseNodeFactory {
         return new ColumnDef(columnDefName, sqlTypeName, isNull, maxLength, scale, isPK, sortOrder, expressionStr, null, isRowTimestamp);
     }
 
+    public DocumentFieldExistsParseNode documentFieldExists(ParseNode fieldName, boolean exists) {
+        return new DocumentFieldExistsParseNode(fieldName, exists);
+    }
+
     public ColumnDef columnDef(ColumnName columnDefName, String sqlTypeName,
                                boolean isArray, Integer arrSize, Boolean isNull,
                                Integer maxLength, Integer scale, boolean isPK,

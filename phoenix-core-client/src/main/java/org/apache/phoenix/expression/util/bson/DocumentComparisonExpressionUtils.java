@@ -34,7 +34,11 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 /**
  * Document style condition expression evaluation support.
  */
-public class DocumentComparisonExpressionUtils {
+public final class DocumentComparisonExpressionUtils {
+
+  private DocumentComparisonExpressionUtils() {
+    // empty
+  }
 
   private static final Logger LOGGER =
       LoggerFactory.getLogger(DocumentComparisonExpressionUtils.class);

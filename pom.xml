@@ -163,7 +163,6 @@
     <maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
     <!-- This overrides the property in the ASF parent project-->
     <version.maven-site-plugin>3.21.0</version.maven-site-plugin>
-    <mvel2.version>2.5.2.Final</mvel2.version>
 
     <!-- Plugin options -->
     <skipParallelStatsEnabledTests>false</skipParallelStatsEnabledTests>
@@ -1641,18 +1640,6 @@
           <exclusion>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-log4j12</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-
-      <dependency>
-        <groupId>org.mvel</groupId>
-        <artifactId>mvel2</artifactId>
-        <version>${mvel2.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>com.thoughtworks.xstream</groupId>
-            <artifactId>xstream</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
