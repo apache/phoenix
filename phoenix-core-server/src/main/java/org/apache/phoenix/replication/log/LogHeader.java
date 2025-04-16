@@ -35,6 +35,7 @@ public class LogHeader implements Log.Header {
     public static int HEADER_SIZE = Log.MAGIC.length + 3 * Bytes.SIZEOF_BYTE;
 
     public LogHeader() {
+
     }
 
     @Override

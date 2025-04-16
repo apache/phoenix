@@ -22,7 +22,6 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
-
 import org.apache.hadoop.hbase.util.Bytes;
 
 public class LogRecord implements Log.Record {
@@ -30,7 +29,7 @@ public class LogRecord implements Log.Record {
     private Log.MutationType mutationType;
     private String schemaObjectName;
     private long commitId;
-    private byte[] rowKey;
+    private byte[] row;
     private long timestamp;
     private Map<byte[], byte[]> columnValues;
     private int serializedLength;
@@ -74,12 +73,12 @@ public class LogRecord implements Log.Record {
 
     @Override
     public byte[] getRowKey() {
-        return rowKey;
+        return row;
     }
 
     @Override
     public Log.Record setRowKey(byte[] rowKey) {
-        this.rowKey = rowKey;
+        this.row = rowKey;
         return this;
     }
 
@@ -132,7 +131,7 @@ public class LogRecord implements Log.Record {
     @Override
     public int hashCode() {
         int result = Objects.hash(mutationType, schemaObjectName, commitId, timestamp);
-        result = 31 * result + Arrays.hashCode(rowKey);
+        result = 31 * result + Arrays.hashCode(row);
         result = 31 * result + mapHashCode(columnValues);
         return result;
     }
@@ -141,7 +140,7 @@ public class LogRecord implements Log.Record {
     private static int mapHashCode(Map<byte[], byte[]> map) {
         int h = 0;
         for (Map.Entry<byte[], byte[]> entry : map.entrySet()) {
-            h += (Arrays.hashCode(entry.getKey()) ^ Arrays.hashCode(entry.getValue()));
+            h += Arrays.hashCode(entry.getKey()) ^ Arrays.hashCode(entry.getValue());
         }
         return h;
     }
@@ -154,13 +153,13 @@ public class LogRecord implements Log.Record {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        LogRecord logRecord = (LogRecord)o;
-        return commitId == logRecord.commitId &&
-            timestamp == logRecord.timestamp &&
-            mutationType == logRecord.mutationType &&
-            Objects.equals(schemaObjectName, logRecord.schemaObjectName) &&
-            Arrays.equals(rowKey, logRecord.rowKey) &&
-            mapsEqual(columnValues, logRecord.columnValues);
+        LogRecord logRecord = (LogRecord) o;
+        return commitId == logRecord.commitId
+            && timestamp == logRecord.timestamp
+            && mutationType == logRecord.mutationType
+            && Objects.equals(schemaObjectName, logRecord.schemaObjectName)
+            && Arrays.equals(row, logRecord.row)
+            && mapsEqual(columnValues, logRecord.columnValues);
     }
 
     // Same
@@ -182,7 +181,7 @@ public class LogRecord implements Log.Record {
     @Override
     public String toString() {
         return "LogRecord [mutationType=" + mutationType + ", schemaObjectName=" + schemaObjectName
-            + ", commitId=" + commitId + ", rowKey=" + Arrays.toString(rowKey) + ", timestamp="
+            + ", commitId=" + commitId + ", rowKey=" + Arrays.toString(row) + ", timestamp="
             + timestamp + ", columnValues=" + columnValues + ", serializedLength="
             + serializedLength + "]";
     }

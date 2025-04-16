@@ -20,7 +20,6 @@ package org.apache.phoenix.replication.log;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
-
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,10 +32,10 @@ import org.slf4j.LoggerFactory;
 public class LogReader implements Log.Reader  {
 
     private static final Logger LOG = LoggerFactory.getLogger(LogReader.class);
-    private LogReaderContext readerContext;
-    private FSDataInputStream in;
-    private LogFormatReader formatReader;
-    private Log.Record currentRecord;
+    private LogReaderContext context;
+    private FSDataInputStream input;
+    private LogFormatReader reader;
+    private Log.Record current;
     private boolean closed = false;
 
     public LogReader() {
@@ -44,16 +43,16 @@ public class LogReader implements Log.Reader  {
     }
 
     public LogReaderContext getContext() {
-        return readerContext;
+        return context;
     }
 
     @Override
     public void init(LogReaderContext context) throws IOException {
-        this.readerContext = context;
-        this.in = context.getFileSystem().open(readerContext.getFilePath());
-        this.formatReader = new LogFormatReader(); // Instantiate from conf when more than one
-        this.formatReader.init(context, in);
-        LOG.debug("Initialized LogReader for path {}", readerContext.getFilePath());
+        this.context = context;
+        this.input = context.getFileSystem().open(context.getFilePath());
+        this.reader = new LogFormatReader(); // Instantiate from conf when more than one
+        this.reader.init(context, input);
+        LOG.debug("Initialized LogReader for path {}", context.getFilePath());
     }
 
     @Override
@@ -63,69 +62,69 @@ public class LogReader implements Log.Reader  {
 
     @Override
     public Log.Record next(Log.Record reuse) throws IOException {
-         if (closed) {
+        if (closed) {
             throw new IOException("Reader has been closed");
         }
-        currentRecord = formatReader.next(reuse);
-        return currentRecord;
+        current = reader.next(reuse);
+        return current;
     }
 
     @Override
     public Iterator<Log.Record> iterator() {
-       return new Iterator<Log.Record>() {
-           private Log.Record nextRecord = null;
-           private boolean fetched = false;
+        return new Iterator<Log.Record>() {
+            private Log.Record next = null;
+            private boolean fetched = false;
 
-           @Override
-           public boolean hasNext() {
-               if (closed) {
-                   return false;
-               }
-               if (!fetched) {
-                   try {
-                       nextRecord = LogReader.this.next();
-                       fetched = true;
-                   } catch (IOException e) {
-                       throw new LogIterationException(e);
-                   }
-               }
-               return nextRecord != null;
-           }
+            @Override
+            public boolean hasNext() {
+                if (closed) {
+                    return false;
+                }
+                if (!fetched) {
+                    try {
+                        next = LogReader.this.next();
+                        fetched = true;
+                    } catch (IOException e) {
+                        throw new LogIterationException(e);
+                    }
+                }
+                return next != null;
+            }
 
-           @Override
-           public Log.Record next() {
-               if (!hasNext()) {
-                   throw new NoSuchElementException("No more records in the Replication Log");
-               }
-               Log.Record record = nextRecord;
-               // Reset state for the next hasNext() call
-               nextRecord = null;
-               fetched = false;
-               return record;
-           }
+            @Override
+            public Log.Record next() {
+                if (!hasNext()) {
+                    throw new NoSuchElementException("No more records in the Replication Log");
+                }
+                Log.Record record = next;
+                // Reset state for the next hasNext() call
+                next = null;
+                fetched = false;
+                return record;
+            }
 
-           @Override
-           public void remove() {
-               throw new UnsupportedOperationException(
-                   "Remove operation is not supported by this iterator");
-           }
-       };
+            @Override
+            public void remove() {
+                throw new UnsupportedOperationException(
+                    "Remove operation is not supported by this iterator");
+            }
+        };
     }
 
     @Override
     public Log.Header getHeader() {
-        if (formatReader == null) {
+        if (reader == null) {
              throw new IllegalStateException("LogReader not initialized");
         }
-        return formatReader.getHeader();
+        return reader.getHeader();
     }
 
      @Override
     public Log.Trailer getTrailer() {
-         if (formatReader == null) {
+         if (reader == null) {
              throw new IllegalStateException("LogReader not initialized");
          }
-        return formatReader.getTrailer();
+        return reader.getTrailer();
     }
 
     @Override
@@ -134,23 +133,22 @@ public class LogReader implements Log.Reader  {
             return;
         }
         try {
-            if (formatReader != null) {
-                formatReader.close();
+            if (reader != null) {
+                reader.close();
             }
-            // inputStream is closed by formatReader
         } catch (IOException e) {
-            LOG.error("Error closing LogReader for path " + readerContext.getFilePath(), e);
+            LOG.error("Error closing LogReader for path " + context.getFilePath(), e);
             throw e;
         } finally {
              closed = true;
-             LOG.debug("Closed LogReader for path {}", readerContext.getFilePath());
+             LOG.debug("Closed LogReader for path {}", context.getFilePath());
         }
     }
 
     @Override
     public String toString() {
-        return "LogReader [readerContext=" + readerContext + ", formatReader=" + formatReader
-            + ", currentRecord=" + currentRecord + ", closed=" + closed + "]";
+        return "LogReader [readerContext=" + context + ", formatReader=" + reader
+            + ", currentRecord=" + current + ", closed=" + closed + "]";
     }
 
 }

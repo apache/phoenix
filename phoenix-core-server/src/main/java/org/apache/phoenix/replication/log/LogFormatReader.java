@@ -38,9 +38,9 @@ public class LogFormatReader implements Closeable {
 
     private static final Logger LOG = LoggerFactory.getLogger(LogFormatReader.class);
 
-    private LogReaderContext readerContext;
-    private Log.Codec.Decoder recordDecoder;
-    private FSDataInputStream inputStream;
+    private LogReaderContext context;
+    private Log.Codec.Decoder decoder;
+    private FSDataInputStream input;
     private Log.Header header;
     private Log.Trailer trailer = null;
     private long currentPosition = 0;
@@ -53,52 +53,52 @@ public class LogFormatReader implements Closeable {
     }
 
     public void init(LogReaderContext context, FSDataInputStream inputStream) throws IOException {
-      this.readerContext = context;
-        this.inputStream = inputStream;
+        this.context = context;
+        this.input = inputStream;
         try {
             readAndValidateTrailer();
             trailerValidated = true;
         } catch (IOException e) {
             // Log warning, trailer might be missing or corrupt, proceed without it
-            LOG.warn("Failed to read or validate Log trailer for path: " +
-                (context != null ? context.getFilePath() : "unknown")
+            LOG.warn("Failed to read or validate Log trailer for path: "
+                + (context != null ? context.getFilePath() : "unknown")
                 + ". Proceeding without trailer.", e);
             trailer = null; // Ensure trailer is null if reading/validation failed
         }
-        this.recordDecoder = null;
+        this.decoder = null;
         // Seek to start of the file and read the header
         readHeader();
         currentPosition = inputStream.getPos(); // Should be the offset of the first block
     }
 
     private void readAndValidateTrailer() throws IOException {
-        if (readerContext.getFileSize() < LogTrailer.FIXED_TRAILER_SIZE) {
-            throw new IOException("File size " + readerContext.getFileSize()
-              + " is smaller than the fixed trailer size " + LogTrailer.FIXED_TRAILER_SIZE);
+        if (context.getFileSize() < LogTrailer.FIXED_TRAILER_SIZE) {
+            throw new IOException("File size " + context.getFileSize()
+                + " is smaller than the fixed trailer size " + LogTrailer.FIXED_TRAILER_SIZE);
         }
         LogTrailer ourTrailer = new LogTrailer();
         // Fixed trailer fields will be LogTrailer.FIXED_TRAILER_SIZE bytes back from end of file.
-        inputStream.seek(readerContext.getFileSize() - LogTrailer.FIXED_TRAILER_SIZE);
+        input.seek(context.getFileSize() - LogTrailer.FIXED_TRAILER_SIZE);
         // Read fixed fields
-        ourTrailer.readFixedFields(inputStream);
+        ourTrailer.readFixedFields(input);
         // Now read the variable length protobuf message if present
-        inputStream.seek(ourTrailer.getTrailerStartOffset());
-        ourTrailer.readMetadata(inputStream);
+        input.seek(ourTrailer.getTrailerStartOffset());
+        ourTrailer.readMetadata(input);
         trailer = ourTrailer;
     }
 
     private void readHeader() throws IOException {
         header = new LogHeader();
-        DataInputStream dataIn = new DataInputStream(inputStream);
+        DataInputStream dataIn = new DataInputStream(input);
         // Seek to start of file
-        inputStream.seek(0);
+        input.seek(0);
         // Read header
         header.readFields(dataIn);
     }
 
     public Log.Record next(Log.Record reuse) throws IOException {
         while (true) { // Loop to handle skipping blocks or reaching end of current block
-            if (recordDecoder == null || !recordDecoder.advance(reuse)) {
+            if (decoder == null || !decoder.advance(reuse)) {
                 currentBlockBuffer = readNextBlock(); // Reads, validates checksum, decompresses
                 if (currentBlockBuffer == null) {
                     // End of file or unrecoverable error after skipping blocks
@@ -106,9 +106,9 @@ public class LogFormatReader implements Closeable {
                     return null;
                 }
                 // Initialize decoder for the new block buffer
-                recordDecoder = readerContext.getCodec().getDecoder(currentBlockBuffer);
+                decoder = context.getCodec().getDecoder(currentBlockBuffer);
                 // Try advancing again within the new block
-                if (!recordDecoder.advance(reuse)) {
+                if (!decoder.advance(reuse)) {
                     // Block was empty or immediately failed after loading? Should not happen if
                     // next() succeeded.
                     LOG.warn("Empty or invalid block loaded at position {}", currentPosition);
@@ -117,8 +117,8 @@ public class LogFormatReader implements Closeable {
             }
             // If we got here, recordDecoder.advance() was successful
 
-            Log.Record record = recordDecoder.current();
-            readerContext.incrementRecordsRead();
+            Log.Record record = decoder.current();
+            context.incrementRecordsRead();
 
             return record;
         }
@@ -134,22 +134,22 @@ public class LogFormatReader implements Closeable {
             LogBlockHeader blockHeader = new LogBlockHeader();
             try {
                 // Read Header
-                DataInputStream dataIn = new DataInputStream(inputStream);
+                DataInputStream dataIn = new DataInputStream(input);
                 blockHeader.readFields(dataIn);
-                currentPosition = inputStream.getPos(); // Position after block header
+                currentPosition = input.getPos(); // Position after block header
 
                 // Read Payload
                 int payloadSize = blockHeader.getCompressedSize();
                 ByteBuffer payloadBuffer = ByteBuffer.allocate(payloadSize);
 
                 try {
-                    inputStream.readFully(payloadBuffer.array(), payloadBuffer.arrayOffset(),
+                    input.readFully(payloadBuffer.array(), payloadBuffer.arrayOffset(),
                         payloadSize);
                     payloadBuffer.limit(payloadSize);
                     currentPosition += payloadSize;
 
                     // Read Checksum
-                    long expectedChecksum = inputStream.readLong();
+                    long expectedChecksum = input.readLong();
                     currentPosition += Log.CHECKSUM_SIZE;
 
                     // Validate Checksum
@@ -170,18 +170,17 @@ public class LogFormatReader implements Closeable {
                     } else {
                         decompressedBuffer = payloadBuffer;
                     }
-                 } finally {
-                     payloadBuffer = null;
-                 }
+                } finally {
+                    payloadBuffer = null;
+                }
 
-                readerContext.incrementBlocksRead();
+                context.incrementBlocksRead();
                 return decompressedBuffer; // Successfully read and processed the block
-
             } catch (IOException | IllegalArgumentException e) {
-                readerContext.incrementCorruptBlocksSkipped();
+                context.incrementCorruptBlocksSkipped();
                 LOG.warn("Encountered corrupt block at offset " + blockStartOffset + " for path: "
-                    + readerContext.getFilePath(), e);
-                if (!readerContext.isSkipCorruptBlocks()) {
+                    + context.getFilePath(), e);
+                if (!context.isSkipCorruptBlocks()) {
                     decompressedBuffer = null;
                     throw new IOException("Failed to read block at offset " + blockStartOffset, e);
                 }
@@ -200,36 +199,36 @@ public class LogFormatReader implements Closeable {
     // Decompresses the payload buffer using the specified algorithm.
     // Manages obtaining/releasing decompressors.
     private ByteBuffer decompressBlock(ByteBuffer compressedBuffer, Log.BlockHeader header)
-          throws IOException {
-       Compression.Algorithm algo = header.getCompression();
-       Decompressor decompressor = algo.getDecompressor();
-       ByteBuffer decompressedBuffer = null;
-       boolean success = false;
-       try {
-           decompressedBuffer = ByteBuffer.allocate(header.getUncompressedSize());
-           if (decompressor instanceof CanReinit) { // Correctly handle CanReinit compressor types
-               ((CanReinit) decompressor).reinit(readerContext.getConfiguration());
-           }
-           decompressor.setInput(compressedBuffer.array(), compressedBuffer.arrayOffset(),
-               header.getCompressedSize());
-           int decompressedSize =
-               decompressor.decompress(decompressedBuffer.array(),
-                   decompressedBuffer.arrayOffset(), header.getUncompressedSize());
-           if (decompressedSize != header.getUncompressedSize()) {
+            throws IOException {
+        Compression.Algorithm compression = header.getCompression();
+        Decompressor decompressor = compression.getDecompressor();
+        ByteBuffer decompressedBuffer = null;
+        boolean success = false;
+        try {
+            decompressedBuffer = ByteBuffer.allocate(header.getUncompressedSize());
+            if (decompressor instanceof CanReinit) { // Correctly handle CanReinit compressor types
+                ((CanReinit) decompressor).reinit(context.getConfiguration());
+            }
+            decompressor.setInput(compressedBuffer.array(), compressedBuffer.arrayOffset(),
+                header.getCompressedSize());
+            int decompressedSize =
+                decompressor.decompress(decompressedBuffer.array(),
+                    decompressedBuffer.arrayOffset(), header.getUncompressedSize());
+            if (decompressedSize != header.getUncompressedSize()) {
                 throw new IOException("Decompression size mismatch: expected="
                     + header.getUncompressedSize() + ", actual=" + decompressedSize);
-           }
-           decompressedBuffer.limit(decompressedSize);
-           success = true;
-           return decompressedBuffer;
-       } finally {
-           if (algo != Compression.Algorithm.NONE && decompressor != null) {
-               algo.returnDecompressor(decompressor);
-           }
-           if (!success && decompressedBuffer != null) {
+            }
+            decompressedBuffer.limit(decompressedSize);
+            success = true;
+            return decompressedBuffer;
+        } finally {
+            if (compression != Compression.Algorithm.NONE && decompressor != null) {
+                compression.returnDecompressor(decompressor);
+            }
+            if (!success && decompressedBuffer != null) {
                 decompressedBuffer = null; // Release buffer on failure
-           }
-       }
+            }
+        }
     }
 
     // Tries to find the start of the next valid block after corruption.
@@ -237,8 +236,8 @@ public class LogFormatReader implements Closeable {
         long seekOffset = offset + 1;
         seekOffset = seekToMagic(seekOffset, Log.BlockHeader.MAGIC);
         if (offset < 0) {
-          LOG.warn("Could not find next block magic after offset " + offset);
-          return false; // EOF or cannot find next block
+            LOG.warn("Could not find next block magic after offset " + offset);
+            return false; // EOF or cannot find next block
         }
 
         if (currentPosition >= getEndOfDataOffset()) {
@@ -248,21 +247,21 @@ public class LogFormatReader implements Closeable {
         }
 
         LOG.warn("Resyncing reader to position " + seekOffset);
-        inputStream.seek(seekOffset);
+        input.seek(seekOffset);
         currentPosition = seekOffset;
 
         // Invalidate current decoder as we've skipped potentially many records
-        this.recordDecoder = null;
+        this.decoder = null;
         return true;
     }
 
     // Helper to seek to the next occurrence of a magic byte sequence
     private long seekToMagic(long startOffset, byte[] magic) throws IOException {
-        inputStream.seek(startOffset);
+        input.seek(startOffset);
         byte[] buffer = new byte[1024]; // Read in chunks, 1K seems reasonable. (Should be larger?)
         int magicPos = 0;
         while (true) {
-            int bytesRead = inputStream.read(buffer);
+            int bytesRead = input.read(buffer);
             if (bytesRead == -1) {
                 return -1; // EOF
             }
@@ -279,9 +278,9 @@ public class LogFormatReader implements Closeable {
                 } else {
                     // Restart the match
                     magicPos = 0;
-                     if (buffer[i] == magic[0]) {
-                         magicPos = 1;
-                     }
+                    if (buffer[i] == magic[0]) {
+                        magicPos = 1;
+                    }
                 }
             }
             startOffset += bytesRead;
@@ -290,7 +289,7 @@ public class LogFormatReader implements Closeable {
 
     // Returns the offset where data blocks end, either EOF or start of trailer.
     private long getEndOfDataOffset() throws IOException {
-        return trailer != null ? trailer.getTrailerStartOffset() : readerContext.getFileSize();
+        return trailer != null ? trailer.getTrailerStartOffset() : context.getFileSize();
     }
 
     // Validates read counts against trailer counts if trailer was successfully read
@@ -298,13 +297,13 @@ public class LogFormatReader implements Closeable {
         if (!trailerValidated || trailer == null) {
             return;
         }
-        if (trailer.getBlockCount() != readerContext.getBlocksRead()) {
-             LOG.warn("Trailer block count mismatch! expected=" + trailer.getBlockCount()
-                 + ", actual=" + readerContext.getBlocksRead());
+        if (trailer.getBlockCount() != context.getBlocksRead()) {
+            LOG.warn("Trailer block count mismatch! expected=" + trailer.getBlockCount()
+                + ", actual=" + context.getBlocksRead());
         }
-        if (trailer.getRecordCount() != readerContext.getRecordsRead()) {
-             LOG.warn("Trailer record count mismatch! expected=" + trailer.getRecordCount()
-                 + ", actual=" + readerContext.getRecordsRead());
+        if (trailer.getRecordCount() != context.getRecordsRead()) {
+            LOG.warn("Trailer record count mismatch! expected=" + trailer.getRecordCount()
+                + ", actual=" + context.getRecordsRead());
         }
     }
 
@@ -319,16 +318,19 @@ public class LogFormatReader implements Closeable {
     @Override
     public void close() throws IOException {
         currentBlockBuffer = null;
-        if (inputStream != null) {
-            inputStream.close();
-            inputStream = null;
+        if (input != null) {
+            try {
+                input.close();
+            } finally {
+                input = null;
+            }
         }
     }
 
     @Override
     public String toString() {
-        return "LogFormatReader [readerContext=" + readerContext + ", header=" + header
-            + ", trailer=" + trailer + ", recordDecoder=" + recordDecoder + ", currentPosition="
+        return "LogFormatReader [readerContext=" + context + ", header=" + header
+            + ", trailer=" + trailer + ", recordDecoder=" + decoder + ", currentPosition="
             + currentPosition + ", trailerValidated=" + trailerValidated + "]";
     }
 

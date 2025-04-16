@@ -21,7 +21,6 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Arrays;
-
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -120,8 +119,7 @@ public class LogTrailer implements Log.Trailer {
         this.majorVersion = in.readByte();
         this.minorVersion = in.readByte();
         // Basic version check for now
-        if (this.majorVersion != Log.VERSION_MAJOR &&
-              this.minorVersion > Log.VERSION_MINOR) {
+        if (this.majorVersion != Log.VERSION_MAJOR && this.minorVersion > Log.VERSION_MINOR) {
             throw new IOException("Unsupported Replication Log version. Got major="
                 + this.majorVersion + " minor=" + this.minorVersion + ", expected major="
                 + Log.VERSION_MAJOR + " minor=" + Log.VERSION_MINOR);
@@ -135,15 +133,15 @@ public class LogTrailer implements Log.Trailer {
     }
 
     public void readMetadata(DataInput in) throws IOException {
-      int protoSize = in.readInt();
-      if (protoSize < 0) {
-          throw new IOException("Invalid Protobuf message size in trailer: " + protoSize);
-      }
-      if (protoSize > 0) {
-          byte[] protoBytes = new byte[protoSize];
-          in.readFully(protoBytes);
-          // Deserialize protobuf when we have something to read
-      }
+        int protoSize = in.readInt();
+        if (protoSize < 0) {
+            throw new IOException("Invalid Protobuf message size in trailer: " + protoSize);
+        }
+        if (protoSize > 0) {
+            byte[] protoBytes = new byte[protoSize];
+            in.readFully(protoBytes);
+            // Deserialize protobuf when we have something to read
+        }
     }
 
     @Override

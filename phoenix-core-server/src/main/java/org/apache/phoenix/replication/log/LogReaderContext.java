@@ -19,7 +19,6 @@ package org.apache.phoenix.replication.log;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicLong;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -35,12 +34,11 @@ public class LogReaderContext {
     public static final boolean DEFAULT_LOG_SKIP_CORRUPT_BLOCKS = true;
 
     private final Configuration conf;
-    private FileSystem fileSystem;
-    private Path filePath;
+    private FileSystem fs;
+    private Path path;
+    private LogCodec codec;
     private long fileSize = -1;
     private boolean isSkipCorruptBlocks;
-    private LogCodec codec;
-
     private AtomicLong blocksRead = new AtomicLong();
     private AtomicLong recordsRead = new AtomicLong();
     private AtomicLong corruptBlocksSkipped = new AtomicLong();
@@ -59,26 +57,26 @@ public class LogReaderContext {
     }
 
     public FileSystem getFileSystem() {
-        return fileSystem;
+        return fs;
     }
 
     public LogReaderContext setFileSystem(FileSystem fileSystem) {
-        this.fileSystem = fileSystem;
+        this.fs = fileSystem;
         return this;
     }
 
     public Path getFilePath() {
-        return filePath;
+        return path;
     }
 
     public LogReaderContext setFilePath(Path filePath) {
-        this.filePath = filePath;
+        this.path = filePath;
         return this;
     }
 
     public long getFileSize() throws IOException {
         if (fileSize < 0) {
-            fileSize = fileSystem.getFileStatus(filePath).getLen();
+            fileSize = fs.getFileStatus(path).getLen();
         }
         return fileSize;
     }
@@ -147,7 +145,7 @@ public class LogReaderContext {
 
     @Override
     public String toString() {
-        return "LogReaderContext [filePath=" + filePath + ", fileSize=" + fileSize
+        return "LogReaderContext [filePath=" + path + ", fileSize=" + fileSize
             + ", isSkipCorruptBlocks=" + isSkipCorruptBlocks + ", codec=" + codec + ", blocksRead="
             + blocksRead + ", recordsRead=" + recordsRead + ", corruptBlocksSkipped="
             + corruptBlocksSkipped + "]";

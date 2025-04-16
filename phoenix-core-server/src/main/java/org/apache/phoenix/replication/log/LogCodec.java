@@ -25,7 +25,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
-
 import org.apache.hadoop.hbase.io.ByteBuffInputStream;
 import org.apache.hadoop.hbase.nio.ByteBuff;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -85,14 +84,13 @@ public class LogCodec implements Log.Codec {
         @Override
         public void write(Log.Record record) throws IOException {
             // Calculate serialized size
-            int recordSize = calculateRecordSize(record);
+            int size = calculateRecordSize(record);
 
             // Set the calculated size (including the vint prefix) on the record object
-            ((LogRecord)record).setSerializedLength(WritableUtils.getVIntSize(recordSize)
-                + recordSize);
+            ((LogRecord) record).setSerializedLength(WritableUtils.getVIntSize(size) + size);
 
             // Write total record length
-            WritableUtils.writeVInt(out, recordSize);
+            WritableUtils.writeVInt(out, size);
 
             // Write record fields
             out.writeByte(record.getMutationType().getCode());
@@ -121,18 +119,18 @@ public class LogCodec implements Log.Codec {
             int size = 0;
             size += Bytes.SIZEOF_BYTE; // Mutation Type
             size += WritableUtils.getVIntSize(record.getSchemaObjectName().length())
-                     + record.getSchemaObjectName().getBytes(StandardCharsets.UTF_8).length;
+                + record.getSchemaObjectName().getBytes(StandardCharsets.UTF_8).length;
             size += WritableUtils.getVIntSize(record.getCommitId()); // Commit ID
             size += WritableUtils.getVIntSize(record.getRowKey().length)
-                    + record.getRowKey().length; // Row Key
+                + record.getRowKey().length; // Row Key
             size += Bytes.SIZEOF_LONG; // Timestamp
             size += WritableUtils.getVIntSize(record.getColumnCount()); // Column Count
             if (record.getColumnCount() > 0) {
                 for (Map.Entry<byte[], byte[]> entry : record.getColumnValues()) {
                     size += WritableUtils.getVIntSize(entry.getKey().length)
-                            + entry.getKey().length; // Col Name
+                        + entry.getKey().length; // Col Name
                     size += WritableUtils.getVIntSize(entry.getValue().length)
-                            + entry.getValue().length; // Col Value
+                        + entry.getValue().length; // Col Value
                 }
             }
             return size;
@@ -142,7 +140,7 @@ public class LogCodec implements Log.Codec {
     private static class RecordDecoder implements Log.Codec.Decoder {
         private final DataInput in;
         // A reference to the object populated by the last successful advance()
-        private LogRecord currentRecord = null;
+        private LogRecord current = null;
 
         RecordDecoder(DataInput in) {
             this.in = in;
@@ -156,23 +154,23 @@ public class LogCodec implements Log.Codec {
 
                 // If we are reusing a record object, prepare it for new data
                 if (reuse == null || !(reuse instanceof LogRecord)) {
-                    currentRecord = new LogRecord();
+                    current = new LogRecord();
                 } else {
-                    currentRecord = (LogRecord)reuse;
-                    currentRecord.clearColumnValues(); // Reset collections
+                    current = (LogRecord) reuse;
+                    current.clearColumnValues(); // Reset collections
                 }
                 // Set the total serialized length on the record
-                currentRecord.setSerializedLength(recordDataLength);
-                currentRecord.setMutationType(Log.MutationType.codeToType(in.readByte()));
-                currentRecord.setSchemaObjectName(WritableUtils.readString(in));
-                currentRecord.setCommitId(WritableUtils.readVLong(in));
+                current.setSerializedLength(recordDataLength);
+                current.setMutationType(Log.MutationType.codeToType(in.readByte()));
+                current.setSchemaObjectName(WritableUtils.readString(in));
+                current.setCommitId(WritableUtils.readVLong(in));
 
                 int rowKeyLen = WritableUtils.readVInt(in);
                 byte[] rowKey = new byte[rowKeyLen];
                 in.readFully(rowKey);
-                currentRecord.setRowKey(rowKey);
+                current.setRowKey(rowKey);
 
-                currentRecord.setTimestamp(in.readLong());
+                current.setTimestamp(in.readLong());
 
                 int colCount = WritableUtils.readVInt(in);
                 for (int i = 0; i < colCount; i++) {
@@ -184,23 +182,23 @@ public class LogCodec implements Log.Codec {
                     byte[] value = new byte[valueLen];
                     in.readFully(value);
 
-                    currentRecord.addColumnValue(colName, value);
+                    current.addColumnValue(colName, value);
                 }
 
                 return true; // Successfully read a record
             } catch (EOFException e) {
                 // End of stream
-                currentRecord = null;
+                current = null;
                 return false;
             }
         }
 
         @Override
         public Log.Record current() {
-            if (currentRecord == null) {
+            if (current == null) {
                 throw new IllegalStateException("Call advance() first or end of stream reached");
             }
-            return currentRecord;
+            return current;
         }
     }
 

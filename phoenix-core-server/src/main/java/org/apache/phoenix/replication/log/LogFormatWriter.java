@@ -21,8 +21,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.DataOutputStream;
 import java.io.IOException;
-
-import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.hbase.io.compress.Compression;
 import org.apache.hadoop.io.compress.Compressor;
@@ -38,11 +36,11 @@ public class LogFormatWriter implements Closeable {
 
     private static final Logger LOG = LoggerFactory.getLogger(LogFormatWriter.class);
 
-    private LogWriterContext writerContext;
-    private Log.Codec.Encoder recordEncoder;
-    private FSDataOutputStream outputStream;
+    private LogWriterContext context;
+    private Log.Codec.Encoder encoder;
     private Compressor compressor; // Reused per file
-    private ByteArrayOutputStream currentBlockUncompressedBytes;
+    private FSDataOutputStream output;
+    private ByteArrayOutputStream currentBlockBytes;
     private DataOutputStream blockDataStream;
     private boolean headerWritten = false;
     private boolean trailerWritten = false;
@@ -56,19 +54,19 @@ public class LogFormatWriter implements Closeable {
     }
 
     public void init(LogWriterContext context, FSDataOutputStream outputStream) throws IOException {
-        this.outputStream = outputStream;
-        this.writerContext = context;
+        this.output = outputStream;
+        this.context = context;
         this.compressor = context.getCompression().getCompressor();
-        this.currentBlockUncompressedBytes = new ByteArrayOutputStream();
-        this.blockDataStream = new DataOutputStream(currentBlockUncompressedBytes);
-        this.recordEncoder = context.getCodec().getEncoder(blockDataStream);
+        this.currentBlockBytes = new ByteArrayOutputStream();
+        this.blockDataStream = new DataOutputStream(currentBlockBytes);
+        this.encoder = context.getCodec().getEncoder(blockDataStream);
     }
 
     private void writeFileHeader() throws IOException {
         if (!headerWritten) {
             LogHeader header = new LogHeader();
-            header.write(outputStream);
-            blocksStartOffset = outputStream.getPos(); // First block starts after header
+            header.write(output);
+            blocksStartOffset = output.getPos(); // First block starts after header
             headerWritten = true;
         }
     }
@@ -88,11 +86,11 @@ public class LogFormatWriter implements Closeable {
         if (blockDataStream == null) {
             startBlock(); // Start the block if needed
         }
-        recordEncoder.write(record);
+        encoder.write(record);
         recordCount++;
 
         // Check if the current block size exceeds the limit AFTER writing the record
-        if (currentBlockUncompressedBytes.size() >= writerContext.getMaxBlockSize()) {
+        if (currentBlockBytes.size() >= context.getMaxBlockSize()) {
             // To close the block, we do a sync(), which not only closes the block and opens a
             // new one, it syncs the finalized block.
             sync();
@@ -102,30 +100,30 @@ public class LogFormatWriter implements Closeable {
     // Should be called before writing the first record.
     public void startBlock() throws IOException {
         if (blockDataStream == null) {
-          this.currentBlockUncompressedBytes = new ByteArrayOutputStream();
-            this.blockDataStream = new DataOutputStream(currentBlockUncompressedBytes);
+            this.currentBlockBytes = new ByteArrayOutputStream();
+            this.blockDataStream = new DataOutputStream(currentBlockBytes);
             // Re-initialize encoder for the new stream if necessary. This depends on the codec
             // implementation details. For now we assume it is necessary.
-            this.recordEncoder = writerContext.getCodec().getEncoder(blockDataStream);
-       }
+            this.encoder = context.getCodec().getEncoder(blockDataStream);
+        }
     }
 
     // Closes the current block being written, compresses it (if applicable),
     // calculates checksum, and writes the block (header, payload, checksum) to the output stream.
     public void closeBlock() throws IOException {
-        if (blockDataStream == null || currentBlockUncompressedBytes.size() == 0) {
+        if (blockDataStream == null || currentBlockBytes.size() == 0) {
             return; // No active block or block is empty
         }
         blockDataStream.flush(); // Ensure all encoded records are in the byte array
-        byte[] uncompressedBytes = currentBlockUncompressedBytes.toByteArray();
+        byte[] uncompressedBytes = currentBlockBytes.toByteArray();
         byte[] bytesToWrite;
-        Compression.Algorithm ourCompression = writerContext.getCompression();
+        Compression.Algorithm ourCompression = context.getCompression();
         if (compressor != null) {
             compressor.reset();
             ByteArrayOutputStream compressedStream = new ByteArrayOutputStream();
             try (DataOutputStream compressingStream = new DataOutputStream(
               ourCompression.createCompressionStream(compressedStream, compressor, 0))) {
-                 compressingStream.write(uncompressedBytes);
+                  compressingStream.write(uncompressedBytes);
             }
             bytesToWrite = compressedStream.toByteArray();
         } else {
@@ -138,57 +136,66 @@ public class LogFormatWriter implements Closeable {
             .setCompression(ourCompression)
             .setUncompressedSize(uncompressedBytes.length)
             .setCompressedSize(bytesToWrite.length);
-        blockHeader.write(outputStream);
+        blockHeader.write(output);
 
-        outputStream.write(bytesToWrite);
+        output.write(bytesToWrite);
         // Calculate checksum on the payload
         crc.reset();
         crc.update(bytesToWrite, 0, bytesToWrite.length);
         long checksum = crc.getValue();
-        outputStream.writeLong(checksum); // Write CRC64 of header and payload
+        output.writeLong(checksum); // Write CRC64 of header and payload
 
         blockCount++;
 
         // Reset for the next block
         // blockDataStream remains wrapping the reset currentBlockUncompressedBytes
-        currentBlockUncompressedBytes.reset();
+        currentBlockBytes.reset();
         blockDataStream = null;
     }
 
     public void sync() throws IOException {
         // Ensure the current block data is flushed to the FSDataOutputStream.
-        if (blockDataStream != null && currentBlockUncompressedBytes.size() > 0) {
-          // Closing the current block forces its header, data (potentially compressed),
-          // and checksum into the outputStream buffer.
-          closeBlock();
-          // Start a new block for subsequent appends.
-          startBlock();
+        if (blockDataStream != null && currentBlockBytes.size() > 0) {
+            // Closing the current block forces its header, data (potentially compressed),
+            // and checksum into the outputStream buffer.
+            closeBlock();
+            // Sync the underlying FSDataOutputStream as soon as we have finished.
+            output.hsync();
+            // Start a new block for subsequent appends.
+            startBlock();
         }
-        // Sync the underlying FSDataOutputStream.
-        outputStream.hsync();
     }
 
     public long getPosition() throws IOException {
-        return outputStream.getPos();
+        return output.getPos();
     }
 
     @Override
     public void close() throws IOException {
+        // We use the fact we have already written the trailer as the boolean "closed" condition.
         if (trailerWritten) {
             return;
         }
         try {
+            // We might be closing an empty file, handle this case correctly.
             if (!headerWritten) {
-                // We might be closing an empty file
                 writeFileHeader();
             }
-            // Close any outstanding block first
+            // Close any outstanding block.
             closeBlock();
+            // After we write the trailer we consider the file closed.
             writeTrailer();
         } finally {
-            IOUtils.closeQuietly(outputStream);
+            if (output != null) {
+                // We need to catch the exception in order to prevent a compressor leak.
+                try {
+                    output.close();
+                } catch (IOException e) {
+                    LOG.error("Exception while closing LogFormatWriter", e);
+                }
+            }
             if (compressor != null) {
-                writerContext.getCompression().returnCompressor(compressor);
+                context.getCompression().returnCompressor(compressor);
                 compressor = null;
             }
         }
@@ -199,11 +206,11 @@ public class LogFormatWriter implements Closeable {
             .setRecordCount(recordCount)
             .setBlockCount(blockCount)
             .setBlocksStartOffset(blocksStartOffset)
-            .setTrailerStartOffset(outputStream.getPos());
-        trailer.write(outputStream);
+            .setTrailerStartOffset(output.getPos());
+        trailer.write(output);
         trailerWritten = true;
         try {
-            outputStream.hsync();
+            output.hsync();
         } catch (IOException e) {
             // Failed sync on trailer write isn't a fatal event.
             LOG.warn("Exception while syncing Log trailer", e);
@@ -212,8 +219,8 @@ public class LogFormatWriter implements Closeable {
 
     @Override
     public String toString() {
-        return "LogFormatWriter [writerContext=" + writerContext
-            + ", currentBlockUncompressedBytes=" + currentBlockUncompressedBytes
+        return "LogFormatWriter [writerContext=" + context
+            + ", currentBlockUncompressedBytes=" + currentBlockBytes
             + ", headerWritten=" + headerWritten + ", trailerWritten=" + trailerWritten
             + ", recordCount=" + recordCount + ", blockCount=" + blockCount
             + ", blocksStartOffset=" + blocksStartOffset + "]";

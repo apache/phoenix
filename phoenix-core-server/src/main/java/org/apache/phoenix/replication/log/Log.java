@@ -23,7 +23,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Map;
-
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -38,17 +37,17 @@ import org.apache.hadoop.hbase.util.Bytes;
 public final class Log {
 
     /** Magic number for Phoenix Replication Log files */
-    public static final byte[] MAGIC = Bytes.toBytes("PLOG");
+    public static byte[] MAGIC = Bytes.toBytes("PLOG");
 
     /** Current major version of the replication log format */
-    public static final byte VERSION_MAJOR = 1;
+    public static byte VERSION_MAJOR = 1;
     /** Current minor version of the replication log format */
-    public static final byte VERSION_MINOR = 0;
+    public static byte VERSION_MINOR = 0;
 
     /** Current version of the replication log checksum */
-    public static final byte CHECKSUM_VERSION = 1;
+    public static byte CHECKSUM_VERSION = 1;
     /** Size of the block checksum trailer (CRC64) */
-    public static final int CHECKSUM_SIZE = Bytes.SIZEOF_LONG;
+    public static int CHECKSUM_SIZE = Bytes.SIZEOF_LONG;
 
     /** Represents the file header */
     public interface Header {
@@ -123,11 +122,11 @@ public final class Log {
      * Mirrors relevant parts of HBase Cell.Type.
      */
     public enum MutationType {
-        PUT((byte)4),
-        DELETE((byte)8),                 // Delete for entire row at specified ts
-        DELETE_COLUMN((byte)12),         // Delete for specific column at specified ts
-        DELETE_FAMILY((byte)14),         // Delete for entire column family at specified ts
-        DELETE_FAMILY_VERSION((byte)10); // Delete for specific column family version
+        PUT((byte) 4),
+        DELETE((byte) 8),                 // Delete for entire row at specified ts
+        DELETE_COLUMN((byte) 12),         // Delete for specific column at specified ts
+        DELETE_FAMILY((byte) 14),         // Delete for entire column family at specified ts
+        DELETE_FAMILY_VERSION((byte) 10); // Delete for specific column family version
 
         private final byte code;
 
@@ -149,7 +148,7 @@ public final class Log {
         }
 
         public static MutationType fromHBaseCellType(Cell.Type type) {
-             switch (type) {
+            switch (type) {
                 case Put:
                     return PUT;
                 case Delete:
@@ -197,8 +196,8 @@ public final class Log {
 
         /** Interface for encoding Records to a DataOutput stream */
         interface Encoder {
-             void write(Record record) throws IOException;
-             // NOTE: The encoder must set serializedLength in the Record after writing.
+            void write(Record record) throws IOException;
+            // NOTE: The encoder must set serializedLength in the Record after writing.
         }
 
         /** Interface for decoding Records from a DataInput stream or ByteBuffer */
@@ -229,9 +228,9 @@ public final class Log {
             if (LogTrailer.isValidTrailer(in, length)) {
                 return true;
             } else {
-              // Not a valid trailer, do we need to do something (set a flag)?
-              // Fall back to checking the header.
-              return LogHeader.isValidHeader(in);
+                // Not a valid trailer, do we need to do something (set a flag)?
+                // Fall back to checking the header.
+                return LogHeader.isValidHeader(in);
             }
         }
     }
