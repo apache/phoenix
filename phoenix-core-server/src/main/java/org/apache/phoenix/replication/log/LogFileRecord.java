@@ -181,9 +181,24 @@ public class LogFileRecord implements LogFile.Record {
     @Override
     public String toString() {
         return "LogFileRecord [mutationType=" + mutationType + ", schemaObjectName="
-            + schemaObjectName + ", commitId=" + commitId + ", rowKey=" + Arrays.toString(row)
-            + ", timestamp=" + timestamp + ", columnValues=" + columnValues + ", serializedLength="
-            + serializedLength + "]";
+            + schemaObjectName + ", commitId=" + commitId + ", rowKey=" + Bytes.toStringBinary(row)
+            + ", timestamp=" + timestamp + ", columnValues=[" + mapToString(columnValues) + "]]";
+    }
+
+    private static String mapToString(Map<byte[], byte[]> map) {
+        StringBuilder sb = new StringBuilder();
+        boolean first = true;
+        for (Map.Entry<byte[], byte[]> entry: map.entrySet()) {
+            if (first) {
+                first = false;
+            } else {
+                sb.append(", ");
+            }
+            sb.append(Bytes.toStringBinary(entry.getKey()));
+            sb.append('=');
+            sb.append(Bytes.toStringBinary(entry.getValue()));
+        }
+        return sb.toString();
     }
 
 }

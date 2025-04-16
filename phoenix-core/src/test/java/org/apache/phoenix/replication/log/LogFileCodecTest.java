@@ -33,8 +33,12 @@ import java.util.Arrays;
 import java.util.List;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class LogFileCodecTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(LogFileCodecTest.class);
 
     @Test
     public void testLogFileCodecSingleRecord() throws IOException {
@@ -116,6 +120,7 @@ public class LogFileCodecTest {
         LogFile.Codec.Encoder encoder = codec.getEncoder(dos);
         for (LogFile.Record record : originalRecords) {
             encoder.write(record);
+            LOG.info("Encoded: size={} record={}", record.getSerializedLength(), record);
         }
         dos.close();
         byte[] encodedBytes = baos.toByteArray();
@@ -125,9 +130,11 @@ public class LogFileCodecTest {
         DataInputStream dis = new DataInputStream(bais);
         LogFile.Codec.Decoder decoder = codec.getDecoder(dis);
 
-        List<LogFileRecord> decodedRecords = new ArrayList<>();
+        List<LogFile.Record> decodedRecords = new ArrayList<>();
         while (decoder.advance(null)) {
-            decodedRecords.add((LogFileRecord) decoder.current());
+            LogFile.Record record = decoder.current();
+            LOG.info("Decoded: record={}", record);
+            decodedRecords.add(record);
         }
 
         assertEquals("Number of decoded records should match", originalRecords.size(),
