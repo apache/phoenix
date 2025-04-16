@@ -22,7 +22,6 @@ import static org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder.MAX_V
 import static org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder.REPLICATION_SCOPE;
 import static org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder.TTL;
 import static org.apache.hadoop.hbase.client.MetricsConnection.CLIENT_SIDE_METRICS_ENABLED_KEY;
-import static org.apache.hadoop.hbase.client.MetricsConnection.METRICS_SCOPE_KEY;
 import static org.apache.hadoop.hbase.ipc.RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY;
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP;
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0;
@@ -167,7 +166,6 @@ import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.client.RpcConnectionRegistry;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
@@ -239,6 +237,7 @@ import org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus;
 import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.RPCConnectionInfo;
 import org.apache.phoenix.log.ConnectionLimiter;
 import org.apache.phoenix.log.DefaultConnectionLimiter;
 import org.apache.phoenix.log.LoggingConnectionLimiter;
@@ -490,8 +489,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 this.config.get(HConstants.CLIENT_ZOOKEEPER_CLIENT_PORT),
                 HConstants.ZOOKEEPER_CLIENT_PORT,
                 this.config.get(HConstants.ZOOKEEPER_CLIENT_PORT),
-                RpcConnectionRegistry.BOOTSTRAP_NODES,
-                this.config.get(RpcConnectionRegistry.BOOTSTRAP_NODES),
+                RPCConnectionInfo.BOOTSTRAP_NODES,
+                this.config.get(RPCConnectionInfo.BOOTSTRAP_NODES),
                 HConstants.MASTER_ADDRS_KEY, this.config.get(HConstants.MASTER_ADDRS_KEY),
                 ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY,
                 this.config.get(ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY));
@@ -559,7 +558,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
 
         if (this.config.getBoolean(CLIENT_SIDE_METRICS_ENABLED_KEY, false)) {
-            this.config.set(METRICS_SCOPE_KEY, config.get(QUERY_SERVICES_NAME));
+            // "hbase.client.metrics.scope" defined on
+            // org.apache.hadoop.hbase.client.MetricsConnection#METRICS_SCOPE_KEY
+            // however we cannot use the constant directly as long as we support HBase 2.4 profile.
+            this.config.set("hbase.client.metrics.scope", config.get(QUERY_SERVICES_NAME));
         }
 
         if (!QueryUtil.isServerConnection(props)) {
