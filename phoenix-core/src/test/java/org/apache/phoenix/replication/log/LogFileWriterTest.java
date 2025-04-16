@@ -37,7 +37,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
-public class LogWriterTest {
+public class LogFileWriterTest {
 
     @Rule
     public TemporaryFolder testFolder = new TemporaryFolder();
@@ -45,16 +45,16 @@ public class LogWriterTest {
     private Configuration conf;
     private FileSystem localFs;
     private Path filePath;
-    private LogReader reader;
-    private LogWriter writer;
+    private LogFileReader reader;
+    private LogFileWriter writer;
 
     @Before
     public void setUp() throws IOException {
         conf = HBaseConfiguration.create();
         localFs = FileSystem.getLocal(conf);
-        filePath = new Path(testFolder.newFile("LogWriterTest").toURI());
-        reader = new LogReader();
-        writer = new LogWriter();
+        filePath = new Path(testFolder.newFile("LogFileWriterTest").toURI());
+        reader = new LogFileReader();
+        writer = new LogFileWriter();
     }
 
     @After
@@ -64,10 +64,10 @@ public class LogWriterTest {
     }
 
     @Test
-    public void testLogWriter() throws IOException {
-        initLogWriter();
-        Log.Record r1 = newRecord("TBL1", 1L, "row1", 10L, 1);
-        Log.Record r2 = newRecord("TBL1", 2L, "row2", 11L, 1);
+    public void testLogFileWriter() throws IOException {
+        initLogFileWriter();
+        LogFile.Record r1 = newRecord("TBL1", 1L, "row1", 10L, 1);
+        LogFile.Record r2 = newRecord("TBL1", 2L, "row2", 11L, 1);
         writer.append(r1);
         writer.sync();
         writer.append(r2);
@@ -76,14 +76,14 @@ public class LogWriterTest {
         assertTrue("File should exist", localFs.exists(filePath));
         assertTrue("File length should be > 0", writer.getLength() > 0);
 
-        initLogReader();
-        assertEquals("Header major version mismatch", Log.VERSION_MAJOR,
+        initLogFileReader();
+        assertEquals("Header major version mismatch", LogFile.VERSION_MAJOR,
             reader.getHeader().getMajorVersion());
 
-        LogRecord decoded1 = (LogRecord) reader.next();
+        LogFileRecord decoded1 = (LogFileRecord) reader.next();
         assertEquals("First record mismatch", r1, decoded1);
 
-        LogRecord decoded2 = (LogRecord) reader.next();
+        LogFileRecord decoded2 = (LogFileRecord) reader.next();
         assertEquals("Second record mismatch", r2, decoded2);
 
         assertNull("Should be end of file", reader.next());
@@ -92,19 +92,19 @@ public class LogWriterTest {
     }
 
     @Test
-    public void testLogReaderIterator() throws IOException {
-        initLogWriter();
-        List<Log.Record> originals = new ArrayList<>();
+    public void testLogFileReaderIterator() throws IOException {
+        initLogFileWriter();
+        List<LogFile.Record> originals = new ArrayList<>();
         for (int i = 0; i < 1000; i++) {
-            Log.Record r = newRecord("ITER", (long)i, "row" + i, 20L + i, 1);
+            LogFile.Record r = newRecord("ITER", (long)i, "row" + i, 20L + i, 1);
             originals.add(r);
             writer.append(r);
         }
         writer.close();
 
-        initLogReader();
-        List<Log.Record> decoded = new ArrayList<>();
-        Iterator<Log.Record> iterator = reader.iterator();
+        initLogFileReader();
+        List<LogFile.Record> decoded = new ArrayList<>();
+        Iterator<LogFile.Record> iterator = reader.iterator();
         while (iterator.hasNext()) {
             decoded.add(iterator.next());
         }
@@ -117,31 +117,32 @@ public class LogWriterTest {
     }
 
     @Test
-    public void testLogReaderEmptyFile() throws IOException {
-        initLogWriter();
+    public void testLogFileReaderEmptyFile() throws IOException {
+        initLogFileWriter();
         writer.close(); // Creates an empty file (header + trailer)
-        initLogReader();
+        initLogFileReader();
         assertNull("Next should return null for empty file", reader.next());
         reader.close();
     }
 
-    private void initLogReader() throws IOException {
-        LogReaderContext ctx = new LogReaderContext(conf)
+    private void initLogFileReader() throws IOException {
+        LogFileReaderContext ctx = new LogFileReaderContext(conf)
             .setFileSystem(localFs)
             .setFilePath(filePath);
         reader.init(ctx);
     }
 
-    private void initLogWriter() throws IOException {
-        LogWriterContext ctx = new LogWriterContext(conf)
+    private void initLogFileWriter() throws IOException {
+        LogFileWriterContext ctx = new LogFileWriterContext(conf)
             .setFileSystem(localFs)
             .setFilePath(filePath);
         writer.init(ctx);
     }
 
-    private Log.Record newRecord(String table, long commitId, String rowKey, long ts, int numCols) {
-        Log.Record record = new LogRecord()
-            .setMutationType(Log.MutationType.PUT)
+    private LogFile.Record newRecord(String table, long commitId, String rowKey, long ts,
+            int numCols) {
+        LogFile.Record record = new LogFileRecord()
+            .setMutationType(LogFile.MutationType.PUT)
             .setSchemaObjectName(table)
             .setCommitId(commitId)
             .setRowKey(Bytes.toBytes(rowKey))

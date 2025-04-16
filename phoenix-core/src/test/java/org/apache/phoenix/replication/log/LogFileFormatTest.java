@@ -44,28 +44,28 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class LogFormatTest {
+public class LogFileFormatTest {
 
-    private static final Logger LOG = LoggerFactory.getLogger(LogFormatTest.class);
+    private static final Logger LOG = LoggerFactory.getLogger(LogFileFormatTest.class);
 
     private Configuration conf;
     private ByteArrayOutputStream writerBaos;
     private DataOutputStream writerDos;
-    private LogReaderContext readerContext;
-    private LogFormatReader reader;
-    private LogWriterContext writerContext;
-    private LogFormatWriter writer;
+    private LogFileReaderContext readerContext;
+    private LogFileFormatReader reader;
+    private LogFileWriterContext writerContext;
+    private LogFileFormatWriter writer;
 
     @Before
     public void setUp() {
         conf = HBaseConfiguration.create();
-        readerContext = new LogReaderContext(conf)
+        readerContext = new LogFileReaderContext(conf)
             .setSkipCorruptBlocks(true); // Enable skipping for corruption tests
-        reader = new LogFormatReader();
+        reader = new LogFileFormatReader();
         writerBaos = new ByteArrayOutputStream();
         writerDos = new DataOutputStream(writerBaos);
-        writerContext = new LogWriterContext(conf);
-        writer = new LogFormatWriter();
+        writerContext = new LogFileWriterContext(conf);
+        writer = new LogFileFormatWriter();
     }
 
     @After
@@ -77,34 +77,34 @@ public class LogFormatTest {
     }
 
     @Test
-    public void testFormatSingleBlock() throws IOException {
-        initWriter();
-        Log.Record r1 = newRecord("TBL1", 1L, "row1", 10L, 1);
-        Log.Record r2 = newRecord("TBL1", 2L, "row2", 11L, 1);
+    public void testLogFileFormatSingleBlock() throws IOException {
+        initLogFileWriter();
+        LogFile.Record r1 = newRecord("TBL1", 1L, "row1", 10L, 1);
+        LogFile.Record r2 = newRecord("TBL1", 2L, "row2", 11L, 1);
 
         writer.append(r1);
         writer.append(r2);
         writer.close(); // Writes block and trailer
 
         byte[] data = writerBaos.toByteArray();
-        initReader(data);
+        initLogFileReader(data);
 
-        assertEquals("Major version mismatch", Log.VERSION_MAJOR,
+        assertEquals("Major version mismatch", LogFile.VERSION_MAJOR,
             reader.getHeader().getMajorVersion());
-        assertEquals("Minor version mismatch", Log.VERSION_MINOR,
+        assertEquals("Minor version mismatch", LogFile.VERSION_MINOR,
             reader.getHeader().getMinorVersion());
 
-        Log.Record decoded1 = reader.next(null);
+        LogFile.Record decoded1 = reader.next(null);
         assertNotNull("First record should not be null", decoded1);
         assertEquals("First record mismatch", r1, decoded1);
 
-        Log.Record decoded2 = reader.next(null);
+        LogFile.Record decoded2 = reader.next(null);
         assertNotNull("Second record should not be null", decoded2);
         assertEquals("Second record mismatch", r2, decoded2);
 
         assertNull("Should be no more records", reader.next(null));
 
-        Log.Trailer trailer = reader.getTrailer();
+        LogFile.Trailer trailer = reader.getTrailer();
         assertNotNull("Trailer should exist", trailer);
         assertEquals("Trailer record count mismatch", 2, trailer.getRecordCount());
         assertEquals("Trailer block count mismatch", 1, trailer.getBlockCount());
@@ -117,24 +117,24 @@ public class LogFormatTest {
     }
 
     @Test
-    public void testFormatMultipleBlocks() throws IOException {
-        initWriter();
-        List<Log.Record> originals = new ArrayList<>();
+    public void testLogFileFormatMultipleBlocks() throws IOException {
+        initLogFileWriter();
+        List<LogFile.Record> originals = new ArrayList<>();
         // Write enough records to cause multiple blocks
         // This has the nice property of writing a large number of blocks compared with the other
         // tests in this unit.
         for (int i = 0; i < 100_000; i++) {
-            Log.Record r = newRecord("TBLMULTI", (long)i, "row" + i, 100L + i, 2);
+            LogFile.Record r = newRecord("TBLMULTI", (long)i, "row" + i, 100L + i, 2);
             originals.add(r);
             writer.append(r);
         }
         writer.close();
 
         byte[] data = writerBaos.toByteArray();
-        initReader(data);
+        initLogFileReader(data);
 
-        List<Log.Record> decoded = new ArrayList<>();
-        Log.Record r;
+        List<LogFile.Record> decoded = new ArrayList<>();
+        LogFile.Record r;
         while ((r = reader.next(null)) != null) {
             decoded.add(r);
         }
@@ -144,7 +144,7 @@ public class LogFormatTest {
             assertEquals("Record " + i + " mismatch", originals.get(i), decoded.get(i));
         }
 
-        Log.Trailer trailer = reader.getTrailer();
+        LogFile.Trailer trailer = reader.getTrailer();
         assertNotNull("Trailer should exist", trailer);
         assertEquals("Trailer record count mismatch", originals.size(), trailer.getRecordCount());
         assertTrue("Trailer block count should be > 1", trailer.getBlockCount() > 1);
@@ -155,16 +155,16 @@ public class LogFormatTest {
     }
 
     @Test
-    public void testFormatHeaderTrailerOnly() throws IOException {
+    public void testLogFileFormatHeaderTrailerOnly() throws IOException {
         // Write header and trailer, no blocks
-        initWriter();
+        initLogFileWriter();
         writer.close();
         byte[] data = writerBaos.toByteArray();
-        initReader(data);
-        assertEquals("Major version mismatch", Log.VERSION_MAJOR,
+        initLogFileReader(data);
+        assertEquals("Major version mismatch", LogFile.VERSION_MAJOR,
             reader.getHeader().getMajorVersion());
         assertNull("Should be no records", reader.next(null));
-        LogTrailer trailer = (LogTrailer) reader.getTrailer();
+        LogFileTrailer trailer = (LogFileTrailer) reader.getTrailer();
         assertNotNull("Trailer should exist", trailer);
         assertEquals("Trailer record count should be 0", 0, trailer.getRecordCount());
         assertEquals("Trailer block count should be 0", 0, trailer.getBlockCount());
@@ -174,11 +174,11 @@ public class LogFormatTest {
     }
 
     @Test
-    public void testCorruptionInvalidBlockMagic() throws IOException {
-        initWriter();
-        List<Log.Record> block1Records = writeBlock(writer, "B1",  0, 10);
-        List<Log.Record> block2Records = writeBlock(writer, "B2", 10, 10);
-        List<Log.Record> block3Records = writeBlock(writer, "B3", 20, 10);
+    public void testLogFileCorruptionInvalidBlockMagic() throws IOException {
+        initLogFileWriter();
+        List<LogFile.Record> block1Records = writeBlock(writer, "B1",  0, 10);
+        List<LogFile.Record> block2Records = writeBlock(writer, "B2", 10, 10);
+        List<LogFile.Record> block3Records = writeBlock(writer, "B3", 20, 10);
         writer.close();
 
         byte[] data = writerBaos.toByteArray();
@@ -186,9 +186,9 @@ public class LogFormatTest {
         int block1End = findBlockEndOffset(data, (int)writer.getBlocksStartOffset());
         data[(int)block1End] = (byte) 'X'; // Corrupt the first byte of 'PBLK'
 
-        initReader(data);
+        initLogFileReader(data);
 
-        List<Log.Record> decoded = readRecords(reader);
+        List<LogFile.Record> decoded = readRecords(reader);
 
         int shouldHave = block1Records.size() + block3Records.size();
         int have = decoded.size();
@@ -210,11 +210,11 @@ public class LogFormatTest {
     }
 
     @Test
-    public void testCorruptionBadBlockChecksum() throws IOException {
-        initWriter();
-        List<Log.Record> block1Records = writeBlock(writer, "B1",  0, 5);
-        List<Log.Record> block2Records = writeBlock(writer, "B2",  5, 5);
-        List<Log.Record> block3Records = writeBlock(writer, "B3", 10, 5);
+    public void testLogFileCorruptionBadBlockChecksum() throws IOException {
+        initLogFileWriter();
+        List<LogFile.Record> block1Records = writeBlock(writer, "B1",  0, 5);
+        List<LogFile.Record> block2Records = writeBlock(writer, "B2",  5, 5);
+        List<LogFile.Record> block3Records = writeBlock(writer, "B3", 10, 5);
         writer.close();
 
         byte[] data = writerBaos.toByteArray();
@@ -222,12 +222,12 @@ public class LogFormatTest {
         // Find offset of second block's checksum and corrupt it
         long block1End = findBlockEndOffset(data, (int)writer.getBlocksStartOffset());
         long block2End = findBlockEndOffset(data, (int)block1End);
-        int block2ChecksumOffset = (int) (block2End - Log.CHECKSUM_SIZE);
+        int block2ChecksumOffset = (int) (block2End - LogFile.CHECKSUM_SIZE);
         data[block2ChecksumOffset] ^= 0xFF; // Flip some bits in the checksum
 
-        initReader(data);
+        initLogFileReader(data);
 
-        List<Log.Record> decoded = readRecords(reader);
+        List<LogFile.Record> decoded = readRecords(reader);
 
         // Should read block 1 and block 3, skipping block 2
         int shouldHave = block1Records.size() + block3Records.size();
@@ -249,11 +249,11 @@ public class LogFormatTest {
     }
 
     @Test
-    public void testCorruptionBadRecord() throws IOException {
-        initWriter();
-        List<Log.Record> block1Records = writeBlock(writer, "B1",  0, 10);
-        List<Log.Record> block2Records = writeBlock(writer, "B2", 10, 10);
-        List<Log.Record> block3Records = writeBlock(writer, "B3", 20, 10);
+    public void testLogFileCorruptionBadRecord() throws IOException {
+        initLogFileWriter();
+        List<LogFile.Record> block1Records = writeBlock(writer, "B1",  0, 10);
+        List<LogFile.Record> block2Records = writeBlock(writer, "B2", 10, 10);
+        List<LogFile.Record> block3Records = writeBlock(writer, "B3", 20, 10);
         writer.close();
 
         byte[] data = writerBaos.toByteArray();
@@ -263,9 +263,9 @@ public class LogFormatTest {
         long block2Start = block1End + LogBlockHeader.HEADER_SIZE;
         data[(int)block2Start + 1] ^= 0xFF;
 
-        initReader(data);
+        initLogFileReader(data);
 
-        List<Log.Record> decoded = readRecords(reader);
+        List<LogFile.Record> decoded = readRecords(reader);
 
         // Should read block 1 and block 3, skipping block 2
         int shouldHave = block1Records.size() + block3Records.size();
@@ -287,10 +287,10 @@ public class LogFormatTest {
     }
 
     @Test
-    public void testCorruptionTruncatedFinalBlock() throws IOException {
-        initWriter();
-        List<Log.Record> block1Records = writeBlock(writer, "B1",  0, 10);
-        List<Log.Record> block2Records = writeBlock(writer, "B2", 10, 10);
+    public void testLogFileCorruptionTruncatedFinalBlock() throws IOException {
+        initLogFileWriter();
+        List<LogFile.Record> block1Records = writeBlock(writer, "B1",  0, 10);
+        List<LogFile.Record> block2Records = writeBlock(writer, "B2", 10, 10);
         // Don't close the writer, simulate truncation within the last block
         // Get the current position which is somewhere inside block 2's data
         long truncationPoint = writer.getPosition() - 10; // Truncate 10 bytes before end
@@ -298,10 +298,10 @@ public class LogFormatTest {
         byte[] data = writerBaos.toByteArray();
         byte[] truncatedData = Arrays.copyOf(data, (int) truncationPoint);
 
-        initReader(truncatedData);
+        initLogFileReader(truncatedData);
 
-        List<Log.Record> decoded = new ArrayList<>();
-        Log.Record r;
+        List<LogFile.Record> decoded = new ArrayList<>();
+        LogFile.Record r;
         try {
             while ((r = reader.next(null)) != null) {
                 decoded.add(r);
@@ -331,9 +331,9 @@ public class LogFormatTest {
     }
 
     @Test
-    public void testCorruptionMissingTrailer() throws IOException {
-        initWriter();
-        List<Log.Record> block1Records = writeBlock(writer, "B1", 0, 5);
+    public void testLogFileCorruptionMissingTrailer() throws IOException {
+        initLogFileWriter();
+        List<LogFile.Record> block1Records = writeBlock(writer, "B1", 0, 5);
         // Don't close the writer, simulate missing trailer
         long trailerStartOffset = writer.getPosition(); // Position before trailer write
 
@@ -347,7 +347,7 @@ public class LogFormatTest {
         // This init should log a warning but succeed
         reader.init(readerContext, fsis);
 
-        List<Log.Record> decoded = readRecords(reader);
+        List<LogFile.Record> decoded = readRecords(reader);
 
         assertEquals("Should read all records from block 1", block1Records.size(), decoded.size());
         for (int i = 0; i < block1Records.size(); i++) {
@@ -471,13 +471,13 @@ public class LogFormatTest {
         }
     }
 
-    private void initReader(byte[] data) throws IOException {
+    private void initLogFileReader(byte[] data) throws IOException {
         FSDataInputStream fsis = new FSDataInputStream(new PositionedByteArrayInputStream(data));
         readerContext.setFileSize(data.length);
         reader.init(readerContext, fsis);
     }
 
-    private void initWriter() throws IOException {
+    private void initLogFileWriter() throws IOException {
         FSDataOutputStream fsos = new FSDataOutputStream(writerDos, null) {
             @Override
             public long getPos() {
@@ -495,9 +495,9 @@ public class LogFormatTest {
         writer.init(writerContext, fsos);
     }
 
-    private Log.Record newRecord(String table, long commitId, String rowKey, long ts, int numCols) {
-        Log.Record record = new LogRecord()
-            .setMutationType(Log.MutationType.PUT)
+    private LogFile.Record newRecord(String table, long commitId, String rowKey, long ts, int numCols) {
+        LogFile.Record record = new LogFileRecord()
+            .setMutationType(LogFile.MutationType.PUT)
             .setSchemaObjectName(table)
             .setCommitId(commitId)
             .setRowKey(Bytes.toBytes(rowKey))
@@ -517,25 +517,25 @@ public class LogFormatTest {
         LogBlockHeader header = new LogBlockHeader();
         header.readFields(dis);
         int payloadSize = header.getCompressedSize();
-        int endOffset = startOffset + header.getSerializedLength() + payloadSize + Log.CHECKSUM_SIZE;
+        int endOffset = startOffset + header.getSerializedLength() + payloadSize + LogFile.CHECKSUM_SIZE;
         LOG.info("Block ending offset is " + endOffset);
         return endOffset;
     }
 
-    private List<Log.Record> readRecords(LogFormatReader reader) throws IOException {
-        List<Log.Record> decoded = new ArrayList<>();
-        Log.Record r;
+    private List<LogFile.Record> readRecords(LogFileFormatReader reader) throws IOException {
+        List<LogFile.Record> decoded = new ArrayList<>();
+        LogFile.Record r;
         while ((r = reader.next(null)) != null) {
             decoded.add(r);
         }
         return decoded;
     }
 
-    private List<Log.Record> writeBlock(LogFormatWriter writer, String tablePrefix,
+    private List<LogFile.Record> writeBlock(LogFileFormatWriter writer, String tablePrefix,
             long startCommitId, int numRecords) throws IOException {
-        List<Log.Record> records = new ArrayList<>();
+        List<LogFile.Record> records = new ArrayList<>();
         for (int i = 0; i < numRecords; i++) {
-            Log.Record r = newRecord(tablePrefix, startCommitId + i, "row" + (startCommitId + i),
+            LogFile.Record r = newRecord(tablePrefix, startCommitId + i, "row" + (startCommitId + i),
                 1000L + i, 1);
             records.add(r);
             writer.append(r);

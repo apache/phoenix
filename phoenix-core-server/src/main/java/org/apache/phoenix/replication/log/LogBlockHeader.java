@@ -24,17 +24,17 @@ import java.util.Arrays;
 import org.apache.hadoop.hbase.io.compress.Compression;
 import org.apache.hadoop.hbase.util.Bytes;
 
-public class LogBlockHeader implements Log.BlockHeader {
+public class LogBlockHeader implements LogFile.BlockHeader {
     private int version;
     private Compression.Algorithm compression;
     private int uncompressedSize;
     private int compressedSize;
 
-    public static final int HEADER_SIZE = Log.BlockHeader.MAGIC.length + (2 * Bytes.SIZEOF_BYTE)
-        + (2 * Bytes.SIZEOF_INT);
+    public static final int HEADER_SIZE = LogFile.BlockHeader.MAGIC.length
+        + (2 * Bytes.SIZEOF_BYTE) + (2 * Bytes.SIZEOF_INT);
 
     public LogBlockHeader() {
-        this.version = Log.BlockHeader.VERSION;
+        this.version = LogFile.BlockHeader.VERSION;
         this.compression = Compression.Algorithm.NONE;
     }
 
@@ -49,7 +49,7 @@ public class LogBlockHeader implements Log.BlockHeader {
     }
 
     @Override
-    public Log.BlockHeader setCompression(Compression.Algorithm compression) {
+    public LogFile.BlockHeader setCompression(Compression.Algorithm compression) {
         this.compression = compression;
         return this;
     }
@@ -60,7 +60,7 @@ public class LogBlockHeader implements Log.BlockHeader {
     }
 
     @Override
-    public Log.BlockHeader setUncompressedSize(int uncompressedSize) {
+    public LogFile.BlockHeader setUncompressedSize(int uncompressedSize) {
         this.uncompressedSize = uncompressedSize;
         return this;
     }
@@ -71,23 +71,23 @@ public class LogBlockHeader implements Log.BlockHeader {
     }
 
     @Override
-    public Log.BlockHeader setCompressedSize(int compressedSize) {
+    public LogFile.BlockHeader setCompressedSize(int compressedSize) {
         this.compressedSize = compressedSize;
         return this;
     }
 
     @Override
     public void readFields(DataInput in) throws IOException {
-        byte[] magic = new byte[Log.BlockHeader.MAGIC.length];
+        byte[] magic = new byte[LogFile.BlockHeader.MAGIC.length];
         in.readFully(magic);
-        if (!Arrays.equals(Log.BlockHeader.MAGIC, magic)) {
+        if (!Arrays.equals(LogFile.BlockHeader.MAGIC, magic)) {
             throw new IOException("Invalid Log block magic. Got " + Bytes.toStringBinary(magic)
-                + ", expected " + Bytes.toStringBinary(Log.BlockHeader.MAGIC));
+                + ", expected " + Bytes.toStringBinary(LogFile.BlockHeader.MAGIC));
         }
         version = in.readByte();
-        if (version != Log.BlockHeader.VERSION) {
+        if (version != LogFile.BlockHeader.VERSION) {
             throw new IOException("Unsupported Log block header version. Got " + version
-                + ", expected " + Log.BlockHeader.VERSION);
+                + ", expected " + LogFile.BlockHeader.VERSION);
         }
         int ordinal = in.readByte();
         compression = Compression.Algorithm.values()[ordinal];
@@ -97,7 +97,7 @@ public class LogBlockHeader implements Log.BlockHeader {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        out.write(Log.BlockHeader.MAGIC);
+        out.write(LogFile.BlockHeader.MAGIC);
         out.writeByte(version);
         out.writeByte((byte)compression.ordinal());
         out.writeInt(uncompressedSize);

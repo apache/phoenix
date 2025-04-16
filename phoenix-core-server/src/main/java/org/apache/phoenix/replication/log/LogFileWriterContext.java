@@ -27,45 +27,46 @@ import org.slf4j.LoggerFactory;
 /**
  * Context for {@link ReplicationLog.Writer}. Uses Builder pattern.
  */
-public class LogWriterContext {
+public class LogFileWriterContext {
 
-    private static final Logger LOG = LoggerFactory.getLogger(LogWriterContext.class);
+    private static final Logger LOG = LoggerFactory.getLogger(LogFileWriterContext.class);
 
     /** Configuration key for the block size */
-    public static final String LOG_BLOCK_SIZE = "phoenix.replication.log.block.size";
+    public static final String LOGFILE_BLOCK_SIZE = "phoenix.replication.logfile.block.size";
     /** Default block size for replication logs (e.g., 1MB) */
-    public static final long DEFAULT_LOG_BLOCK_SIZE = 1L * 1024 * 1024; // 1 MB
+    public static final long DEFAULT_LOGFILE_BLOCK_SIZE = 1L * 1024 * 1024; // 1 MB
 
     /** Configuration key for compression type */
-    public static final String LOG_COMPRESSION = "phoenix.replication.log.compression";
+    public static final String LOGFILE_COMPRESSION = "phoenix.replication.logfile.compression";
     /** Default block size for replication logs (e.g., 1MB) */
-    public static final String DEFAULT_LOG_COMPRESSION = Compression.Algorithm.NONE.name();
+    public static final String DEFAULT_LOGFILE_COMPRESSION = Compression.Algorithm.NONE.name();
 
     private final Configuration conf;
     private FileSystem fs;
     private Path path;
     private Compression.Algorithm compression;
-    private LogCodec codec;
+    private LogFileCodec codec;
     private long maxBlockSize;
 
-    public LogWriterContext(Configuration conf) {
+    public LogFileWriterContext(Configuration conf) {
         this.conf = conf;
         try {
-            this.compression = Compression.getCompressionAlgorithmByName(conf.get(LOG_COMPRESSION,
-                DEFAULT_LOG_COMPRESSION));
+            this.compression =
+                Compression.getCompressionAlgorithmByName(conf.get(LOGFILE_COMPRESSION,
+                    DEFAULT_LOGFILE_COMPRESSION));
         } catch (IllegalArgumentException e) {
             // "NONE" is not actually a valid compression algorithm name
             this.compression = Compression.Algorithm.NONE;
         }
-        this.maxBlockSize = conf.getLong(LOG_BLOCK_SIZE, DEFAULT_LOG_BLOCK_SIZE);
+        this.maxBlockSize = conf.getLong(LOGFILE_BLOCK_SIZE, DEFAULT_LOGFILE_BLOCK_SIZE);
         if (this.maxBlockSize <= 0) {
-            LOG.warn("Invalid {} configured: {}. Using default: {}", LOG_BLOCK_SIZE,
-                this.maxBlockSize, DEFAULT_LOG_BLOCK_SIZE);
-            this.maxBlockSize = DEFAULT_LOG_BLOCK_SIZE;
+            LOG.warn("Invalid {} configured: {}. Using default: {}", LOGFILE_BLOCK_SIZE,
+                this.maxBlockSize, DEFAULT_LOGFILE_BLOCK_SIZE);
+            this.maxBlockSize = DEFAULT_LOGFILE_BLOCK_SIZE;
         }
         // Note: When we have multiple codec types, instantiate the appropriate type based on
         // configuration;
-        this.codec = new LogCodec();
+        this.codec = new LogFileCodec();
     }
 
     public Configuration getConfiguration() {
@@ -80,12 +81,12 @@ public class LogWriterContext {
         return path;
     }
 
-    public LogWriterContext setFilePath(Path path) {
+    public LogFileWriterContext setFilePath(Path path) {
         this.path = path;
         return this;
     }
 
-    public LogWriterContext setFileSystem(FileSystem fs) {
+    public LogFileWriterContext setFileSystem(FileSystem fs) {
         this.fs = fs;
         return this;
     }
@@ -94,16 +95,16 @@ public class LogWriterContext {
         return compression;
     }
 
-    public LogWriterContext setCompression(Compression.Algorithm compression) {
+    public LogFileWriterContext setCompression(Compression.Algorithm compression) {
         this.compression = compression;
         return this;
     }
 
-    public LogCodec getCodec() {
+    public LogFileCodec getCodec() {
         return codec;
     }
 
-    public LogWriterContext setCodec(LogCodec codec) {
+    public LogFileWriterContext setCodec(LogFileCodec codec) {
         this.codec = codec;
         return this;
     }
@@ -112,14 +113,14 @@ public class LogWriterContext {
         return maxBlockSize;
     }
 
-    public LogWriterContext setMaxBlockSize(long maxBlockSize) {
+    public LogFileWriterContext setMaxBlockSize(long maxBlockSize) {
         this.maxBlockSize = maxBlockSize;
         return this;
     }
 
     @Override
     public String toString() {
-        return "LogWriterContext [path=" + path + ", compression=" + compression + ", codec="
+        return "LogFileWriterContext [path=" + path + ", compression=" + compression + ", codec="
             + codec + ", maxBlockSize=" + maxBlockSize + "]";
     }
 

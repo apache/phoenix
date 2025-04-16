@@ -26,18 +26,18 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.util.Bytes;
 
-public class LogTrailer implements Log.Trailer {
-    private int majorVersion = Log.VERSION_MAJOR;
-    private int minorVersion = Log.VERSION_MINOR;
+public class LogFileTrailer implements LogFile.Trailer {
+    private int majorVersion = LogFile.VERSION_MAJOR;
+    private int minorVersion = LogFile.VERSION_MINOR;
     private long recordCount;
     private long blockCount;
     private long blocksStartOffset;
     private long trailerStartOffset;
 
-    public static final int VERSION_AND_MAGIC_SIZE = Log.MAGIC.length + 2 * Bytes.SIZEOF_BYTE;
+    public static final int VERSION_AND_MAGIC_SIZE = LogFile.MAGIC.length + 2 * Bytes.SIZEOF_BYTE;
     public static final int FIXED_TRAILER_SIZE = Bytes.SIZEOF_LONG * 4 + VERSION_AND_MAGIC_SIZE;
 
-    public LogTrailer() {
+    public LogFileTrailer() {
 
     }
 
@@ -56,13 +56,13 @@ public class LogTrailer implements Log.Trailer {
     }
 
     @Override
-    public Log.Trailer setMajorVersion(int majorVersion) {
+    public LogFile.Trailer setMajorVersion(int majorVersion) {
         this.majorVersion = majorVersion;
         return this;
     }
 
     @Override
-    public Log.Trailer setMinorVersion(int minorVersion) {
+    public LogFile.Trailer setMinorVersion(int minorVersion) {
         this.minorVersion = minorVersion;
         return this;
     }
@@ -73,7 +73,7 @@ public class LogTrailer implements Log.Trailer {
     }
 
     @Override
-    public Log.Trailer setRecordCount(long recordCount) {
+    public LogFile.Trailer setRecordCount(long recordCount) {
         this.recordCount = recordCount;
         return this;
     }
@@ -84,7 +84,7 @@ public class LogTrailer implements Log.Trailer {
     }
 
     @Override
-    public Log.Trailer setBlockCount(long blockCount) {
+    public LogFile.Trailer setBlockCount(long blockCount) {
         this.blockCount = blockCount;
         return this;
     }
@@ -95,7 +95,7 @@ public class LogTrailer implements Log.Trailer {
     }
 
     @Override
-    public Log.Trailer setBlocksStartOffset(long offset) {
+    public LogFile.Trailer setBlocksStartOffset(long offset) {
         this.blocksStartOffset = offset;
         return this;
     }
@@ -106,7 +106,7 @@ public class LogTrailer implements Log.Trailer {
     }
 
     @Override
-    public Log.Trailer setTrailerStartOffset(long offset) {
+    public LogFile.Trailer setTrailerStartOffset(long offset) {
         this.trailerStartOffset = offset;
         return this;
     }
@@ -119,23 +119,24 @@ public class LogTrailer implements Log.Trailer {
         this.majorVersion = in.readByte();
         this.minorVersion = in.readByte();
         // Basic version check for now
-        if (this.majorVersion != Log.VERSION_MAJOR && this.minorVersion > Log.VERSION_MINOR) {
-            throw new IOException("Unsupported Replication Log version. Got major="
-                + this.majorVersion + " minor=" + this.minorVersion + ", expected major="
-                + Log.VERSION_MAJOR + " minor=" + Log.VERSION_MINOR);
+        if (this.majorVersion != LogFile.VERSION_MAJOR 
+                && this.minorVersion > LogFile.VERSION_MINOR) {
+            throw new IOException("Unsupported LogFile version. Got major=" + majorVersion
+                + " minor=" + minorVersion + ", expected major=" + LogFile.VERSION_MAJOR
+                + " minor=" + LogFile.VERSION_MINOR);
         }
-        byte[] magic = new byte[Log.MAGIC.length];
+        byte[] magic = new byte[LogFile.MAGIC.length];
         in.readFully(magic);
-        if (!Arrays.equals(Log.MAGIC, magic)) {
-            throw new IOException("Invalid Replication Log file magic. Got "
-                + Bytes.toStringBinary(magic) + ", expected " + Bytes.toStringBinary(Log.MAGIC));
+        if (!Arrays.equals(LogFile.MAGIC, magic)) {
+            throw new IOException("Invalid LogFile magic. Got " + Bytes.toStringBinary(magic)
+                + ", expected " + Bytes.toStringBinary(LogFile.MAGIC));
         }
     }
 
     public void readMetadata(DataInput in) throws IOException {
         int protoSize = in.readInt();
         if (protoSize < 0) {
-            throw new IOException("Invalid Protobuf message size in trailer: " + protoSize);
+            throw new IOException("Invalid Protobuf message size in LogFile trailer");
         }
         if (protoSize > 0) {
             byte[] protoBytes = new byte[protoSize];
@@ -160,7 +161,7 @@ public class LogTrailer implements Log.Trailer {
         out.writeLong(this.trailerStartOffset);
         out.writeByte(this.getMajorVersion());
         out.writeByte(this.getMinorVersion());
-        out.write(Log.MAGIC);
+        out.write(LogFile.MAGIC);
     }
 
     @Override
@@ -182,15 +183,15 @@ public class LogTrailer implements Log.Trailer {
             return false;
         }
         in.seek(offset);
-        byte[] magic = new byte[Log.MAGIC.length];
+        byte[] magic = new byte[LogFile.MAGIC.length];
         in.readFully(magic);
-        if (!Arrays.equals(Log.MAGIC, magic)) {
+        if (!Arrays.equals(LogFile.MAGIC, magic)) {
             return false;
         }
         int majorVersion = in.readByte();
         int minorVersion = in.readByte();
         // Basic version check for now
-        if (majorVersion != Log.VERSION_MAJOR && minorVersion > Log.VERSION_MINOR) {
+        if (majorVersion != LogFile.VERSION_MAJOR && minorVersion > LogFile.VERSION_MINOR) {
             return false;
         }
         return true;
@@ -198,7 +199,7 @@ public class LogTrailer implements Log.Trailer {
 
     @Override
     public String toString() {
-        return "LogTrailer [majorVersion=" + majorVersion + ", minorVersion=" + minorVersion
+        return "LogFileTrailer [majorVersion=" + majorVersion + ", minorVersion=" + minorVersion
             + ", recordCount=" + recordCount + ", blockCount=" + blockCount
             + ", blocksStartOffset=" + blocksStartOffset + ", trailerStartOffset="
             + trailerStartOffset + "]";

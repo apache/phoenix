@@ -34,17 +34,17 @@ import java.util.List;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.Test;
 
-public class LogCodecTest {
+public class LogFileCodecTest {
 
     @Test
-    public void testLogCodecSingleRecord() throws IOException {
-        LogCodec codec = new LogCodec();
-        Log.Record originalRecord = newRecord("TBL1", 100L, "row1", 12345L, 1);
+    public void testLogFileCodecSingleRecord() throws IOException {
+        LogFileCodec codec = new LogFileCodec();
+        LogFile.Record originalRecord = newRecord("TBL1", 100L, "row1", 12345L, 1);
 
         // Encode
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(baos);
-        Log.Codec.Encoder encoder = codec.getEncoder(dos);
+        LogFile.Codec.Encoder encoder = codec.getEncoder(dos);
         encoder.write(originalRecord);
         dos.close();
         byte[] encodedBytes = baos.toByteArray();
@@ -52,10 +52,10 @@ public class LogCodecTest {
         // Decode
         ByteArrayInputStream bais = new ByteArrayInputStream(encodedBytes);
         DataInputStream dis = new DataInputStream(bais);
-        Log.Codec.Decoder decoder = codec.getDecoder(dis);
+        LogFile.Codec.Decoder decoder = codec.getDecoder(dis);
 
         assertTrue("Should be able to advance decoder", decoder.advance(null));
-        LogRecord decodedRecord = (LogRecord) decoder.current();
+        LogFileRecord decodedRecord = (LogFileRecord) decoder.current();
 
         // Verify length was set
         assertTrue("Serialized length should be greater than 0",
@@ -67,15 +67,15 @@ public class LogCodecTest {
     }
 
     @Test
-    public void testLogCodecReuseRecord() throws IOException {
-        LogCodec codec = new LogCodec();
-        Log.Record originalRecord1 = newRecord("TBL1", 100L, "row1", 12345L, 1);
-        Log.Record originalRecord2 = newRecord("TBL2", 101L, "row2", 12346L, 2);
+    public void testLogFileCodecReuseRecord() throws IOException {
+        LogFileCodec codec = new LogFileCodec();
+        LogFile.Record originalRecord1 = newRecord("TBL1", 100L, "row1", 12345L, 1);
+        LogFile.Record originalRecord2 = newRecord("TBL2", 101L, "row2", 12346L, 2);
 
         // Encode
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(baos);
-        Log.Codec.Encoder encoder = codec.getEncoder(dos);
+        LogFile.Codec.Encoder encoder = codec.getEncoder(dos);
         encoder.write(originalRecord1);
         encoder.write(originalRecord2);
         dos.close();
@@ -84,17 +84,17 @@ public class LogCodecTest {
         // Decode
         ByteArrayInputStream bais = new ByteArrayInputStream(encodedBytes);
         DataInputStream dis = new DataInputStream(bais);
-        Log.Codec.Decoder decoder = codec.getDecoder(dis);
+        LogFile.Codec.Decoder decoder = codec.getDecoder(dis);
 
-        LogRecord reusableRecord = new LogRecord();
+        LogFileRecord reusableRecord = new LogFileRecord();
 
         assertTrue("Should advance to first record", decoder.advance(reusableRecord));
-        LogRecord decoded1 = (LogRecord) decoder.current();
+        LogFileRecord decoded1 = (LogFileRecord) decoder.current();
         assertSame("Should reuse the provided object for first record", reusableRecord, decoded1);
         assertEquals("First decoded record should match", originalRecord1, decoded1);
 
         assertTrue("Should advance to second record", decoder.advance(reusableRecord));
-        LogRecord decoded2 = (LogRecord) decoder.current();
+        LogFileRecord decoded2 = (LogFileRecord) decoder.current();
         assertSame("Should reuse the provided object for second record", reusableRecord, decoded2);
         assertEquals("Second decoded record should match", originalRecord2, decoded2);
 
@@ -102,9 +102,9 @@ public class LogCodecTest {
     }
 
     @Test
-    public void testLogCodecMultipleRecords() throws IOException {
-        LogCodec codec = new LogCodec();
-        List<Log.Record> originalRecords = Arrays.asList(
+    public void testLogFileCodecMultipleRecords() throws IOException {
+        LogFileCodec codec = new LogFileCodec();
+        List<LogFile.Record> originalRecords = Arrays.asList(
             newRecord("TBL1", 100L, "row1", 12345L, 1),
             newRecord("TBL2", 101L, "row2", 12346L, 2),
             newRecord("TBL1", 102L, "row3", 12347L, 0) // No columns
@@ -113,8 +113,8 @@ public class LogCodecTest {
         // Encode
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(baos);
-        Log.Codec.Encoder encoder = codec.getEncoder(dos);
-        for (Log.Record record : originalRecords) {
+        LogFile.Codec.Encoder encoder = codec.getEncoder(dos);
+        for (LogFile.Record record : originalRecords) {
             encoder.write(record);
         }
         dos.close();
@@ -123,11 +123,11 @@ public class LogCodecTest {
         // Decode
         ByteArrayInputStream bais = new ByteArrayInputStream(encodedBytes);
         DataInputStream dis = new DataInputStream(bais);
-        Log.Codec.Decoder decoder = codec.getDecoder(dis);
+        LogFile.Codec.Decoder decoder = codec.getDecoder(dis);
 
-        List<LogRecord> decodedRecords = new ArrayList<>();
+        List<LogFileRecord> decodedRecords = new ArrayList<>();
         while (decoder.advance(null)) {
-            decodedRecords.add((LogRecord) decoder.current());
+            decodedRecords.add((LogFileRecord) decoder.current());
         }
 
         assertEquals("Number of decoded records should match", originalRecords.size(),
@@ -141,32 +141,32 @@ public class LogCodecTest {
     }
 
     @Test
-    public void testLogCodecDecodeFromByteBuffer() throws IOException {
-        LogCodec codec = new LogCodec();
-        Log.Record originalRecord = newRecord("TBLBB", 200L, "row_bb", 54321L, 1);
+    public void testLogFileCodecDecodeFromByteBuffer() throws IOException {
+        LogFileCodec codec = new LogFileCodec();
+        LogFile.Record originalRecord = newRecord("TBLBB", 200L, "row_bb", 54321L, 1);
 
         // Encode
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(baos);
-        Log.Codec.Encoder encoder = codec.getEncoder(dos);
+        LogFile.Codec.Encoder encoder = codec.getEncoder(dos);
         encoder.write(originalRecord);
         dos.close();
         byte[] encodedBytes = baos.toByteArray();
 
         // Decode using ByteBuffer
         ByteBuffer buffer = ByteBuffer.wrap(encodedBytes);
-        Log.Codec.Decoder decoder = codec.getDecoder(buffer);
+        LogFile.Codec.Decoder decoder = codec.getDecoder(buffer);
 
         assertTrue("Should be able to advance decoder from ByteBuffer", decoder.advance(null));
-        LogRecord decodedRecord = (LogRecord) decoder.current();
+        LogFileRecord decodedRecord = (LogFileRecord) decoder.current();
         assertEquals("Decoded record from ByteBuffer should match original", originalRecord,
             decodedRecord);
         assertFalse("Should be no more records in ByteBuffer", decoder.advance(null));
     }
 
-    private Log.Record newRecord(String table, long commitId, String rowKey, long ts, int numCols) {
-        Log.Record record = new LogRecord()
-            .setMutationType(Log.MutationType.PUT)
+    private LogFile.Record newRecord(String table, long commitId, String rowKey, long ts, int numCols) {
+        LogFile.Record record = new LogFileRecord()
+            .setMutationType(LogFile.MutationType.PUT)
             .setSchemaObjectName(table)
             .setCommitId(commitId)
             .setRowKey(Bytes.toBytes(rowKey))

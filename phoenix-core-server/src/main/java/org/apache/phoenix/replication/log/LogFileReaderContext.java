@@ -26,30 +26,31 @@ import org.apache.hadoop.fs.Path;
 /**
  * Context for {@link ReplicationLog.Reader}. Uses Builder pattern.
  */
-public class LogReaderContext {
+public class LogFileReaderContext {
 
-    /** Configuration key for compression type */
-    public static final String LOG_SKIP_CORRUPT_BLOCKS = "phoenix.replication.log.skip.corrupt.blocks";
+    /** Configuration key for skipping corrupt blocks */
+    public static final String LOGFILE_SKIP_CORRUPT_BLOCKS =
+        "phoenix.replication.logfile.skip.corrupt.blocks";
     /** Default for skipping corrupt blocks */
-    public static final boolean DEFAULT_LOG_SKIP_CORRUPT_BLOCKS = true;
+    public static final boolean DEFAULT_LOGFILE_SKIP_CORRUPT_BLOCKS = true;
 
     private final Configuration conf;
     private FileSystem fs;
     private Path path;
-    private LogCodec codec;
+    private LogFileCodec codec;
     private long fileSize = -1;
     private boolean isSkipCorruptBlocks;
     private AtomicLong blocksRead = new AtomicLong();
     private AtomicLong recordsRead = new AtomicLong();
     private AtomicLong corruptBlocksSkipped = new AtomicLong();
 
-    public LogReaderContext(Configuration conf) {
+    public LogFileReaderContext(Configuration conf) {
         this.conf = conf;
-        this.isSkipCorruptBlocks = conf.getBoolean(LOG_SKIP_CORRUPT_BLOCKS,
-            DEFAULT_LOG_SKIP_CORRUPT_BLOCKS);
+        this.isSkipCorruptBlocks = conf.getBoolean(LOGFILE_SKIP_CORRUPT_BLOCKS,
+            DEFAULT_LOGFILE_SKIP_CORRUPT_BLOCKS);
         // Note: When we have multiple codec types, instantiate the appropriate type based on
         // configuration;
-        this.codec = new LogCodec();
+        this.codec = new LogFileCodec();
     }
 
     public Configuration getConfiguration() {
@@ -60,7 +61,7 @@ public class LogReaderContext {
         return fs;
     }
 
-    public LogReaderContext setFileSystem(FileSystem fileSystem) {
+    public LogFileReaderContext setFileSystem(FileSystem fileSystem) {
         this.fs = fileSystem;
         return this;
     }
@@ -69,7 +70,7 @@ public class LogReaderContext {
         return path;
     }
 
-    public LogReaderContext setFilePath(Path filePath) {
+    public LogFileReaderContext setFilePath(Path filePath) {
         this.path = filePath;
         return this;
     }
@@ -81,7 +82,7 @@ public class LogReaderContext {
         return fileSize;
     }
 
-    public LogReaderContext setFileSize(long fileSize) {
+    public LogFileReaderContext setFileSize(long fileSize) {
         this.fileSize = fileSize;
         return this;
     }
@@ -90,16 +91,16 @@ public class LogReaderContext {
         return isSkipCorruptBlocks;
     }
 
-    public LogReaderContext setSkipCorruptBlocks(boolean isSkipCorruptBlocks) {
+    public LogFileReaderContext setSkipCorruptBlocks(boolean isSkipCorruptBlocks) {
         this.isSkipCorruptBlocks = isSkipCorruptBlocks;
         return this;
     }
 
-    public LogCodec getCodec() {
+    public LogFileCodec getCodec() {
         return codec;
     }
 
-    public LogReaderContext setCodec(LogCodec codec) {
+    public LogFileReaderContext setCodec(LogFileCodec codec) {
         this.codec = codec;
         return this;
     }
@@ -112,7 +113,7 @@ public class LogReaderContext {
         return blocksRead.get();
     }
 
-    public LogReaderContext setBlocksRead(long value) {
+    public LogFileReaderContext setBlocksRead(long value) {
         blocksRead.set(value);
         return this;
     }
@@ -125,7 +126,7 @@ public class LogReaderContext {
         return recordsRead.get();
     }
 
-    public LogReaderContext setRecordsRead(long value) {
+    public LogFileReaderContext setRecordsRead(long value) {
         recordsRead.set(value);
         return this;
     }
@@ -138,14 +139,14 @@ public class LogReaderContext {
         return corruptBlocksSkipped.get();
     }
 
-    public LogReaderContext setCorruptBlocksSkipped(long value) {
+    public LogFileReaderContext setCorruptBlocksSkipped(long value) {
         corruptBlocksSkipped.set(value);
         return this;
     }
 
     @Override
     public String toString() {
-        return "LogReaderContext [filePath=" + path + ", fileSize=" + fileSize
+        return "LogFileReaderContext [filePath=" + path + ", fileSize=" + fileSize
             + ", isSkipCorruptBlocks=" + isSkipCorruptBlocks + ", codec=" + codec + ", blocksRead="
             + blocksRead + ", recordsRead=" + recordsRead + ", corruptBlocksSkipped="
             + corruptBlocksSkipped + "]";

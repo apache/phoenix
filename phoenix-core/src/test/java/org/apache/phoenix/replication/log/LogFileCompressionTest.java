@@ -45,9 +45,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @RunWith(Parameterized.class)
-public class LogCompressionTest {
+public class LogFileCompressionTest {
 
-    private static final Logger LOG = LoggerFactory.getLogger(LogCompressionTest.class);
+    private static final Logger LOG = LoggerFactory.getLogger(LogFileCompressionTest.class);
 
     @ClassRule
     public static TemporaryFolder testFolder = new TemporaryFolder();
@@ -56,12 +56,12 @@ public class LogCompressionTest {
     private FileSystem localFs;
     private Path filePath;
     private Compression.Algorithm compression;
-    private LogReaderContext readerContext;
-    private LogReader reader;
-    private LogWriterContext writerContext;
-    private LogWriter writer;
+    private LogFileReaderContext readerContext;
+    private LogFileReader reader;
+    private LogFileWriterContext writerContext;
+    private LogFileWriter writer;
 
-    public LogCompressionTest(Compression.Algorithm compression) {
+    public LogFileCompressionTest(Compression.Algorithm compression) {
         this.compression = compression;
     }
 
@@ -90,8 +90,8 @@ public class LogCompressionTest {
         // Use a unique path for each test instance based on compression
         filePath = new Path(testFolder.newFile("LogCompressionTest_"
             + compression.getName()).toURI());
-        reader = new LogReader();
-        writer = new LogWriter();
+        reader = new LogFileReader();
+        writer = new LogFileWriter();
     }
 
     @After
@@ -101,57 +101,57 @@ public class LogCompressionTest {
     }
 
     @Test
-    public void testSingleBlockWithCompression() throws IOException {
+    public void testLogFileSingleBlockWithCompression() throws IOException {
         LOG.info("Testing single block with compression {}", compression.getName());
-        initLogWriter(LogWriterContext.DEFAULT_LOG_BLOCK_SIZE);
-        List<Log.Record> originals = new ArrayList<>();
+        initLogFileWriter(LogFileWriterContext.DEFAULT_LOGFILE_BLOCK_SIZE);
+        List<LogFile.Record> originals = new ArrayList<>();
         for (int i = 0; i < 100; i++) {
-            Log.Record r = newRecord("TBL1", (long)i, "row" + i, 100L + i, 2);
+            LogFile.Record r = newRecord("TBL1", (long)i, "row" + i, 100L + i, 2);
             originals.add(r);
             writer.append(r);
         }
         writer.close();
-        initLogReader();
+        initLogFileReader();
         readAndVerifyRecords(originals, 1); // Expect exactly one block
     }
 
     @Test
-    public void testMultipleBlocksWithCompression() throws IOException {
+    public void testLogFileMultipleBlocksWithCompression() throws IOException {
         LOG.info("Testing multiple blocks with compression {}", compression.getName());
         // Use a small block size to force multiple blocks
-        initLogWriter(8 * 1024); // 8k
-        List<Log.Record> originals = new ArrayList<>();
+        initLogFileWriter(8 * 1024); // 8k
+        List<LogFile.Record> originals = new ArrayList<>();
         // Generate enough records to span multiple blocks
         for (int i = 0; i < 100_000; i++) {
-            Log.Record r = newRecord("TBL_MULTI", (long)i, "row" + i, 200L + i, 5);
+            LogFile.Record r = newRecord("TBL_MULTI", (long)i, "row" + i, 200L + i, 5);
             originals.add(r);
             writer.append(r);
         }
         writer.close();
-        initLogReader();
+        initLogFileReader();
         assertTrue("File has more than one block", reader.getTrailer().getBlockCount() > 1);
         readAndVerifyRecords(originals, reader.getTrailer().getBlockCount());
     }
 
     @Test
-    public void testEmptyFile() throws IOException {
+    public void testLogFileEmptyFile() throws IOException {
         LOG.info("Testing empty file with compression {}", compression.getName());
-        initLogWriter(LogWriterContext.DEFAULT_LOG_BLOCK_SIZE);
+        initLogFileWriter(LogFileWriterContext.DEFAULT_LOGFILE_BLOCK_SIZE);
         writer.close(); // Creates an empty file (header + trailer)
-        initLogReader();
+        initLogFileReader();
         assertNull("Next should return null for empty file", reader.next());
         reader.close();
     }
 
-    private void initLogReader() throws IOException {
-        readerContext = new LogReaderContext(conf)
+    private void initLogFileReader() throws IOException {
+        readerContext = new LogFileReaderContext(conf)
             .setFileSystem(localFs)
             .setFilePath(filePath);
         reader.init(readerContext);
     }
 
-    private void initLogWriter(long maxBlockSize) throws IOException {
-        writerContext = new LogWriterContext(conf)
+    private void initLogFileWriter(long maxBlockSize) throws IOException {
+        writerContext = new LogFileWriterContext(conf)
             .setCompression(compression)
             .setFileSystem(localFs)
             .setFilePath(filePath)
@@ -159,10 +159,10 @@ public class LogCompressionTest {
         writer.init(writerContext);
     }
 
-    private Log.Record newRecord(String table, long commitId, String rowKey, long ts,
+    private LogFile.Record newRecord(String table, long commitId, String rowKey, long ts,
             int numCols) {
-        Log.Record record = new LogRecord()
-            .setMutationType(Log.MutationType.PUT)
+        LogFile.Record record = new LogFileRecord()
+            .setMutationType(LogFile.MutationType.PUT)
             .setSchemaObjectName(table)
             .setCommitId(commitId)
             .setRowKey(Bytes.toBytes(rowKey))
@@ -173,19 +173,19 @@ public class LogCompressionTest {
         return record;
     }
 
-    private void readAndVerifyRecords(List<Log.Record> originalRecords, long expectedBlockCount)
+    private void readAndVerifyRecords(List<LogFile.Record> originalRecords, long expectedBlockCount)
             throws IOException {
         assertTrue("Test file does not exist: " + filePath, localFs.exists(filePath));
         assertTrue("Test file has zero length: " + filePath,
             localFs.getFileStatus(filePath).getLen() > 0);
 
         // Verify Header
-        Log.Header header = reader.getHeader();
+        LogFile.Header header = reader.getHeader();
         assertNotNull("Header should not be null", header);
 
         // Read records using iterator
-        List<Log.Record> decodedRecords = new ArrayList<>();
-        Iterator<Log.Record> iterator = reader.iterator();
+        List<LogFile.Record> decodedRecords = new ArrayList<>();
+        Iterator<LogFile.Record> iterator = reader.iterator();
         while (iterator.hasNext()) {
           decodedRecords.add(iterator.next());
         }
@@ -198,7 +198,7 @@ public class LogCompressionTest {
         }
 
         // Verify Trailer
-        Log.Trailer trailer = reader.getTrailer();
+        LogFile.Trailer trailer = reader.getTrailer();
         assertNotNull("Trailer should not be null", trailer);
         assertEquals("Trailer record count mismatch", originalRecords.size(),
             trailer.getRecordCount());

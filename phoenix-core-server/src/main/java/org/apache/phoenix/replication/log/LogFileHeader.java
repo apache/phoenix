@@ -27,14 +27,13 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.util.Bytes;
 
-public class LogHeader implements Log.Header {
-    private int majorVersion = Log.VERSION_MAJOR;
-    private int minorVersion = Log.VERSION_MINOR;
-    private int blockChecksumVersion = Log.CHECKSUM_VERSION;
+public class LogFileHeader implements LogFile.Header {
+    private int majorVersion = LogFile.VERSION_MAJOR;
+    private int minorVersion = LogFile.VERSION_MINOR;
 
-    public static int HEADER_SIZE = Log.MAGIC.length + 3 * Bytes.SIZEOF_BYTE;
+    public static int HEADER_SIZE = LogFile.MAGIC.length + 3 * Bytes.SIZEOF_BYTE;
 
-    public LogHeader() {
+    public LogFileHeader() {
 
     }
 
@@ -44,7 +43,7 @@ public class LogHeader implements Log.Header {
     }
 
     @Override
-    public Log.Header setMajorVersion(int majorVersion) {
+    public LogFile.Header setMajorVersion(int majorVersion) {
         this.majorVersion = majorVersion;
         return this;
     }
@@ -55,42 +54,34 @@ public class LogHeader implements Log.Header {
     }
 
     @Override
-    public Log.Header setMinorVersion(int minorVersion) {
+    public LogFile.Header setMinorVersion(int minorVersion) {
         this.minorVersion = minorVersion;
         return this;
     }
 
     @Override
     public void readFields(DataInput in) throws IOException {
-        byte[] magic = new byte[Log.MAGIC.length];
+        byte[] magic = new byte[LogFile.MAGIC.length];
         in.readFully(magic);
-        if (!Arrays.equals(Log.MAGIC, magic)) {
-            throw new IOException("Invalid Replication Log file magic. Got "
-                + Bytes.toStringBinary(magic) + ", expected "
-                + Bytes.toStringBinary(Log.MAGIC));
+        if (!Arrays.equals(LogFile.MAGIC, magic)) {
+            throw new IOException("Invalid LogFile magic. Got " + Bytes.toStringBinary(magic)
+                + ", expected " + Bytes.toStringBinary(LogFile.MAGIC));
         }
         majorVersion = in.readByte();
         minorVersion = in.readByte();
         // Basic version check for now
-        if (majorVersion != Log.VERSION_MAJOR && minorVersion > Log.VERSION_MINOR) {
-            throw new IOException("Unsupported Log version. Got major=" + majorVersion
-                + " minor=" + minorVersion + ", expected major=" + Log.VERSION_MAJOR
-                + " minor=" + Log.VERSION_MINOR);
-        }
-        blockChecksumVersion = in.readByte();
-        // Basic version check for now
-        if (blockChecksumVersion != Log.CHECKSUM_VERSION) {
-            throw new IOException("Unsupported Log checksum version. Got "
-                + blockChecksumVersion + ", expected " + Log.CHECKSUM_VERSION);
+        if (majorVersion != LogFile.VERSION_MAJOR && minorVersion > LogFile.VERSION_MINOR) {
+            throw new IOException("Unsupported LogFile version. Got major=" + majorVersion
+                + " minor=" + minorVersion + ", expected major=" + LogFile.VERSION_MAJOR
+                + " minor=" + LogFile.VERSION_MINOR);
         }
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
-        out.write(Log.MAGIC);
+        out.write(LogFile.MAGIC);
         out.writeByte(majorVersion);
         out.writeByte(minorVersion);
-        out.writeByte(blockChecksumVersion);
     }
 
     @Override
@@ -98,7 +89,8 @@ public class LogHeader implements Log.Header {
         return HEADER_SIZE;
     }
 
-    public static boolean isValidHeader(final FileSystem fs, final Path path) throws IOException {
+    public static boolean isValidHeader(final FileSystem fs, final Path path)
+            throws IOException {
         if (fs.getFileStatus(path).getLen() < HEADER_SIZE) {
             return false;
         }
@@ -109,15 +101,15 @@ public class LogHeader implements Log.Header {
 
     public static boolean isValidHeader(FSDataInputStream in) throws IOException {
         in.seek(0);
-        byte[] magic = new byte[Log.MAGIC.length];
+        byte[] magic = new byte[LogFile.MAGIC.length];
         in.readFully(magic);
-        if (!Arrays.equals(Log.MAGIC, magic)) {
+        if (!Arrays.equals(LogFile.MAGIC, magic)) {
             return false;
         }
         int majorVersion = in.readByte();
         int minorVersion = in.readByte();
         // Basic version check for now
-        if (majorVersion != Log.VERSION_MAJOR && minorVersion > Log.VERSION_MINOR) {
+        if (majorVersion != LogFile.VERSION_MAJOR && minorVersion > LogFile.VERSION_MINOR) {
             return false;
         }
         return true;
@@ -125,8 +117,8 @@ public class LogHeader implements Log.Header {
 
     @Override
     public String toString() {
-        return "LogHeader [majorVersion=" + majorVersion + ", minorVersion=" + minorVersion
-            + ", blockChecksumVersion=" + blockChecksumVersion + "]";
+        return "LogFileHeader [majorVersion=" + majorVersion + ", minorVersion=" + minorVersion
+            + "]";
     }
 
 }

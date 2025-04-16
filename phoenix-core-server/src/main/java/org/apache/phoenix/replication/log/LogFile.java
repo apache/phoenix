@@ -34,7 +34,7 @@ import org.apache.hadoop.hbase.util.Bytes;
  * Defines the structure and constants for Phoenix Replication Log files.
  * Provides interfaces for reading and writing these logs.
  */
-public final class Log {
+public final class LogFile {
 
     /** Magic number for Phoenix Replication Log files */
     public static byte[] MAGIC = Bytes.toBytes("PLOG");
@@ -44,8 +44,6 @@ public final class Log {
     /** Current minor version of the replication log format */
     public static byte VERSION_MINOR = 0;
 
-    /** Current version of the replication log checksum */
-    public static byte CHECKSUM_VERSION = 1;
     /** Size of the block checksum trailer (CRC64) */
     public static int CHECKSUM_SIZE = Bytes.SIZEOF_LONG;
 
@@ -167,7 +165,7 @@ public final class Log {
 
     /** Interface for writing replication logs */
     public interface Writer extends Closeable {
-        void init(LogWriterContext context) throws IOException;
+        void init(LogFileWriterContext context) throws IOException;
         void append(Record record) throws IOException;
         /** Flushes buffered data and syncs to the underlying filesystem */
         void sync() throws IOException;
@@ -177,7 +175,7 @@ public final class Log {
 
     /** Interface for reading replication logs */
     public interface Reader extends Closeable, Iterable<Record> {
-        void init(LogReaderContext context) throws IOException;
+        void init(LogFileReaderContext context) throws IOException;
         /** Returns the next record, or null if the end of the log is reached */
         Record next() throws IOException;
         /** Returns the next record, potentially reusing the provided record object */
@@ -222,15 +220,15 @@ public final class Log {
         }
     }
 
-    public static boolean isValidLog(final FileSystem fs, final Path path) throws IOException {
+    public static boolean isValidLogFile(final FileSystem fs, final Path path) throws IOException {
         long length = fs.getFileStatus(path).getLen();
         try (FSDataInputStream in = fs.open(path)) {
-            if (LogTrailer.isValidTrailer(in, length)) {
+            if (LogFileTrailer.isValidTrailer(in, length)) {
                 return true;
             } else {
                 // Not a valid trailer, do we need to do something (set a flag)?
                 // Fall back to checking the header.
-                return LogHeader.isValidHeader(in);
+                return LogFileHeader.isValidHeader(in);
             }
         }
     }

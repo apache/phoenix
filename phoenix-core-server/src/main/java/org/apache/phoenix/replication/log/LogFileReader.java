@@ -29,50 +29,50 @@ import org.slf4j.LoggerFactory;
  * Manages reading the header, trailer, and iterating through blocks and records via
  * the LogFormatReader.
  */
-public class LogReader implements Log.Reader  {
+public class LogFileReader implements LogFile.Reader  {
 
-    private static final Logger LOG = LoggerFactory.getLogger(LogReader.class);
-    private LogReaderContext context;
+    private static final Logger LOG = LoggerFactory.getLogger(LogFileReader.class);
+    private LogFileReaderContext context;
     private FSDataInputStream input;
-    private LogFormatReader reader;
-    private Log.Record current;
+    private LogFileFormatReader reader;
+    private LogFile.Record current;
     private boolean closed = false;
 
-    public LogReader() {
+    public LogFileReader() {
 
     }
 
-    public LogReaderContext getContext() {
+    public LogFileReaderContext getContext() {
         return context;
     }
 
     @Override
-    public void init(LogReaderContext context) throws IOException {
+    public void init(LogFileReaderContext context) throws IOException {
         this.context = context;
         this.input = context.getFileSystem().open(context.getFilePath());
-        this.reader = new LogFormatReader(); // Instantiate from conf when more than one
+        this.reader = new LogFileFormatReader(); // Instantiate from conf when more than one
         this.reader.init(context, input);
-        LOG.debug("Initialized LogReader for path {}", context.getFilePath());
+        LOG.debug("Initialized LogFileReader for path {}", context.getFilePath());
     }
 
     @Override
-    public Log.Record next() throws IOException {
+    public LogFile.Record next() throws IOException {
         return next(null);
     }
 
     @Override
-    public Log.Record next(Log.Record reuse) throws IOException {
+    public LogFile.Record next(LogFile.Record reuse) throws IOException {
         if (closed) {
-            throw new IOException("Reader has been closed");
+            throw new IOException("LogFileReader has been closed");
         }
         current = reader.next(reuse);
         return current;
     }
 
     @Override
-    public Iterator<Log.Record> iterator() {
-        return new Iterator<Log.Record>() {
-            private Log.Record next = null;
+    public Iterator<LogFile.Record> iterator() {
+        return new Iterator<LogFile.Record>() {
+            private LogFile.Record next = null;
             private boolean fetched = false;
 
             @Override
@@ -82,21 +82,21 @@ public class LogReader implements Log.Reader  {
                 }
                 if (!fetched) {
                     try {
-                        next = LogReader.this.next();
+                        next = LogFileReader.this.next();
                         fetched = true;
                     } catch (IOException e) {
-                        throw new LogIterationException(e);
+                        throw new LogFileIterationException(e);
                     }
                 }
                 return next != null;
             }
 
             @Override
-            public Log.Record next() {
+            public LogFile.Record next() {
                 if (!hasNext()) {
-                    throw new NoSuchElementException("No more records in the Replication Log");
+                    throw new NoSuchElementException("No more records in the Log");
                 }
-                Log.Record record = next;
+                LogFile.Record record = next;
                 // Reset state for the next hasNext() call
                 next = null;
                 fetched = false;
@@ -112,17 +112,17 @@ public class LogReader implements Log.Reader  {
     }
 
     @Override
-    public Log.Header getHeader() {
+    public LogFile.Header getHeader() {
         if (reader == null) {
-             throw new IllegalStateException("LogReader not initialized");
+             throw new IllegalStateException("LogFileReader not initialized");
         }
         return reader.getHeader();
     }
 
      @Override
-    public Log.Trailer getTrailer() {
+    public LogFile.Trailer getTrailer() {
          if (reader == null) {
-             throw new IllegalStateException("LogReader not initialized");
+             throw new IllegalStateException("LogFileReader not initialized");
          }
         return reader.getTrailer();
     }
@@ -137,17 +137,17 @@ public class LogReader implements Log.Reader  {
                 reader.close();
             }
         } catch (IOException e) {
-            LOG.error("Error closing LogReader for path " + context.getFilePath(), e);
+            LOG.error("Error closing LogFileReader for path " + context.getFilePath(), e);
             throw e;
         } finally {
              closed = true;
-             LOG.debug("Closed LogReader for path {}", context.getFilePath());
+             LOG.debug("Closed LogFileReader for path {}", context.getFilePath());
         }
     }
 
     @Override
     public String toString() {
-        return "LogReader [readerContext=" + context + ", formatReader=" + reader
+        return "LogFileReader [readerContext=" + context + ", formatReader=" + reader
             + ", currentRecord=" + current + ", closed=" + closed + "]";
     }
 

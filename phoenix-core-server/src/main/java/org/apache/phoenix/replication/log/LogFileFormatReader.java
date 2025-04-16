@@ -34,25 +34,26 @@ import org.slf4j.LoggerFactory;
  * from the underlying stream, checksum validation, decompression, and providing access to block
  * data for the Codec.
  */
-public class LogFormatReader implements Closeable {
+public class LogFileFormatReader implements Closeable {
 
-    private static final Logger LOG = LoggerFactory.getLogger(LogFormatReader.class);
+    private static final Logger LOG = LoggerFactory.getLogger(LogFileFormatReader.class);
 
-    private LogReaderContext context;
-    private Log.Codec.Decoder decoder;
+    private LogFileReaderContext context;
+    private LogFile.Codec.Decoder decoder;
     private FSDataInputStream input;
-    private Log.Header header;
-    private Log.Trailer trailer = null;
+    private LogFile.Header header;
+    private LogFile.Trailer trailer = null;
     private long currentPosition = 0;
     private ByteBuffer currentBlockBuffer = null;
     private boolean trailerValidated = false;
     private CRC64 crc = new CRC64();
 
-    public LogFormatReader() {
+    public LogFileFormatReader() {
 
     }
 
-    public void init(LogReaderContext context, FSDataInputStream inputStream) throws IOException {
+    public void init(LogFileReaderContext context, FSDataInputStream inputStream)
+            throws IOException {
         this.context = context;
         this.input = inputStream;
         try {
@@ -72,13 +73,13 @@ public class LogFormatReader implements Closeable {
     }
 
     private void readAndValidateTrailer() throws IOException {
-        if (context.getFileSize() < LogTrailer.FIXED_TRAILER_SIZE) {
+        if (context.getFileSize() < LogFileTrailer.FIXED_TRAILER_SIZE) {
             throw new IOException("File size " + context.getFileSize()
-                + " is smaller than the fixed trailer size " + LogTrailer.FIXED_TRAILER_SIZE);
+                + " is smaller than the fixed trailer size " + LogFileTrailer.FIXED_TRAILER_SIZE);
         }
-        LogTrailer ourTrailer = new LogTrailer();
+        LogFileTrailer ourTrailer = new LogFileTrailer();
         // Fixed trailer fields will be LogTrailer.FIXED_TRAILER_SIZE bytes back from end of file.
-        input.seek(context.getFileSize() - LogTrailer.FIXED_TRAILER_SIZE);
+        input.seek(context.getFileSize() - LogFileTrailer.FIXED_TRAILER_SIZE);
         // Read fixed fields
         ourTrailer.readFixedFields(input);
         // Now read the variable length protobuf message if present
@@ -88,7 +89,7 @@ public class LogFormatReader implements Closeable {
     }
 
     private void readHeader() throws IOException {
-        header = new LogHeader();
+        header = new LogFileHeader();
         DataInputStream dataIn = new DataInputStream(input);
         // Seek to start of file
         input.seek(0);
@@ -96,7 +97,7 @@ public class LogFormatReader implements Closeable {
         header.readFields(dataIn);
     }
 
-    public Log.Record next(Log.Record reuse) throws IOException {
+    public LogFile.Record next(LogFile.Record reuse) throws IOException {
         while (true) { // Loop to handle skipping blocks or reaching end of current block
             if (decoder == null || !decoder.advance(reuse)) {
                 currentBlockBuffer = readNextBlock(); // Reads, validates checksum, decompresses
@@ -117,7 +118,7 @@ public class LogFormatReader implements Closeable {
             }
             // If we got here, recordDecoder.advance() was successful
 
-            Log.Record record = decoder.current();
+            LogFile.Record record = decoder.current();
             context.incrementRecordsRead();
 
             return record;
@@ -150,7 +151,7 @@ public class LogFormatReader implements Closeable {
 
                     // Read Checksum
                     long expectedChecksum = input.readLong();
-                    currentPosition += Log.CHECKSUM_SIZE;
+                    currentPosition += LogFile.CHECKSUM_SIZE;
 
                     // Validate Checksum
                     crc.reset();
@@ -198,7 +199,7 @@ public class LogFormatReader implements Closeable {
 
     // Decompresses the payload buffer using the specified algorithm.
     // Manages obtaining/releasing decompressors.
-    private ByteBuffer decompressBlock(ByteBuffer compressedBuffer, Log.BlockHeader header)
+    private ByteBuffer decompressBlock(ByteBuffer compressedBuffer, LogFile.BlockHeader header)
             throws IOException {
         Compression.Algorithm compression = header.getCompression();
         Decompressor decompressor = compression.getDecompressor();
@@ -234,7 +235,7 @@ public class LogFormatReader implements Closeable {
     // Tries to find the start of the next valid block after corruption.
     private boolean resyncReader(long offset) throws IOException {
         long seekOffset = offset + 1;
-        seekOffset = seekToMagic(seekOffset, Log.BlockHeader.MAGIC);
+        seekOffset = seekToMagic(seekOffset, LogFile.BlockHeader.MAGIC);
         if (offset < 0) {
             LOG.warn("Could not find next block magic after offset " + offset);
             return false; // EOF or cannot find next block
@@ -258,7 +259,7 @@ public class LogFormatReader implements Closeable {
     // Helper to seek to the next occurrence of a magic byte sequence
     private long seekToMagic(long startOffset, byte[] magic) throws IOException {
         input.seek(startOffset);
-        byte[] buffer = new byte[1024]; // Read in chunks, 1K seems reasonable. (Should be larger?)
+        byte[] buffer = new byte[8192]; // Read in chunks, 8K seems reasonable. (Should be larger?)
         int magicPos = 0;
         while (true) {
             int bytesRead = input.read(buffer);
@@ -307,11 +308,11 @@ public class LogFormatReader implements Closeable {
         }
     }
 
-    public Log.Header getHeader() {
+    public LogFile.Header getHeader() {
         return header;
     }
 
-    public Log.Trailer getTrailer() {
+    public LogFile.Trailer getTrailer() {
         return trailer;
     }
 
@@ -329,7 +330,7 @@ public class LogFormatReader implements Closeable {
 
     @Override
     public String toString() {
-        return "LogFormatReader [readerContext=" + context + ", header=" + header
+        return "LogFileFormatReader [readerContext=" + context + ", header=" + header
             + ", trailer=" + trailer + ", recordDecoder=" + decoder + ", currentPosition="
             + currentPosition + ", trailerValidated=" + trailerValidated + "]";
     }

@@ -24,9 +24,9 @@ import java.util.Objects;
 import java.util.TreeMap;
 import org.apache.hadoop.hbase.util.Bytes;
 
-public class LogRecord implements Log.Record {
+public class LogFileRecord implements LogFile.Record {
 
-    private Log.MutationType mutationType;
+    private LogFile.MutationType mutationType;
     private String schemaObjectName;
     private long commitId;
     private byte[] row;
@@ -34,17 +34,17 @@ public class LogRecord implements Log.Record {
     private Map<byte[], byte[]> columnValues;
     private int serializedLength;
 
-    public LogRecord() {
+    public LogFileRecord() {
         this.columnValues = new TreeMap<>(Bytes.BYTES_COMPARATOR);
     }
 
     @Override
-    public Log.MutationType getMutationType() {
+    public LogFile.MutationType getMutationType() {
         return mutationType;
     }
 
     @Override
-    public Log.Record setMutationType(Log.MutationType mutationType) {
+    public LogFile.Record setMutationType(LogFile.MutationType mutationType) {
         this.mutationType = mutationType;
         return this;
     }
@@ -55,7 +55,7 @@ public class LogRecord implements Log.Record {
     }
 
     @Override
-    public Log.Record setSchemaObjectName(String schemaObjectName) {
+    public LogFile.Record setSchemaObjectName(String schemaObjectName) {
         this.schemaObjectName = schemaObjectName;
         return this;
     }
@@ -66,7 +66,7 @@ public class LogRecord implements Log.Record {
     }
 
     @Override
-    public Log.Record setCommitId(long commitId) {
+    public LogFile.Record setCommitId(long commitId) {
         this.commitId = commitId;
         return this;
     }
@@ -77,7 +77,7 @@ public class LogRecord implements Log.Record {
     }
 
     @Override
-    public Log.Record setRowKey(byte[] rowKey) {
+    public LogFile.Record setRowKey(byte[] rowKey) {
         this.row = rowKey;
         return this;
     }
@@ -88,7 +88,7 @@ public class LogRecord implements Log.Record {
     }
 
     @Override
-    public Log.Record setTimestamp(long timestamp) {
+    public LogFile.Record setTimestamp(long timestamp) {
         this.timestamp = timestamp;
         return this;
     }
@@ -101,19 +101,19 @@ public class LogRecord implements Log.Record {
     }
 
     @Override
-    public Log.Record setSerializedLength(int serializedLength) {
+    public LogFile.Record setSerializedLength(int serializedLength) {
         this.serializedLength = serializedLength;
         return this;
     }
 
     @Override
-    public Log.Record clearColumnValues() {
+    public LogFile.Record clearColumnValues() {
         this.columnValues.clear();
         return this;
     }
 
     @Override
-    public Log.Record addColumnValue(byte[] columnName, byte[] value) {
+    public LogFile.Record addColumnValue(byte[] columnName, byte[] value) {
         this.columnValues.put(columnName, value);
         return this;
     }
@@ -153,13 +153,13 @@ public class LogRecord implements Log.Record {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        LogRecord logRecord = (LogRecord) o;
-        return commitId == logRecord.commitId
-            && timestamp == logRecord.timestamp
-            && mutationType == logRecord.mutationType
-            && Objects.equals(schemaObjectName, logRecord.schemaObjectName)
-            && Arrays.equals(row, logRecord.row)
-            && mapsEqual(columnValues, logRecord.columnValues);
+        LogFileRecord record = (LogFileRecord) o;
+        return commitId == record.commitId
+            && timestamp == record.timestamp
+            && mutationType == record.mutationType
+            && Objects.equals(schemaObjectName, record.schemaObjectName)
+            && Arrays.equals(row, record.row)
+            && mapsEqual(columnValues, record.columnValues);
     }
 
     // Same
@@ -180,9 +180,9 @@ public class LogRecord implements Log.Record {
 
     @Override
     public String toString() {
-        return "LogRecord [mutationType=" + mutationType + ", schemaObjectName=" + schemaObjectName
-            + ", commitId=" + commitId + ", rowKey=" + Arrays.toString(row) + ", timestamp="
-            + timestamp + ", columnValues=" + columnValues + ", serializedLength="
+        return "LogFileRecord [mutationType=" + mutationType + ", schemaObjectName="
+            + schemaObjectName + ", commitId=" + commitId + ", rowKey=" + Arrays.toString(row)
+            + ", timestamp=" + timestamp + ", columnValues=" + columnValues + ", serializedLength="
             + serializedLength + "]";
     }
 

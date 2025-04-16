@@ -34,7 +34,7 @@ import org.apache.hadoop.io.WritableUtils;
  * Default Codec for encoding and decoding ReplicationLog Records within a block buffer.
  * This implementation uses standard Java DataInput/DataOutput for serialization.
  *
- * Record Format within a block (variable length encoding used where efficient):
+ * Record Format within a block:
  * - Total Record Length (vint)
  * - Mutation Type (byte)
  * - Schema Object Name Length (vint)
@@ -50,7 +50,7 @@ import org.apache.hadoop.io.WritableUtils;
  *   - Value Length (vint)
  *   - Value Bytes (byte[])
  */
-public class LogCodec implements Log.Codec {
+public class LogFileCodec implements LogFile.Codec {
 
     @Override
     public Encoder getEncoder(DataOutput out) {
@@ -74,7 +74,7 @@ public class LogCodec implements Log.Codec {
         }
     }
 
-    private static class RecordEncoder implements Log.Codec.Encoder {
+    private static class RecordEncoder implements LogFile.Codec.Encoder {
         private final DataOutput out;
 
         RecordEncoder(DataOutput out) {
@@ -82,12 +82,12 @@ public class LogCodec implements Log.Codec {
         }
 
         @Override
-        public void write(Log.Record record) throws IOException {
+        public void write(LogFile.Record record) throws IOException {
             // Calculate serialized size
             int size = calculateRecordSize(record);
 
             // Set the calculated size (including the vint prefix) on the record object
-            ((LogRecord) record).setSerializedLength(WritableUtils.getVIntSize(size) + size);
+            ((LogFileRecord) record).setSerializedLength(WritableUtils.getVIntSize(size) + size);
 
             // Write total record length
             WritableUtils.writeVInt(out, size);
@@ -115,7 +115,7 @@ public class LogCodec implements Log.Codec {
             }
         }
 
-        private int calculateRecordSize(Log.Record record) {
+        private int calculateRecordSize(LogFile.Record record) {
             int size = 0;
             size += Bytes.SIZEOF_BYTE; // Mutation Type
             size += WritableUtils.getVIntSize(record.getSchemaObjectName().length())
@@ -137,31 +137,31 @@ public class LogCodec implements Log.Codec {
         }
     }
 
-    private static class RecordDecoder implements Log.Codec.Decoder {
+    private static class RecordDecoder implements LogFile.Codec.Decoder {
         private final DataInput in;
         // A reference to the object populated by the last successful advance()
-        private LogRecord current = null;
+        private LogFileRecord current = null;
 
         RecordDecoder(DataInput in) {
             this.in = in;
         }
 
         @Override
-        public boolean advance(Log.Record reuse) throws IOException {
+        public boolean advance(LogFile.Record reuse) throws IOException {
             try {
                 int recordDataLength = WritableUtils.readVInt(in);
                 recordDataLength += WritableUtils.getVIntSize(recordDataLength);
 
                 // If we are reusing a record object, prepare it for new data
-                if (reuse == null || !(reuse instanceof LogRecord)) {
-                    current = new LogRecord();
+                if (reuse == null || !(reuse instanceof LogFileRecord)) {
+                    current = new LogFileRecord();
                 } else {
-                    current = (LogRecord) reuse;
+                    current = (LogFileRecord) reuse;
                     current.clearColumnValues(); // Reset collections
                 }
                 // Set the total serialized length on the record
                 current.setSerializedLength(recordDataLength);
-                current.setMutationType(Log.MutationType.codeToType(in.readByte()));
+                current.setMutationType(LogFile.MutationType.codeToType(in.readByte()));
                 current.setSchemaObjectName(WritableUtils.readString(in));
                 current.setCommitId(WritableUtils.readVLong(in));
 
@@ -194,9 +194,9 @@ public class LogCodec implements Log.Codec {
         }
 
         @Override
-        public Log.Record current() {
+        public LogFile.Record current() {
             if (current == null) {
-                throw new IllegalStateException("Call advance() first or end of stream reached");
+                throw new IllegalStateException("Call advance() first, or end of stream reached");
             }
             return current;
         }

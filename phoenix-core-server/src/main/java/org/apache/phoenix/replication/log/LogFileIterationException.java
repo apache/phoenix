@@ -23,7 +23,7 @@ import java.io.IOException;
  * Unchecked exception thrown when an IOException occurs during iteration over a replication log
  * using its Iterator interface.
  */
-public class LogIterationException extends RuntimeException {
+public class LogFileIterationException extends RuntimeException {
 
     private static final long serialVersionUID = 1L; // Recommended for RuntimeExceptions
 
@@ -35,7 +35,7 @@ public class LogIterationException extends RuntimeException {
      *              (A {@code null} value is permitted, and indicates that the cause is
      *              nonexistent or unknown.)
      */
-    public LogIterationException(IOException cause) {
+    public LogFileIterationException(IOException cause) {
         super("IOException occurred during Replication Log iteration: "
               + (cause == null ? "Unknown cause" : cause.getMessage()), cause);
     }
@@ -48,7 +48,7 @@ public class LogIterationException extends RuntimeException {
      *              (A {@code null} value is permitted, and indicates that the cause is
      *              nonexistent or unknown.)
      */
-    public LogIterationException(String message, IOException cause) {
+    public LogFileIterationException(String message, IOException cause) {
         super(message, cause);
     }
 

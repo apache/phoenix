@@ -27,36 +27,36 @@ import org.slf4j.LoggerFactory;
  * Writer for Phoenix Replication Log files.
  * Manages writing the header, blocks (via LogFormatWriter), and trailer.
  */
-public class LogWriter implements Log.Writer {
+public class LogFileWriter implements LogFile.Writer {
 
-    private static final Logger LOG = LoggerFactory.getLogger(LogWriter.class);
+    private static final Logger LOG = LoggerFactory.getLogger(LogFileWriter.class);
 
-    private LogWriterContext context;
-    private LogFormatWriter writer;
+    private LogFileWriterContext context;
+    private LogFileFormatWriter writer;
     private FSDataOutputStream output;
     private boolean closed = false;
 
-    public LogWriter() {
+    public LogFileWriter() {
 
     }
 
-    public LogWriterContext getContext() {
+    public LogFileWriterContext getContext() {
         return context;
     }
 
     @Override
-    public void init(LogWriterContext context) throws IOException {
+    public void init(LogFileWriterContext context) throws IOException {
         this.context = context;
         // TODO: Handle stream creation with proper permissions and overwrite options based on
         // config. For now we overwrite.
         this.output = context.getFileSystem().create(context.getFilePath(), true);
-        this.writer = new LogFormatWriter();  // Instantiate from conf when more than one
+        this.writer = new LogFileFormatWriter();  // Instantiate from conf when more than one
         this.writer.init(context, output); // Pass context for codec, allocator etc.
-        LOG.debug("Initialized ReplicationLogWriter for path {}", context.getFilePath());
+        LOG.debug("Initialized LogFileWriter for path {}", context.getFilePath());
     }
 
     @Override
-    public void append(Log.Record record) throws IOException {
+    public void append(LogFile.Record record) throws IOException {
         if (closed) {
             throw new IOException("Writer has been closed");
         }
@@ -78,7 +78,7 @@ public class LogWriter implements Log.Writer {
             if (context.getFileSystem().exists(context.getFilePath())) {
                 return context.getFileSystem().getFileStatus(context.getFilePath()).getLen();
             } else {
-                throw new FileNotFoundException("Log file not found at path "
+                throw new FileNotFoundException("LogFile not found at path "
                     + context.getFilePath());
             }
         }
@@ -113,13 +113,13 @@ public class LogWriter implements Log.Writer {
             throw e;
         } finally {
             closed = true;
-            LOG.debug("Closed LogWriter for path {}", context.getFilePath());
+            LOG.debug("Closed LogFileWriter for path {}", context.getFilePath());
         }
     }
 
     @Override
     public String toString() {
-        return "LogWriter [writerContext=" + context + ", formatWriter=" + writer
+        return "LogFileWriter [writerContext=" + context + ", formatWriter=" + writer
             + ", closed=" + closed + "]";
     }
 

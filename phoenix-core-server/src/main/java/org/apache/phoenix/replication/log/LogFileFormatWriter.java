@@ -32,12 +32,12 @@ import org.slf4j.LoggerFactory;
  * Handles the low-level writing of headers, blocks, and trailers for Log files.
  * Manages buffering, compression, checksums, and writing to the underlying stream.
  */
-public class LogFormatWriter implements Closeable {
+public class LogFileFormatWriter implements Closeable {
 
-    private static final Logger LOG = LoggerFactory.getLogger(LogFormatWriter.class);
+    private static final Logger LOG = LoggerFactory.getLogger(LogFileFormatWriter.class);
 
-    private LogWriterContext context;
-    private Log.Codec.Encoder encoder;
+    private LogFileWriterContext context;
+    private LogFile.Codec.Encoder encoder;
     private Compressor compressor; // Reused per file
     private FSDataOutputStream output;
     private ByteArrayOutputStream currentBlockBytes;
@@ -49,11 +49,12 @@ public class LogFormatWriter implements Closeable {
     private long blocksStartOffset = -1;
     private CRC64 crc = new CRC64(); // Indirect this when we have more than one type
 
-    public LogFormatWriter() {
+    public LogFileFormatWriter() {
 
     }
 
-    public void init(LogWriterContext context, FSDataOutputStream outputStream) throws IOException {
+    public void init(LogFileWriterContext context, FSDataOutputStream outputStream)
+            throws IOException {
         this.output = outputStream;
         this.context = context;
         this.compressor = context.getCompression().getCompressor();
@@ -64,7 +65,7 @@ public class LogFormatWriter implements Closeable {
 
     private void writeFileHeader() throws IOException {
         if (!headerWritten) {
-            LogHeader header = new LogHeader();
+            LogFileHeader header = new LogFileHeader();
             header.write(output);
             blocksStartOffset = output.getPos(); // First block starts after header
             headerWritten = true;
@@ -75,7 +76,7 @@ public class LogFormatWriter implements Closeable {
         return blocksStartOffset;
     }
 
-    public void append(Log.Record record) throws IOException {
+    public void append(LogFile.Record record) throws IOException {
         if (!headerWritten) {
             // Lazily write file header
             writeFileHeader();
@@ -132,7 +133,7 @@ public class LogFormatWriter implements Closeable {
         }
 
         // Write block header
-        Log.BlockHeader blockHeader = new LogBlockHeader()
+        LogFile.BlockHeader blockHeader = new LogBlockHeader()
             .setCompression(ourCompression)
             .setUncompressedSize(uncompressedBytes.length)
             .setCompressedSize(bytesToWrite.length);
@@ -202,7 +203,7 @@ public class LogFormatWriter implements Closeable {
     }
 
     private void writeTrailer() throws IOException {
-        Log.Trailer trailer = new LogTrailer()
+        LogFile.Trailer trailer = new LogFileTrailer()
             .setRecordCount(recordCount)
             .setBlockCount(blockCount)
             .setBlocksStartOffset(blocksStartOffset)
@@ -219,7 +220,7 @@ public class LogFormatWriter implements Closeable {
 
     @Override
     public String toString() {
-        return "LogFormatWriter [writerContext=" + context
+        return "LogFileFormatWriter [writerContext=" + context
             + ", currentBlockUncompressedBytes=" + currentBlockBytes
             + ", headerWritten=" + headerWritten + ", trailerWritten=" + trailerWritten
             + ", recordCount=" + recordCount + ", blockCount=" + blockCount
