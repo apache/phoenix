@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,7 +18,6 @@
 package org.apache.phoenix.schema.types;
 
 import java.sql.SQLException;
-
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.schema.SortOrder;
 
@@ -28,39 +27,38 @@ import org.apache.phoenix.schema.SortOrder;
  */
 public abstract class PNumericType<T> extends PDataType<T> {
 
-    protected PNumericType(String sqlTypeName, int sqlType, Class clazz,
-            org.apache.phoenix.schema.types.PDataType.PDataCodec codec, int ordinal) {
-        super(sqlTypeName, sqlType, clazz, codec, ordinal);
+  protected PNumericType(String sqlTypeName, int sqlType, Class clazz,
+    org.apache.phoenix.schema.types.PDataType.PDataCodec codec, int ordinal) {
+    super(sqlTypeName, sqlType, clazz, codec, ordinal);
+  }
+
+  public final int signum(byte[] bytes, int offset, int length, SortOrder sortOrder) {
+    return signum(bytes, offset, length, sortOrder, null, null);
+  }
+
+  public final int signum(ImmutableBytesWritable ptr, SortOrder sortOrder) {
+    return signum(ptr.get(), ptr.getOffset(), ptr.getLength(), sortOrder);
+  }
+
+  abstract public int signum(byte[] bytes, int offset, int length, SortOrder sortOrder,
+    Integer maxLength, Integer scale);
+
+  abstract public void abs(byte[] bytes, int offset, int length, SortOrder sortOrder,
+    ImmutableBytesWritable outPtr);
+
+  public final void abs(ImmutableBytesWritable ptr, SortOrder sortOrder,
+    ImmutableBytesWritable outPtr) {
+    abs(ptr.get(), ptr.getOffset(), ptr.getLength(), sortOrder, outPtr);
+  }
+
+  @Override
+  public Object toObject(byte[] bytes, int offset, int length, PDataType actualType,
+    SortOrder sortOrder, Integer maxLength, Integer scale, Class jdbcType) throws SQLException {
+    PDataType pType = PDataTypeFactory.getInstance().instanceFromJavaClass(jdbcType, this);
+    if (pType == null || !PNumericType.class.isAssignableFrom(pType.getClass())) {
+      throw newMismatchException(actualType, jdbcType);
+    } else {
+      return pType.toObject(bytes, offset, length, actualType, sortOrder, maxLength, scale);
     }
-
-    public final int signum(byte[] bytes, int offset, int length, SortOrder sortOrder) {
-        return signum(bytes, offset, length, sortOrder, null, null);
-    }
-
-    public final int signum(ImmutableBytesWritable ptr, SortOrder sortOrder) {
-        return signum(ptr.get(), ptr.getOffset(), ptr.getLength(), sortOrder);
-    }
-
-    abstract public int signum(byte[] bytes, int offset, int length, SortOrder sortOrder,
-            Integer maxLength, Integer scale);
-
-    abstract public void abs(byte[] bytes, int offset, int length, SortOrder sortOrder,
-            ImmutableBytesWritable outPtr);
-
-    public final void abs(ImmutableBytesWritable ptr, SortOrder sortOrder,
-            ImmutableBytesWritable outPtr) {
-        abs(ptr.get(), ptr.getOffset(), ptr.getLength(), sortOrder, outPtr);
-    }
-
-    @Override
-    public Object toObject(byte[] bytes, int offset, int length, PDataType actualType,
-            SortOrder sortOrder, Integer maxLength, Integer scale, Class jdbcType)
-            throws SQLException {
-        PDataType pType = PDataTypeFactory.getInstance().instanceFromJavaClass(jdbcType, this);
-        if (pType == null || !PNumericType.class.isAssignableFrom(pType.getClass())) {
-            throw newMismatchException(actualType, jdbcType);
-        } else {
-            return pType.toObject(bytes, offset, length, actualType, sortOrder, maxLength, scale);
-        }
-    }
+  }
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,27 +17,24 @@
  */
 package org.apache.phoenix.expression.aggregator;
 
-import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PUnsignedLong;
 
 /**
- * 
- * Aggregator that sums unsigned long values
- * TODO: create these classes dynamically based on the type passed through
- *
- * 
+ * Aggregator that sums unsigned long values TODO: create these classes dynamically based on the
+ * type passed through
  * @since 0.12
  */
 public class UnsignedLongSumAggregator extends NumberSumAggregator {
-    
-    public UnsignedLongSumAggregator(SortOrder sortOrder) {
-        super(sortOrder);
-    }
-    
-    @Override
-    protected PDataType getInputDataType() {
-        return PUnsignedLong.INSTANCE;
-    }
+
+  public UnsignedLongSumAggregator(SortOrder sortOrder) {
+    super(sortOrder);
+  }
+
+  @Override
+  protected PDataType getInputDataType() {
+    return PUnsignedLong.INSTANCE;
+  }
 
 }

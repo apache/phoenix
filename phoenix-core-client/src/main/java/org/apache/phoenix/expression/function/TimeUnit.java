@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,32 +20,35 @@ package org.apache.phoenix.expression.function;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 
 public enum TimeUnit {
-    DAY("day"), 
-    HOUR("hour"), 
-    MINUTE("minute"), 
-    SECOND("second"), 
-    MILLISECOND("millisecond"),
-    WEEK("week"),
-    MONTH("month"),
-    YEAR("year");
-    
-    private String value;
-    
-    private TimeUnit(String value) {
-        this.value = value;
+  DAY("day"),
+  HOUR("hour"),
+  MINUTE("minute"),
+  SECOND("second"),
+  MILLISECOND("millisecond"),
+  WEEK("week"),
+  MONTH("month"),
+  YEAR("year");
+
+  private String value;
+
+  private TimeUnit(String value) {
+    this.value = value;
+  }
+
+  public static final String VALID_VALUES = Joiner.on(", ").join(TimeUnit.values());
+
+  public static TimeUnit getTimeUnit(String timeUnit) {
+    if (timeUnit == null) {
+      throw new IllegalArgumentException(
+        "No time unit value specified. Only a time unit value that belongs to one of these : "
+          + VALID_VALUES + " is allowed.");
     }
-    
-    public static final String VALID_VALUES = Joiner.on(", ").join(TimeUnit.values());
-    
-    public static TimeUnit getTimeUnit(String timeUnit) {
-        if(timeUnit == null) {
-            throw new IllegalArgumentException("No time unit value specified. Only a time unit value that belongs to one of these : " + VALID_VALUES + " is allowed.");
-        }
-        for(TimeUnit tu : values()) {
-            if(timeUnit.equalsIgnoreCase(tu.value)) {
-                return tu;
-            }    
-        }
-        throw new IllegalArgumentException("Invalid value of time unit " + timeUnit + ". Only a time unit value that belongs to one of these : " + VALID_VALUES + " is allowed.");
+    for (TimeUnit tu : values()) {
+      if (timeUnit.equalsIgnoreCase(tu.value)) {
+        return tu;
+      }
     }
+    throw new IllegalArgumentException("Invalid value of time unit " + timeUnit
+      + ". Only a time unit value that belongs to one of these : " + VALID_VALUES + " is allowed.");
+  }
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,7 +20,6 @@ package org.apache.phoenix.hbase.index.parallel;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
-
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.util.Pair;
 
@@ -39,13 +38,13 @@ public interface TaskRunner extends Stoppable {
    * @param tasks to run
    * @return Pair containing ordered List of results from each task and an ordered immutable list of
    *         underlying futures which can be used for getting underlying exceptions
-   * @throws ExecutionException if any of the tasks fails. Wraps the underyling failure, which can
-   *             be retrieved via {@link ExecutionException#getCause()}.
+   * @throws ExecutionException   if any of the tasks fails. Wraps the underyling failure, which can
+   *                              be retrieved via {@link ExecutionException#getCause()}.
    * @throws InterruptedException if the current thread is interrupted while waiting for the batch
-   *             to complete
+   *                              to complete
    */
-  public <R> Pair<List<R>, List<Future<R>>> submit(TaskBatch<R> tasks) throws
-      ExecutionException, InterruptedException;
+  public <R> Pair<List<R>, List<Future<R>>> submit(TaskBatch<R> tasks)
+    throws ExecutionException, InterruptedException;
 
   /**
    * Similar to {@link #submit(TaskBatch)}, but is not interruptible. If an interrupt is found while
@@ -54,11 +53,11 @@ public interface TaskRunner extends Stoppable {
    * @param tasks to run
    * @return Pair containing ordered List of results from each task and an ordered immutable list of
    *         underlying futures which can be used for getting underlying exceptions
-   * @throws EarlyExitFailure if there are still tasks to submit to the pool, but there is a stop
-   *             notification
+   * @throws EarlyExitFailure   if there are still tasks to submit to the pool, but there is a stop
+   *                            notification
    * @throws ExecutionException if any of the tasks fails. Wraps the underyling failure, which can
-   *             be retrieved via {@link ExecutionException#getCause()}.
+   *                            be retrieved via {@link ExecutionException#getCause()}.
    */
-  public <R> Pair<List<R>, List<Future<R>>> submitUninterruptible(TaskBatch<R> tasks) throws EarlyExitFailure,
-      ExecutionException;
+  public <R> Pair<List<R>, List<Future<R>>> submitUninterruptible(TaskBatch<R> tasks)
+    throws EarlyExitFailure, ExecutionException;
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,44 +19,45 @@ package org.apache.phoenix.expression.aggregator;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.schema.types.PArrayDataType;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PArrayDataType;
+import org.apache.phoenix.schema.types.PDataType;
 
 public class DistinctValueClientAggregator extends DistinctValueWithCountClientAggregator {
-    private final PDataType valueType;
-    private final PDataType resultType;
-    
-    public DistinctValueClientAggregator(SortOrder sortOrder, PDataType valueType, PDataType resultType) {
-        super(sortOrder);
-        this.valueType = valueType;
-        this.resultType = resultType;
-    }
+  private final PDataType valueType;
+  private final PDataType resultType;
 
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        if (cachedResult == null) {            
-            Object[] values = new Object[valueVsCount.size()];
-            int i = 0;
-            for (ImmutableBytesPtr key : valueVsCount.keySet()) {
-                values[i++] = valueType.toObject(key, sortOrder);
-            }
-            cachedResult = PArrayDataType.instantiatePhoenixArray(valueType, values);
-        }
-        buffer = resultType.toBytes(cachedResult, sortOrder);
-        ptr.set(buffer);
-        return true;
-    }
+  public DistinctValueClientAggregator(SortOrder sortOrder, PDataType valueType,
+    PDataType resultType) {
+    super(sortOrder);
+    this.valueType = valueType;
+    this.resultType = resultType;
+  }
 
-    @Override
-    protected PDataType getResultDataType() {
-        return resultType;
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    if (cachedResult == null) {
+      Object[] values = new Object[valueVsCount.size()];
+      int i = 0;
+      for (ImmutableBytesPtr key : valueVsCount.keySet()) {
+        values[i++] = valueType.toObject(key, sortOrder);
+      }
+      cachedResult = PArrayDataType.instantiatePhoenixArray(valueType, values);
     }
-    
-    @Override
-    protected int getBufferLength() {
-        return 0;
-    }
+    buffer = resultType.toBytes(cachedResult, sortOrder);
+    ptr.set(buffer);
+    return true;
+  }
+
+  @Override
+  protected PDataType getResultDataType() {
+    return resultType;
+  }
+
+  @Override
+  protected int getBufferLength() {
+    return 0;
+  }
 
 }

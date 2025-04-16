@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,9 +17,9 @@
  */
 package org.apache.phoenix.jdbc;
 
-
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
+
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
@@ -34,71 +34,67 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 @VisibleForTesting
 public class HAURLInfo {
-    private final String name;
-    private final String principal;
-    private final String additionalJDBCParams;
+  private final String name;
+  private final String principal;
+  private final String additionalJDBCParams;
 
-    HAURLInfo(String name, String principal, String additionalJDBCParams) {
-        Preconditions.checkNotNull(name);
-        this.name = name;
-        this.principal = principal;
-        this.additionalJDBCParams = additionalJDBCParams;
-    }
+  HAURLInfo(String name, String principal, String additionalJDBCParams) {
+    Preconditions.checkNotNull(name);
+    this.name = name;
+    this.principal = principal;
+    this.additionalJDBCParams = additionalJDBCParams;
+  }
 
-    HAURLInfo(String name, String principal) {
-        this(name, principal, null);
-    }
+  HAURLInfo(String name, String principal) {
+    this(name, principal, null);
+  }
 
-    HAURLInfo(String name) {
-        this(name, null, null);
-    }
+  HAURLInfo(String name) {
+    this(name, null, null);
+  }
 
-    public String getName() {
-        return name;
-    }
+  public String getName() {
+    return name;
+  }
 
-    public String getPrincipal() {
-        return principal;
-    }
+  public String getPrincipal() {
+    return principal;
+  }
 
-    public String getAdditionalJDBCParams() {
-        return additionalJDBCParams;
-    }
+  public String getAdditionalJDBCParams() {
+    return additionalJDBCParams;
+  }
 
-    @Override
-    public String toString() {
-        if (principal != null) {
-            return String.format("%s[%s]", name, principal);
-        }
-        return name;
+  @Override
+  public String toString() {
+    if (principal != null) {
+      return String.format("%s[%s]", name, principal);
     }
+    return name;
+  }
 
-    @Override
-    public boolean equals(Object other) {
-        if (other == null) {
-            return false;
-        }
-        if (other == this) {
-            return true;
-        }
-        if (other.getClass() != getClass()) {
-            return false;
-        }
-        HAURLInfo otherInfo = (HAURLInfo) other;
-        return new EqualsBuilder()
-                .append(name, otherInfo.name)
-                .append(principal, otherInfo.principal)
-                .isEquals();
+  @Override
+  public boolean equals(Object other) {
+    if (other == null) {
+      return false;
     }
+    if (other == this) {
+      return true;
+    }
+    if (other.getClass() != getClass()) {
+      return false;
+    }
+    HAURLInfo otherInfo = (HAURLInfo) other;
+    return new EqualsBuilder().append(name, otherInfo.name).append(principal, otherInfo.principal)
+      .isEquals();
+  }
 
-    @Override
-    public int hashCode() {
-        if (principal != null) {
-            return new HashCodeBuilder(7, 47)
-                    .append(name)
-                    .append(principal).hashCode();
-        }
-        return new HashCodeBuilder(7, 47).append(name).hashCode();
+  @Override
+  public int hashCode() {
+    if (principal != null) {
+      return new HashCodeBuilder(7, 47).append(name).append(principal).hashCode();
     }
+    return new HashCodeBuilder(7, 47).append(name).hashCode();
+  }
 
 }

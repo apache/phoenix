@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,7 +22,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
-
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.StatementContext;
@@ -38,173 +37,172 @@ import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.DateUtil;
 
-
 /**
- *
- * Implementation of the {@code TO_DATE(<string>,[<format-string>,[<timezone-string>]])} built-in function.
- * The second argument is optional and defaults to the phoenix.query.dateFormat value
- * from the HBase config. If present it must be a constant string. The third argument is either a
- * valid (constant) timezone id, or the string "local". The third argument is also optional, and
- * it defaults to GMT.
- *
+ * Implementation of the {@code TO_DATE(<string>,[<format-string>,[<timezone-string>]])} built-in
+ * function. The second argument is optional and defaults to the phoenix.query.dateFormat value from
+ * the HBase config. If present it must be a constant string. The third argument is either a valid
+ * (constant) timezone id, or the string "local". The third argument is also optional, and it
+ * defaults to GMT.
  */
-@BuiltInFunction(name=ToDateFunction.NAME, nodeClass=ToDateParseNode.class,
-        args={@Argument(allowedTypes={PVarchar.class}),
-                @Argument(allowedTypes={PVarchar.class},isConstant=true,defaultValue="null"),
-                @Argument(allowedTypes={PVarchar.class}, isConstant=true, defaultValue = "null") } )
+@BuiltInFunction(name = ToDateFunction.NAME, nodeClass = ToDateParseNode.class,
+    args = { @Argument(allowedTypes = { PVarchar.class }),
+      @Argument(allowedTypes = { PVarchar.class }, isConstant = true, defaultValue = "null"),
+      @Argument(allowedTypes = { PVarchar.class }, isConstant = true, defaultValue = "null") })
 public class ToDateFunction extends ScalarFunction {
-    public static final String NAME = "TO_DATE";
-    private DateUtil.DateTimeParser dateParser;
-    private PDataCodec codec;
-    protected String dateFormat;
-    protected String timeZoneId;
+  public static final String NAME = "TO_DATE";
+  private DateUtil.DateTimeParser dateParser;
+  private PDataCodec codec;
+  protected String dateFormat;
+  protected String timeZoneId;
 
-    public ToDateFunction() {
-    }
+  public ToDateFunction() {
+  }
 
-    public ToDateFunction(List<Expression> children, StatementContext context) throws SQLException {
-        super(children);
-        String dateFormat = (String) ((LiteralExpression) children.get(1)).getValue();
-        String timeZoneId = (String) ((LiteralExpression) children.get(2)).getValue();
-        if (dateFormat == null) {
-            dateFormat = context.getDateFormat();
-        }
-        if (timeZoneId == null) {
-            timeZoneId = context.getDateFormatTimeZoneId();
-        }
-        init(dateFormat, timeZoneId);
+  public ToDateFunction(List<Expression> children, StatementContext context) throws SQLException {
+    super(children);
+    String dateFormat = (String) ((LiteralExpression) children.get(1)).getValue();
+    String timeZoneId = (String) ((LiteralExpression) children.get(2)).getValue();
+    if (dateFormat == null) {
+      dateFormat = context.getDateFormat();
     }
+    if (timeZoneId == null) {
+      timeZoneId = context.getDateFormatTimeZoneId();
+    }
+    init(dateFormat, timeZoneId);
+  }
 
-    public ToDateFunction(List<Expression> children, String dateFormat, String timeZoneId) throws SQLException {
-        super(children);
-        init(dateFormat, timeZoneId);
-    }
-    
-    @Override
-    public ToDateFunction clone(List<Expression> children) {
-    	try {
-            return new ToDateFunction(children, dateFormat, timeZoneId);
-        } catch (Exception e) {
-            throw new RuntimeException(e); // Impossible, since it was originally constructed this way
-        }
-    }
-    
-    private void init(String dateFormat, String timeZoneId) {
-        this.dateFormat = dateFormat;
-        this.dateParser = DateUtil.getDateTimeParser(dateFormat, getDataType(), timeZoneId);
-        // Store resolved timeZoneId, as if it's LOCAL, we don't want the
-        // server to evaluate using the local time zone. Instead, we want
-        // to use the client local time zone.
-        this.timeZoneId = this.dateParser.getTimeZone().getID();
-        this.codec = DateUtil.getCodecFor(getDataType());
-    }
+  public ToDateFunction(List<Expression> children, String dateFormat, String timeZoneId)
+    throws SQLException {
+    super(children);
+    init(dateFormat, timeZoneId);
+  }
 
-    @Override
-    public int hashCode() {
-        final int prime = 31;
-        int result = super.hashCode();
-        result = prime * result + ((dateFormat == null) ? 0 : dateFormat.hashCode());
-        result = prime * result + ((timeZoneId == null) ? 0 : timeZoneId.hashCode());
-        return result;
+  @Override
+  public ToDateFunction clone(List<Expression> children) {
+    try {
+      return new ToDateFunction(children, dateFormat, timeZoneId);
+    } catch (Exception e) {
+      throw new RuntimeException(e); // Impossible, since it was originally constructed this way
     }
+  }
 
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (getClass() != obj.getClass()) return false;
-        ToDateFunction other = (ToDateFunction)obj;
-        // Only compare first child, as the other two are potentially resolved on the fly.
-        if (!this.getChildren().get(0).equals(other.getChildren().get(0))) return false;
-        if (dateFormat == null) {
-            if (other.dateFormat != null) return false;
-        } else if (!dateFormat.equals(other.dateFormat)) return false;
-        if (timeZoneId == null) {
-            if (other.timeZoneId != null) return false;
-        } else if (!timeZoneId.equals(other.timeZoneId)) return false;
-        return true;
-    }
+  private void init(String dateFormat, String timeZoneId) {
+    this.dateFormat = dateFormat;
+    this.dateParser = DateUtil.getDateTimeParser(dateFormat, getDataType(), timeZoneId);
+    // Store resolved timeZoneId, as if it's LOCAL, we don't want the
+    // server to evaluate using the local time zone. Instead, we want
+    // to use the client local time zone.
+    this.timeZoneId = this.dateParser.getTimeZone().getID();
+    this.codec = DateUtil.getCodecFor(getDataType());
+  }
 
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        Expression expression = getExpression();
-        if (!expression.evaluate(tuple, ptr)) {
-            return false;
-        }
-        if (ptr.getLength() == 0) {
-            return true;
-        }
-        PDataType type = expression.getDataType();
-        String dateStr = (String)type.toObject(ptr, expression.getSortOrder());
-        long epochTime = dateParser.parseDateTime(dateStr);
-        PDataType returnType = getDataType();
-        byte[] byteValue = new byte[returnType.getByteSize()];
-        codec.encodeLong(epochTime, byteValue, 0);
-        ptr.set(byteValue);
-        return true;
-     }
+  @Override
+  public int hashCode() {
+    final int prime = 31;
+    int result = super.hashCode();
+    result = prime * result + ((dateFormat == null) ? 0 : dateFormat.hashCode());
+    result = prime * result + ((timeZoneId == null) ? 0 : timeZoneId.hashCode());
+    return result;
+  }
 
-    @Override
-    public PDataType getDataType() {
-        return PDate.INSTANCE;
-    }
+  @Override
+  public boolean equals(Object obj) {
+    if (this == obj) return true;
+    if (getClass() != obj.getClass()) return false;
+    ToDateFunction other = (ToDateFunction) obj;
+    // Only compare first child, as the other two are potentially resolved on the fly.
+    if (!this.getChildren().get(0).equals(other.getChildren().get(0))) return false;
+    if (dateFormat == null) {
+      if (other.dateFormat != null) return false;
+    } else if (!dateFormat.equals(other.dateFormat)) return false;
+    if (timeZoneId == null) {
+      if (other.timeZoneId != null) return false;
+    } else if (!timeZoneId.equals(other.timeZoneId)) return false;
+    return true;
+  }
 
-    @Override
-    public boolean isNullable() {
-        return getExpression().isNullable();
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    Expression expression = getExpression();
+    if (!expression.evaluate(tuple, ptr)) {
+      return false;
     }
+    if (ptr.getLength() == 0) {
+      return true;
+    }
+    PDataType type = expression.getDataType();
+    String dateStr = (String) type.toObject(ptr, expression.getSortOrder());
+    long epochTime = dateParser.parseDateTime(dateStr);
+    PDataType returnType = getDataType();
+    byte[] byteValue = new byte[returnType.getByteSize()];
+    codec.encodeLong(epochTime, byteValue, 0);
+    ptr.set(byteValue);
+    return true;
+  }
 
-    private String getTimeZoneIdArg() {
-        return children.size() < 3 ? null : (String) ((LiteralExpression) children.get(2)).getValue();
-    }
-    
-    private String getDateFormatArg() {
-        return children.size() < 2 ? null : (String) ((LiteralExpression) children.get(1)).getValue();
-    }
-    
-    @Override
-    public void readFields(DataInput input) throws IOException {
-        super.readFields(input);
-        String timeZoneId;
-        String dateFormat = WritableUtils.readString(input);  
-        if (dateFormat.length() != 0) { // pre 4.3
-            timeZoneId = DateUtil.DEFAULT_TIME_ZONE_ID;         
+  @Override
+  public PDataType getDataType() {
+    return PDate.INSTANCE;
+  }
+
+  @Override
+  public boolean isNullable() {
+    return getExpression().isNullable();
+  }
+
+  private String getTimeZoneIdArg() {
+    return children.size() < 3 ? null : (String) ((LiteralExpression) children.get(2)).getValue();
+  }
+
+  private String getDateFormatArg() {
+    return children.size() < 2 ? null : (String) ((LiteralExpression) children.get(1)).getValue();
+  }
+
+  @Override
+  public void readFields(DataInput input) throws IOException {
+    super.readFields(input);
+    String timeZoneId;
+    String dateFormat = WritableUtils.readString(input);
+    if (dateFormat.length() != 0) { // pre 4.3
+      timeZoneId = DateUtil.DEFAULT_TIME_ZONE_ID;
+    } else {
+      int nChildren = children.size();
+      if (nChildren == 1) {
+        dateFormat = WritableUtils.readString(input);
+        timeZoneId = WritableUtils.readString(input);
+      } else
+        if (nChildren == 2 || DateUtil.LOCAL_TIME_ZONE_ID.equalsIgnoreCase(getTimeZoneIdArg())) {
+          dateFormat = getDateFormatArg();
+          timeZoneId = WritableUtils.readString(input);
         } else {
-            int nChildren = children.size();
-            if (nChildren == 1) {
-                dateFormat = WritableUtils.readString(input); 
-                timeZoneId =  WritableUtils.readString(input);
-            } else if (nChildren == 2 || DateUtil.LOCAL_TIME_ZONE_ID.equalsIgnoreCase(getTimeZoneIdArg())) {
-                dateFormat = getDateFormatArg();
-                timeZoneId =  WritableUtils.readString(input);
-            } else {
-                dateFormat = getDateFormatArg();
-                timeZoneId =  getTimeZoneIdArg();
-            }
-        }
-        init(dateFormat, timeZoneId);
-    }
-
-    @Override
-    public void write(DataOutput output) throws IOException {
-        super.write(output);
-        WritableUtils.writeString(output, ""); // For b/w compat
-        int nChildren = children.size();
-        // If dateFormat and/or timeZoneId are supplied as children, don't write them again,
-        // except if using LOCAL, in which case we want to write the resolved/actual time zone.
-        if (nChildren == 1) {
-            WritableUtils.writeString(output, dateFormat);
-            WritableUtils.writeString(output, timeZoneId);
-        } else if (nChildren == 2 || DateUtil.LOCAL_TIME_ZONE_ID.equalsIgnoreCase(getTimeZoneIdArg())) {
-            WritableUtils.writeString(output, timeZoneId);
+          dateFormat = getDateFormatArg();
+          timeZoneId = getTimeZoneIdArg();
         }
     }
+    init(dateFormat, timeZoneId);
+  }
 
-    private Expression getExpression() {
-        return children.get(0);
+  @Override
+  public void write(DataOutput output) throws IOException {
+    super.write(output);
+    WritableUtils.writeString(output, ""); // For b/w compat
+    int nChildren = children.size();
+    // If dateFormat and/or timeZoneId are supplied as children, don't write them again,
+    // except if using LOCAL, in which case we want to write the resolved/actual time zone.
+    if (nChildren == 1) {
+      WritableUtils.writeString(output, dateFormat);
+      WritableUtils.writeString(output, timeZoneId);
+    } else if (nChildren == 2 || DateUtil.LOCAL_TIME_ZONE_ID.equalsIgnoreCase(getTimeZoneIdArg())) {
+      WritableUtils.writeString(output, timeZoneId);
     }
+  }
 
-    @Override
-    public String getName() {
-        return NAME;
-    }
+  private Expression getExpression() {
+    return children.get(0);
+  }
+
+  @Override
+  public String getName() {
+    return NAME;
+  }
 }

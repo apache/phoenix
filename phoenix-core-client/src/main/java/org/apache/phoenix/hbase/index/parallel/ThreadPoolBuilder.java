@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -62,7 +62,7 @@ public class ThreadPoolBuilder {
   }
 
   String getName() {
-   return this.name;
+    return this.name;
   }
 
   int getMaxThreads() {
@@ -70,18 +70,18 @@ public class ThreadPoolBuilder {
     if (this.maxThreads != null) {
       String key = this.maxThreads.getFirst();
       maxThreads =
-          key == null ? this.maxThreads.getSecond() : conf.getInt(key, this.maxThreads.getSecond());
+        key == null ? this.maxThreads.getSecond() : conf.getInt(key, this.maxThreads.getSecond());
     }
     LOGGER.trace("Creating pool builder with max " + maxThreads + " threads ");
     return maxThreads;
   }
 
   long getKeepAliveTime() {
-    long timeout =DEFAULT_TIMEOUT;
+    long timeout = DEFAULT_TIMEOUT;
     if (this.timeout != null) {
       String key = this.timeout.getFirst();
       timeout =
-          key == null ? this.timeout.getSecond() : conf.getLong(key, this.timeout.getSecond());
+        key == null ? this.timeout.getSecond() : conf.getLong(key, this.timeout.getSecond());
     }
 
     LOGGER.trace("Creating pool builder with core thread timeout of " + timeout + " seconds ");

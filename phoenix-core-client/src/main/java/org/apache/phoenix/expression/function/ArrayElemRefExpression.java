@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,7 +21,6 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
-
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.BaseCompoundExpression;
 import org.apache.phoenix.expression.Expression;
@@ -32,52 +31,54 @@ import org.apache.phoenix.schema.types.PDataType;
 
 public class ArrayElemRefExpression extends BaseCompoundExpression {
 
-    private int index;
+  private int index;
 
-    public ArrayElemRefExpression() {
-    }
-    
-    public ArrayElemRefExpression(List<Expression> children) {
-        super(children);
-    }
+  public ArrayElemRefExpression() {
+  }
 
-    public void setIndex(int index) {
-        this.index = index;
-    }
+  public ArrayElemRefExpression(List<Expression> children) {
+    super(children);
+  }
 
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        Expression arrayExpr = children.get(0);
-        return PArrayDataTypeDecoder.positionAtArrayElement(tuple, ptr, index, arrayExpr, getDataType(), getMaxLength());
-    }
+  public void setIndex(int index) {
+    this.index = index;
+  }
 
-    @Override
-    public Integer getMaxLength() {
-        return this.children.get(0).getMaxLength();
-    }
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    Expression arrayExpr = children.get(0);
+    return PArrayDataTypeDecoder.positionAtArrayElement(tuple, ptr, index, arrayExpr, getDataType(),
+      getMaxLength());
+  }
 
-    @Override
-    public PDataType getDataType() {
-        return PDataType.fromTypeId(children.get(0).getDataType().getSqlType() - PDataType.ARRAY_TYPE_BASE);
-    }
-    
-    @Override
-    public void write(DataOutput output) throws IOException {
-        super.write(output);
-    }
-    
-    @Override
-    public void readFields(DataInput input) throws IOException {
-        super.readFields(input);
-    }
+  @Override
+  public Integer getMaxLength() {
+    return this.children.get(0).getMaxLength();
+  }
 
-    @Override
-    public final <T> T accept(ExpressionVisitor<T> visitor) {
-        List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
-        T t = visitor.visitLeave(this, l);
-        if (t == null) {
-            t = visitor.defaultReturn(this, l);
-        }
-        return t;
+  @Override
+  public PDataType getDataType() {
+    return PDataType
+      .fromTypeId(children.get(0).getDataType().getSqlType() - PDataType.ARRAY_TYPE_BASE);
+  }
+
+  @Override
+  public void write(DataOutput output) throws IOException {
+    super.write(output);
+  }
+
+  @Override
+  public void readFields(DataInput input) throws IOException {
+    super.readFields(input);
+  }
+
+  @Override
+  public final <T> T accept(ExpressionVisitor<T> visitor) {
+    List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
+    T t = visitor.visitLeave(this, l);
+    if (t == null) {
+      t = visitor.defaultReturn(this, l);
     }
+    return t;
+  }
 }

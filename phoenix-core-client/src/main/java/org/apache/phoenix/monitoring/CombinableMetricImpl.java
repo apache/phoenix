@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,77 +19,75 @@ package org.apache.phoenix.monitoring;
 
 public class CombinableMetricImpl implements CombinableMetric, Cloneable {
 
-    private final Metric metric;
+  private final Metric metric;
 
-    public CombinableMetricImpl(MetricType type) {
-        metric = new NonAtomicMetric(type);
-    }
-    
-    private CombinableMetricImpl(Metric metric) {
-        this.metric = metric;
-    }
+  public CombinableMetricImpl(MetricType type) {
+    metric = new NonAtomicMetric(type);
+  }
 
-    @Override
-	public MetricType getMetricType() {
-		return metric.getMetricType();
-	}
+  private CombinableMetricImpl(Metric metric) {
+    this.metric = metric;
+  }
 
-    @Override
-    public long getValue() {
-        return metric.getValue();
-    }
+  @Override
+  public MetricType getMetricType() {
+    return metric.getMetricType();
+  }
 
-    @Override
-    public void change(long delta) {
-        metric.change(delta);
-    }
+  @Override
+  public long getValue() {
+    return metric.getValue();
+  }
 
-    @Override
-    public void increment() {
-        metric.increment();
-    }
+  @Override
+  public void change(long delta) {
+    metric.change(delta);
+  }
 
-    @Override
-    public String getCurrentMetricState() {
-        return metric.getCurrentMetricState();
-    }
+  @Override
+  public void increment() {
+    metric.increment();
+  }
 
-    @Override
-    public void reset() {
-        metric.reset();
-    }
+  @Override
+  public String getCurrentMetricState() {
+    return metric.getCurrentMetricState();
+  }
 
-    /**
-     * Set the Metric value as current value
-     *
-     * @param value
-     */
-    @Override
-    public void set(long value) {
-        metric.set(value);
-    }
+  @Override
+  public void reset() {
+    metric.reset();
+  }
 
-    @Override
-    public String getPublishString() {
-        return getCurrentMetricState();
-    }
+  /**
+   * Set the Metric value as current value
+   */
+  @Override
+  public void set(long value) {
+    metric.set(value);
+  }
 
-    @Override
-    public CombinableMetric combine(CombinableMetric metric) {
-        this.metric.change(metric.getValue());
-        return this;
-    }
+  @Override
+  public String getPublishString() {
+    return getCurrentMetricState();
+  }
 
-    @Override
-    public void decrement() {
-        metric.decrement();
-    }
-    
-    @Override
-    public CombinableMetric clone(){
-        NonAtomicMetric metric = new NonAtomicMetric(this.metric.getMetricType());
-        metric.change(this.metric.getValue());
-        return new CombinableMetricImpl(metric);
-    }
+  @Override
+  public CombinableMetric combine(CombinableMetric metric) {
+    this.metric.change(metric.getValue());
+    return this;
+  }
+
+  @Override
+  public void decrement() {
+    metric.decrement();
+  }
+
+  @Override
+  public CombinableMetric clone() {
+    NonAtomicMetric metric = new NonAtomicMetric(this.metric.getMetricType());
+    metric.change(this.metric.getValue());
+    return new CombinableMetricImpl(metric);
+  }
 
 }

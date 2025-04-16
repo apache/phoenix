@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,73 +21,72 @@ import org.apache.phoenix.schema.SortOrder;
 
 public class PVarbinaryArray extends PArrayDataType<byte[][]> {
 
-    public static final PVarbinaryArray INSTANCE = new PVarbinaryArray();
+  public static final PVarbinaryArray INSTANCE = new PVarbinaryArray();
 
-    private PVarbinaryArray() {
-        super("VARBINARY ARRAY", PDataType.ARRAY_TYPE_BASE + PVarbinary.INSTANCE.getSqlType(),
-                PhoenixArray.class, null, 27);
+  private PVarbinaryArray() {
+    super("VARBINARY ARRAY", PDataType.ARRAY_TYPE_BASE + PVarbinary.INSTANCE.getSqlType(),
+      PhoenixArray.class, null, 27);
+  }
+
+  @Override
+  public boolean isArrayType() {
+    return true;
+  }
+
+  @Override
+  public boolean isFixedWidth() {
+    return false;
+  }
+
+  @Override
+  public int compareTo(Object lhs, Object rhs, PDataType rhsType) {
+    return compareTo(lhs, rhs);
+  }
+
+  @Override
+  public Integer getByteSize() {
+    return null;
+  }
+
+  @Override
+  public byte[] toBytes(Object object) {
+    return toBytes(object, SortOrder.ASC);
+  }
+
+  @Override
+  public byte[] toBytes(Object object, SortOrder sortOrder) {
+    return toBytes(object, PVarbinary.INSTANCE, sortOrder);
+  }
+
+  @Override
+  public Object toObject(byte[] bytes, int offset, int length, PDataType actualType,
+    SortOrder sortOrder, Integer maxLength, Integer scale) {
+    return toObject(bytes, offset, length, PVarbinary.INSTANCE, sortOrder, maxLength, scale,
+      PVarbinary.INSTANCE);
+  }
+
+  @Override
+  public boolean isCoercibleTo(PDataType targetType) {
+    return isCoercibleTo(targetType, this);
+  }
+
+  @Override
+  public boolean isCoercibleTo(PDataType targetType, Object value) {
+    if (value == null) {
+      return true;
     }
-
-    @Override
-    public boolean isArrayType() {
-        return true;
-    }
-
-    @Override
-    public boolean isFixedWidth() {
+    PhoenixArray pArr = (PhoenixArray) value;
+    Object[] charArr = (Object[]) pArr.array;
+    for (Object i : charArr) {
+      if (!super.isCoercibleTo(PVarbinary.INSTANCE, i)) {
         return false;
+      }
     }
+    return true;
+  }
 
-    @Override
-    public int compareTo(Object lhs, Object rhs, PDataType rhsType) {
-        return compareTo(lhs, rhs);
-    }
-
-    @Override
-    public Integer getByteSize() {
-        return null;
-    }
-
-    @Override
-    public byte[] toBytes(Object object) {
-        return toBytes(object, SortOrder.ASC);
-    }
-
-    @Override
-    public byte[] toBytes(Object object, SortOrder sortOrder) {
-        return toBytes(object, PVarbinary.INSTANCE, sortOrder);
-    }
-
-    @Override
-    public Object toObject(byte[] bytes, int offset, int length,
-            PDataType actualType, SortOrder sortOrder, Integer maxLength,
-            Integer scale) {
-        return toObject(bytes, offset, length, PVarbinary.INSTANCE, sortOrder, maxLength, scale,
-                PVarbinary.INSTANCE);
-    }
-
-    @Override
-    public boolean isCoercibleTo(PDataType targetType) {
-        return isCoercibleTo(targetType, this);
-    }
-
-    @Override
-    public boolean isCoercibleTo(PDataType targetType, Object value) {
-        if (value == null) {
-            return true;
-        }
-        PhoenixArray pArr = (PhoenixArray) value;
-        Object[] charArr = (Object[]) pArr.array;
-        for (Object i : charArr) {
-            if (!super.isCoercibleTo(PVarbinary.INSTANCE, i)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    @Override
-    public Object getSampleValue(Integer maxLength, Integer arrayLength) {
-        return getSampleValue(PVarbinary.INSTANCE, arrayLength, maxLength);
-    }
+  @Override
+  public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+    return getSampleValue(PVarbinary.INSTANCE, arrayLength, maxLength);
+  }
 }

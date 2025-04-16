@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,7 +18,6 @@
 package org.apache.phoenix.mapreduce;
 
 import java.io.IOException;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
@@ -32,8 +31,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Wrapper around TextInputFormat which can ignore the first line in the first InputSplit
- * for a file.
+ * Wrapper around TextInputFormat which can ignore the first line in the first InputSplit for a
+ * file.
  */
 public class PhoenixTextInputFormat extends TextInputFormat {
   public static final String SKIP_HEADER_KEY = "phoenix.input.format.skip.header";
@@ -43,21 +42,24 @@ public class PhoenixTextInputFormat extends TextInputFormat {
   }
 
   @Override
-  public RecordReader<LongWritable, Text> createRecordReader(InputSplit split, TaskAttemptContext context) {
-    RecordReader<LongWritable,Text> rr = super.createRecordReader(split, context);
-    
+  public RecordReader<LongWritable, Text> createRecordReader(InputSplit split,
+    TaskAttemptContext context) {
+    RecordReader<LongWritable, Text> rr = super.createRecordReader(split, context);
+
     return new PhoenixLineRecordReader((LineRecordReader) rr);
   }
 
-  public static class PhoenixLineRecordReader extends RecordReader<LongWritable,Text> {
+  public static class PhoenixLineRecordReader extends RecordReader<LongWritable, Text> {
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixLineRecordReader.class);
     private final LineRecordReader rr;
+
     private PhoenixLineRecordReader(LineRecordReader rr) {
       this.rr = rr;
     }
 
     @Override
-    public void initialize(InputSplit genericSplit, TaskAttemptContext context) throws IOException, InterruptedException {
+    public void initialize(InputSplit genericSplit, TaskAttemptContext context)
+      throws IOException, InterruptedException {
       rr.initialize(genericSplit, context);
       final Configuration conf = context.getConfiguration();
       final FileSplit split = (FileSplit) genericSplit;

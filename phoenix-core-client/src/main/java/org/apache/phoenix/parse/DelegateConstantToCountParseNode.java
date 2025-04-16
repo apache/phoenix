@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,28 +19,30 @@ package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
 import java.util.List;
-
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
 import org.apache.phoenix.expression.function.FunctionExpression;
 
-
 public abstract class DelegateConstantToCountParseNode extends AggregateFunctionParseNode {
 
-    public DelegateConstantToCountParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
-        super(name, children, info);
+  public DelegateConstantToCountParseNode(String name, List<ParseNode> children,
+    BuiltInFunctionInfo info) {
+    super(name, children, info);
+  }
+
+  protected CountAggregateFunction getDelegateFunction(List<Expression> children,
+    StatementContext context) {
+    CountAggregateFunction countFunc = null;
+    if (getChildren().get(0).isStateless()) {
+      countFunc = (CountAggregateFunction) context.getExpressionManager()
+        .addIfAbsent(new CountAggregateFunction(children));
     }
-    
-    protected CountAggregateFunction getDelegateFunction(List<Expression> children, StatementContext context) {
-        CountAggregateFunction countFunc = null;
-        if (getChildren().get(0).isStateless()) {
-            countFunc = (CountAggregateFunction)context.getExpressionManager().addIfAbsent(new CountAggregateFunction(children));
-        }
-        return countFunc;
-    }
-    
-    @Override
-    public abstract FunctionExpression create(List<Expression> children, StatementContext context) throws SQLException;
+    return countFunc;
+  }
+
+  @Override
+  public abstract FunctionExpression create(List<Expression> children, StatementContext context)
+    throws SQLException;
 
 }

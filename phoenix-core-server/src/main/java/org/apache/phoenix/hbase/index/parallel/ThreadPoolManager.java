@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,12 +26,12 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Threads;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 /**
@@ -44,22 +44,20 @@ public class ThreadPoolManager {
   /**
    * Get an executor for the given name, based on the passed {@link Configuration}. If a thread pool
    * already exists with that name, it will be returned.
-   * @param builder
-   * @param env
    * @return a {@link ThreadPoolExecutor} for the given name. Thread pool that only shuts down when
    *         there are no more explicit references to it. You do not need to shutdown the threadpool
    *         on your own - it is managed for you. When you are done, you merely need to release your
    *         reference. If you do attempt to shutdown the pool, you should be careful to call
-   *         {@link ThreadPoolExecutor#shutdown()} XOR {@link ThreadPoolExecutor#shutdownNow()} - extra calls to either can lead to
-   *         early shutdown of the pool.
+   *         {@link ThreadPoolExecutor#shutdown()} XOR {@link ThreadPoolExecutor#shutdownNow()} -
+   *         extra calls to either can lead to early shutdown of the pool.
    */
   public static synchronized ThreadPoolExecutor getExecutor(ThreadPoolBuilder builder,
-      RegionCoprocessorEnvironment env) {
+    RegionCoprocessorEnvironment env) {
     return getExecutor(builder, env.getSharedData());
   }
 
   static synchronized ThreadPoolExecutor getExecutor(ThreadPoolBuilder builder,
-      Map<String, Object> poolCache) {
+    Map<String, Object> poolCache) {
     ThreadPoolExecutor pool = (ThreadPoolExecutor) poolCache.get(builder.getName());
     if (pool == null || pool.isTerminating() || pool.isShutdown()) {
       pool = getDefaultExecutor(builder);
@@ -72,7 +70,6 @@ public class ThreadPoolManager {
   }
 
   /**
-   * @param conf
    */
   private static ShutdownOnUnusedThreadPoolExecutor getDefaultExecutor(ThreadPoolBuilder builder) {
     int maxThreads = builder.getMaxThreads();
@@ -88,11 +85,11 @@ public class ThreadPoolManager {
     // usual policy and throw a RejectedExecutionException because we are shutting down anyways and
     // the worst thing is that this gets unloaded.
     ShutdownOnUnusedThreadPoolExecutor pool =
-        new ShutdownOnUnusedThreadPoolExecutor(maxThreads, maxThreads, keepAliveTime,
-            TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(),
-            new ThreadFactoryBuilder().setNameFormat(builder.getName()+"-pool-%d")
-            .setUncaughtExceptionHandler(Threads.LOGGING_EXCEPTION_HANDLER).build(),
-            builder.getName());
+      new ShutdownOnUnusedThreadPoolExecutor(maxThreads, maxThreads, keepAliveTime,
+        TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(),
+        new ThreadFactoryBuilder().setNameFormat(builder.getName() + "-pool-%d")
+          .setUncaughtExceptionHandler(Threads.LOGGING_EXCEPTION_HANDLER).build(),
+        builder.getName());
     pool.allowCoreThreadTimeOut(true);
     return pool;
   }
@@ -109,8 +106,8 @@ public class ThreadPoolManager {
     private String poolName;
 
     public ShutdownOnUnusedThreadPoolExecutor(int coreThreads, int maxThreads, long keepAliveTime,
-        TimeUnit timeUnit, BlockingQueue<Runnable> workQueue, ThreadFactory threadFactory,
-        String poolName) {
+      TimeUnit timeUnit, BlockingQueue<Runnable> workQueue, ThreadFactory threadFactory,
+      String poolName) {
       super(coreThreads, maxThreads, keepAliveTime, timeUnit, workQueue, threadFactory);
       this.references = new AtomicInteger();
       this.poolName = poolName;
