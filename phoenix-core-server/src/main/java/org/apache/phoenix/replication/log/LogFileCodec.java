@@ -94,7 +94,9 @@ public class LogFileCodec implements LogFile.Codec {
 
             // Write record fields
             out.writeByte(record.getMutationType().getCode());
-            WritableUtils.writeString(out, record.getSchemaObjectName()); // Uses vint for length
+            byte[] nameBytes = record.getSchemaObjectName().getBytes(StandardCharsets.UTF_8);
+            WritableUtils.writeVInt(out, nameBytes.length);
+            out.write(nameBytes);
             WritableUtils.writeVLong(out, record.getCommitId());
             WritableUtils.writeVInt(out, record.getRowKey().length);
             out.write(record.getRowKey());
@@ -118,8 +120,8 @@ public class LogFileCodec implements LogFile.Codec {
         private int calculateRecordSize(LogFile.Record record) {
             int size = 0;
             size += Bytes.SIZEOF_BYTE; // Mutation Type
-            size += WritableUtils.getVIntSize(record.getSchemaObjectName().length())
-                + record.getSchemaObjectName().getBytes(StandardCharsets.UTF_8).length;
+            byte[] nameBytes = record.getSchemaObjectName().getBytes(StandardCharsets.UTF_8);
+            size += WritableUtils.getVIntSize(nameBytes.length) + nameBytes.length;
             size += WritableUtils.getVIntSize(record.getCommitId()); // Commit ID
             size += WritableUtils.getVIntSize(record.getRowKey().length)
                 + record.getRowKey().length; // Row Key
@@ -162,7 +164,12 @@ public class LogFileCodec implements LogFile.Codec {
                 // Set the total serialized length on the record
                 current.setSerializedLength(recordDataLength);
                 current.setMutationType(LogFile.MutationType.codeToType(in.readByte()));
-                current.setSchemaObjectName(WritableUtils.readString(in));
+
+                int nameBytesLen = WritableUtils.readVInt(in);
+                byte nameBytes[] = new byte[nameBytesLen];
+                in.readFully(nameBytes);
+                current.setSchemaObjectName(Bytes.toString(nameBytes));
+
                 current.setCommitId(WritableUtils.readVLong(in));
 
                 int rowKeyLen = WritableUtils.readVInt(in);
