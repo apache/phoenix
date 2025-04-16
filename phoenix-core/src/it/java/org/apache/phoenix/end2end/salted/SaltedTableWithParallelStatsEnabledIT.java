@@ -153,7 +153,7 @@ public class SaltedTableWithParallelStatsEnabledIT extends ParallelStatsEnabledI
         for (int i = 0; i< saltBucketCount; i++) {
             rowKeyPrefix[0] = (byte) i;
             Scan scan = new Scan();
-            scan.setStartStopRowForPrefixScan(rowKeyPrefix);
+            scan.setRowPrefixFilter(rowKeyPrefix);
             try (ResultScanner scanner = hTable.getScanner(scan)) {
                 while(scanner.next() != null) {
                     rowCountFromHBase++;
@@ -266,7 +266,7 @@ public class SaltedTableWithParallelStatsEnabledIT extends ParallelStatsEnabledI
         Table hTable = conn.unwrap(PhoenixConnection.class)
                 .getQueryServices().getTable(tableName.getBytes());
         Scan scan = new Scan();
-        scan.setStartStopRowForPrefixScan(rowKeyPrefix);
+        scan.setRowPrefixFilter(rowKeyPrefix);
         boolean pastFirstRow = false;
         try (ResultScanner scanner = hTable.getScanner(scan)) {
             Result r;
