@@ -21,7 +21,7 @@
 
 # !!!  PLEASE READ !!!
 # !!!  Do NOT run the script against a prodcution cluster because it wipes out
-# !!!  existing data of the cluster 
+# !!!  existing data of the cluster
 
 from __future__ import print_function
 import os

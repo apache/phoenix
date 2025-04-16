@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,110 +25,116 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.compile.ExplainPlanAttributes
-    .ExplainPlanAttributesBuilder;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.AssertResults;
 import org.junit.Test;
 
-
-
 public class ConcatResultIteratorTest {
-    private final static byte[] A = Bytes.toBytes("a");
-    private final static byte[] B = Bytes.toBytes("b");
-    private final static byte[] C = Bytes.toBytes("c");
-    private final static byte[] D = Bytes.toBytes("d");
+  private final static byte[] A = Bytes.toBytes("a");
+  private final static byte[] B = Bytes.toBytes("b");
+  private final static byte[] C = Bytes.toBytes("c");
+  private final static byte[] D = Bytes.toBytes("d");
 
-    @Test
-    public void testConcat() throws Throwable {
-        Tuple[] results1 = new Tuple[] {
-                new SingleKeyValueTuple(new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(1))),
-            };
-        Tuple[] results2 = new Tuple[] {
-                new SingleKeyValueTuple(new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(2)))
-            };
-        Tuple[] results3 = new Tuple[] {
-                new SingleKeyValueTuple(new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(3))),
-                new SingleKeyValueTuple(new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(4))),
-            };
-        final List<PeekingResultIterator>results = Arrays.asList(new PeekingResultIterator[] {new MaterializedResultIterator(Arrays.asList(results1)), new MaterializedResultIterator(Arrays.asList(results2)), new MaterializedResultIterator(Arrays.asList(results3))});
-        ResultIterators iterators = new MaterializedResultIterators(results);
+  @Test
+  public void testConcat() throws Throwable {
+    Tuple[] results1 = new Tuple[] { new SingleKeyValueTuple(
+      new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(1))), };
+    Tuple[] results2 = new Tuple[] { new SingleKeyValueTuple(
+      new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(2))) };
+    Tuple[] results3 = new Tuple[] {
+      new SingleKeyValueTuple(
+        new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(3))),
+      new SingleKeyValueTuple(
+        new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(4))), };
+    final List<PeekingResultIterator> results = Arrays
+      .asList(new PeekingResultIterator[] { new MaterializedResultIterator(Arrays.asList(results1)),
+        new MaterializedResultIterator(Arrays.asList(results2)),
+        new MaterializedResultIterator(Arrays.asList(results3)) });
+    ResultIterators iterators = new MaterializedResultIterators(results);
 
-        Tuple[] expectedResults = new Tuple[] {
-                new SingleKeyValueTuple(new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(1))),
-                new SingleKeyValueTuple(new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(2))),
-                new SingleKeyValueTuple(new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(3))),
-                new SingleKeyValueTuple(new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(4))),
-            };
+    Tuple[] expectedResults = new Tuple[] {
+      new SingleKeyValueTuple(
+        new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(1))),
+      new SingleKeyValueTuple(
+        new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(2))),
+      new SingleKeyValueTuple(
+        new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(3))),
+      new SingleKeyValueTuple(
+        new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(4))), };
 
-        ResultIterator scanner = new ConcatResultIterator(iterators);
-        AssertResults.assertResults(scanner, expectedResults);
-    }
-    
-    @Test
-    public void testMergeSort() throws Throwable {
-        Tuple[] results1 = new Tuple[] {
-                new SingleKeyValueTuple(new KeyValue(C, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(1))),
-            };
-        Tuple[] results2 = new Tuple[] {
-                new SingleKeyValueTuple(new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(2)))
-            };
-        Tuple[] results3 = new Tuple[] {
-                new SingleKeyValueTuple(new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(3))),
-                new SingleKeyValueTuple(new KeyValue(D, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(4))),
-            };
-        final List<PeekingResultIterator>results = new ArrayList<PeekingResultIterator>(Arrays.asList(new PeekingResultIterator[] {new MaterializedResultIterator(Arrays.asList(results1)), new MaterializedResultIterator(Arrays.asList(results2)), new MaterializedResultIterator(Arrays.asList(results3))}));
+    ResultIterator scanner = new ConcatResultIterator(iterators);
+    AssertResults.assertResults(scanner, expectedResults);
+  }
 
-        Tuple[] expectedResults = new Tuple[] {
-                new SingleKeyValueTuple(new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(3))),
-                new SingleKeyValueTuple(new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(2))),
-                new SingleKeyValueTuple(new KeyValue(C, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(1))),
-                new SingleKeyValueTuple(new KeyValue(D, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(4))),
-            };
+  @Test
+  public void testMergeSort() throws Throwable {
+    Tuple[] results1 = new Tuple[] { new SingleKeyValueTuple(
+      new KeyValue(C, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(1))), };
+    Tuple[] results2 = new Tuple[] { new SingleKeyValueTuple(
+      new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(2))) };
+    Tuple[] results3 = new Tuple[] {
+      new SingleKeyValueTuple(
+        new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(3))),
+      new SingleKeyValueTuple(
+        new KeyValue(D, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(4))), };
+    final List<PeekingResultIterator> results = new ArrayList<PeekingResultIterator>(Arrays
+      .asList(new PeekingResultIterator[] { new MaterializedResultIterator(Arrays.asList(results1)),
+        new MaterializedResultIterator(Arrays.asList(results2)),
+        new MaterializedResultIterator(Arrays.asList(results3)) }));
 
-        ResultIterators iterators = new ResultIterators() {
+    Tuple[] expectedResults = new Tuple[] {
+      new SingleKeyValueTuple(
+        new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(3))),
+      new SingleKeyValueTuple(
+        new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(2))),
+      new SingleKeyValueTuple(
+        new KeyValue(C, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(1))),
+      new SingleKeyValueTuple(
+        new KeyValue(D, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(4))), };
 
-            @Override
-            public List<PeekingResultIterator> getIterators() throws SQLException {
-                return results;
-            }
+    ResultIterators iterators = new ResultIterators() {
 
-            @Override
-            public void explain(List<String> planSteps,
-                    ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+      @Override
+      public List<PeekingResultIterator> getIterators() throws SQLException {
+        return results;
+      }
 
-            }
+      @Override
+      public void explain(List<String> planSteps,
+        ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
 
-            @Override
-            public int size() {
-                return results.size();
-            }
+      }
 
-            @Override
-            public void explain(List<String> planSteps) {
-            }
-            
-			@Override
-			public List<KeyRange> getSplits() {
-				return Collections.emptyList();
-			}
+      @Override
+      public int size() {
+        return results.size();
+      }
 
-			@Override
-			public List<List<Scan>> getScans() {
-				return Collections.emptyList();
-			}
+      @Override
+      public void explain(List<String> planSteps) {
+      }
 
-            @Override
-            public void close() throws SQLException {
-            }
-        };
-        ResultIterator scanner = new MergeSortRowKeyResultIterator(iterators);
-        AssertResults.assertResults(scanner, expectedResults);
-    }
+      @Override
+      public List<KeyRange> getSplits() {
+        return Collections.emptyList();
+      }
+
+      @Override
+      public List<List<Scan>> getScans() {
+        return Collections.emptyList();
+      }
+
+      @Override
+      public void close() throws SQLException {
+      }
+    };
+    ResultIterator scanner = new MergeSortRowKeyResultIterator(iterators);
+    AssertResults.assertResults(scanner, expectedResults);
+  }
 }

@@ -17,7 +17,7 @@ limitations under the License.
 
 Pherf is a performance test framework that exercises HBase through Apache Phoenix, a SQL layer interface.
 
-## Build 
+## Build
 mvn clean package -DskipTests
 
 ## Important arguments:
@@ -38,23 +38,23 @@ mvn clean package -DskipTests
 - -rowCountOverride [number of rows] _Specify number of rows to be upserted rather than using row count specified in schema_ </br>
 
 ## Running from IDE
-Ex. Load data and execute queries. Specify the following as your IDE debug arguments:<br/> 
+Ex. Load data and execute queries. Specify the following as your IDE debug arguments:<br/>
 `-drop -l -q -z localhost`
 
 ## Running from command line
-Ex. Drop existing tables, load data, and execute queries:<br/>  
+Ex. Drop existing tables, load data, and execute queries:<br/>
 `java -jar pherf-1.0-SNAPSHOT-jar-with-dependencies.jar -drop -l -q -z localhost`
 
 ## Adding Rules for Data Creation
-Review [test_scenario.xml](/src/test/resources/scenario/test_scenario.xml) 
+Review [test_scenario.xml](/src/test/resources/scenario/test_scenario.xml)
 for syntax examples.<br />
 
 * Rules are defined as `<columns />` and are applied in the order they appear in file.
-* Rules of the same type override the values of a prior rule of the same type. If `<userDefined>true</userDefined>` is 
+* Rules of the same type override the values of a prior rule of the same type. If `<userDefined>true</userDefined>` is
 set, rule will only
 apply override when type and name match the column name in Phoenix.
-* `<prefix>` tag is set at the column level. It can be used to define a constant string appended to the beginning of 
-CHAR and VARCHAR data type values. 
+* `<prefix>` tag is set at the column level. It can be used to define a constant string appended to the beginning of
+CHAR and VARCHAR data type values.
 * **Required field** Supported Phoenix types: VARCHAR, CHAR, DATE, DECIMAL, INTEGER
     * denoted by the `<type>` tag
 * User defined true changes rule matching to use both name and type fields to determine equivalence.
@@ -66,8 +66,8 @@ CHAR and VARCHAR data type values.
     * LIST:         Means pick values from predefined list of values
 * **Required field** Length defines boundary for random values for CHAR and VARCHAR types.
     * denoted by the `<length>` tag
-* Column level Min/Max value defines boundaries for numerical values. For DATES, these values supply a range between 
-which values are generated. At the column level the granularity is a year. At a specific data value level, the 
+* Column level Min/Max value defines boundaries for numerical values. For DATES, these values supply a range between
+which values are generated. At the column level the granularity is a year. At a specific data value level, the
 granularity is down to the Ms.
     * denoted by the `<minValue>` tag
     * denoted by the `<maxValue>` tag
@@ -76,19 +76,19 @@ the value will be null.
     * denoted by `<nullChance>`
 * Name can either be any text or the actual column name in the Phoenix table.
     * denoted by the `<name>`
-* Value List is used in conjunction with LIST data sequences. Each entry is a DataValue with a specified value to be 
-used when generating data. 
+* Value List is used in conjunction with LIST data sequences. Each entry is a DataValue with a specified value to be
+used when generating data.
     * Denoted by the `<valueList><datavalue><value/></datavalue></valueList>` tags
     * If the distribution attribute on the datavalue is set, values will be created according to
-that probability. 
-    * When distribution is used, values must add up to 100%. 
+that probability.
+    * When distribution is used, values must add up to 100%.
     * If distribution is not used, values will be randomly picked from the list with equal distribution.
 
 ## Defining Scenario
-Scenario can have multiple querySets. Consider following example, concurrency of 1-4 means that each query will be 
-executed starting with concurrency level of 1 and reach up to maximum concurrency of 4. Per thread, query would be 
+Scenario can have multiple querySets. Consider following example, concurrency of 1-4 means that each query will be
+executed starting with concurrency level of 1 and reach up to maximum concurrency of 4. Per thread, query would be
 executed to a minimum of 10 times or 10 seconds (whichever comes first). QuerySet by defult is executed serially but you
- can change executionType to PARALLEL so queries are executed concurrently. Scenarios are defined in XMLs stored 
+ can change executionType to PARALLEL so queries are executed concurrently. Scenarios are defined in XMLs stored
  in the resource directory.
 
 ```
@@ -97,7 +97,7 @@ executed to a minimum of 10 times or 10 seconds (whichever comes first). QuerySe
     <!--Minimum of executionDurationInMs or numberOfExecutions. Which ever is reached first -->
     <querySet concurrency="1-4" executionType="PARALLEL" executionDurationInMs="10000" numberOfExecutions="10">
         <query id="q1" verifyRowCount="false" statement="select count(*) from PHERF.TEST_TABLE"/>
-        <query id="q2" tenantId="1234567890" ddl="create view if not exists 
+        <query id="q2" tenantId="1234567890" ddl="create view if not exists
         myview(mypk varchar not null primary key, mycol varchar)" statement="upsert select ..."/>
     </querySet>
     <querySet concurrency="3" executionType="SERIAL" executionDurationInMs="20000" numberOfExecutions="100">
@@ -105,11 +105,11 @@ executed to a minimum of 10 times or 10 seconds (whichever comes first). QuerySe
         <query id="q4" statement="select count(*) from PHERF.TEST_TABLE WHERE TENANT_ID='00D000000000062'"/>
     </querySet>
 </scenario>
-        
+
 ```
 
 ## Results
-Results are written real time in _results_ directory. Open the result that is saved in .jpg format for real time 
+Results are written real time in _results_ directory. Open the result that is saved in .jpg format for real time
 visualization.
 
 ## Testing

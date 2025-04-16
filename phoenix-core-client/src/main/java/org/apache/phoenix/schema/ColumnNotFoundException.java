@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,32 +20,30 @@ package org.apache.phoenix.schema;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 
-
 /**
- * 
- * Exception thrown when a column name referenced in a select
- * statement cannot be found in any table.
- *
- * 
+ * Exception thrown when a column name referenced in a select statement cannot be found in any
+ * table.
  * @since 0.1
  */
 public class ColumnNotFoundException extends MetaDataEntityNotFoundException {
-    private static final long serialVersionUID = 1L;
-    private static SQLExceptionCode code = SQLExceptionCode.COLUMN_NOT_FOUND;
-    private final String columnName;
+  private static final long serialVersionUID = 1L;
+  private static SQLExceptionCode code = SQLExceptionCode.COLUMN_NOT_FOUND;
+  private final String columnName;
 
-    public ColumnNotFoundException(String columnName) {
-        this(null, null, null, columnName);
-    }
+  public ColumnNotFoundException(String columnName) {
+    this(null, null, null, columnName);
+  }
 
-    public ColumnNotFoundException(String schemaName, String tableName, String familyName, String columnName) {
-        super(new SQLExceptionInfo.Builder(code).setSchemaName(schemaName).setTableName(tableName)
-                .setFamilyName(familyName).setColumnName(columnName).build().toString(),
-                code.getSQLState(), code.getErrorCode(), schemaName, tableName, null);
-        this.columnName = columnName;
-    }
+  public ColumnNotFoundException(String schemaName, String tableName, String familyName,
+    String columnName) {
+    super(
+      new SQLExceptionInfo.Builder(code).setSchemaName(schemaName).setTableName(tableName)
+        .setFamilyName(familyName).setColumnName(columnName).build().toString(),
+      code.getSQLState(), code.getErrorCode(), schemaName, tableName, null);
+    this.columnName = columnName;
+  }
 
-    public String getColumnName() {
-        return columnName;
-    }
+  public String getColumnName() {
+    return columnName;
+  }
 }

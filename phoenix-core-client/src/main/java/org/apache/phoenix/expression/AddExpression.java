@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,37 +18,32 @@
 package org.apache.phoenix.expression;
 
 import java.util.List;
-
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 
-
 /**
- * 
  * Subtract expression implementation
- *
- * 
  * @since 0.1
  */
 public abstract class AddExpression extends BaseAddSubtractExpression {
-    public AddExpression() {
-    }
+  public AddExpression() {
+  }
 
-    public AddExpression(List<Expression> children) {
-        super(children);
-    }
+  public AddExpression(List<Expression> children) {
+    super(children);
+  }
 
-    @Override
-    public final <T> T accept(ExpressionVisitor<T> visitor) {
-        List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
-        T t = visitor.visitLeave(this, l);
-        if (t == null) {
-            t = visitor.defaultReturn(this, l);
-        }
-        return t;
+  @Override
+  public final <T> T accept(ExpressionVisitor<T> visitor) {
+    List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
+    T t = visitor.visitLeave(this, l);
+    if (t == null) {
+      t = visitor.defaultReturn(this, l);
     }
+    return t;
+  }
 
-    @Override
-    public String getOperatorString() {
-        return " + ";
-    }
+  @Override
+  public String getOperatorString() {
+    return " + ";
+  }
 }

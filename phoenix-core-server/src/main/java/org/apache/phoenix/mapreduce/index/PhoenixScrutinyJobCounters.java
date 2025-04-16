@@ -1,4 +1,3 @@
-/**
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -8,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,30 +21,30 @@ package org.apache.phoenix.mapreduce.index;
  * Counters used for Index Scrutiny MR job
  */
 public enum PhoenixScrutinyJobCounters {
-    /**
-     * number of rows in data table with a valid index row (or vice-versa)
-     */
-    VALID_ROW_COUNT,
-    /**
-     * number of rows in data table with an invalid index row (or vice-versa)
-     */
-    INVALID_ROW_COUNT,
-    /**
-     * Number of rows in the index table with an incorrect covered column value
-     */
-    BAD_COVERED_COL_VAL_COUNT,
-    /**
-     * Number of rows in source that have expired while scrutiny was comparing them with target
-     */
-    EXPIRED_ROW_COUNT,
-    /**
-     * Number of batches processed
-     */
-    BATCHES_PROCESSED_COUNT,
-    /**
-     * Number of rows in source that became older than the max lookback age while scrutiny
-     * was comparing them with the target, and didn't match. We break these out separately because
-     * they could be due to extra versions being compacted, and are harmless.
-     */
-    BEYOND_MAX_LOOKBACK_COUNT;
+  /**
+   * number of rows in data table with a valid index row (or vice-versa)
+   */
+  VALID_ROW_COUNT,
+  /**
+   * number of rows in data table with an invalid index row (or vice-versa)
+   */
+  INVALID_ROW_COUNT,
+  /**
+   * Number of rows in the index table with an incorrect covered column value
+   */
+  BAD_COVERED_COL_VAL_COUNT,
+  /**
+   * Number of rows in source that have expired while scrutiny was comparing them with target
+   */
+  EXPIRED_ROW_COUNT,
+  /**
+   * Number of batches processed
+   */
+  BATCHES_PROCESSED_COUNT,
+  /**
+   * Number of rows in source that became older than the max lookback age while scrutiny was
+   * comparing them with the target, and didn't match. We break these out separately because they
+   * could be due to extra versions being compacted, and are harmless.
+   */
+  BEYOND_MAX_LOOKBACK_COUNT;
 }

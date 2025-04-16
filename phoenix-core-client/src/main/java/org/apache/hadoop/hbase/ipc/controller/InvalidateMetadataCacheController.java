@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -27,25 +27,25 @@ import org.apache.phoenix.util.IndexUtil;
  * Controller used to invalidate server side metadata cache RPCs.
  */
 public class InvalidateMetadataCacheController extends DelegatingHBaseRpcController {
-    private int priority;
+  private int priority;
 
-    public InvalidateMetadataCacheController(HBaseRpcController delegate, Configuration conf) {
-        super(delegate);
-        this.priority = IndexUtil.getInvalidateMetadataCachePriority(conf);
-    }
+  public InvalidateMetadataCacheController(HBaseRpcController delegate, Configuration conf) {
+    super(delegate);
+    this.priority = IndexUtil.getInvalidateMetadataCachePriority(conf);
+  }
 
-    @Override
-    public void setPriority(int priority) {
-        this.priority = priority;
-    }
+  @Override
+  public void setPriority(int priority) {
+    this.priority = priority;
+  }
 
-    @Override
-    public void setPriority(TableName tn) {
-        // Nothing
-    }
+  @Override
+  public void setPriority(TableName tn) {
+    // Nothing
+  }
 
-    @Override
-    public int getPriority() {
-        return this.priority;
-    }
+  @Override
+  public int getPriority() {
+    return this.priority;
+  }
 }

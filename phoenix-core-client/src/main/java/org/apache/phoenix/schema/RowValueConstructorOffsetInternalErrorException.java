@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,21 +18,19 @@
 package org.apache.phoenix.schema;
 
 import java.sql.SQLException;
-
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 
 /**
- * 
  * Exception thrown when a RVC Offset is not coercible to a PK or index of a table
- * 
  */
 public class RowValueConstructorOffsetInternalErrorException extends SQLException {
-    private static final long serialVersionUID = 1L;
-    private static SQLExceptionCode code = SQLExceptionCode.ROW_VALUE_CONSTRUCTOR_OFFSET_INTERNAL_ERROR;
-    final private static String BASE_MESSAGE = new SQLExceptionInfo.Builder(code).build().toString();
+  private static final long serialVersionUID = 1L;
+  private static SQLExceptionCode code =
+    SQLExceptionCode.ROW_VALUE_CONSTRUCTOR_OFFSET_INTERNAL_ERROR;
+  final private static String BASE_MESSAGE = new SQLExceptionInfo.Builder(code).build().toString();
 
-    public RowValueConstructorOffsetInternalErrorException(String additionalInfo) {
-        super(BASE_MESSAGE + " " + additionalInfo, code.getSQLState(), code.getErrorCode());
-    }
+  public RowValueConstructorOffsetInternalErrorException(String additionalInfo) {
+    super(BASE_MESSAGE + " " + additionalInfo, code.getSQLState(), code.getErrorCode());
+  }
 }

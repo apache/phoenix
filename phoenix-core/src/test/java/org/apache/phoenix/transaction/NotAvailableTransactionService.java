@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,10 +21,11 @@ import java.io.IOException;
 
 public class NotAvailableTransactionService implements PhoenixTransactionService {
 
-  private static final NotAvailableTransactionService INSTANCE = new NotAvailableTransactionService();
+  private static final NotAvailableTransactionService INSTANCE =
+    new NotAvailableTransactionService();
 
   public static NotAvailableTransactionService getInstance() {
-      return INSTANCE;
+    return INSTANCE;
   }
 
   @Override

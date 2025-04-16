@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.pherf.workload.mt.generators;
 
 import org.apache.phoenix.pherf.workload.mt.operations.Operation;
@@ -24,47 +23,50 @@ import org.apache.phoenix.pherf.workload.mt.operations.Operation;
  * Holds information on the tenant operation details.
  */
 public class TenantOperationInfo {
-    private final String modelName;
-    private final String scenarioName;
-    private final String tableName;
-    private final String tenantId;
-    private final String tenantGroupId;
-    private final String operationGroupId;
-    private final Operation operation;
+  private final String modelName;
+  private final String scenarioName;
+  private final String tableName;
+  private final String tenantId;
+  private final String tenantGroupId;
+  private final String operationGroupId;
+  private final Operation operation;
 
-    public TenantOperationInfo(String modelName, String scenarioName, String tableName,
-            String tenantGroupId, String operationGroupId,
-            String tenantId, Operation operation) {
-        this.modelName = modelName;
-        this.scenarioName = scenarioName;
-        this.tableName = tableName;
-        this.tenantGroupId = tenantGroupId;
-        this.operationGroupId = operationGroupId;
-        this.tenantId = tenantId;
-        this.operation = operation;
-    }
+  public TenantOperationInfo(String modelName, String scenarioName, String tableName,
+    String tenantGroupId, String operationGroupId, String tenantId, Operation operation) {
+    this.modelName = modelName;
+    this.scenarioName = scenarioName;
+    this.tableName = tableName;
+    this.tenantGroupId = tenantGroupId;
+    this.operationGroupId = operationGroupId;
+    this.tenantId = tenantId;
+    this.operation = operation;
+  }
 
-    public String getModelName() { return modelName; }
+  public String getModelName() {
+    return modelName;
+  }
 
-    public String getScenarioName() { return scenarioName; }
+  public String getScenarioName() {
+    return scenarioName;
+  }
 
-    public String getTableName() {
-        return tableName;
-    }
+  public String getTableName() {
+    return tableName;
+  }
 
-    public String getTenantGroupId() {
-        return tenantGroupId;
-    }
+  public String getTenantGroupId() {
+    return tenantGroupId;
+  }
 
-    public String getOperationGroupId() {
-        return operationGroupId;
-    }
+  public String getOperationGroupId() {
+    return operationGroupId;
+  }
 
-    public Operation getOperation() {
-        return operation;
-    }
+  public Operation getOperation() {
+    return operation;
+  }
 
-    public String getTenantId() {
-        return tenantId;
-    }
+  public String getTenantId() {
+    return tenantId;
+  }
 }

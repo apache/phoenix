@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,39 +19,37 @@ package org.apache.phoenix.parse;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.schema.SortOrder;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 
-import org.apache.phoenix.schema.SortOrder;
-
 public class IndexKeyConstraint {
-	public static final IndexKeyConstraint EMPTY = new IndexKeyConstraint(Collections.<Pair<ParseNode, SortOrder>>emptyList());
+  public static final IndexKeyConstraint EMPTY =
+    new IndexKeyConstraint(Collections.<Pair<ParseNode, SortOrder>> emptyList());
 
-    private final List<Pair<ParseNode, SortOrder>> columnNameToSortOrder;
-    
-    IndexKeyConstraint(List<Pair<ParseNode, SortOrder>> parseNodeAndSortOrder) {
-        this.columnNameToSortOrder = ImmutableList.copyOf(parseNodeAndSortOrder);
-    }
+  private final List<Pair<ParseNode, SortOrder>> columnNameToSortOrder;
 
-    public List<Pair<ParseNode, SortOrder>> getParseNodeAndSortOrderList() {
-        return columnNameToSortOrder;
-    }
+  IndexKeyConstraint(List<Pair<ParseNode, SortOrder>> parseNodeAndSortOrder) {
+    this.columnNameToSortOrder = ImmutableList.copyOf(parseNodeAndSortOrder);
+  }
 
-    @Override
-    public String toString() {
-        StringBuffer sb = new StringBuffer();
-        for(Pair<ParseNode, SortOrder> entry : columnNameToSortOrder) {
-            if(sb.length()!=0) {
-                sb.append(", ");
-            }
-            sb.append(entry.getFirst().toString());
-            if(entry.getSecond() != SortOrder.getDefault()) {
-                sb.append(" "+entry.getSecond());
-            }
-        }
-        return sb.toString();
+  public List<Pair<ParseNode, SortOrder>> getParseNodeAndSortOrderList() {
+    return columnNameToSortOrder;
+  }
+
+  @Override
+  public String toString() {
+    StringBuffer sb = new StringBuffer();
+    for (Pair<ParseNode, SortOrder> entry : columnNameToSortOrder) {
+      if (sb.length() != 0) {
+        sb.append(", ");
+      }
+      sb.append(entry.getFirst().toString());
+      if (entry.getSecond() != SortOrder.getDefault()) {
+        sb.append(" " + entry.getSecond());
+      }
     }
+    return sb.toString();
+  }
 }

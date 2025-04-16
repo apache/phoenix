@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,65 +20,55 @@ package org.apache.phoenix.parse;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
-
 import org.apache.phoenix.compile.ColumnResolver;
 
-
-
 /**
- * 
  * Node representing EXISTS and NOT EXISTS expressions in SQL
- *
- * 
  * @since 0.1
  */
 public class ExistsParseNode extends UnaryParseNode {
-    private final boolean negate;
+  private final boolean negate;
 
-    ExistsParseNode(ParseNode child, boolean negate) {
-        super(child);
-        this.negate = negate;
+  ExistsParseNode(ParseNode child, boolean negate) {
+    super(child);
+    this.negate = negate;
+  }
+
+  public boolean isNegate() {
+    return negate;
+  }
+
+  @Override
+  public <T> T accept(ParseNodeVisitor<T> visitor) throws SQLException {
+    List<T> l = Collections.emptyList();
+    if (visitor.visitEnter(this)) {
+      l = acceptChildren(visitor);
     }
-    
-    public boolean isNegate() {
-        return negate;
-    }
+    return visitor.visitLeave(this, l);
+  }
 
-    @Override
-    public <T> T accept(ParseNodeVisitor<T> visitor) throws SQLException {
-        List<T> l = Collections.emptyList();
-        if (visitor.visitEnter(this)) {
-            l = acceptChildren(visitor);
-        }
-        return visitor.visitLeave(this, l);
-    }
+  @Override
+  public int hashCode() {
+    final int prime = 31;
+    int result = super.hashCode();
+    result = prime * result + (negate ? 1231 : 1237);
+    return result;
+  }
 
-	@Override
-	public int hashCode() {
-		final int prime = 31;
-		int result = super.hashCode();
-		result = prime * result + (negate ? 1231 : 1237);
-		return result;
-	}
+  @Override
+  public boolean equals(Object obj) {
+    if (this == obj) return true;
+    if (!super.equals(obj)) return false;
+    if (getClass() != obj.getClass()) return false;
+    ExistsParseNode other = (ExistsParseNode) obj;
+    if (negate != other.negate) return false;
+    return true;
+  }
 
-	@Override
-	public boolean equals(Object obj) {
-		if (this == obj)
-			return true;
-		if (!super.equals(obj))
-			return false;
-		if (getClass() != obj.getClass())
-			return false;
-		ExistsParseNode other = (ExistsParseNode) obj;
-		if (negate != other.negate)
-			return false;
-		return true;
-	}
-
-    @Override
-    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
-        if (negate) buf.append(" NOT");
-        buf.append(" EXISTS ");
-        getChildren().get(0).toSQL(resolver, buf);
-    }
+  @Override
+  public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+    if (negate) buf.append(" NOT");
+    buf.append(" EXISTS ");
+    getChildren().get(0).toSQL(resolver, buf);
+  }
 }

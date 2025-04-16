@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,197 +25,197 @@ import java.sql.SQLException;
 import java.text.*;
 import java.util.Date;
 import java.util.List;
-
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
-
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
-
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.parse.*;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.parse.*;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PChar;
-import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.schema.tuple.Tuple;
+
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
- * 
- * Implementation of TO_NUMBER(&lt;string&gt;/&lt;date&gt;/&lt;timestamp&gt;, [&lt;pattern-string&gt;]) built-in function.  The format for the optional
+ * Implementation of TO_NUMBER(&lt;string&gt;/&lt;date&gt;/&lt;timestamp&gt;,
+ * [&lt;pattern-string&gt;]) built-in function. The format for the optional
  * <code>pattern_string</code> param is specified in {@link DecimalFormat}.
- *
- * 
  * @since 0.1
  */
-@BuiltInFunction(name=ToNumberFunction.NAME,  nodeClass=ToNumberParseNode.class, args= {
-        @Argument(allowedTypes={PVarchar.class, PTimestamp.class}),
-        @Argument(allowedTypes={PVarchar.class}, isConstant=true, defaultValue="null")} )
+@BuiltInFunction(name = ToNumberFunction.NAME, nodeClass = ToNumberParseNode.class,
+    args = { @Argument(allowedTypes = { PVarchar.class, PTimestamp.class }),
+      @Argument(allowedTypes = { PVarchar.class }, isConstant = true, defaultValue = "null") })
 public class ToNumberFunction extends ScalarFunction {
-	public static final String NAME = "TO_NUMBER";
-    
-    private String formatString = null;
-    private Format format = null;
-	private FunctionArgumentType type;
-    
-    public ToNumberFunction() {}
+  public static final String NAME = "TO_NUMBER";
 
-    public ToNumberFunction(List<Expression> children, StatementContext context) throws SQLException {
-        super(children.subList(0, 1));
-        PDataType dataType = children.get(0).getDataType();
-        String formatString = (String)((LiteralExpression)children.get(1)).getValue(); // either date or number format string
-        Format formatter =  null;
-        FunctionArgumentType type;
+  private String formatString = null;
+  private Format format = null;
+  private FunctionArgumentType type;
 
-        if (dataType.isCoercibleTo(PTimestamp.INSTANCE)) {
-            if (formatString == null) {
-                formatString = context.getDateFormat();
-                formatter = context.getDateFormatter();
-            } else {
-                formatter = FunctionArgumentType.TEMPORAL.getFormatter(formatString);
-            }
-            type = FunctionArgumentType.TEMPORAL;
-        }
-        else if (dataType.isCoercibleTo(PChar.INSTANCE)) {
-            if (formatString != null) {
-                formatter = FunctionArgumentType.CHAR.getFormatter(formatString);
-            }
-            type = FunctionArgumentType.CHAR;
-        }
-        else {
-            throw new SQLException(dataType + " type is unsupported for TO_NUMBER().  Numeric and temporal types are supported.");
-        }
-        Preconditions.checkNotNull(type);
-        this.type = type;
-        this.formatString = formatString;
-        this.format = formatter;
+  public ToNumberFunction() {
+  }
+
+  public ToNumberFunction(List<Expression> children, StatementContext context) throws SQLException {
+    super(children.subList(0, 1));
+    PDataType dataType = children.get(0).getDataType();
+    String formatString = (String) ((LiteralExpression) children.get(1)).getValue(); // either date
+                                                                                     // or number
+                                                                                     // format
+                                                                                     // string
+    Format formatter = null;
+    FunctionArgumentType type;
+
+    if (dataType.isCoercibleTo(PTimestamp.INSTANCE)) {
+      if (formatString == null) {
+        formatString = context.getDateFormat();
+        formatter = context.getDateFormatter();
+      } else {
+        formatter = FunctionArgumentType.TEMPORAL.getFormatter(formatString);
+      }
+      type = FunctionArgumentType.TEMPORAL;
+    } else if (dataType.isCoercibleTo(PChar.INSTANCE)) {
+      if (formatString != null) {
+        formatter = FunctionArgumentType.CHAR.getFormatter(formatString);
+      }
+      type = FunctionArgumentType.CHAR;
+    } else {
+      throw new SQLException(dataType
+        + " type is unsupported for TO_NUMBER().  Numeric and temporal types are supported.");
+    }
+    Preconditions.checkNotNull(type);
+    this.type = type;
+    this.formatString = formatString;
+    this.format = formatter;
+  }
+
+  public ToNumberFunction(List<Expression> children, FunctionArgumentType type, String formatString,
+    Format formatter) throws SQLException {
+    super(children.subList(0, 1));
+    Preconditions.checkNotNull(type);
+    this.type = type;
+    this.formatString = formatString;
+    this.format = formatter;
+  }
+
+  @Override
+  public ToNumberFunction clone(List<Expression> children) {
+    try {
+      return new ToNumberFunction(children, type, formatString, format);
+    } catch (Exception e) {
+      throw new RuntimeException(e); // Impossible, since it was originally constructed this way
+    }
+  }
+
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    Expression expression = getExpression();
+    if (!expression.evaluate(tuple, ptr)) {
+      return false;
+    } else if (ptr.getLength() == 0) {
+      return true;
     }
 
-    public ToNumberFunction(List<Expression> children, FunctionArgumentType type, String formatString, Format formatter) throws SQLException {
-        super(children.subList(0, 1));
-        Preconditions.checkNotNull(type);
-        this.type = type;
-        this.formatString = formatString;
-        this.format = formatter;
-    }
-    
-    @Override
-    public ToNumberFunction clone(List<Expression> children) {
-    	try {
-            return new ToNumberFunction(children, type, formatString, format);
-        } catch (Exception e) {
-            throw new RuntimeException(e); // Impossible, since it was originally constructed this way
-        }
+    PDataType type = expression.getDataType();
+    if (type.isCoercibleTo(PTimestamp.INSTANCE)) {
+      Date date = (Date) type.toObject(ptr, expression.getSortOrder());
+      BigDecimal time = new BigDecimal(date.getTime());
+      byte[] byteValue = getDataType().toBytes(time);
+      ptr.set(byteValue);
+      return true;
     }
 
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        Expression expression = getExpression();
-        if (!expression.evaluate(tuple, ptr)) {
-            return false;
-        } else if (ptr.getLength() == 0) {
-            return true;
-        }
-
-        PDataType type = expression.getDataType();
-        if (type.isCoercibleTo(PTimestamp.INSTANCE)) {
-        	Date date = (Date) type.toObject(ptr, expression.getSortOrder());
-        	BigDecimal time = new BigDecimal(date.getTime());
-            byte[] byteValue = getDataType().toBytes(time);
-            ptr.set(byteValue);
-            return true;
-        }
-        
-        String stringValue = (String)type.toObject(ptr, expression.getSortOrder());
-        if (stringValue == null) {
-            ptr.set(EMPTY_BYTE_ARRAY);
-            return true;
-        }
-        stringValue = stringValue.trim();
-        BigDecimal decimalValue;
-        if (format == null) {
-            decimalValue = (BigDecimal) getDataType().toObject(stringValue);
-        } else {
-            ParsePosition parsePosition = new ParsePosition(0);
-            Number number = ((DecimalFormat) format).parse(stringValue, parsePosition);
-            if (parsePosition.getErrorIndex() > -1) {
-                ptr.set(EMPTY_BYTE_ARRAY);
-                return true;
-            }
-            
-            if (number instanceof BigDecimal) { 
-                // since we set DecimalFormat.setParseBigDecimal(true) we are guaranteeing result to be 
-                // of type BigDecimal in most cases.  see java.text.DecimalFormat.parse() JavaDoc.
-                decimalValue = (BigDecimal)number;
-            } else {
-                ptr.set(EMPTY_BYTE_ARRAY);
-                return true;
-            }
-        }
-        byte[] byteValue = getDataType().toBytes(decimalValue);
-        ptr.set(byteValue);
+    String stringValue = (String) type.toObject(ptr, expression.getSortOrder());
+    if (stringValue == null) {
+      ptr.set(EMPTY_BYTE_ARRAY);
+      return true;
+    }
+    stringValue = stringValue.trim();
+    BigDecimal decimalValue;
+    if (format == null) {
+      decimalValue = (BigDecimal) getDataType().toObject(stringValue);
+    } else {
+      ParsePosition parsePosition = new ParsePosition(0);
+      Number number = ((DecimalFormat) format).parse(stringValue, parsePosition);
+      if (parsePosition.getErrorIndex() > -1) {
+        ptr.set(EMPTY_BYTE_ARRAY);
         return true;
-    }
+      }
 
-    @Override
-    public PDataType getDataType() {
-    	return PDecimal.INSTANCE;
-    }
-    
-    @Override
-    public boolean isNullable() {
-        return getExpression().isNullable();
-    }
-
-    private Expression getExpression() {
-        return children.get(0);
-    }
-
-    @Override
-    public String getName() {
-        return NAME;
-    }
-    
-    @Override
-    public void readFields(DataInput input) throws IOException {
-        super.readFields(input);
-        formatString = WritableUtils.readString(input);
-        type = WritableUtils.readEnum(input, FunctionArgumentType.class);
-        if (formatString != null) {
-        	format = type.getFormatter(formatString);
-        }
-    }
-
-    @Override
-    public void write(DataOutput output) throws IOException {
-        super.write(output);
-        WritableUtils.writeString(output, formatString);
-        WritableUtils.writeEnum(output, type);
-    }
-
-    @Override
-    public int hashCode() {
-        final int prime = 31;
-        int result = super.hashCode();
-        result = prime * result + ((formatString == null) ? 0 : formatString.hashCode());
-        result = prime * result + getExpression().hashCode();
-        return result;
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (!super.equals(obj)) return false;
-        if (getClass() != obj.getClass()) return false;
-        ToNumberFunction other = (ToNumberFunction)obj;
-        if (formatString == null) {
-            if (other.formatString != null) return false;
-        } else if (!formatString.equals(other.formatString)) return false;
-        if (!getExpression().equals(other.getExpression())) return false;
+      if (number instanceof BigDecimal) {
+        // since we set DecimalFormat.setParseBigDecimal(true) we are guaranteeing result to be
+        // of type BigDecimal in most cases. see java.text.DecimalFormat.parse() JavaDoc.
+        decimalValue = (BigDecimal) number;
+      } else {
+        ptr.set(EMPTY_BYTE_ARRAY);
         return true;
+      }
     }
+    byte[] byteValue = getDataType().toBytes(decimalValue);
+    ptr.set(byteValue);
+    return true;
+  }
+
+  @Override
+  public PDataType getDataType() {
+    return PDecimal.INSTANCE;
+  }
+
+  @Override
+  public boolean isNullable() {
+    return getExpression().isNullable();
+  }
+
+  private Expression getExpression() {
+    return children.get(0);
+  }
+
+  @Override
+  public String getName() {
+    return NAME;
+  }
+
+  @Override
+  public void readFields(DataInput input) throws IOException {
+    super.readFields(input);
+    formatString = WritableUtils.readString(input);
+    type = WritableUtils.readEnum(input, FunctionArgumentType.class);
+    if (formatString != null) {
+      format = type.getFormatter(formatString);
+    }
+  }
+
+  @Override
+  public void write(DataOutput output) throws IOException {
+    super.write(output);
+    WritableUtils.writeString(output, formatString);
+    WritableUtils.writeEnum(output, type);
+  }
+
+  @Override
+  public int hashCode() {
+    final int prime = 31;
+    int result = super.hashCode();
+    result = prime * result + ((formatString == null) ? 0 : formatString.hashCode());
+    result = prime * result + getExpression().hashCode();
+    return result;
+  }
+
+  @Override
+  public boolean equals(Object obj) {
+    if (this == obj) return true;
+    if (!super.equals(obj)) return false;
+    if (getClass() != obj.getClass()) return false;
+    ToNumberFunction other = (ToNumberFunction) obj;
+    if (formatString == null) {
+      if (other.formatString != null) return false;
+    } else if (!formatString.equals(other.formatString)) return false;
+    if (!getExpression().equals(other.getExpression())) return false;
+    return true;
+  }
 }

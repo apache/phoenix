@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,20 +20,18 @@ package org.apache.phoenix.query;
 import org.apache.phoenix.util.InstanceResolver;
 
 /**
- * Manages providers that provide property policy for Phoenix.
- * 
- * Dependent modules may register their own implementations of the following using {@link java.util.ServiceLoader}:
+ * Manages providers that provide property policy for Phoenix. Dependent modules may register their
+ * own implementations of the following using {@link java.util.ServiceLoader}:
  * <ul>
- *     <li>{@link PropertyPolicy}</li>
+ * <li>{@link PropertyPolicy}</li>
  * </ul>
- *
  * If a custom implementation is not registered, the default implementations will be used.
- *
  */
 public class PropertyPolicyProvider {
-    private static final PropertyPolicy DEFAULT_PROPERTY_POLICY = new PropertyPolicy.PropertyPolicyImpl();
+  private static final PropertyPolicy DEFAULT_PROPERTY_POLICY =
+    new PropertyPolicy.PropertyPolicyImpl();
 
-    public static PropertyPolicy getPropertyPolicy(){
-        return InstanceResolver.getSingleton(PropertyPolicy.class, DEFAULT_PROPERTY_POLICY);
-    }
+  public static PropertyPolicy getPropertyPolicy() {
+    return InstanceResolver.getSingleton(PropertyPolicy.class, DEFAULT_PROPERTY_POLICY);
+  }
 }
