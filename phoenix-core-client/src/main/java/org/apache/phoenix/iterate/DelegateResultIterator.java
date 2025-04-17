@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,42 +19,39 @@ package org.apache.phoenix.iterate;
 
 import java.sql.SQLException;
 import java.util.List;
-
-import org.apache.phoenix.compile.ExplainPlanAttributes
-    .ExplainPlanAttributesBuilder;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.schema.tuple.Tuple;
 
-
 public class DelegateResultIterator implements ResultIterator {
-    private final ResultIterator delegate;
-    
-    public DelegateResultIterator(ResultIterator delegate) {
-        this.delegate = delegate;
-    }
-    
-    protected ResultIterator getDelegate() {
-    	return delegate;
-    }
-    
-    @Override
-    public void close() throws SQLException {
-        delegate.close();
-    }
+  private final ResultIterator delegate;
 
-    @Override
-    public Tuple next() throws SQLException {
-        return delegate.next();
-    }
+  public DelegateResultIterator(ResultIterator delegate) {
+    this.delegate = delegate;
+  }
 
-    @Override
-    public void explain(List<String> planSteps) {
-        delegate.explain(planSteps);
-    }
+  protected ResultIterator getDelegate() {
+    return delegate;
+  }
 
-    @Override
-    public void explain(List<String> planSteps,
-            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
-        delegate.explain(planSteps, explainPlanAttributesBuilder);
-    }
+  @Override
+  public void close() throws SQLException {
+    delegate.close();
+  }
+
+  @Override
+  public Tuple next() throws SQLException {
+    return delegate.next();
+  }
+
+  @Override
+  public void explain(List<String> planSteps) {
+    delegate.explain(planSteps);
+  }
+
+  @Override
+  public void explain(List<String> planSteps,
+    ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+    delegate.explain(planSteps, explainPlanAttributesBuilder);
+  }
 
 }

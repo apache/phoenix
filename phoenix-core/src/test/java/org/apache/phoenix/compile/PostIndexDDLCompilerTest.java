@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,7 +22,6 @@ import static org.junit.Assert.assertEquals;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -34,50 +33,52 @@ import org.junit.Test;
 
 public class PostIndexDDLCompilerTest extends BaseConnectionlessQueryTest {
 
-    @Test
-    public void testHintInSubquery() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            setupTables(conn);
-            PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-            String query = "UPSERT /*+ NO_INDEX */ INTO T(k, v1) SELECT /*+ NO_INDEX */  k,v1 FROM T WHERE v1 = '4'";
-            MutationPlan plan = stmt.compileMutation(query);
-            assertEquals("T", plan.getQueryPlan().getTableRef().getTable().getTableName().getString());
-            query = "UPSERT INTO T(k, v1) SELECT /*+ NO_INDEX */  k,v1 FROM T WHERE v1 = '4'";
-            plan = stmt.compileMutation(query);
-            // TODO the following should actually use data table T if we supported hints in subqueries
-            assertEquals("IDX", plan.getQueryPlan().getTableRef().getTable().getTableName().getString());
-        }
+  @Test
+  public void testHintInSubquery() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupTables(conn);
+      PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+      String query =
+        "UPSERT /*+ NO_INDEX */ INTO T(k, v1) SELECT /*+ NO_INDEX */  k,v1 FROM T WHERE v1 = '4'";
+      MutationPlan plan = stmt.compileMutation(query);
+      assertEquals("T", plan.getQueryPlan().getTableRef().getTable().getTableName().getString());
+      query = "UPSERT INTO T(k, v1) SELECT /*+ NO_INDEX */  k,v1 FROM T WHERE v1 = '4'";
+      plan = stmt.compileMutation(query);
+      // TODO the following should actually use data table T if we supported hints in subqueries
+      assertEquals("IDX", plan.getQueryPlan().getTableRef().getTable().getTableName().getString());
     }
+  }
 
-    @Test
-    public void testCompile() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            setupTables(conn);
-            PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
-            PTable pDataTable = pConn.getTable(new PTableKey(null, "T"));
-            PostIndexDDLCompiler compiler = new PostIndexDDLCompiler(pConn, new TableRef(pDataTable));
-            MutationPlan plan = compiler.compile(pConn.getTable(new PTableKey(null, "IDX")));
-            assertEquals("T", plan.getQueryPlan().getTableRef().getTable().getTableName().getString());
-        }
+  @Test
+  public void testCompile() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupTables(conn);
+      PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+      PTable pDataTable = pConn.getTable(new PTableKey(null, "T"));
+      PostIndexDDLCompiler compiler = new PostIndexDDLCompiler(pConn, new TableRef(pDataTable));
+      MutationPlan plan = compiler.compile(pConn.getTable(new PTableKey(null, "IDX")));
+      assertEquals("T", plan.getQueryPlan().getTableRef().getTable().getTableName().getString());
     }
+  }
 
-    @Test
-    public void testCreateTableWithNoVerify() throws SQLException {
-        String ddl = "CREATE TABLE A (K VARCHAR PRIMARY KEY DESC) NOVERIFY";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-            MutationPlan plan = stmt.compileMutation(ddl);
-            MutationState state = plan.execute();
+  @Test
+  public void testCreateTableWithNoVerify() throws SQLException {
+    String ddl = "CREATE TABLE A (K VARCHAR PRIMARY KEY DESC) NOVERIFY";
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+      MutationPlan plan = stmt.compileMutation(ddl);
+      MutationState state = plan.execute();
 
-            assertEquals("CREATE TABLE\n", plan.getExplainPlan().toString());
-            assertEquals(0, state.getMaxSize());
-            assertEquals(0, state.getMaxSizeBytes());
-        }
+      assertEquals("CREATE TABLE\n", plan.getExplainPlan().toString());
+      assertEquals(0, state.getMaxSize());
+      assertEquals(0, state.getMaxSizeBytes());
     }
+  }
 
-    private void setupTables(Connection conn) throws SQLException {
-        conn.createStatement().execute("CREATE TABLE T (k VARCHAR NOT NULL PRIMARY KEY, v1 CHAR(15), v2 VARCHAR)");
-        conn.createStatement().execute("CREATE INDEX IDX ON T(v1, v2)");
-    }
+  private void setupTables(Connection conn) throws SQLException {
+    conn.createStatement()
+      .execute("CREATE TABLE T (k VARCHAR NOT NULL PRIMARY KEY, v1 CHAR(15), v2 VARCHAR)");
+    conn.createStatement().execute("CREATE INDEX IDX ON T(v1, v2)");
+  }
 
 }

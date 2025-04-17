@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,18 +15,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.hadoop.hbase.regionserver.wal;
 
 import org.apache.phoenix.compat.hbase.CompatIndexedHLogReader;
 
-
 /**
- * A WALReader that can also deserialize custom WALEdit s that contain index information.
- * 
- * This is basically a wrapper around a SequenceFileLogReader that has a custom
- * SequenceFileLogReader.WALReader#next(Object) method that only replaces the creation of the WALEdit with our own custom
- * type
+ * A WALReader that can also deserialize custom WALEdit s that contain index information. This is
+ * basically a wrapper around a SequenceFileLogReader that has a custom
+ * SequenceFileLogReader.WALReader#next(Object) method that only replaces the creation of the
+ * WALEdit with our own custom type
  * <p>
  * This is a little bit of a painful way of going about this, but saves the effort of hacking the
  * HBase source (and deal with getting it reviewed and backported, etc.) and still works.

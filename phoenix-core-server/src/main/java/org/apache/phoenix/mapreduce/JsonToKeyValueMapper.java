@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,7 +20,6 @@ package org.apache.phoenix.mapreduce;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.JacksonUtil;
@@ -32,42 +31,40 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
  * MapReduce mapper that converts JSON input lines into KeyValues that can be written to HFiles.
- * 
- * KeyValues are produced by executing UPSERT statements on a Phoenix connection and then
- * extracting the created KeyValues and rolling back the statement execution before it is
- * committed to HBase.
+ * KeyValues are produced by executing UPSERT statements on a Phoenix connection and then extracting
+ * the created KeyValues and rolling back the statement execution before it is committed to HBase.
  */
 public class JsonToKeyValueMapper extends FormatToBytesWritableMapper<Map<?, ?>> {
 
-    private LineParser<Map<?, ?>> lineParser;
+  private LineParser<Map<?, ?>> lineParser;
 
+  @Override
+  protected LineParser<Map<?, ?>> getLineParser() {
+    return lineParser;
+  }
+
+  @Override
+  protected void setup(Context context) throws IOException, InterruptedException {
+    super.setup(context);
+    lineParser = new JsonLineParser();
+  }
+
+  @VisibleForTesting
+  @Override
+  protected UpsertExecutor<Map<?, ?>, ?> buildUpsertExecutor(Configuration conf) {
+    String tableName = conf.get(TABLE_NAME_CONFKEY);
+    Preconditions.checkNotNull(tableName, "table name is not configured");
+
+    List<ColumnInfo> columnInfoList = buildColumnInfoList(conf);
+
+    return new JsonUpsertExecutor(conn, tableName, columnInfoList, upsertListener);
+  }
+
+  @VisibleForTesting
+  static class JsonLineParser implements LineParser<Map<?, ?>> {
     @Override
-    protected  LineParser<Map<?, ?>> getLineParser() {
-        return lineParser;
+    public Map<?, ?> parse(String input) throws IOException {
+      return JacksonUtil.getObjectReader(Map.class).readValue(input);
     }
-
-    @Override
-    protected void setup(Context context) throws IOException, InterruptedException {
-        super.setup(context);
-        lineParser = new JsonLineParser();
-    }
-
-    @VisibleForTesting
-    @Override
-    protected UpsertExecutor<Map<?, ?>, ?> buildUpsertExecutor(Configuration conf) {
-        String tableName = conf.get(TABLE_NAME_CONFKEY);
-        Preconditions.checkNotNull(tableName, "table name is not configured");
-
-        List<ColumnInfo> columnInfoList = buildColumnInfoList(conf);
-
-        return new JsonUpsertExecutor(conn, tableName, columnInfoList, upsertListener);
-    }
-
-    @VisibleForTesting
-    static class JsonLineParser implements LineParser<Map<?, ?>> {
-        @Override
-        public Map<?, ?> parse(String input) throws IOException {
-            return JacksonUtil.getObjectReader(Map.class).readValue(input);
-        }
-    }
+  }
 }

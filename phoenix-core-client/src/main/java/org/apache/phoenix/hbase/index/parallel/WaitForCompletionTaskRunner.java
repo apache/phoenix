@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -35,10 +35,10 @@ import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.Listenabl
  * Does not throw an {@link ExecutionException} if any of the tasks fail.
  */
 public class WaitForCompletionTaskRunner extends BaseTaskRunner {
-  
+
   /**
    * @param service thread pool to which {@link Task}s are submitted. This service is then 'owned'
-   *          by <tt>this</tt> and will be shutdown on calls to {@link #stop(String)}.
+   *                by <tt>this</tt> and will be shutdown on calls to {@link #stop(String)}.
    */
   public WaitForCompletionTaskRunner(ExecutorService service) {
     super(service);

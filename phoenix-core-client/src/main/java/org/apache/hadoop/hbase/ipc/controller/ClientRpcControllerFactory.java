@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,7 +18,6 @@
 package org.apache.hadoop.hbase.ipc.controller;
 
 import java.util.List;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CellScannable;
 import org.apache.hadoop.hbase.CellScanner;
@@ -26,35 +25,35 @@ import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 
 /**
- * {@link RpcControllerFactory} that sets the priority of metadata rpc calls to be processed
- * in its own queue.
+ * {@link RpcControllerFactory} that sets the priority of metadata rpc calls to be processed in its
+ * own queue.
  */
 public class ClientRpcControllerFactory extends RpcControllerFactory {
 
-    public ClientRpcControllerFactory(Configuration conf) {
-        super(conf);
-    }
+  public ClientRpcControllerFactory(Configuration conf) {
+    super(conf);
+  }
 
-    @Override
-    public HBaseRpcController newController() {
-        HBaseRpcController delegate = super.newController();
-        return getController(delegate);
-    }
+  @Override
+  public HBaseRpcController newController() {
+    HBaseRpcController delegate = super.newController();
+    return getController(delegate);
+  }
 
-    @Override
-    public HBaseRpcController newController(CellScanner cellScanner) {
-        HBaseRpcController delegate = super.newController(cellScanner);
-        return getController(delegate);
-    }
+  @Override
+  public HBaseRpcController newController(CellScanner cellScanner) {
+    HBaseRpcController delegate = super.newController(cellScanner);
+    return getController(delegate);
+  }
 
-    @Override
-    public HBaseRpcController newController(List<CellScannable> cellIterables) {
-        HBaseRpcController delegate = super.newController(cellIterables);
-        return getController(delegate);
-    }
-    
-    private HBaseRpcController getController(HBaseRpcController delegate) {
-		return new MetadataRpcController(delegate, conf);
-    }
-    
+  @Override
+  public HBaseRpcController newController(List<CellScannable> cellIterables) {
+    HBaseRpcController delegate = super.newController(cellIterables);
+    return getController(delegate);
+  }
+
+  private HBaseRpcController getController(HBaseRpcController delegate) {
+    return new MetadataRpcController(delegate, conf);
+  }
+
 }

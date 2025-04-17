@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.pherf.workload.mt.operations;
 
 /**
@@ -23,9 +22,15 @@ package org.apache.phoenix.pherf.workload.mt.operations;
  * @see {@link org.apache.phoenix.pherf.configuration.LoadProfile}
  */
 public interface Operation {
-    enum OperationType {
-        PRE_RUN, UPSERT, SELECT, IDLE_TIME, USER_DEFINED
-    }
-    String getId();
-    OperationType getType();
+  enum OperationType {
+    PRE_RUN,
+    UPSERT,
+    SELECT,
+    IDLE_TIME,
+    USER_DEFINED
+  }
+
+  String getId();
+
+  OperationType getType();
 }

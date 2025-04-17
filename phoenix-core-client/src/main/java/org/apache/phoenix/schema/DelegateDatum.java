@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,38 +20,38 @@ package org.apache.phoenix.schema;
 import org.apache.phoenix.schema.types.PDataType;
 
 public class DelegateDatum implements PDatum {
-    private final PDatum delegate;
-    
-    public DelegateDatum(PDatum delegate) {
-        this.delegate = delegate;
-    }
-    
-    @Override
-    public boolean isNullable() {
-        return delegate.isNullable();
-    }
+  private final PDatum delegate;
 
-    @Override
-    public PDataType getDataType() {
-        return delegate.getDataType();
-    }
+  public DelegateDatum(PDatum delegate) {
+    this.delegate = delegate;
+  }
 
-    @Override
-    public Integer getMaxLength() {
-        return delegate.getMaxLength();
-    }
+  @Override
+  public boolean isNullable() {
+    return delegate.isNullable();
+  }
 
-    @Override
-    public Integer getScale() {
-        return delegate.getScale();
-    }
-    
-	@Override
-	public SortOrder getSortOrder() {
-		return delegate.getSortOrder();
-	}
+  @Override
+  public PDataType getDataType() {
+    return delegate.getDataType();
+  }
 
-    protected PDatum getDelegate() {
-        return delegate;
-    }
+  @Override
+  public Integer getMaxLength() {
+    return delegate.getMaxLength();
+  }
+
+  @Override
+  public Integer getScale() {
+    return delegate.getScale();
+  }
+
+  @Override
+  public SortOrder getSortOrder() {
+    return delegate.getSortOrder();
+  }
+
+  protected PDatum getDelegate() {
+    return delegate;
+  }
 }

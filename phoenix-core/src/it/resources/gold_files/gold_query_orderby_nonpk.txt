@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
- 
+
 'COUNT(COL2)'
 '25'
 'ID','COL1','COL2'

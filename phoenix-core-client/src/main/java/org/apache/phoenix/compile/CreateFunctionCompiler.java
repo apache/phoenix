@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,6 @@ package org.apache.phoenix.compile;
 
 import java.sql.SQLException;
 import java.util.Collections;
-
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -28,58 +27,57 @@ import org.apache.phoenix.schema.MetaDataClient;
 
 public class CreateFunctionCompiler {
 
-    private final PhoenixStatement statement;
-    
-    public CreateFunctionCompiler(PhoenixStatement statement) {
-        this.statement = statement;
+  private final PhoenixStatement statement;
+
+  public CreateFunctionCompiler(PhoenixStatement statement) {
+    this.statement = statement;
+  }
+
+  public MutationPlan compile(final CreateFunctionStatement create) throws SQLException {
+    final PhoenixConnection connection = statement.getConnection();
+    PhoenixConnection connectionToBe = connection;
+    final StatementContext context = new StatementContext(statement);
+    final MetaDataClient client = new MetaDataClient(connectionToBe);
+
+    return new CreateFunctionMutationPlan(context, create, client, connection);
+  }
+
+  private static class CreateFunctionMutationPlan extends BaseMutationPlan {
+
+    private final StatementContext context;
+    private final CreateFunctionStatement create;
+    private final MetaDataClient client;
+    private final PhoenixConnection connection;
+
+    private CreateFunctionMutationPlan(StatementContext context, CreateFunctionStatement create,
+      MetaDataClient client, PhoenixConnection connection) {
+      super(context, create.getOperation());
+      this.context = context;
+      this.create = create;
+      this.client = client;
+      this.connection = connection;
     }
 
-    public MutationPlan compile(final CreateFunctionStatement create) throws SQLException {
-        final PhoenixConnection connection = statement.getConnection();
-        PhoenixConnection connectionToBe = connection;
-        final StatementContext context = new StatementContext(statement);
-        final MetaDataClient client = new MetaDataClient(connectionToBe);
-        
-        return new CreateFunctionMutationPlan(context, create, client, connection);
+    @Override
+    public MutationState execute() throws SQLException {
+      try {
+        return client.createFunction(create);
+      } finally {
+        if (client.getConnection() != connection) {
+          client.getConnection().close();
+        }
+      }
     }
 
-    private static class CreateFunctionMutationPlan extends BaseMutationPlan {
-
-        private final StatementContext context;
-        private final CreateFunctionStatement create;
-        private final MetaDataClient client;
-        private final PhoenixConnection connection;
-
-        private CreateFunctionMutationPlan(StatementContext context, CreateFunctionStatement create,
-                MetaDataClient client, PhoenixConnection connection) {
-            super(context, create.getOperation());
-            this.context = context;
-            this.create = create;
-            this.client = client;
-            this.connection = connection;
-        }
-
-        @Override
-        public MutationState execute() throws SQLException {
-            try {
-                return client.createFunction(create);
-            } finally {
-                if (client.getConnection() != connection) {
-                    client.getConnection().close();
-                }
-            }
-        }
-
-        @Override
-        public ExplainPlan getExplainPlan() throws SQLException {
-            return new ExplainPlan(Collections.singletonList("CREATE"
-              + (create.getFunctionInfo().isReplace() ? " OR REPLACE" : "")
-              + " FUNCTION"));
-        }
-
-        @Override
-        public StatementContext getContext() {
-            return context;
-        }
+    @Override
+    public ExplainPlan getExplainPlan() throws SQLException {
+      return new ExplainPlan(Collections.singletonList(
+        "CREATE" + (create.getFunctionInfo().isReplace() ? " OR REPLACE" : "") + " FUNCTION"));
     }
+
+    @Override
+    public StatementContext getContext() {
+      return context;
+    }
+  }
 }

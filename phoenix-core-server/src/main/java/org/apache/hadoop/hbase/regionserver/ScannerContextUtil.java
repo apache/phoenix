@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,49 +15,45 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.hadoop.hbase.regionserver;
-
 
 import java.util.List;
 import java.util.Map;
-
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.PrivateCellUtil;
 
 /**
- * ScannerContext has all methods package visible. To properly update the context progress for our scanners we
- * need this helper
+ * ScannerContext has all methods package visible. To properly update the context progress for our
+ * scanners we need this helper
  */
 public class ScannerContextUtil {
-    public static void incrementSizeProgress(ScannerContext sc, List<Cell> cells) {
-        for (Cell cell : cells) {
-            sc.incrementSizeProgress(PrivateCellUtil.estimatedSerializedSizeOf(cell),
-                    cell.heapSize());
-        }
+  public static void incrementSizeProgress(ScannerContext sc, List<Cell> cells) {
+    for (Cell cell : cells) {
+      sc.incrementSizeProgress(PrivateCellUtil.estimatedSerializedSizeOf(cell), cell.heapSize());
     }
+  }
 
-    public static void updateMetrics(ScannerContext src, ScannerContext dst) {
-        if (src != null && dst != null && src.isTrackingMetrics() && dst.isTrackingMetrics()) {
-            for (Map.Entry<String, Long> entry : src.getMetrics().getMetricsMap().entrySet()) {
-                dst.metrics.addToCounter(entry.getKey(), entry.getValue());
-            }
-        }
+  public static void updateMetrics(ScannerContext src, ScannerContext dst) {
+    if (src != null && dst != null && src.isTrackingMetrics() && dst.isTrackingMetrics()) {
+      for (Map.Entry<String, Long> entry : src.getMetrics().getMetricsMap().entrySet()) {
+        dst.metrics.addToCounter(entry.getKey(), entry.getValue());
+      }
     }
+  }
 
-    public static ScannerContext copyNoLimitScanner(ScannerContext sc) {
-        return new ScannerContext(sc.keepProgress, null, sc.isTrackingMetrics());
-    }
+  public static ScannerContext copyNoLimitScanner(ScannerContext sc) {
+    return new ScannerContext(sc.keepProgress, null, sc.isTrackingMetrics());
+  }
 
-    public static void updateTimeProgress(ScannerContext sc) {
-        sc.updateTimeProgress();
-    }
+  public static void updateTimeProgress(ScannerContext sc) {
+    sc.updateTimeProgress();
+  }
 
-    /**
-     * Set returnImmediately on the ScannerContext to true, it will have the same behavior
-     * as reaching the time limit. Use this to make RSRpcService.scan return immediately.
-     */
-    public static void setReturnImmediately(ScannerContext sc) {
-        sc.returnImmediately();
-    }
+  /**
+   * Set returnImmediately on the ScannerContext to true, it will have the same behavior as reaching
+   * the time limit. Use this to make RSRpcService.scan return immediately.
+   */
+  public static void setReturnImmediately(ScannerContext sc) {
+    sc.returnImmediately();
+  }
 }

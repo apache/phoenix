@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,6 @@ package org.apache.phoenix.compile;
 
 import java.sql.SQLException;
 import java.util.List;
-
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.StatelessTraverseAllParseNodeVisitor;
 
@@ -27,20 +26,20 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class ColumnNameTrackingExpressionCompiler extends StatelessTraverseAllParseNodeVisitor {
 
-    private List<String> dataColumnNames = Lists.newArrayListWithExpectedSize(10);
+  private List<String> dataColumnNames = Lists.newArrayListWithExpectedSize(10);
 
-    public void reset() {
-        this.getDataColumnNames().clear();
-    }
+  public void reset() {
+    this.getDataColumnNames().clear();
+  }
 
-    @Override
-    public Void visit(ColumnParseNode node) throws SQLException {
-        getDataColumnNames().add(node.getName());
-        return null;
-    }
+  @Override
+  public Void visit(ColumnParseNode node) throws SQLException {
+    getDataColumnNames().add(node.getName());
+    return null;
+  }
 
-    public List<String> getDataColumnNames() {
-        return dataColumnNames;
-    }
+  public List<String> getDataColumnNames() {
+    return dataColumnNames;
+  }
 
 }

@@ -15,9 +15,7 @@
   See the License for the specific language governing permissions and
   limitations under the License.
 -->
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.phoenix</groupId>
@@ -25,9 +23,9 @@
     <version>5.3.0-SNAPSHOT</version>
   </parent>
   <artifactId>phoenix-client-parent</artifactId>
+  <packaging>pom</packaging>
   <name>Phoenix Client Parent</name>
   <description>Common configuration for the Phoenix Client Variants</description>
-  <packaging>pom</packaging>
   <properties>
     <!-- Don't make a test-jar -->
     <maven.test.skip>true</maven.test.skip>
@@ -66,7 +64,7 @@
             <ignoredDependencies>
               <ignoredDependency>*</ignoredDependency>
             </ignoredDependencies>
-           </configuration>
+          </configuration>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -88,7 +86,7 @@
                   <exclude>README*</exclude>
                 </excludes>
               </filter>
-             <filter>
+              <filter>
                 <artifact>org.apache.hadoop:hadoop-yarn-common</artifact>
                 <excludes>
                   <exclude>org/apache/hadoop/yarn/factories/package-info.class</exclude>
@@ -115,27 +113,20 @@
               <!-- Phoenix specific -->
             </filters>
             <transformers>
-              <transformer
-                  implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
-              <transformer
-                  implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
+              <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+              <transformer implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
                 <resource>csv-bulk-load-config.properties</resource>
-                <file>
-                  ${project.basedir}/../config/csv-bulk-load-config.properties
-                </file>
+                <file>${project.basedir}/../config/csv-bulk-load-config.properties</file>
               </transformer>
-              <transformer
-                  implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
+              <transformer implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
                 <resource>README.md</resource>
                 <file>${project.basedir}/../README.md</file>
               </transformer>
-              <transformer
-                  implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
+              <transformer implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
                 <resource>LICENSE.txt</resource>
                 <file>${project.basedir}/../LICENSE</file>
               </transformer>
-              <transformer
-                  implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
+              <transformer implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
                 <resource>NOTICE</resource>
                 <file>${project.basedir}/../NOTICE</file>
               </transformer>
