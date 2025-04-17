@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,6 @@ package org.apache.phoenix.expression.visitor;
 
 import java.util.Iterator;
 import java.util.List;
-
 import org.apache.phoenix.expression.AddExpression;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.ArrayConstructorExpression;
@@ -44,122 +43,122 @@ import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.function.ScalarFunction;
 import org.apache.phoenix.expression.function.SingleAggregateFunction;
 
-
 public abstract class BaseExpressionVisitor<E> implements ExpressionVisitor<E> {
 
-    @Override
-    public E defaultReturn(Expression node, List<E> l) {
-        return null;
-    }
+  @Override
+  public E defaultReturn(Expression node, List<E> l) {
+    return null;
+  }
 
-    @Override
-    public Iterator<Expression> visitEnter(AndExpression node) {
-        return null;
-    }
+  @Override
+  public Iterator<Expression> visitEnter(AndExpression node) {
+    return null;
+  }
 
-    @Override
-    public Iterator<Expression> visitEnter(OrExpression node) {
-        return null;
-    }
+  @Override
+  public Iterator<Expression> visitEnter(OrExpression node) {
+    return null;
+  }
 
-    @Override
-    public Iterator<Expression> visitEnter(ScalarFunction node) {
-        return null;
-    }
+  @Override
+  public Iterator<Expression> visitEnter(ScalarFunction node) {
+    return null;
+  }
 
-    @Override
-    public Iterator<Expression> visitEnter(ComparisonExpression node) {
-        return null;
-    }
+  @Override
+  public Iterator<Expression> visitEnter(ComparisonExpression node) {
+    return null;
+  }
 
-    @Override
-    public Iterator<Expression> visitEnter(LikeExpression node) {
-        return null;
-    }
+  @Override
+  public Iterator<Expression> visitEnter(LikeExpression node) {
+    return null;
+  }
 
-    @Override
-    public Iterator<Expression> visitEnter(SingleAggregateFunction node) {
-        return null;
-    }
+  @Override
+  public Iterator<Expression> visitEnter(SingleAggregateFunction node) {
+    return null;
+  }
 
-    @Override
-    public Iterator<Expression> visitEnter(CaseExpression node) {
-        return null;
-    }
+  @Override
+  public Iterator<Expression> visitEnter(CaseExpression node) {
+    return null;
+  }
 
-    @Override
-    public Iterator<Expression> visitEnter(NotExpression node) {
-        return null;
-    }
+  @Override
+  public Iterator<Expression> visitEnter(NotExpression node) {
+    return null;
+  }
 
-    @Override
-    public Iterator<Expression> visitEnter(IsNullExpression node) {
-        return null;
-    }
+  @Override
+  public Iterator<Expression> visitEnter(IsNullExpression node) {
+    return null;
+  }
 
-    @Override
-    public Iterator<Expression> visitEnter(InListExpression node) {
-        return null;
-    }
+  @Override
+  public Iterator<Expression> visitEnter(InListExpression node) {
+    return null;
+  }
 
-    @Override
-    public Iterator<Expression> visitEnter(AddExpression node) {
-        return null;
-    }
+  @Override
+  public Iterator<Expression> visitEnter(AddExpression node) {
+    return null;
+  }
 
-    @Override
-    public Iterator<Expression> visitEnter(SubtractExpression node) {
-        return null;
-    }
+  @Override
+  public Iterator<Expression> visitEnter(SubtractExpression node) {
+    return null;
+  }
 
-    @Override
-    public Iterator<Expression> visitEnter(MultiplyExpression node) {
-        return null;
-    }
+  @Override
+  public Iterator<Expression> visitEnter(MultiplyExpression node) {
+    return null;
+  }
 
-    @Override
-    public Iterator<Expression> visitEnter(DivideExpression node) {
-        return null;
-    }
-    
-    @Override
-    public Iterator<Expression> visitEnter(StringConcatExpression node) {
-        return null;
-    }
-    
-    @Override
-    public Iterator<Expression> visitEnter(RowValueConstructorExpression node) {
-        return null;
-    }
-    
-    @Override
-    public Iterator<Expression> visitEnter(CoerceExpression node) {
-        return null;
-    }
-    
-    @Override
-    public Iterator<Expression> visitEnter(ArrayConstructorExpression node) {
-        return null;
-    }
-    
-    @Override
-    public Iterator<Expression> visitEnter(SingleCellConstructorExpression node) {
-        return null;
-    }
-    
-    @Override
-    public Iterator<Expression> visitEnter(ModulusExpression modulusExpression) {
-        return null;
-    }
+  @Override
+  public Iterator<Expression> visitEnter(DivideExpression node) {
+    return null;
+  }
 
-    @Override
-    public Iterator<Expression> visitEnter(ArrayAnyComparisonExpression arrayAnyComparisonExpression) {
-        return null;
-    }
+  @Override
+  public Iterator<Expression> visitEnter(StringConcatExpression node) {
+    return null;
+  }
 
-    @Override
-    public Iterator<Expression> visitEnter(ArrayElemRefExpression arrayElemRefExpression) {
-        return null;
-    }
+  @Override
+  public Iterator<Expression> visitEnter(RowValueConstructorExpression node) {
+    return null;
+  }
+
+  @Override
+  public Iterator<Expression> visitEnter(CoerceExpression node) {
+    return null;
+  }
+
+  @Override
+  public Iterator<Expression> visitEnter(ArrayConstructorExpression node) {
+    return null;
+  }
+
+  @Override
+  public Iterator<Expression> visitEnter(SingleCellConstructorExpression node) {
+    return null;
+  }
+
+  @Override
+  public Iterator<Expression> visitEnter(ModulusExpression modulusExpression) {
+    return null;
+  }
+
+  @Override
+  public Iterator<Expression>
+    visitEnter(ArrayAnyComparisonExpression arrayAnyComparisonExpression) {
+    return null;
+  }
+
+  @Override
+  public Iterator<Expression> visitEnter(ArrayElemRefExpression arrayElemRefExpression) {
+    return null;
+  }
 
 }

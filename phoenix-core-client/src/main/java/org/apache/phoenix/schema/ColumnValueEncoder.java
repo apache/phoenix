@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,27 +19,24 @@ package org.apache.phoenix.schema;
 
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 
-
 /**
  * Interface to encode column values into a serialized byte[] that will be stored in a single cell
- * The last byte of the serialized byte[] should be the serialized value of the {@link ImmutableStorageScheme}
- * that was used.
+ * The last byte of the serialized byte[] should be the serialized value of the
+ * {@link ImmutableStorageScheme} that was used.
  */
 public interface ColumnValueEncoder {
-    
-    /**
-     * append a column value to the array
-     */
-    void appendValue(byte[] bytes, int offset, int length);
-    
-    /**
-     * append a value that is not present to the array (used to support DEFAULT expressions)
-     */
-    void appendAbsentValue();
-    
-    /**
-     * @return the encoded byte[] that contains the serialized column values
-     */
-    byte[] encode();
-    
+
+  /**
+   * append a column value to the array
+   */
+  void appendValue(byte[] bytes, int offset, int length);
+
+  /**
+   * append a value that is not present to the array (used to support DEFAULT expressions)
+   */
+  void appendAbsentValue();
+
+  /** Returns the encoded byte[] that contains the serialized column values */
+  byte[] encode();
+
 }

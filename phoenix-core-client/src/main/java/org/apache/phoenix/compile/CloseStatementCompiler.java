@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,6 @@ package org.apache.phoenix.compile;
 
 import java.sql.SQLException;
 import java.util.Collections;
-
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -28,29 +27,29 @@ import org.apache.phoenix.parse.CloseStatement;
 import org.apache.phoenix.schema.MetaDataClient;
 
 public class CloseStatementCompiler {
-    private final PhoenixStatement statement;
-    private final Operation operation;
+  private final PhoenixStatement statement;
+  private final Operation operation;
 
-    public CloseStatementCompiler(PhoenixStatement statement, Operation operation) {
-        this.statement = statement;
-        this.operation = operation;
-    }
+  public CloseStatementCompiler(PhoenixStatement statement, Operation operation) {
+    this.statement = statement;
+    this.operation = operation;
+  }
 
-    public MutationPlan compile(final CloseStatement close) throws SQLException {
-        final PhoenixConnection connection = statement.getConnection();
-        final StatementContext context = new StatementContext(statement);
-        final MetaDataClient client = new MetaDataClient(connection);
-        
-        return new BaseMutationPlan(context, operation) {
-            @Override
-            public MutationState execute() throws SQLException {
-                return client.close(close);
-            }
+  public MutationPlan compile(final CloseStatement close) throws SQLException {
+    final PhoenixConnection connection = statement.getConnection();
+    final StatementContext context = new StatementContext(statement);
+    final MetaDataClient client = new MetaDataClient(connection);
 
-            @Override
-            public ExplainPlan getExplainPlan() throws SQLException {
-                return new ExplainPlan(Collections.singletonList("CLOSE CURSOR"));
-            }
-        };
-    }
+    return new BaseMutationPlan(context, operation) {
+      @Override
+      public MutationState execute() throws SQLException {
+        return client.close(close);
+      }
+
+      @Override
+      public ExplainPlan getExplainPlan() throws SQLException {
+        return new ExplainPlan(Collections.singletonList("CLOSE CURSOR"));
+      }
+    };
+  }
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,7 +20,6 @@ package org.apache.phoenix.expression.function;
 import java.sql.SQLException;
 import java.util.Base64;
 import java.util.List;
-
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -28,115 +27,117 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.schema.IllegalDataException;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.schema.tuple.Tuple;
 
 /**
  * Convert string to bytes
  */
-@FunctionParseNode.BuiltInFunction(name = DecodeFunction.NAME, args = {
-	@FunctionParseNode.Argument(allowedTypes = { PVarchar.class }),
-	@FunctionParseNode.Argument(enumeration = "EncodeFormat")})
+@FunctionParseNode.BuiltInFunction(name = DecodeFunction.NAME,
+    args = { @FunctionParseNode.Argument(allowedTypes = { PVarchar.class }),
+      @FunctionParseNode.Argument(enumeration = "EncodeFormat") })
 public class DecodeFunction extends ScalarFunction {
 
-	public static final String NAME = "DECODE";
+  public static final String NAME = "DECODE";
 
-	public DecodeFunction() {
-	}
+  public DecodeFunction() {
+  }
 
-	public DecodeFunction(List<Expression> children) throws SQLException {
-		super(children);
-	}
+  public DecodeFunction(List<Expression> children) throws SQLException {
+    super(children);
+  }
 
-	@Override
-	public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-		Expression expression = getExpression();
-		if (!expression.evaluate(tuple, ptr)) {
-			return false;
-		}
-		if (ptr.getLength() == 0) {
-			return true; // expression was evaluated, but evaluated to null
-		}
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    Expression expression = getExpression();
+    if (!expression.evaluate(tuple, ptr)) {
+      return false;
+    }
+    if (ptr.getLength() == 0) {
+      return true; // expression was evaluated, but evaluated to null
+    }
 
-		String stringToDecode = (String) PVarchar.INSTANCE.toObject(ptr);
+    String stringToDecode = (String) PVarchar.INSTANCE.toObject(ptr);
 
-		Expression encodingExpression = getEncodingExpression();
-		if (!encodingExpression.evaluate(tuple, ptr)) {
-			return false;
-		}
+    Expression encodingExpression = getEncodingExpression();
+    if (!encodingExpression.evaluate(tuple, ptr)) {
+      return false;
+    }
 
-		if (ptr.getLength() == 0) {
-	        throw new IllegalDataException(new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
-	        .setMessage("Missing bytes encoding").build().buildException());
-		}
+    if (ptr.getLength() == 0) {
+      throw new IllegalDataException(new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
+        .setMessage("Missing bytes encoding").build().buildException());
+    }
 
-		PDataType type = encodingExpression.getDataType();
-		String encoding = ((String) type.toObject(ptr)).toUpperCase();
+    PDataType type = encodingExpression.getDataType();
+    String encoding = ((String) type.toObject(ptr)).toUpperCase();
 
-		byte out[];
+    byte out[];
 
-		EncodeFormat format = EncodeFormat.valueOf(encoding);
-		switch (format) {
-			case HEX:
-				out = decodeHex(stringToDecode);
-				break;
-			case BASE64:
-				out = Base64.getDecoder().decode(stringToDecode);
-				break;
-			case HBASE:
-				out = Bytes.toBytesBinary(stringToDecode);
-				break;
-			default:
-				throw new IllegalDataException("Unsupported encoding \"" + encoding + "\"");
-		}
-		ptr.set(out);
+    EncodeFormat format = EncodeFormat.valueOf(encoding);
+    switch (format) {
+      case HEX:
+        out = decodeHex(stringToDecode);
+        break;
+      case BASE64:
+        out = Base64.getDecoder().decode(stringToDecode);
+        break;
+      case HBASE:
+        out = Bytes.toBytesBinary(stringToDecode);
+        break;
+      default:
+        throw new IllegalDataException("Unsupported encoding \"" + encoding + "\"");
+    }
+    ptr.set(out);
 
-		return true;
-	}
+    return true;
+  }
 
-	private byte[] decodeHex(String hexStr) {
-		byte[] out = new byte[hexStr.length() / 2];
-		for (int i = 0; i < hexStr.length(); i = i + 2) {
-			try {
-				out[i / 2] = (byte) Integer.parseInt(hexStr.substring(i, i + 2), 16);
-			} catch (NumberFormatException ex) {
-				throw new IllegalDataException(new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
-		        .setMessage("Value " + hexStr.substring(i, i + 2) + " cannot be cast to hex number").build().buildException());
-			} catch (StringIndexOutOfBoundsException ex) {
-				throw new IllegalDataException(new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
-                .setMessage("Invalid value length, cannot cast to hex number (" + hexStr + ")").build().buildException());
-			}
-		}
-		return out;
-	}
+  private byte[] decodeHex(String hexStr) {
+    byte[] out = new byte[hexStr.length() / 2];
+    for (int i = 0; i < hexStr.length(); i = i + 2) {
+      try {
+        out[i / 2] = (byte) Integer.parseInt(hexStr.substring(i, i + 2), 16);
+      } catch (NumberFormatException ex) {
+        throw new IllegalDataException(new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
+          .setMessage("Value " + hexStr.substring(i, i + 2) + " cannot be cast to hex number")
+          .build().buildException());
+      } catch (StringIndexOutOfBoundsException ex) {
+        throw new IllegalDataException(new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
+          .setMessage("Invalid value length, cannot cast to hex number (" + hexStr + ")").build()
+          .buildException());
+      }
+    }
+    return out;
+  }
 
-	@Override
-	public PDataType getDataType() {
-		return PVarbinary.INSTANCE;
-	}
+  @Override
+  public PDataType getDataType() {
+    return PVarbinary.INSTANCE;
+  }
 
-	@Override
-	public boolean isNullable() {
-		return getExpression().isNullable();
-	}
+  @Override
+  public boolean isNullable() {
+    return getExpression().isNullable();
+  }
 
-	private Expression getExpression() {
-		return children.get(0);
-	}
+  private Expression getExpression() {
+    return children.get(0);
+  }
 
-	private Expression getEncodingExpression() {
-		return children.get(1);
-	}
+  private Expression getEncodingExpression() {
+    return children.get(1);
+  }
 
-	@Override
-	public String getName() {
-		return NAME;
-	}
+  @Override
+  public String getName() {
+    return NAME;
+  }
 
-	@Override
-	public Integer getMaxLength() {
-		return getExpression().getMaxLength();
-	}
+  @Override
+  public Integer getMaxLength() {
+    return getExpression().getMaxLength();
+  }
 }

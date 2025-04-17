@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,48 +21,41 @@ package org.apache.phoenix.monitoring;
  * Interface that represents phoenix-internal metric.
  */
 public interface Metric {
-    
-    /**
-     * @return type of the metric
-     */
-    public MetricType getMetricType();
 
-    /**
-     * @return Current value of the metric
-     */
-    public long getValue();
+  /** Returns type of the metric */
+  public MetricType getMetricType();
 
-    /**
-     * Change the metric by the specified amount
-     * 
-     * @param delta
-     *            amount by which the metric value should be changed
-     */
-    public void change(long delta);
+  /** Returns Current value of the metric */
+  public long getValue();
 
-    /**
-     * Increase the value of metric by 1
-     */
-    public void increment();
-    
-    /**
-     * Decrease the value of metric by 1
-     */
-    public void decrement();
-    
-    /**
-     * @return String that represents the current state of the metric. Typically used for logging or reporting purposes.
-     */
-    public String getCurrentMetricState();
-    
-    /**
-     * Reset the metric
-     */
-    public void reset();
+  /**
+   * Change the metric by the specified amount amount by which the metric value should be changed
+   */
+  public void change(long delta);
 
-    /**
-     * Set the Metric value as current value
-     */
-    void set(long value);
+  /**
+   * Increase the value of metric by 1
+   */
+  public void increment();
+
+  /**
+   * Decrease the value of metric by 1
+   */
+  public void decrement();
+
+  /**
+   * Returns String that represents the current state of the metric. Typically used for logging or
+   * reporting purposes.
+   */
+  public String getCurrentMetricState();
+
+  /**
+   * Reset the metric
+   */
+  public void reset();
+
+  /**
+   * Set the Metric value as current value
+   */
+  void set(long value);
 }
-

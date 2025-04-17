@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,73 +24,73 @@ import java.util.Properties;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
-
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtilHelper;
 import org.junit.Test;
 
 public class PropertiesUtilTest {
 
-    private static final String SOME_TENANT_ID = "00Dxx0000001234";
-    private static final String SOME_OTHER_PROPERTY_KEY = "some_other_property";
-    private static final String SOME_OTHER_PROPERTY_VALUE = "some_other_value";
-    
-    @Test
-    public void testCopy() throws Exception{
-        final Properties propsWithTenant = new Properties();
-        propsWithTenant.put(PhoenixRuntime.TENANT_ID_ATTRIB, SOME_TENANT_ID);
+  private static final String SOME_TENANT_ID = "00Dxx0000001234";
+  private static final String SOME_OTHER_PROPERTY_KEY = "some_other_property";
+  private static final String SOME_OTHER_PROPERTY_VALUE = "some_other_value";
 
-        verifyValidCopy(propsWithTenant);
-    }
+  @Test
+  public void testCopy() throws Exception {
+    final Properties propsWithTenant = new Properties();
+    propsWithTenant.put(PhoenixRuntime.TENANT_ID_ATTRIB, SOME_TENANT_ID);
 
-    @Test
-    public void testCopyOnWrappedProperties() throws Exception{
-        final Properties propsWithTenant = new Properties();
-        propsWithTenant.put(PhoenixRuntime.TENANT_ID_ATTRIB, SOME_TENANT_ID);
+    verifyValidCopy(propsWithTenant);
+  }
 
-        verifyValidCopy(new Properties(propsWithTenant));
-    }
+  @Test
+  public void testCopyOnWrappedProperties() throws Exception {
+    final Properties propsWithTenant = new Properties();
+    propsWithTenant.put(PhoenixRuntime.TENANT_ID_ATTRIB, SOME_TENANT_ID);
 
-    @Test
-    public void testCopyFromConfiguration() throws Exception{
-        //make sure that we don't only copy the ZK quorum, but all
-        //properties
-        final Configuration conf = HBaseConfiguration.create();
-        final Properties props = new Properties();
-        
-        conf.set(HConstants.ZOOKEEPER_QUORUM, HConstants.LOCALHOST);
-        conf.set(PropertiesUtilTest.SOME_OTHER_PROPERTY_KEY, 
-                PropertiesUtilTest.SOME_OTHER_PROPERTY_VALUE);
-        Properties combinedProps = PropertiesUtil.combineProperties(props, conf);
-        assertEquals(combinedProps.getProperty(HConstants.ZOOKEEPER_QUORUM),
-                conf.get(HConstants.ZOOKEEPER_QUORUM));
-        assertEquals(combinedProps.getProperty(PropertiesUtilTest.SOME_OTHER_PROPERTY_KEY),
-                conf.get(PropertiesUtilTest.SOME_OTHER_PROPERTY_KEY));
-    }
+    verifyValidCopy(new Properties(propsWithTenant));
+  }
 
-    @Test
-    public void testPropertyOverrideRespected() throws Exception {
-        final Configuration conf = HBaseConfiguration.create();
-        final Properties props = new Properties();
-        props.setProperty(HConstants.HBASE_RPC_TIMEOUT_KEY,
-            Long.toString(HConstants.DEFAULT_HBASE_RPC_TIMEOUT * 10));
-        Properties combinedProps = PropertiesUtil.combineProperties(props, conf);
-        assertEquals(combinedProps.getProperty(HConstants.HBASE_RPC_TIMEOUT_KEY),
-            Long.toString(HConstants.DEFAULT_HBASE_RPC_TIMEOUT * 10));
-    }
+  @Test
+  public void testCopyFromConfiguration() throws Exception {
+    // make sure that we don't only copy the ZK quorum, but all
+    // properties
+    final Configuration conf = HBaseConfiguration.create();
+    final Properties props = new Properties();
 
-    @Test
-    public void testDeprecatedProperties() throws Exception {
-        final Configuration conf = HBaseConfiguration.create();
-        conf.set("phoneix.mapreduce.output.cluster.quorum", "myoverridezookeeperhost");
-        String test = PhoenixConfigurationUtilHelper.getOutputCluster(conf);
-        assertEquals("myoverridezookeeperhost", test);
-        assertEquals("myoverridezookeeperhost",
-                conf.get(PhoenixConfigurationUtilHelper.MAPREDUCE_OUTPUT_CLUSTER_QUORUM));
-    }
+    conf.set(HConstants.ZOOKEEPER_QUORUM, HConstants.LOCALHOST);
+    conf.set(PropertiesUtilTest.SOME_OTHER_PROPERTY_KEY,
+      PropertiesUtilTest.SOME_OTHER_PROPERTY_VALUE);
+    Properties combinedProps = PropertiesUtil.combineProperties(props, conf);
+    assertEquals(combinedProps.getProperty(HConstants.ZOOKEEPER_QUORUM),
+      conf.get(HConstants.ZOOKEEPER_QUORUM));
+    assertEquals(combinedProps.getProperty(PropertiesUtilTest.SOME_OTHER_PROPERTY_KEY),
+      conf.get(PropertiesUtilTest.SOME_OTHER_PROPERTY_KEY));
+  }
 
-    private void verifyValidCopy(Properties props) throws SQLException {
-        Properties copy = PropertiesUtil.deepCopy(props);
-        copy.containsKey(PhoenixRuntime.TENANT_ID_ATTRIB); //This checks the map and NOT the defaults in java.util.Properties
-        assertEquals(SOME_TENANT_ID, copy.getProperty(PhoenixRuntime.TENANT_ID_ATTRIB));
-    }
+  @Test
+  public void testPropertyOverrideRespected() throws Exception {
+    final Configuration conf = HBaseConfiguration.create();
+    final Properties props = new Properties();
+    props.setProperty(HConstants.HBASE_RPC_TIMEOUT_KEY,
+      Long.toString(HConstants.DEFAULT_HBASE_RPC_TIMEOUT * 10));
+    Properties combinedProps = PropertiesUtil.combineProperties(props, conf);
+    assertEquals(combinedProps.getProperty(HConstants.HBASE_RPC_TIMEOUT_KEY),
+      Long.toString(HConstants.DEFAULT_HBASE_RPC_TIMEOUT * 10));
+  }
+
+  @Test
+  public void testDeprecatedProperties() throws Exception {
+    final Configuration conf = HBaseConfiguration.create();
+    conf.set("phoneix.mapreduce.output.cluster.quorum", "myoverridezookeeperhost");
+    String test = PhoenixConfigurationUtilHelper.getOutputCluster(conf);
+    assertEquals("myoverridezookeeperhost", test);
+    assertEquals("myoverridezookeeperhost",
+      conf.get(PhoenixConfigurationUtilHelper.MAPREDUCE_OUTPUT_CLUSTER_QUORUM));
+  }
+
+  private void verifyValidCopy(Properties props) throws SQLException {
+    Properties copy = PropertiesUtil.deepCopy(props);
+    copy.containsKey(PhoenixRuntime.TENANT_ID_ATTRIB); // This checks the map and NOT the defaults
+                                                       // in java.util.Properties
+    assertEquals(SOME_TENANT_ID, copy.getProperty(PhoenixRuntime.TENANT_ID_ATTRIB));
+  }
 }

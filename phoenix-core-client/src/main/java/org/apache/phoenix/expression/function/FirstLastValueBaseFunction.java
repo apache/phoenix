@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,7 +18,6 @@
 package org.apache.phoenix.expression.function;
 
 import java.util.List;
-
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -26,41 +25,41 @@ import org.apache.phoenix.schema.types.PDataType;
 
 /**
  * (FIRST|LAST|NTH)_VALUE build in function interface
- *
  */
 abstract public class FirstLastValueBaseFunction extends DelegateConstantToCountAggregateFunction {
 
-    public FirstLastValueBaseFunction() {
-    }
+  public FirstLastValueBaseFunction() {
+  }
 
-    public FirstLastValueBaseFunction(List<Expression> childExpressions, CountAggregateFunction delegate) {
-        super(childExpressions, delegate);
-    }
+  public FirstLastValueBaseFunction(List<Expression> childExpressions,
+    CountAggregateFunction delegate) {
+    super(childExpressions, delegate);
+  }
 
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        boolean wasEvaluated = super.evaluate(tuple, ptr);
-        if (!wasEvaluated) {
-            return false;
-        }
-        if (isConstantExpression()) {
-            getAggregatorExpression().evaluate(tuple, ptr);
-        }
-        return true;
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    boolean wasEvaluated = super.evaluate(tuple, ptr);
+    if (!wasEvaluated) {
+      return false;
     }
+    if (isConstantExpression()) {
+      getAggregatorExpression().evaluate(tuple, ptr);
+    }
+    return true;
+  }
 
-    @Override
-    public PDataType getDataType() {
-        return children.get(2).getDataType();
-    }
-    
-    @Override
-    public Integer getMaxLength() {
-        return children.get(2).getMaxLength();
-    }
-    
-    @Override
-    public Integer getScale() {
-        return children.get(2).getScale();
-    }
+  @Override
+  public PDataType getDataType() {
+    return children.get(2).getDataType();
+  }
+
+  @Override
+  public Integer getMaxLength() {
+    return children.get(2).getMaxLength();
+  }
+
+  @Override
+  public Integer getScale() {
+    return children.get(2).getScale();
+  }
 }

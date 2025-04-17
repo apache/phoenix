@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,15 +23,23 @@ import org.apache.phoenix.query.MetaDataMutated;
 
 public interface PMetaData extends MetaDataMutated, Iterable<PTable> {
 
-    public static interface Pruner {
-        public boolean prune(PTable table);
-        public boolean prune(PFunction function);
-    }
-    public int size();
-    public PTableRef getTableRef(PTableKey key) throws TableNotFoundException;
-    public void pruneTables(Pruner pruner);
-    public PFunction getFunction(PTableKey key) throws FunctionNotFoundException;
-    public void pruneFunctions(Pruner pruner);
-    public long getAge(PTableRef ref);
-    public PSchema getSchema(PTableKey key) throws SchemaNotFoundException;
+  public static interface Pruner {
+    public boolean prune(PTable table);
+
+    public boolean prune(PFunction function);
+  }
+
+  public int size();
+
+  public PTableRef getTableRef(PTableKey key) throws TableNotFoundException;
+
+  public void pruneTables(Pruner pruner);
+
+  public PFunction getFunction(PTableKey key) throws FunctionNotFoundException;
+
+  public void pruneFunctions(Pruner pruner);
+
+  public long getAge(PTableRef ref);
+
+  public PSchema getSchema(PTableKey key) throws SchemaNotFoundException;
 }

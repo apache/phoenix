@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,40 +15,38 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.expression.rewrite;
 
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.schema.SortOrder;
 
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
-
 public class RowValueConstructorExpressionRewriter {
 
-    static RowValueConstructorExpressionRewriter singleton = null;
+  static RowValueConstructorExpressionRewriter singleton = null;
 
-    public static RowValueConstructorExpressionRewriter getSingleton() {
-        if (singleton == null) {
-            singleton = new RowValueConstructorExpressionRewriter();
-        }
-        return singleton;
+  public static RowValueConstructorExpressionRewriter getSingleton() {
+    if (singleton == null) {
+      singleton = new RowValueConstructorExpressionRewriter();
     }
+    return singleton;
+  }
 
-    public RowValueConstructorExpression rewriteAllChildrenAsc(
-            RowValueConstructorExpression rvcExpression) throws SQLException {
-        List<Expression> replacementChildren = new ArrayList<>(rvcExpression.getChildren().size());
-        for (int i = 0; i < rvcExpression.getChildren().size(); i++) {
-            Expression child = rvcExpression.getChildren().get(i);
-            if (child.getSortOrder() == SortOrder.DESC) {
-                //As The KeySlot visitor has not been setup for InvertFunction need to Use Coerce
-                child = CoerceExpression.create(child, child.getDataType(), SortOrder.ASC, null);
-            }
-            replacementChildren.add(child);
-        }
-        return rvcExpression.clone(replacementChildren);
+  public RowValueConstructorExpression
+    rewriteAllChildrenAsc(RowValueConstructorExpression rvcExpression) throws SQLException {
+    List<Expression> replacementChildren = new ArrayList<>(rvcExpression.getChildren().size());
+    for (int i = 0; i < rvcExpression.getChildren().size(); i++) {
+      Expression child = rvcExpression.getChildren().get(i);
+      if (child.getSortOrder() == SortOrder.DESC) {
+        // As The KeySlot visitor has not been setup for InvertFunction need to Use Coerce
+        child = CoerceExpression.create(child, child.getDataType(), SortOrder.ASC, null);
+      }
+      replacementChildren.add(child);
     }
+    return rvcExpression.clone(replacementChildren);
+  }
 }

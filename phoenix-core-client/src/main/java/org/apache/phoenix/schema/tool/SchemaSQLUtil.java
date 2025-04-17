@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,7 +17,8 @@
  */
 package org.apache.phoenix.schema.tool;
 
-import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
+import java.util.List;
+import java.util.Map;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnName;
@@ -27,164 +28,158 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.SchemaUtil;
 
-import java.util.List;
-import java.util.Map;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 
 public class SchemaSQLUtil {
 
-    protected static String getCreateTableSQL(CreateTableStatement createStmt) {
-        if (createStmt == null) {
-            return "";
-        }
-        StringBuffer sb = new StringBuffer()
-                .append("CREATE "+createStmt.getTableType() + " ");
-        if (createStmt.ifNotExists()) {
-            sb.append("IF NOT EXISTS ");
-        }
-        sb.append(createStmt.getTableName()).append("\n")
-                .append(getColumnDefListToString(createStmt))
-                .append("\nCONSTRAINT "+createStmt.getPrimaryKeyConstraint().getName()+" PRIMARY KEY")
-                .append(" ("+createStmt.getPrimaryKeyConstraint().toString()+"))"
-                        .replaceAll(",", ",\n"));
-        if (createStmt.getTableType().equals(PTableType.VIEW)) {
-            sb.append("\nAS SELECT * FROM " + createStmt.getBaseTableName());
-            if (createStmt.getWhereClause()!=null) {
-                sb.append(" WHERE " +createStmt.getWhereClause());
-            }
-        }
-        appendProperties(sb, createStmt.getProps());
-        return sb.toString();
+  protected static String getCreateTableSQL(CreateTableStatement createStmt) {
+    if (createStmt == null) {
+      return "";
+    }
+    StringBuffer sb = new StringBuffer().append("CREATE " + createStmt.getTableType() + " ");
+    if (createStmt.ifNotExists()) {
+      sb.append("IF NOT EXISTS ");
+    }
+    sb.append(createStmt.getTableName()).append("\n").append(getColumnDefListToString(createStmt))
+      .append("\nCONSTRAINT " + createStmt.getPrimaryKeyConstraint().getName() + " PRIMARY KEY")
+      .append(" (" + createStmt.getPrimaryKeyConstraint().toString() + "))".replaceAll(",", ",\n"));
+    if (createStmt.getTableType().equals(PTableType.VIEW)) {
+      sb.append("\nAS SELECT * FROM " + createStmt.getBaseTableName());
+      if (createStmt.getWhereClause() != null) {
+        sb.append(" WHERE " + createStmt.getWhereClause());
+      }
+    }
+    appendProperties(sb, createStmt.getProps());
+    return sb.toString();
+  }
+
+  protected static String getCreateIndexSQL(CreateIndexStatement createStmt) {
+    if (createStmt == null) {
+      return "";
+    }
+    StringBuffer sb =
+      new StringBuffer().append("CREATE" + (createStmt.getIndexType().equals(PTable.IndexType.LOCAL)
+        ? " " + createStmt.getIndexType()
+        : "") + " INDEX ");
+    if (createStmt.ifNotExists()) {
+      sb.append("IF NOT EXISTS ");
+    }
+    sb.append(createStmt.getIndexTableName().getTableName()).append("\n")
+      .append("ON " + createStmt.getTable().getName())
+      .append("(" + createStmt.getIndexConstraint().toString()).append(")");
+    if (createStmt.getIncludeColumns() != null && !createStmt.getIncludeColumns().isEmpty()) {
+      sb.append("\nINCLUDE ");
+      sb.append(getColumnListToString(createStmt.getIncludeColumns()));
+    }
+    if (createStmt.isAsync()) {
+      sb.append(" ASYNC");
+    }
+    appendProperties(sb, createStmt.getProps());
+    return sb.toString();
+  }
+
+  private static String getColumnListToString(List<ColumnName> columnNames) {
+    StringBuffer sb = new StringBuffer();
+    for (ColumnName cName : columnNames) {
+      if (sb.length() == 0) {
+        sb.append("(");
+      }
+      sb.append(cName.toString()).append(",\n");
+    }
+    if (sb.length() != 0) {
+      sb.deleteCharAt(sb.length() - 1).deleteCharAt(sb.length() - 1);
+      sb.append(")");
+    }
+    return sb.toString();
+  }
+
+  private static String getColumnDefListToString(CreateTableStatement createStatement) {
+    List<ColumnDef> colDef = createStatement.getColumnDefs();
+    StringBuffer sb = new StringBuffer();
+    for (ColumnDef cDef : colDef) {
+      String columnString = getColumnInfoString(cDef);
+      if (sb.length() == 0) {
+        sb.append("(");
+      } else {
+        sb.append(",\n");
+      }
+      sb.append(columnString);
+    }
+    return sb.toString();
+  }
+
+  private static String getColumnInfoString(ColumnDef cDef) {
+    String colFam = cDef.getColumnDefName().getFamilyName();
+    String colDefName = cDef.getColumnDefName().getColumnName();
+    String colName = cDef.getColumnDefName().toString();
+    if (colFam != null) {
+      colName =
+        SchemaUtil.getEscapedArgument(colFam) + "." + SchemaUtil.getEscapedArgument(colDefName);
+    }
+    boolean isArrayType = cDef.getDataType().isArrayType();
+    String type = cDef.getDataType().getSqlTypeName();
+    Integer maxLength = cDef.getMaxLength();
+    Integer arrSize = cDef.getArraySize();
+    Integer scale = cDef.getScale();
+    StringBuilder buf = new StringBuilder(colName);
+    buf.append(' ');
+    if (isArrayType) {
+      String arrayPrefix = type.split("\\s+")[0];
+      buf.append(arrayPrefix);
+      appendMaxLengthAndScale(buf, maxLength, scale);
+      buf.append(' ');
+      buf.append("ARRAY");
+      if (arrSize != null) {
+        buf.append('[');
+        buf.append(arrSize);
+        buf.append(']');
+      }
+    } else {
+      buf.append(type);
+      appendMaxLengthAndScale(buf, maxLength, scale);
     }
 
-    protected static String getCreateIndexSQL(CreateIndexStatement createStmt) {
-        if (createStmt == null) {
-            return "";
-        }
-        StringBuffer sb = new StringBuffer()
-                .append("CREATE"
-                        + (createStmt.getIndexType().equals(PTable.IndexType.LOCAL) ? " "+createStmt.getIndexType() : "")
-                        + " INDEX ");
-        if (createStmt.ifNotExists()) {
-            sb.append("IF NOT EXISTS ");
-        }
-        sb.append(createStmt.getIndexTableName().getTableName()).append("\n")
-                .append("ON "+createStmt.getTable().getName())
-                .append("("+createStmt.getIndexConstraint().toString()).append(")");
-        if (createStmt.getIncludeColumns()!=null && !createStmt.getIncludeColumns().isEmpty()) {
-            sb.append("\nINCLUDE ");
-            sb.append(getColumnListToString(createStmt.getIncludeColumns()));
-        }
-        if (createStmt.isAsync()) {
-            sb.append(" ASYNC");
-        }
-        appendProperties(sb, createStmt.getProps());
-        return sb.toString();
+    if (!cDef.isNull()) {
+      buf.append(' ');
+      buf.append("NOT NULL");
+    }
+    if (cDef.getExpression() != null) {
+      buf.append(" DEFAULT ");
+      buf.append(cDef.getExpression());
     }
 
-    private static String getColumnListToString(List<ColumnName> columnNames) {
-        StringBuffer sb = new StringBuffer();
-        for(ColumnName cName : columnNames) {
-            if (sb.length()==0) {
-                sb.append("(");
-            }
-            sb.append(cName.toString()).append(",\n");
-        }
-        if (sb.length()!=0) {
-            sb.deleteCharAt(sb.length()-1).deleteCharAt(sb.length()-1);
-            sb.append(")");
-        }
-        return sb.toString();
-    }
+    return buf.toString();
+  }
 
-    private static String getColumnDefListToString(CreateTableStatement createStatement) {
-        List<ColumnDef> colDef = createStatement.getColumnDefs();
-        StringBuffer sb = new StringBuffer();
-        for(ColumnDef cDef : colDef) {
-            String columnString = getColumnInfoString(cDef);
-            if (sb.length()==0) {
-                sb.append("(");
-            } else {
-                sb.append(",\n");
-            }
-            sb.append(columnString);
-        }
-        return sb.toString();
+  private static void appendMaxLengthAndScale(StringBuilder buf, Integer maxLength, Integer scale) {
+    if (maxLength != null) {
+      buf.append('(');
+      buf.append(maxLength);
+      if (scale != null) {
+        buf.append(',');
+        buf.append(scale); // has both max length and scale. For ex- decimal(10,2)
+      }
+      buf.append(')');
     }
+  }
 
-    private static String getColumnInfoString(ColumnDef cDef) {
-        String colFam = cDef.getColumnDefName().getFamilyName();
-        String colDefName = cDef.getColumnDefName().getColumnName();
-        String colName = cDef.getColumnDefName().toString();
-        if (colFam != null) {
-            colName = SchemaUtil.getEscapedArgument(colFam)
-                    + "." + SchemaUtil.getEscapedArgument(colDefName);
+  private static void appendProperties(StringBuffer sb,
+    ListMultimap<String, Pair<String, Object>> props) {
+    if (props != null && !props.isEmpty()) {
+      sb.append("\n");
+      for (Map.Entry<String, Pair<String, Object>> entry : props.entries()) {
+        String prop = entry.getValue().getFirst();
+        if (prop.contains(".")) {
+          prop = SchemaUtil.getEscapedArgument(prop);
         }
-        boolean isArrayType = cDef.getDataType().isArrayType();
-        String type = cDef.getDataType().getSqlTypeName();
-        Integer maxLength = cDef.getMaxLength();
-        Integer arrSize = cDef.getArraySize();
-        Integer scale = cDef.getScale();
-        StringBuilder buf = new StringBuilder(colName);
-        buf.append(' ');
-        if (isArrayType) {
-            String arrayPrefix = type.split("\\s+")[0];
-            buf.append(arrayPrefix);
-            appendMaxLengthAndScale(buf, maxLength, scale);
-            buf.append(' ');
-            buf.append("ARRAY");
-            if (arrSize != null) {
-                buf.append('[');
-                buf.append(arrSize);
-                buf.append(']');
-            }
+        if (prop.equals("BLOOMFILTER")) {
+          sb.append(prop).append("=").append("'").append(entry.getValue().getSecond()).append("'");
         } else {
-            buf.append(type);
-            appendMaxLengthAndScale(buf, maxLength, scale);
+          sb.append(prop).append("=").append(entry.getValue().getSecond());
         }
-
-        if (!cDef.isNull()) {
-            buf.append(' ');
-            buf.append("NOT NULL");
-        }
-        if(cDef.getExpression()!=null) {
-            buf.append(" DEFAULT ");
-            buf.append(cDef.getExpression());
-        }
-
-        return buf.toString();
+        sb.append(",");
+      }
+      sb.deleteCharAt(sb.length() - 1);
     }
-
-    private static void appendMaxLengthAndScale(StringBuilder buf, Integer maxLength, Integer scale){
-        if (maxLength != null) {
-            buf.append('(');
-            buf.append(maxLength);
-            if (scale != null) {
-                buf.append(',');
-                buf.append(scale); // has both max length and scale. For ex- decimal(10,2)
-            }
-            buf.append(')');
-        }
-    }
-
-    private static void appendProperties(StringBuffer sb,
-            ListMultimap<String, Pair<String, Object>> props) {
-        if (props != null && !props.isEmpty()) {
-            sb.append("\n");
-            for (Map.Entry<String, Pair<String, Object>> entry : props.entries()) {
-                String prop = entry.getValue().getFirst();
-                if (prop.contains(".")) {
-                    prop = SchemaUtil.getEscapedArgument(prop);
-                }
-                if (prop.equals("BLOOMFILTER")) {
-                    sb.append(prop).append("=")
-                            .append("'").append(entry.getValue().getSecond()).append("'");
-                } else {
-                    sb.append(prop).append("=")
-                            .append(entry.getValue().getSecond());
-                }
-                sb.append(",");
-            }
-            sb.deleteCharAt(sb.length()-1);
-        }
-    }
+  }
 }

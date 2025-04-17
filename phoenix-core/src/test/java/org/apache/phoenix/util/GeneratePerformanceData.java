@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,38 +26,35 @@ import java.util.GregorianCalendar;
 import java.util.Random;
 
 public class GeneratePerformanceData {
-    public static void main(String[] args) throws FileNotFoundException, IOException {
-        String[] host = {"NA","CS","EU"};
-        String[] domain = {"Salesforce.com","Apple.com","Google.com"};
-        String[] feature = {"Login","Report","Dashboard"};
-        Calendar now = GregorianCalendar.getInstance();
-        Random random = new Random();
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        if (args.length != 2) {
-            System.out.println("Data file name and row count must be specified as arguments");
-            return;
-        }
-        String dataFile = args[0];
-        int rowCount = Integer.parseInt(args[1]);
-        FileOutputStream fostream = null;
-        try {
-            fostream = new FileOutputStream(dataFile);
-            for (int i=0; i<rowCount; i++) {
-                now.add(Calendar.SECOND, 1);
-                fostream.write((host[random.nextInt(host.length)] + "," + 
-                        domain[random.nextInt(domain.length)] + "," + 
-                        feature[random.nextInt(feature.length)] + "," + 
-                        sdf.format(now.getTime()) + "," + 
-                        random.nextInt(500) + "," + 
-                        random.nextInt(2000)+"," + 
-                        random.nextInt(10000) + 
-                        "\n").getBytes());
-                if (i % 10000 == 0) {
-                    System.out.print(".");
-                }
-            }
-        } finally {
-            fostream.close();
-        }
+  public static void main(String[] args) throws FileNotFoundException, IOException {
+    String[] host = { "NA", "CS", "EU" };
+    String[] domain = { "Salesforce.com", "Apple.com", "Google.com" };
+    String[] feature = { "Login", "Report", "Dashboard" };
+    Calendar now = GregorianCalendar.getInstance();
+    Random random = new Random();
+    SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    if (args.length != 2) {
+      System.out.println("Data file name and row count must be specified as arguments");
+      return;
     }
+    String dataFile = args[0];
+    int rowCount = Integer.parseInt(args[1]);
+    FileOutputStream fostream = null;
+    try {
+      fostream = new FileOutputStream(dataFile);
+      for (int i = 0; i < rowCount; i++) {
+        now.add(Calendar.SECOND, 1);
+        fostream
+          .write((host[random.nextInt(host.length)] + "," + domain[random.nextInt(domain.length)]
+            + "," + feature[random.nextInt(feature.length)] + "," + sdf.format(now.getTime()) + ","
+            + random.nextInt(500) + "," + random.nextInt(2000) + "," + random.nextInt(10000) + "\n")
+              .getBytes());
+        if (i % 10000 == 0) {
+          System.out.print(".");
+        }
+      }
+    } finally {
+      fostream.close();
+    }
+  }
 }

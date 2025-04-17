@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,21 +20,18 @@ package org.apache.phoenix.util;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import org.apache.phoenix.expression.LikeExpression;
 import org.junit.Test;
 
-import org.apache.phoenix.expression.LikeExpression;
-
-
 public class LikeExpressionTest {
-    @Test
-    public void testWildcardToLikeExpression() {
-        String tableName = "PTSDB";
-        assertTrue(tableName==LikeExpression.wildCardToLike(tableName));
-        assertEquals("PRODUCT\\_METRICS", LikeExpression.wildCardToLike("PRODUCT_METRICS"));
-        assertEquals("PRODUCT%", LikeExpression.wildCardToLike("PRODUCT*"));
-        assertEquals("PRODUCT_METRICS", LikeExpression.wildCardToLike("PRODUCT?METRICS"));
-        assertEquals("PR?O%UCT%M*TRI_S", LikeExpression.wildCardToLike("PR\\?O*UCT*M\\*TRI?S"));
-    }
-    
+  @Test
+  public void testWildcardToLikeExpression() {
+    String tableName = "PTSDB";
+    assertTrue(tableName == LikeExpression.wildCardToLike(tableName));
+    assertEquals("PRODUCT\\_METRICS", LikeExpression.wildCardToLike("PRODUCT_METRICS"));
+    assertEquals("PRODUCT%", LikeExpression.wildCardToLike("PRODUCT*"));
+    assertEquals("PRODUCT_METRICS", LikeExpression.wildCardToLike("PRODUCT?METRICS"));
+    assertEquals("PR?O%UCT%M*TRI_S", LikeExpression.wildCardToLike("PR\\?O*UCT*M\\*TRI?S"));
+  }
 
 }

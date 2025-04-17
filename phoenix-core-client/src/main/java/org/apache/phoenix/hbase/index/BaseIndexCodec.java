@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,14 +21,14 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.hbase.index.covered.IndexCodec;
 
 public abstract class BaseIndexCodec implements IndexCodec {
-    /**
-     * {@inheritDoc}
-     * <p>
-     * By default, the codec is always enabled. Subclasses should override this method if they want do
-     * decide to index on a per-mutation basis.
-     */
-    @Override
-    public boolean isEnabled(Mutation m) {
-        return true;
-    }
+  /**
+   * {@inheritDoc}
+   * <p>
+   * By default, the codec is always enabled. Subclasses should override this method if they want do
+   * decide to index on a per-mutation basis.
+   */
+  @Override
+  public boolean isEnabled(Mutation m) {
+    return true;
+  }
 }

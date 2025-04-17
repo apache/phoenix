@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,7 +20,6 @@ package org.apache.phoenix.hbase.index.covered.update;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-
 
 /**
  * Simple POJO for tracking a bunch of column references and the next-newest timestamp for those
@@ -38,8 +37,8 @@ public class ColumnTracker implements IndexedColumnGroup {
   private final int hashCode;
 
   private static int calcHashCode(List<ColumnReference> columns) {
-      return columns.hashCode();
-    }
+    return columns.hashCode();
+  }
 
   public ColumnTracker(Collection<? extends ColumnReference> columns) {
     this.columns = new ArrayList<ColumnReference>(columns);
@@ -69,13 +68,13 @@ public class ColumnTracker implements IndexedColumnGroup {
   }
 
   @Override
-  public boolean equals(Object o){
-    if(!(o instanceof ColumnTracker)){
+  public boolean equals(Object o) {
+    if (!(o instanceof ColumnTracker)) {
       return false;
     }
-    ColumnTracker other = (ColumnTracker)o;
+    ColumnTracker other = (ColumnTracker) o;
     if (hashCode != other.hashCode) {
-        return false;
+      return false;
     }
     if (other.columns.size() != columns.size()) {
       return false;
