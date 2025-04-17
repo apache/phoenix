@@ -38,6 +38,7 @@ import org.apache.phoenix.query.PhoenixTestBuilder;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.InstanceResolver;
@@ -89,20 +90,26 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
     static final int VIEW_TTL_120_SECS = 120;
 
     // Various Test System indexes
-    private final static String SYS_INDEX_TABLE_LINK_TEST_INDEX_NAME = "SYS_INDEX_TABLE_LINK_TEST_INDEX";
+    private final static String SYS_INDEX_TABLE_LINK_TEST_INDEX_NAME = "INDEX_TABLE_LINK_TEST_INDEX";
     private final static String FULL_SYS_INDEX_TABLE_LINK_TEST_INDEX_NAME = QueryConstants.SYSTEM_SCHEMA_NAME + "." + SYS_INDEX_TABLE_LINK_TEST_INDEX_NAME;
-    private final static String SYS_VIEW_HDR_TEST_INDEX_NAME = "SYS_VIEW_HDR_TEST_INDEX";
+    private final static String SYS_INDEX_HDR_TEST_INDEX_NAME = "INDEX_HDR_TEST_INDEX";
+    private final static String FULL_SYS_INDEX_HDR_TEST_INDEX_NAME = QueryConstants.SYSTEM_SCHEMA_NAME + "." + SYS_INDEX_HDR_TEST_INDEX_NAME;
+    private final static String SYS_VIEW_HDR_TEST_INDEX_NAME = "VIEW_HDR_TEST_INDEX";
     private final static String FULL_SYS_VIEW_HDR_TEST_INDEX_NAME = QueryConstants.SYSTEM_SCHEMA_NAME + "." + SYS_VIEW_HDR_TEST_INDEX_NAME;
-    private final static String SYS_VIEW_INDEX_HDR_TEST_INDEX_NAME = "SYS_VIEW_INDEX_HDR_TEST_INDEX";
+    private final static String SYS_VIEW_INDEX_HDR_TEST_INDEX_NAME = "VIEW_INDEX_HDR_TEST_INDEX";
     private final static String FULL_SYS_VIEW_INDEX_HDR_TEST_INDEX_NAME = QueryConstants.SYSTEM_SCHEMA_NAME + "." + SYS_VIEW_INDEX_HDR_TEST_INDEX_NAME;
-    private final static String SYS_ROW_KEY_MATCHER_TEST_INDEX_NAME = "SYS_ROW_KEY_MATCHER_TEST_INDEX";
+    private final static String SYS_ROW_KEY_MATCHER_TEST_INDEX_NAME = "ROW_KEY_MATCHER_TEST_INDEX";
     private final static String FULL_SYS_ROW_KEY_MATCHER_TEST_INDEX_NAME = QueryConstants.SYSTEM_SCHEMA_NAME + "." + SYS_ROW_KEY_MATCHER_TEST_INDEX_NAME;
 
     // System Index creation statements
     private final static String SYS_INDEX_TABLE_LINK_TEST_INDEX_SQL =  String.format(
             "CREATE INDEX IF NOT EXISTS %s " +
-                    "ON SYSTEM.CATALOG (TENANT_ID, TABLE_SCHEM, TABLE_NAME, TABLE_TYPE) " +
+                    "ON SYSTEM.CATALOG (TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY) INCLUDE(TABLE_TYPE, LINK_TYPE) " +
                     "WHERE TABLE_TYPE = 'i' AND LINK_TYPE = 1", SYS_INDEX_TABLE_LINK_TEST_INDEX_NAME);
+    private final static String SYS_INDEX_HDR_TEST_INDEX_SQL =  String.format(
+            "CREATE INDEX IF NOT EXISTS %s " +
+                    "ON SYSTEM.CATALOG (TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, INDEX_STATE, DATA_TABLE_NAME) INCLUDE(TABLE_TYPE) " +
+                    "WHERE TABLE_TYPE = 'i' AND INDEX_STATE IS NOT NULL", SYS_INDEX_HDR_TEST_INDEX_NAME);
     private final static String SYS_VIEW_HDR_TEST_INDEX_SQL =  String.format(
             "CREATE INDEX IF NOT EXISTS %s " +
                     "ON SYSTEM.CATALOG(TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY) " +
@@ -136,8 +143,19 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
             "WHERE %s AND TABLE_SCHEM = '%s' AND TABLE_NAME = '%s' AND TABLE_TYPE = 'i'" +
             " AND LINK_TYPE = 1";
 
+    static final String SYS_CATALOG_INDEX_HDR_SQL = "SELECT count(*) FROM SYSTEM.CATALOG " +
+            "WHERE %s AND TABLE_SCHEM = '%s' AND TABLE_NAME = '%s' AND TABLE_TYPE = 'i'" +
+            " AND INDEX_STATE IS NOT NULL";
+
+    static final String SYS_CATALOG_COLUMN_EXISTS_SQL = "SELECT count(*) FROM SYSTEM.CATALOG " +
+            "WHERE TABLE_SCHEM = '%s' AND TABLE_NAME = '%s' AND COLUMN_NAME = '%s'" ;
+
     // SQL on the index table - SYSTEM.SYS_INDEX_TABLE_LINK_TEST_INDEX,
     static final String SYS_CATALOG_IDX_INDEX_TABLE_LINK_SQL = "SELECT \":COLUMN_FAMILY\" FROM %s " +
+            "WHERE %s AND \":TABLE_SCHEM\" = '%s' AND \":TABLE_NAME\" = '%s'" ;
+
+    // SQL on the index table - SYSTEM.SYS_INDEX_HDR_TEST_INDEX_NAME,
+    static final String SYS_CATALOG_IDX_INDEX_HDR_SQL = "SELECT \"0:DATA_TABLE_NAME\", \"0:INDEX_STATE\" FROM %s " +
             "WHERE %s AND \":TABLE_SCHEM\" = '%s' AND \":TABLE_NAME\" = '%s'" ;
 
     // SQL on the index table - SYSTEM.SYS_VIEW_HDR_TEST_INDEX,
@@ -211,6 +229,40 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
     }
 
 
+    void assertSystemCatalogHasIndexHdr(String tenantId, String schemaName,
+            String tableName) throws SQLException {
+
+        try (Connection connection = DriverManager.getConnection(getUrl())) {
+            Statement stmt = connection.createStatement();
+            String tenantClause = tenantId == null || tenantId.isEmpty() ?
+                    "TENANT_ID IS NULL" :
+                    String.format("TENANT_ID = '%s'", tenantId);
+            String sql = String
+                    .format(SYS_CATALOG_INDEX_HDR_SQL, tenantClause, schemaName, tableName);
+            stmt.execute(sql);
+            ResultSet rs = stmt.getResultSet();
+            int numRows = rs.next() ? rs.getInt(1) : 0;
+
+            assertEquals(String.format("Expected rows do not match for schema = %s, table = %s",
+                    schemaName, tableName), 1, numRows);
+        }
+    }
+
+    void assertAdditionalColumnInMetaIndexTable(String schemaName, String indexName, String newColumnName,
+            boolean exists) throws SQLException {
+
+        try (Connection connection = DriverManager.getConnection(getUrl())) {
+            Statement stmt = connection.createStatement();
+            String sql = String
+                    .format(SYS_CATALOG_COLUMN_EXISTS_SQL, schemaName, indexName, newColumnName);
+            stmt.execute(sql);
+            ResultSet rs = stmt.getResultSet();
+            int numRows = rs.next() ? rs.getInt(1) : 0;
+
+            assertEquals(String.format("Expected rows do not match for schema = %s, table = %s",
+                    schemaName, indexName), exists ? 1 : 0, numRows);
+        }
+    }
 
     void assertSystemCatalogHasIndexTableLinks(String tenantId, String schemaName,
             String tableName) throws SQLException {
@@ -322,6 +374,36 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
         }
     }
 
+    void assertSystemCatalogIndexHaveIndexHdr(String systemCatalogIndexName,
+            String tenantId, String schemaName,
+            String tableName, boolean exists, String indexName, String expectedIndexState) throws SQLException {
+
+        try (Connection connection = DriverManager.getConnection(getUrl())) {
+            Statement stmt = connection.createStatement();
+            String tenantClause = tenantId == null || tenantId.isEmpty() ?
+                    "\":TENANT_ID\" IS NULL" :
+                    String.format("\":TENANT_ID\" = '%s'", tenantId);
+            String sql = String.format(SYS_CATALOG_IDX_INDEX_HDR_SQL, systemCatalogIndexName,
+                    tenantClause, schemaName, indexName);
+            stmt.execute(sql);
+            ResultSet rs = stmt.getResultSet();
+            boolean hasRows = rs.next();
+            String actualDataTableName = hasRows ? rs.getString(1) : null;
+            String actualIndexState =  hasRows ? rs.getString(2) : null;
+            if (exists) {
+                assertEquals(String.format("Expected rows do not match for schema = %s, table = %s",
+                        schemaName, indexName), tableName, actualDataTableName);
+                assertEquals(String.format("Expected rows do not match for schema = %s, table = %s",
+                        schemaName, indexName), expectedIndexState, actualIndexState);
+            } else {
+                assertNull(String.format("Zero rows expected for schema = %s, table = %s",
+                        schemaName, indexName), actualDataTableName);
+                assertNull(String.format("Zero rows expected for schema = %s, table = %s",
+                        schemaName, indexName), actualIndexState);
+            }
+        }
+    }
+
 
     void assertSystemCatalogIndexHaveIndexTableLinks(String systemCatalogIndexName,
             String tenantId, String schemaName,
@@ -400,6 +482,14 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Statement stmt = conn.createStatement()) {
             stmt.execute(String.format("drop index %s ON SYSTEM.CATALOG", sysIndexName));
+            conn.commit();
+        }
+    }
+
+    void alterIndexState(String indexName, String tableName, PIndexState newState) throws SQLException {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+            stmt.execute(String.format("alter index %s ON %s %s", indexName, tableName, newState.name()));
             conn.commit();
         }
     }
@@ -576,7 +666,7 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testIndexesOfIndexTableLinkTypeCondition() throws Exception {
+    public void testIndexesOfIndexTableLinkTypeAndIndexHdrCondition() throws Exception {
 
         PhoenixTestBuilder.SchemaBuilder.TenantViewOptions
                 tenantViewOptions = new PhoenixTestBuilder.SchemaBuilder.TenantViewOptions();
@@ -594,6 +684,7 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
                 SchemaUtil.getSchemaNameFromFullName(schemaBuilder.getEntityTenantViewName()));
         String globalViewName = stripQuotes(
                 SchemaUtil.getTableNameFromFullName(schemaBuilder.getEntityGlobalViewName()));
+        String fullGlobalViewName = schemaBuilder.getEntityGlobalViewName();
         String tenantViewName = stripQuotes(
                 SchemaUtil.getTableNameFromFullName(schemaBuilder.getEntityTenantViewName()));
         String globalIndexName = stripQuotes(
@@ -610,21 +701,42 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
         assertSystemCatalogHasIndexTableLinks(null, schemaName, globalViewName);
         assertSystemCatalogHasIndexTableLinks(tenantId, schemaName, tenantViewName);
 
+        // Assert index table header rows (table_type = 'i' AND INDEX_STATE IS NOT NULL) exists in SYSTEM. CATALOG
+        assertSystemCatalogHasIndexHdr(null, schemaName, globalIndexName);
+        assertSystemCatalogHasIndexHdr(tenantId, schemaName, tenantIndexName);
+
         //Create the SYSTEM.CATALOG index for Index Table links
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Statement stmt = conn.createStatement()) {
             stmt.execute(SYS_INDEX_TABLE_LINK_TEST_INDEX_SQL);
+            stmt.execute(SYS_INDEX_HDR_TEST_INDEX_SQL);
             conn.commit();
         }
         LOGGER.info("Finished creating index: " + SYS_INDEX_TABLE_LINK_TEST_INDEX_SQL);
+        LOGGER.info("Finished creating index: " + SYS_INDEX_HDR_TEST_INDEX_SQL);
 
         // Assert System Catalog index table has been created
         assertSystemCatalogIndexTable(SYS_INDEX_TABLE_LINK_TEST_INDEX_NAME, true);
+        assertSystemCatalogIndexTable(SYS_INDEX_HDR_TEST_INDEX_NAME, true);
         // Assert appropriate rows are inserted in the SYSTEM.CATALOG index tables
         assertSystemCatalogIndexHaveIndexTableLinks(FULL_SYS_INDEX_TABLE_LINK_TEST_INDEX_NAME, null, schemaName, globalViewName,
                 true, globalIndexName);
         assertSystemCatalogIndexHaveIndexTableLinks(FULL_SYS_INDEX_TABLE_LINK_TEST_INDEX_NAME, tenantId, schemaName, tenantViewName,
                 true, tenantIndexName);
+
+        assertSystemCatalogIndexHaveIndexHdr(FULL_SYS_INDEX_HDR_TEST_INDEX_NAME, null, schemaName, globalViewName,
+                true, globalIndexName, PIndexState.ACTIVE.getSerializedValue());
+        assertSystemCatalogIndexHaveIndexHdr(FULL_SYS_INDEX_HDR_TEST_INDEX_NAME, tenantId, schemaName, tenantViewName,
+                true, tenantIndexName, PIndexState.ACTIVE.getSerializedValue());
+
+        // Alter the index state and verify meta index
+        alterIndexState(globalIndexName, fullGlobalViewName, PIndexState.UNUSABLE);
+        assertSystemCatalogIndexHaveIndexHdr(FULL_SYS_INDEX_HDR_TEST_INDEX_NAME, null, schemaName, globalViewName,
+                true, globalIndexName, PIndexState.INACTIVE.getSerializedValue());
+
+        alterIndexState(globalIndexName, fullGlobalViewName, PIndexState.REBUILD);
+        assertSystemCatalogIndexHaveIndexHdr(FULL_SYS_INDEX_HDR_TEST_INDEX_NAME, null, schemaName, globalViewName,
+                true, globalIndexName, PIndexState.ACTIVE.getSerializedValue());
 
         LOGGER.info("Dropping base table " + fullBaseTableName);
         dropTableWithChildViews(fullBaseTableName, 2);
@@ -637,10 +749,17 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
         assertSystemCatalogIndexHaveIndexTableLinks(FULL_SYS_INDEX_TABLE_LINK_TEST_INDEX_NAME, null, schemaName, globalViewName, false, null);
         assertSystemCatalogIndexHaveIndexTableLinks(FULL_SYS_INDEX_TABLE_LINK_TEST_INDEX_NAME, tenantId, schemaName, tenantViewName, false, null);
 
+        assertSystemCatalogIndexHaveIndexHdr(FULL_SYS_INDEX_HDR_TEST_INDEX_NAME, null, schemaName, null,
+                false, globalIndexName, null);
+        assertSystemCatalogIndexHaveIndexHdr(FULL_SYS_INDEX_HDR_TEST_INDEX_NAME, tenantId, schemaName, null,
+                false, tenantIndexName, null);
+
         dropSystemCatalogIndex(SYS_INDEX_TABLE_LINK_TEST_INDEX_NAME);
+        dropSystemCatalogIndex(SYS_INDEX_HDR_TEST_INDEX_NAME);
 
         // Assert System Catalog index table dropped
         assertSystemCatalogIndexTable(FULL_SYS_INDEX_TABLE_LINK_TEST_INDEX_NAME, false);
+        assertSystemCatalogIndexTable(FULL_SYS_INDEX_HDR_TEST_INDEX_NAME, false);
     }
 
     @Test
@@ -682,6 +801,9 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
 
             conn.commit();
         }
+        LOGGER.info("Finished creating index: " + SYS_VIEW_HDR_TEST_INDEX_SQL);
+        LOGGER.info("Finished creating index: " + SYS_ROW_KEY_MATCHER_TEST_INDEX_SQL);
+        LOGGER.info("Finished creating index: " + SYS_VIEW_INDEX_HDR_TEST_INDEX_SQL);
 
         /**
          * Testing creation of SYS_INDEX rows
@@ -768,6 +890,92 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
             }
 
         }
+    }
+
+    @Test
+    public void testAddColumnWithCascadeOnMetaIndexes() throws Exception {
+
+        PhoenixTestBuilder.SchemaBuilder.TenantViewOptions
+                tenantViewOptions = new PhoenixTestBuilder.SchemaBuilder.TenantViewOptions();
+        tenantViewOptions.setTenantViewColumns(Lists.newArrayList(TENANT_VIEW_COLUMNS));
+        tenantViewOptions.setTenantViewColumnTypes(Lists.newArrayList(COLUMN_TYPES));
+
+        // Create 2 level view
+        final PhoenixTestBuilder.SchemaBuilder
+                schemaBuilder = createLevel2TenantViewWithGlobalLevelTTL(VIEW_TTL_300_SECS, tenantViewOptions, null,
+                true);
+
+        String tenantId = schemaBuilder.getDataOptions().getTenantId();
+        String fullBaseTableName = schemaBuilder.getEntityTableName();
+        String schemaName = stripQuotes(
+                SchemaUtil.getSchemaNameFromFullName(schemaBuilder.getEntityTenantViewName()));
+        String globalViewName = stripQuotes(
+                SchemaUtil.getTableNameFromFullName(schemaBuilder.getEntityGlobalViewName()));
+        String fullGlobalViewName = schemaBuilder.getEntityGlobalViewName();
+        String tenantViewName = stripQuotes(
+                SchemaUtil.getTableNameFromFullName(schemaBuilder.getEntityTenantViewName()));
+        String globalIndexName = stripQuotes(
+                SchemaUtil.getTableNameFromFullName(schemaBuilder.getEntityGlobalViewIndexName()));
+        String tenantIndexName = stripQuotes(
+                SchemaUtil.getTableNameFromFullName(schemaBuilder.getEntityTenantViewIndexName()));
+
+        // Assert View Header rows exists for global view
+        assertSystemCatalogHasViewHeaderRelatedColumns("", schemaName, globalViewName, true, VIEW_TTL_300_SECS);
+        // Assert View Header rows exists for tenant view
+        assertSystemCatalogHasViewHeaderRelatedColumns(tenantId, schemaName, tenantViewName, true, 0);
+
+        // Assert index table link rows (link_type = 1) exists in SYSTEM. CATALOG
+        assertSystemCatalogHasIndexTableLinks(null, schemaName, globalViewName);
+        assertSystemCatalogHasIndexTableLinks(tenantId, schemaName, tenantViewName);
+
+        // Assert index table header rows (table_type = 'i' AND INDEX_STATE IS NOT NULL) exists in SYSTEM. CATALOG
+        assertSystemCatalogHasIndexHdr(null, schemaName, globalIndexName);
+        assertSystemCatalogHasIndexHdr(tenantId, schemaName, tenantIndexName);
+
+        //Create the SYSTEM.CATALOG index for Index Table links
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+            stmt.execute(SYS_INDEX_TABLE_LINK_TEST_INDEX_SQL);
+            stmt.execute(SYS_INDEX_HDR_TEST_INDEX_SQL);
+            conn.commit();
+        }
+        LOGGER.info("Finished creating index: " + SYS_INDEX_TABLE_LINK_TEST_INDEX_SQL);
+        LOGGER.info("Finished creating index: " + SYS_INDEX_HDR_TEST_INDEX_SQL);
+
+        // Assert System Catalog index table has been created
+        assertSystemCatalogIndexTable(SYS_INDEX_TABLE_LINK_TEST_INDEX_NAME, true);
+        assertSystemCatalogIndexTable(SYS_INDEX_HDR_TEST_INDEX_NAME, true);
+        // Assert appropriate rows are inserted in the SYSTEM.CATALOG index tables
+        assertSystemCatalogIndexHaveIndexTableLinks(FULL_SYS_INDEX_TABLE_LINK_TEST_INDEX_NAME, null, schemaName, globalViewName,
+                true, globalIndexName);
+        assertSystemCatalogIndexHaveIndexTableLinks(FULL_SYS_INDEX_TABLE_LINK_TEST_INDEX_NAME, tenantId, schemaName, tenantViewName,
+                true, tenantIndexName);
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("ALTER TABLE SYSTEM.CATALOG ADD IF NOT EXISTS TEST_COL1 INTEGER DEFAULT 5 CASCADE INDEX ALL");
+        }
+
+        // Assert the new column exists in the meta index definition
+        assertAdditionalColumnInMetaIndexTable("SYSTEM", SYS_INDEX_TABLE_LINK_TEST_INDEX_NAME, "0:TEST_COL1", true);
+        assertAdditionalColumnInMetaIndexTable("SYSTEM", SYS_INDEX_HDR_TEST_INDEX_NAME, "0:TEST_COL1", true);
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("ALTER TABLE SYSTEM.CATALOG DROP COLUMN TEST_COL1");
+        }
+
+        // Assert the new column has been removed from the meta index definition
+        assertAdditionalColumnInMetaIndexTable("SYSTEM", SYS_INDEX_TABLE_LINK_TEST_INDEX_NAME, "0:TEST_COL1", false);
+        assertAdditionalColumnInMetaIndexTable("SYSTEM", SYS_INDEX_HDR_TEST_INDEX_NAME, "0:TEST_COL1", false);
+
+        dropSystemCatalogIndex(SYS_INDEX_TABLE_LINK_TEST_INDEX_NAME);
+        dropSystemCatalogIndex(SYS_INDEX_HDR_TEST_INDEX_NAME);
+
+        // Assert System Catalog index table dropped
+        assertSystemCatalogIndexTable(FULL_SYS_INDEX_TABLE_LINK_TEST_INDEX_NAME, false);
+        assertSystemCatalogIndexTable(FULL_SYS_INDEX_HDR_TEST_INDEX_NAME, false);
+
     }
 
 }

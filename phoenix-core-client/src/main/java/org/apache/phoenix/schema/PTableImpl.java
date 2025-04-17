@@ -2509,9 +2509,7 @@ public class PTableImpl implements PTable {
                 || (tableName.equalsIgnoreCase(PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_TABLE)
                 && column.getName().getString().equalsIgnoreCase(PhoenixDatabaseMetaData.PARTITION_END_KEY))
                 // TODO remove before merging - only for testing SYSTEM CATALOG indexes
-                || (tableName.equalsIgnoreCase("SYS_ROW_KEY_MATCHER_IDX")
-                && column.getName().getString().equalsIgnoreCase("0:" + PhoenixDatabaseMetaData.ROW_KEY_MATCHER))
-                || (tableName.equalsIgnoreCase("SYS_VIEW_HDR_IDX")
+                || (tableName.equalsIgnoreCase("VIEW_HDR_SYS_INDEX")
                 && column.getName().getString().equalsIgnoreCase("0:" + PhoenixDatabaseMetaData.ROW_KEY_MATCHER))
         ) {
             return new PColumnImpl(column.getName(),
@@ -2533,7 +2531,7 @@ public class PTableImpl implements PTable {
         }
 
         // TODO remove before merging - only for testing SYSTEM CATALOG indexes
-        if ((tableName.equalsIgnoreCase("SYS_VIEW_INDEX_HDR_IDX")
+        if ((tableName.equalsIgnoreCase("VIEW_INDEX_HDR_SYS_INDEX")
                 && column.getName().getString().equalsIgnoreCase(": DECODE_VIEW_INDEX_ID(VIEW_INDEX_ID,VIEW_INDEX_ID_DATA_TYPE)"))) {
             return new PColumnImpl(PNameFactory.newName(":VIEW_INDEX_ID"),
                     column.getFamilyName(),
