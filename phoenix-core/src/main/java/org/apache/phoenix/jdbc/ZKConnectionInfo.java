@@ -82,6 +82,7 @@ public class ZKConnectionInfo extends ConnectionInfo {
         if (getZkHosts() != null) {
             //This has the highest priority
             connectionProps.put(HConstants.CLIENT_ZOOKEEPER_QUORUM, getZkHosts());
+            connectionProps.put(HConstants.ZOOKEEPER_QUORUM, getZkHosts());
         }
         //Port is already normalized into zkHosts
         if (getZkRootNode() != null) {
