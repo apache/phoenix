@@ -450,6 +450,8 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_PHOENIX_GET_METADATA_READ_LOCK_ENABLED = true;
 
     public static final int DEFAULT_PHOENIX_STREAMS_GET_TABLE_REGIONS_TIMEOUT = 300000; // 5 minutes
+    public static final boolean DEFAULT_SYSTEM_CATALOG_INDEXES_ENABLED = false;
+
 
     public static final Boolean DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED = false;
 

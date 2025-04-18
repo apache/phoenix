@@ -20,6 +20,7 @@ package org.apache.phoenix.jdbc;
 import org.apache.hadoop.hbase.*;
 import org.apache.phoenix.end2end.PhoenixRegionServerEndpointTestImpl;
 import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
+import org.apache.phoenix.hbase.index.write.TestTrackingParallelWriterIndexCommitter;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.commons.lang3.RandomUtils;
@@ -55,6 +56,7 @@ import static org.apache.hadoop.hbase.ipc.RpcClient.*;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_REPLICATION_KEY;
 import static org.apache.hadoop.test.GenericTestUtils.waitFor;
 import static org.apache.phoenix.hbase.index.write.AbstractParallelWriterIndexCommitter.NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY;
+import static org.apache.phoenix.hbase.index.write.IndexWriter.INDEX_COMMITTER_CONF_KEY;
 import static org.apache.phoenix.jdbc.ClusterRoleRecordGeneratorTool.PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT;
 import static org.apache.phoenix.jdbc.FailoverPhoenixConnection.FAILOVER_TIMEOUT_MS_ATTR;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.*;
@@ -702,6 +704,9 @@ public class HighAvailabilityTestingUtility {
             // Phoenix Region Server Endpoint needed for metadata caching
             conf.set(REGIONSERVER_COPROCESSOR_CONF_KEY,
                         PhoenixRegionServerEndpointTestImpl.class.getName());
+            conf.set(INDEX_COMMITTER_CONF_KEY,
+                    TestTrackingParallelWriterIndexCommitter.class.getName());
+
         }
     }
 
