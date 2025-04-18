@@ -2828,11 +2828,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
                 if (parentTableKey != null) {
                     metaDataCache.invalidate(new ImmutableBytesPtr(parentTableKey));
-                    if ((tableType == INDEX) && SchemaUtil.isSystemTable(Bytes.toBytes(fullTableName))) {
-                        // Ensure that the data table is refreshed back in the cache
-                        doGetTable(tenantIdBytes, parentSchemaName, parentTableName,
-                                HConstants.LATEST_TIMESTAMP, null, request.getClientVersion());
-                    }
                 }
                 metaDataCache.invalidate(cacheKey);
                 // Get timeStamp from mutations - the above method sets it if it's unset
@@ -4637,9 +4632,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     metaDataCache.invalidate(cacheKey);
                     if (dataTableKey != null) {
                         metaDataCache.invalidate(new ImmutableBytesPtr(dataTableKey));
-                        // Ensure that the data table is refreshed back in the cache
-                        doGetTable(tenantId, schemaName, CellUtil.cloneValue(dataTableKV),
-                                HConstants.LATEST_TIMESTAMP, null, request.getClientVersion());
                     }
                     if (setRowKeyOrderOptimizableCell || disableTimeStampKVIndex != -1
                             || currentState.isDisabled() || newState == PIndexState.BUILDING) {

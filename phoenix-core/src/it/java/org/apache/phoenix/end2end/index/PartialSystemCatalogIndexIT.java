@@ -30,6 +30,7 @@ import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ViewTTLIT;
+import org.apache.phoenix.hbase.index.write.TestTrackingParallelWriterIndexCommitter;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.query.ConfigurationFactory;
@@ -49,6 +50,7 @@ import org.apache.phoenix.util.TableViewFinderResult;
 import org.apache.phoenix.util.ViewUtil;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
@@ -69,6 +71,7 @@ import java.util.Properties;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_INDEX_SYSTEM_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.MISMATCHED_TOKEN;
+import static org.apache.phoenix.hbase.index.write.IndexWriter.INDEX_COMMITTER_CONF_KEY;
 import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.COLUMN_TYPES;
 import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.TENANT_VIEW_COLUMNS;
 import static org.apache.phoenix.query.QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS;
@@ -895,6 +898,17 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
     @Test
     public void testAddColumnWithCascadeOnMetaIndexes() throws Exception {
 
+        //Create the SYSTEM.CATALOG index for Index Table links
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+            stmt.execute(SYS_INDEX_TABLE_LINK_TEST_INDEX_SQL);
+            stmt.execute(SYS_INDEX_HDR_TEST_INDEX_SQL);
+            conn.commit();
+        }
+        LOGGER.info("Finished creating index: " + SYS_INDEX_TABLE_LINK_TEST_INDEX_SQL);
+        LOGGER.info("Finished creating index: " + SYS_INDEX_HDR_TEST_INDEX_SQL);
+
+
         PhoenixTestBuilder.SchemaBuilder.TenantViewOptions
                 tenantViewOptions = new PhoenixTestBuilder.SchemaBuilder.TenantViewOptions();
         tenantViewOptions.setTenantViewColumns(Lists.newArrayList(TENANT_VIEW_COLUMNS));
@@ -932,15 +946,10 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
         assertSystemCatalogHasIndexHdr(null, schemaName, globalIndexName);
         assertSystemCatalogHasIndexHdr(tenantId, schemaName, tenantIndexName);
 
-        //Create the SYSTEM.CATALOG index for Index Table links
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                Statement stmt = conn.createStatement()) {
-            stmt.execute(SYS_INDEX_TABLE_LINK_TEST_INDEX_SQL);
-            stmt.execute(SYS_INDEX_HDR_TEST_INDEX_SQL);
-            conn.commit();
-        }
-        LOGGER.info("Finished creating index: " + SYS_INDEX_TABLE_LINK_TEST_INDEX_SQL);
-        LOGGER.info("Finished creating index: " + SYS_INDEX_HDR_TEST_INDEX_SQL);
+        //////////////////////////////////
+        // TODO
+
+        ///////////////////////////////////
 
         // Assert System Catalog index table has been created
         assertSystemCatalogIndexTable(SYS_INDEX_TABLE_LINK_TEST_INDEX_NAME, true);
@@ -977,5 +986,4 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
         assertSystemCatalogIndexTable(FULL_SYS_INDEX_HDR_TEST_INDEX_NAME, false);
 
     }
-
 }

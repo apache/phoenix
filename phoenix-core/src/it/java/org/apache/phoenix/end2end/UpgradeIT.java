@@ -104,7 +104,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.apache.phoenix.util.UpgradeUtil;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -767,7 +766,6 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    @Ignore
     public void testLastDDLTimestampBootstrap() throws Exception {
         Long testStartTime = EnvironmentEdgeManager.currentTimeMillis();
         //Create a table, view, and index

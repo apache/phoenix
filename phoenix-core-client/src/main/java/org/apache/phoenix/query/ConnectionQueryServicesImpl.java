@@ -4072,9 +4072,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try {
             metaConnection.createStatement().executeUpdate(getCDCStreamDDL());
         } catch (TableAlreadyExistsException ignore) {}
-        try {
-            upgradeSystemCatalogIndexes(metaConnection);
-        } catch (TableAlreadyExistsException ignore) {}
     }
 
     /**
@@ -4721,7 +4718,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // so that any failures here can be handled/continued out of band.
         metaConnection = upgradeSystemChildLink(metaConnection, moveChildLinks,
                 systemTableToSnapshotMap);
-        metaConnection = upgradeSystemCatalogIndexes(metaConnection);
         return metaConnection;
     }
 
@@ -5068,35 +5064,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return metaConnection;
     }
 
-    // TODO: remove before merging, only for testing
-    private PhoenixConnection upgradeSystemCatalogIndexes(PhoenixConnection metaConnection)
-            throws SQLException {
-        Properties p = PropertiesUtil.deepCopy(metaConnection.getClientInfo());
-        p.remove(PhoenixRuntime.CURRENT_SCN_ATTRIB);
-
-        Configuration conf = metaConnection.getQueryServices().getConfiguration();
-        boolean catalogIndexesEnabled = conf.getBoolean(SYSTEM_CATALOG_INDEXES_ENABLED, DEFAULT_SYSTEM_CATALOG_INDEXES_ENABLED);
-
-
-        // Checking if namespace is enabled
-        if (!catalogIndexesEnabled) {
-            LOGGER.debug("Not creating meta indexes since disabled");
-            return metaConnection;
-        }
-
-        try (PhoenixConnection conn = new PhoenixConnection(
-                ConnectionQueryServicesImpl.this, metaConnection.getURL(), p)) {
-            conn.setRunningUpgrade(metaConnection.isRunningUpgrade());
-            LOGGER.debug("Creating meta indexes");
-            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS INDEX_TABLE_LINK_SYS_INDEX ON SYSTEM.CATALOG(TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY) INCLUDE (TABLE_TYPE, LINK_TYPE) WHERE TABLE_TYPE = 'i' AND LINK_TYPE = 1 ASYNC");
-            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS INDEX_HDR_SYS_INDEX ON SYSTEM.CATALOG(TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, INDEX_STATE, DATA_TABLE_NAME) INCLUDE (TABLE_TYPE) WHERE TABLE_TYPE = 'i' AND INDEX_STATE IS NOT NULL ASYNC");
-            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS VIEW_HDR_SYS_INDEX ON SYSTEM.CATALOG(TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY) INCLUDE (TABLE_TYPE, VIEW_STATEMENT, TTL, ROW_KEY_MATCHER) WHERE TABLE_TYPE = 'v' ASYNC");
-            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS VIEW_INDEX_HDR_SYS_INDEX ON SYSTEM.CATALOG(DECODE_VIEW_INDEX_ID(VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE), TENANT_ID, TABLE_SCHEM, TABLE_NAME) INCLUDE(TABLE_TYPE, LINK_TYPE, VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE)  WHERE TABLE_TYPE = 'i' AND LINK_TYPE IS NULL AND VIEW_INDEX_ID IS NOT NULL ASYNC");
-            // TODO Can only be turned on when client is compatible
-            //conn.createStatement().execute("CREATE INDEX IF NOT EXISTS SYS_ROW_KEY_MATCHER_IDX ON SYSTEM.CATALOG(ROW_KEY_MATCHER, TTL, TABLE_TYPE, TENANT_ID, TABLE_SCHEM, TABLE_NAME) INCLUDE (VIEW_STATEMENT) WHERE TABLE_TYPE = 'v' AND ROW_KEY_MATCHER IS NOT NULL ASYNC");
-        } catch (TableAlreadyExistsException ignore) {}
-        return metaConnection;
-    }
 
     // Special method for adding the column qualifier column for 4.10. 
     private PhoenixConnection addColumnQualifierColumn(PhoenixConnection oldMetaConnection, Long timestamp) throws SQLException {
