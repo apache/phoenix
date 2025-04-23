@@ -202,7 +202,8 @@ public enum ExpressionType {
     BsonValueFunction(BsonValueFunction.class),
     PartitionIdFunction(PartitionIdFunction.class),
     DecodeBinaryFunction(DecodeBinaryFunction.class),
-    EncodeBinaryFunction(EncodeBinaryFunction.class);
+    EncodeBinaryFunction(EncodeBinaryFunction.class),
+    SubBinaryFunction(SubBinaryFunction.class);
 
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;
