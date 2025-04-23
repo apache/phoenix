@@ -448,12 +448,6 @@ public class DelegateTable implements PTable {
             throws SQLException {
         return delegate.getIndexWhereColumns(connection);
     }
-
-    @Override
-    public Long getMaxLookbackAge() {
-        return delegate.getMaxLookbackAge();
-    }
-
     @Override public Map<String, String> getPropertyValues() { return delegate.getPropertyValues(); }
 
     @Override public Map<String, String> getDefaultPropertyValues() { return delegate.getDefaultPropertyValues(); }

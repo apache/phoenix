@@ -84,7 +84,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
 import static org.apache.phoenix.query.QueryServices.SKIP_SYSTEM_TABLES_EXISTENCE_CHECK;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE_BYTES;
 import static org.apache.phoenix.schema.PTable.LinkType.PHYSICAL_TABLE;
 import static org.apache.phoenix.schema.PTable.LinkType.VIEW_INDEX_PARENT_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CDC_INCLUDE_BYTES;
@@ -121,7 +120,6 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.Objects;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
@@ -389,8 +387,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private static final Cell INDEX_WHERE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
             TABLE_FAMILY_BYTES, INDEX_WHERE_BYTES);
 
-    private static final Cell MAX_LOOKBACK_AGE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, MAX_LOOKBACK_AGE_BYTES);
-
     private static final Cell TTL_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
             TABLE_FAMILY_BYTES, TTL_BYTES);
     private static final Cell ROW_KEY_MATCHER_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
@@ -434,7 +430,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             EXTERNAL_SCHEMA_ID_KV,
             STREAMING_TOPIC_NAME_KV,
             INDEX_WHERE_KV,
-            MAX_LOOKBACK_AGE_KV,
             CDC_INCLUDE_KV,
             TTL_KV,
             ROW_KEY_MATCHER_KV
@@ -486,8 +481,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private static final int CDC_INCLUDE_INDEX = TABLE_KV_COLUMNS.indexOf(CDC_INCLUDE_KV);
     private static final int INDEX_WHERE_INDEX =
             TABLE_KV_COLUMNS.indexOf(INDEX_WHERE_KV);
-
-    private static final int MAX_LOOKBACK_AGE_INDEX = TABLE_KV_COLUMNS.indexOf(MAX_LOOKBACK_AGE_KV);
     private static final int TTL_INDEX = TABLE_KV_COLUMNS.indexOf(TTL_KV);
     private static final int ROW_KEY_MATCHER_INDEX = TABLE_KV_COLUMNS.indexOf(ROW_KEY_MATCHER_KV);
     // KeyValues for Column
@@ -1471,16 +1464,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 : null;
         builder.setIndexWhere(indexWhere != null ? indexWhere
                 : oldTable != null ? oldTable.getIndexWhere() : null);
-
-        Cell maxLookbackAgeKv = tableKeyValues[MAX_LOOKBACK_AGE_INDEX];
-        Long maxLookbackAge = maxLookbackAgeKv == null ? null :
-                PLong.INSTANCE.getCodec().decodeLong(maxLookbackAgeKv.getValueArray(),
-                        maxLookbackAgeKv.getValueOffset(), SortOrder.getDefault());
-        if (tableType == PTableType.VIEW) {
-            byte[] viewKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
-                    schemaName == null ? null : schemaName.getBytes(), tableNameBytes);
-            maxLookbackAge = scanMaxLookbackAgeFromParent(viewKey, clientTimeStamp);
-        }
         Cell ttlKv = tableKeyValues[TTL_INDEX];
         TTLExpression ttl = TTL_EXPRESSION_NOT_DEFINED;
         if (ttlKv != null) {
@@ -1656,7 +1639,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                             parentSchemaName == null ? null : parentSchemaName.getBytes(),
                             parentTableName.getBytes());
                     //parentViewType should not be Mapped
-                    maxLookbackAge = scanMaxLookbackAgeFromParent(viewKey, clientTimeStamp);
                     ttl = getTTLFromHierarchy(viewKey, clientTimeStamp, true);
                     isThisAViewIndex = true;
                 }
@@ -1671,13 +1653,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         isSalted, baseColumnCount, isRegularView, columnTimestamp);
             }
         }
-        if (tableType == INDEX && ! isThisAViewIndex) {
-            byte[] tableKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
-                    parentSchemaName == null ? null : parentSchemaName.getBytes(), parentTableName.getBytes());
-            maxLookbackAge = scanMaxLookbackAgeFromParent(tableKey, clientTimeStamp);
-        }
-        builder.setMaxLookbackAge(maxLookbackAge != null ? maxLookbackAge :
-                (oldTable != null ? oldTable.getMaxLookbackAge() : null));
 
         if (tableType == INDEX && !isThisAViewIndex && ttl.equals(TTL_EXPRESSION_NOT_DEFINED)) {
             //If this is an index on Table get TTL from Table
@@ -1720,64 +1695,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         // Avoid querying the stats table because we're holding the rowLock here. Issuing an RPC to a remote
         // server while holding this lock is a bad idea and likely to cause contention.
         return builder.build();
-    }
-
-    private Long scanMaxLookbackAgeFromParent(byte[] key, long clientTimeStamp) throws IOException {
-        Scan scan = MetaDataUtil.newTableRowsScan(key, MIN_TABLE_TIMESTAMP, clientTimeStamp);
-        try(Table sysCat = ServerUtil.getHTableForCoprocessorScan(this.env,
-                SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()));
-            ResultScanner scanner = sysCat.getScanner(scan)) {
-            Result result = scanner.next();
-            boolean startCheckingForLink = false;
-            byte[] parentTableKey = null;
-            do {
-                if (result == null) {
-                    return null;
-                }
-                else if (startCheckingForLink) {
-                    byte[] linkTypeBytes = result.getValue(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
-                    if (linkTypeBytes != null) {
-                        LinkType linkType = LinkType.fromSerializedValue(linkTypeBytes[0]);
-                        int rowKeyColMetadataLength = 5;
-                        byte[][] rowKeyMetaData = new byte[rowKeyColMetadataLength][];
-                        getVarChars(result.getRow(), rowKeyColMetadataLength, rowKeyMetaData);
-                        if (linkType == VIEW_INDEX_PARENT_TABLE) {
-                            parentTableKey = getParentTableKeyFromChildRowKeyMetaData(rowKeyMetaData);
-                            return scanMaxLookbackAgeFromParent(parentTableKey, clientTimeStamp);
-                        }
-                        else if (linkType == PHYSICAL_TABLE) {
-                            parentTableKey = getParentTableKeyFromChildRowKeyMetaData(rowKeyMetaData);
-                        }
-                    }
-                }
-                else {
-                    byte[] maxLookbackAgeInBytes = result.getValue(TABLE_FAMILY_BYTES, MAX_LOOKBACK_AGE_BYTES);
-                    if (maxLookbackAgeInBytes != null) {
-                        return PLong.INSTANCE.getCodec().decodeLong(maxLookbackAgeInBytes, 0, SortOrder.getDefault());
-                    }
-                }
-                result = scanner.next();
-                startCheckingForLink = true;
-            } while (result != null);
-            return parentTableKey == null ? null : scanMaxLookbackAgeFromParent(parentTableKey, clientTimeStamp);
-        }
-    }
-
-    private byte[] getParentTableKeyFromChildRowKeyMetaData(byte[][] rowKeyMetaData) {
-        byte[] parentTenantId = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
-        String
-                parentSchema =
-                SchemaUtil.getSchemaNameFromFullName(
-                        rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]);
-        byte[]
-                parentSchemaName =
-                parentSchema != null ? parentSchema.getBytes(StandardCharsets.UTF_8) : null;
-        byte[]
-                parentTableName =
-                SchemaUtil.getTableNameFromFullName(
-                                rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX])
-                        .getBytes(StandardCharsets.UTF_8);
-        return SchemaUtil.getTableKey(parentTenantId, parentSchemaName, parentTableName);
     }
 
     /**
@@ -3761,12 +3678,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         && result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                     return result;
                 } else {
-                    PTable oldTable = table;
                     table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP,
                             clientVersion);
-                    if (table != null && hasInheritableTablePropertyChanged(table, oldTable)) {
-                        invalidateAllChildTablesAndIndexes(table, childViews);
-                    }
                     if (clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG && type == PTableType.VIEW) {
                         try (PhoenixConnection connection = getServerConnectionForMetaData(
                                 env.getConfiguration()).unwrap(PhoenixConnection.class)) {
@@ -3809,32 +3722,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 env.getConfiguration()).unwrap(PhoenixConnection.class)) {
             ConnectionQueryServices queryServices = connection.getQueryServices();
             queryServices.invalidateServerMetadataCache(requests);
-        }
-    }
-
-    private boolean hasInheritableTablePropertyChanged(PTable newTable, PTable oldTable) {
-        return ! Objects.equals(newTable.getMaxLookbackAge(), oldTable.getMaxLookbackAge());
-    }
-
-    private void invalidateAllChildTablesAndIndexes(PTable table, List<PTable> childViews) {
-        List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
-        if (table.getIndexes() != null) {
-            for(PTable index: table.getIndexes()) {
-                invalidateList.add(new ImmutableBytesPtr(SchemaUtil.getTableKey(index)));
-            }
-        }
-        for(PTable childView: childViews) {
-            invalidateList.add(new ImmutableBytesPtr(SchemaUtil.getTableKey(childView)));
-            if (childView.getIndexes() != null) {
-                for(PTable viewIndex: childView.getIndexes()) {
-                    invalidateList.add(new ImmutableBytesPtr(SchemaUtil.getTableKey(viewIndex)));
-                }
-            }
-        }
-        Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache =
-                GlobalCache.getInstance(this.env).getMetaDataCache();
-        for(ImmutableBytesPtr invalidateKey: invalidateList) {
-            metaDataCache.invalidate(invalidateKey);
         }
     }
 

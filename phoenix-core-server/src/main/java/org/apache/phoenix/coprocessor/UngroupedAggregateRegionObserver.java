@@ -639,7 +639,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 try (PhoenixConnection conn = QueryUtil.getConnectionOnServer(
                         compactionConfig).unwrap(PhoenixConnection.class)) {
                     table = conn.getTableNoCache(fullTableName);
-                    maxLookbackAge = table.getMaxLookbackAge();
                 } catch (Exception e) {
                     if (e instanceof TableNotFoundException) {
                         LOGGER.debug("Ignoring HBase table that is not a Phoenix table: "
@@ -680,9 +679,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         && isPhoenixTableTTLEnabled(c.getEnvironment().getConfiguration())) {
                     internalScanner =
                             new CompactionScanner(c.getEnvironment(), store, scanner,
-                                    MetaDataUtil.getMaxLookbackAge(
-                                            c.getEnvironment().getConfiguration(),
-                                            maxLookbackAge),
+                                    BaseScannerRegionObserverConstants.getMaxLookbackInMillis(
+                                            c.getEnvironment().getConfiguration()),
                                     request.isMajor() || request.isAllFiles(),
                                     keepDeleted, table
                             );

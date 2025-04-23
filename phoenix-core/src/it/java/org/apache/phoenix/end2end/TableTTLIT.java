@@ -68,16 +68,17 @@ public class TableTTLIT extends BaseTest {
     private final boolean multiCF;
     private final boolean columnEncoded;
     private final KeepDeletedCells keepDeletedCells;
-    private final Integer tableLevelMaxLooback;
+    private final Integer tableLevelMaxLookback;
 
     public TableTTLIT(boolean multiCF, boolean columnEncoded,
-            KeepDeletedCells keepDeletedCells, int versions, int ttl, Integer tableLevelMaxLooback) {
+            KeepDeletedCells keepDeletedCells, int versions, int ttl,
+                      Integer tableLevelMaxLookback) {
         this.multiCF = multiCF;
         this.columnEncoded = columnEncoded;
         this.keepDeletedCells = keepDeletedCells;
         this.versions = versions;
         this.ttl = ttl;
-        this.tableLevelMaxLooback = tableLevelMaxLooback;
+        this.tableLevelMaxLookback = tableLevelMaxLookback;
     }
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -106,9 +107,6 @@ public class TableTTLIT extends BaseTest {
             optionBuilder.append(", COLUMN_ENCODED_BYTES=2");
         } else {
             optionBuilder.append(", COLUMN_ENCODED_BYTES=0");
-        }
-        if (tableLevelMaxLooback != null) {
-            optionBuilder.append(", MAX_LOOKBACK_AGE=").append(tableLevelMaxLooback * 1000);
         }
         this.tableDDLOptions = optionBuilder.toString();
         injectEdge = new ManualEnvironmentEdge();
@@ -156,7 +154,8 @@ public class TableTTLIT extends BaseTest {
 
     @Test
     public void testMaskingAndMajorCompaction() throws Exception {
-        final int maxLookbackAge = tableLevelMaxLooback != null ? tableLevelMaxLooback : MAX_LOOKBACK_AGE;
+        final int maxLookbackAge = tableLevelMaxLookback != null
+                ? tableLevelMaxLookback : MAX_LOOKBACK_AGE;
         final int maxDeleteCounter = maxLookbackAge == 0 ? 1 : maxLookbackAge;
         final int maxCompactionCounter = ttl / 2;
         final int maxFlushCounter = ttl;
@@ -166,11 +165,13 @@ public class TableTTLIT extends BaseTest {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String tableName = generateUniqueName();
             createTable(tableName);
-            conn.createStatement().execute("Alter Table " + tableName + " set \"phoenix.max.lookback.age.seconds\" = " + maxLookbackAge);
+            conn.createStatement().execute("Alter Table " + tableName
+                    + " set \"phoenix.max.lookback.age.seconds\" = " + maxLookbackAge);
             conn.commit();
             String noCompactTableName = generateUniqueName();
             createTable(noCompactTableName);
-            conn.createStatement().execute("ALTER TABLE " + noCompactTableName + " set MAX_LOOKBACK_AGE = " + maxLookbackAge * 1000);
+            conn.createStatement().execute("ALTER TABLE " + noCompactTableName
+                    + " set \"phoenix.max.lookback.age.seconds\" = " + maxLookbackAge);
             conn.commit();
             long startTime = System.currentTimeMillis() + 1000;
             startTime = (startTime / 1000) * 1000;
@@ -227,7 +228,8 @@ public class TableTTLIT extends BaseTest {
                 }
                 verificationCounter = RAND.nextInt(maxVerificationCounter) + 1;
                 compareRow(conn, tableName, noCompactTableName, "a", MAX_COLUMN_INDEX);
-                long scn = injectEdge.currentTime() - maxLookbackAge * 1000;
+                long scn = injectEdge.currentTime()
+                        - (Math.min(maxLookbackAge, MAX_LOOKBACK_AGE) * 1000L);
                 long scnEnd = injectEdge.currentTime();
                 long scnStart = Math.max(scn, startTime);
                 for (scn = scnEnd; scn >= scnStart; scn -= 1000) {
@@ -246,15 +248,14 @@ public class TableTTLIT extends BaseTest {
     @Test
     public void testMinorCompactionShouldNotRetainCellsWhenMaxLookbackIsDisabled()
             throws Exception {
-        final int maxLookbackAge = tableLevelMaxLooback != null
-                ? tableLevelMaxLooback : MAX_LOOKBACK_AGE;
-        if (maxLookbackAge > 0) {
+        if (tableLevelMaxLookback == null || tableLevelMaxLookback != 0) {
             return;
         }
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String tableName = generateUniqueName();
             createTable(tableName);
-            conn.commit();
+            conn.createStatement().execute("Alter Table " + tableName
+                    + " set \"phoenix.max.lookback.age.seconds\" = " + tableLevelMaxLookback);
             final int flushCount = 10;
             byte[] row = Bytes.toBytes("a");
             int rowUpdateCounter = 0;
@@ -316,12 +317,14 @@ public class TableTTLIT extends BaseTest {
     @Test
     public void testMultipleRowsWithUpdatesMoreThanTTLApart() throws Exception {
         // for the purpose of this test only considering cases when maxlookback is 0
-        if (tableLevelMaxLooback == null || tableLevelMaxLooback != 0) {
+        if (tableLevelMaxLookback == null || tableLevelMaxLookback != 0) {
             return;
         }
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String tableName = generateUniqueName();
             createTable(tableName);
+            conn.createStatement().execute("Alter Table " + tableName
+                    + " set \"phoenix.max.lookback.age.seconds\" = " + tableLevelMaxLookback);
             long startTime = System.currentTimeMillis() + 1000;
             startTime = (startTime / 1000) * 1000;
             EnvironmentEdgeManager.injectEdge(injectEdge);
@@ -370,12 +373,14 @@ public class TableTTLIT extends BaseTest {
     @Test
     public void testMaskingGapAnalysis() throws Exception {
         // for the purpose of this test only considering cases when maxlookback is 0
-        if (tableLevelMaxLooback == null || tableLevelMaxLooback != 0) {
+        if (tableLevelMaxLookback == null || tableLevelMaxLookback != 0) {
             return;
         }
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String tableName = generateUniqueName();
             createTable(tableName);
+            conn.createStatement().execute("Alter Table " + tableName
+                    + " set \"phoenix.max.lookback.age.seconds\" = " + tableLevelMaxLookback);
             long startTime = System.currentTimeMillis() + 1000;
             startTime = (startTime / 1000) * 1000;
             EnvironmentEdgeManager.injectEdge(injectEdge);
@@ -427,12 +432,14 @@ public class TableTTLIT extends BaseTest {
     @Test
     public void testMultipleUpdatesToSingleColumn() throws Exception {
         // for the purpose of this test only considering cases when maxlookback is 0
-        if (tableLevelMaxLooback == null || tableLevelMaxLooback != 0) {
+        if (tableLevelMaxLookback == null || tableLevelMaxLookback != 0) {
             return;
         }
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String tableName = generateUniqueName();
             createTable(tableName);
+            conn.createStatement().execute("Alter Table " + tableName
+                    + " set \"phoenix.max.lookback.age.seconds\" = " + tableLevelMaxLookback);
             long startTime = System.currentTimeMillis() + 1000;
             startTime = (startTime / 1000) * 1000;
             EnvironmentEdgeManager.injectEdge(injectEdge);
@@ -459,7 +466,7 @@ public class TableTTLIT extends BaseTest {
     @Test
     public void testDeleteFamilyVersion() throws Exception {
         // for the purpose of this test only considering cases when maxlookback is 0
-        if (tableLevelMaxLooback == null || tableLevelMaxLooback != 0) {
+        if (tableLevelMaxLookback == null || tableLevelMaxLookback != 0) {
             return;
         }
         if (multiCF == true) {
@@ -468,9 +475,12 @@ public class TableTTLIT extends BaseTest {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String tableName = "T_" + generateUniqueName();
             createTable(tableName);
+            conn.createStatement().execute("Alter Table " + tableName
+                    + " set \"phoenix.max.lookback.age.seconds\" = " + tableLevelMaxLookback);
             String indexName = "I_" + generateUniqueName();
-            String indexDDL = String.format("create index %s on %s (val1) include (val2, val3)",
-                    indexName, tableName);
+            String indexDDL = String.format("create index %s on %s (val1) include (val2, val3) " +
+                            "\"phoenix.max.lookback.age.seconds\" = %d",
+                    indexName, tableName, tableLevelMaxLookback);
             conn.createStatement().execute(indexDDL);
             updateRow(conn, tableName, "a1");
             String indexColumnValue;
