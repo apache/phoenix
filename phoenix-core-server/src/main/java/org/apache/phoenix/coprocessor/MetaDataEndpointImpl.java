@@ -1677,6 +1677,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         isSalted, baseColumnCount, isRegularView, columnTimestamp);
             }
         }
+        // Ignoring meta indexes when looking for maxLookBackAge and TTL on parent tables.
+        // Due to failures in Namespace related ITs when isNamespaceMappingEnabled is enabled.
         boolean isMetaIndex = (QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName.getString()) && (tableType == INDEX));
         if (tableType == INDEX && ! isThisAViewIndex && !isMetaIndex) {
             byte[] tableKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
