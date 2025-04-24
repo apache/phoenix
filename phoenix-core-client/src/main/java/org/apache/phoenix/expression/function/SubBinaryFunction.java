@@ -10,6 +10,7 @@ import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 
 import java.io.DataInput;
 import java.io.IOException;
@@ -27,7 +28,7 @@ import java.util.List;
 
  */
 @FunctionParseNode.BuiltInFunction(name=SubBinaryFunction.NAME,  args={
-        @FunctionParseNode.Argument(allowedTypes={PBinary.class,PVarbinary.class}), // TODO: PVarbinaryEncoded
+        @FunctionParseNode.Argument(allowedTypes={PBinary.class,PVarbinary.class, PVarbinaryEncoded.class}),
         @FunctionParseNode.Argument(allowedTypes={PLong.class}), // These are LONG because negative numbers end up as longs
         @FunctionParseNode.Argument(allowedTypes={PLong.class},defaultValue="null")} )
 public class SubBinaryFunction extends PrefixFunction {
@@ -122,8 +123,7 @@ public class SubBinaryFunction extends PrefixFunction {
 
     @Override
     public PDataType getDataType() {
-        // todo: VARBINARY_ENCODED
-        return isFixedWidth ? getBinaryExpression().getDataType() : PVarbinary.INSTANCE;
+        return getBinaryExpression().getDataType();
     }
 
     @Override
