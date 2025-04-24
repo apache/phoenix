@@ -854,11 +854,15 @@ public class CompactionScanner implements InternalScanner {
                                     retainedCells.add(cell);
                                 }
                             }
-                            cell = result.get(index + 1);
-                            if (!CellUtil.matchingColumn(cell, currentColumnCell)) {
-                                continue top;
+                            if (index + 1 < result.size()) {
+                                cell = result.get(index + 1);
+                                if (!CellUtil.matchingColumn(cell, currentColumnCell)) {
+                                    continue top;
+                                }
+                                index++;
+                            } else {
+                                break top;
                             }
-                            index++;
                         }
                     }
                 }
@@ -885,17 +889,25 @@ public class CompactionScanner implements InternalScanner {
                     } else if (!major) {
                         retainedCells.add(cell);
                     }
-                    Cell nextCell = result.get(index + 1);
-                    if (!CellUtil.matchingColumn(currentColumnCell, nextCell)) {
-                        continue top;
-                    }
-                    // Increment index by one as the delete cell should be consumed
-                    index++;
-                    if (nextCell.getType() == Cell.Type.Put
-                            && cell.getTimestamp() == nextCell.getTimestamp()) {
-                        // This put cell is masked by the delete marker
+                    if (index + 1 < result.size()) {
+                        Cell nextCell = result.get(index + 1);
+                        if (!CellUtil.matchingColumn(currentColumnCell, nextCell)) {
+                            continue top;
+                        }
+                        // Increment index by one as the delete cell should be consumed
                         index++;
-                        cell = result.get(index);
+                        if (nextCell.getType() == Cell.Type.Put
+                                && cell.getTimestamp() == nextCell.getTimestamp()) {
+                            // This put cell is masked by the delete marker
+                            index++;
+                            if (index < result.size()) {
+                                cell = result.get(index);
+                            } else {
+                                break top;
+                            }
+                        }
+                    } else {
+                        break top;
                     }
                 }
                 if (cell.getType() == Cell.Type.DeleteColumn) {
