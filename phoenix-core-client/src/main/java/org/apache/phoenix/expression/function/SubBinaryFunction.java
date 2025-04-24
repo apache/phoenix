@@ -122,7 +122,8 @@ public class SubBinaryFunction extends PrefixFunction {
         int maxLength = binLength - offset;
         length = length == -1 ? maxLength : Math.min(length,maxLength);
         if (getDataType() == PVarbinaryEncoded.INSTANCE) {
-            ptr.set(Arrays.copyOfRange(bytes, offset, offset + length));
+            byte[] result = Arrays.copyOfRange(bytes, offset, offset + length);
+            ptr.set(PVarbinaryEncoded.INSTANCE.toBytes(result));
         }
         else {
             ptr.set(ptr.get(), ptr.getOffset() + offset, length);

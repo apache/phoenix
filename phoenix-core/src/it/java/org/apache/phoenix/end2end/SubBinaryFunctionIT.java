@@ -10,6 +10,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Arrays;
 
 @Category(ParallelStatsDisabledTest.class)
 public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
@@ -65,6 +66,12 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
         rs.next();
         assertSubBinary(b21, rs.getBytes(1), 3, 1);
         assertSubBinary(b22, rs.getBytes(2), 5, 3);
+
+        PreparedStatement stmt2 = conn.prepareStatement("SELECT id FROM " + tableName + " WHERE SUBBINARY(BIN_COL, 2, 6) = ?");
+        stmt2.setBytes(1, new byte[] {55, 0, 19, -5, -34, 0});
+        rs = stmt2.executeQuery();
+        Assert.assertTrue(rs.next());
+        Assert.assertEquals(2, rs.getInt(1));
     }
 
     @Test
@@ -119,6 +126,12 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
         rs.next();
         assertSubBinary(b21, rs.getBytes(1), 8, 2);
         assertSubBinary(b22, rs.getBytes(2), 8, 2);
+
+        PreparedStatement stmt2 = conn.prepareStatement("SELECT id FROM " + tableName + " WHERE SUBBINARY(BIN_COL, 2, 6) = ?");
+        stmt2.setBytes(1, new byte[] {1, 20, -28, 0, -1, 0});
+        rs = stmt2.executeQuery();
+        Assert.assertTrue(rs.next());
+        Assert.assertEquals(2, rs.getInt(1));
     }
 
     @Test
@@ -173,6 +186,16 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
         rs.next();
         assertSubBinary(b21, rs.getBytes(1), 9, 1);
         assertSubBinary(b22, rs.getBytes(2), 9, 1);
+
+
+        rs = conn.createStatement().executeQuery("SELECT SUBBINARY(BIN_COL, 2, 6) FROM " + tableName + " WHERE id = 2");
+        rs.next();
+        System.out.println("rs.getBytes(1) = " + Arrays.toString(rs.getBytes(1)));
+        PreparedStatement stmt2 = conn.prepareStatement("SELECT id FROM " + tableName + " WHERE SUBBINARY(BIN_COL, 2, 6) = ?");
+        stmt2.setBytes(1, new byte[] {1, 20, -28, 0, -1, 0});
+        rs = stmt2.executeQuery();
+        Assert.assertTrue(rs.next());
+        Assert.assertEquals(2, rs.getInt(1));
     }
 
 
