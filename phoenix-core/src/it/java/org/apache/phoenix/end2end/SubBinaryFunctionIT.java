@@ -10,7 +10,6 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Arrays;
 
 @Category(ParallelStatsDisabledTest.class)
 public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
@@ -147,7 +146,7 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
 
 
         byte[] b11 = new byte[] {56, 50, 19, 0, 34, 83, -101, -102, 91, 92};
-        byte[] b12 = new byte[] {10, 55, 0, 19, -5, -34, 0, -12, 0, 0, 0, 1};
+        byte[] b12 = new byte[] {10, 55, -1, 19, -5, -34, 0, -12, 0, 0, 0, 1};
         byte[] b21 = new byte[] {-11, 55, -119, 0, 8, 0, 1, 2, -4, 33};
         byte[] b22 = new byte[] {1, 1, 20, -28, 0, -1, 0, -11, -21, -1};
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?, ?, ?)");
@@ -188,11 +187,26 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
         assertSubBinary(b22, rs.getBytes(2), 9, 1);
 
 
-        rs = conn.createStatement().executeQuery("SELECT SUBBINARY(BIN_COL, 2, 6) FROM " + tableName + " WHERE id = 2");
-        rs.next();
-        System.out.println("rs.getBytes(1) = " + Arrays.toString(rs.getBytes(1)));
         PreparedStatement stmt2 = conn.prepareStatement("SELECT id FROM " + tableName + " WHERE SUBBINARY(BIN_COL, 2, 6) = ?");
         stmt2.setBytes(1, new byte[] {1, 20, -28, 0, -1, 0});
+        rs = stmt2.executeQuery();
+        Assert.assertTrue(rs.next());
+        Assert.assertEquals(2, rs.getInt(1));
+
+        stmt2 = conn.prepareStatement("SELECT id FROM " + tableName + " WHERE SUBBINARY(BIN_COL, 0, 3) = ?");
+        stmt2.setBytes(1, new byte[] {10, 55, -1});
+        rs = stmt2.executeQuery();
+        Assert.assertTrue(rs.next());
+        Assert.assertEquals(1, rs.getInt(1));
+
+        stmt2 = conn.prepareStatement("SELECT id FROM " + tableName + " WHERE SUBBINARY(BIN_COL, 1, 3) = ?");
+        stmt2.setBytes(1, new byte[] {10, 55, -1});
+        rs = stmt2.executeQuery();
+        Assert.assertTrue(rs.next());
+        Assert.assertEquals(1, rs.getInt(1));
+
+        stmt2 = conn.prepareStatement("SELECT id FROM " + tableName + " WHERE SUBBINARY(BIN_COL, -5, 3) = ?");
+        stmt2.setBytes(1, new byte[] {-1, 0, -11});
         rs = stmt2.executeQuery();
         Assert.assertTrue(rs.next());
         Assert.assertEquals(2, rs.getInt(1));
