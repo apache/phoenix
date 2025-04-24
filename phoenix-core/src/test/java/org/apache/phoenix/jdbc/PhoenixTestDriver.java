@@ -32,9 +32,11 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesTestImpl;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTION_TIME;
 
 
 /**
@@ -49,7 +51,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
 
     private final ReadOnlyProps overrideProps;
-    
+
     @GuardedBy("this")
     private final QueryServices queryServices;
     
@@ -84,8 +86,11 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
     
     @Override
     public synchronized Connection connect(String url, Properties info) throws SQLException {
+        final long connectionStartTime = EnvironmentEdgeManager.currentTimeMillis();
         checkClosed();
-        return super.connect(url, info);
+        Connection testConnect = super.connect(url, info);
+        GLOBAL_PHOENIX_CONNECTION_TIME.update(EnvironmentEdgeManager.currentTimeMillis() - connectionStartTime);
+        return testConnect;
     }
     
     @Override // public for testing
