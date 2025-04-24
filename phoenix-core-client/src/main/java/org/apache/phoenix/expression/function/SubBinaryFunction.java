@@ -14,6 +14,7 @@ import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 
 import java.io.DataInput;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -101,7 +102,15 @@ public class SubBinaryFunction extends PrefixFunction {
         if (ptr.getLength()==0) {
             return true;
         }
-        int binLength = ptr.getLength();
+        byte[] bytes = new byte[]{};
+        int binLength;
+        if (getDataType() == PVarbinaryEncoded.INSTANCE) {
+            bytes = (byte[]) PVarbinaryEncoded.INSTANCE.toObject(ptr.get(), ptr.getOffset(),
+                            ptr.getLength());
+            binLength = bytes.length;
+        } else {
+            binLength = ptr.getLength();
+        }
         // Account for 1 versus 0-based offset
         offset = offset - (offset <= 0 ? 0 : 1);
         if (offset < 0) { // Offset < 0 means get from end
@@ -112,7 +121,12 @@ public class SubBinaryFunction extends PrefixFunction {
         }
         int maxLength = binLength - offset;
         length = length == -1 ? maxLength : Math.min(length,maxLength);
-        ptr.set(ptr.get(), ptr.getOffset() + offset, length);
+        if (getDataType() == PVarbinaryEncoded.INSTANCE) {
+            ptr.set(Arrays.copyOfRange(bytes, offset, offset + length));
+        }
+        else {
+            ptr.set(ptr.get(), ptr.getOffset() + offset, length);
+        }
         return true;
     }
 

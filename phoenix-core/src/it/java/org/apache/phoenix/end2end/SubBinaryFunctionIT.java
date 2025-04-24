@@ -157,6 +157,22 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
         rs.next();
         assertSubBinary(b21, rs.getBytes(1), 4, 6);
         assertSubBinary(b22, rs.getBytes(2), 6, 4);
+
+        rs = conn.createStatement().executeQuery("SELECT SUBBINARY(BIN_PK, -4, 3), SUBBINARY(BIN_COL, -3, 1) FROM " + tableName);
+        rs.next();
+        assertSubBinary(b11, rs.getBytes(1), 6, 3);
+        assertSubBinary(b12, rs.getBytes(2), 9, 1);
+        rs.next();
+        assertSubBinary(b21, rs.getBytes(1), 6, 3);
+        assertSubBinary(b22, rs.getBytes(2), 7, 1);
+
+        rs = conn.createStatement().executeQuery("SELECT SUBBINARY(BIN_PK, -1), SUBBINARY(BIN_COL, -1) FROM " + tableName);
+        rs.next();
+        assertSubBinary(b11, rs.getBytes(1), 9, 1);
+        assertSubBinary(b12, rs.getBytes(2), 11, 1);
+        rs.next();
+        assertSubBinary(b21, rs.getBytes(1), 9, 1);
+        assertSubBinary(b22, rs.getBytes(2), 9, 1);
     }
 
 
