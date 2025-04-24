@@ -88,15 +88,14 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ParseNodeUtil;
 import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
-
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
 
 /**
@@ -208,7 +207,8 @@ public class QueryCompiler {
             return;
         }
         long maxLookBackAgeInMillis =
-            BaseScannerRegionObserverConstants.getMaxLookbackInMillis(conn.getQueryServices().getConfiguration());
+            BaseScannerRegionObserverConstants.getMaxLookbackInMillis(
+                    conn.getQueryServices().getConfiguration());
         long now = EnvironmentEdgeManager.currentTimeMillis();
         if (maxLookBackAgeInMillis > 0 && now - maxLookBackAgeInMillis > scn){
             throw new SQLExceptionInfo.Builder(
