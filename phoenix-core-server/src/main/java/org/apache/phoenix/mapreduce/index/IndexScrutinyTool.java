@@ -20,6 +20,7 @@ package org.apache.phoenix.mapreduce.index;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.List;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
@@ -444,14 +445,14 @@ public class IndexScrutinyTool extends Configured implements Tool {
                 // create the output table if it doesn't exist
                 Configuration outputConfiguration = HBaseConfiguration.create(configuration);
                 outputConfiguration.unset(PhoenixRuntime.TENANT_ID_ATTRIB);
-                try (Connection outputConn = ConnectionUtil.getOutputConnection(outputConfiguration)) {
-                    outputConn.createStatement().execute(IndexScrutinyTableOutput.OUTPUT_TABLE_DDL);
-                    outputConn.createStatement().
-                        execute(IndexScrutinyTableOutput.OUTPUT_TABLE_BEYOND_LOOKBACK_DDL);
-                    outputConn.createStatement()
-                            .execute(IndexScrutinyTableOutput.OUTPUT_METADATA_DDL);
-                    outputConn.createStatement().
-                        execute(IndexScrutinyTableOutput.OUTPUT_METADATA_BEYOND_LOOKBACK_COUNTER_DDL);
+                try (Connection outputConn =
+                             ConnectionUtil.getOutputConnection(outputConfiguration);
+                     Statement stmt = outputConn.createStatement()) {
+                    stmt.execute(IndexScrutinyTableOutput.OUTPUT_TABLE_DDL);
+                    stmt.execute(IndexScrutinyTableOutput.OUTPUT_TABLE_BEYOND_LOOKBACK_DDL);
+                    stmt.execute(IndexScrutinyTableOutput.OUTPUT_METADATA_DDL);
+                    stmt.execute(
+                            IndexScrutinyTableOutput.OUTPUT_METADATA_BEYOND_LOOKBACK_COUNTER_DDL);
                 }
             }
 
@@ -518,7 +519,8 @@ public class IndexScrutinyTool extends Configured implements Tool {
     }
 
     private void validateTimestamp(Configuration configuration, long ts) {
-        long maxLookBackAge = BaseScannerRegionObserverConstants.getMaxLookbackInMillis(configuration);
+        long maxLookBackAge = BaseScannerRegionObserverConstants.getMaxLookbackInMillis(
+                configuration);
         if (maxLookBackAge != BaseScannerRegionObserverConstants.DEFAULT_PHOENIX_MAX_LOOKBACK_AGE * 1000L) {
             long minTimestamp = EnvironmentEdgeManager.currentTimeMillis() - maxLookBackAge;
             if (ts < minTimestamp){
