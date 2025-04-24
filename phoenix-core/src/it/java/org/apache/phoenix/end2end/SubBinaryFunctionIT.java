@@ -302,6 +302,11 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
         rs = conn.createStatement().executeQuery("EXPLAIN " + sql);
         String plan = QueryUtil.getExplainPlan(rs);
         Assert.assertTrue(plan.contains("RANGE SCAN OVER " + tableName + " [1,X'01'] - [1,X'02']"));
+
+        sql = "SELECT * FROM " + tableName + " WHERE id = 1 AND SUBBINARY(VAR_BIN_COL, 2, 1) = X'01'";
+        rs = conn.createStatement().executeQuery("EXPLAIN " + sql);
+        plan = QueryUtil.getExplainPlan(rs);
+        Assert.assertTrue(plan.contains("RANGE SCAN OVER " + tableName + " [1]"));
     }
 
     private void upsertRow(PreparedStatement stmt, int id, byte[] b1, byte[] b2) throws SQLException {
