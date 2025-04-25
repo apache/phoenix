@@ -1053,64 +1053,76 @@ public class IndexToolIT extends BaseTest {
         String schemaName = SchemaUtil.getSchemaNameFromFullName(fullTableName);
         String tableName = SchemaUtil.getTableNameFromFullName(fullTableName);
         String indexName = SchemaUtil.getTableNameFromFullName(fullIndexName);
-        // This checks the state of every raw index row without rebuilding any row
-        IndexTool indexTool = IndexToolIT.runIndexTool(false, schemaName, tableName,
-                indexName, null, 0, IndexTool.IndexVerifyType.ONLY);
-        LOGGER.info(indexTool.getJob().getCounters().toString());
-        TestUtil.dumpTable(conn, TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
-        assertEquals(0, indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
-        assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
-        assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
-        assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
-        assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
-        assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());
-        assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT).getValue());
+        try {
+            // This checks the state of every raw index row without rebuilding any row
+            IndexTool indexTool = IndexToolIT.runIndexTool(false, schemaName, tableName,
+                    indexName, null, 0, IndexTool.IndexVerifyType.ONLY);
+            TestUtil.dumpTable(conn, TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+            Counters counters = indexTool.getJob().getCounters();
+            LOGGER.info(counters.toString());
+            assertEquals(0, counters.findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, counters.findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, counters.findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, counters.findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, counters.findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, counters.findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, counters.findCounter(BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT).getValue());
 
-        // This checks the state of an index row after it is repaired
-        long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
-        // We want to check the index rows again as they may be modified by the read repair
-        indexTool = IndexToolIT.runIndexTool(false, schemaName, tableName, indexName,
-                null, 0, IndexTool.IndexVerifyType.ONLY);
-        LOGGER.info(indexTool.getJob().getCounters().toString());
+            // This checks the state of an index row after it is repaired
+            long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
+            // We want to check the index rows again as they may be modified by the read repair
+            indexTool = IndexToolIT.runIndexTool(false, schemaName, tableName, indexName,
+                    null, 0, IndexTool.IndexVerifyType.ONLY);
+            counters = indexTool.getJob().getCounters();
+            LOGGER.info(counters.toString());
+            assertEquals(0, counters.findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, counters.findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, counters.findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, counters.findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, counters.findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
+            // The index scrutiny run will trigger index repair on all unverified rows, and they will be repaired or
+            // deleted (since the age threshold is set to zero ms for these tests
+            PTable pIndexTable = conn.unwrap(PhoenixConnection.class).getTable(fullIndexName);
+            if (pIndexTable.getIndexType() != PTable.IndexType.UNCOVERED_GLOBAL) {
+                assertEquals(0, counters.findCounter(BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT).getValue());
+            }
+            assertEquals(0, counters.findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT).getValue());
 
-        assertEquals(0, indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
-        assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
-        assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
-        assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
-        assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
-        // The index scrutiny run will trigger index repair on all unverified rows, and they will be repaired or
-        // deleted (since the age threshold is set to zero ms for these tests
-        PTable pIndexTable = conn.unwrap(PhoenixConnection.class).getTable(fullIndexName);
-        if (pIndexTable.getIndexType() != PTable.IndexType.UNCOVERED_GLOBAL) {
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT).getValue());
+            // Now we rebuild the entire index table and expect that it is still good after the full rebuild
+            indexTool = IndexToolIT.runIndexTool(false, schemaName, tableName, indexName,
+                    null, 0, IndexTool.IndexVerifyType.AFTER);
+            counters = indexTool.getJob().getCounters();
+            LOGGER.info(counters.toString());
+            assertEquals(counters.findCounter(AFTER_REBUILD_VALID_INDEX_ROW_COUNT).getValue(),
+                    counters.findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, counters.findCounter(AFTER_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, counters.findCounter(AFTER_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, counters.findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, counters.findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
+            // Truncate, rebuild and verify the index table
+            TableName physicalTableName = TableName.valueOf(pIndexTable.getPhysicalName().getBytes());
+            PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+            try (Admin admin = pConn.getQueryServices().getAdmin()) {
+                admin.disableTable(physicalTableName);
+                admin.truncateTable(physicalTableName, true);
+            }
+            indexTool = IndexToolIT.runIndexTool(false, schemaName, tableName, indexName,
+                    null, 0, IndexTool.IndexVerifyType.AFTER);
+            counters = indexTool.getJob().getCounters();
+            LOGGER.info(counters.toString());
+            assertEquals(0, counters.findCounter(AFTER_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, counters.findCounter(AFTER_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, counters.findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, counters.findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
+            pConn.getQueryServices().clearTableRegionCache(TableName.valueOf(fullIndexName));
+            long actualRowCountAfterCompaction = IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
+            assertEquals(actualRowCount, actualRowCountAfterCompaction);
+            return actualRowCount;
+        } catch (AssertionError e) {
+            TestUtil.dumpTable(conn, TableName.valueOf(fullTableName));
+            TestUtil.dumpTable(conn, TableName.valueOf(fullIndexName));
+            throw e;
         }
-        assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());
-        assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT).getValue());
-        // Now we rebuild the entire index table and expect that it is still good after the full rebuild
-        indexTool = IndexToolIT.runIndexTool(false, schemaName, tableName, indexName,
-                null, 0, IndexTool.IndexVerifyType.AFTER);
-        assertEquals(indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_VALID_INDEX_ROW_COUNT).getValue(),
-                indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
-        assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
-        assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
-        assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
-        assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
-        // Truncate, rebuild and verify the index table
-        TableName physicalTableName = TableName.valueOf(pIndexTable.getPhysicalName().getBytes());
-        PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
-        try (Admin admin = pConn.getQueryServices().getAdmin()) {
-            admin.disableTable(physicalTableName);
-            admin.truncateTable(physicalTableName, true);
-        }
-        indexTool = IndexToolIT.runIndexTool(false, schemaName, tableName, indexName,
-                null, 0, IndexTool.IndexVerifyType.AFTER);
-        assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
-        assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
-        assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
-        assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
-        pConn.getQueryServices().clearTableRegionCache(TableName.valueOf(fullIndexName));
-        long actualRowCountAfterCompaction = IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
-        assertEquals(actualRowCount, actualRowCountAfterCompaction);
-        return actualRowCount;
     }
 }
