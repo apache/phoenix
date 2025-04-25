@@ -40,7 +40,6 @@ public class LogFileFormatWriter implements Closeable {
 
     private LogFileWriterContext context;
     private LogFile.Codec.Encoder encoder;
-    private Compressor compressor; // Reused per file
     private FSDataOutputStream output;
     private ByteArrayOutputStream currentBlockBytes;
     private DataOutputStream blockDataStream;
@@ -61,7 +60,6 @@ public class LogFileFormatWriter implements Closeable {
             throws IOException {
         this.output = outputStream;
         this.context = context;
-        this.compressor = context.getCompression().getCompressor();
         this.currentBlockBytes = new ByteArrayOutputStream();
         this.blockDataStream = new DataOutputStream(currentBlockBytes);
         this.encoder = context.getCodec().getEncoder(blockDataStream);
@@ -124,28 +122,32 @@ public class LogFileFormatWriter implements Closeable {
         ByteBuffer writeBuff;
         int lengthToWrite;
         Compression.Algorithm ourCompression = context.getCompression();
-        if (compressor != null) {
-            compressor.reset();
-            compressor.setInput(uncompressedBytes, 0, uncompressedBytes.length);
-            compressor.finish(); // We are going to one-shot this.
-            // Give 20% overhead for pathological cases
-            // We can't go below this by much because the Snappy compressor will require more than
-            // 10% overhead or else it will refuse to try.
-            int compressBuffNeeded = (int)(uncompressedBytes.length * 1.2f);
-            if (compressBuff == null || compressBuff.capacity() < compressBuffNeeded) {
-                compressBuff = ByteBuffer.allocate(compressBuffNeeded);
+        if (ourCompression != Compression.Algorithm.NONE) {
+            Compressor compressor = ourCompression.getCompressor();
+            try {
+                compressor.reset();
+                compressor.setInput(uncompressedBytes, 0, uncompressedBytes.length);
+                compressor.finish(); // We are going to one-shot this.
+                // Give 20% overhead for pathological cases
+                // We can't go below this by much because the Snappy compressor will require more than
+                // 10% overhead or else it will refuse to try.
+                int compressBuffNeeded = (int)(uncompressedBytes.length * 1.2f);
+                if (compressBuff == null || compressBuff.capacity() < compressBuffNeeded) {
+                    compressBuff = ByteBuffer.allocate(compressBuffNeeded);
+                }
+                compressBuff.clear();
+                lengthToWrite = compressor.compress(compressBuff.array(), compressBuff.arrayOffset(),
+                    compressBuffNeeded);
+                if (!compressor.finished()) {
+                    throw new IOException("Compressor did not finish");
+                }
+                writeBuff = compressBuff;
+            } finally {
+                context.getCompression().returnCompressor(compressor);;
             }
-            compressBuff.clear();
-            lengthToWrite = compressor.compress(compressBuff.array(), compressBuff.arrayOffset(),
-                compressBuffNeeded);
-            if (!compressor.finished()) {
-                throw new IOException("Compressor did not finish");
-            }
-            writeBuff = compressBuff;
         } else {
             writeBuff = ByteBuffer.wrap(uncompressedBytes);
             lengthToWrite = uncompressedBytes.length;
-            ourCompression = Compression.Algorithm.NONE; // Explicitly NONE if no compressor
         }
 
         // Write block header
@@ -210,11 +212,6 @@ public class LogFileFormatWriter implements Closeable {
                 } catch (IOException e) {
                     LOG.error("Exception while closing LogFormatWriter", e);
                 }
-            }
-            if (compressor != null) {
-                context.getCompression().returnCompressor(compressor);
-                compressor = null;
-                compressBuff = null;
             }
         }
     }

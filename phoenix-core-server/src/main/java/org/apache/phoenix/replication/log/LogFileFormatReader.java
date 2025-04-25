@@ -22,7 +22,6 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.hbase.io.compress.CanReinit;
 import org.apache.hadoop.hbase.io.compress.Compression;
 import org.apache.hadoop.io.compress.Decompressor;
 import org.apache.phoenix.replication.util.CRC64;
@@ -201,10 +200,9 @@ public class LogFileFormatReader implements Closeable {
     // Manages obtaining/releasing decompressors.
     private ByteBuffer decompressBlock(ByteBuffer compressedBuffer, LogFile.BlockHeader header)
             throws IOException {
+        ByteBuffer decompressedBuffer;
         Compression.Algorithm compression = header.getDataCompression();
         Decompressor decompressor = compression.getDecompressor();
-        ByteBuffer decompressedBuffer = null;
-        boolean success = false;
         try {
             decompressedBuffer = ByteBuffer.allocate(header.getUncompressedDataSize());
             decompressor.reset();
@@ -218,15 +216,9 @@ public class LogFileFormatReader implements Closeable {
                     + header.getUncompressedDataSize() + ", actual=" + decompressedSize);
             }
             decompressedBuffer.limit(decompressedSize);
-            success = true;
             return decompressedBuffer;
         } finally {
-            if (compression != Compression.Algorithm.NONE && decompressor != null) {
-                compression.returnDecompressor(decompressor);
-            }
-            if (!success && decompressedBuffer != null) {
-                decompressedBuffer = null; // Release buffer on failure
-            }
+            compression.returnDecompressor(decompressor);
         }
     }
 
