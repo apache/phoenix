@@ -37,6 +37,7 @@ public class AsyncFSDataOutput implements SyncableDataOutput {
     @Override
     public void sync() throws IOException {
         try {
+            // Our sync method is synchronous, as intended.
             delegate.flush(true).get();
         } catch (InterruptedException e) {
             InterruptedIOException ioe = new InterruptedIOException();
@@ -71,6 +72,12 @@ public class AsyncFSDataOutput implements SyncableDataOutput {
     public void write(byte[] b, int off, int len) throws IOException {
         delegate.write(b, off, len);
     }
+
+    // The below DataOutput interface methods must be adapted to AsyncFSOutput because
+    // AsyncFSOutput only implements write(byte[]), write(byte[], int, int) and writeInt(int).
+    // Most will never be called. We only need these so we can conform to the SyncableDataOutput
+    // interface contract. The methods we really care about for performance have been directly
+    // delegated above.
 
     private byte[] byteBuf = new byte[1];
 
@@ -119,7 +126,7 @@ public class AsyncFSDataOutput implements SyncableDataOutput {
 
     @Override
     public void writeBytes(String s) throws IOException {
-        delegate.write(Bytes.toBytes(s));
+        writeUTF(s); // Simplify here by unconditionally coding strings as UTF-8.
     }
 
     @Override
