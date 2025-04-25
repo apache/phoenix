@@ -19,6 +19,7 @@ package org.apache.phoenix.replication.log;
 
 import java.io.Closeable;
 import java.io.DataInputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -189,6 +190,7 @@ public class LogFileFormatReader implements Closeable {
                 if (!resyncReader(blockStartOffset)) {
                     // Cannot resync, likely EOF or further corruption
                     decompressedBuffer = null;
+                    return null;
                 }
                 // Continue the loop to read the next block after resync
             }
@@ -224,26 +226,53 @@ public class LogFileFormatReader implements Closeable {
 
     // Tries to find the start of the next valid block after corruption.
     private boolean resyncReader(long offset) throws IOException {
-        long seekOffset = offset + 1;
-        seekOffset = seekToMagic(seekOffset, LogFile.BlockHeader.MAGIC);
-        if (offset < 0) {
-            LOG.warn("Could not find next block magic after offset " + offset);
-            return false; // EOF or cannot find next block
+        long nextOffset = offset + 1; // Start searching after the point of failure
+        long endOfDataOffset = getEndOfDataOffset();
+        while (nextOffset < endOfDataOffset) {
+            long startPos = seekToMagic(nextOffset, LogFile.BlockHeader.MAGIC);
+            if (startPos < 0) {
+                LOG.warn("Could not find next block magic after offset {}", nextOffset);
+                return false; // EOF reached without finding magic bytes
+            }
+            // Found what look like magic bytes, now validate the header
+            try {
+                input.seek(startPos);
+                LogBlockHeader blockHeader = new LogBlockHeader();
+                blockHeader.readFields(input); // This reads exactly HEADER_SIZE bytes
+                // Basic validation (readFields already checks magic and version)
+                if (blockHeader.getUncompressedDataSize() < 0
+                        || blockHeader.getCompressedDataSize() < 0) {
+                    throw new IOException("Invalid block header found at offset " + startPos);
+                }
+                // Check if the block fits within the data boundary
+                long blockEndOffset = startPos + blockHeader.getSerializedHeaderLength()
+                    + blockHeader.getCompressedDataSize() + LogFile.CHECKSUM_SIZE;
+                if (blockEndOffset > endOfDataOffset) {
+                  throw new IOException("Possible block at offset " + startPos +
+                      " extends beyond end of data offset " + endOfDataOffset);
+                }
+                // If we reached here, the header seems structurally valid.
+                LOG.warn("Found valid block header at offset {}", startPos);
+                input.seek(startPos);
+                currentPosition = startPos;
+                // Invalidate current decoder
+                this.decoder = null;
+                return true;
+            } catch (EOFException e) {
+                // Found magic bytes too close to the end of the file
+                LOG.warn("Found magic bytes at offset {} but hit EOF trying to read header",
+                    startPos);
+                return false;
+            } catch (IOException | IllegalArgumentException e) {
+                // Header was invalid (bad magic, version, compression, sizes, etc.)
+                LOG.warn("Found magic bytes at offset {} but header validation failed: {},"
+                    + " continuing", startPos, e.getMessage());
+                nextOffset = startPos + 1; // Continue searching after the magic bytes
+            }
         }
-
-        if (currentPosition >= getEndOfDataOffset()) {
-            LOG.warn("Current position " + currentPosition + " is beyond the end of data offset "
-                + getEndOfDataOffset());
-            return false; // Reached end of file while trying to skip
-        }
-
-        LOG.warn("Resyncing reader to position " + seekOffset);
-        input.seek(seekOffset);
-        currentPosition = seekOffset;
-
-        // Invalidate current decoder as we've skipped potentially many records
-        this.decoder = null;
-        return true;
+        // Reached end of data without finding a valid block
+        LOG.warn("Reached of data offset {} without finding a valid block", endOfDataOffset);
+        return false;
     }
 
     // Helper to seek to the next occurrence of a magic byte sequence
