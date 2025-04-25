@@ -90,6 +90,7 @@ import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
@@ -108,6 +109,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_LINK_HBASE_
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -504,7 +507,42 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
 
     }
 
-    // Helper to get rowKeyMatcher from Metadata.
+    byte[] getRowKeyMatcherFromSyscatIndex(String tenantId, String schemaName,
+            String tableName, boolean useIndexTable) throws SQLException {
+
+        final String
+                SYS_CATALOG_ROW_KEY_MATCHER_HEADER_SQL =
+                "SELECT ROW_KEY_MATCHER FROM SYSTEM.CATALOG " + "WHERE %s AND TABLE_SCHEM <> 'SYSTEM' AND TABLE_NAME = '%s' AND  ROW_KEY_MATCHER IS NOT NULL";
+        final String  SYS_CATALOG_IDX_ROW_KEY_MATCHER_HEADER_SQL = "SELECT \"0:ROW_KEY_MATCHER\" FROM SYSTEM.SYS_ROW_KEY_MATCHER_IDX " + "WHERE %s AND \":TABLE_SCHEM\" = '%s' AND \":TABLE_NAME\" = '%s'";
+
+        try (Connection connection = DriverManager.getConnection(getUrl())) {
+            Statement stmt = connection.createStatement();
+            String
+                    tenantClause = useIndexTable ?
+                    (tenantId == null || tenantId.isEmpty() ?
+                            "\":TENANT_ID\" IS NULL" :
+                            String.format("\":TENANT_ID\" = '%s'", tenantId)) :
+                    (tenantId == null || tenantId.isEmpty() ?
+                            "TENANT_ID IS NULL" :
+                            String.format("TENANT_ID = '%s'", tenantId));
+            String
+                    sql = useIndexTable ?
+                    String.format(SYS_CATALOG_IDX_ROW_KEY_MATCHER_HEADER_SQL, tenantClause, schemaName,
+                            tableName) :
+                    String.format(SYS_CATALOG_ROW_KEY_MATCHER_HEADER_SQL, tenantClause,
+                            tableName);
+            stmt.execute(sql);
+            ResultSet rs = stmt.getResultSet();
+            byte[] matcherBytes = rs.next() ? rs.getBytes(1) : EMPTY_BYTE_ARRAY;
+            LOGGER.info("Row key matcher SQL: {}", sql);
+            LOGGER.info("Row key matcher: {}, {}",
+                    Bytes.toStringBinary(matcherBytes),
+                    Bytes.toStringBinary(PVarbinaryEncoded.INSTANCE.toBytes(matcherBytes)));
+            return PVarbinaryEncoded.INSTANCE.toBytes(matcherBytes);
+        }
+    }
+
+        // Helper to get rowKeyMatcher from Metadata.
     private Pair<String, byte[]> getRowKeyMatchersFromView(PhoenixConnection connection,
             PTable view) throws SQLException {
         return getRowKeyMatchersFromView(connection, view.getName().getString());
@@ -560,6 +598,12 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
                 PVarbinaryEncoded.INSTANCE.toBytes(
                         WhereOptimizer.getRowKeyMatcher(connection, tableName, viewStatementTable,
                                 viewColumnConstantsToBe, isViewColumnReferencedToBe));
+        byte[]
+                rowKeyMatcher3 = getRowKeyMatcherFromSyscatIndex(view.getTenantId() != null ? view.getTenantId().getString() : null, view.getSchemaName().getString(), view.getTableName().getString(), false);
+
+        byte[]
+                rowKeyMatcher4 = getRowKeyMatcherFromSyscatIndex(view.getTenantId() != null ? view.getTenantId().getString() : null, view.getSchemaName().getString(), view.getTableName().getString(), true);
+
         LOGGER.debug(String.format(
                 "target-view-name = %s, physical = %s, stmt-table = %s\n, " +
                         "row-matcher-0 = %s (syscat)\n, row-matcher-1 = %s\n, row-matcher-2 = %s\n",
@@ -571,6 +615,10 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
                 Bytes.compareTo(rowKeyInfo.getSecond(), rowKeyMatcher1) == 0);
         assertTrue("RowKey matcher patterns do not match",
                 Bytes.compareTo(rowKeyInfo.getSecond(), rowKeyMatcher2) == 0);
+        assertTrue("RowKey matcher patterns do not match",
+                Bytes.compareTo(rowKeyInfo.getSecond(), rowKeyMatcher3) == 0);
+        assertTrue("RowKey matcher patterns do not match",
+                Bytes.compareTo(rowKeyInfo.getSecond(), rowKeyMatcher4) == 0);
         return rowKeyMatcher1;
     }
 
@@ -807,6 +855,15 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
         try {
             List<PDataType[]> testCases = getTestCases();
             SortOrder[][] sortOrders = getSortOrders();
+
+            try (Connection conn = DriverManager.getConnection(getUrl());
+                    Statement stmt = conn.createStatement()) {
+                //TestUtil.dumpTable(conn, TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES));
+                stmt.execute("CREATE INDEX IF NOT EXISTS SYS_VIEW_HDR_IDX ON SYSTEM.CATALOG(TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY) INCLUDE (TABLE_TYPE, VIEW_STATEMENT, TTL, ROW_KEY_MATCHER) WHERE TABLE_TYPE = 'v'");
+                stmt.execute("CREATE INDEX IF NOT EXISTS SYS_ROW_KEY_MATCHER_IDX ON SYSTEM.CATALOG(ROW_KEY_MATCHER, TTL, TABLE_TYPE, TENANT_ID, TABLE_SCHEM, TABLE_NAME) INCLUDE (VIEW_STATEMENT) WHERE TABLE_TYPE = 'v' AND ROW_KEY_MATCHER IS NOT NULL");
+                stmt.execute("CREATE INDEX IF NOT EXISTS SYS_VIEW_INDEX_HDR_IDX ON SYSTEM.CATALOG(DECODE_VIEW_INDEX_ID(VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE), TENANT_ID, TABLE_SCHEM, TABLE_NAME) INCLUDE(TABLE_TYPE, LINK_TYPE, VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE)  WHERE TABLE_TYPE = 'i' AND LINK_TYPE IS NULL AND VIEW_INDEX_ID IS NOT NULL");
+                conn.commit();
+            }
 
             String tableName = "";
             tableName = createViewHierarchy(
