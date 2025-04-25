@@ -31,13 +31,18 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.compress.Compression;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.ClassRule;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+import org.junit.rules.TestName;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -51,8 +56,10 @@ public class LogFileCompressionTest {
 
     @ClassRule
     public static TemporaryFolder testFolder = new TemporaryFolder();
+    @Rule
+    public TestName testName = new TestName();
 
-    private Configuration conf;
+    private static Configuration conf;
     private FileSystem localFs;
     private Path filePath;
     private Compression.Algorithm compression;
@@ -75,40 +82,51 @@ public class LogFileCompressionTest {
         return params;
     }
 
+    @BeforeClass
+    public static void setUpBeforeClass() {
+      conf = HBaseConfiguration.create();
+      // Use the pure java AirCompressor codecs so we don't need to worry about environment
+      // issues.
+      conf.set("hbase.io.compress.lz4.codec",
+          "org.apache.hadoop.hbase.io.compress.aircompressor.Lz4Codec");
+      Compression.Algorithm.LZ4.reload(conf);
+      conf.set("hbase.io.compress.snappy.codec",
+          "org.apache.hadoop.hbase.io.compress.aircompressor.SnappyCodec");
+      Compression.Algorithm.SNAPPY.reload(conf);
+      conf.set("hbase.io.compress.zstd.codec",
+          "org.apache.hadoop.hbase.io.compress.aircompressor.ZstdCodec");
+      Compression.Algorithm.ZSTD.reload(conf);
+    }
+
     @Before
     public void setUp() throws IOException {
-        conf = HBaseConfiguration.create();
-        // Use the pure java AirCompressor codecs so we don't need to worry about environment
-        // issues.
-        conf.set("hbase.io.compress.lz4.codec",
-            "org.apache.hadoop.hbase.io.compress.aircompressor.Lz4Codec");
-        conf.set("hbase.io.compress.snappy.codec",
-            "org.apache.hadoop.hbase.io.compress.aircompressor.SnappyCodec");
-        conf.set("hbase.io.compress.zstd.codec",
-            "org.apache.hadoop.hbase.io.compress.aircompressor.ZstdCodec");
         localFs = FileSystem.getLocal(conf);
         // Use a unique path for each test instance based on compression
         filePath = new Path(testFolder.newFile("LogCompressionTest_"
-            + compression.getName()).toURI());
+            + testName.getMethodName()).getAbsolutePath());
         reader = new LogFileReader();
         writer = new LogFileWriter();
     }
 
     @After
     public void tearDown() throws IOException {
-        writer.close();
-        reader.close();
+        if (writer != null) {
+            writer.close();
+        }
+        if (reader != null) {
+            reader.close();
+        }
     }
 
     @Test
     public void testLogFileSingleBlockWithCompression() throws IOException {
         LOG.info("Testing single block with compression {}", compression.getName());
         initLogFileWriter(LogFileWriterContext.DEFAULT_LOGFILE_BLOCK_SIZE);
-        List<LogFile.Record> originals = new ArrayList<>();
+        List<Mutation> originals = new ArrayList<>();
         for (int i = 0; i < 100; i++) {
-            LogFile.Record r = newRecord("TBL1", (long)i, "row" + i, 100L + i, 2);
-            originals.add(r);
-            writer.append(r);
+            Mutation mutation = newPut("row" + i, 100L + i, 2);
+            originals.add(mutation);
+            writer.append("TBL1", i, mutation);
         }
         writer.close();
         initLogFileReader();
@@ -120,12 +138,12 @@ public class LogFileCompressionTest {
         LOG.info("Testing multiple blocks with compression {}", compression.getName());
         // Use a small block size to force multiple blocks
         initLogFileWriter(8 * 1024); // 8k
-        List<LogFile.Record> originals = new ArrayList<>();
+        List<Mutation> originals = new ArrayList<>();
         // Generate enough records to span multiple blocks
         for (int i = 0; i < 100_000; i++) {
-            LogFile.Record r = newRecord("TBL_MULTI", (long)i, "row" + i, 200L + i, 5);
-            originals.add(r);
-            writer.append(r);
+            Mutation mutation = newPut("row" + i, 200L + i, 5);
+            originals.add(mutation);
+            writer.append("TBL_MULTI", i, mutation);
         }
         writer.close();
         initLogFileReader();
@@ -159,21 +177,7 @@ public class LogFileCompressionTest {
         writer.init(writerContext);
     }
 
-    private LogFile.Record newRecord(String table, long commitId, String rowKey, long ts,
-            int numCols) {
-        LogFile.Record record = new LogFileRecord()
-            .setMutationType(LogFile.MutationType.PUT)
-            .setSchemaObjectName(table)
-            .setCommitId(commitId)
-            .setRowKey(Bytes.toBytes(rowKey))
-            .setTimestamp(ts);
-        for (int i = 0; i < numCols; i++) {
-            record.addColumnValue(Bytes.toBytes("col" + i), Bytes.toBytes("v" + i + "_" + rowKey));
-        }
-        return record;
-    }
-
-    private void readAndVerifyRecords(List<LogFile.Record> originalRecords, long expectedBlockCount)
+    private void readAndVerifyRecords(List<Mutation> origina, long expectedBlockCount)
             throws IOException {
         assertTrue("Test file does not exist: " + filePath, localFs.exists(filePath));
         assertTrue("Test file has zero length: " + filePath,
@@ -184,23 +188,23 @@ public class LogFileCompressionTest {
         assertNotNull("Header should not be null", header);
 
         // Read records using iterator
-        List<LogFile.Record> decodedRecords = new ArrayList<>();
-        Iterator<LogFile.Record> iterator = reader.iterator();
+        List<Mutation> decoded = new ArrayList<>();
+        Iterator<Mutation> iterator = reader.iterator();
         while (iterator.hasNext()) {
-          decodedRecords.add(iterator.next());
+            decoded.add(iterator.next());
         }
 
         // Verify Records
-        assertEquals("Number of decoded records mismatch", originalRecords.size(),
-            decodedRecords.size());
-        for (int i = 0; i < originalRecords.size(); i++) {
-          assertEquals("Record " + i + " mismatch", originalRecords.get(i), decodedRecords.get(i));
+        assertEquals("Number of decoded records mismatch", origina.size(),
+            decoded.size());
+        for (int i = 0; i < origina.size(); i++) {
+            assertMutationEquals("Record " + i + " mismatch", origina.get(i), decoded.get(i));
         }
 
         // Verify Trailer
         LogFile.Trailer trailer = reader.getTrailer();
         assertNotNull("Trailer should not be null", trailer);
-        assertEquals("Trailer record count mismatch", originalRecords.size(),
+        assertEquals("Trailer record count mismatch", origina.size(),
             trailer.getRecordCount());
         assertEquals("Trailer block count mismatch", expectedBlockCount,
             trailer.getBlockCount());
@@ -212,6 +216,27 @@ public class LogFileCompressionTest {
             readerContext.getBlocksRead());
         assertEquals("Reader context corrupt blocks skipped count should be 0", 0,
             readerContext.getCorruptBlocksSkipped());
+    }
+
+    private Mutation newPut(String rowKey, long ts, int numCols) {
+        final byte[] qualifier = Bytes.toBytes("q");
+        Put put = new Put(Bytes.toBytes(rowKey));
+        put.setTimestamp(ts);
+        for (int i = 0; i < numCols; i++) {
+            put.addColumn(Bytes.toBytes("col" + i), qualifier, ts,
+                Bytes.toBytes("v" + i + "_" + rowKey));
+        }
+        return put;
+    }
+
+    static void assertMutationEquals(String message, Mutation m1, Mutation m2) throws AssertionError {
+        try {
+            if (!m1.toJSON().equals(m2.toJSON())) {
+                throw new AssertionError(message);
+            }
+        } catch (IOException e) {
+            throw new AssertionError(e.getMessage());
+        }
     }
 
 }

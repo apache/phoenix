@@ -17,9 +17,11 @@
  */
 package org.apache.phoenix.replication.log;
 
+import java.io.ByteArrayOutputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -76,66 +78,62 @@ public class LogFileCodec implements LogFile.Codec {
 
     private static class RecordEncoder implements LogFile.Codec.Encoder {
         private final DataOutput out;
+        private final ByteArrayOutputStream currentRecord;
 
         RecordEncoder(DataOutput out) {
             this.out = out;
+            currentRecord = new ByteArrayOutputStream();
         }
+
 
         @Override
         public void write(LogFile.Record record) throws IOException {
-            // Calculate serialized size
-            int size = calculateRecordSize(record);
 
-            // Set the calculated size (including the vint prefix) on the record object
-            ((LogFileRecord) record).setSerializedLength(WritableUtils.getVIntSize(size) + size);
-
-            // Write total record length
-            WritableUtils.writeVInt(out, size);
+            DataOutput recordOut = new DataOutputStream(currentRecord);
 
             // Write record fields
-            out.writeByte(record.getMutationType().getCode());
+            recordOut.writeByte(record.getMutationType().getCode());
             byte[] nameBytes = record.getSchemaObjectName().getBytes(StandardCharsets.UTF_8);
-            WritableUtils.writeVInt(out, nameBytes.length);
-            out.write(nameBytes);
-            WritableUtils.writeVLong(out, record.getCommitId());
-            WritableUtils.writeVInt(out, record.getRowKey().length);
-            out.write(record.getRowKey());
-            out.writeLong(record.getTimestamp());
+            WritableUtils.writeVInt(recordOut, nameBytes.length);
+            recordOut.write(nameBytes);
+            WritableUtils.writeVLong(recordOut, record.getCommitId());
+            WritableUtils.writeVInt(recordOut, record.getRowKey().length);
+            recordOut.write(record.getRowKey());
+            recordOut.writeLong(record.getTimestamp());
 
             int colCount = record.getColumnCount();
-            WritableUtils.writeVInt(out, colCount);
+            WritableUtils.writeVInt(recordOut, colCount);
 
             if (colCount > 0) {
-                for (Map.Entry<byte[], byte[]> entry : record.getColumnValues()) {
+                for (Map.Entry<byte[], Map<byte[], byte[]>> entry : record.getColumnValues()) {
                     byte[] colName = entry.getKey();
-                    byte[] colValue = entry.getValue();
-                    WritableUtils.writeVInt(out, colName.length);
-                    out.write(colName);
-                    WritableUtils.writeVInt(out, colValue.length);
-                    out.write(colValue);
+                    Map<byte[], byte[]> column = entry.getValue();
+                    WritableUtils.writeVInt(recordOut, colName.length);
+                    recordOut.write(colName);
+                    WritableUtils.writeVInt(recordOut, column.size());
+                    for (Map.Entry<byte[],byte[]> qualValue : column.entrySet()) {
+                        byte[] qualName = qualValue.getKey();
+                        byte[] value = qualValue.getValue();
+                        WritableUtils.writeVInt(recordOut, qualName.length);
+                        recordOut.write(qualName);
+                        WritableUtils.writeVInt(recordOut, value.length);
+                        recordOut.write(value);
+                    }
                 }
             }
-        }
 
-        private int calculateRecordSize(LogFile.Record record) {
-            int size = 0;
-            size += Bytes.SIZEOF_BYTE; // Mutation Type
-            byte[] nameBytes = record.getSchemaObjectName().getBytes(StandardCharsets.UTF_8);
-            size += WritableUtils.getVIntSize(nameBytes.length) + nameBytes.length;
-            size += WritableUtils.getVIntSize(record.getCommitId()); // Commit ID
-            size += WritableUtils.getVIntSize(record.getRowKey().length)
-                + record.getRowKey().length; // Row Key
-            size += Bytes.SIZEOF_LONG; // Timestamp
-            size += WritableUtils.getVIntSize(record.getColumnCount()); // Column Count
-            if (record.getColumnCount() > 0) {
-                for (Map.Entry<byte[], byte[]> entry : record.getColumnValues()) {
-                    size += WritableUtils.getVIntSize(entry.getKey().length)
-                        + entry.getKey().length; // Col Name
-                    size += WritableUtils.getVIntSize(entry.getValue().length)
-                        + entry.getValue().length; // Col Value
-                }
-            }
-            return size;
+            byte[] currentRecordBytes = currentRecord.toByteArray();
+            // Write total record length
+            WritableUtils.writeVInt(out, currentRecordBytes.length);
+            // Write the record
+            out.write(currentRecordBytes);
+
+            // Set the size (including the vint prefix) on the record object
+            ((LogFileRecord) record).setSerializedLength(currentRecordBytes.length +
+                WritableUtils.getVIntSize(currentRecordBytes.length));
+
+            // Reset the ByteArrayOutputStream to release resources
+            currentRecord.reset();
         }
     }
 
@@ -181,18 +179,27 @@ public class LogFileCodec implements LogFile.Codec {
 
                 int colCount = WritableUtils.readVInt(in);
                 for (int i = 0; i < colCount; i++) {
+                    // Col name
                     int colNameLen = WritableUtils.readVInt(in);
                     byte[] colName = new byte[colNameLen];
                     in.readFully(colName);
-
-                    int valueLen = WritableUtils.readVInt(in);
-                    byte[] value = new byte[valueLen];
-                    in.readFully(value);
-
-                    current.addColumnValue(colName, value);
+                    // Qualifiers+Values Count
+                    int qualValuesCount = WritableUtils.readVInt(in);
+                    for (int j = 0; j < qualValuesCount; j++) {
+                        // Qualifier name
+                        int qualNameLen = WritableUtils.readVInt(in);
+                        byte[] qualName = new byte[qualNameLen];
+                        in.readFully(qualName);
+                        // Value
+                        int valueLen = WritableUtils.readVInt(in);
+                        byte[] value = new byte[valueLen];
+                        in.readFully(value);
+                        current.addColumnValue(colName, qualName, value);
+                    }
                 }
 
-                return true; // Successfully read a record
+                // Successfully read a record
+                return true;
             } catch (EOFException e) {
                 // End of stream
                 current = null;

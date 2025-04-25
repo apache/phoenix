@@ -30,14 +30,21 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class LogFileWriterTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(LogFileWriterTest.class);
 
     @Rule
     public TemporaryFolder testFolder = new TemporaryFolder();
@@ -66,11 +73,13 @@ public class LogFileWriterTest {
     @Test
     public void testLogFileWriter() throws IOException {
         initLogFileWriter();
-        LogFile.Record r1 = newRecord("TBL1", 1L, "row1", 10L, 1);
-        LogFile.Record r2 = newRecord("TBL1", 2L, "row2", 11L, 1);
-        writer.append(r1);
+        Mutation r1 = newPut("row1", 10L, 1);
+        Mutation r2 = newDelete("row2", 11L, 1);
+        writer.append("TBL1", 1, r1);
+        LOG.debug("Appended " + r1);
         writer.sync();
-        writer.append(r2);
+        writer.append("TBL1", 2, r2);
+        LOG.debug("Appended " + r2);
         writer.close();
 
         assertTrue("File should exist", localFs.exists(filePath));
@@ -80,11 +89,13 @@ public class LogFileWriterTest {
         assertEquals("Header major version mismatch", LogFile.VERSION_MAJOR,
             reader.getHeader().getMajorVersion());
 
-        LogFileRecord decoded1 = (LogFileRecord) reader.next();
-        assertEquals("First record mismatch", r1, decoded1);
+        Mutation decoded1 = reader.next();
+        LOG.debug("Read " + decoded1);
+        assertMutationEquals("First record mismatch", r1, decoded1);
 
-        LogFileRecord decoded2 = (LogFileRecord) reader.next();
-        assertEquals("Second record mismatch", r2, decoded2);
+        Mutation decoded2 = reader.next();
+        LOG.debug("Read " + decoded2);
+        assertMutationEquals("Second record mismatch", r2, decoded2);
 
         assertNull("Should be end of file", reader.next());
         assertNotNull("Trailer should exist", reader.getTrailer());
@@ -94,24 +105,25 @@ public class LogFileWriterTest {
     @Test
     public void testLogFileReaderIterator() throws IOException {
         initLogFileWriter();
-        List<LogFile.Record> originals = new ArrayList<>();
+        List<Mutation> originals = new ArrayList<>();
         for (int i = 0; i < 1000; i++) {
-            LogFile.Record r = newRecord("ITER", (long)i, "row" + i, 20L + i, 1);
-            originals.add(r);
-            writer.append(r);
+            Mutation m = newPut("row" + i, 10L + i, 1);
+            originals.add(m);
+            writer.append("ITER", i, m);
         }
         writer.close();
 
         initLogFileReader();
-        List<LogFile.Record> decoded = new ArrayList<>();
-        Iterator<LogFile.Record> iterator = reader.iterator();
+        List<Mutation> decoded = new ArrayList<>();
+        Iterator<Mutation> iterator = reader.iterator();
         while (iterator.hasNext()) {
-            decoded.add(iterator.next());
+            Mutation m = iterator.next();
+            decoded.add(m);
         }
 
         assertEquals("Iterator count mismatch", originals.size(), decoded.size());
         for (int i = 0; i < originals.size(); i++) {
-            assertEquals("Iterator record " + i + " mismatch", originals.get(i), decoded.get(i));
+            assertMutationEquals("Iterator record " + i + " mismatch", originals.get(i), decoded.get(i));
         }
         reader.close();
     }
@@ -139,18 +151,34 @@ public class LogFileWriterTest {
         writer.init(ctx);
     }
 
-    private LogFile.Record newRecord(String table, long commitId, String rowKey, long ts,
-            int numCols) {
-        LogFile.Record record = new LogFileRecord()
-            .setMutationType(LogFile.MutationType.PUT)
-            .setSchemaObjectName(table)
-            .setCommitId(commitId)
-            .setRowKey(Bytes.toBytes(rowKey))
-            .setTimestamp(ts);
+    private Mutation newPut(String rowKey, long ts, int numCols) {
+        final byte[] qualifier = Bytes.toBytes("q");
+        Put put = new Put(Bytes.toBytes(rowKey));
+        put.setTimestamp(ts);
         for (int i = 0; i < numCols; i++) {
-            record.addColumnValue(Bytes.toBytes("col" + i), Bytes.toBytes("v" + i + "_" + rowKey));
+            put.addColumn(Bytes.toBytes("col" + i), qualifier, ts,
+                Bytes.toBytes("v" + i + "_" + rowKey));
         }
-        return record;
+        return put;
+    }
+
+    private Mutation newDelete(String rowKey, long ts, int numCols) {
+        Delete delete = new Delete(Bytes.toBytes(rowKey));
+        delete.setTimestamp(ts);
+        for (int i = 0; i < numCols; i++) {
+            delete.addFamily(Bytes.toBytes("col" + i), ts);
+        }
+        return delete;
+    }
+
+    static void assertMutationEquals(String message, Mutation m1, Mutation m2) throws AssertionError {
+        try {
+          if (!m1.toJSON().equals(m2.toJSON())) {
+              throw new AssertionError(message);
+          }
+        } catch (IOException e) {
+            throw new AssertionError(e.getMessage());
+        }
     }
 
 }

@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.hbase.client.Mutation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,23 +57,18 @@ public class LogFileReader implements LogFile.Reader  {
     }
 
     @Override
-    public LogFile.Record next() throws IOException {
-        return next(null);
-    }
-
-    @Override
-    public LogFile.Record next(LogFile.Record reuse) throws IOException {
+    public Mutation next() throws IOException {
         if (closed) {
             throw new IOException("LogFileReader has been closed");
         }
-        current = reader.next(reuse);
-        return current;
+        current = reader.next(current);
+        return LogFile.Record.toHBaseMutation(current);
     }
 
     @Override
-    public Iterator<LogFile.Record> iterator() {
-        return new Iterator<LogFile.Record>() {
-            private LogFile.Record next = null;
+    public Iterator<Mutation> iterator() {
+        return new Iterator<Mutation>() {
+            private Mutation next = null;
             private boolean fetched = false;
 
             @Override
@@ -92,15 +88,15 @@ public class LogFileReader implements LogFile.Reader  {
             }
 
             @Override
-            public LogFile.Record next() {
+            public Mutation next() {
                 if (!hasNext()) {
                     throw new NoSuchElementException("No more records in the Log");
                 }
-                LogFile.Record record = next;
+                Mutation mutation = next;
                 // Reset state for the next hasNext() call
                 next = null;
                 fetched = false;
-                return record;
+                return mutation;
             }
 
             @Override

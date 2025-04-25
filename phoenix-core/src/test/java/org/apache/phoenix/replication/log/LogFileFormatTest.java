@@ -495,19 +495,6 @@ public class LogFileFormatTest {
         writer.init(writerContext, fsos);
     }
 
-    private LogFile.Record newRecord(String table, long commitId, String rowKey, long ts, int numCols) {
-        LogFile.Record record = new LogFileRecord()
-            .setMutationType(LogFile.MutationType.PUT)
-            .setSchemaObjectName(table)
-            .setCommitId(commitId)
-            .setRowKey(Bytes.toBytes(rowKey))
-            .setTimestamp(ts);
-        for (int i = 0; i < numCols; i++) {
-            record.addColumnValue(Bytes.toBytes("col" + i), Bytes.toBytes("v" + i + "_" + rowKey));
-        }
-        return record;
-    }
-
     private int findBlockEndOffset(byte[] data, int startOffset) throws IOException {
         ByteArrayInputStream bais = new ByteArrayInputStream(data);
         DataInputStream dis = new DataInputStream(bais);
@@ -516,8 +503,8 @@ public class LogFileFormatTest {
         LOG.info("Reading header at " + startOffset);
         LogBlockHeader header = new LogBlockHeader();
         header.readFields(dis);
-        int payloadSize = header.getCompressedSize();
-        int endOffset = startOffset + header.getSerializedLength() + payloadSize + LogFile.CHECKSUM_SIZE;
+        int payloadSize = header.getCompressedDataSize();
+        int endOffset = startOffset + header.getSerializedHeaderLength() + payloadSize + LogFile.CHECKSUM_SIZE;
         LOG.info("Block ending offset is " + endOffset);
         return endOffset;
     }
@@ -544,6 +531,22 @@ public class LogFileFormatTest {
         LOG.info("Next block start position is " + writer.getPosition());
         writer.startBlock();
         return records;
+    }
+
+    private LogFile.Record newRecord(String table, long commitId, String rowKey, long ts,
+            int numCols) {
+        final byte[] qualifier = Bytes.toBytes("q");
+        LogFile.Record record = new LogFileRecord()
+            .setMutationType(LogFile.MutationType.PUT)
+            .setSchemaObjectName(table)
+            .setCommitId(commitId)
+            .setRowKey(Bytes.toBytes(rowKey))
+            .setTimestamp(ts);
+        for (int i = 0; i < numCols; i++) {
+            record.addColumnValue(Bytes.toBytes("col" + i), qualifier,
+                Bytes.toBytes("v" + i + "_" + rowKey));
+        }
+        return record;
     }
 
 }

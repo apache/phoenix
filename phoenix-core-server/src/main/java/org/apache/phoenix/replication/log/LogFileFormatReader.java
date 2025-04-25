@@ -140,7 +140,7 @@ public class LogFileFormatReader implements Closeable {
                 currentPosition = input.getPos(); // Position after block header
 
                 // Read Payload
-                int payloadSize = blockHeader.getCompressedSize();
+                int payloadSize = blockHeader.getCompressedDataSize();
                 ByteBuffer payloadBuffer = ByteBuffer.allocate(payloadSize);
 
                 try {
@@ -166,7 +166,7 @@ public class LogFileFormatReader implements Closeable {
                     }
 
                     // Decompress if necessary
-                    if (blockHeader.getCompression() != Compression.Algorithm.NONE) {
+                    if (blockHeader.getDataCompression() != Compression.Algorithm.NONE) {
                         decompressedBuffer = decompressBlock(payloadBuffer, blockHeader);
                     } else {
                         decompressedBuffer = payloadBuffer;
@@ -201,23 +201,21 @@ public class LogFileFormatReader implements Closeable {
     // Manages obtaining/releasing decompressors.
     private ByteBuffer decompressBlock(ByteBuffer compressedBuffer, LogFile.BlockHeader header)
             throws IOException {
-        Compression.Algorithm compression = header.getCompression();
+        Compression.Algorithm compression = header.getDataCompression();
         Decompressor decompressor = compression.getDecompressor();
         ByteBuffer decompressedBuffer = null;
         boolean success = false;
         try {
-            decompressedBuffer = ByteBuffer.allocate(header.getUncompressedSize());
-            if (decompressor instanceof CanReinit) { // Correctly handle CanReinit compressor types
-                ((CanReinit) decompressor).reinit(context.getConfiguration());
-            }
+            decompressedBuffer = ByteBuffer.allocate(header.getUncompressedDataSize());
+            decompressor.reset();
             decompressor.setInput(compressedBuffer.array(), compressedBuffer.arrayOffset(),
-                header.getCompressedSize());
+                header.getCompressedDataSize());
             int decompressedSize =
                 decompressor.decompress(decompressedBuffer.array(),
-                    decompressedBuffer.arrayOffset(), header.getUncompressedSize());
-            if (decompressedSize != header.getUncompressedSize()) {
+                    decompressedBuffer.arrayOffset(), header.getUncompressedDataSize());
+            if (decompressedSize != header.getUncompressedDataSize()) {
                 throw new IOException("Decompression size mismatch: expected="
-                    + header.getUncompressedSize() + ", actual=" + decompressedSize);
+                    + header.getUncompressedDataSize() + ", actual=" + decompressedSize);
             }
             decompressedBuffer.limit(decompressedSize);
             success = true;

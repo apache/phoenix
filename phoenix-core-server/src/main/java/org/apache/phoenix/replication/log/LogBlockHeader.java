@@ -44,34 +44,34 @@ public class LogBlockHeader implements LogFile.BlockHeader {
     }
 
     @Override
-    public Compression.Algorithm getCompression() {
+    public Compression.Algorithm getDataCompression() {
         return compression;
     }
 
     @Override
-    public LogFile.BlockHeader setCompression(Compression.Algorithm compression) {
+    public LogFile.BlockHeader setDataCompression(Compression.Algorithm compression) {
         this.compression = compression;
         return this;
     }
 
     @Override
-    public int getUncompressedSize() {
+    public int getUncompressedDataSize() {
         return uncompressedSize;
     }
 
     @Override
-    public LogFile.BlockHeader setUncompressedSize(int uncompressedSize) {
+    public LogFile.BlockHeader setUncompressedDataSize(int uncompressedSize) {
         this.uncompressedSize = uncompressedSize;
         return this;
     }
 
     @Override
-    public int getCompressedSize() {
+    public int getCompressedDataSize() {
         return compressedSize;
     }
 
     @Override
-    public LogFile.BlockHeader setCompressedSize(int compressedSize) {
+    public LogFile.BlockHeader setCompressedDataSize(int compressedSize) {
         this.compressedSize = compressedSize;
         return this;
     }
@@ -105,7 +105,7 @@ public class LogBlockHeader implements LogFile.BlockHeader {
     }
 
     @Override
-    public int getSerializedLength() {
+    public int getSerializedHeaderLength() {
         return HEADER_SIZE;
     }
 

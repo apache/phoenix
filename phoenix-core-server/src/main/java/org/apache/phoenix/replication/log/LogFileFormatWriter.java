@@ -21,6 +21,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.hbase.io.compress.Compression;
 import org.apache.hadoop.io.compress.Compressor;
@@ -48,6 +50,8 @@ public class LogFileFormatWriter implements Closeable {
     private long blockCount = 0;
     private long blocksStartOffset = -1;
     private CRC64 crc = new CRC64(); // Indirect this when we have more than one type
+    // Cached buffer for compression for performance
+    ByteBuffer compressBuff = null;
 
     public LogFileFormatWriter() {
 
@@ -117,32 +121,44 @@ public class LogFileFormatWriter implements Closeable {
         }
         blockDataStream.flush(); // Ensure all encoded records are in the byte array
         byte[] uncompressedBytes = currentBlockBytes.toByteArray();
-        byte[] bytesToWrite;
+        ByteBuffer writeBuff;
+        int lengthToWrite;
         Compression.Algorithm ourCompression = context.getCompression();
         if (compressor != null) {
             compressor.reset();
-            ByteArrayOutputStream compressedStream = new ByteArrayOutputStream();
-            try (DataOutputStream compressingStream = new DataOutputStream(
-              ourCompression.createCompressionStream(compressedStream, compressor, 0))) {
-                  compressingStream.write(uncompressedBytes);
+            compressor.setInput(uncompressedBytes, 0, uncompressedBytes.length);
+            compressor.finish(); // We are going to one-shot this.
+            // Give 20% overhead for pathological cases
+            // We can't go below this by much because the Snappy compressor will require more than
+            // 10% overhead or else it will refuse to try.
+            int compressBuffNeeded = (int)(uncompressedBytes.length * 1.2f);
+            if (compressBuff == null || compressBuff.capacity() < compressBuffNeeded) {
+                compressBuff = ByteBuffer.allocate(compressBuffNeeded);
             }
-            bytesToWrite = compressedStream.toByteArray();
+            compressBuff.clear();
+            lengthToWrite = compressor.compress(compressBuff.array(), compressBuff.arrayOffset(),
+                compressBuffNeeded);
+            if (!compressor.finished()) {
+                throw new IOException("Compressor did not finish");
+            }
+            writeBuff = compressBuff;
         } else {
-            bytesToWrite = uncompressedBytes;
+            writeBuff = ByteBuffer.wrap(uncompressedBytes);
+            lengthToWrite = uncompressedBytes.length;
             ourCompression = Compression.Algorithm.NONE; // Explicitly NONE if no compressor
         }
 
         // Write block header
         LogFile.BlockHeader blockHeader = new LogBlockHeader()
-            .setCompression(ourCompression)
-            .setUncompressedSize(uncompressedBytes.length)
-            .setCompressedSize(bytesToWrite.length);
+            .setDataCompression(ourCompression)
+            .setUncompressedDataSize(uncompressedBytes.length)
+            .setCompressedDataSize(lengthToWrite);
         blockHeader.write(output);
 
-        output.write(bytesToWrite);
+        output.write(writeBuff.array(), writeBuff.arrayOffset(), lengthToWrite);
         // Calculate checksum on the payload
         crc.reset();
-        crc.update(bytesToWrite, 0, bytesToWrite.length);
+        crc.update(writeBuff.array(), writeBuff.arrayOffset(), lengthToWrite);
         long checksum = crc.getValue();
         output.writeLong(checksum); // Write CRC64 of header and payload
 
@@ -198,6 +214,7 @@ public class LogFileFormatWriter implements Closeable {
             if (compressor != null) {
                 context.getCompression().returnCompressor(compressor);
                 compressor = null;
+                compressBuff = null;
             }
         }
     }

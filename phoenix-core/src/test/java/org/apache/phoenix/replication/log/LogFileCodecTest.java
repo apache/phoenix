@@ -171,7 +171,9 @@ public class LogFileCodecTest {
         assertFalse("Should be no more records in ByteBuffer", decoder.advance(null));
     }
 
-    private LogFile.Record newRecord(String table, long commitId, String rowKey, long ts, int numCols) {
+    private LogFile.Record newRecord(String table, long commitId, String rowKey, long ts,
+          int numCols) {
+        final byte[] qualifier = Bytes.toBytes("q");
         LogFile.Record record = new LogFileRecord()
             .setMutationType(LogFile.MutationType.PUT)
             .setSchemaObjectName(table)
@@ -179,7 +181,8 @@ public class LogFileCodecTest {
             .setRowKey(Bytes.toBytes(rowKey))
             .setTimestamp(ts);
         for (int i = 0; i < numCols; i++) {
-            record.addColumnValue(Bytes.toBytes("col" + i), Bytes.toBytes("v" + i + "_" + rowKey));
+            record.addColumnValue(Bytes.toBytes("col" + i), qualifier,
+                Bytes.toBytes("v" + i + "_" + rowKey));
         }
         return record;
     }
