@@ -144,7 +144,6 @@ public class BaseScannerRegionObserverConstants {
     public static final String CDC_DATA_TABLE_DEF = "_CdcDataTableDef";
     public static final String IS_PHOENIX_TTL_SCAN_TABLE_SYSTEM = "_IsPhoenixScanTableSystem";
 
-    public static final String MAX_LOOKBACK_AGE = "MAX_LOOKBACK_AGE";
     /**
      * The scan attribute to provide the scan start rowkey for analyze table queries.
      */

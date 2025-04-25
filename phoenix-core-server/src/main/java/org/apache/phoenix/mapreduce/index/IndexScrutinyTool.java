@@ -20,6 +20,7 @@ package org.apache.phoenix.mapreduce.index;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.List;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
@@ -59,7 +60,6 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -272,7 +272,6 @@ public class IndexScrutinyTool extends Configured implements Tool {
 
             // set CURRENT_SCN for our scan so that incoming writes don't throw off scrutiny
             configuration.set(PhoenixConfigurationUtil.CURRENT_SCN_VALUE, Long.toString(ts));
-            PhoenixConfigurationUtil.setMaxLookbackAge(configuration, pdataTable.getMaxLookbackAge());
 
             // set the source table to either data or index table
             SourceTargetColumnNames columnNames =
@@ -422,15 +421,14 @@ public class IndexScrutinyTool extends Configured implements Tool {
                             ? Long.parseLong(cmdLine.getOptionValue(TIMESTAMP.getOpt()))
                             : EnvironmentEdgeManager.currentTimeMillis() - 60000;
 
+            validateTimestamp(configuration, ts);
+
             if (indexTable != null) {
                 if (!IndexTool.isValidIndexTable(connection, qDataTable, indexTable, tenantId)) {
                     throw new IllegalArgumentException(String
                             .format(" %s is not an index table for %s ", indexTable, qDataTable));
                 }
             }
-
-            PTable pDataTable = connection.unwrap(PhoenixConnection.class).getTable(qDataTable);
-            validateTimestamp(configuration, ts, pDataTable.getMaxLookbackAge());
 
             String outputFormatOption = cmdLine.getOptionValue(OUTPUT_FORMAT_OPTION.getOpt());
             OutputFormat outputFormat =
@@ -447,8 +445,14 @@ public class IndexScrutinyTool extends Configured implements Tool {
                 // create the output table if it doesn't exist
                 Configuration outputConfiguration = HBaseConfiguration.create(configuration);
                 outputConfiguration.unset(PhoenixRuntime.TENANT_ID_ATTRIB);
-                try (Connection outputConn = ConnectionUtil.getOutputConnection(outputConfiguration)) {
-                    createScrutinyToolTables(outputConn);
+                try (Connection outputConn =
+                             ConnectionUtil.getOutputConnection(outputConfiguration);
+                     Statement stmt = outputConn.createStatement()) {
+                    stmt.execute(IndexScrutinyTableOutput.OUTPUT_TABLE_DDL);
+                    stmt.execute(IndexScrutinyTableOutput.OUTPUT_TABLE_BEYOND_LOOKBACK_DDL);
+                    stmt.execute(IndexScrutinyTableOutput.OUTPUT_METADATA_DDL);
+                    stmt.execute(
+                            IndexScrutinyTableOutput.OUTPUT_METADATA_BEYOND_LOOKBACK_COUNTER_DDL);
                 }
             }
 
@@ -514,15 +518,17 @@ public class IndexScrutinyTool extends Configured implements Tool {
         }
     }
 
-    private void validateTimestamp(Configuration configuration, long ts, Long dataTableMaxLookback) {
-        long maxLookBackAge = MetaDataUtil.getMaxLookbackAge(configuration, dataTableMaxLookback);
+    private void validateTimestamp(Configuration configuration, long ts) {
+        long maxLookBackAge = BaseScannerRegionObserverConstants.getMaxLookbackInMillis(
+                configuration);
         if (maxLookBackAge != BaseScannerRegionObserverConstants.DEFAULT_PHOENIX_MAX_LOOKBACK_AGE * 1000L) {
             long minTimestamp = EnvironmentEdgeManager.currentTimeMillis() - maxLookBackAge;
             if (ts < minTimestamp){
-                throw new IllegalArgumentException("Index scrutiny can't look back past the configured" +
-                    " max lookback age: " + maxLookBackAge / 1000 + " seconds");
+                throw new IllegalArgumentException("Index scrutiny can't look back past the "
+                        + "configured max lookback age: " + maxLookBackAge / 1000 + " seconds");
             }
         }
+
     }
 
     @VisibleForTesting
@@ -535,13 +541,4 @@ public class IndexScrutinyTool extends Configured implements Tool {
         System.exit(result);
     }
 
-    public static void createScrutinyToolTables(Connection conn) throws Exception {
-        conn.createStatement().execute(IndexScrutinyTableOutput.OUTPUT_TABLE_DDL);
-        conn.createStatement().
-                execute(IndexScrutinyTableOutput.OUTPUT_TABLE_BEYOND_LOOKBACK_DDL);
-        conn.createStatement()
-                .execute(IndexScrutinyTableOutput.OUTPUT_METADATA_DDL);
-        conn.createStatement().
-                execute(IndexScrutinyTableOutput.OUTPUT_METADATA_BEYOND_LOOKBACK_COUNTER_DDL);
-    }
 }

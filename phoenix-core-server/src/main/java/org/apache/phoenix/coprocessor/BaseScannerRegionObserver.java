@@ -18,7 +18,6 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
-import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
@@ -28,7 +27,6 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.MemoryCompactionPolicy;
 import org.apache.hadoop.hbase.NotServingRegionException;
-import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
@@ -58,17 +56,12 @@ import org.apache.phoenix.index.CDCTableInfo;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.NonAggregateRegionScannerFactory;
 import org.apache.phoenix.iterate.RegionScannerFactory;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
-import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.ClientUtil;
-import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
-import org.apache.phoenix.schema.PTable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -384,10 +377,9 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             setScanOptionsForFlushesAndCompactions(options);
             return;
         }
-        long maxLookbackAgeInMillis = getMaxLookbackAge(c);
-        if (isMaxLookbackTimeEnabled(maxLookbackAgeInMillis)) {
+        if (isMaxLookbackTimeEnabled(conf)) {
             setScanOptionsForFlushesAndCompactionsWhenPhoenixTTLIsDisabled(conf, options, store,
-                    scanType, maxLookbackAgeInMillis);
+                    scanType);
         }
     }
 
@@ -400,11 +392,9 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             setScanOptionsForFlushesAndCompactions(options);
             return;
         }
-
-        long maxLookbackAgeInMillis = getMaxLookbackAge(c);
-        if (isMaxLookbackTimeEnabled(maxLookbackAgeInMillis)) {
+        if (isMaxLookbackTimeEnabled(conf)) {
             setScanOptionsForFlushesAndCompactionsWhenPhoenixTTLIsDisabled(conf, options, store,
-                    ScanType.COMPACT_RETAIN_DELETES, maxLookbackAgeInMillis);
+                    ScanType.COMPACT_RETAIN_DELETES);
         }
     }
 
@@ -417,8 +407,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             setScanOptionsForFlushesAndCompactions(options);
             return;
         }
-        long maxLookbackAgeInMillis = getMaxLookbackAge(c);
-        if (isMaxLookbackTimeEnabled(maxLookbackAgeInMillis)) {
+        if (isMaxLookbackTimeEnabled(conf)) {
             MemoryCompactionPolicy inMemPolicy =
                     store.getColumnFamilyDescriptor().getInMemoryCompaction();
             ScanType scanType;
@@ -431,7 +420,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                 scanType = ScanType.COMPACT_RETAIN_DELETES;
             }
             setScanOptionsForFlushesAndCompactionsWhenPhoenixTTLIsDisabled(conf, options, store,
-                    scanType, maxLookbackAgeInMillis);
+                    scanType);
         }
     }
 
@@ -509,9 +498,10 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
      */
     public long getTimeToLiveForCompactions(Configuration conf,
             ColumnFamilyDescriptor columnDescriptor,
-            ScanOptions options, long maxLookbackTtl) {
+            ScanOptions options) {
         long ttlConfigured = columnDescriptor.getTimeToLive();
         long ttlInMillis = ttlConfigured * 1000;
+        long maxLookbackTtl = BaseScannerRegionObserverConstants.getMaxLookbackInMillis(conf);
         if (isMaxLookbackTimeEnabled(maxLookbackTtl)) {
             if (ttlConfigured == HConstants.FOREVER
                     && columnDescriptor.getKeepDeletedCells() != KeepDeletedCells.TRUE) {
@@ -531,10 +521,10 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public void setScanOptionsForFlushesAndCompactionsWhenPhoenixTTLIsDisabled(Configuration conf,
             ScanOptions options,
             final Store store,
-            ScanType type, long maxLookbackAge) {
+            ScanType type) {
         ColumnFamilyDescriptor cfDescriptor = store.getColumnFamilyDescriptor();
         options.setTTL(getTimeToLiveForCompactions(conf, cfDescriptor,
-                options, maxLookbackAge));
+                options));
         options.setKeepDeletedCells(getKeepDeletedCells(options, type));
         options.setMaxVersions(Integer.MAX_VALUE);
         options.setMinVersions(getMinVersions(options, cfDescriptor));
@@ -547,27 +537,6 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
 
     public static boolean isMaxLookbackTimeEnabled(long maxLookbackTime){
         return maxLookbackTime > 0L;
-    }
-
-    private static long getMaxLookbackAge(ObserverContext<RegionCoprocessorEnvironment> c) {
-        TableName tableName = c.getEnvironment().getRegion().getRegionInfo().getTable();
-        String fullTableName = tableName.getNameAsString();
-        Configuration conf = c.getEnvironment().getConfiguration();
-        PTable table;
-        try(PhoenixConnection conn = QueryUtil.getConnectionOnServer(
-                conf).unwrap(PhoenixConnection.class)) {
-            table = conn.getTableNoCache(fullTableName);
-        }
-        catch (SQLException e) {
-            if (e instanceof TableNotFoundException) {
-                LOGGER.debug("Ignoring HBase table that is not a Phoenix table: {}", fullTableName);
-                // non-Phoenix HBase tables won't be found, do nothing
-            } else {
-                LOGGER.error("Unable to fetch table level max lookback age for {}", fullTableName, e);
-            }
-            return MetaDataUtil.getMaxLookbackAge(conf, null);
-        }
-        return MetaDataUtil.getMaxLookbackAge(conf, table.getMaxLookbackAge());
     }
 
     public static boolean isPhoenixTableTTLEnabled(Configuration conf) {

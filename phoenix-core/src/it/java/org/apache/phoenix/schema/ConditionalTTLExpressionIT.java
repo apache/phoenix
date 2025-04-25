@@ -137,7 +137,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
 
     @Parameterized.Parameters(name = "columnEncoded={0}, tableLevelMaxLookback={1}")
     public static synchronized Collection<Object[]> data() {
-        // maxlookback value is in ms
+        // maxlookback value is in sec
         return Arrays.asList(new Object[][]{
                 {false, 0},
                 {true, 0},
@@ -162,7 +162,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
     public void beforeTest() {
         StringBuilder optionBuilder = new StringBuilder();
         optionBuilder.append(" TTL = '%s'"); // placeholder for TTL
-        optionBuilder.append(", MAX_LOOKBACK_AGE=" + tableLevelMaxLookback);
+        optionBuilder.append(", \"phoenix.max.lookback.age.seconds\" = " + tableLevelMaxLookback);
         if (columnEncoded) {
             optionBuilder.append(", COLUMN_ENCODED_BYTES=2");
         } else {
@@ -237,7 +237,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
 
             // increment by at least 2*maxlookback so that there are no updates within the
             // maxlookback window and no updates visible through the maxlookback window
-            injectEdge.incrementValue(2* tableLevelMaxLookback + 5);
+            injectEdge.incrementValue(2 * tableLevelMaxLookback * 1000L + 5);
             doMajorCompaction(tableName);
             CellCount expectedCellCount = new CellCount();
             for (int i = 0; i < rowCount; ++i) {
@@ -306,7 +306,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             updateColumn(conn, 3, ttlCol, true);
 
             // all the updates are within the maxlookback window
-            injectEdge.setValue(startTime + tableLevelMaxLookback);
+            injectEdge.setValue(startTime + tableLevelMaxLookback * 1000L);
             doMajorCompaction(tableName);
             CellCount expectedCellCount = new CellCount();
             for (int i = 0; i < rowCount; ++i) {
@@ -342,7 +342,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             actual = TestUtil.getRowCount(conn, tableName, true);
             assertEquals(rowCount - 1, actual);
             // all previous updates of the expired row fall out of maxlookback window
-            injectEdge.incrementValue(tableLevelMaxLookback+5);
+            injectEdge.incrementValue(tableLevelMaxLookback * 1000L + 5);
             // update another column not part of ttl expression
             // This is an update on an expired row, all the other columns will be masked but the
             // row is no longer masked since the ttl column is now null
@@ -366,7 +366,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             actual = TestUtil.getRowCount(conn, tableName, true);
             assertEquals(rowCount, actual);
             // no row versions in maxlookback
-            injectEdge.incrementValue(tableLevelMaxLookback + 5);
+            injectEdge.incrementValue(tableLevelMaxLookback * 1000L + 5);
             doMajorCompaction(tableName);
             // beyond max lookback all the DeleteColumn cells should be purged
             expectedCellCount.insertRow(dataRowPosToKey.get(0), 2);
@@ -376,8 +376,8 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testPhoenixRowTimestamp() throws Exception {
-        int ttl = 50;
-        // equivalent to a ttl of 50ms
+        int ttl = 50 * 1000;
+        // equivalent to a ttl of 50 sec
         String ttlExpression = String.format(
                 "TO_NUMBER(CURRENT_TIME()) - TO_NUMBER(PHOENIX_ROW_TIMESTAMP()) >= %d", ttl);
         createTable(ttlExpression);
@@ -411,7 +411,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             }
 
             // advance the time by more than maxlookbackwindow
-            injectEdge.incrementValue(tableLevelMaxLookback + 2);
+            injectEdge.incrementValue(tableLevelMaxLookback * 1000L + 2);
             doMajorCompaction(tableName);
             CellCount expectedCellCount = new CellCount();
             expectedCellCount.insertRow(dataRowPosToKey.get(1), 2);
@@ -464,7 +464,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
                 }
                 validateTable(conn, tableName, expectedCellCount, dataRowPosToKey.values());
                 // increment so that the delete markers are outside of max lookback
-                injectEdge.incrementValue(tableLevelMaxLookback + 1);
+                injectEdge.incrementValue(tableLevelMaxLookback * 1000L + 1);
                 doMajorCompaction(tableName);
                 for (int rowPosition : rowsToDelete) {
                     expectedCellCount.removeRow(dataRowPosToKey.get(rowPosition));
@@ -516,7 +516,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             }
 
             // advance the time by more than maxlookbackwindow
-            injectEdge.incrementValue(tableLevelMaxLookback + 2);
+            injectEdge.incrementValue(tableLevelMaxLookback * 1000L + 2);
             doMajorCompaction(tableName);
             CellCount expectedCellCount = new CellCount();
             expectedCellCount.insertRow(dataRowPosToKey.get(2), updatedCols.size() + 1);
@@ -587,8 +587,9 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             // now create the index async
             String indexName = generateUniqueName();
             String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
-            String indexDDL = String.format("create index %s on %s (%s) include (%s) async",
-                    indexName, fullDataTableName, "VAL1", ttlCol);
+            String indexDDL = String.format("create index %s on %s (%s) include (%s) async "
+                            + "\"phoenix.max.lookback.age.seconds\" = %d",
+                    indexName, fullDataTableName, "VAL1", ttlCol, tableLevelMaxLookback);
             conn.createStatement().execute(indexDDL);
             IndexTool it = IndexToolIT.runIndexTool(false, schemaName, tableName, indexName,
                     null, 0, IndexTool.IndexVerifyType.BEFORE);
@@ -624,7 +625,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             actual = TestUtil.getRowCountFromIndex(conn, fullDataTableName, fullIndexName);
             assertEquals(rowCount -(2+1), actual);
 
-            injectEdge.incrementValue(2*tableLevelMaxLookback + 5);
+            injectEdge.incrementValue(2 * tableLevelMaxLookback * 1000L + 5);
             doMajorCompaction(fullDataTableName);
             doMajorCompaction(fullIndexName);
 
@@ -822,6 +823,8 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             // now create the index async
             String indexName = generateUniqueName();
             String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
+            // Not setting table level max lookback explicitly on index table as physical table is
+            // same for data table and local index on data table
             String indexDDL = String.format("create local index %s on %s (%s) include (%s) async",
                     indexName, fullDataTableName, "VAL1", ttlCol);
             conn.createStatement().execute(indexDDL);
@@ -835,7 +838,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             actual = TestUtil.getRowCountFromIndex(conn, fullDataTableName, fullIndexName);
             assertEquals(rowCount -(2+1), actual);
 
-            injectEdge.incrementValue(2*tableLevelMaxLookback + 5);
+            injectEdge.incrementValue(2 * tableLevelMaxLookback * 1000L + 5);
             // local index tables rows are in a separate column family store and will be compacted
             doMajorCompaction(fullDataTableName);
 
@@ -978,8 +981,9 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
         String ddl = String.format("CREATE TABLE %s (ID BIGINT NOT NULL PRIMARY KEY, " +
                         "EVENT_TYPE CHAR(15), CREATED_TS TIMESTAMP) %s", tableName,
                 String.format(tableDDLOptions, ttlExpression));
-        String indexDDL = String.format("CREATE INDEX %s ON %s (EVENT_TYPE) INCLUDE(CREATED_TS)",
-                indexName, tableName);
+        String indexDDL = String.format("CREATE INDEX %s ON %s (EVENT_TYPE) INCLUDE(CREATED_TS) "
+                        + "\"phoenix.max.lookback.age.seconds\" = %d",
+                indexName, tableName, tableLevelMaxLookback);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute(ddl);
             conn.createStatement().execute(indexDDL);
@@ -1111,7 +1115,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
 
             // increment by at least 2*maxlookback so that there are no updates within the
             // maxlookback window and no updates visible through the maxlookback window
-            injectEdge.incrementValue(2* tableLevelMaxLookback + 5);
+            injectEdge.incrementValue(2 * tableLevelMaxLookback * 1000L + 5);
             doMajorCompaction(tableName);
             CellCount expectedCellCount = new CellCount();
             for (int i = 0; i < rowCount; ++i) {
@@ -1141,9 +1145,15 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(cdc_sql);
             populateTable(conn, rowCount);
             String schemaName = SchemaUtil.getSchemaNameFromFullName(tableName);
-            String cdcIndexName = SchemaUtil.getTableName(schemaName,
+            String cdcIndexName = CDCUtil.getCDCIndexName(cdcName);
+            String fullCdcIndexName = SchemaUtil.getTableName(schemaName,
                     CDCUtil.getCDCIndexName(cdcName));
-            PTable cdcIndex = ((PhoenixConnection) conn).getTableNoCache(cdcIndexName);
+            // Explicitly set table level max lookback on CDC index
+            String cdcIndexSetMaxLookbackDdl = String.format("ALTER INDEX %s ON %s ACTIVE SET "
+                    + "\"phoenix.max.lookback.age.seconds\" = %d",
+                    cdcIndexName, tableName, tableLevelMaxLookback);
+            conn.createStatement().execute(cdcIndexSetMaxLookbackDdl);
+            PTable cdcIndex = ((PhoenixConnection) conn).getTableNoCache(fullCdcIndexName);
             assertEquals(cdcIndex.getTTLExpression(), TTL_EXPRESSION_FOREVER);
 
             // get row count on base table no row should be masked
@@ -1151,16 +1161,16 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             assertEquals(rowCount, actual);
 
             // get raw row count on cdc index table
-            actual = TestUtil.getRawRowCount(conn, TableName.valueOf(cdcIndexName));
+            actual = TestUtil.getRawRowCount(conn, TableName.valueOf(fullCdcIndexName));
             assertEquals(rowCount, actual);
 
             // Advance time by the max lookback age. This will cause all rows in cdc index to expire
-            injectEdge.incrementValue(tableLevelMaxLookback + 2);
+            injectEdge.incrementValue(tableLevelMaxLookback * 1000L + 2);
 
             // Major compact the CDC index. This will remove all expired rows
-            TestUtil.doMajorCompaction(conn, cdcIndexName);
+            TestUtil.doMajorCompaction(conn, fullCdcIndexName);
             // get raw row count on cdc index table
-            actual = TestUtil.getRawRowCount(conn, TableName.valueOf(cdcIndexName));
+            actual = TestUtil.getRawRowCount(conn, TableName.valueOf(fullCdcIndexName));
             assertEquals(0, actual);
 
             // table should still have all the rows intact
@@ -1169,7 +1179,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
 
             String alterDDL = String.format("alter table %s set TTL='%s = %d'", tableName, ttlCol, 0);
             conn.createStatement().execute(alterDDL);
-            cdcIndex = ((PhoenixConnection) conn).getTableNoCache(cdcIndexName);
+            cdcIndex = ((PhoenixConnection) conn).getTableNoCache(fullCdcIndexName);
             assertEquals(cdcIndex.getTTLExpression(), TTL_EXPRESSION_FOREVER);
         }
     }
@@ -1221,10 +1231,11 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
         String indexName = "I_" + generateUniqueName();
         String tableName = schemaBuilder.getEntityTableName();
         String schema = SchemaUtil.getSchemaNameFromFullName(tableName);
-        String indexDDL = String.format("create index %s on %s (%s) include (%s)",
+        String indexDDL = String.format("create index %s on %s (%s) include (%s) "
+                        + "\"phoenix.max.lookback.age.seconds\" = %d",
                 indexName, tableName,
                 Joiner.on(",").join(indexedColumns),
-                Joiner.on(",").join(includedColumns));
+                Joiner.on(",").join(includedColumns), tableLevelMaxLookback);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute(indexDDL);
         }

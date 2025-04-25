@@ -120,10 +120,9 @@ message PTable {
   optional PTable transformingNewTable=51;
   optional bytes streamingTopicName=52;
   optional bytes indexWhere=53;
-  optional int64 maxLookbackAge = 54;
-  optional string CDCIncludeScopes=55;
-  optional bytes ttl = 56;
-  optional bytes rowKeyMatcher = 57;
+  optional string CDCIncludeScopes=54;
+  optional bytes ttl = 55;
+  optional bytes rowKeyMatcher = 56;
 }
 
 message EncodedCQCounter {

@@ -72,7 +72,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -242,7 +241,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         }
         // Create the following objects only for rebuilds by IndexTool
         hTableFactory = IndexWriterUtils.getDefaultDelegateHTableFactory(env);
-        maxLookBackInMills = MetaDataUtil.getMaxLookbackAge(config, ScanUtil.getMaxLookbackAgeFromScanAttribute(scan));
+        maxLookBackInMills = BaseScannerRegionObserverConstants.getMaxLookbackInMillis(config);
         rowCountPerTask = config.getInt(INDEX_VERIFY_ROW_COUNTS_PER_TASK_CONF_KEY,
                 DEFAULT_INDEX_VERIFY_ROW_COUNTS_PER_TASK);
 

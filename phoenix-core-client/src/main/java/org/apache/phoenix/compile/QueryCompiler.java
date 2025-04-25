@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.expression.function.PhoenixRowTimestampFunction;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.NamedTableNode;
@@ -87,17 +88,14 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ParseNodeUtil;
 import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
-import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.hadoop.conf.Configuration;
-
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
 
 /**
@@ -208,19 +206,9 @@ public class QueryCompiler {
         if (scn == null) {
             return;
         }
-        List<TableRef> involvedTables = resolver.getTables();
-        Long maxLookBackAgeInMillis = null;
-        for(TableRef tableRef: involvedTables) {
-            PTable table = tableRef.getTable();
-            if (maxLookBackAgeInMillis == null) {
-                maxLookBackAgeInMillis = table.getMaxLookbackAge();
-            }
-            else if (table.getMaxLookbackAge() != null) {
-                maxLookBackAgeInMillis = Long.min(maxLookBackAgeInMillis, table.getMaxLookbackAge());
-            }
-        }
-        Configuration conf = conn.getQueryServices().getConfiguration();
-        maxLookBackAgeInMillis = MetaDataUtil.getMaxLookbackAge(conf, maxLookBackAgeInMillis);
+        long maxLookBackAgeInMillis =
+            BaseScannerRegionObserverConstants.getMaxLookbackInMillis(
+                    conn.getQueryServices().getConfiguration());
         long now = EnvironmentEdgeManager.currentTimeMillis();
         if (maxLookBackAgeInMillis > 0 && now - maxLookBackAgeInMillis > scn){
             throw new SQLExceptionInfo.Builder(

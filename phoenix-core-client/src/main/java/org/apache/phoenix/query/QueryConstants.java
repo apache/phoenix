@@ -189,7 +189,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE;
 
 /**
  *
@@ -404,7 +403,6 @@ public interface QueryConstants {
             EXTERNAL_SCHEMA_ID + " VARCHAR, \n" +
             STREAMING_TOPIC_NAME + " VARCHAR, \n" +
             INDEX_WHERE + " VARCHAR, \n" +
-            MAX_LOOKBACK_AGE + " BIGINT, \n" +
             CDC_INCLUDE_TABLE + " VARCHAR, \n" +
             TTL + " VARCHAR, \n" +
             ROW_KEY_MATCHER + " VARBINARY_ENCODED, \n" +
