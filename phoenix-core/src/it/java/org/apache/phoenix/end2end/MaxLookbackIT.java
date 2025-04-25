@@ -126,11 +126,11 @@ public class MaxLookbackIT extends BaseTest {
     public void testTooLowSCNWithTableLevelMaxLookback() throws Exception {
         String dataTableName1 = generateUniqueName();
         StringBuilder optionBuilderForDataTable1 = new StringBuilder(optionBuilder);
-        optionBuilderForDataTable1.append("MAX_LOOKBACK_AGE="+((TABLE_LEVEL_MAX_LOOKBACK_AGE + 3) * 1000));
+        optionBuilderForDataTable1.append("MAX_LOOKBACK_AGE=" + (TABLE_LEVEL_MAX_LOOKBACK_AGE + 3));
         tableDDLOptions = optionBuilderForDataTable1.toString();
         createTable(dataTableName1);
         StringBuilder optionBuilderForDataTable2 = new StringBuilder(optionBuilder);
-        optionBuilderForDataTable2.append("MAX_LOOKBACK_AGE="+(TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000));
+        optionBuilderForDataTable2.append("MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK_AGE);
         String dataTableName2 = generateUniqueName();
         tableDDLOptions = optionBuilderForDataTable2.toString();
         createTable(dataTableName2);
@@ -235,7 +235,7 @@ public class MaxLookbackIT extends BaseTest {
     public void testRecentlyDeletedRowsNotCompactedAwayWithTableLevelMaxLookback() throws Exception {
         try(Connection conn = DriverManager.getConnection(getUrl())) {
             String dataTableName = generateUniqueName();
-            optionBuilder.append("MAX_LOOKBACK_AGE="+(TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000));
+            optionBuilder.append("MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK_AGE);
             tableDDLOptions = optionBuilder.toString();
             String indexName = generateUniqueName();
             createTable(dataTableName);
@@ -377,7 +377,7 @@ public class MaxLookbackIT extends BaseTest {
         ttl = 8;
         long maxLookbackAge = 12;
         optionBuilder.append("TTL=").append(ttl).append(", MAX_LOOKBACK_AGE=").
-                append(maxLookbackAge * 1000);
+                append(maxLookbackAge);
         tableDDLOptions = optionBuilder.toString();
         Configuration conf = getUtility().getConfiguration();
         //disable automatic memstore flushes
@@ -455,7 +455,7 @@ public class MaxLookbackIT extends BaseTest {
         ttl = 8;
         long maxLookbackAge = 12;
         optionBuilder.append("TTL=").append(ttl).append(", MAX_LOOKBACK_AGE=").
-                append(maxLookbackAge * 1000);
+                append(maxLookbackAge);
         tableDDLOptions = optionBuilder.toString();
         int delta = 1;
         Configuration conf = getUtility().getConfiguration();

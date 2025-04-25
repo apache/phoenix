@@ -1310,26 +1310,26 @@ public class ViewIT extends SplitSystemCatalogIT {
         try(Connection conn = DriverManager.getConnection(getUrl());
             Statement stmt = conn.createStatement()) {
             stmt.execute(createDdl);
-            assertEquals(maxLookbackAge, queryTableLevelMaxLookbackAge(fullTableName));
+            assertEquals((Long) (maxLookbackAge * 1000), queryTableLevelMaxLookbackAge(fullTableName));
             String childViewName = generateUniqueName();
             String fullChildViewName = SchemaUtil.getTableName(schemaName, childViewName);
             createDdl = "CREATE VIEW " + fullChildViewName + " AS SELECT * FROM " + fullTableName;
             stmt.execute(createDdl);
-            assertEquals(maxLookbackAge, queryTableLevelMaxLookbackAge(fullChildViewName));
+            assertEquals((Long) (maxLookbackAge * 1000), queryTableLevelMaxLookbackAge(fullChildViewName));
             String grandChildViewName = generateUniqueName();
             String fullGrandChildViewName = SchemaUtil.getTableName(schemaName, grandChildViewName);
             createDdl = "CREATE VIEW " + fullGrandChildViewName + " (col2 varchar) AS SELECT * FROM " + fullChildViewName;
             stmt.execute(createDdl);
-            assertEquals(maxLookbackAge, queryTableLevelMaxLookbackAge(fullGrandChildViewName));
+            assertEquals((Long) (maxLookbackAge * 1000), queryTableLevelMaxLookbackAge(fullGrandChildViewName));
             String childViewIndexName = generateUniqueName();
             createDdl = "CREATE INDEX " + childViewIndexName + " ON " + fullChildViewName + " (COL1)";
             stmt.execute(createDdl);
-            assertEquals(maxLookbackAge, queryTableLevelMaxLookbackAge(
+            assertEquals((Long) (maxLookbackAge * 1000), queryTableLevelMaxLookbackAge(
                     SchemaUtil.getTableName(schemaName, childViewIndexName)));
             String grandChildViewIndexName = generateUniqueName();
             createDdl = "CREATE INDEX " + grandChildViewIndexName + " ON " + fullGrandChildViewName + " (COL2)";
             stmt.execute(createDdl);
-            assertEquals(maxLookbackAge, queryTableLevelMaxLookbackAge(
+            assertEquals((Long) (maxLookbackAge * 1000), queryTableLevelMaxLookbackAge(
                     SchemaUtil.getTableName(schemaName, grandChildViewIndexName)));
         }
     }
