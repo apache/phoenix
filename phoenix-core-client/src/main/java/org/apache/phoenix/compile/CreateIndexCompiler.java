@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.compile;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.client.Scan;
@@ -32,6 +33,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.CreateIndexStatement;
+import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.StatelessTraverseAllParseNodeVisitor;
 import org.apache.phoenix.parse.SubqueryParseNode;
@@ -72,6 +74,10 @@ import java.sql.Timestamp;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+
+import static org.apache.phoenix.query.QueryServices.DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.SYSTEM_CATALOG_INDEXES_ENABLED;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SYSTEM_CATALOG_INDEXES_ENABLED;
 
 public class CreateIndexCompiler {
     private final PhoenixStatement statement;
@@ -230,6 +236,7 @@ public class CreateIndexCompiler {
     }
     public MutationPlan compile(final CreateIndexStatement create) throws SQLException {
         final PhoenixConnection connection = statement.getConnection();
+        verifyDataTable(connection, create.getTable());
         final ColumnResolver resolver
                 = FromCompiler.getResolverForCreateIndex(
                         create, connection, create.getUdfParseNodes());
@@ -277,5 +284,36 @@ public class CreateIndexCompiler {
             }
         	
         };
+    }
+
+    /**
+     * Helper method to validate CREATE INDEX statements on SYSTEM tables.
+     * 1. Pass if scheme name not provided, assumption is - it not a SYSTEM table.
+     * 2. Fail if SYSTEM_CATALOG_INDEXES_ENABLED not enabled
+     * 3. Fail if table other than SYSTEM.CATALOG
+     *
+     * @param connection
+     * @param table
+     * @throws SQLException
+     */
+    private void verifyDataTable(PhoenixConnection connection, NamedTableNode table) throws SQLException {
+        Configuration conf = connection.getQueryServices().getConfiguration();
+        boolean catalogIndexesEnabled = conf.getBoolean(SYSTEM_CATALOG_INDEXES_ENABLED, DEFAULT_SYSTEM_CATALOG_INDEXES_ENABLED);
+
+        TableName tableName = table.getName();
+        if (tableName.getSchemaName() == null) {
+            return;
+        }
+        if (tableName.getSchemaName().equalsIgnoreCase(PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME) &&
+                !catalogIndexesEnabled) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.SYSTEM_TABLE_INDEXES_NOT_ENABLED).
+                    build().buildException();
+        }
+
+        if (tableName.getSchemaName().equalsIgnoreCase(PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME) &&
+            !tableName.getTableName().equalsIgnoreCase(PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE)) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_INDEX_SYSTEM_TABLE).
+                    build().buildException();
+        }
     }
 }

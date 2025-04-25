@@ -146,6 +146,7 @@ import org.apache.phoenix.end2end.PhoenixRegionServerEndpointTestImpl;
 import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
@@ -649,6 +650,9 @@ public abstract class BaseTest {
         conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 2);
         conf.setInt(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY, 1);
         conf.setInt(GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, 0);
+        conf.set(IndexManagementUtil.WAL_EDIT_CODEC_CLASS_KEY,
+                "org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec");
+
         // This results in processing one row at a time in each next operation of the aggregate region
         // scanner, i.e.,  one row pages. In other words, 0ms page allows only one row to be processed
         // within one page; 0ms page is equivalent to one-row page

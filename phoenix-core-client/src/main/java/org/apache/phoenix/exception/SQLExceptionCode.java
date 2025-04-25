@@ -113,6 +113,10 @@ public enum SQLExceptionCode {
             " Index where clause cannot include a subquery."),
     CANNOT_EVALUATE_INDEX_WHERE(304, "23102",
             "Invalid index where clause. It cannot be evaluated on a data table row."),
+    SYSTEM_TABLE_INDEXES_NOT_ENABLED(305, "23103",
+            "Invalid index on table. Indexes on SYSTEM tables are not enabled."),
+    CANNOT_INDEX_SYSTEM_TABLE(306, "23104",
+            "Invalid index on table. SYSTEM Indexes can only be on SYSTEM.CATALOG table."),
     /**
      * Invalid Cursor State (errorcode 04, sqlstate 24)
      */
