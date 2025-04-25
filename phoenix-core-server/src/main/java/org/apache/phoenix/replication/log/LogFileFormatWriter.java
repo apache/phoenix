@@ -22,8 +22,6 @@ import java.io.Closeable;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-
-import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.hbase.io.compress.Compression;
 import org.apache.hadoop.io.compress.Compressor;
 import org.apache.phoenix.replication.util.CRC64;
@@ -40,7 +38,7 @@ public class LogFileFormatWriter implements Closeable {
 
     private LogFileWriterContext context;
     private LogFile.Codec.Encoder encoder;
-    private FSDataOutputStream output;
+    private SyncableDataOutput output;
     private ByteArrayOutputStream currentBlockBytes;
     private DataOutputStream blockDataStream;
     private boolean headerWritten = false;
@@ -56,9 +54,8 @@ public class LogFileFormatWriter implements Closeable {
 
     }
 
-    public void init(LogFileWriterContext context, FSDataOutputStream outputStream)
-            throws IOException {
-        this.output = outputStream;
+    public void init(LogFileWriterContext context, HDFSDataOutput output) throws IOException {
+        this.output = output;
         this.context = context;
         this.currentBlockBytes = new ByteArrayOutputStream();
         this.blockDataStream = new DataOutputStream(currentBlockBytes);
@@ -178,8 +175,8 @@ public class LogFileFormatWriter implements Closeable {
             // Closing the current block forces its header, data (potentially compressed),
             // and checksum into the outputStream buffer.
             closeBlock();
-            // Sync the underlying FSDataOutputStream as soon as we have finished.
-            output.hsync();
+            // Flush and sync the underlying output
+            output.sync();
             // Start a new block for subsequent appends.
             startBlock();
         }
@@ -225,7 +222,7 @@ public class LogFileFormatWriter implements Closeable {
         trailer.write(output);
         trailerWritten = true;
         try {
-            output.hsync();
+            output.sync();
         } catch (IOException e) {
             // Failed sync on trailer write isn't a fatal event.
             LOG.warn("Exception while syncing Log trailer", e);

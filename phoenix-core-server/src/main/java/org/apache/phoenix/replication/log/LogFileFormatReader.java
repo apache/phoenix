@@ -22,7 +22,6 @@ import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.hbase.io.compress.Compression;
 import org.apache.hadoop.io.compress.Decompressor;
 import org.apache.phoenix.replication.util.CRC64;
@@ -40,7 +39,7 @@ public class LogFileFormatReader implements Closeable {
 
     private LogFileReaderContext context;
     private LogFile.Codec.Decoder decoder;
-    private FSDataInputStream input;
+    private SeekableDataInput input;
     private LogFile.Header header;
     private LogFile.Trailer trailer = null;
     private long currentPosition = 0;
@@ -52,10 +51,9 @@ public class LogFileFormatReader implements Closeable {
 
     }
 
-    public void init(LogFileReaderContext context, FSDataInputStream inputStream)
-            throws IOException {
+    public void init(LogFileReaderContext context, SeekableDataInput input) throws IOException {
         this.context = context;
-        this.input = inputStream;
+        this.input = input;
         try {
             readAndValidateTrailer();
             trailerValidated = true;
@@ -69,7 +67,7 @@ public class LogFileFormatReader implements Closeable {
         this.decoder = null;
         // Seek to start of the file and read the header
         readHeader();
-        currentPosition = inputStream.getPos(); // Should be the offset of the first block
+        currentPosition = input.getPos(); // Should be the offset of the first block
     }
 
     private void readAndValidateTrailer() throws IOException {
@@ -90,11 +88,10 @@ public class LogFileFormatReader implements Closeable {
 
     private void readHeader() throws IOException {
         header = new LogFileHeader();
-        DataInputStream dataIn = new DataInputStream(input);
         // Seek to start of file
         input.seek(0);
         // Read header
-        header.readFields(dataIn);
+        header.readFields(input);
     }
 
     public LogFile.Record next(LogFile.Record reuse) throws IOException {
@@ -135,8 +132,7 @@ public class LogFileFormatReader implements Closeable {
             LogBlockHeader blockHeader = new LogBlockHeader();
             try {
                 // Read Header
-                DataInputStream dataIn = new DataInputStream(input);
-                blockHeader.readFields(dataIn);
+                blockHeader.readFields(input);
                 currentPosition = input.getPos(); // Position after block header
 
                 // Read Payload

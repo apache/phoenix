@@ -19,7 +19,6 @@ package org.apache.phoenix.replication.log;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,7 +33,6 @@ public class LogFileWriter implements LogFile.Writer {
 
     private LogFileWriterContext context;
     private LogFileFormatWriter writer;
-    private FSDataOutputStream output;
     private boolean closed = false;
 
     public LogFileWriter() {
@@ -48,11 +46,12 @@ public class LogFileWriter implements LogFile.Writer {
     @Override
     public void init(LogFileWriterContext context) throws IOException {
         this.context = context;
+        this.writer = new LogFileFormatWriter();
         // TODO: Handle stream creation with proper permissions and overwrite options based on
         // config. For now we overwrite.
-        this.output = context.getFileSystem().create(context.getFilePath(), true);
-        this.writer = new LogFileFormatWriter();  // Instantiate from conf when more than one
-        this.writer.init(context, output); // Pass context for codec, allocator etc.
+        this.writer.init(context, 
+            new HDFSDataOutput(context.getFileSystem().create(context.getFilePath(),
+                true)));
         LOG.debug("Initialized LogFileWriter for path {}", context.getFilePath());
     }
 
@@ -84,7 +83,7 @@ public class LogFileWriter implements LogFile.Writer {
                     + context.getFilePath());
             }
         }
-        if (output == null || writer == null) {
+        if (writer == null) {
             return 0; // Not initialized or already closed cleanly
         }
         // Return the current position for an open file being written
@@ -101,18 +100,6 @@ public class LogFileWriter implements LogFile.Writer {
             if (writer != null) {
                 writer.close();
             }
-        } catch (IOException e) {
-            LOG.error("Error closing LogFormatWriter for " + context.getFilePath(), e);
-            // Still attempt to close the underlying stream
-            if (output != null) {
-                try {
-                    output.close();
-                } catch (IOException nested) {
-                    LOG.error("Error closing output stream for " + context.getFilePath()
-                        + " after format writer close failed", nested);
-                }
-            }
-            throw e;
         } finally {
             closed = true;
             LOG.debug("Closed LogFileWriter for path {}", context.getFilePath());

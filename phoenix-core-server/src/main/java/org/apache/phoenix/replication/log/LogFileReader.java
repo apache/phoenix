@@ -34,7 +34,6 @@ public class LogFileReader implements LogFile.Reader  {
 
     private static final Logger LOG = LoggerFactory.getLogger(LogFileReader.class);
     private LogFileReaderContext context;
-    private FSDataInputStream input;
     private LogFileFormatReader reader;
     private LogFile.Record current;
     private boolean closed = false;
@@ -50,9 +49,8 @@ public class LogFileReader implements LogFile.Reader  {
     @Override
     public void init(LogFileReaderContext context) throws IOException {
         this.context = context;
-        this.input = context.getFileSystem().open(context.getFilePath());
         this.reader = new LogFileFormatReader(); // Instantiate from conf when more than one
-        this.reader.init(context, input);
+        this.reader.init(context, new FSDataInput(context.getFileSystem().open(context.getFilePath())));
         LOG.debug("Initialized LogFileReader for path {}", context.getFilePath());
     }
 

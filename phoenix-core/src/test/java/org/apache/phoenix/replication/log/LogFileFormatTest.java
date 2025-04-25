@@ -32,10 +32,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
-import org.apache.hadoop.fs.PositionedReadable;
-import org.apache.hadoop.fs.Seekable;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.junit.After;
 import org.junit.Before;
@@ -341,11 +338,10 @@ public class LogFileFormatTest {
         byte[] truncatedData = Arrays.copyOf(data, (int) trailerStartOffset);
 
         // Re-initialize reader with truncated data
-        PositionedByteArrayInputStream bais = new PositionedByteArrayInputStream(truncatedData);
-        FSDataInputStream fsis = new FSDataInputStream(bais);
+        PositionedByteArrayInputStream input = new PositionedByteArrayInputStream(truncatedData);
         readerContext.setFileSize(truncatedData.length);
         // This init should log a warning but succeed
-        reader.init(readerContext, fsis);
+        reader.init(readerContext, input);
 
         List<LogFile.Record> decoded = readRecords(reader);
 
@@ -364,14 +360,19 @@ public class LogFileFormatTest {
     }
 
     static class PositionedByteArrayInputStream extends ByteArrayInputStream
-            implements Seekable, PositionedReadable {
+            implements SeekableDataInput {
+
+        // A view of ourselves as a data input stream
+        private DataInputStream stream;
 
         public PositionedByteArrayInputStream(byte[] buf) {
             super(buf);
+            this.stream = new DataInputStream(this);
         }
 
         public PositionedByteArrayInputStream(byte[] buf, int offset, int length) {
             super(buf, offset, length);
+            this.stream = new DataInputStream(this);
         }
 
         @Override
@@ -469,6 +470,83 @@ public class LogFileFormatTest {
         public void readFully(long position, byte[] buffer) throws IOException {
             readFully(position, buffer, 0, buffer.length);
         }
+
+        @Override
+        public void readFully(byte[] b) throws IOException {
+            stream.readFully(b);
+        }
+
+        @Override
+        public void readFully(byte[] b, int off, int len) throws IOException {
+            stream.readFully(b, off, len);
+        }
+
+        @Override
+        public int skipBytes(int n) throws IOException {
+            return stream.skipBytes(n);
+        }
+
+        @Override
+        public boolean readBoolean() throws IOException {
+            return stream.readBoolean();
+        }
+
+        @Override
+        public byte readByte() throws IOException {
+            return stream.readByte();
+        }
+
+        @Override
+        public int readUnsignedByte() throws IOException {
+            return stream.readUnsignedByte();
+        }
+
+        @Override
+        public short readShort() throws IOException {
+            return stream.readShort();
+        }
+
+        @Override
+        public int readUnsignedShort() throws IOException {
+            return stream.readUnsignedShort();
+        }
+
+        @Override
+        public char readChar() throws IOException {
+            return stream.readChar();
+        }
+
+        @Override
+        public int readInt() throws IOException {
+            return stream.readInt();
+        }
+
+        @Override
+        public long readLong() throws IOException {
+            return stream.readLong();
+        }
+
+        @Override
+        public float readFloat() throws IOException {
+            return stream.readFloat();
+        }
+
+        @Override
+        public double readDouble() throws IOException {
+            return stream.readDouble();
+        }
+
+        @Override
+        @Deprecated
+        public String readLine() throws IOException {
+            return stream.readLine();
+        }
+
+        @Override
+        public String readUTF() throws IOException {
+            return stream.readUTF();
+        }
+
     }
 
     private int findBlockEndOffset(byte[] data, int startOffset) throws IOException {
@@ -510,13 +588,12 @@ public class LogFileFormatTest {
     }
 
     private void initLogFileReader(byte[] data) throws IOException {
-        FSDataInputStream fsis = new FSDataInputStream(new PositionedByteArrayInputStream(data));
         readerContext.setFileSize(data.length);
-        reader.init(readerContext, fsis);
+        reader.init(readerContext, new PositionedByteArrayInputStream(data));
     }
 
     private void initLogFileWriter() throws IOException {
-        FSDataOutputStream fsos = new FSDataOutputStream(writerDos, null) {
+        HDFSDataOutput output = new HDFSDataOutput(new FSDataOutputStream(writerDos, null) {
             @Override
             public long getPos() {
                 return writerDos.size();
@@ -529,8 +606,8 @@ public class LogFileFormatTest {
             public void hsync() throws IOException {
                 writerDos.flush();
             }
-        };
-        writer.init(writerContext, fsos);
+        });
+        writer.init(writerContext, output);
     }
 
 }
