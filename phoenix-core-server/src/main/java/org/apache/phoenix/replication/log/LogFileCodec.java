@@ -26,7 +26,12 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ByteBuffInputStream;
 import org.apache.hadoop.hbase.nio.ByteBuff;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -92,32 +97,37 @@ public class LogFileCodec implements LogFile.Codec {
             DataOutput recordOut = new DataOutputStream(currentRecord);
 
             // Write record fields
-            recordOut.writeByte(record.getMutationType().getCode());
-            byte[] nameBytes = record.getSchemaObjectName().getBytes(StandardCharsets.UTF_8);
+
+            Mutation mutation = record.getMutation();
+            LogFileRecord.MutationType mutationType = LogFileRecord.MutationType.get(mutation);
+            recordOut.writeByte(mutationType.getCode());
+            byte[] nameBytes = record.getHBaseTableName().getBytes(StandardCharsets.UTF_8);
             WritableUtils.writeVInt(recordOut, nameBytes.length);
             recordOut.write(nameBytes);
             WritableUtils.writeVLong(recordOut, record.getCommitId());
-            WritableUtils.writeVInt(recordOut, record.getRowKey().length);
-            recordOut.write(record.getRowKey());
-            recordOut.writeLong(record.getTimestamp());
+            byte[] rowKey = mutation.getRow();
+            WritableUtils.writeVInt(recordOut, rowKey.length);
+            recordOut.write(rowKey);
+            recordOut.writeLong(mutation.getTimestamp());
 
-            int colCount = record.getColumnCount();
+            Map<byte[], List<Cell>> familyMap = mutation.getFamilyCellMap();
+            int colCount = familyMap.size();
             WritableUtils.writeVInt(recordOut, colCount);
 
-            if (colCount > 0) {
-                for (Map.Entry<byte[], Map<byte[], byte[]>> entry : record.getColumnValues()) {
-                    byte[] colName = entry.getKey();
-                    Map<byte[], byte[]> column = entry.getValue();
-                    WritableUtils.writeVInt(recordOut, colName.length);
-                    recordOut.write(colName);
-                    WritableUtils.writeVInt(recordOut, column.size());
-                    for (Map.Entry<byte[],byte[]> qualValue : column.entrySet()) {
-                        byte[] qualName = qualValue.getKey();
-                        byte[] value = qualValue.getValue();
-                        WritableUtils.writeVInt(recordOut, qualName.length);
-                        recordOut.write(qualName);
-                        WritableUtils.writeVInt(recordOut, value.length);
-                        recordOut.write(value);
+            for (Map.Entry<byte[], List<Cell>> entry: familyMap.entrySet()) {
+                byte[] column = entry.getKey();
+                WritableUtils.writeVInt(recordOut, column.length);
+                recordOut.write(column);
+                List<Cell> cells = entry.getValue();
+                WritableUtils.writeVInt(recordOut, cells.size());
+                for (Cell cell: cells) {
+                    WritableUtils.writeVInt(recordOut, cell.getQualifierLength());
+                    recordOut.write(cell.getQualifierArray(), cell.getQualifierOffset(),
+                        cell.getQualifierLength());
+                    WritableUtils.writeVInt(recordOut, cell.getValueLength());
+                    if (cell.getValueLength() > 0) {
+                        recordOut.write(cell.getValueArray(), cell.getValueOffset(),
+                            cell.getValueLength());
                     }
                 }
             }
@@ -157,44 +167,83 @@ public class LogFileCodec implements LogFile.Codec {
                     current = new LogFileRecord();
                 } else {
                     current = (LogFileRecord) reuse;
-                    current.clearColumnValues(); // Reset collections
                 }
                 // Set the total serialized length on the record
                 current.setSerializedLength(recordDataLength);
-                current.setMutationType(LogFile.MutationType.codeToType(in.readByte()));
+
+                LogFileRecord.MutationType type =
+                    LogFileRecord.MutationType.codeToType(in.readByte());
 
                 int nameBytesLen = WritableUtils.readVInt(in);
                 byte nameBytes[] = new byte[nameBytesLen];
                 in.readFully(nameBytes);
-                current.setSchemaObjectName(Bytes.toString(nameBytes));
+
+                current.setHBaseTableName(Bytes.toString(nameBytes));
 
                 current.setCommitId(WritableUtils.readVLong(in));
 
                 int rowKeyLen = WritableUtils.readVInt(in);
                 byte[] rowKey = new byte[rowKeyLen];
                 in.readFully(rowKey);
-                current.setRowKey(rowKey);
 
-                current.setTimestamp(in.readLong());
+                Mutation mutation;
+                switch (type) {
+                    case PUT:
+                        mutation = new Put(rowKey);
+                        break;
+                    case DELETE:
+                    case DELETEFAMILYVERSION:
+                    case DELETECOLUMN:
+                    case DELETEFAMILY:
+                        mutation = new Delete(rowKey);
+                        break;
+                    default:
+                        throw new UnsupportedOperationException("Unhandled mutation type " + type);
+                }
+                current.setMutation(mutation);
+
+                long ts = in.readLong();
+                mutation.setTimestamp(ts);
 
                 int colCount = WritableUtils.readVInt(in);
                 for (int i = 0; i < colCount; i++) {
                     // Col name
-                    int colNameLen = WritableUtils.readVInt(in);
-                    byte[] colName = new byte[colNameLen];
-                    in.readFully(colName);
+                    int columnLen = WritableUtils.readVInt(in);
+                    byte[] column = new byte[columnLen];
+                    in.readFully(column);
                     // Qualifiers+Values Count
-                    int qualValuesCount = WritableUtils.readVInt(in);
-                    for (int j = 0; j < qualValuesCount; j++) {
+                    int valuesCount = WritableUtils.readVInt(in);
+                    for (int j = 0; j < valuesCount; j++) {
                         // Qualifier name
-                        int qualNameLen = WritableUtils.readVInt(in);
-                        byte[] qualName = new byte[qualNameLen];
-                        in.readFully(qualName);
+                        int qualLen = WritableUtils.readVInt(in);
+                        byte[] qual = new byte[qualLen];
+                        if (qualLen > 0) {
+                            in.readFully(qual);
+                        }
                         // Value
                         int valueLen = WritableUtils.readVInt(in);
                         byte[] value = new byte[valueLen];
-                        in.readFully(value);
-                        current.addColumnValue(colName, qualName, value);
+                        if (valueLen > 0) {
+                            in.readFully(value);
+                        }
+                        switch (type) {
+                            case PUT:
+                                ((Put)mutation).addColumn(column, qual, ts, value);
+                                break;
+                            case DELETE:
+                            case DELETECOLUMN:
+                                ((Delete)mutation).addColumn(column, qual, ts);
+                                break;
+                            case DELETEFAMILYVERSION:
+                                ((Delete)mutation).addFamilyVersion(column, ts);
+                                break;
+                            case DELETEFAMILY:
+                                ((Delete)mutation).addFamily(column);
+                                break;
+                            default:
+                                throw new UnsupportedOperationException(
+                                    "Unhandled mutation type " + type);
+                        }
                     }
                 }
 

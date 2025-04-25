@@ -37,7 +37,6 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.PositionedReadable;
 import org.apache.hadoop.fs.Seekable;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -79,8 +78,8 @@ public class LogFileFormatTest {
     @Test
     public void testLogFileFormatSingleBlock() throws IOException {
         initLogFileWriter();
-        LogFile.Record r1 = newRecord("TBL1", 1L, "row1", 10L, 1);
-        LogFile.Record r2 = newRecord("TBL1", 2L, "row2", 11L, 1);
+        LogFile.Record r1 = LogFileTestUtil.newPutRecord("TBL1", 1L, "row1", 10L, 1);
+        LogFile.Record r2 = LogFileTestUtil.newPutRecord("TBL1", 2L, "row2", 11L, 1);
 
         writer.append(r1);
         writer.append(r2);
@@ -96,11 +95,11 @@ public class LogFileFormatTest {
 
         LogFile.Record decoded1 = reader.next(null);
         assertNotNull("First record should not be null", decoded1);
-        assertEquals("First record mismatch", r1, decoded1);
+        LogFileTestUtil.assertRecordEquals("First record mismatch", r1, decoded1);
 
         LogFile.Record decoded2 = reader.next(null);
         assertNotNull("Second record should not be null", decoded2);
-        assertEquals("Second record mismatch", r2, decoded2);
+        LogFileTestUtil.assertRecordEquals("Second record mismatch", r2, decoded2);
 
         assertNull("Should be no more records", reader.next(null));
 
@@ -124,7 +123,7 @@ public class LogFileFormatTest {
         // This has the nice property of writing a large number of blocks compared with the other
         // tests in this unit.
         for (int i = 0; i < 100_000; i++) {
-            LogFile.Record r = newRecord("TBLMULTI", (long)i, "row" + i, 100L + i, 2);
+            LogFile.Record r = LogFileTestUtil.newPutRecord("TBLMULTI", i, "row" + i, 10L + i, 2);
             originals.add(r);
             writer.append(r);
         }
@@ -141,7 +140,8 @@ public class LogFileFormatTest {
 
         assertEquals("Number of records mismatch", originals.size(), decoded.size());
         for (int i = 0; i < originals.size(); i++) {
-            assertEquals("Record " + i + " mismatch", originals.get(i), decoded.get(i));
+            LogFileTestUtil.assertRecordEquals("Record " + i + " mismatch", originals.get(i),
+                decoded.get(i));
         }
 
         LogFile.Trailer trailer = reader.getTrailer();
@@ -196,13 +196,13 @@ public class LogFileFormatTest {
         assertEquals("Should read records from block 1 and 3", shouldHave, have);
         // Verify first block records
         for (int i = 0; i < block1Records.size(); i++) {
-            assertEquals("Block 1 record " + i + " mismatch", block1Records.get(i),
-                decoded.get(i));
+            LogFileTestUtil.assertRecordEquals("Block 1 record " + i + " mismatch",
+                block1Records.get(i), decoded.get(i));
         }
         // Verify third block records (offset by block1 size)
         for (int i = 0; i < block3Records.size(); i++) {
-            assertEquals("Block 3 record " + i + " mismatch", block3Records.get(i),
-                decoded.get(i + block1Records.size()));
+            LogFileTestUtil.assertRecordEquals("Block 3 record " + i + " mismatch",
+                block3Records.get(i), decoded.get(i + block1Records.size()));
         }
 
         assertEquals("Should have skipped 1 corrupt block", 1,
@@ -235,13 +235,13 @@ public class LogFileFormatTest {
         assertEquals("Should read records from block 1 and 3", shouldHave, have);
         // Verify first block records
         for (int i = 0; i < block1Records.size(); i++) {
-            assertEquals("Block 1 record " + i + " mismatch", block1Records.get(i),
-                decoded.get(i));
+            LogFileTestUtil.assertRecordEquals("Block 1 record " + i + " mismatch",
+                block1Records.get(i), decoded.get(i));
         }
         // Verify third block records (offset by block1 size)
         for (int i = 0; i < block3Records.size(); i++) {
-            assertEquals("Block 3 record " + i + " mismatch", block3Records.get(i),
-                decoded.get(i + block1Records.size()));
+            LogFileTestUtil.assertRecordEquals("Block 3 record " + i + " mismatch",
+                block3Records.get(i), decoded.get(i + block1Records.size()));
         }
 
         assertEquals("Should have skipped 1 corrupt block", 1,
@@ -273,13 +273,13 @@ public class LogFileFormatTest {
         assertEquals("Should read records from block 1 and 3", shouldHave, have);
         // Verify first block records
         for (int i = 0; i < block1Records.size(); i++) {
-            assertEquals("Block 1 record " + i + " mismatch", block1Records.get(i),
-                decoded.get(i));
+            LogFileTestUtil.assertRecordEquals("Block 1 record " + i + " mismatch",
+                block1Records.get(i), decoded.get(i));
         }
         // Verify third block records (offset by block1 size)
         for (int i = 0; i < block3Records.size(); i++) {
-            assertEquals("Block 3 record " + i + " mismatch", block3Records.get(i),
-                decoded.get(i + block1Records.size()));
+            LogFileTestUtil.assertRecordEquals("Block 3 record " + i + " mismatch",
+                block3Records.get(i), decoded.get(i + block1Records.size()));
         }
 
         assertEquals("Should have skipped 1 corrupt block", 1,
@@ -316,8 +316,8 @@ public class LogFileFormatTest {
         assertEquals("Should read records only from block 1", block1Records.size(),
             decoded.size());
         for (int i = 0; i < block1Records.size(); i++) {
-            assertEquals("Block 1 record " + i + " mismatch", block1Records.get(i),
-                decoded.get(i));
+            LogFileTestUtil.assertRecordEquals("Block 1 record " + i + " mismatch",
+                block1Records.get(i), decoded.get(i));
         }
 
         // Depending on where the truncation happens, the block might be detected as corrupt or
@@ -351,8 +351,8 @@ public class LogFileFormatTest {
 
         assertEquals("Should read all records from block 1", block1Records.size(), decoded.size());
         for (int i = 0; i < block1Records.size(); i++) {
-            assertEquals("Block 1 record " + i + " mismatch", block1Records.get(i),
-                decoded.get(i));
+            LogFileTestUtil.assertRecordEquals("Block 1 record " + i + " mismatch",
+                block1Records.get(i), decoded.get(i));
         }
 
         assertNull("Trailer should be null", reader.getTrailer());
@@ -471,30 +471,6 @@ public class LogFileFormatTest {
         }
     }
 
-    private void initLogFileReader(byte[] data) throws IOException {
-        FSDataInputStream fsis = new FSDataInputStream(new PositionedByteArrayInputStream(data));
-        readerContext.setFileSize(data.length);
-        reader.init(readerContext, fsis);
-    }
-
-    private void initLogFileWriter() throws IOException {
-        FSDataOutputStream fsos = new FSDataOutputStream(writerDos, null) {
-            @Override
-            public long getPos() {
-                return writerDos.size();
-            }
-            @Override
-            public void hflush() throws IOException {
-                writerDos.flush();
-            }
-            @Override
-            public void hsync() throws IOException {
-                writerDos.flush();
-            }
-        };
-        writer.init(writerContext, fsos);
-    }
-
     private int findBlockEndOffset(byte[] data, int startOffset) throws IOException {
         ByteArrayInputStream bais = new ByteArrayInputStream(data);
         DataInputStream dis = new DataInputStream(bais);
@@ -518,12 +494,12 @@ public class LogFileFormatTest {
         return decoded;
     }
 
-    private List<LogFile.Record> writeBlock(LogFileFormatWriter writer, String tablePrefix,
+    private List<LogFile.Record> writeBlock(LogFileFormatWriter writer, String table,
             long startCommitId, int numRecords) throws IOException {
         List<LogFile.Record> records = new ArrayList<>();
         for (int i = 0; i < numRecords; i++) {
-            LogFile.Record r = newRecord(tablePrefix, startCommitId + i, "row" + (startCommitId + i),
-                1000L + i, 1);
+            LogFile.Record r = LogFileTestUtil.newPutRecord(table, startCommitId + i,
+                "row" + (startCommitId + i), 10L + i, 1);
             records.add(r);
             writer.append(r);
         }
@@ -533,20 +509,28 @@ public class LogFileFormatTest {
         return records;
     }
 
-    private LogFile.Record newRecord(String table, long commitId, String rowKey, long ts,
-            int numCols) {
-        final byte[] qualifier = Bytes.toBytes("q");
-        LogFile.Record record = new LogFileRecord()
-            .setMutationType(LogFile.MutationType.PUT)
-            .setSchemaObjectName(table)
-            .setCommitId(commitId)
-            .setRowKey(Bytes.toBytes(rowKey))
-            .setTimestamp(ts);
-        for (int i = 0; i < numCols; i++) {
-            record.addColumnValue(Bytes.toBytes("col" + i), qualifier,
-                Bytes.toBytes("v" + i + "_" + rowKey));
-        }
-        return record;
+    private void initLogFileReader(byte[] data) throws IOException {
+        FSDataInputStream fsis = new FSDataInputStream(new PositionedByteArrayInputStream(data));
+        readerContext.setFileSize(data.length);
+        reader.init(readerContext, fsis);
+    }
+
+    private void initLogFileWriter() throws IOException {
+        FSDataOutputStream fsos = new FSDataOutputStream(writerDos, null) {
+            @Override
+            public long getPos() {
+                return writerDos.size();
+            }
+            @Override
+            public void hflush() throws IOException {
+                writerDos.flush();
+            }
+            @Override
+            public void hsync() throws IOException {
+                writerDos.flush();
+            }
+        };
+        writer.init(writerContext, fsos);
     }
 
 }

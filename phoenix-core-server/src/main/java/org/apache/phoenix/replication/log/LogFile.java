@@ -22,11 +22,9 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Map;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.compress.Compression;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -279,30 +277,30 @@ public interface LogFile {
     /** Represents a single logical change */
     interface Record {
         /**
-         * Gets the type of mutation this record represents (e.g., PUT, DELETE).
-         * @return The MutationType.
+         * Gets the mutation this record represents.
+         * @return The Mutation.
          */
-        MutationType getMutationType();
+        Mutation getMutation();
 
         /**
-         * Sets the type of mutation this record represents.
-         * @param mutationType The MutationType to set.
+         * Sets the mutation this record represents.
+         * @param mutation The Mutation to set.
          * @return This Record instance for chaining.
          */
-        Record setMutationType(MutationType mutationType);
+        Record setMutation(Mutation mutation);
 
         /**
-         * Gets the name of the schema object (e.g., table or view name) this record pertains to.
-         * @return The schema object name.
+         * Gets the name of the HBase table this record pertains to.
+         * @return The HBase table name.
          */
-        String getSchemaObjectName();
+        String getHBaseTableName();
 
         /**
-         * Sets the name of the schema object this record pertains to.
-         * @param schemaObjectName The schema object name to set.
+         * Sets the name of the HBase table this record pertains to.
+         * @param tabletName The HBase table name to set.
          * @return This Record instance for chaining.
          */
-        Record setSchemaObjectName(String schemaObjectName);
+        Record setHBaseTableName(String tableName);
 
         /**
          * Gets the commit ID or System Change Number (SCN) associated with this record.
@@ -318,60 +316,6 @@ public interface LogFile {
         Record setCommitId(long commitId);
 
         /**
-         * Gets the row key for the mutation represented by this record.
-         * @return The row key as a byte array.
-         */
-        byte[] getRowKey();
-
-        /**
-         * Sets the row key for the mutation represented by this record.
-         * @param rowKey The row key byte array to set.
-         * @return This Record instance for chaining.
-         */
-        Record setRowKey(byte[] rowKey);
-
-        /**
-         * Gets the timestamp associated with the mutation in this record.
-         * @return The timestamp (typically milliseconds since epoch).
-         */
-        long getTimestamp();
-
-        /**
-         * Sets the timestamp for the mutation in this record.
-         * @param timestamp The timestamp to set.
-         * @return This Record instance for chaining.
-         */
-        Record setTimestamp(long timestamp);
-
-        /**
-         * Gets the number of columns included in this record's mutation data.
-         * @return The count of columns.
-         */
-        int getColumnCount();
-
-        /**
-         * Gets an iterable view of the column name + column qualifier to value mappings for this
-         * record. The underlying collection should not be modified via this iterable.
-         * @return An iterable of Map entries representing column names and their values.
-         */
-        Iterable<Map.Entry<byte[], Map<byte[], byte[]>>> getColumnValues();
-
-        /**
-         * Adds a column+qualifier and its corresponding value to this record.
-         * @param family The family as a byte array.
-         * @param qualifier The qualifier as a byte array.
-         * @param value The value of the column as a byte array.
-         * @return This Record instance for chaining.
-         */
-        Record addColumnValue(byte[] family, byte[] qualifier, byte[] value);
-
-        /**
-         * Removes all column name/value pairs currently stored in this record.
-         * @return This Record instance for chaining.
-         */
-        Record clearColumnValues();
-
-        /**
          * Gets the total serialized length of this record in bytes, including any length prefixes
          * used by the codec. This value should be set by the codec after writing or reading.
          * @return The total serialized length of the record.
@@ -384,81 +328,6 @@ public interface LogFile {
          * @return This Record instance for chaining.
          */
         Record setSerializedLength(int serializedLength);
-
-        // Helper methods for converting between Records and HBase Mutations
-
-        /**
-         * Builds a Record from an HBase Mutation. Assumes the mutation contains cells
-         * relevant to a single logical operation at a specific timestamp.
-         * @param schemaObjectName The schema object name
-         * @param commitId The commit identifier
-         * @param mutation The HBase Mutation (Put or Delete).
-         * @return The corresponding Record instance.
-         * @throws IllegalArgumentException if the mutation type is unsupported.
-         */
-        static Record fromHBaseMutation(String schemaObjectName, long commitId, Mutation mutation) {
-            return LogFileRecord.fromHBaseMutation(schemaObjectName, mutation, commitId);
-        }
-
-       /**
-         * Builds an HBase mutation, given a Record.
-         * @param mutation The Record instance.
-         * @return The HBase Mutation
-         */
-        static Mutation toHBaseMutation(Record record) {
-            if (record == null) {
-                return null;
-            }
-            return LogFileRecord.toHBaseMutation(record);
-        }
-    }
-
-    /**
-     * Defines the types of mutations that can be stored in a Record.
-     * Mirrors relevant parts of HBase Cell.Type.
-     */
-    enum MutationType {
-        PUT((byte) 4),
-        DELETE((byte) 8),                 // Delete for entire row at specified ts
-        DELETE_COLUMN((byte) 12),         // Delete for specific column at specified ts
-        DELETE_FAMILY((byte) 14),         // Delete for entire column family at specified ts
-        DELETE_FAMILY_VERSION((byte) 10); // Delete for specific column family version
-
-        private final byte code;
-
-        MutationType(byte code) {
-            this.code = code;
-        }
-
-        public byte getCode() {
-            return code;
-        }
-
-        public static MutationType codeToType(byte code) {
-            for (MutationType t : values()) {
-                if (t.code == code) {
-                    return t;
-                }
-            }
-            throw new IllegalArgumentException("Unknown MutationType code: " + code);
-        }
-
-        public static MutationType fromHBaseCellType(Cell.Type type) {
-            switch (type) {
-                case Put:
-                    return PUT;
-                case Delete:
-                    return DELETE;
-                case DeleteColumn:
-                    return DELETE_COLUMN;
-                case DeleteFamily:
-                    return DELETE_FAMILY;
-                case DeleteFamilyVersion:
-                    return DELETE_FAMILY_VERSION;
-                default:
-                    throw new IllegalArgumentException("Unsupported MutationType: " + type);
-            }
-        }
     }
 
     /** Interface for writing replication logs */
@@ -472,12 +341,12 @@ public interface LogFile {
 
         /**
          * Appends an HBase mutation to the log file. The log record may be buffered internally.
-         * @param schemaObjectName The schema object name
+         * @param tableName The HBase table name
          * @param commitId The commit identifier
          * @param mutation The mutation to append.
          * @throws IOException if an I/O error occurs during append.
          */
-        void append(String schemaObjectName, long commitId, Mutation mutation) throws IOException;
+        void append(String tableName, long commitId, Mutation mutation) throws IOException;
 
         /**
          * Flushes any buffered data to the underlying storage and ensures it is durable

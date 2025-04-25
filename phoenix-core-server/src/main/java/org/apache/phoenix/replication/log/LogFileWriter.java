@@ -57,11 +57,12 @@ public class LogFileWriter implements LogFile.Writer {
     }
 
     @Override
-    public void append(String schemaObjectName, long commitId, Mutation mutation) throws IOException {
+    public void append(String tableName, long commitId, Mutation mutation) throws IOException {
         if (closed) {
             throw new IOException("Writer has been closed");
-        }
-        writer.append(LogFile.Record.fromHBaseMutation(schemaObjectName, commitId, mutation));
+        }        
+        writer.append(new LogFileRecord().setHBaseTableName(tableName).setCommitId(commitId)
+            .setMutation(mutation));
     }
 
     @Override

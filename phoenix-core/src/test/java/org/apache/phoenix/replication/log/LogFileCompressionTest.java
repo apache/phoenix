@@ -32,9 +32,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.compress.Compression;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -124,7 +122,7 @@ public class LogFileCompressionTest {
         initLogFileWriter(LogFileWriterContext.DEFAULT_LOGFILE_BLOCK_SIZE);
         List<Mutation> originals = new ArrayList<>();
         for (int i = 0; i < 100; i++) {
-            Mutation mutation = newPut("row" + i, 100L + i, 2);
+            Mutation mutation = LogFileTestUtil.newPut("row" + i, 100L + i, 2);
             originals.add(mutation);
             writer.append("TBL1", i, mutation);
         }
@@ -141,7 +139,7 @@ public class LogFileCompressionTest {
         List<Mutation> originals = new ArrayList<>();
         // Generate enough records to span multiple blocks
         for (int i = 0; i < 100_000; i++) {
-            Mutation mutation = newPut("row" + i, 200L + i, 5);
+            Mutation mutation = LogFileTestUtil.newPut("row" + i, 200L + i, 5);
             originals.add(mutation);
             writer.append("TBL_MULTI", i, mutation);
         }
@@ -161,23 +159,7 @@ public class LogFileCompressionTest {
         reader.close();
     }
 
-    private void initLogFileReader() throws IOException {
-        readerContext = new LogFileReaderContext(conf)
-            .setFileSystem(localFs)
-            .setFilePath(filePath);
-        reader.init(readerContext);
-    }
-
-    private void initLogFileWriter(long maxBlockSize) throws IOException {
-        writerContext = new LogFileWriterContext(conf)
-            .setCompression(compression)
-            .setFileSystem(localFs)
-            .setFilePath(filePath)
-            .setMaxBlockSize(maxBlockSize);
-        writer.init(writerContext);
-    }
-
-    private void readAndVerifyRecords(List<Mutation> origina, long expectedBlockCount)
+    private void readAndVerifyRecords(List<Mutation> originals, long expectedBlockCount)
             throws IOException {
         assertTrue("Test file does not exist: " + filePath, localFs.exists(filePath));
         assertTrue("Test file has zero length: " + filePath,
@@ -195,16 +177,17 @@ public class LogFileCompressionTest {
         }
 
         // Verify Records
-        assertEquals("Number of decoded records mismatch", origina.size(),
+        assertEquals("Number of decoded records mismatch", originals.size(),
             decoded.size());
-        for (int i = 0; i < origina.size(); i++) {
-            assertMutationEquals("Record " + i + " mismatch", origina.get(i), decoded.get(i));
+        for (int i = 0; i < originals.size(); i++) {
+            LogFileTestUtil.assertMutationEquals("Record " + i + " mismatch", originals.get(i),
+                decoded.get(i));
         }
 
         // Verify Trailer
         LogFile.Trailer trailer = reader.getTrailer();
         assertNotNull("Trailer should not be null", trailer);
-        assertEquals("Trailer record count mismatch", origina.size(),
+        assertEquals("Trailer record count mismatch", originals.size(),
             trailer.getRecordCount());
         assertEquals("Trailer block count mismatch", expectedBlockCount,
             trailer.getBlockCount());
@@ -218,25 +201,16 @@ public class LogFileCompressionTest {
             readerContext.getCorruptBlocksSkipped());
     }
 
-    private Mutation newPut(String rowKey, long ts, int numCols) {
-        final byte[] qualifier = Bytes.toBytes("q");
-        Put put = new Put(Bytes.toBytes(rowKey));
-        put.setTimestamp(ts);
-        for (int i = 0; i < numCols; i++) {
-            put.addColumn(Bytes.toBytes("col" + i), qualifier, ts,
-                Bytes.toBytes("v" + i + "_" + rowKey));
-        }
-        return put;
+    private void initLogFileReader() throws IOException {
+        readerContext = new LogFileReaderContext(conf).setFileSystem(localFs)
+            .setFilePath(filePath);
+        reader.init(readerContext);
     }
 
-    static void assertMutationEquals(String message, Mutation m1, Mutation m2) throws AssertionError {
-        try {
-            if (!m1.toJSON().equals(m2.toJSON())) {
-                throw new AssertionError(message);
-            }
-        } catch (IOException e) {
-            throw new AssertionError(e.getMessage());
-        }
+    private void initLogFileWriter(long maxBlockSize) throws IOException {
+        writerContext = new LogFileWriterContext(conf).setCompression(compression)
+            .setFileSystem(localFs).setFilePath(filePath).setMaxBlockSize(maxBlockSize);
+        writer.init(writerContext);
     }
 
 }

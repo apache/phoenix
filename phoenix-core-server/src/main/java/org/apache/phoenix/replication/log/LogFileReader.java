@@ -62,7 +62,12 @@ public class LogFileReader implements LogFile.Reader  {
             throw new IOException("LogFileReader has been closed");
         }
         current = reader.next(current);
-        return LogFile.Record.toHBaseMutation(current);
+        if (current == null) {
+            return null;
+        }
+        // NOTE: We don't currently do anything with the Record's table name or commit id, but may
+        // some day.
+        return current.getMutation();
     }
 
     @Override
