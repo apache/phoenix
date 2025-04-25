@@ -85,6 +85,7 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THRESHOLD_MILLISECONDS;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SYSTEM_CATALOG_INDEXES_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TIMEOUT_DURING_UPGRADE_MS;
 import static org.apache.phoenix.util.UpgradeUtil.addParentToChildLinks;
 import static org.apache.phoenix.util.UpgradeUtil.addViewIndexToParentLinks;
@@ -1352,10 +1353,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
             // TODO: better encapsulation for this
             // Since indexes can't have indexes, don't install our indexing coprocessor for indexes.
-            // Also don't install on the SYSTEM.CATALOG and SYSTEM.STATS table because we use
+            // Also don't install on the SYSTEM.STATS table because we use
             // all-or-none mutate class which break when this coprocessor is installed (PHOENIX-1318).
+            // With PHOENIX-7107 which introduced indexes on SYSTEM.CATALOG we need to install the
+            // indexing coprocessor on SYSTEM.CATALOG
             if ((tableType != PTableType.INDEX && tableType != PTableType.VIEW && !isViewIndex)
-                    && !SchemaUtil.isMetaTable(tableName)
                     && !SchemaUtil.isStatsTable(tableName)) {
                 if (isTransactional) {
                     if (!newDesc.hasCoprocessor(QueryConstants.PHOENIX_TRANSACTIONAL_INDEXER_CLASSNAME)) {
@@ -1785,8 +1787,26 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             TableDescriptorBuilder newDesc = generateTableDescriptor(physicalTableName, parentPhysicalTableName, existingDesc, tableType, props, families,
                     splits, isNamespaceMapped);
 
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug("ensureTableCreated " +
+                                "physicalTableName = {}, " +
+                                "parentPhysicalTableName = {}, " +
+                                "isUpgradeRequired = {}, " +
+                                "isAutoUpgradeEnabled = {}, " +
+                                "isDoNotUpgradePropSet = {}, " +
+                                "isNamespaceMapped = {}, " +
+                                "createdNamespace = {}",
+                        Bytes.toString(physicalTableName),
+                        Bytes.toString(parentPhysicalTableName),
+                        isUpgradeRequired(),
+                        isAutoUpgradeEnabled,
+                        isDoNotUpgradePropSet,
+                        isNamespaceMapped,
+                        createdNamespace);
+            }
+
             if (!tableExist) {
-                if (SchemaUtil.isSystemTable(physicalTableName) && !isUpgradeRequired() && (!isAutoUpgradeEnabled || isDoNotUpgradePropSet)) {
+                if (SchemaUtil.isSystemTable(physicalTableName) && (tableType == PTableType.TABLE || tableType == PTableType.SYSTEM) && !isUpgradeRequired() && (!isAutoUpgradeEnabled || isDoNotUpgradePropSet)) {
                     // Disallow creating the SYSTEM.CATALOG or SYSTEM:CATALOG HBase table
                     throw new UpgradeRequiredException();
                 }
