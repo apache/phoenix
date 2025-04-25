@@ -41,6 +41,7 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
         rs.next();
         assertSubBinary(b21, rs.getBytes(1), 0, 3);
         assertSubBinary(b22, rs.getBytes(2), 0, 4);
+        Assert.assertFalse(rs.next());
 
         rs = conn.createStatement().executeQuery("SELECT SUBBINARY(BIN_PK, 2), SUBBINARY(BIN_COL, 5) FROM " + tableName);
         rs.next();
@@ -49,6 +50,7 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
         rs.next();
         assertSubBinary(b21, rs.getBytes(1), 1, 3);
         assertSubBinary(b22, rs.getBytes(2), 4, 4);
+        Assert.assertFalse(rs.next());
 
         rs = conn.createStatement().executeQuery("SELECT SUBBINARY(BIN_PK, -3, 2), SUBBINARY(BIN_COL, -6, 3) FROM " + tableName);
         rs.next();
@@ -57,6 +59,7 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
         rs.next();
         assertSubBinary(b21, rs.getBytes(1), 1, 2);
         assertSubBinary(b22, rs.getBytes(2), 2, 3);
+        Assert.assertFalse(rs.next());
 
         rs = conn.createStatement().executeQuery("SELECT SUBBINARY(BIN_PK, -1), SUBBINARY(BIN_COL, -3) FROM " + tableName);
         rs.next();
@@ -65,12 +68,14 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
         rs.next();
         assertSubBinary(b21, rs.getBytes(1), 3, 1);
         assertSubBinary(b22, rs.getBytes(2), 5, 3);
+        Assert.assertFalse(rs.next());
 
         PreparedStatement stmt2 = conn.prepareStatement("SELECT id FROM " + tableName + " WHERE SUBBINARY(BIN_COL, 2, 6) = ?");
         stmt2.setBytes(1, new byte[] {55, 0, 19, -5, -34, 0});
         rs = stmt2.executeQuery();
         Assert.assertTrue(rs.next());
         Assert.assertEquals(2, rs.getInt(1));
+        Assert.assertFalse(rs.next());
     }
 
     @Test
@@ -101,6 +106,7 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
         rs.next();
         assertSubBinary(b21, rs.getBytes(1), 0, 4);
         assertSubBinary(b22, rs.getBytes(2), 0, 3);
+        Assert.assertFalse(rs.next());
 
         rs = conn.createStatement().executeQuery("SELECT SUBBINARY(BIN_PK, 5), SUBBINARY(BIN_COL, 7) FROM " + tableName);
         rs.next();
@@ -109,6 +115,7 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
         rs.next();
         assertSubBinary(b21, rs.getBytes(1), 4, 6);
         assertSubBinary(b22, rs.getBytes(2), 6, 4);
+        Assert.assertFalse(rs.next());
 
         rs = conn.createStatement().executeQuery("SELECT SUBBINARY(BIN_PK, -4, 3), SUBBINARY(BIN_COL, -3, 1) FROM " + tableName);
         rs.next();
@@ -117,6 +124,7 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
         rs.next();
         assertSubBinary(b21, rs.getBytes(1), 6, 3);
         assertSubBinary(b22, rs.getBytes(2), 7, 1);
+        Assert.assertFalse(rs.next());
 
         rs = conn.createStatement().executeQuery("SELECT SUBBINARY(BIN_PK, -2), SUBBINARY(BIN_COL, -2) FROM " + tableName);
         rs.next();
@@ -125,12 +133,14 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
         rs.next();
         assertSubBinary(b21, rs.getBytes(1), 8, 2);
         assertSubBinary(b22, rs.getBytes(2), 8, 2);
+        Assert.assertFalse(rs.next());
 
         PreparedStatement stmt2 = conn.prepareStatement("SELECT id FROM " + tableName + " WHERE SUBBINARY(BIN_COL, 2, 6) = ?");
         stmt2.setBytes(1, new byte[] {1, 20, -28, 0, -1, 0});
         rs = stmt2.executeQuery();
         Assert.assertTrue(rs.next());
         Assert.assertEquals(2, rs.getInt(1));
+        Assert.assertFalse(rs.next());
     }
 
     @Test
@@ -149,6 +159,10 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
         byte[] b12 = new byte[] {10, 55, -1, 19, -5, -34, 0, -12, 0, 0, 0, 1};
         byte[] b21 = new byte[] {-11, 55, -119, 0, 8, 0, 1, 2, -4, 33};
         byte[] b22 = new byte[] {1, 1, 20, -28, 0, -1, 0, -11, -21, -1};
+        byte[] b112 = new byte[] {56, 50, 19, 0, -1, -11, -12, 1, 9};
+        byte[] b122 = new byte[] {5, 1, 0, 0, 0, 0, 22, 122, 48, -121, 73, 3, 0, 23};
+        byte[] b31 = new byte[] {10, 55, 0, 19, -5, -34, 0, -12, 0, 0, 0, 1};
+        byte[] b32 = new byte[] {-11, 55, -119, 0, 8, 0, 1, 2, -4, 33};
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?, ?, ?)");
         upsertRow(stmt, 1, b11, b12);
         upsertRow(stmt, 2, b21, b22);
@@ -161,6 +175,7 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
         rs.next();
         assertSubBinary(b21, rs.getBytes(1), 0, 4);
         assertSubBinary(b22, rs.getBytes(2), 0, 3);
+        Assert.assertFalse(rs.next());
 
         rs = conn.createStatement().executeQuery("SELECT SUBBINARY(BIN_PK, 5), SUBBINARY(BIN_COL, 7) FROM " + tableName);
         rs.next();
@@ -169,6 +184,7 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
         rs.next();
         assertSubBinary(b21, rs.getBytes(1), 4, 6);
         assertSubBinary(b22, rs.getBytes(2), 6, 4);
+        Assert.assertFalse(rs.next());
 
         rs = conn.createStatement().executeQuery("SELECT SUBBINARY(BIN_PK, -4, 3), SUBBINARY(BIN_COL, -3, 1) FROM " + tableName);
         rs.next();
@@ -177,6 +193,7 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
         rs.next();
         assertSubBinary(b21, rs.getBytes(1), 6, 3);
         assertSubBinary(b22, rs.getBytes(2), 7, 1);
+        Assert.assertFalse(rs.next());
 
         rs = conn.createStatement().executeQuery("SELECT SUBBINARY(BIN_PK, -1), SUBBINARY(BIN_COL, -1) FROM " + tableName);
         rs.next();
@@ -185,6 +202,7 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
         rs.next();
         assertSubBinary(b21, rs.getBytes(1), 9, 1);
         assertSubBinary(b22, rs.getBytes(2), 9, 1);
+        Assert.assertFalse(rs.next());
 
 
         PreparedStatement stmt2 = conn.prepareStatement("SELECT id FROM " + tableName + " WHERE SUBBINARY(BIN_COL, 2, 6) = ?");
@@ -192,24 +210,42 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
         rs = stmt2.executeQuery();
         Assert.assertTrue(rs.next());
         Assert.assertEquals(2, rs.getInt(1));
+        Assert.assertFalse(rs.next());
 
         stmt2 = conn.prepareStatement("SELECT id FROM " + tableName + " WHERE SUBBINARY(BIN_COL, 0, 3) = ?");
         stmt2.setBytes(1, new byte[] {10, 55, -1});
         rs = stmt2.executeQuery();
         Assert.assertTrue(rs.next());
         Assert.assertEquals(1, rs.getInt(1));
+        Assert.assertFalse(rs.next());
 
         stmt2 = conn.prepareStatement("SELECT id FROM " + tableName + " WHERE SUBBINARY(BIN_COL, 1, 3) = ?");
         stmt2.setBytes(1, new byte[] {10, 55, -1});
         rs = stmt2.executeQuery();
         Assert.assertTrue(rs.next());
         Assert.assertEquals(1, rs.getInt(1));
+        Assert.assertFalse(rs.next());
 
         stmt2 = conn.prepareStatement("SELECT id FROM " + tableName + " WHERE SUBBINARY(BIN_COL, -5, 3) = ?");
         stmt2.setBytes(1, new byte[] {-1, 0, -11});
         rs = stmt2.executeQuery();
         Assert.assertTrue(rs.next());
         Assert.assertEquals(2, rs.getInt(1));
+        Assert.assertFalse(rs.next());
+
+        upsertRow(stmt, 1, b112, b122);
+        upsertRow(stmt, 3, b31, b32);
+        conn.commit();
+
+        stmt2 = conn.prepareStatement("SELECT BIN_COL FROM " + tableName + " WHERE id = 1 AND SUBBINARY(BIN_PK, 0, 4) = ?");
+        stmt2.setBytes(1, new byte[] {56, 50, 19, 0});
+        rs = stmt2.executeQuery();
+        Assert.assertTrue(rs.next());
+        Assert.assertArrayEquals(b12, rs.getBytes(1));
+        Assert.assertTrue(rs.next());
+        Assert.assertArrayEquals(b122, rs.getBytes(1));
+        Assert.assertFalse(rs.next());
+
     }
 
 
