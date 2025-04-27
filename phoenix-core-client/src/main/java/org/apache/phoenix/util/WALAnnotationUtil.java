@@ -17,6 +17,7 @@ package org.apache.phoenix.util;
 
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.execute.MutationState;
 
 /**
@@ -42,7 +43,8 @@ public class WALAnnotationUtil {
     }
 
     public static void annotateMutation(Mutation m, byte[] tenantId, byte[] schemaName,
-                                        byte[] logicalTableName, byte[] tableType, byte[] ddlTimestamp) {
+                                        byte[] logicalTableName, byte[] tableType,
+                                        byte[] ddlTimestamp, byte[] emptyCF, byte[] emptyCQ) {
         if (!m.getDurability().equals(Durability.SKIP_WAL)) {
             if (tenantId != null) {
                 m.setAttribute(MutationState.MutationMetadataType.TENANT_ID.toString(), tenantId);
@@ -52,6 +54,10 @@ public class WALAnnotationUtil {
                     logicalTableName);
             m.setAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString(), tableType);
             m.setAttribute(MutationState.MutationMetadataType.TIMESTAMP.toString(), ddlTimestamp);
+            m.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME,
+                    emptyCF);
+            m.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME,
+                    emptyCQ);
         }
     }
 

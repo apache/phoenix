@@ -31,7 +31,9 @@ import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -60,6 +62,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControllerFactory;
+import org.apache.hadoop.hbase.regionserver.FlushLifeCycleTracker;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -178,6 +181,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     private Configuration compactionConfig;
     private Configuration indexWriteConfig;
     private ReadOnlyProps indexWriteProps;
+    private static final Map<TableName, Map<String, byte[]>> TABLE_ATTRIBUTES = new HashMap<>();
+
+    public static Map<TableName, Map<String, byte[]>> getTableAttributes() {
+        return TABLE_ATTRIBUTES;
+    }
 
     @Override
     public Optional<RegionObserver> getRegionObserver() {
@@ -612,6 +620,42 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     }
 
     @Override
+    public InternalScanner preFlush(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
+                                    InternalScanner scanner, FlushLifeCycleTracker tracker)
+            throws IOException {
+        if (!isPhoenixTableTTLEnabled(c.getEnvironment().getConfiguration())) {
+            return scanner;
+        } else {
+            TableName tableName =
+                    c.getEnvironment().getRegion().getTableDescriptor().getTableName();
+            Map<String, byte[]> tableAttributes = getTableAttributes().get(tableName);
+            if (tableAttributes == null) {
+                LOGGER.warn("Table {} has no table attributes for empty CF and empty CQ. "
+                                + "IndexRegionObserver has not received any mutations yet? Do not"
+                                + " perform Compaction now.",
+                        tableName);
+                return scanner;
+            }
+            byte[] emptyCF = tableAttributes
+                    .get(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME);
+            byte[] emptyCQ = tableAttributes
+                    .get(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME);
+            if (emptyCF == null || emptyCQ == null) {
+                LOGGER.warn("Table {} has no empty CF and empty CQ attributes updated in cache. "
+                                + "Do not perform Compaction now.",
+                        tableName);
+                return scanner;
+            }
+            return User.runAsLoginUser(
+                    (PrivilegedExceptionAction<InternalScanner>) () -> new CompactionScanner(
+                            c.getEnvironment(), store, scanner,
+                            BaseScannerRegionObserverConstants.getMaxLookbackInMillis(
+                                    c.getEnvironment().getConfiguration()),
+                            false, true, null, emptyCF, emptyCQ));
+        }
+    }
+
+    @Override
     public InternalScanner preCompact(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
                                       InternalScanner scanner, ScanType scanType, CompactionLifeCycleTracker tracker,
                                       CompactionRequest request) throws IOException {
@@ -682,7 +726,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     BaseScannerRegionObserverConstants.getMaxLookbackInMillis(
                                             c.getEnvironment().getConfiguration()),
                                     request.isMajor() || request.isAllFiles(),
-                                    keepDeleted, table
+                                    keepDeleted, table, null, null
                             );
                 }
                 else if (isPhoenixTableTTLEnabled(c.getEnvironment().getConfiguration())) {

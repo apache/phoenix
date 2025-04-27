@@ -319,7 +319,7 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
 
     private void setMutationAttributes(Mutation m, byte[] uuidValue) {
         ScanUtil.annotateMutationWithMetadataAttributes(tenantId, schemaName,
-                logicalTableName, tableType, lastDdlTimestamp, m);
+                logicalTableName, tableType, lastDdlTimestamp, emptyCF, emptyCQ, m);
         m.setAttribute(useProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD,
                 indexMetaData);
         m.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);

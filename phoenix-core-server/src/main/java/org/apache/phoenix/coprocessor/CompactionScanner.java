@@ -167,12 +167,14 @@ public class CompactionScanner implements InternalScanner {
     private static boolean forceMinorCompaction = false;
 
     public CompactionScanner(RegionCoprocessorEnvironment env,
-            Store store,
-            InternalScanner storeScanner,
-            long maxLookbackAgeInMillis,
-            boolean major,
-            boolean keepDeleted,
-            PTable table) throws IOException {
+                             Store store,
+                             InternalScanner storeScanner,
+                             long maxLookbackAgeInMillis,
+                             boolean major,
+                             boolean keepDeleted,
+                             PTable table,
+                             byte[] emptyCF,
+                             byte[] emptyCQ) throws IOException {
         this.storeScanner = storeScanner;
         this.region = env.getRegion();
         this.store = store;
@@ -180,13 +182,13 @@ public class CompactionScanner implements InternalScanner {
         // Empty column family and qualifier are always needed to compute which all empty cells to retain
         // even during minor compactions. If required empty cells are not retained during
         // minor compactions then we can run into the risk of partial row expiry on next major compaction.
-        this.emptyCF = SchemaUtil.getEmptyColumnFamily(table);
-        this.emptyCQ = SchemaUtil.getEmptyColumnQualifier(table);
+        this.emptyCF = table != null ? SchemaUtil.getEmptyColumnFamily(table) : emptyCF;
+        this.emptyCQ = table != null ? SchemaUtil.getEmptyColumnQualifier(table) : emptyCQ;
         compactionTime = EnvironmentEdgeManager.currentTimeMillis();
         columnFamilyName = store.getColumnFamilyName();
         storeColumnFamily = columnFamilyName.getBytes();
         tableName = region.getRegionInfo().getTable().getNameAsString();
-        String dataTableName = table.getName().toString();
+        String dataTableName = table != null ? table.getName().toString() : "_NA_";
         Long overriddenMaxLookback = maxLookbackMap.get(tableName + SEPARATOR + columnFamilyName);
         this.maxLookbackInMillis = overriddenMaxLookback == null ?
                 maxLookbackAgeInMillis : Math.max(maxLookbackAgeInMillis, overriddenMaxLookback);
@@ -201,7 +203,7 @@ public class CompactionScanner implements InternalScanner {
         this.keepDeletedCells = keepDeleted ? KeepDeletedCells.TTL : cfd.getKeepDeletedCells();
         familyCount = region.getTableDescriptor().getColumnFamilies().length;
         localIndex = columnFamilyName.startsWith(LOCAL_INDEX_COLUMN_FAMILY_PREFIX);
-        emptyCFStore = familyCount == 1 || columnFamilyName.equals(Bytes.toString(emptyCF))
+        emptyCFStore = familyCount == 1 || columnFamilyName.equals(Bytes.toString(this.emptyCF))
                         || localIndex;
 
         isCDCIndex = table != null ? CDCUtil.isCDCIndex(table) : false;
@@ -232,7 +234,7 @@ public class CompactionScanner implements InternalScanner {
                 dataTableName, tableName, region.getRegionInfo().getEncodedName(),
                 Bytes.toStringBinary(region.getRegionInfo().getStartKey()),
                 Bytes.toStringBinary(region.getRegionInfo().getEndKey()),
-                Bytes.toString(this.emptyCF), Bytes.toString(emptyCQ),
+                Bytes.toString(this.emptyCF), Bytes.toString(this.emptyCQ),
                 this.minVersion, this.maxVersion, this.keepDeletedCells.name(),
                 this.familyCount, this.localIndex, this.emptyCFStore,
                 compactionTime, maxLookbackWindowStart, maxLookbackInMillis, this.major));
