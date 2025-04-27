@@ -400,11 +400,14 @@ public class ViewUtil {
                 tableInfoList.add(new TableInfo(viewTenantId, viewSchemaName, viewName));
                 if (scanSysCatForTTLDefinedOnAnyChildPair.getFirst()) {
                     byte[] viewKey = SchemaUtil.getTableKey(viewTenantId, viewSchemaName, viewName);
+                    logger.info("viewKey: {}", Bytes.toStringBinary(viewKey));
+
                     Scan ttlScan = MetaDataUtil.newTableRowsScan(viewKey,
                             MetaDataProtocol.MIN_TABLE_TIMESTAMP, timestamp);
                     Result ttlResult = sysCat.getScanner(ttlScan).next();
                     if (ttlResult != null) {
                         if (ttlResult.getValue(TABLE_FAMILY_BYTES, TTL_BYTES) != null) {
+                            logger.info("viewKey: {}, {}", Bytes.toStringBinary(viewKey), Bytes.toString(ttlResult.getValue(TABLE_FAMILY_BYTES, TTL_BYTES)));
                             scanSysCatForTTLDefinedOnAnyChildPair.setSecond(true);
                             scanSysCatForTTLDefinedOnAnyChildPair.setFirst(false);
                         }

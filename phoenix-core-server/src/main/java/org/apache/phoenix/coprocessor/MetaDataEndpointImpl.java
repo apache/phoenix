@@ -75,6 +75,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION_BYTES;
@@ -87,6 +88,7 @@ import static org.apache.phoenix.query.QueryServices.INDEX_MUTATE_BATCH_SIZE_THR
 import static org.apache.phoenix.query.QueryServices.SKIP_SYSTEM_TABLES_EXISTENCE_CHECK;
 import static org.apache.phoenix.query.QueryServices.SYSTEM_CATALOG_INDEXES_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SYSTEM_CATALOG_INDEXES_ENABLED;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR;
 import static org.apache.phoenix.schema.PTable.LinkType.PHYSICAL_TABLE;
 import static org.apache.phoenix.schema.PTable.LinkType.VIEW_INDEX_PARENT_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CDC_INCLUDE_BYTES;
@@ -138,6 +140,7 @@ import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.TagUtil;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -1489,6 +1492,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
             // TODO: Need to Update Cache for Alter Commands, can use PHOENIX-6883.
         }
+        LOGGER.info("Found TTL entity: {}, ttl = {}", Bytes.toStringBinary(tableNameBytes), ttl.getTTLExpression());
 
         Cell rowKeyMatcherKv = tableKeyValues[ROW_KEY_MATCHER_INDEX];
         byte[] rowKeyMatcher = rowKeyMatcherKv != null
@@ -1729,6 +1733,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
         byte[] tableKey = null;
         do {
+            LOGGER.info("Checking current-view: {}", Bytes.toStringBinary(viewKey));
 
             if (result == null) {
                 return TTL_EXPRESSION_NOT_DEFINED;
@@ -1746,6 +1751,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             if (result.getValue(TABLE_FAMILY_BYTES, TTL_BYTES) != null) {
                 String ttlStr = (String) PVarchar.INSTANCE.toObject(
                         result.getValue(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES));
+                LOGGER.info("Found TTL current-view: {}, ttl = {}", Bytes.toStringBinary(viewKey), ttlStr);
+
                 return TTLExpressionFactory.create(ttlStr);
             } else if (linkTypeBytes != null ) {
                 String parentSchema =SchemaUtil.getSchemaNameFromFullName(
@@ -1761,6 +1768,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                             PARENT_TENANT_ID_BYTES);
                     byte[] parentViewKey = SchemaUtil.getTableKey(parentViewTenantId,
                             parentViewSchemaName, parentViewName);
+                    LOGGER.info("Checking current-view = {}, parent-view: {}", Bytes.toStringBinary(viewKey), Bytes.toStringBinary(parentViewKey));
                     return getTTLFromHierarchy(parentViewKey, clientTimeStamp, false);
                 }
 
@@ -2508,6 +2516,23 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 if (tableType != PTableType.VIEW) {
                     UpgradeUtil.addRowKeyOrderOptimizableCell(tableMetadata, tableKey, clientTimeStamp);
                 }
+
+                if ((tableType == PTableType.TABLE) && (clientVersion < MetaDataProtocol.MIN_VERSION_TABLE_TTL_IN_SYSTEM_CATALOG)) {
+                    Table hTable = ServerUtil.getHTableForCoprocessorScan(env, TableName.valueOf(cPhysicalName));
+                    ColumnFamilyDescriptor cfd =
+                            hTable.getTableDescriptor().getColumnFamilies()[0];
+                    TTLExpression ttlExpression;
+                    if (cfd.getTimeToLive() == HConstants.FOREVER) {
+                        ttlExpression = TTL_EXPRESSION_NOT_DEFINED;
+                    } else {
+                        ttlExpression = TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR;
+                    }
+                    LOGGER.info("Adding backward compatible TTL (create {}) for table-key {} with ttl value {}",
+                            clientVersion,
+                            Bytes.toStringBinary(tableKey), ttlExpression.toString());
+                    UpgradeUtil.addTTLForClientOlderThan530(tableMetadata, tableKey, clientTimeStamp, ttlExpression);
+                }
+
                 // If the parent table of the view has the auto partition sequence name attribute, modify the
                 // tableMetadata and set the view statement and partition column correctly
                 if (parentTable != null && parentTable.getAutoPartitionSeqName() != null) {
