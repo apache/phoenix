@@ -32,7 +32,6 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.CompiledTTLExpression;
 import org.apache.phoenix.schema.TTLExpressionFactory;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -40,10 +39,10 @@ import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.isPhoenixTableTTLEnabled;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.isPhoenixCompactionEnabled;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME;
-import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.IS_PHOENIX_TTL_SCAN_TABLE_SYSTEM;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
 
 /**
@@ -76,10 +75,25 @@ public class TTLRegionScanner extends BaseRegionScanner {
         emptyCF = scan.getAttribute(EMPTY_COLUMN_FAMILY_NAME);
         currentTime = scan.getTimeRange().getMax() == HConstants.LATEST_TIMESTAMP
                 ? EnvironmentEdgeManager.currentTimeMillis() : scan.getTimeRange().getMax();
-        byte[] isSystemTable = scan.getAttribute(IS_PHOENIX_TTL_SCAN_TABLE_SYSTEM);
-        if (isPhoenixTableTTLEnabled(env.getConfiguration()) && (isSystemTable == null
-                || !Bytes.toBoolean(isSystemTable))) {
-            ttlExpression = ScanUtil.getTTLExpression(this.scan);
+        CompiledTTLExpression scanTTLExpression = ScanUtil.getTTLExpression(scan);
+        /**
+         * In 5.3.0 release the TTL column will be created in SYSTEM.CATALOG and used to store TTL
+         * values, but the TTL values for tables and SYSTEM tables with literal expressions
+         * will continue to be stored in the HBase TableDescriptor for backward compatibility
+         * and SYSTEM.CATALOG will store a special literal TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR.
+         *
+         * The newer 5.3.x clients will be sending a Compiled TTL expression in the
+         * BaseScannerRegionObserverConstants.TTL scan attribute.
+         * Older 5.2 client will not have any scan attribute set and thus will be null.
+         *
+         * To achieve backward compatibility
+         * When scanTTLExpression is null or equals TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR
+         * we will use the TableDescriptor as the source of truth.
+         */
+        if (isPhoenixCompactionEnabled(
+                env.getConfiguration()) && scanTTLExpression != null && !scanTTLExpression.equals(
+                TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR)) {
+            ttlExpression = scanTTLExpression;
         } else {
             ColumnFamilyDescriptor cfd =
                     env.getRegion().getTableDescriptor().getColumnFamilies()[0];
@@ -90,8 +104,7 @@ public class TTLRegionScanner extends BaseRegionScanner {
         // be done here. We also disable masking when TTL is HConstants.FOREVER.
         isMaskingEnabled = emptyCF != null && emptyCQ != null
                 && !ttlExpression.equals(TTL_EXPRESSION_FOREVER)
-                && (isPhoenixTableTTLEnabled(env.getConfiguration()) && (isSystemTable == null
-                || !Bytes.toBoolean(isSystemTable)));
+                && (isPhoenixCompactionEnabled(env.getConfiguration()));
     }
 
     private void init() throws IOException {

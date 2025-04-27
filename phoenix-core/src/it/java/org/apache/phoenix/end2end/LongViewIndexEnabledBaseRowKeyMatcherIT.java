@@ -43,7 +43,7 @@ public class LongViewIndexEnabledBaseRowKeyMatcherIT extends BaseRowKeyMatcherTe
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         final Configuration conf = HBaseConfiguration.create();
-        conf.set(QueryServices.PHOENIX_TABLE_TTL_ENABLED, String.valueOf(true));
+        conf.set(QueryServices.PHOENIX_COMPACTION_ENABLED, String.valueOf(true));
         conf.set(QueryServices.SYSTEM_CATALOG_INDEXES_ENABLED, String.valueOf(true));
         conf.set(QueryServices.LONG_VIEW_INDEX_ENABLED_ATTRIB, String.valueOf(true));
         conf.set(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB, "true");

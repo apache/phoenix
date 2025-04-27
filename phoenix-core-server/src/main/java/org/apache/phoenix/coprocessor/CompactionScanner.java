@@ -108,6 +108,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_
 import static org.apache.phoenix.query.QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_DEFINED;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
@@ -1273,10 +1274,12 @@ public class CompactionScanner implements InternalScanner {
                 Store store) throws IOException {
 
             boolean isSystemTable = pTable.getType() == PTableType.SYSTEM;
+            boolean ttlFromDescriptor = false;
             try {
-                if (isSystemTable) {
+                if (isSystemTable ||  pTable.getTTLExpression().equals(TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR)) {
                     ColumnFamilyDescriptor cfd = store.getColumnFamilyDescriptor();
                     ttlExpr = TTLExpressionFactory.create(cfd.getTimeToLive());
+                    ttlFromDescriptor = true;
                 } else {
                     ttlExpr = !pTable.getTTLExpression().equals(TTL_EXPRESSION_NOT_DEFINED)
                             ? pTable.getCompiledTTLExpression(pConn) : TTL_EXPRESSION_FOREVER;
@@ -1287,8 +1290,8 @@ public class CompactionScanner implements InternalScanner {
             }
             LOGGER.info(String.format(
                     "NonPartitionedTableTTLTracker params:- " +
-                            "(physical-name=%s, ttl=%s, isSystemTable=%s)",
-                    pTable.getName().toString(), ttlExpr, isSystemTable));
+                            "(physical-name=%s, ttl=%s, ttlFromDescriptor=%s, isSystemTable=%s)",
+                    pTable.getName().toString(), ttlExpr, ttlFromDescriptor, isSystemTable));
         }
 
         @Override
@@ -1329,9 +1332,17 @@ public class CompactionScanner implements InternalScanner {
                 this.tableRowKeyMatcher =
                         new PartitionedTableRowKeyMatcher(table, isSalted, isSharedIndex,
                                 isLongViewIndexEnabled, viewTTLTenantViewsPerScanLimit);
+                boolean ttlFromDescriptor = false;
                 try {
-                    this.ttlExpr = !table.getTTLExpression().equals(TTL_EXPRESSION_NOT_DEFINED)
-                            ? table.getCompiledTTLExpression(pConn) : TTL_EXPRESSION_FOREVER;
+                    if (table.getTTLExpression().equals(TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR)) {
+                        ColumnFamilyDescriptor cfd = store.getColumnFamilyDescriptor();
+                        this.ttlExpr = TTLExpressionFactory.create(cfd.getTimeToLive());
+                        ttlFromDescriptor = true;
+                    } else {
+                        this.ttlExpr = !table.getTTLExpression().equals(TTL_EXPRESSION_NOT_DEFINED)
+                                ? table.getCompiledTTLExpression(pConn) : TTL_EXPRESSION_FOREVER;
+                    }
+
                 } catch (SQLException e) {
                     throw ClientUtil.createIOException(
                             String.format("Error compiling ttl expression %s", this.ttlExpr), e);
@@ -1346,10 +1357,11 @@ public class CompactionScanner implements InternalScanner {
                         "PartitionedTableTTLTracker params:- " + 
                                 "region-name = %s, table-name = %s,  " +
                                 "multi-tenant = %s, shared-index = %s, salted = %s, " +
-                                "default-ttl = %s, startingPKPosition = %d",
+                                "default-ttl = %s, ttlFromDescriptor = %s, startingPKPosition = %d",
                         region.getRegionInfo().getEncodedName(),
                         region.getRegionInfo().getTable().getNameAsString(), this.isMultiTenant,
-                        this.isSharedIndex, this.isSalted, this.ttlExpr, this.startingPKPosition));
+                        this.isSharedIndex, this.isSalted, this.ttlExpr, ttlFromDescriptor,
+                        this.startingPKPosition));
 
             } catch (SQLException e) {
                 LOGGER.error(String.format("Failed to read from catalog: " + e.getMessage()));

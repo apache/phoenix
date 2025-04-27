@@ -374,8 +374,11 @@ public interface QueryServices extends SQLCloseable {
     public static final String PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED = "phoenix.ttl.server_side.masking.enabled";
     // The time limit on the amount of work to be done in one RPC call
     public static final String PHOENIX_SERVER_PAGE_SIZE_MS = "phoenix.server.page.size.ms";
-    // Phoenix TTL implemented by CompactionScanner and TTLRegionScanner is enabled
+
+    // TODO : Deprecate instead use PHOENIX_COMPACTION_ENABLED
     public static final String PHOENIX_TABLE_TTL_ENABLED = "phoenix.table.ttl.enabled";
+    // Phoenix TTL/Compaction implemented by CompactionScanner and TTLRegionScanner is enabled
+    public static final String PHOENIX_COMPACTION_ENABLED = "phoenix.compaction.enabled";
     // Copied here to avoid dependency on hbase-server
     public static final String WAL_EDIT_CODEC_ATTRIB = "hbase.regionserver.wal.codec";
     //Property to know whether TTL at View Level is enabled

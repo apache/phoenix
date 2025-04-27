@@ -257,6 +257,7 @@ import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
+import org.apache.phoenix.schema.ConditionalTTLExpression;
 import org.apache.phoenix.schema.ConnectionProperty;
 import org.apache.phoenix.schema.EmptySequenceCacheException;
 import org.apache.phoenix.schema.FunctionNotFoundException;
@@ -1361,11 +1362,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
         }
         return false;
-    }
-
-    private boolean isPhoenixTTLEnabled() {
-         return config.getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
-                QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
     }
 
 
@@ -3169,19 +3165,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                             .setMessage("Property: " + propName).build()
                                             .buildException();
                                 }
-                                //Handle FOREVER and NONE case
-                                propValue = convertForeverAndNoneTTLValue(propValue, isPhoenixTTLEnabled());
-                                //If Phoenix level TTL is enabled we are using TTL as phoenix
-                                //Table level property.
-                                if (!isPhoenixTTLEnabled()) {
-                                    // only literal TTL expression
-                                    LiteralTTLExpression ttlExpr =
-                                            (LiteralTTLExpression) TableProperty.TTL.getValue(propValue);
-                                    newTTL = ttlExpr != null ? ttlExpr.getTTLValue() : null;
-                                    //Even though TTL is really a HColumnProperty we treat it
-                                    //specially. We enforce that all CFs have the same TTL.
-                                    commonFamilyProps.put(propName, propValue);
-                                } else {
+                                if (propValue != null) {
+                                    TTLExpression ttlExpr = MetaDataUtil.convertForeverAndNoneTTLValue(propValue, false);
+                                    // Keeping TTL value in HTable descriptor when expression is a Literal Expression
+                                    if ((ttlExpr instanceof LiteralTTLExpression ) && (table.getType() != PTableType.VIEW)) {
+                                        // only literal TTL expression
+                                        newTTL = ((LiteralTTLExpression) ttlExpr).getTTLValue();
+                                        //Even though TTL is really a HColumnProperty we treat it
+                                        //specially. We enforce that all CFs have the same TTL.
+                                        commonFamilyProps.put(propName, newTTL);
+                                    } else if (ttlExpr instanceof ConditionalTTLExpression &&  table.getType() == PTableType.TABLE) {
+                                        // Resetting the TTL value in HTable descriptor to FOREVER when expression is a Conditional Expression
+                                        newTTL = HConstants.FOREVER;
+                                        commonFamilyProps.put(propName, newTTL);
+                                    }
                                     //Setting this here just to check if we need to throw Exception
                                     //for Transaction's SET_TTL Feature.
                                     newPhoenixTTL = (TTLExpression) TableProperty.TTL.getValue(propValue);
@@ -3492,19 +3489,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return (newTTL != null) ?
                 newTTL :
                 tableDesc.getColumnFamily(SchemaUtil.getEmptyColumnFamily(table)).getTimeToLive();
-    }
-
-    public static Object convertForeverAndNoneTTLValue(Object propValue, boolean isPhoenixTTLEnabled) {
-        //Handle FOREVER and NONE value for TTL at HBase level TTL.
-        if (propValue instanceof String) {
-            String strValue = (String) propValue;
-            if ("FOREVER".equalsIgnoreCase(strValue)) {
-                propValue = HConstants.FOREVER;
-            } else if ("NONE".equalsIgnoreCase(strValue)) {
-                propValue = isPhoenixTTLEnabled ? TTL_NOT_DEFINED : HConstants.FOREVER;
-            }
-        }
-        return propValue;
     }
 
     /**
@@ -4560,7 +4544,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
              */
             metaConnection = addColumnsIfNotExists(metaConnection,
                     PhoenixDatabaseMetaData.SYSTEM_CATALOG, MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 1,
-                    PhoenixDatabaseMetaData.TTL + " " + PInteger.INSTANCE.getSqlTypeName());
+                    PhoenixDatabaseMetaData.TTL + " " + PVarchar.INSTANCE.getSqlTypeName());
             metaConnection = addColumnsIfNotExists(metaConnection,
                     PhoenixDatabaseMetaData.SYSTEM_CATALOG, MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0,
                     PhoenixDatabaseMetaData.ROW_KEY_MATCHER + " "

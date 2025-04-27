@@ -38,9 +38,11 @@ public class LiteralTTLExpression implements TTLExpression, CompiledTTLExpressio
             new LiteralTTLExpression(HConstants.FOREVER);
     public static final LiteralTTLExpression TTL_EXPRESSION_NOT_DEFINED =
             new LiteralTTLExpression(PhoenixDatabaseMetaData.TTL_NOT_DEFINED);
+    public static final LiteralTTLExpression TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR =
+            new LiteralTTLExpression(PhoenixDatabaseMetaData.TTL_DEFINED_IN_TABLE_DESCRIPTOR);
 
     public LiteralTTLExpression(int ttl) {
-        Preconditions.checkArgument(ttl >= 0);
+        Preconditions.checkArgument(ttl == -1 || ttl >= 0);
         this.ttlValue = ttl;
     }
 

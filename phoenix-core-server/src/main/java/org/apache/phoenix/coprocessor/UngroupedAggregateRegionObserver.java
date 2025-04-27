@@ -676,7 +676,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     }
                 }
                 if (table != null
-                        && isPhoenixTableTTLEnabled(c.getEnvironment().getConfiguration())) {
+                        && isPhoenixCompactionEnabled(c.getEnvironment().getConfiguration())) {
                     internalScanner =
                             new CompactionScanner(c.getEnvironment(), store, scanner,
                                     BaseScannerRegionObserverConstants.getMaxLookbackInMillis(
@@ -685,7 +685,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     keepDeleted, table
                             );
                 }
-                else if (isPhoenixTableTTLEnabled(c.getEnvironment().getConfiguration())) {
+                else if (isPhoenixCompactionEnabled(c.getEnvironment().getConfiguration())) {
                     LOGGER.warn("Skipping compaction for table: {} " +
                             "as failed to retrieve PTable object", fullTableName);
                 }
