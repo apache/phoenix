@@ -373,7 +373,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             ScanType scanType, ScanOptions options, CompactionLifeCycleTracker tracker,
             CompactionRequest request) throws IOException {
         Configuration conf = c.getEnvironment().getConfiguration();
-        if (isPhoenixTableTTLEnabled(conf)) {
+        if (isPhoenixCompactionEnabled(conf)) {
             setScanOptionsForFlushesAndCompactions(options);
             return;
         }
@@ -388,7 +388,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             ScanOptions options, FlushLifeCycleTracker tracker) throws IOException {
         Configuration conf = c.getEnvironment().getConfiguration();
 
-        if (isPhoenixTableTTLEnabled(conf)) {
+        if (isPhoenixCompactionEnabled(conf)) {
             setScanOptionsForFlushesAndCompactions(options);
             return;
         }
@@ -403,7 +403,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             ObserverContext<RegionCoprocessorEnvironment> c, Store store, ScanOptions options)
             throws IOException {
         Configuration conf = c.getEnvironment().getConfiguration();
-        if (isPhoenixTableTTLEnabled(conf)) {
+        if (isPhoenixCompactionEnabled(conf)) {
             setScanOptionsForFlushesAndCompactions(options);
             return;
         }
@@ -429,7 +429,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             ScanOptions options) throws IOException {
 
         Configuration conf = c.getEnvironment().getConfiguration();
-        if (isPhoenixTableTTLEnabled(conf)) {
+        if (isPhoenixCompactionEnabled(conf)) {
             setScanOptionsForFlushesAndCompactions(options);
             return;
         }
@@ -539,8 +539,10 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         return maxLookbackTime > 0L;
     }
 
-    public static boolean isPhoenixTableTTLEnabled(Configuration conf) {
+    public static boolean isPhoenixCompactionEnabled(Configuration conf) {
         return conf.getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
-                QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
+                QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED) &&
+                conf.getBoolean(QueryServices.PHOENIX_COMPACTION_ENABLED,
+                        QueryServicesOptions.DEFAULT_PHOENIX_COMPACTION_ENABLED);
     }
 }

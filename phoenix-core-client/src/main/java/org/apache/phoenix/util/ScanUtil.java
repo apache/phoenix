@@ -27,6 +27,7 @@ import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverCons
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_TTL;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
@@ -1175,9 +1176,11 @@ public class ScanUtil {
         return TTLExpressionFactory.create(phoenixTTL);
     }
 
-    public static boolean isPhoenixTableTTLEnabled(Configuration conf) {
+    public static boolean isPhoenixCompactionEnabled(Configuration conf) {
         return conf.getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
-                QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
+                QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED) &&
+                conf.getBoolean(QueryServices.PHOENIX_COMPACTION_ENABLED,
+                QueryServicesOptions.DEFAULT_PHOENIX_COMPACTION_ENABLED);
     }
 
     public static boolean isMaskTTLExpiredRows(Scan scan) {
@@ -1408,14 +1411,16 @@ public class ScanUtil {
             return;
         }
 
-        // If Phoenix level TTL is not enabled OR is a system table then return.
-        if (!isPhoenixTableTTLEnabled(phoenixConnection.getQueryServices().getConfiguration())) {
-            if (SchemaUtil.isSystemTable(
-                    SchemaUtil.getTableNameAsBytes(table.getSchemaName().getString(),
-                            table.getTableName().getString()))) {
-                scan.setAttribute(BaseScannerRegionObserverConstants.IS_PHOENIX_TTL_SCAN_TABLE_SYSTEM,
-                        Bytes.toBytes(true));
-            }
+        // If is a system table then set the scan attribute.
+        if (SchemaUtil.isSystemTable(
+                SchemaUtil.getTableNameAsBytes(table.getSchemaName().getString(),
+                        table.getTableName().getString()))) {
+            scan.setAttribute(BaseScannerRegionObserverConstants.IS_PHOENIX_TTL_SCAN_TABLE_SYSTEM,
+                    Bytes.toBytes(true));
+        }
+
+        // If Phoenix level TTL is not enabled
+        if (!isPhoenixCompactionEnabled(phoenixConnection.getQueryServices().getConfiguration())) {
             return;
         }
 
@@ -1449,6 +1454,7 @@ public class ScanUtil {
         // Otherwise, we can cache stale values and keep reusing the stale values which can give
         // incorrect results.
         CompiledTTLExpression ttlExpr = table.getCompiledTTLExpression(phoenixConnection);
+        LOGGER.info("ScanUtil: table/view = {}, ttl-expr = {}", table.getTableName().toString(), ttlExpr.toString());
         byte[] ttlForScan = ttlExpr.serialize();
         if (ttlForScan != null) {
             byte[] emptyColumnFamilyName = SchemaUtil.getEmptyColumnFamily(table);

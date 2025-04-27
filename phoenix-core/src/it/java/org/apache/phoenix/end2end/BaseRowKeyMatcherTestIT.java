@@ -664,6 +664,8 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
             }
             ;
         } catch (SQLException | IOException e) {
+            LOGGER.info(e.getMessage());
+            fail();
             throw new RuntimeException(e);
         }
         return viewToRowKeyMap;
@@ -855,16 +857,6 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
         try {
             List<PDataType[]> testCases = getTestCases();
             SortOrder[][] sortOrders = getSortOrders();
-
-            try (Connection conn = DriverManager.getConnection(getUrl());
-                    Statement stmt = conn.createStatement()) {
-                //TestUtil.dumpTable(conn, TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES));
-                stmt.execute("CREATE INDEX IF NOT EXISTS SYS_VIEW_HDR_IDX ON SYSTEM.CATALOG(TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY) INCLUDE (TABLE_TYPE, VIEW_STATEMENT, TTL, ROW_KEY_MATCHER) WHERE TABLE_TYPE = 'v'");
-                stmt.execute("CREATE INDEX IF NOT EXISTS SYS_ROW_KEY_MATCHER_IDX ON SYSTEM.CATALOG(ROW_KEY_MATCHER, TTL, TABLE_TYPE, TENANT_ID, TABLE_SCHEM, TABLE_NAME) INCLUDE (VIEW_STATEMENT) WHERE TABLE_TYPE = 'v' AND ROW_KEY_MATCHER IS NOT NULL");
-                stmt.execute("CREATE INDEX IF NOT EXISTS SYS_VIEW_INDEX_HDR_IDX ON SYSTEM.CATALOG(DECODE_VIEW_INDEX_ID(VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE), TENANT_ID, TABLE_SCHEM, TABLE_NAME) INCLUDE(TABLE_TYPE, LINK_TYPE, VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE)  WHERE TABLE_TYPE = 'i' AND LINK_TYPE IS NULL AND VIEW_INDEX_ID IS NOT NULL");
-                conn.commit();
-            }
-
             String tableName = "";
             tableName = createViewHierarchy(
                     testCases, sortOrders, 500, 5000, 3,

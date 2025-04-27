@@ -116,6 +116,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
     public static final int MIN_PENDING_DISABLE_INDEX = VersionUtil.encodeVersion("4", "14", "0");
     // The minimum client version that allows VARBINARY_ENCODED columns
     public static final int MIN_VERSION_ALLOW_VBE_COLUMNS = VersionUtil.encodeVersion("5", "3", "0");
+    public static final int MIN_VERSION_TABLE_TTL_IN_SYSTEM_CATALOG = VersionUtil.encodeVersion("5", "3", "0");
     // Version below which we should turn off essential column family.
     public static final int ESSENTIAL_FAMILY_VERSION_THRESHOLD = VersionUtil.encodeVersion("0", "94", "7");
     /** Version below which we fall back on the generic KeyValueBuilder */

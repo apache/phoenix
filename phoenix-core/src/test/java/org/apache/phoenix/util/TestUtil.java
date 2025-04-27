@@ -19,9 +19,12 @@ package org.apache.phoenix.util;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.query.BaseTest.generateUniqueName;
+import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_NAME;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
 import static org.apache.phoenix.util.PhoenixRuntime.CONNECTIONLESS;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
@@ -175,29 +178,16 @@ public class TestUtil {
     public static final String DEFAULT_SCHEMA_NAME = "S";
     public static final String DEFAULT_DATA_TABLE_NAME = "T";
     public static final String DEFAULT_INDEX_TABLE_NAME = "I";
-    public static final String DEFAULT_DATA_TABLE_FULL_NAME = SchemaUtil.getTableName(DEFAULT_SCHEMA_NAME, "T");
-    public static final String DEFAULT_INDEX_TABLE_FULL_NAME = SchemaUtil.getTableName(DEFAULT_SCHEMA_NAME, "I");
+    public static final String
+            DEFAULT_DATA_TABLE_FULL_NAME =
+            SchemaUtil.getTableName(DEFAULT_SCHEMA_NAME, "T");
+    public static final String
+            DEFAULT_INDEX_TABLE_FULL_NAME =
+            SchemaUtil.getTableName(DEFAULT_SCHEMA_NAME, "I");
 
-    public static final String TEST_TABLE_SCHEMA = "(" +
-        "   varchar_pk VARCHAR NOT NULL, " +
-        "   char_pk CHAR(10) NOT NULL, " +
-        "   int_pk INTEGER NOT NULL, " +
-        "   long_pk BIGINT NOT NULL, " +
-        "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
-        "   date_pk DATE NOT NULL, " +
-        "   a.varchar_col1 VARCHAR, " +
-        "   a.char_col1 CHAR(10), " +
-        "   a.int_col1 INTEGER, " +
-        "   a.long_col1 BIGINT, " +
-        "   a.decimal_col1 DECIMAL(31, 10), " +
-        "   a.date1 DATE, " +
-        "   b.varchar_col2 VARCHAR, " +
-        "   b.char_col2 CHAR(10), " +
-        "   b.int_col2 INTEGER, " +
-        "   b.long_col2 BIGINT, " +
-        "   b.decimal_col2 DECIMAL(31, 10), " +
-        "   b.date2 DATE " +
-        "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) ";
+    public static final String
+            TEST_TABLE_SCHEMA =
+            "(" + "   varchar_pk VARCHAR NOT NULL, " + "   char_pk CHAR(10) NOT NULL, " + "   int_pk INTEGER NOT NULL, " + "   long_pk BIGINT NOT NULL, " + "   decimal_pk DECIMAL(31, 10) NOT NULL, " + "   date_pk DATE NOT NULL, " + "   a.varchar_col1 VARCHAR, " + "   a.char_col1 CHAR(10), " + "   a.int_col1 INTEGER, " + "   a.long_col1 BIGINT, " + "   a.decimal_col1 DECIMAL(31, 10), " + "   a.date1 DATE, " + "   b.varchar_col2 VARCHAR, " + "   b.char_col2 CHAR(10), " + "   b.int_col2 INTEGER, " + "   b.long_col2 BIGINT, " + "   b.decimal_col2 DECIMAL(31, 10), " + "   b.date2 DATE " + "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) ";
 
     private TestUtil() {
     }
@@ -238,7 +228,10 @@ public class TestUtil {
     public final static String PARENTID8 = "0500x0000000008";
     public final static String PARENTID9 = "0500x0000000009";
 
-    public final static List<String> PARENTIDS = Lists.newArrayList(PARENTID1, PARENTID2, PARENTID3, PARENTID4, PARENTID5, PARENTID6, PARENTID7, PARENTID8, PARENTID9);
+    public final static List<String>
+            PARENTIDS =
+            Lists.newArrayList(PARENTID1, PARENTID2, PARENTID3, PARENTID4, PARENTID5, PARENTID6,
+                    PARENTID7, PARENTID8, PARENTID9);
 
     public final static String ENTITYHISTID1 = "017x00000000001";
     public final static String ENTITYHISTID2 = "017x00000000002";
@@ -250,13 +243,22 @@ public class TestUtil {
     public final static String ENTITYHISTID8 = "017x00000000008";
     public final static String ENTITYHISTID9 = "017x00000000009";
 
-    public final static List<String> ENTITYHISTIDS = Lists.newArrayList(ENTITYHISTID1, ENTITYHISTID2, ENTITYHISTID3, ENTITYHISTID4, ENTITYHISTID5, ENTITYHISTID6, ENTITYHISTID7, ENTITYHISTID8, ENTITYHISTID9);
+    public final static List<String>
+            ENTITYHISTIDS =
+            Lists.newArrayList(ENTITYHISTID1, ENTITYHISTID2, ENTITYHISTID3, ENTITYHISTID4,
+                    ENTITYHISTID5, ENTITYHISTID6, ENTITYHISTID7, ENTITYHISTID8, ENTITYHISTID9);
 
     public static final String LOCALHOST = "localhost";
-    public static final String PHOENIX_JDBC_URL = JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + LOCALHOST + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
-    public static final String PHOENIX_CONNECTIONLESS_JDBC_URL = JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + CONNECTIONLESS + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
+    public static final String
+            PHOENIX_JDBC_URL =
+            JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + LOCALHOST + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
+    public static final String
+            PHOENIX_CONNECTIONLESS_JDBC_URL =
+            JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + CONNECTIONLESS + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
 
-    public static final String TEST_SCHEMA_FILE_NAME = "config" + File.separator + "test-schema.xml";
+    public static final String
+            TEST_SCHEMA_FILE_NAME =
+            "config" + File.separator + "test-schema.xml";
     public static final String CED_SCHEMA_FILE_NAME = "config" + File.separator + "schema.xml";
     public static final String ENTITY_HISTORY_TABLE_NAME = "ENTITY_HISTORY";
     public static final String ENTITY_HISTORY_SALTED_TABLE_NAME = "ENTITY_HISTORY_SALTED";
@@ -296,16 +298,32 @@ public class TestUtil {
     public static final String JOIN_ITEM_TABLE = "ItemTable";
     public static final String JOIN_SUPPLIER_TABLE = "SupplierTable";
     public static final String JOIN_COITEM_TABLE = "CoitemTable";
-    public static final String JOIN_ORDER_TABLE_FULL_NAME = '"' + JOIN_SCHEMA + "\".\"" + JOIN_ORDER_TABLE + '"';
-    public static final String JOIN_CUSTOMER_TABLE_FULL_NAME = '"' + JOIN_SCHEMA + "\".\"" + JOIN_CUSTOMER_TABLE + '"';
-    public static final String JOIN_ITEM_TABLE_FULL_NAME = '"' + JOIN_SCHEMA + "\".\"" + JOIN_ITEM_TABLE + '"';
-    public static final String JOIN_SUPPLIER_TABLE_FULL_NAME = '"' + JOIN_SCHEMA + "\".\"" + JOIN_SUPPLIER_TABLE + '"';
-    public static final String JOIN_COITEM_TABLE_FULL_NAME = '"' + JOIN_SCHEMA + "\".\"" + JOIN_COITEM_TABLE + '"';
+    public static final String
+            JOIN_ORDER_TABLE_FULL_NAME =
+            '"' + JOIN_SCHEMA + "\".\"" + JOIN_ORDER_TABLE + '"';
+    public static final String
+            JOIN_CUSTOMER_TABLE_FULL_NAME =
+            '"' + JOIN_SCHEMA + "\".\"" + JOIN_CUSTOMER_TABLE + '"';
+    public static final String
+            JOIN_ITEM_TABLE_FULL_NAME =
+            '"' + JOIN_SCHEMA + "\".\"" + JOIN_ITEM_TABLE + '"';
+    public static final String
+            JOIN_SUPPLIER_TABLE_FULL_NAME =
+            '"' + JOIN_SCHEMA + "\".\"" + JOIN_SUPPLIER_TABLE + '"';
+    public static final String
+            JOIN_COITEM_TABLE_FULL_NAME =
+            '"' + JOIN_SCHEMA + "\".\"" + JOIN_COITEM_TABLE + '"';
     public static final String JOIN_ORDER_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_ORDER_TABLE;
-    public static final String JOIN_CUSTOMER_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_CUSTOMER_TABLE;
+    public static final String
+            JOIN_CUSTOMER_TABLE_DISPLAY_NAME =
+            JOIN_SCHEMA + "." + JOIN_CUSTOMER_TABLE;
     public static final String JOIN_ITEM_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_ITEM_TABLE;
-    public static final String JOIN_SUPPLIER_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_SUPPLIER_TABLE;
-    public static final String JOIN_COITEM_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_COITEM_TABLE;
+    public static final String
+            JOIN_SUPPLIER_TABLE_DISPLAY_NAME =
+            JOIN_SCHEMA + "." + JOIN_SUPPLIER_TABLE;
+    public static final String
+            JOIN_COITEM_TABLE_DISPLAY_NAME =
+            JOIN_SCHEMA + "." + JOIN_COITEM_TABLE;
     public static final String BINARY_NAME = "BinaryTable";
 
     /**
@@ -329,12 +347,8 @@ public class TestUtil {
     };
 
     public static byte[][] getSplits(String tenantId) {
-        return new byte[][]{
-            HConstants.EMPTY_BYTE_ARRAY,
-            Bytes.toBytes(tenantId + "00A"),
-            Bytes.toBytes(tenantId + "00B"),
-            Bytes.toBytes(tenantId + "00C"),
-        };
+        return new byte[][] { HConstants.EMPTY_BYTE_ARRAY, Bytes.toBytes(tenantId + "00A"),
+                Bytes.toBytes(tenantId + "00B"), Bytes.toBytes(tenantId + "00C"), };
     }
 
     public static void assertRoundEquals(BigDecimal bd1, BigDecimal bd2) {
@@ -346,15 +360,18 @@ public class TestUtil {
     }
 
     public static BigDecimal computeAverage(double sum, long count) {
-        return BigDecimal.valueOf(sum).divide(BigDecimal.valueOf(count), PDataType.DEFAULT_MATH_CONTEXT);
+        return BigDecimal.valueOf(sum)
+                .divide(BigDecimal.valueOf(count), PDataType.DEFAULT_MATH_CONTEXT);
     }
 
     public static BigDecimal computeAverage(long sum, long count) {
-        return BigDecimal.valueOf(sum).divide(BigDecimal.valueOf(count), PDataType.DEFAULT_MATH_CONTEXT);
+        return BigDecimal.valueOf(sum)
+                .divide(BigDecimal.valueOf(count), PDataType.DEFAULT_MATH_CONTEXT);
     }
 
     public static Expression constantComparison(CompareOperator op, PColumn c, Object o) {
-        return new ComparisonExpression(Arrays.<Expression>asList(new KeyValueColumnExpression(c), LiteralExpression.newConstant(o)), op);
+        return new ComparisonExpression(Arrays.<Expression> asList(new KeyValueColumnExpression(c),
+                LiteralExpression.newConstant(o)), op);
     }
 
     public static Expression kvColumn(PColumn c) {
@@ -370,37 +387,40 @@ public class TestUtil {
     }
 
     private static boolean useByteBasedRegex(StatementContext context) {
-        return context
-            .getConnection()
-            .getQueryServices()
-            .getProps()
-            .getBoolean(QueryServices.USE_BYTE_BASED_REGEX_ATTRIB,
-                QueryServicesOptions.DEFAULT_USE_BYTE_BASED_REGEX);
+        return context.getConnection().getQueryServices().getProps()
+                .getBoolean(QueryServices.USE_BYTE_BASED_REGEX_ATTRIB,
+                        QueryServicesOptions.DEFAULT_USE_BYTE_BASED_REGEX);
     }
 
     public static Expression like(Expression e, Object o, StatementContext context) {
         return useByteBasedRegex(context) ?
-            ByteBasedLikeExpression.create(Arrays.asList(e, LiteralExpression.newConstant(o)), LikeType.CASE_SENSITIVE) :
-            StringBasedLikeExpression.create(Arrays.asList(e, LiteralExpression.newConstant(o)), LikeType.CASE_SENSITIVE);
+                ByteBasedLikeExpression.create(Arrays.asList(e, LiteralExpression.newConstant(o)),
+                        LikeType.CASE_SENSITIVE) :
+                StringBasedLikeExpression.create(Arrays.asList(e, LiteralExpression.newConstant(o)),
+                        LikeType.CASE_SENSITIVE);
     }
 
     public static Expression ilike(Expression e, Object o, StatementContext context) {
         return useByteBasedRegex(context) ?
-            ByteBasedLikeExpression.create(Arrays.asList(e, LiteralExpression.newConstant(o)), LikeType.CASE_INSENSITIVE) :
-            StringBasedLikeExpression.create(Arrays.asList(e, LiteralExpression.newConstant(o)), LikeType.CASE_INSENSITIVE);
+                ByteBasedLikeExpression.create(Arrays.asList(e, LiteralExpression.newConstant(o)),
+                        LikeType.CASE_INSENSITIVE) :
+                StringBasedLikeExpression.create(Arrays.asList(e, LiteralExpression.newConstant(o)),
+                        LikeType.CASE_INSENSITIVE);
     }
 
     public static Expression substr(Expression e, Object offset, Object length) {
-        return new SubstrFunction(Arrays.asList(e, LiteralExpression.newConstant(offset), LiteralExpression.newConstant(length)));
+        return new SubstrFunction(Arrays.asList(e, LiteralExpression.newConstant(offset),
+                LiteralExpression.newConstant(length)));
     }
 
     public static Expression substr2(Expression e, Object offset) {
 
-        return new SubstrFunction(Arrays.asList(e, LiteralExpression.newConstant(offset), LiteralExpression.newConstant(null)));
+        return new SubstrFunction(Arrays.asList(e, LiteralExpression.newConstant(offset),
+                LiteralExpression.newConstant(null)));
     }
 
     public static Expression columnComparison(CompareOperator op, Expression c1, Expression c2) {
-        return new ComparisonExpression(Arrays.<Expression>asList(c1, c2), op);
+        return new ComparisonExpression(Arrays.<Expression> asList(c1, c2), op);
     }
 
     public static SingleKeyValueComparisonFilter singleKVFilter(Expression e) {
@@ -415,7 +435,8 @@ public class TestUtil {
         return new MultiCQKeyValueComparisonFilter(e, false, ByteUtil.EMPTY_BYTE_ARRAY);
     }
 
-    public static MultiEncodedCQKeyValueComparisonFilter multiEncodedKVFilter(Expression e, QualifierEncodingScheme encodingScheme) {
+    public static MultiEncodedCQKeyValueComparisonFilter multiEncodedKVFilter(Expression e,
+            QualifierEncodingScheme encodingScheme) {
         return new MultiEncodedCQKeyValueComparisonFilter(e, encodingScheme, false, null);
     }
 
@@ -432,7 +453,8 @@ public class TestUtil {
     }
 
     public static Expression in(Expression... expressions) throws SQLException {
-        return InListExpression.create(Arrays.asList(expressions), false, new ImmutableBytesWritable(), true);
+        return InListExpression.create(Arrays.asList(expressions), false,
+                new ImmutableBytesWritable(), true);
     }
 
     public static Expression in(Expression e, Object... literals) throws SQLException {
@@ -458,9 +480,9 @@ public class TestUtil {
     }
 
     public static void assertNotDegenerate(Scan scan) {
-        assertFalse(
-            Bytes.compareTo(KeyRange.EMPTY_RANGE.getLowerRange(), scan.getStartRow()) == 0 &&
-                Bytes.compareTo(KeyRange.EMPTY_RANGE.getLowerRange(), scan.getStopRow()) == 0);
+        assertFalse(Bytes.compareTo(KeyRange.EMPTY_RANGE.getLowerRange(),
+                scan.getStartRow()) == 0 && Bytes.compareTo(KeyRange.EMPTY_RANGE.getLowerRange(),
+                scan.getStopRow()) == 0);
     }
 
     public static void assertEmptyScanKey(Scan scan) {
@@ -472,49 +494,50 @@ public class TestUtil {
 
     /**
      * Does a deep comparison of two Results, down to the byte arrays.
-     *
      * @param res1 first result to compare
      * @param res2 second result to compare
      * @throws Exception Every difference is throwing an exception
      */
-    public static void compareTuples(Tuple res1, Tuple res2)
-        throws Exception {
+    public static void compareTuples(Tuple res1, Tuple res2) throws Exception {
         if (res2 == null) {
-            throw new Exception("There wasn't enough rows, we stopped at "
-                + res1);
+            throw new Exception("There wasn't enough rows, we stopped at " + res1);
         }
         if (res1.size() != res2.size()) {
-            throw new Exception("This row doesn't have the same number of KVs: "
-                + res1.toString() + " compared to " + res2.toString());
+            throw new Exception(
+                    "This row doesn't have the same number of KVs: " + res1.toString() + " compared to " + res2.toString());
         }
         for (int i = 0; i < res1.size(); i++) {
             Cell ourKV = res1.getValue(i);
             Cell replicatedKV = res2.getValue(i);
             if (!ourKV.equals(replicatedKV)) {
-                throw new Exception("This result was different: "
-                    + res1.toString() + " compared to " + res2.toString());
+                throw new Exception(
+                        "This result was different: " + res1.toString() + " compared to " + res2.toString());
             }
         }
     }
 
     public static void clearMetaDataCache(Connection conn) throws Throwable {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        Table htable = pconn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
+        Table
+                htable =
+                pconn.getQueryServices()
+                        .getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
         htable.coprocessorService(MetaDataService.class, HConstants.EMPTY_START_ROW,
-            HConstants.EMPTY_END_ROW, new Batch.Call<MetaDataService, ClearCacheResponse>() {
-                @Override
-                public ClearCacheResponse call(MetaDataService instance) throws IOException {
-                    ServerRpcController controller = new ServerRpcController();
-                    BlockingRpcCallback<ClearCacheResponse> rpcCallback =
-                        new BlockingRpcCallback<ClearCacheResponse>();
-                    ClearCacheRequest.Builder builder = ClearCacheRequest.newBuilder();
-                    instance.clearCache(controller, builder.build(), rpcCallback);
-                    if (controller.getFailedOn() != null) {
-                        throw controller.getFailedOn();
+                HConstants.EMPTY_END_ROW, new Batch.Call<MetaDataService, ClearCacheResponse>() {
+                    @Override
+                    public ClearCacheResponse call(MetaDataService instance) throws IOException {
+                        ServerRpcController controller = new ServerRpcController();
+                        BlockingRpcCallback<ClearCacheResponse>
+                                rpcCallback =
+                                new BlockingRpcCallback<ClearCacheResponse>();
+                        ClearCacheRequest.Builder builder = ClearCacheRequest.newBuilder();
+                        instance.clearCache(controller, builder.build(), rpcCallback);
+                        if (controller.getFailedOn() != null) {
+                            throw controller.getFailedOn();
+                        }
+                        return rpcCallback.get();
                     }
-                    return rpcCallback.get();
-                }
-            });
+                });
     }
 
     public static void closeStatement(Statement stmt) {
@@ -536,7 +559,8 @@ public class TestUtil {
         closeConnection(conn);
     }
 
-    public static void bindParams(PhoenixPreparedStatement stmt, List<Object> binds) throws SQLException {
+    public static void bindParams(PhoenixPreparedStatement stmt, List<Object> binds)
+            throws SQLException {
         for (int i = 0; i < binds.size(); i++) {
             stmt.setObject(i + 1, binds.get(i));
         }
@@ -548,52 +572,48 @@ public class TestUtil {
      * @param id        id of the row being inserted
      * @param input     input to be inserted
      */
-    public static void upsertRow(Connection conn, String tableName, String sortOrder, int id, Object input) throws SQLException {
+    public static void upsertRow(Connection conn, String tableName, String sortOrder, int id,
+            Object input) throws SQLException {
         String dml = String.format("UPSERT INTO " + tableName + "_%s VALUES(?,?)", sortOrder);
         PreparedStatement stmt = conn.prepareStatement(dml);
         stmt.setInt(1, id);
-        if (input instanceof String)
-            stmt.setString(2, (String) input);
-        else if (input instanceof Integer)
-            stmt.setInt(2, (Integer) input);
-        else if (input instanceof Double)
-            stmt.setDouble(2, (Double) input);
-        else if (input instanceof Float)
-            stmt.setFloat(2, (Float) input);
-        else if (input instanceof Boolean)
-            stmt.setBoolean(2, (Boolean) input);
-        else if (input instanceof Long)
-            stmt.setLong(2, (Long) input);
-        else
-            throw new UnsupportedOperationException("" + input.getClass() + " is not supported by upsertRow");
+        if (input instanceof String) stmt.setString(2, (String) input);
+        else if (input instanceof Integer) stmt.setInt(2, (Integer) input);
+        else if (input instanceof Double) stmt.setDouble(2, (Double) input);
+        else if (input instanceof Float) stmt.setFloat(2, (Float) input);
+        else if (input instanceof Boolean) stmt.setBoolean(2, (Boolean) input);
+        else if (input instanceof Long) stmt.setLong(2, (Long) input);
+        else throw new UnsupportedOperationException(
+                    "" + input.getClass() + " is not supported by upsertRow");
         stmt.execute();
         conn.commit();
     }
 
-    public static void createGroupByTestTable(Connection conn, String tableName) throws SQLException {
-        conn.createStatement().execute("create table " + tableName +
-            "   (id varchar not null primary key,\n" +
-            "    uri varchar, appcpu integer)");
+    public static void createGroupByTestTable(Connection conn, String tableName)
+            throws SQLException {
+        conn.createStatement().execute(
+                "create table " + tableName + "   (id varchar not null primary key,\n" + "    uri varchar, appcpu integer)");
     }
 
-    private static void createTable(Connection conn, String inputSqlType, String tableName, String sortOrder) throws SQLException {
-        String dmlFormat =
-            "CREATE TABLE " + tableName + "_%s (id INTEGER NOT NULL, pk %s NOT NULL, " + "kv %s "
-                + "CONSTRAINT PK_CONSTRAINT PRIMARY KEY (id, pk %s))";
+    private static void createTable(Connection conn, String inputSqlType, String tableName,
+            String sortOrder) throws SQLException {
+        String
+                dmlFormat =
+                "CREATE TABLE " + tableName + "_%s (id INTEGER NOT NULL, pk %s NOT NULL, " + "kv %s " + "CONSTRAINT PK_CONSTRAINT PRIMARY KEY (id, pk %s))";
         String ddl = String.format(dmlFormat, sortOrder, inputSqlType, inputSqlType, sortOrder);
         conn.createStatement().execute(ddl);
         conn.commit();
     }
 
     /**
-     * Creates a table to be used for testing. It contains one id column, one varchar column to be used as input, and
-     * one column which will contain null values
-     *
+     * Creates a table to be used for testing. It contains one id column, one varchar column to
+     * be used as input, and one column which will contain null values
      * @param conn         connection to be used
      * @param inputSqlType sql type of input
      * @param inputList    list of values to be inserted into the pk column
      */
-    public static String initTables(Connection conn, String inputSqlType, List<Object> inputList) throws Exception {
+    public static String initTables(Connection conn, String inputSqlType, List<Object> inputList)
+            throws Exception {
         String tableName = generateUniqueName();
         createTable(conn, inputSqlType, tableName, "ASC");
         createTable(conn, inputSqlType, tableName, "DESC");
@@ -604,22 +624,39 @@ public class TestUtil {
         return tableName;
     }
 
-    public static List<KeyRange> getAllSplits(Connection conn, String tableName) throws SQLException {
+    public static List<KeyRange> getAllSplits(Connection conn, String tableName)
+            throws SQLException {
         return getSplits(conn, tableName, null, null, null, null, null);
     }
 
-    public static List<KeyRange> getAllSplits(Connection conn, String tableName, String where, String selectClause) throws SQLException {
+    public static List<KeyRange> getAllSplits(Connection conn, String tableName, String where,
+            String selectClause) throws SQLException {
         return getSplits(conn, tableName, null, null, null, where, selectClause);
     }
 
-    public static List<KeyRange> getSplits(Connection conn, String tableName, String pkCol, byte[] lowerRange, byte[] upperRange, String whereClauseSuffix, String selectClause) throws SQLException {
-        String whereClauseStart =
-            (lowerRange == null && upperRange == null ? "" :
-                " WHERE " + ((lowerRange != null ? (pkCol + " >= ? " + (upperRange != null ? " AND " : "")) : "")
-                    + (upperRange != null ? (pkCol + " < ?") : "")));
-        String whereClause = whereClauseSuffix == null ? whereClauseStart : whereClauseStart.length() == 0 ? (" WHERE " + whereClauseSuffix) : (" AND " + whereClauseSuffix);
-        String query = "SELECT /*+ NO_INDEX */ " + selectClause + " FROM " + tableName + whereClause;
-        PhoenixPreparedStatement pstmt = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
+    public static List<KeyRange> getSplits(Connection conn, String tableName, String pkCol,
+            byte[] lowerRange, byte[] upperRange, String whereClauseSuffix, String selectClause)
+            throws SQLException {
+        String
+                whereClauseStart =
+                (lowerRange == null && upperRange == null ?
+                        "" :
+                        " WHERE " + ((lowerRange != null ?
+                                (pkCol + " >= ? " + (upperRange != null ? " AND " : "")) :
+                                "") + (upperRange != null ? (pkCol + " < ?") : "")));
+        String
+                whereClause =
+                whereClauseSuffix == null ?
+                        whereClauseStart :
+                        whereClauseStart.length() == 0 ?
+                                (" WHERE " + whereClauseSuffix) :
+                                (" AND " + whereClauseSuffix);
+        String
+                query =
+                "SELECT /*+ NO_INDEX */ " + selectClause + " FROM " + tableName + whereClause;
+        PhoenixPreparedStatement
+                pstmt =
+                conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
         if (lowerRange != null) {
             pstmt.setBytes(1, lowerRange);
         }
@@ -631,25 +668,37 @@ public class TestUtil {
         return keyRanges;
     }
 
-    public static Collection<GuidePostsInfo> getGuidePostsList(Connection conn, String tableName) throws SQLException {
+    public static Collection<GuidePostsInfo> getGuidePostsList(Connection conn, String tableName)
+            throws SQLException {
         return getGuidePostsList(conn, tableName, null, null, null, null);
     }
 
-    public static Collection<GuidePostsInfo> getGuidePostsList(Connection conn, String tableName, String where)
-        throws SQLException {
+    public static Collection<GuidePostsInfo> getGuidePostsList(Connection conn, String tableName,
+            String where) throws SQLException {
         return getGuidePostsList(conn, tableName, null, null, null, where);
     }
 
-    public static Collection<GuidePostsInfo> getGuidePostsList(Connection conn, String tableName, String pkCol,
-                                                               byte[] lowerRange, byte[] upperRange, String whereClauseSuffix) throws SQLException {
-        String whereClauseStart = (lowerRange == null && upperRange == null ? ""
-            : " WHERE "
-            + ((lowerRange != null ? (pkCol + " >= ? " + (upperRange != null ? " AND " : "")) : "") + (upperRange != null ? (pkCol + " < ?")
-            : "")));
-        String whereClause = whereClauseSuffix == null ? whereClauseStart
-            : whereClauseStart.length() == 0 ? (" WHERE " + whereClauseSuffix) : (" AND " + whereClauseSuffix);
+    public static Collection<GuidePostsInfo> getGuidePostsList(Connection conn, String tableName,
+            String pkCol, byte[] lowerRange, byte[] upperRange, String whereClauseSuffix)
+            throws SQLException {
+        String
+                whereClauseStart =
+                (lowerRange == null && upperRange == null ?
+                        "" :
+                        " WHERE " + ((lowerRange != null ?
+                                (pkCol + " >= ? " + (upperRange != null ? " AND " : "")) :
+                                "") + (upperRange != null ? (pkCol + " < ?") : "")));
+        String
+                whereClause =
+                whereClauseSuffix == null ?
+                        whereClauseStart :
+                        whereClauseStart.length() == 0 ?
+                                (" WHERE " + whereClauseSuffix) :
+                                (" AND " + whereClauseSuffix);
         String query = "SELECT /*+ NO_INDEX */ COUNT(*) FROM " + tableName + whereClause;
-        PhoenixPreparedStatement pstmt = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
+        PhoenixPreparedStatement
+                pstmt =
+                conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
         if (lowerRange != null) {
             pstmt.setBytes(1, lowerRange);
         }
@@ -660,32 +709,40 @@ public class TestUtil {
         TableRef tableRef = pstmt.getQueryPlan().getTableRef();
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         PTable table = tableRef.getTable();
-        GuidePostsInfo info = pconn.getQueryServices().getTableStats(new GuidePostsKey(table.getName().getBytes(), SchemaUtil.getEmptyColumnFamily(table)));
+        GuidePostsInfo
+                info =
+                pconn.getQueryServices().getTableStats(new GuidePostsKey(table.getName().getBytes(),
+                        SchemaUtil.getEmptyColumnFamily(table)));
         return Collections.singletonList(info);
     }
 
-    public static void analyzeTable(Connection conn, String tableName) throws IOException, SQLException {
+    public static void analyzeTable(Connection conn, String tableName)
+            throws IOException, SQLException {
         analyzeTable(conn, tableName, false);
     }
 
-    public static void analyzeTable(Connection conn, String tableName, boolean transactional) throws IOException, SQLException {
+    public static void analyzeTable(Connection conn, String tableName, boolean transactional)
+            throws IOException, SQLException {
         String query = "UPDATE STATISTICS " + tableName;
         conn.createStatement().execute(query);
         // if the table is transactional burn a txn in order to make sure the next txn read pointer is close to wall clock time
         conn.commit();
     }
 
-    public static void analyzeTableIndex(Connection conn, String tableName) throws IOException, SQLException {
+    public static void analyzeTableIndex(Connection conn, String tableName)
+            throws IOException, SQLException {
         String query = "UPDATE STATISTICS " + tableName + " INDEX";
         conn.createStatement().execute(query);
     }
 
-    public static void analyzeTableColumns(Connection conn, String tableName) throws IOException, SQLException {
+    public static void analyzeTableColumns(Connection conn, String tableName)
+            throws IOException, SQLException {
         String query = "UPDATE STATISTICS " + tableName + " COLUMNS";
         conn.createStatement().execute(query);
     }
 
-    public static void analyzeTable(String url, Properties props, String tableName) throws IOException, SQLException {
+    public static void analyzeTable(String url, Properties props, String tableName)
+            throws IOException, SQLException {
         Connection conn = DriverManager.getConnection(url, props);
         analyzeTable(conn, tableName);
         conn.close();
@@ -698,7 +755,10 @@ public class TestUtil {
         stmt.setInt(3, i);
         stmt.setLong(4, i);
         stmt.setBigDecimal(5, new BigDecimal(i * 0.5d));
-        Date date = new Date(DateUtil.parseDate("2015-01-01 00:00:00").getTime() + (i - 1) * MILLIS_IN_DAY);
+        Date
+                date =
+                new Date(DateUtil.parseDate("2015-01-01 00:00:00")
+                        .getTime() + (i - 1) * MILLIS_IN_DAY);
         stmt.setDate(6, date);
     }
 
@@ -709,112 +769,113 @@ public class TestUtil {
         assertEquals(rs.getInt(3), i);
         assertEquals(rs.getInt(4), i);
         assertEquals(rs.getBigDecimal(5), new BigDecimal(i * 0.5d));
-        Date date = new Date(DateUtil.parseDate("2015-01-01 00:00:00").getTime() + (i - 1) * MILLIS_IN_DAY);
+        Date
+                date =
+                new Date(DateUtil.parseDate("2015-01-01 00:00:00")
+                        .getTime() + (i - 1) * MILLIS_IN_DAY);
         assertEquals(rs.getDate(6), date);
     }
 
-    public static ClientAggregators getSingleSumAggregator(String url, Properties props) throws SQLException {
-        try (PhoenixConnection pconn = DriverManager.getConnection(url, props).unwrap(PhoenixConnection.class)) {
+    public static ClientAggregators getSingleSumAggregator(String url, Properties props)
+            throws SQLException {
+        try (PhoenixConnection pconn = DriverManager.getConnection(url, props)
+                .unwrap(PhoenixConnection.class)) {
             PhoenixStatement statement = new PhoenixStatement(pconn);
-            StatementContext context = new StatementContext(statement, null, new Scan(), new SequenceManager(statement));
+            StatementContext
+                    context =
+                    new StatementContext(statement, null, new Scan(),
+                            new SequenceManager(statement));
             AggregationManager aggregationManager = context.getAggregationManager();
-            SumAggregateFunction func = new SumAggregateFunction(Arrays.<Expression>asList(new KeyValueColumnExpression(new PLongColumn() {
-                @Override
-                public PName getName() {
-                    return SINGLE_COLUMN_NAME;
-                }
+            SumAggregateFunction
+                    func =
+                    new SumAggregateFunction(Arrays.<Expression> asList(
+                            new KeyValueColumnExpression(new PLongColumn() {
+                                @Override
+                                public PName getName() {
+                                    return SINGLE_COLUMN_NAME;
+                                }
 
-                @Override
-                public PName getFamilyName() {
-                    return SINGLE_COLUMN_FAMILY_NAME;
-                }
+                                @Override
+                                public PName getFamilyName() {
+                                    return SINGLE_COLUMN_FAMILY_NAME;
+                                }
 
-                @Override
-                public int getPosition() {
-                    return 0;
-                }
+                                @Override
+                                public int getPosition() {
+                                    return 0;
+                                }
 
-                @Override
-                public SortOrder getSortOrder() {
-                    return SortOrder.getDefault();
-                }
+                                @Override
+                                public SortOrder getSortOrder() {
+                                    return SortOrder.getDefault();
+                                }
 
-                @Override
-                public Integer getArraySize() {
-                    return 0;
-                }
+                                @Override
+                                public Integer getArraySize() {
+                                    return 0;
+                                }
 
-                @Override
-                public byte[] getViewConstant() {
-                    return null;
-                }
+                                @Override
+                                public byte[] getViewConstant() {
+                                    return null;
+                                }
 
-                @Override
-                public boolean isViewReferenced() {
-                    return false;
-                }
+                                @Override
+                                public boolean isViewReferenced() {
+                                    return false;
+                                }
 
-                @Override
-                public String getExpressionStr() {
-                    return null;
-                }
+                                @Override
+                                public String getExpressionStr() {
+                                    return null;
+                                }
 
-                @Override
-                public long getTimestamp() {
-                    return HConstants.LATEST_TIMESTAMP;
-                }
+                                @Override
+                                public long getTimestamp() {
+                                    return HConstants.LATEST_TIMESTAMP;
+                                }
 
-                @Override
-                public boolean isDerived() {
-                    return false;
-                }
+                                @Override
+                                public boolean isDerived() {
+                                    return false;
+                                }
 
-                @Override
-                public boolean isExcluded() {
-                    return false;
-                }
+                                @Override
+                                public boolean isExcluded() {
+                                    return false;
+                                }
 
-                @Override
-                public boolean isRowTimestamp() {
-                    return false;
-                }
+                                @Override
+                                public boolean isRowTimestamp() {
+                                    return false;
+                                }
 
-                @Override
-                public boolean isDynamic() {
-                    return false;
-                }
+                                @Override
+                                public boolean isDynamic() {
+                                    return false;
+                                }
 
-                @Override
-                public byte[] getColumnQualifierBytes() {
-                    return SINGLE_COLUMN_NAME.getBytes();
-                }
-            })), null);
-            aggregationManager.setAggregators(new ClientAggregators(Collections.<SingleAggregateFunction>singletonList(func), 1));
+                                @Override
+                                public byte[] getColumnQualifierBytes() {
+                                    return SINGLE_COLUMN_NAME.getBytes();
+                                }
+                            })), null);
+            aggregationManager.setAggregators(
+                    new ClientAggregators(Collections.<SingleAggregateFunction> singletonList(func),
+                            1));
             ClientAggregators aggregators = aggregationManager.getAggregators();
             return aggregators;
         }
     }
 
-    public static void createMultiCFTestTable(Connection conn, String tableName, String options) throws SQLException {
-        String ddl = "create table if not exists " + tableName + "(" +
-            "   varchar_pk VARCHAR NOT NULL, " +
-            "   char_pk CHAR(5) NOT NULL, " +
-            "   int_pk INTEGER NOT NULL, " +
-            "   long_pk BIGINT NOT NULL, " +
-            "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
-            "   a.varchar_col1 VARCHAR, " +
-            "   a.char_col1 CHAR(5), " +
-            "   a.int_col1 INTEGER, " +
-            "   a.long_col1 BIGINT, " +
-            "   a.decimal_col1 DECIMAL(31, 10), " +
-            "   b.varchar_col2 VARCHAR, " +
-            "   b.char_col2 CHAR(5), " +
-            "   b.int_col2 INTEGER, " +
-            "   b.long_col2 BIGINT, " +
-            "   b.decimal_col2 DECIMAL, " +
-            "   b.date_col DATE " +
-            "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk)) "
-            + (options != null ? options : "");
+    public static void createMultiCFTestTable(Connection conn, String tableName, String options)
+            throws SQLException {
+        String
+                ddl =
+                "create table if not exists " + tableName + "(" + "   varchar_pk VARCHAR NOT NULL, " + "   char_pk CHAR(5) NOT NULL, " + "   int_pk INTEGER NOT NULL, " + "   long_pk BIGINT NOT NULL, " + "   decimal_pk DECIMAL(31, 10) NOT NULL, " + "   a.varchar_col1 VARCHAR, " + "   a.char_col1 CHAR(5), " + "   a.int_col1 INTEGER, " + "   a.long_col1 BIGINT, " + "   a.decimal_col1 DECIMAL(31, 10), " + "   b.varchar_col2 VARCHAR, " + "   b.char_col2 CHAR(5), " + "   b.int_col2 INTEGER, " + "   b.long_col2 BIGINT, " + "   b.decimal_col2 DECIMAL, " + "   b.date_col DATE " + "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk)) " + (
+                        options != null ?
+                                options :
+                                "");
         conn.createStatement().execute(ddl);
     }
 
@@ -837,29 +898,29 @@ public class TestUtil {
                 }
                 Thread.sleep(1000);
             }
-        }
-        finally {
+        } finally {
             CompactionScanner.setForceMinorCompaction(false);
         }
     }
 
     public static void majorCompact(HBaseTestingUtility utility, TableName table)
-        throws IOException, InterruptedException {
+            throws IOException, InterruptedException {
         long compactionRequestedSCN = EnvironmentEdgeManager.currentTimeMillis();
         Admin admin = utility.getAdmin();
         admin.majorCompact(table);
         long lastCompactionTimestamp;
         CompactionState state = null;
         CompactionState previousState = null;
-        while ((state = admin.getCompactionState(table)).equals(CompactionState.MAJOR)
-                || state.equals(CompactionState.MAJOR_AND_MINOR)
-                || (lastCompactionTimestamp =
+        while ((state = admin.getCompactionState(table)).equals(
+                CompactionState.MAJOR) || state.equals(CompactionState.MAJOR_AND_MINOR) || (
+                lastCompactionTimestamp =
                         admin.getLastMajorCompactionTimestamp(table)) < compactionRequestedSCN) {
             // In HBase 2.5 getLastMajorCompactionTimestamp doesn't seem to get updated when the
             // clock is stopped, so check for the state going to NONE instead
-            if (state.equals(CompactionState.NONE) && (previousState != null
-                    && (previousState.equals(CompactionState.MAJOR_AND_MINOR)
-                    || previousState.equals(CompactionState.MAJOR)))) {
+            if (state.equals(
+                    CompactionState.NONE) && (previousState != null && (previousState.equals(
+                    CompactionState.MAJOR_AND_MINOR) || previousState.equals(
+                    CompactionState.MAJOR)))) {
                 break;
             }
             previousState = state;
@@ -868,8 +929,8 @@ public class TestUtil {
     }
 
     /**
-     * Runs a major compaction, and then waits until the compaction is complete before returning.
-     *
+     * Runs a major compaction, and then waits until the compaction is complete before
+     * returning.
      * @param tableName name of the table to be compacted
      */
     public static void doMajorCompaction(Connection conn, String tableName) throws Exception {
@@ -915,7 +976,7 @@ public class TestUtil {
                 Thread.sleep(6000L);
                 Scan scan = new Scan();
                 scan.withStartRow(markerRowKey);
-                scan.withStopRow(Bytes.add(markerRowKey, new byte[]{0}));
+                scan.withStopRow(Bytes.add(markerRowKey, new byte[] { 0 }));
                 scan.setRaw(true);
 
                 try (Table htableForRawScan = services.getTable(Bytes.toBytes(tableName))) {
@@ -938,16 +999,22 @@ public class TestUtil {
         }
     }
 
-    public static void createTransactionalTable(Connection conn, String tableName) throws SQLException {
+    public static void createTransactionalTable(Connection conn, String tableName)
+            throws SQLException {
         createTransactionalTable(conn, tableName, "");
     }
 
-    public static void createTransactionalTable(Connection conn, String tableName, String extraProps) throws SQLException {
-        conn.createStatement().execute("create table " + tableName + TestUtil.TEST_TABLE_SCHEMA + "TRANSACTIONAL=true" + (extraProps.length() == 0 ? "" : ("," + extraProps)));
+    public static void createTransactionalTable(Connection conn, String tableName,
+            String extraProps) throws SQLException {
+        conn.createStatement().execute(
+                "create table " + tableName + TestUtil.TEST_TABLE_SCHEMA + "TRANSACTIONAL=true" + (
+                        extraProps.length() == 0 ?
+                                "" :
+                                ("," + extraProps)));
     }
 
     public static void dumpTable(Connection conn, TableName tableName)
-        throws SQLException, IOException {
+            throws SQLException, IOException {
         ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
         Table table = cqs.getTable(tableName.getName());
         dumpTable(table);
@@ -969,9 +1036,9 @@ public class TestUtil {
                 Cell current;
                 while (cellScanner.advance()) {
                     current = cellScanner.current();
-                    System.out.println(current + " column= " +
-                        Bytes.toStringBinary(CellUtil.cloneQualifier(current)) +
-                        " val=" + Bytes.toStringBinary(CellUtil.cloneValue(current)));
+                    System.out.println(current + " column= " + Bytes.toStringBinary(
+                            CellUtil.cloneQualifier(current)) + " val=" + Bytes.toStringBinary(
+                            CellUtil.cloneValue(current)));
                     cellCount++;
                 }
             }
@@ -1059,16 +1126,19 @@ public class TestUtil {
         }
     }
 
-
-    public static void dumpIndexStatus(Connection conn, String indexName) throws IOException, SQLException {
-        try (Table table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES)) {
-            System.out.println("************ dumping index status for " + indexName + " **************");
+    public static void dumpIndexStatus(Connection conn, String indexName)
+            throws IOException, SQLException {
+        try (Table table = conn.unwrap(PhoenixConnection.class).getQueryServices()
+                .getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES)) {
+            System.out.println(
+                    "************ dumping index status for " + indexName + " **************");
             Scan s = new Scan();
             s.setRaw(true);
             s.readAllVersions();
             byte[] startRow = SchemaUtil.getTableKeyFromFullName(indexName);
             s.withStartRow(startRow);
-            s.withStopRow(ByteUtil.nextKey(ByteUtil.concat(startRow, QueryConstants.SEPARATOR_BYTE_ARRAY)));
+            s.withStopRow(ByteUtil.nextKey(
+                    ByteUtil.concat(startRow, QueryConstants.SEPARATOR_BYTE_ARRAY)));
             try (ResultScanner scanner = table.getScanner(s)) {
                 Result result = null;
                 while ((result = scanner.next()) != null) {
@@ -1076,8 +1146,13 @@ public class TestUtil {
                     Cell current = null;
                     while (cellScanner.advance()) {
                         current = cellScanner.current();
-                        if (Bytes.compareTo(current.getQualifierArray(), current.getQualifierOffset(), current.getQualifierLength(), PhoenixDatabaseMetaData.INDEX_STATE_BYTES, 0, PhoenixDatabaseMetaData.INDEX_STATE_BYTES.length) == 0) {
-                            System.out.println(current.getTimestamp() + "/INDEX_STATE=" + PIndexState.fromSerializedValue(current.getValueArray()[current.getValueOffset()]));
+                        if (Bytes.compareTo(current.getQualifierArray(),
+                                current.getQualifierOffset(), current.getQualifierLength(),
+                                PhoenixDatabaseMetaData.INDEX_STATE_BYTES, 0,
+                                PhoenixDatabaseMetaData.INDEX_STATE_BYTES.length) == 0) {
+                            System.out.println(
+                                    current.getTimestamp() + "/INDEX_STATE=" + PIndexState.fromSerializedValue(
+                                            current.getValueArray()[current.getValueOffset()]));
                         }
                     }
                 }
@@ -1109,7 +1184,8 @@ public class TestUtil {
         }
     }
 
-    public static void waitForIndexRebuild(Connection conn, String fullIndexName, PIndexState indexState) throws InterruptedException, SQLException {
+    public static void waitForIndexRebuild(Connection conn, String fullIndexName,
+            PIndexState indexState) throws InterruptedException, SQLException {
         waitForIndexState(conn, fullIndexName, indexState, 0L);
     }
 
@@ -1118,24 +1194,25 @@ public class TestUtil {
         public final Long indexDisableTimestamp;
         public final Boolean success;
 
-        public IndexStateCheck(PIndexState indexState, Long indexDisableTimestamp, Boolean success) {
+        public IndexStateCheck(PIndexState indexState, Long indexDisableTimestamp,
+                Boolean success) {
             this.indexState = indexState;
             this.indexDisableTimestamp = indexDisableTimestamp;
             this.success = success;
         }
     }
 
-    public static void waitForIndexState(Connection conn, String fullIndexName, PIndexState expectedIndexState) throws InterruptedException, SQLException {
+    public static void waitForIndexState(Connection conn, String fullIndexName,
+            PIndexState expectedIndexState) throws InterruptedException, SQLException {
         int maxTries = 120, nTries = 0;
         PIndexState actualIndexState = null;
         do {
             String schema = SchemaUtil.getSchemaNameFromFullName(fullIndexName);
             String index = SchemaUtil.getTableNameFromFullName(fullIndexName);
             Thread.sleep(1000); // sleep 1 sec
-            String query = "SELECT " + PhoenixDatabaseMetaData.INDEX_STATE + " FROM " +
-                PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + " WHERE (" + PhoenixDatabaseMetaData.TABLE_SCHEM + "," + PhoenixDatabaseMetaData.TABLE_NAME
-                + ") = (" + "'" + schema + "','" + index + "') "
-                + "AND " + PhoenixDatabaseMetaData.COLUMN_FAMILY + " IS NULL AND " + PhoenixDatabaseMetaData.COLUMN_NAME + " IS NULL";
+            String
+                    query =
+                    "SELECT " + PhoenixDatabaseMetaData.INDEX_STATE + " FROM " + PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + " WHERE (" + PhoenixDatabaseMetaData.TABLE_SCHEM + "," + PhoenixDatabaseMetaData.TABLE_NAME + ") = (" + "'" + schema + "','" + index + "') " + "AND " + PhoenixDatabaseMetaData.COLUMN_FAMILY + " IS NULL AND " + PhoenixDatabaseMetaData.COLUMN_NAME + " IS NULL";
             ResultSet rs = conn.createStatement().executeQuery(query);
             if (rs.next()) {
                 actualIndexState = PIndexState.fromSerializedValue(rs.getString(1));
@@ -1145,15 +1222,22 @@ public class TestUtil {
                 }
             }
         } while (++nTries < maxTries);
-        fail("Ran out of time waiting for index state to become " + expectedIndexState + " last seen actual state is " +
-            (actualIndexState == null ? "Unknown" : actualIndexState.toString()));
+        fail("Ran out of time waiting for index state to become " + expectedIndexState + " last seen actual state is " + (
+                actualIndexState == null ?
+                        "Unknown" :
+                        actualIndexState.toString()));
     }
 
-    public static void waitForIndexState(Connection conn, String fullIndexName, PIndexState expectedIndexState, Long expectedIndexDisableTimestamp) throws InterruptedException, SQLException {
+    public static void waitForIndexState(Connection conn, String fullIndexName,
+            PIndexState expectedIndexState, Long expectedIndexDisableTimestamp)
+            throws InterruptedException, SQLException {
         int maxTries = 60, nTries = 0;
         do {
             Thread.sleep(1000); // sleep 1 sec
-            IndexStateCheck state = checkIndexStateInternal(conn, fullIndexName, expectedIndexState, expectedIndexDisableTimestamp);
+            IndexStateCheck
+                    state =
+                    checkIndexStateInternal(conn, fullIndexName, expectedIndexState,
+                            expectedIndexDisableTimestamp);
             if (state.success != null) {
                 if (Boolean.TRUE.equals(state.success)) {
                     return;
@@ -1164,12 +1248,20 @@ public class TestUtil {
         fail("Ran out of time waiting for index state to become " + expectedIndexState);
     }
 
-    public static boolean checkIndexState(Connection conn, String fullIndexName, PIndexState expectedIndexState, Long expectedIndexDisableTimestamp) throws SQLException {
-        return Boolean.TRUE.equals(checkIndexStateInternal(conn, fullIndexName, expectedIndexState, expectedIndexDisableTimestamp).success);
+    public static boolean checkIndexState(Connection conn, String fullIndexName,
+            PIndexState expectedIndexState, Long expectedIndexDisableTimestamp)
+            throws SQLException {
+        return Boolean.TRUE.equals(checkIndexStateInternal(conn, fullIndexName, expectedIndexState,
+                expectedIndexDisableTimestamp).success);
     }
 
-    public static void assertIndexState(Connection conn, String fullIndexName, PIndexState expectedIndexState, Long expectedIndexDisableTimestamp) throws SQLException {
-        IndexStateCheck state = checkIndexStateInternal(conn, fullIndexName, expectedIndexState, expectedIndexDisableTimestamp);
+    public static void assertIndexState(Connection conn, String fullIndexName,
+            PIndexState expectedIndexState, Long expectedIndexDisableTimestamp)
+            throws SQLException {
+        IndexStateCheck
+                state =
+                checkIndexStateInternal(conn, fullIndexName, expectedIndexState,
+                        expectedIndexDisableTimestamp);
         if (!Boolean.TRUE.equals(state.success)) {
             if (expectedIndexState != null) {
                 assertEquals(expectedIndexState, state.indexState);
@@ -1180,7 +1272,8 @@ public class TestUtil {
         }
     }
 
-    public static PIndexState getIndexState(Connection conn, String fullIndexName) throws SQLException {
+    public static PIndexState getIndexState(Connection conn, String fullIndexName)
+            throws SQLException {
         IndexStateCheck state = checkIndexStateInternal(conn, fullIndexName, null, null);
         return state.indexState;
     }
@@ -1191,56 +1284,66 @@ public class TestUtil {
         get.addColumn(TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES);
 
         try {
-            Result pendingDisableCountResult =
-                conn.getQueryServices()
-                    .getTable(SchemaUtil.getPhysicalTableName(
-                        PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME,
-                        conn.getQueryServices().getProps()).getName())
-                    .get(get);
+            Result
+                    pendingDisableCountResult =
+                    conn.getQueryServices().getTable(SchemaUtil.getPhysicalTableName(
+                            PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME,
+                            conn.getQueryServices().getProps()).getName()).get(get);
             return Bytes.toLong(pendingDisableCountResult.getValue(TABLE_FAMILY_BYTES,
-                PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES));
+                    PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES));
         } catch (Exception e) {
             LOGGER.error("Exception in getPendingDisableCount: " + e);
             return 0;
         }
     }
 
-    private static IndexStateCheck checkIndexStateInternal(Connection conn, String fullIndexName, PIndexState expectedIndexState, Long expectedIndexDisableTimestamp) throws SQLException {
+    private static IndexStateCheck checkIndexStateInternal(Connection conn, String fullIndexName,
+            PIndexState expectedIndexState, Long expectedIndexDisableTimestamp)
+            throws SQLException {
         String schema = SchemaUtil.getSchemaNameFromFullName(fullIndexName);
         String index = SchemaUtil.getTableNameFromFullName(fullIndexName);
-        String query = "SELECT CAST(" + PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP + " AS BIGINT)," + PhoenixDatabaseMetaData.INDEX_STATE + " FROM " +
-            PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + " WHERE (" + PhoenixDatabaseMetaData.TABLE_SCHEM + "," + PhoenixDatabaseMetaData.TABLE_NAME
-            + ") = (" + "'" + schema + "','" + index + "') "
-            + "AND " + PhoenixDatabaseMetaData.COLUMN_FAMILY + " IS NULL AND " + PhoenixDatabaseMetaData.COLUMN_NAME + " IS NULL";
+        String
+                query =
+                "SELECT CAST(" + PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP + " AS BIGINT)," + PhoenixDatabaseMetaData.INDEX_STATE + " FROM " + PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + " WHERE (" + PhoenixDatabaseMetaData.TABLE_SCHEM + "," + PhoenixDatabaseMetaData.TABLE_NAME + ") = (" + "'" + schema + "','" + index + "') " + "AND " + PhoenixDatabaseMetaData.COLUMN_FAMILY + " IS NULL AND " + PhoenixDatabaseMetaData.COLUMN_NAME + " IS NULL";
         ResultSet rs = conn.createStatement().executeQuery(query);
         Long actualIndexDisableTimestamp = null;
         PIndexState actualIndexState = null;
         if (rs.next()) {
             actualIndexDisableTimestamp = rs.getLong(1);
             actualIndexState = PIndexState.fromSerializedValue(rs.getString(2));
-            boolean matchesExpected = (expectedIndexDisableTimestamp == null || Objects.equal(actualIndexDisableTimestamp, expectedIndexDisableTimestamp))
-                && (expectedIndexState == null || actualIndexState == expectedIndexState);
+            boolean
+                    matchesExpected =
+                    (expectedIndexDisableTimestamp == null || Objects.equal(
+                            actualIndexDisableTimestamp,
+                            expectedIndexDisableTimestamp)) && (expectedIndexState == null || actualIndexState == expectedIndexState);
             if (matchesExpected) {
-                return new IndexStateCheck(actualIndexState, actualIndexDisableTimestamp, Boolean.TRUE);
+                return new IndexStateCheck(actualIndexState, actualIndexDisableTimestamp,
+                        Boolean.TRUE);
             }
             if (ZERO.equals(actualIndexDisableTimestamp)) {
-                return new IndexStateCheck(actualIndexState, actualIndexDisableTimestamp, Boolean.FALSE);
+                return new IndexStateCheck(actualIndexState, actualIndexDisableTimestamp,
+                        Boolean.FALSE);
             }
         }
         return new IndexStateCheck(actualIndexState, actualIndexDisableTimestamp, null);
     }
 
     public static long getRowCount(Connection conn, String tableName) throws SQLException {
-        ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ count(*) FROM " + tableName);
+        ResultSet
+                rs =
+                conn.createStatement()
+                        .executeQuery("SELECT /*+ NO_INDEX */ count(*) FROM " + tableName);
         assertTrue(rs.next());
         return rs.getLong(1);
     }
 
     public static long getRowCount(Connection conn, String tableName, boolean skipIndex)
             throws SQLException {
-        String query = String.format("SELECT %s count(*) FROM %s",
-                (skipIndex ? "/*+ NO_INDEX */" : ""), tableName);
-        try(ResultSet rs = conn.createStatement().executeQuery(query)) {
+        String
+                query =
+                String.format("SELECT %s count(*) FROM %s", (skipIndex ? "/*+ NO_INDEX */" : ""),
+                        tableName);
+        try (ResultSet rs = conn.createStatement().executeQuery(query)) {
             assertTrue(rs.next());
             return rs.getLong(1);
         }
@@ -1249,7 +1352,7 @@ public class TestUtil {
     public static long getRowCountFromIndex(Connection conn, String tableName, String indexName)
             throws SQLException {
         String query = String.format("SELECT count(*) FROM %s", tableName);
-        try(ResultSet rs = conn.createStatement().executeQuery(query)) {
+        try (ResultSet rs = conn.createStatement().executeQuery(query)) {
             PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
             String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
             assertTrue(explainPlan.contains(indexName));
@@ -1258,46 +1361,49 @@ public class TestUtil {
         }
     }
 
-    public static void addCoprocessor(Connection conn, String tableName, Class coprocessorClass) throws Exception {
+    public static void addCoprocessor(Connection conn, String tableName, Class coprocessorClass)
+            throws Exception {
         int priority = QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY + 100;
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
         TableDescriptor descriptor = services.getTableDescriptor(Bytes.toBytes(tableName));
         TableDescriptorBuilder descriptorBuilder = null;
-		if (!descriptor.getCoprocessorDescriptors().stream().map(CoprocessorDescriptor::getClassName)
-                .collect(Collectors.toList()).contains(coprocessorClass.getName())) {
-		    descriptorBuilder=TableDescriptorBuilder.newBuilder(descriptor);
-		    descriptorBuilder.setCoprocessor(
-                    CoprocessorDescriptorBuilder.newBuilder(coprocessorClass.getName()).setPriority(priority).build());
-		}else{
-			return;
-		}
+        if (!descriptor.getCoprocessorDescriptors().stream()
+                .map(CoprocessorDescriptor::getClassName).collect(Collectors.toList())
+                .contains(coprocessorClass.getName())) {
+            descriptorBuilder = TableDescriptorBuilder.newBuilder(descriptor);
+            descriptorBuilder.setCoprocessor(
+                    CoprocessorDescriptorBuilder.newBuilder(coprocessorClass.getName())
+                            .setPriority(priority).build());
+        } else {
+            return;
+        }
         final int retries = 10;
         int numTries = 10;
         descriptor = descriptorBuilder.build();
         try (Admin admin = services.getAdmin()) {
             admin.modifyTable(descriptor);
-            while (!admin.getDescriptor(TableName.valueOf(tableName)).equals(descriptor)
-                    && numTries > 0) {
+            while (!admin.getDescriptor(TableName.valueOf(tableName))
+                    .equals(descriptor) && numTries > 0) {
                 numTries--;
                 if (numTries == 0) {
                     throw new Exception(
-                        "Failed to add " + coprocessorClass.getName() + " after "
-                            + retries + " retries.");
+                            "Failed to add " + coprocessorClass.getName() + " after " + retries + " retries.");
                 }
                 Thread.sleep(1000);
             }
         }
     }
 
-    public static void removeCoprocessor(Connection conn, String tableName, Class coprocessorClass) throws Exception {
+    public static void removeCoprocessor(Connection conn, String tableName, Class coprocessorClass)
+            throws Exception {
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
         TableDescriptor descriptor = services.getTableDescriptor(Bytes.toBytes(tableName));
         TableDescriptorBuilder descriptorBuilder = null;
         if (descriptor.getCoprocessorDescriptors().stream().map(CoprocessorDescriptor::getClassName)
                 .collect(Collectors.toList()).contains(coprocessorClass.getName())) {
-            descriptorBuilder=TableDescriptorBuilder.newBuilder(descriptor);
+            descriptorBuilder = TableDescriptorBuilder.newBuilder(descriptor);
             descriptorBuilder.removeCoprocessor(coprocessorClass.getName());
-        }else{
+        } else {
             return;
         }
         final int retries = 10;
@@ -1305,33 +1411,41 @@ public class TestUtil {
         descriptor = descriptorBuilder.build();
         try (Admin admin = services.getAdmin()) {
             admin.modifyTable(descriptor);
-            while (!admin.getDescriptor(TableName.valueOf(tableName)).equals(descriptor)
-                    && numTries > 0) {
+            while (!admin.getDescriptor(TableName.valueOf(tableName))
+                    .equals(descriptor) && numTries > 0) {
                 numTries--;
                 if (numTries == 0) {
                     throw new Exception(
-                        "Failed to remove " + coprocessorClass.getName() + " after "
-                            + retries + " retries.");
+                            "Failed to remove " + coprocessorClass.getName() + " after " + retries + " retries.");
                 }
                 Thread.sleep(1000);
             }
         }
     }
 
-    public static boolean compare(CompareOperator op, ImmutableBytesWritable lhsOutPtr, ImmutableBytesWritable rhsOutPtr) {
-        int compareResult = Bytes.compareTo(lhsOutPtr.get(), lhsOutPtr.getOffset(), lhsOutPtr.getLength(), rhsOutPtr.get(), rhsOutPtr.getOffset(), rhsOutPtr.getLength());
+    public static boolean compare(CompareOperator op, ImmutableBytesWritable lhsOutPtr,
+            ImmutableBytesWritable rhsOutPtr) {
+        int
+                compareResult =
+                Bytes.compareTo(lhsOutPtr.get(), lhsOutPtr.getOffset(), lhsOutPtr.getLength(),
+                        rhsOutPtr.get(), rhsOutPtr.getOffset(), rhsOutPtr.getLength());
         return ByteUtil.compare(op, compareResult);
     }
 
     public static QueryPlan getOptimizeQueryPlan(Connection conn, String sql) throws SQLException {
-        PhoenixPreparedStatement statement = conn.prepareStatement(sql).unwrap(PhoenixPreparedStatement.class);
+        PhoenixPreparedStatement
+                statement =
+                conn.prepareStatement(sql).unwrap(PhoenixPreparedStatement.class);
         QueryPlan queryPlan = statement.optimizeQuery(sql);
         queryPlan.iterator();
         return queryPlan;
     }
 
-    public static QueryPlan getOptimizeQueryPlanNoIterator(Connection conn, String sql) throws SQLException {
-        PhoenixPreparedStatement statement = conn.prepareStatement(sql).unwrap(PhoenixPreparedStatement.class);
+    public static QueryPlan getOptimizeQueryPlanNoIterator(Connection conn, String sql)
+            throws SQLException {
+        PhoenixPreparedStatement
+                statement =
+                conn.prepareStatement(sql).unwrap(PhoenixPreparedStatement.class);
         QueryPlan queryPlan = statement.optimizeQuery(sql);
         return queryPlan;
     }
@@ -1343,12 +1457,11 @@ public class TestUtil {
                 Object realValue = rs.getObject(columnIndex);
                 Object expectedValue = rows[rowIndex][columnIndex - 1];
                 if (realValue == null) {
-                    assertNull("rowIndex:[" + rowIndex + "],columnIndex:[" + columnIndex + "]", expectedValue);
+                    assertNull("rowIndex:[" + rowIndex + "],columnIndex:[" + columnIndex + "]",
+                            expectedValue);
                 } else {
                     assertEquals("rowIndex:[" + rowIndex + "],columnIndex:[" + columnIndex + "]",
-                        expectedValue,
-                        realValue
-                    );
+                            expectedValue, realValue);
                 }
             }
         }
@@ -1357,7 +1470,6 @@ public class TestUtil {
 
     /**
      * Find a random free port in localhost for binding.
-     *
      * @return A port number or -1 for failure.
      */
     public static int getRandomPort() {
@@ -1380,12 +1492,15 @@ public class TestUtil {
         return false;
     }
 
-    public static JoinTable getJoinTable(String query, PhoenixConnection connection) throws SQLException {
+    public static JoinTable getJoinTable(String query, PhoenixConnection connection)
+            throws SQLException {
         SQLParser parser = new SQLParser(query);
         SelectStatement select = SubselectRewriter.flatten(parser.parseQuery(), connection);
         ColumnResolver resolver = FromCompiler.getResolverForQuery(select, connection);
         select = StatementNormalizer.normalize(select, resolver);
-        SelectStatement transformedSelect = SubqueryRewriter.transform(select, resolver, connection);
+        SelectStatement
+                transformedSelect =
+                SubqueryRewriter.transform(select, resolver, connection);
         if (transformedSelect != select) {
             resolver = FromCompiler.getResolverForQuery(transformedSelect, connection);
             select = StatementNormalizer.normalize(transformedSelect, resolver);
@@ -1404,18 +1519,71 @@ public class TestUtil {
         assertEquals(code.getSQLState(), se.getSQLState());
     }
 
-    public static void assertTableHasTtl(Connection conn, TableName tableName, int ttl, boolean phoenixTTLEnabled)
-        throws SQLException, IOException {
+    /**
+     * In 5.3.0 release the TTL column will be created in SYSTEM.CATALOG and used to store TTL
+     * values, but the TTL values for tables with literal expressions will continue to be stored
+     * in the HBase TableDescriptor for backward compatibility. Table level TTL values will be
+     * moved from the HBase TableDescriptor and stored in SYSTEM.CATALOG in a future release.
+     */
+    public static void assertHBaseTTLValue(Connection conn, TableName tableName, int ttl,
+            boolean checkTTLInSystemCatalog) throws SQLException, IOException {
         TTLExpression tableTTL;
-        if (phoenixTTLEnabled) {
-            tableTTL = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,
-                    tableName.getNameAsString())).getTTLExpression();
+        if (checkTTLInSystemCatalog) {
+            tableTTL =
+                    conn.unwrap(PhoenixConnection.class)
+                            .getTable(new PTableKey(null, tableName.getNameAsString()))
+                            .getTTLExpression();
         } else {
-            tableTTL = TTLExpressionFactory.create(
-                    getColumnDescriptor(conn, tableName).getTimeToLive());
+            tableTTL =
+                    TTLExpressionFactory.create(
+                            getColumnDescriptor(conn, tableName).getTimeToLive());
         }
         TTLExpression expectedTTL = TTLExpressionFactory.create(ttl);
         Assert.assertEquals(expectedTTL, tableTTL);
+    }
+
+    /**
+     * In 5.3.0 release the TTL column will be created in SYSTEM.CATALOG and used to store TTL
+     * values, but the TTL values for tables with literal expressions will continue to be stored
+     * in the HBase TableDescriptor for backward compatibility.
+     * When table type != TABLE (i.e. VIEW TTL) OR expression is ConditionalExpression then
+     * actual TTL value is stored in SYSTEM.CATALOG and TableDescriptor will be set to FOREVER
+     * When table type == TABLE (i.e. Table TTL) and expression is LiteralExpression then actual
+     * TTL value is stored in TableDescriptor and SYSTEM.CATALOG will be set to
+     * TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR. if expression == TTL_NOT_DEFINED OR FOREVER
+     * then TTL_NOT_DEFINED will be stores in SYSTEM.CATALOG
+     */
+
+    public static void assertTTLValue(Connection conn, TTLExpression expected, String name)
+            throws SQLException, IOException {
+        PTable pTable = PhoenixRuntime.getTableNoCache(conn, name);
+        assertTTLValue(conn, pTable, expected);
+    }
+
+    public static void assertTTLValue(Connection conn, TableName tableName, int ttl)
+            throws SQLException, IOException {
+        assertTTLValue(conn, tableName.getNameAsString(), TTLExpressionFactory.create(ttl));
+    }
+
+    public static  void assertTTLValue(Connection conn, String name, TTLExpression expected)
+            throws SQLException, IOException {
+        PTable pTable = PhoenixRuntime.getTableNoCache(conn, name);
+        assertTTLValue(conn, pTable, expected);
+    }
+
+    public static void assertTTLValue(Connection conn, PTable pTable, TTLExpression expected)
+            throws SQLException, IOException {
+        TTLExpression actualInSyscat = pTable.getTTLExpression();
+        byte[] hbaseTableName = pTable.getPhysicalName().getBytes();
+        ColumnFamilyDescriptor cfd = getColumnDescriptor(conn, TableName.valueOf(hbaseTableName));
+        TTLExpression actual = actualInSyscat;
+        if (actualInSyscat.equals(TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR)) {
+            actual = TTLExpressionFactory.create(cfd.getTimeToLive());
+        } else {
+            assertEquals("Table descriptor TTL value did not match :-", TTL_EXPRESSION_FOREVER,
+                    TTLExpressionFactory.create(cfd.getTimeToLive()));
+        }
+        assertEquals("TTL value did not match :-", expected, actual);
     }
 
     public static void assertTableHasVersions(Connection conn, TableName tableName, int versions)
