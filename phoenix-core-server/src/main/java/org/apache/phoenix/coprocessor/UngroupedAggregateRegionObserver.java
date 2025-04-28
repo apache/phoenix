@@ -623,36 +623,42 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
 
     @Override
     public InternalScanner preFlush(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
-                                    InternalScanner scanner, FlushLifeCycleTracker tracker)
-            throws IOException {
-        if (!isPhoenixTableTTLEnabled(c.getEnvironment().getConfiguration())) {
+                                    InternalScanner scanner, FlushLifeCycleTracker tracker) {
+        try {
+            if (!isPhoenixTableTTLEnabled(c.getEnvironment().getConfiguration())) {
+                return scanner;
+            } else {
+                TableName tableName =
+                        c.getEnvironment().getRegion().getTableDescriptor().getTableName();
+                Map<String, byte[]> tableAttributes = TABLE_ATTRIBUTES.get(tableName);
+                if (tableAttributes == null) {
+                    LOGGER.warn("Table {} has no table attributes for empty CF and empty CQ. "
+                            + "UngroupedAggregateRegionObserver has not received any "
+                            + "mutations yet? Do not perform Compaction now.", tableName);
+                    return scanner;
+                }
+                byte[] emptyCF = tableAttributes
+                        .get(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME);
+                byte[] emptyCQ = tableAttributes
+                        .get(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME);
+                if (emptyCF == null || emptyCQ == null) {
+                    LOGGER.warn(
+                            "Table {} has no empty CF and empty CQ attributes updated in cache. "
+                                    + "Do not perform Compaction now.",
+                            tableName);
+                    return scanner;
+                }
+                return User.runAsLoginUser(
+                        (PrivilegedExceptionAction<InternalScanner>) () -> new CompactionScanner(
+                                c.getEnvironment(), store, scanner,
+                                BaseScannerRegionObserverConstants.getMaxLookbackInMillis(
+                                        c.getEnvironment().getConfiguration()),
+                                false, true, null, emptyCF, emptyCQ));
+            }
+        } catch (Exception e) {
+            // this is not normal
+            LOGGER.error("Error in preFlush. Do not perform Compaction for now.", e);
             return scanner;
-        } else {
-            TableName tableName =
-                    c.getEnvironment().getRegion().getTableDescriptor().getTableName();
-            Map<String, byte[]> tableAttributes = TABLE_ATTRIBUTES.get(tableName);
-            if (tableAttributes == null) {
-                LOGGER.warn("Table {} has no table attributes for empty CF and empty CQ. "
-                                + "UngroupedAggregateRegionObserver has not received any "
-                                + "mutations yet? Do not perform Compaction now.", tableName);
-                return scanner;
-            }
-            byte[] emptyCF = tableAttributes
-                    .get(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME);
-            byte[] emptyCQ = tableAttributes
-                    .get(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME);
-            if (emptyCF == null || emptyCQ == null) {
-                LOGGER.warn("Table {} has no empty CF and empty CQ attributes updated in cache. "
-                                + "Do not perform Compaction now.",
-                        tableName);
-                return scanner;
-            }
-            return User.runAsLoginUser(
-                    (PrivilegedExceptionAction<InternalScanner>) () -> new CompactionScanner(
-                            c.getEnvironment(), store, scanner,
-                            BaseScannerRegionObserverConstants.getMaxLookbackInMillis(
-                                    c.getEnvironment().getConfiguration()),
-                            false, true, null, emptyCF, emptyCQ));
         }
     }
 
