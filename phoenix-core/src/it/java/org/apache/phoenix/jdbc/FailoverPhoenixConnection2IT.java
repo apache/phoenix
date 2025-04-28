@@ -528,6 +528,19 @@ public class FailoverPhoenixConnection2IT {
             assertFalse(conn.isClosed());
             assertTrue(conn.getWrappedConnection().isClosed());
         }
+
+        //Try reading again, but it should throw SQLException
+        try {
+            connection.createStatement().executeQuery(
+                    String.format("SELECT v FROM %s WHERE id = %d", tableName, 50));
+            fail();
+        } catch (Exception e) {
+            if (e instanceof SQLException) {
+                //Expected as connections should be closed
+            } else {
+                fail();
+            }
+        }
     }
 
     /**
