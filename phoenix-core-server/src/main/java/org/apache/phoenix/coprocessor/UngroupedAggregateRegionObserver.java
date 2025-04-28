@@ -37,6 +37,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 import javax.annotation.concurrent.GuardedBy;
 
@@ -183,7 +185,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     private ReadOnlyProps indexWriteProps;
     private boolean isEmptyColumnNameCached;
 
-    private static final Map<TableName, Map<String, byte[]>> TABLE_ATTRIBUTES = new HashMap<>();
+    private static final ConcurrentMap<TableName, Map<String, byte[]>> TABLE_ATTRIBUTES =
+            new ConcurrentHashMap<>();
 
     @Override
     public Optional<RegionObserver> getRegionObserver() {
