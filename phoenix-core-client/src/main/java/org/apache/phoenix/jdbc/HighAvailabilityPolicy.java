@@ -52,7 +52,7 @@ public enum HighAvailabilityPolicy {
          * Cluster Role Transitions for Failover High Availability Policy, Here we are trying to
          * close connections late to allow existing reads to continue during Failover.
          * ACTIVE --> ACTIVE_TO_STANDBY (Doing Nothing as we are in process of moving the current
-         *      to STANDBY and at this step we are blocking reads to drain replication this allows
+         *      to STANDBY and at this step we are blocking write to drain replication this allows
          *      us to continue existing reads to continue)
          * ACTIVE|ACTIVE_TO_STANDBY --> STANDBY (Closing all current connections)
          *
