@@ -41,7 +41,6 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -259,7 +258,7 @@ public class WALRecoveryRegionPostOpenIT extends BaseTest {
             scan = new Scan();
             primaryTable.close();
             primaryTable = hbaseConn.getTable(TableName.valueOf(DATA_TABLE_NAME));
-            ((ClusterConnection)hbaseConn).clearRegionLocationCache();
+            hbaseConn.clearRegionLocationCache();
             resultScanner = primaryTable.getScanner(scan);
             count = 0;
             for (Result result : resultScanner) {
