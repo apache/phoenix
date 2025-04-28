@@ -20,11 +20,14 @@ package org.apache.phoenix.replication.log;
 import java.io.Closeable;
 import java.io.DataInput;
 import java.io.IOException;
+
 import org.apache.hadoop.fs.FSDataInputStream;
 
 /**
  * Input side abstraction, mirroring the write side FSDataOutput.
  */
+@edu.umd.cs.findbugs.annotations.SuppressWarnings(value="EI_EXPOSE_REP2",
+    justification="Intentional")
 public class FSDataInput implements DataInput, Closeable, SeekableDataInput {
 
     private final FSDataInputStream delegate;
@@ -35,12 +38,12 @@ public class FSDataInput implements DataInput, Closeable, SeekableDataInput {
 
     @Override
     public void readFully(byte[] b) throws IOException {
-        delegate.readFully(b);      
+        delegate.readFully(b);
     }
 
     @Override
     public void readFully(byte[] b, int off, int len) throws IOException {
-        delegate.readFully(b, off, len);      
+        delegate.readFully(b, off, len);
     }
 
     @Override
@@ -111,7 +114,7 @@ public class FSDataInput implements DataInput, Closeable, SeekableDataInput {
 
     @Override
     public void seek(long pos) throws IOException {
-        delegate.seek(pos);     
+        delegate.seek(pos);
     }
 
     @Override

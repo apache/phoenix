@@ -22,6 +22,7 @@ import java.io.Closeable;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+
 import org.apache.hadoop.hbase.io.compress.Compression;
 import org.apache.hadoop.io.compress.Compressor;
 import org.apache.phoenix.replication.util.CRC64;
@@ -48,7 +49,7 @@ public class LogFileFormatWriter implements Closeable {
     private long blocksStartOffset = -1;
     private CRC64 crc = new CRC64(); // Indirect this when we have more than one type
     // Cached buffer for compression for performance
-    ByteBuffer compressBuff = null;
+    ByteBuffer compressBuf = null;
 
     public LogFileFormatWriter() {
 
@@ -116,8 +117,8 @@ public class LogFileFormatWriter implements Closeable {
         }
         blockDataStream.flush(); // Ensure all encoded records are in the byte array
         byte[] uncompressedBytes = currentBlockBytes.toByteArray();
-        ByteBuffer writeBuff;
-        int lengthToWrite;
+        ByteBuffer writeBuf;
+        int writeLen;
         Compression.Algorithm ourCompression = context.getCompression();
         if (ourCompression != Compression.Algorithm.NONE) {
             Compressor compressor = ourCompression.getCompressor();
@@ -126,38 +127,38 @@ public class LogFileFormatWriter implements Closeable {
                 compressor.setInput(uncompressedBytes, 0, uncompressedBytes.length);
                 compressor.finish(); // We are going to one-shot this.
                 // Give 20% overhead for pathological cases
-                // We can't go below this by much because the Snappy compressor will require more than
-                // 10% overhead or else it will refuse to try.
-                int compressBuffNeeded = (int)(uncompressedBytes.length * 1.2f);
-                if (compressBuff == null || compressBuff.capacity() < compressBuffNeeded) {
-                    compressBuff = ByteBuffer.allocate(compressBuffNeeded);
+                // We can't go below this by much because the Snappy compressor will require more
+                // than 10% overhead or else it will refuse to try.
+                int compressBuffNeeded = (int) (uncompressedBytes.length * 1.2f);
+                if (compressBuf == null || compressBuf.capacity() < compressBuffNeeded) {
+                    compressBuf = ByteBuffer.allocate(compressBuffNeeded);
                 }
-                compressBuff.clear();
-                lengthToWrite = compressor.compress(compressBuff.array(), compressBuff.arrayOffset(),
+                compressBuf.clear();
+                writeLen = compressor.compress(compressBuf.array(), compressBuf.arrayOffset(),
                     compressBuffNeeded);
                 if (!compressor.finished()) {
                     throw new IOException("Compressor did not finish");
                 }
-                writeBuff = compressBuff;
+                writeBuf = compressBuf;
             } finally {
-                context.getCompression().returnCompressor(compressor);;
+                context.getCompression().returnCompressor(compressor);
             }
         } else {
-            writeBuff = ByteBuffer.wrap(uncompressedBytes);
-            lengthToWrite = uncompressedBytes.length;
+            writeBuf = ByteBuffer.wrap(uncompressedBytes);
+            writeLen = uncompressedBytes.length;
         }
 
         // Write block header
         LogFile.BlockHeader blockHeader = new LogBlockHeader()
             .setDataCompression(ourCompression)
             .setUncompressedDataSize(uncompressedBytes.length)
-            .setCompressedDataSize(lengthToWrite);
+            .setCompressedDataSize(writeLen);
         blockHeader.write(output);
 
-        output.write(writeBuff.array(), writeBuff.arrayOffset(), lengthToWrite);
+        output.write(writeBuf.array(), writeBuf.arrayOffset(), writeLen);
         // Calculate checksum on the payload
         crc.reset();
-        crc.update(writeBuff.array(), writeBuff.arrayOffset(), lengthToWrite);
+        crc.update(writeBuf.array(), writeBuf.arrayOffset(), writeLen);
         long checksum = crc.getValue();
         output.writeLong(checksum); // Write CRC64 of header and payload
 

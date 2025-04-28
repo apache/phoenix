@@ -21,20 +21,22 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Arrays;
+
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.util.Bytes;
 
 public class LogFileTrailer implements LogFile.Trailer {
-    private int majorVersion = LogFile.VERSION_MAJOR;
-    private int minorVersion = LogFile.VERSION_MINOR;
+    private int majorVersion = LogFileHeader.VERSION_MAJOR;
+    private int minorVersion = LogFileHeader.VERSION_MINOR;
     private long recordCount;
     private long blockCount;
     private long blocksStartOffset;
     private long trailerStartOffset;
 
-    public static final int VERSION_AND_MAGIC_SIZE = LogFile.MAGIC.length + 2 * Bytes.SIZEOF_BYTE;
+    public static final int VERSION_AND_MAGIC_SIZE = LogFileHeader.MAGIC.length
+        + 2 * Bytes.SIZEOF_BYTE;
     public static final int FIXED_TRAILER_SIZE = Bytes.SIZEOF_LONG * 4 + VERSION_AND_MAGIC_SIZE;
 
     public LogFileTrailer() {
@@ -119,17 +121,17 @@ public class LogFileTrailer implements LogFile.Trailer {
         this.majorVersion = in.readByte();
         this.minorVersion = in.readByte();
         // Basic version check for now
-        if (this.majorVersion != LogFile.VERSION_MAJOR 
-                && this.minorVersion > LogFile.VERSION_MINOR) {
+        if (this.majorVersion != LogFileHeader.VERSION_MAJOR
+                && this.minorVersion > LogFileHeader.VERSION_MINOR) {
             throw new IOException("Unsupported LogFile version. Got major=" + majorVersion
-                + " minor=" + minorVersion + ", expected major=" + LogFile.VERSION_MAJOR
-                + " minor=" + LogFile.VERSION_MINOR);
+                + " minor=" + minorVersion + ", expected major=" + LogFileHeader.VERSION_MAJOR
+                + " minor=" + LogFileHeader.VERSION_MINOR);
         }
-        byte[] magic = new byte[LogFile.MAGIC.length];
+        byte[] magic = new byte[LogFileHeader.MAGIC.length];
         in.readFully(magic);
-        if (!Arrays.equals(LogFile.MAGIC, magic)) {
+        if (!Arrays.equals(LogFileHeader.MAGIC, magic)) {
             throw new IOException("Invalid LogFile magic. Got " + Bytes.toStringBinary(magic)
-                + ", expected " + Bytes.toStringBinary(LogFile.MAGIC));
+                + ", expected " + Bytes.toStringBinary(LogFileHeader.MAGIC));
         }
     }
 
@@ -161,7 +163,7 @@ public class LogFileTrailer implements LogFile.Trailer {
         out.writeLong(this.trailerStartOffset);
         out.writeByte(this.getMajorVersion());
         out.writeByte(this.getMinorVersion());
-        out.write(LogFile.MAGIC);
+        out.write(LogFileHeader.MAGIC);
     }
 
     @Override
@@ -183,15 +185,16 @@ public class LogFileTrailer implements LogFile.Trailer {
             return false;
         }
         in.seek(offset);
-        byte[] magic = new byte[LogFile.MAGIC.length];
+        byte[] magic = new byte[LogFileHeader.MAGIC.length];
         in.readFully(magic);
-        if (!Arrays.equals(LogFile.MAGIC, magic)) {
+        if (!Arrays.equals(LogFileHeader.MAGIC, magic)) {
             return false;
         }
         int majorVersion = in.readByte();
         int minorVersion = in.readByte();
         // Basic version check for now
-        if (majorVersion != LogFile.VERSION_MAJOR && minorVersion > LogFile.VERSION_MINOR) {
+        if (majorVersion != LogFileHeader.VERSION_MAJOR
+                && minorVersion > LogFileHeader.VERSION_MINOR) {
             return false;
         }
         return true;

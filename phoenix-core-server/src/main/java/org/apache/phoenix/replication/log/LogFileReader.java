@@ -20,7 +20,7 @@ package org.apache.phoenix.replication.log;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
-import org.apache.hadoop.fs.FSDataInputStream;
+
 import org.apache.hadoop.hbase.client.Mutation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,7 +50,8 @@ public class LogFileReader implements LogFile.Reader  {
     public void init(LogFileReaderContext context) throws IOException {
         this.context = context;
         this.reader = new LogFileFormatReader(); // Instantiate from conf when more than one
-        this.reader.init(context, new FSDataInput(context.getFileSystem().open(context.getFilePath())));
+        this.reader.init(context,
+            new FSDataInput(context.getFileSystem().open(context.getFilePath())));
         LOG.debug("Initialized LogFileReader for path {}", context.getFilePath());
     }
 
@@ -113,16 +114,16 @@ public class LogFileReader implements LogFile.Reader  {
     @Override
     public LogFile.Header getHeader() {
         if (reader == null) {
-             throw new IllegalStateException("LogFileReader not initialized");
+            throw new IllegalStateException("LogFileReader not initialized");
         }
         return reader.getHeader();
     }
 
-     @Override
+    @Override
     public LogFile.Trailer getTrailer() {
-         if (reader == null) {
-             throw new IllegalStateException("LogFileReader not initialized");
-         }
+        if (reader == null) {
+            throw new IllegalStateException("LogFileReader not initialized");
+        }
         return reader.getTrailer();
     }
 
@@ -139,8 +140,8 @@ public class LogFileReader implements LogFile.Reader  {
             LOG.error("Error closing LogFileReader for path " + context.getFilePath(), e);
             throw e;
         } finally {
-             closed = true;
-             LOG.debug("Closed LogFileReader for path {}", context.getFilePath());
+            closed = true;
+            LOG.debug("Closed LogFileReader for path {}", context.getFilePath());
         }
     }
 

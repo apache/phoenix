@@ -51,12 +51,10 @@ public class CRC64 {
      * @param len the number of bytes to use for the update
      */
     public void update(byte[] input, int off, int len) {
-        long crc = value; // Use local variable for performance within the loop
+        // Update CRC calculation using the lookup table
         for (int i = off; i < off + len; i++) {
-            // Update CRC calculation using the lookup table
-            crc = TABLE[(input[i] ^ (int) crc) & 0xFF] ^ (crc >>> 8);
+            value = TABLE[(input[i] ^ (int) value) & 0xFF] ^ (value >>> 8);
         }
-        value = crc;
     }
 
     /**

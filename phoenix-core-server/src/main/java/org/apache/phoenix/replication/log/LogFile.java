@@ -22,29 +22,18 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.compress.Compression;
-import org.apache.hadoop.hbase.util.Bytes;
 
 /**
  * Defines the structure and constants for Phoenix Replication Log files.
  * Provides interfaces for reading and writing these logs.
  */
 public interface LogFile {
-
-    /** Magic number for Phoenix Replication Log files */
-    static final byte[] MAGIC = Bytes.toBytes("PLOG");
-
-    /** Current major version of the replication log format */
-    static final byte VERSION_MAJOR = 1;
-    /** Current minor version of the replication log format */
-    static final byte VERSION_MINOR = 0;
-
-    /** Size of the block checksum trailer (CRC64) */
-    static final int CHECKSUM_SIZE = Bytes.SIZEOF_LONG;
 
     /** Represents the file header */
     interface Header {
@@ -93,15 +82,10 @@ public interface LogFile {
          * @throws IOException if an I/O error occurs.
          */
         void write(DataOutput out) throws IOException;
-     }
+    }
 
     /** Represents the header of a single block within the log file */
     interface BlockHeader {
-        /** Magic number for Phoenix Replication Log blocks */
-        static final byte[] MAGIC = Bytes.toBytes("PBLK");
-        /** Current version of the replication log block header */
-        static final byte VERSION = 1;
-
         /**
          * Gets the version of this block header format.
          * @return The block header version number.
@@ -297,7 +281,7 @@ public interface LogFile {
 
         /**
          * Sets the name of the HBase table this record pertains to.
-         * @param tabletName The HBase table name to set.
+         * @param tableName The HBase table name to set.
          * @return This Record instance for chaining.
          */
         Record setHBaseTableName(String tableName);
@@ -424,7 +408,7 @@ public interface LogFile {
             boolean advance(Record reuse) throws IOException;
             /**
              * Returns the current record, which might be the object passed in the last successful
-             * call to {@code advance(reuse)} or an internal object if reuse was null or incompatible.
+             * call to {@code advance(reuse)} or an internal object if reuse was null.
              * Throws IllegalStateException if advance() has not been called successfully first.
              */
             Record current();

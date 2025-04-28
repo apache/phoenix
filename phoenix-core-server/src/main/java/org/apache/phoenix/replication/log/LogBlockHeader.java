@@ -21,6 +21,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Arrays;
+
 import org.apache.hadoop.hbase.io.compress.Compression;
 import org.apache.hadoop.hbase.util.Bytes;
 
@@ -30,11 +31,16 @@ public class LogBlockHeader implements LogFile.BlockHeader {
     private int uncompressedSize;
     private int compressedSize;
 
-    public static final int HEADER_SIZE = LogFile.BlockHeader.MAGIC.length
-        + (2 * Bytes.SIZEOF_BYTE) + (2 * Bytes.SIZEOF_INT);
+    /** Magic for replication log blocks */
+    public static final byte[] MAGIC = Bytes.toBytes("PBLK");
+    /** Current version of the replication log block header */
+    public static final byte VERSION = 1;
+
+    public static final int HEADER_SIZE = MAGIC.length + (2 * Bytes.SIZEOF_BYTE)
+        + (2 * Bytes.SIZEOF_INT);
 
     public LogBlockHeader() {
-        this.version = LogFile.BlockHeader.VERSION;
+        this.version = VERSION;
         this.compression = Compression.Algorithm.NONE;
     }
 
@@ -78,16 +84,16 @@ public class LogBlockHeader implements LogFile.BlockHeader {
 
     @Override
     public void readFields(DataInput in) throws IOException {
-        byte[] magic = new byte[LogFile.BlockHeader.MAGIC.length];
+        byte[] magic = new byte[MAGIC.length];
         in.readFully(magic);
-        if (!Arrays.equals(LogFile.BlockHeader.MAGIC, magic)) {
+        if (!Arrays.equals(MAGIC, magic)) {
             throw new IOException("Invalid Log block magic. Got " + Bytes.toStringBinary(magic)
-                + ", expected " + Bytes.toStringBinary(LogFile.BlockHeader.MAGIC));
+                + ", expected " + Bytes.toStringBinary(MAGIC));
         }
         version = in.readByte();
-        if (version != LogFile.BlockHeader.VERSION) {
+        if (version != VERSION) {
             throw new IOException("Unsupported Log block header version. Got " + version
-                + ", expected " + LogFile.BlockHeader.VERSION);
+                + ", expected " + VERSION);
         }
         int ordinal = in.readByte();
         compression = Compression.Algorithm.values()[ordinal];
@@ -97,9 +103,9 @@ public class LogBlockHeader implements LogFile.BlockHeader {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        out.write(LogFile.BlockHeader.MAGIC);
+        out.write(MAGIC);
         out.writeByte(version);
-        out.writeByte((byte)compression.ordinal());
+        out.writeByte((byte) compression.ordinal());
         out.writeInt(uncompressedSize);
         out.writeInt(compressedSize);
     }

@@ -20,12 +20,15 @@ package org.apache.phoenix.replication.log;
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.util.concurrent.ExecutionException;
+
 import org.apache.hadoop.hbase.io.asyncfs.AsyncFSOutput;
 import org.apache.hadoop.hbase.util.Bytes;
 
 /**
  * SyncableDataOutput implementation that delegates to a hbase-async AsyncFSOutput.
  */
+@edu.umd.cs.findbugs.annotations.SuppressWarnings(value="EI_EXPOSE_REP2",
+    justification="Intentional")
 public class AsyncFSDataOutput implements SyncableDataOutput {
 
     private final AsyncFSOutput delegate;
@@ -83,7 +86,7 @@ public class AsyncFSDataOutput implements SyncableDataOutput {
 
     @Override
     public void writeByte(int v) throws IOException {
-        byteBuf[0] = (byte)v;
+        byteBuf[0] = (byte) v;
         delegate.write(byteBuf);
     }
 
@@ -132,7 +135,7 @@ public class AsyncFSDataOutput implements SyncableDataOutput {
     @Override
     public void writeChars(String s) throws IOException {
         int len = s.length();
-        for (int i = 0 ; i < len ; i++) {
+        for (int i = 0; i < len; i++) {
             int v = s.charAt(i);
             writeByte((v >>> 8) & 0xFF);
             writeByte((v >>> 0) & 0xFF);

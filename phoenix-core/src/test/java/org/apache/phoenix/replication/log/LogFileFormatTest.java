@@ -34,6 +34,7 @@ import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -85,9 +86,9 @@ public class LogFileFormatTest {
         byte[] data = writerBaos.toByteArray();
         initLogFileReader(data);
 
-        assertEquals("Major version mismatch", LogFile.VERSION_MAJOR,
+        assertEquals("Major version mismatch", LogFileHeader.VERSION_MAJOR,
             reader.getHeader().getMajorVersion());
-        assertEquals("Minor version mismatch", LogFile.VERSION_MINOR,
+        assertEquals("Minor version mismatch", LogFileHeader.VERSION_MINOR,
             reader.getHeader().getMinorVersion());
 
         LogFile.Record decoded1 = reader.next(null);
@@ -158,7 +159,7 @@ public class LogFileFormatTest {
         writer.close();
         byte[] data = writerBaos.toByteArray();
         initLogFileReader(data);
-        assertEquals("Major version mismatch", LogFile.VERSION_MAJOR,
+        assertEquals("Major version mismatch", LogFileHeader.VERSION_MAJOR,
             reader.getHeader().getMajorVersion());
         assertNull("Should be no records", reader.next(null));
         LogFileTrailer trailer = (LogFileTrailer) reader.getTrailer();
@@ -219,7 +220,7 @@ public class LogFileFormatTest {
         // Find offset of second block's checksum and corrupt it
         long block1End = findBlockEndOffset(data, (int)writer.getBlocksStartOffset());
         long block2End = findBlockEndOffset(data, (int)block1End);
-        int block2ChecksumOffset = (int) (block2End - LogFile.CHECKSUM_SIZE);
+        int block2ChecksumOffset = (int) (block2End - Bytes.SIZEOF_LONG);
         data[block2ChecksumOffset] ^= 0xFF; // Flip some bits in the checksum
 
         initLogFileReader(data);
@@ -558,7 +559,8 @@ public class LogFileFormatTest {
         LogBlockHeader header = new LogBlockHeader();
         header.readFields(dis);
         int payloadSize = header.getCompressedDataSize();
-        int endOffset = startOffset + header.getSerializedHeaderLength() + payloadSize + LogFile.CHECKSUM_SIZE;
+        int endOffset = startOffset + header.getSerializedHeaderLength() + payloadSize
+            + Bytes.SIZEOF_LONG;
         LOG.info("Block ending offset is " + endOffset);
         return endOffset;
     }

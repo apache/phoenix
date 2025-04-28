@@ -28,6 +28,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -139,8 +140,8 @@ public class LogFileCodec implements LogFile.Codec {
             out.write(currentRecordBytes);
 
             // Set the size (including the vint prefix) on the record object
-            ((LogFileRecord) record).setSerializedLength(currentRecordBytes.length +
-                WritableUtils.getVIntSize(currentRecordBytes.length));
+            ((LogFileRecord) record).setSerializedLength(currentRecordBytes.length
+                + WritableUtils.getVIntSize(currentRecordBytes.length));
 
             // Reset the ByteArrayOutputStream to release resources
             currentRecord.reset();
@@ -175,7 +176,7 @@ public class LogFileCodec implements LogFile.Codec {
                     LogFileRecord.MutationType.codeToType(in.readByte());
 
                 int nameBytesLen = WritableUtils.readVInt(in);
-                byte nameBytes[] = new byte[nameBytesLen];
+                byte[] nameBytes = new byte[nameBytesLen];
                 in.readFully(nameBytes);
 
                 current.setHBaseTableName(Bytes.toString(nameBytes));

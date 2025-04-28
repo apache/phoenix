@@ -103,7 +103,7 @@ public interface LogFileTestUtil {
             .setCommitId(commitId);
         return record;
     }
-  
+
     static void assertRecordEquals(String message, LogFile.Record r1, LogFile.Record r2)
             throws AssertionError {
         try {

@@ -18,6 +18,7 @@
 package org.apache.phoenix.replication.log;
 
 import java.io.IOException;
+
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.client.Delete;
@@ -90,19 +91,19 @@ public class LogFileRecord implements LogFile.Record {
 
     @Override
     public boolean equals(Object obj) {
-      if (this == obj) {
-          return true;
-      }
-      if (obj == null) {
-          return false;
-      }
-      if (getClass() != obj.getClass()) {
-          return false;
-      }
-      LogFileRecord other = (LogFileRecord) obj;
-      return tableName.equals(other.tableName)
-          && commitId == other.commitId
-          && mutation.toString().equals(other.toString());
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null) {
+            return false;
+        }
+        if (getClass() != obj.getClass()) {
+            return false;
+        }
+        LogFileRecord other = (LogFileRecord) obj;
+        return tableName.equals(other.tableName)
+            && commitId == other.commitId
+            && mutation.toString().equals(other.toString());
     }
 
     @Override
@@ -127,7 +128,7 @@ public class LogFileRecord implements LogFile.Record {
 
         private int code;
 
-        private MutationType(int code) {
+        MutationType(int code) {
             this.code = code;
         }
 

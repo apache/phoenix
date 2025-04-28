@@ -19,13 +19,16 @@ package org.apache.phoenix.replication.log;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicLong;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
 /**
- * Context for {@link ReplicationLog.Reader}. Uses Builder pattern.
+ * Context for {@link Log.Reader}. Uses Builder pattern.
  */
+@edu.umd.cs.findbugs.annotations.SuppressWarnings(value={ "EI_EXPOSE_REP", "EI_EXPOSE_REP2" },
+    justification="Intentional")
 public class LogFileReaderContext {
 
     /** Configuration key for skipping corrupt blocks */

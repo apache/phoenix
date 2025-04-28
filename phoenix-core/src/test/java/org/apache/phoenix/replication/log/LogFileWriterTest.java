@@ -85,7 +85,7 @@ public class LogFileWriterTest {
         assertTrue("File length should be > 0", writer.getLength() > 0);
 
         initLogFileReader();
-        assertEquals("Header major version mismatch", LogFile.VERSION_MAJOR,
+        assertEquals("Header major version mismatch", LogFileHeader.VERSION_MAJOR,
             reader.getHeader().getMajorVersion());
 
         Mutation decoded1 = reader.next();

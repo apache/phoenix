@@ -73,10 +73,15 @@ public class LogFileCompressionTest {
     @Parameters(name = "Compression={0}")
     public static Collection<Object[]> data() {
         List<Object[]> params = new ArrayList<>();
+        // NONE
         params.add(new Object[]{Compression.Algorithm.NONE});
+        // LZ4, LZO, SNAPPY, and ZSTD provided by hbase-compression-aircompressor
         params.add(new Object[]{Compression.Algorithm.LZ4});
+        params.add(new Object[]{Compression.Algorithm.LZO});
         params.add(new Object[]{Compression.Algorithm.SNAPPY});
         params.add(new Object[]{Compression.Algorithm.ZSTD});
+        // GZ provided by the JRE
+        params.add(new Object[]{Compression.Algorithm.GZ});
         return params;
     }
 
@@ -88,6 +93,9 @@ public class LogFileCompressionTest {
       conf.set("hbase.io.compress.lz4.codec",
           "org.apache.hadoop.hbase.io.compress.aircompressor.Lz4Codec");
       Compression.Algorithm.LZ4.reload(conf);
+      conf.set("hbase.io.compress.lzo.codec",
+          "org.apache.hadoop.hbase.io.compress.aircompressor.LzoCodec");
+      Compression.Algorithm.LZO.reload(conf);
       conf.set("hbase.io.compress.snappy.codec",
           "org.apache.hadoop.hbase.io.compress.aircompressor.SnappyCodec");
       Compression.Algorithm.SNAPPY.reload(conf);

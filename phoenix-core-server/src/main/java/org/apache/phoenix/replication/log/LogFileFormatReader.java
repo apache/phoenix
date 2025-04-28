@@ -18,11 +18,12 @@
 package org.apache.phoenix.replication.log;
 
 import java.io.Closeable;
-import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+
 import org.apache.hadoop.hbase.io.compress.Compression;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.compress.Decompressor;
 import org.apache.phoenix.replication.util.CRC64;
 import org.slf4j.Logger;
@@ -33,6 +34,8 @@ import org.slf4j.LoggerFactory;
  * from the underlying stream, checksum validation, decompression, and providing access to block
  * data for the Codec.
  */
+@edu.umd.cs.findbugs.annotations.SuppressWarnings(value={ "EI_EXPOSE_REP", "EI_EXPOSE_REP2" },
+    justification="Intentional")
 public class LogFileFormatReader implements Closeable {
 
     private static final Logger LOG = LoggerFactory.getLogger(LogFileFormatReader.class);
@@ -147,7 +150,7 @@ public class LogFileFormatReader implements Closeable {
 
                     // Read Checksum
                     long expectedChecksum = input.readLong();
-                    currentPosition += LogFile.CHECKSUM_SIZE;
+                    currentPosition += Bytes.SIZEOF_LONG;
 
                     // Validate Checksum
                     crc.reset();
@@ -225,7 +228,7 @@ public class LogFileFormatReader implements Closeable {
         long nextOffset = offset + 1; // Start searching after the point of failure
         long endOfDataOffset = getEndOfDataOffset();
         while (nextOffset < endOfDataOffset) {
-            long startPos = seekToMagic(nextOffset, LogFile.BlockHeader.MAGIC);
+            long startPos = seekToMagic(nextOffset, LogBlockHeader.MAGIC);
             if (startPos < 0) {
                 LOG.warn("Could not find next block magic after offset {}", nextOffset);
                 return false; // EOF reached without finding magic bytes
@@ -242,10 +245,10 @@ public class LogFileFormatReader implements Closeable {
                 }
                 // Check if the block fits within the data boundary
                 long blockEndOffset = startPos + blockHeader.getSerializedHeaderLength()
-                    + blockHeader.getCompressedDataSize() + LogFile.CHECKSUM_SIZE;
+                    + blockHeader.getCompressedDataSize() + Bytes.SIZEOF_LONG;
                 if (blockEndOffset > endOfDataOffset) {
-                  throw new IOException("Possible block at offset " + startPos +
-                      " extends beyond end of data offset " + endOfDataOffset);
+                    throw new IOException("Possible block at offset " + startPos +
+                        " extends beyond end of data offset " + endOfDataOffset);
                 }
                 // If we reached here, the header seems structurally valid.
                 LOG.warn("Found valid block header at offset {}", startPos);
@@ -323,14 +326,6 @@ public class LogFileFormatReader implements Closeable {
         }
     }
 
-    public LogFile.Header getHeader() {
-        return header;
-    }
-
-    public LogFile.Trailer getTrailer() {
-        return trailer;
-    }
-
     @Override
     public void close() throws IOException {
         currentBlockBuffer = null;
@@ -348,6 +343,14 @@ public class LogFileFormatReader implements Closeable {
         return "LogFileFormatReader [readerContext=" + context + ", header=" + header
             + ", trailer=" + trailer + ", recordDecoder=" + decoder + ", currentPosition="
             + currentPosition + ", trailerValidated=" + trailerValidated + "]";
+    }
+
+    LogFile.Header getHeader() {
+        return header;
+    }
+
+    LogFile.Trailer getTrailer() {
+        return trailer;
     }
 
 }
