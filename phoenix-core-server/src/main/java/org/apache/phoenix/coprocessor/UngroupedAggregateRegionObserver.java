@@ -181,11 +181,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     private Configuration compactionConfig;
     private Configuration indexWriteConfig;
     private ReadOnlyProps indexWriteProps;
-    private static final Map<TableName, Map<String, byte[]>> TABLE_ATTRIBUTES = new HashMap<>();
+    private boolean isEmptyColumnNameCached;
 
-    public static Map<TableName, Map<String, byte[]>> getTableAttributes() {
-        return TABLE_ATTRIBUTES;
-    }
+    private static final Map<TableName, Map<String, byte[]>> TABLE_ATTRIBUTES = new HashMap<>();
 
     @Override
     public Optional<RegionObserver> getRegionObserver() {
@@ -194,6 +192,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
 
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {
+        this.isEmptyColumnNameCached = false;
         /*
          * We need to create a copy of region's configuration since we don't want any side effect of
          * setting the RpcControllerFactory.
@@ -628,12 +627,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         } else {
             TableName tableName =
                     c.getEnvironment().getRegion().getTableDescriptor().getTableName();
-            Map<String, byte[]> tableAttributes = getTableAttributes().get(tableName);
+            Map<String, byte[]> tableAttributes = TABLE_ATTRIBUTES.get(tableName);
             if (tableAttributes == null) {
                 LOGGER.warn("Table {} has no table attributes for empty CF and empty CQ. "
-                                + "IndexRegionObserver has not received any mutations yet? Do not"
-                                + " perform Compaction now.",
-                        tableName);
+                                + "UngroupedAggregateRegionObserver has not received any "
+                                + "mutations yet? Do not perform Compaction now.", tableName);
                 return scanner;
             }
             byte[] emptyCF = tableAttributes
@@ -1106,6 +1104,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             throws IOException {
         final Configuration conf = c.getEnvironment().getConfiguration();
         try {
+            updateEmptyCfCqValuesToStaticCache(c, miniBatchOp);
             final HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(conf);
             if (haGroupStoreManager.isMutationBlocked()) {
                 throw new IOException("Blocking Mutation as Some CRRs are in ACTIVE_TO_STANDBY "
@@ -1115,4 +1114,36 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             throw new IOException(e);
         }
     }
+
+    private void updateEmptyCfCqValuesToStaticCache(ObserverContext<RegionCoprocessorEnvironment> c,
+                                                    MiniBatchOperationInProgress<Mutation> miniBatchOp) {
+        if (!isEmptyColumnNameCached) {
+            byte[] emptyCF = miniBatchOp.getOperation(0)
+                    .getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME);
+            byte[] emptyCQ = miniBatchOp.getOperation(0)
+                    .getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME);
+            if (emptyCF != null && emptyCQ != null) {
+                updateEmptyColNamesToStaticCache(
+                        c.getEnvironment().getRegion().getTableDescriptor().getTableName(), emptyCF,
+                        emptyCQ);
+                isEmptyColumnNameCached = true;
+            }
+        }
+    }
+
+    private static void updateEmptyColNamesToStaticCache(TableName table, byte[] emptyCF,
+                                                         byte[] emptyCQ) {
+        TABLE_ATTRIBUTES.computeIfAbsent(
+                table, tableName -> {
+                    Map<String, byte[]> tableAttributes = new HashMap<>();
+                    tableAttributes.put(
+                            BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME,
+                            emptyCF);
+                    tableAttributes.put(
+                            BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME,
+                            emptyCQ);
+                    return tableAttributes;
+                });
+    }
+
 }

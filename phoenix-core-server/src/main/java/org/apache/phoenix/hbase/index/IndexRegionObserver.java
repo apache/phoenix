@@ -55,7 +55,6 @@ import org.apache.htrace.Trace;
 import org.apache.htrace.TraceScope;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
-import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
@@ -396,7 +395,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private static final int DEFAULT_ROWLOCK_WAIT_DURATION = 30000;
   private static final int DEFAULT_CONCURRENT_MUTATION_WAIT_DURATION_IN_MS = 100;
   private byte[] encodedRegionName;
-  private boolean initialMutation;
 
   @Override
   public Optional<RegionObserver> getRegionObserver() {
@@ -407,7 +405,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   public void start(CoprocessorEnvironment e) throws IOException {
       try {
         final RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) e;
-        initialMutation = true;
         encodedRegionName = env.getRegion().getRegionInfo().getEncodedNameAsBytes();
         String serverName = env.getServerName().getServerName();
         if (env.getConfiguration().getBoolean(CHECK_VERSION_CONF_KEY, true)) {
@@ -1235,13 +1232,16 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                 byte[] emptyCQ = indexMaintainer.getEmptyKeyValueQualifier();
                 HTableInterfaceReference hTableInterfaceReference =
                         new HTableInterfaceReference(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
-                updateEmptyColNamesToStaticCache(TableName.valueOf(indexMaintainer.getIndexTableName()),
-                        emptyCF, emptyCQ);
                 List <Pair<Mutation, byte[]>> updates = context.indexUpdates.get(hTableInterfaceReference);
                 for (Pair<Mutation, byte[]> update : updates) {
                     Mutation m = update.getFirst();
                     if (m instanceof Put) {
                         // This will be done before the data table row is updated (i.e., in the first write phase)
+                        m.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME,
+                                emptyCF);
+                        m.setAttribute(
+                                BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME,
+                                emptyCQ);
                         context.preIndexUpdates.put(hTableInterfaceReference, m);
                     } else if (IndexUtil.isDeleteFamily(m)) {
                         // DeleteColumn is always accompanied by a Put so no need to make the index
@@ -1250,6 +1250,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                         Put unverifiedPut = new Put(m.getRow());
                         unverifiedPut.addColumn(
                             emptyCF, emptyCQ, batchTimestamp, QueryConstants.UNVERIFIED_BYTES);
+                        unverifiedPut.setAttribute(
+                                BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME,
+                                emptyCF);
+                        unverifiedPut.setAttribute(
+                                BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME,
+                                emptyCQ);
                         // This will be done before the data table row is updated (i.e., in the first write phase)
                         context.preIndexUpdates.put(hTableInterfaceReference, unverifiedPut);
                     }
@@ -1455,7 +1461,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         PhoenixIndexMetaData indexMetaData = getPhoenixIndexMetaData(c, miniBatchOp);
         BatchMutateContext context = new BatchMutateContext(indexMetaData.getClientVersion());
         setBatchMutateContext(c, context);
-        updateEmptyCfCqValuesToStaticCache(c, miniBatchOp);
         identifyIndexMaintainerTypes(indexMetaData, context);
         identifyMutationTypes(miniBatchOp, context);
         context.populateOriginalMutations(miniBatchOp);
@@ -1551,37 +1556,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         if (failDataTableUpdatesForTesting) {
             throw new DoNotRetryIOException("Simulating the data table write failure");
         }
-    }
-
-    private void updateEmptyCfCqValuesToStaticCache(ObserverContext<RegionCoprocessorEnvironment> c,
-                                                    MiniBatchOperationInProgress<Mutation> miniBatchOp) {
-        if (initialMutation) {
-            initialMutation = false;
-            byte[] emptyCF = miniBatchOp.getOperation(0)
-                    .getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME);
-            byte[] emptyCQ = miniBatchOp.getOperation(0)
-                    .getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME);
-            if (emptyCF != null && emptyCQ != null) {
-                updateEmptyColNamesToStaticCache(
-                        c.getEnvironment().getRegion().getTableDescriptor().getTableName(), emptyCF,
-                        emptyCQ);
-            }
-        }
-    }
-
-    private static void updateEmptyColNamesToStaticCache(TableName table, byte[] emptyCF,
-                                                         byte[] emptyCQ) {
-        UngroupedAggregateRegionObserver.getTableAttributes().computeIfAbsent(
-                table, tableName -> {
-                    Map<String, byte[]> tableAttributes = new HashMap<>();
-                    tableAttributes.put(
-                            BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME,
-                            emptyCF);
-                    tableAttributes.put(
-                            BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME,
-                            emptyCQ);
-                    return tableAttributes;
-                });
     }
 
     /**
