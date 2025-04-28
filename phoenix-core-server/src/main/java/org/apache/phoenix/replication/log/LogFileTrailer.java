@@ -35,9 +35,8 @@ public class LogFileTrailer implements LogFile.Trailer {
     private long blocksStartOffset;
     private long trailerStartOffset;
 
-    public static final int VERSION_AND_MAGIC_SIZE = LogFileHeader.MAGIC.length
-        + 2 * Bytes.SIZEOF_BYTE;
-    public static final int FIXED_TRAILER_SIZE = Bytes.SIZEOF_LONG * 4 + VERSION_AND_MAGIC_SIZE;
+    static final int VERSION_AND_MAGIC_SIZE = LogFileHeader.MAGIC.length + 2 * Bytes.SIZEOF_BYTE;
+    static final int FIXED_TRAILER_SIZE = Bytes.SIZEOF_LONG * 4 + VERSION_AND_MAGIC_SIZE;
 
     public LogFileTrailer() {
 

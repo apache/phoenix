@@ -26,8 +26,8 @@ import org.apache.hadoop.fs.FSDataInputStream;
 /**
  * Input side abstraction, mirroring the write side FSDataOutput.
  */
-@edu.umd.cs.findbugs.annotations.SuppressWarnings(value="EI_EXPOSE_REP2",
-    justification="Intentional")
+@edu.umd.cs.findbugs.annotations.SuppressWarnings(value = { "EI_EXPOSE_REP", "EI_EXPOSE_REP2" },
+    justification = "Intentional")
 public class FSDataInput implements DataInput, Closeable, SeekableDataInput {
 
     private final FSDataInputStream delegate;

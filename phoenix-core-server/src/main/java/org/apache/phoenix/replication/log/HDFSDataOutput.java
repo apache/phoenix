@@ -24,8 +24,8 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 /**
  * SyncableDataOutput implementation that delegates to a standard FSDataOutputStream.
  */
-@edu.umd.cs.findbugs.annotations.SuppressWarnings(value="EI_EXPOSE_REP2",
-    justification="Intentional")
+@edu.umd.cs.findbugs.annotations.SuppressWarnings(value = { "EI_EXPOSE_REP", "EI_EXPOSE_REP2" },
+    justification = "Intentional")
 public class HDFSDataOutput implements SyncableDataOutput {
 
     private final FSDataOutputStream delegate;

@@ -25,10 +25,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Context for {@link Log.Writer}. Uses Builder pattern.
+ * Context for LogFileWriter. Uses Builder pattern.
  */
-@edu.umd.cs.findbugs.annotations.SuppressWarnings(value={ "EI_EXPOSE_REP", "EI_EXPOSE_REP2" },
-    justification="Intentional")
+@edu.umd.cs.findbugs.annotations.SuppressWarnings(value = { "EI_EXPOSE_REP", "EI_EXPOSE_REP2" },
+    justification = "Intentional")
 public class LogFileWriterContext {
 
     private static final Logger LOG = LoggerFactory.getLogger(LogFileWriterContext.class);

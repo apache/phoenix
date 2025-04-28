@@ -32,11 +32,11 @@ public class LogBlockHeader implements LogFile.BlockHeader {
     private int compressedSize;
 
     /** Magic for replication log blocks */
-    public static final byte[] MAGIC = Bytes.toBytes("PBLK");
+    static final byte[] MAGIC = Bytes.toBytes("PBLK");
     /** Current version of the replication log block header */
-    public static final byte VERSION = 1;
+    static final byte VERSION = 1;
 
-    public static final int HEADER_SIZE = MAGIC.length + (2 * Bytes.SIZEOF_BYTE)
+    static final int HEADER_SIZE = MAGIC.length + (2 * Bytes.SIZEOF_BYTE)
         + (2 * Bytes.SIZEOF_INT);
 
     public LogBlockHeader() {

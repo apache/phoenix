@@ -25,10 +25,10 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
 /**
- * Context for {@link Log.Reader}. Uses Builder pattern.
+ * Context for LogFileReader. Uses Builder pattern.
  */
-@edu.umd.cs.findbugs.annotations.SuppressWarnings(value={ "EI_EXPOSE_REP", "EI_EXPOSE_REP2" },
-    justification="Intentional")
+@edu.umd.cs.findbugs.annotations.SuppressWarnings(value = { "EI_EXPOSE_REP", "EI_EXPOSE_REP2" },
+    justification = "Intentional")
 public class LogFileReaderContext {
 
     /** Configuration key for skipping corrupt blocks */

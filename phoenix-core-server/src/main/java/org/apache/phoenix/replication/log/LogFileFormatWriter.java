@@ -25,7 +25,6 @@ import java.nio.ByteBuffer;
 
 import org.apache.hadoop.hbase.io.compress.Compression;
 import org.apache.hadoop.io.compress.Compressor;
-import org.apache.phoenix.replication.util.CRC64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

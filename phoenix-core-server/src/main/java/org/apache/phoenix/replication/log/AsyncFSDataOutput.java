@@ -27,8 +27,8 @@ import org.apache.hadoop.hbase.util.Bytes;
 /**
  * SyncableDataOutput implementation that delegates to a hbase-async AsyncFSOutput.
  */
-@edu.umd.cs.findbugs.annotations.SuppressWarnings(value="EI_EXPOSE_REP2",
-    justification="Intentional")
+@edu.umd.cs.findbugs.annotations.SuppressWarnings(value = { "EI_EXPOSE_REP", "EI_EXPOSE_REP2" },
+    justification = "Intentional")
 public class AsyncFSDataOutput implements SyncableDataOutput {
 
     private final AsyncFSOutput delegate;

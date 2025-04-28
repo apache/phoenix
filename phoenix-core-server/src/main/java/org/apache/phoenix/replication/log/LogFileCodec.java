@@ -189,17 +189,17 @@ public class LogFileCodec implements LogFile.Codec {
 
                 Mutation mutation;
                 switch (type) {
-                    case PUT:
-                        mutation = new Put(rowKey);
-                        break;
-                    case DELETE:
-                    case DELETEFAMILYVERSION:
-                    case DELETECOLUMN:
-                    case DELETEFAMILY:
-                        mutation = new Delete(rowKey);
-                        break;
-                    default:
-                        throw new UnsupportedOperationException("Unhandled mutation type " + type);
+                case PUT:
+                    mutation = new Put(rowKey);
+                    break;
+                case DELETE:
+                case DELETEFAMILYVERSION:
+                case DELETECOLUMN:
+                case DELETEFAMILY:
+                    mutation = new Delete(rowKey);
+                    break;
+                default:
+                    throw new UnsupportedOperationException("Unhandled mutation type " + type);
                 }
                 current.setMutation(mutation);
 
@@ -228,22 +228,22 @@ public class LogFileCodec implements LogFile.Codec {
                             in.readFully(value);
                         }
                         switch (type) {
-                            case PUT:
-                                ((Put)mutation).addColumn(column, qual, ts, value);
-                                break;
-                            case DELETE:
-                            case DELETECOLUMN:
-                                ((Delete)mutation).addColumn(column, qual, ts);
-                                break;
-                            case DELETEFAMILYVERSION:
-                                ((Delete)mutation).addFamilyVersion(column, ts);
-                                break;
-                            case DELETEFAMILY:
-                                ((Delete)mutation).addFamily(column);
-                                break;
-                            default:
-                                throw new UnsupportedOperationException(
-                                    "Unhandled mutation type " + type);
+                        case PUT:
+                            ((Put)mutation).addColumn(column, qual, ts, value);
+                            break;
+                        case DELETE:
+                        case DELETECOLUMN:
+                            ((Delete)mutation).addColumn(column, qual, ts);
+                            break;
+                        case DELETEFAMILYVERSION:
+                            ((Delete)mutation).addFamilyVersion(column, ts);
+                            break;
+                        case DELETEFAMILY:
+                            ((Delete)mutation).addFamily(column);
+                            break;
+                        default:
+                            throw new UnsupportedOperationException("Unhandled mutation type "
+                                + type);
                         }
                     }
                 }

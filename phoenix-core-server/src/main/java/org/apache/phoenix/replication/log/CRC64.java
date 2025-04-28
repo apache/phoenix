@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.replication.util;
+package org.apache.phoenix.replication.log;
 
 public class CRC64 {
     private static final long POLY = 0xC96C5795D7870F42L; // ECMA-182

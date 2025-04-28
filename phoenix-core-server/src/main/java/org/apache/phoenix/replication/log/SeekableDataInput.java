@@ -29,8 +29,8 @@ import org.apache.hadoop.fs.Seekable;
  */
 public interface SeekableDataInput extends DataInput, Closeable, Seekable, PositionedReadable {
 
-  int read(byte[] buf) throws IOException;
+    int read(byte[] buf) throws IOException;
 
-  int read(byte[] buf, int pos, int len) throws IOException;
+    int read(byte[] buf, int pos, int len) throws IOException;
 
 }

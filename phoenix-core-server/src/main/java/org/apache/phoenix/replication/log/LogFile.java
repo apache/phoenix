@@ -416,6 +416,13 @@ public interface LogFile {
         }
     }
 
+    /**
+     * Utility for determining if a file is a valid replication log file.
+     * @param fs The FileSystem
+     * @param path Path to the potential replication log file
+     * @return true if the file is a valid replication log file, false otherwise
+     * @throws IOException if an I/O problem was encountered
+     */
     static boolean isValidLogFile(final FileSystem fs, final Path path) throws IOException {
         long length = fs.getFileStatus(path).getLen();
         try (FSDataInputStream in = fs.open(path)) {

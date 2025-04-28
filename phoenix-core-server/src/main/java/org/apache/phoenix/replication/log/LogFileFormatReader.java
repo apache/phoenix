@@ -25,7 +25,6 @@ import java.nio.ByteBuffer;
 import org.apache.hadoop.hbase.io.compress.Compression;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.compress.Decompressor;
-import org.apache.phoenix.replication.util.CRC64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,8 +33,8 @@ import org.slf4j.LoggerFactory;
  * from the underlying stream, checksum validation, decompression, and providing access to block
  * data for the Codec.
  */
-@edu.umd.cs.findbugs.annotations.SuppressWarnings(value={ "EI_EXPOSE_REP", "EI_EXPOSE_REP2" },
-    justification="Intentional")
+@edu.umd.cs.findbugs.annotations.SuppressWarnings(value = { "EI_EXPOSE_REP", "EI_EXPOSE_REP2" },
+    justification = "Intentional")
 public class LogFileFormatReader implements Closeable {
 
     private static final Logger LOG = LoggerFactory.getLogger(LogFileFormatReader.class);

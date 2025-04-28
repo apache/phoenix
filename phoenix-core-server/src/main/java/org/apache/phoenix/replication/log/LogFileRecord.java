@@ -25,6 +25,8 @@ import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 
+@edu.umd.cs.findbugs.annotations.SuppressWarnings(value = { "EI_EXPOSE_REP", "EI_EXPOSE_REP2" },
+    justification = "Intentional")
 public class LogFileRecord implements LogFile.Record {
 
     private String tableName;
@@ -149,17 +151,17 @@ public class LogFileRecord implements LogFile.Record {
                 }
                 Cell cell = s.current();
                 switch (cell.getType()) {
-                    case Delete:
-                        return DELETE;
-                    case DeleteFamilyVersion:
-                        return DELETEFAMILYVERSION;
-                    case DeleteColumn:
-                        return DELETECOLUMN;
-                    case DeleteFamily:
-                        return DELETEFAMILY;
-                    default:
-                        // Fall through to throw the UnsupportedOperationException
-                        break;
+                case Delete:
+                    return DELETE;
+                case DeleteFamilyVersion:
+                    return DELETEFAMILYVERSION;
+                case DeleteColumn:
+                    return DELETECOLUMN;
+                case DeleteFamily:
+                    return DELETEFAMILY;
+                default:
+                    // Fall through to throw the UnsupportedOperationException
+                    break;
                 }
             } // Fall through to throw the UnsupportedOperationException
             throw new UnsupportedOperationException("Unsupported mutation type: " + mutation);

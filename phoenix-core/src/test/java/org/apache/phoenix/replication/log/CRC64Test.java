@@ -15,12 +15,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.replication.util;
+package org.apache.phoenix.replication.log;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 
 import java.nio.charset.StandardCharsets;
+
+import org.apache.phoenix.replication.log.CRC64;
 import org.junit.Test;
 
 public class CRC64Test {

@@ -30,13 +30,13 @@ import org.apache.hadoop.hbase.util.Bytes;
 public class LogFileHeader implements LogFile.Header {
 
     /** Magic number for Phoenix Replication Log files */
-    public static final byte[] MAGIC = Bytes.toBytes("PLOG");
+    static final byte[] MAGIC = Bytes.toBytes("PLOG");
     /** Current major version of the replication log format */
-    public static final int VERSION_MAJOR = 1;
+    static final int VERSION_MAJOR = 1;
     /** Current minor version of the replication log format */
-    public static final int VERSION_MINOR = 0;
+    static final int VERSION_MINOR = 0;
 
-    public static final int HEADERSIZE = MAGIC.length + 3 * Bytes.SIZEOF_BYTE;
+    static final int HEADERSIZE = MAGIC.length + 3 * Bytes.SIZEOF_BYTE;
 
     private int majorVersion = VERSION_MAJOR;
     private int minorVersion = VERSION_MINOR;
