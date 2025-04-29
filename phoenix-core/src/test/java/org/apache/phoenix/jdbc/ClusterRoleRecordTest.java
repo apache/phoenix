@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeTrue;
 
 import java.io.File;
 import java.io.IOException;
@@ -35,8 +36,10 @@ import java.util.Optional;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.output.ByteArrayOutputStream;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.util.JacksonUtil;
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestName;
@@ -83,6 +86,13 @@ public class ClusterRoleRecordTest {
         LOG.info("Prepared the JSON file for testing, file:{}, content:\n{}", file,
                 FileUtils.readFileToString(file, "UTF-8"));
         return file.getPath();
+    }
+
+    @Before
+    public void setUp() throws Exception {
+        if (registryType == ClusterRoleRecord.RegistryType.RPC) {
+            assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.5.0")>=0);
+        }
     }
 
     @Test
