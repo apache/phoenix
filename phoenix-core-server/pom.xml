@@ -122,7 +122,6 @@
             <artifactId>omid-commit-table</artifactId>
         </dependency>
 
-
         <!-- Other dependencies -->
         <dependency>
             <groupId>org.antlr</groupId>
@@ -179,6 +178,10 @@
         <dependency>
             <groupId>com.google.code.findbugs</groupId>
             <artifactId>jsr305</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.lmax</groupId>
+            <artifactId>disruptor</artifactId>
         </dependency>
     </dependencies>
 
