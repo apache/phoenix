@@ -105,7 +105,7 @@ public class LogFileRecord implements LogFile.Record {
         LogFileRecord other = (LogFileRecord) obj;
         return tableName.equals(other.tableName)
             && commitId == other.commitId
-            && mutation.toString().equals(other.toString());
+            && mutation.toString().equals(other.mutation.toString());
     }
 
     @Override
