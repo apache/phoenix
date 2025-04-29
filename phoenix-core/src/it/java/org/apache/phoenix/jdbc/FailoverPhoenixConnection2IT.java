@@ -544,6 +544,43 @@ public class FailoverPhoenixConnection2IT {
     }
 
     /**
+     * Test early rollback of Failover Policy where connections should not be affected
+     * ACTIVE --> ACTIVE_TO_STANDBY and then ACTIVE_TO_STANDBY --> ACTIVE
+     */
+    @Test(timeout = 300000)
+    public void testEarlyRollbackHasNoEffectOnFailoverConnections() throws Exception {
+        //Creating some connections to ACTIVE cluster
+        short numberOfConnections = 3;
+        //Create FailoverPhoenixConnections with default urls
+        List<Connection> connectionList = new ArrayList<>(numberOfConnections);
+        for (short i = 0; i < numberOfConnections; i++) {
+            connectionList.add(createFailoverConnection());
+        }
+
+        //Transit Role1 ACTIVE --> ACTIVE_TO_STANDBY
+        CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
+                ClusterRoleRecord.ClusterRole.STANDBY);
+        //Connections should be open
+        for (short i = 0; i < numberOfConnections; i++) {
+            FailoverPhoenixConnection conn = ((FailoverPhoenixConnection) connectionList.get(i));
+            assertFalse(conn.isClosed());
+            assertFalse(conn.getWrappedConnection().isClosed());
+        }
+
+        //Transit Role1 ACTIVE_TO_STANDBY --> ACTIVE
+        CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.ACTIVE,
+                ClusterRoleRecord.ClusterRole.STANDBY);
+        //Connections should still be open
+        for (short i = 0; i < numberOfConnections; i++) {
+            FailoverPhoenixConnection conn = ((FailoverPhoenixConnection) connectionList.get(i));
+            assertFalse(conn.isClosed());
+            assertFalse(conn.getWrappedConnection().isClosed());
+            //closing connections
+            conn.close();
+        }
+    }
+
+    /**
      * Create a failover connection using {@link #clientProperties}.
      */
     private Connection createFailoverConnection() throws SQLException {

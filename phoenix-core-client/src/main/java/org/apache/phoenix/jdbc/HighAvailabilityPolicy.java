@@ -60,6 +60,8 @@ public enum HighAvailabilityPolicy {
          * STANDBY --> ACTIVE_TO_STANDBY (Should not be a case but in case of failover Rollback we
          *      are going back to ACTIVE_TO_STANDBY state invalidating earlier here as connections
          *      are already closed)
+         * ACTIVE_TO_STANDBY --> ACTIVE (Doing nothing as we have already invalidated cqsi when we
+         *      transitioned from STANDBY to ACTIVE_TO_STANDBY)
          * @param haGroup The high availability (HA) group
          * @param oldRecord The older cluster role record cached in this client for the given HA group
          * @param newRecord New cluster role record read from one ZooKeeper cluster znode
