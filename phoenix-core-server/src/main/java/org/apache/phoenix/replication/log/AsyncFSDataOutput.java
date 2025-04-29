@@ -97,14 +97,15 @@ public class AsyncFSDataOutput implements SyncableDataOutput {
 
     @Override
     public void writeShort(int v) throws IOException {
+        // This code is equivalent to what DataOutputStream in the JRE does.
         writeByte((v >>> 8) & 0xFF);
         writeByte((v >>> 0) & 0xFF);
     }
 
     @Override
     public void writeChar(int v) throws IOException {
-        writeByte((v >>> 8) & 0xFF);
-        writeByte((v >>> 0) & 0xFF);
+        // What DataOutputStream in the JRE does is equivalent to writeShort.
+        writeShort(v);
     }
 
     @Override
@@ -134,11 +135,11 @@ public class AsyncFSDataOutput implements SyncableDataOutput {
 
     @Override
     public void writeChars(String s) throws IOException {
+        // DataOutputStream in the JRE does the equivalent of writeShort on each code point.
         int len = s.length();
         for (int i = 0; i < len; i++) {
             int v = s.charAt(i);
-            writeByte((v >>> 8) & 0xFF);
-            writeByte((v >>> 0) & 0xFF);
+            writeShort(v);
         }
     }
 

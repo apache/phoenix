@@ -43,20 +43,39 @@ import org.apache.hadoop.io.WritableUtils;
  * This implementation uses standard Java DataInput/DataOutput for serialization.
  *
  * Record Format within a block:
- * - Total Record Length (vint)
- * - Mutation Type (byte)
- * - Schema Object Name Length (vint)
- * - Schema Object Name Bytes (byte[])
- * - Commit ID / SCN (vlong)
- * - Row Key Length (vint)
- * - Row Key Bytes (byte[])
- * - Timestamp (long)
- * - Number of Columns (vint)
- * - For each column:
- *   - Column Name Length (vint)
- *   - Column Name Bytes (byte[])
- *   - Value Length (vint)
- *   - Value Bytes (byte[])
+ * <pre>
+ *   +--------------------------------------------+
+ *   | RECORD LENGTH (vint)                       |
+ *   +--------------------------------------------+
+ *   | RECORD HEADER                              |
+ *   |  - Mutation type (byte)                    |
+ *   |  - HBase table name length (vint)          |
+ *   |  - HBase table name (byte[])               |
+ *   |  - Transaction/SCN or commit ID (vint)     |
+ *   +--------------------------------------------+
+ *   | ROW KEY LENGTH (vint)                      |
+ *   | ROW KEY (byte[])                           |
+ *   +--------------------------------------------+
+ *   | MUTATION TIMESTAMP (vint)                  |
+ *   +--------------------------------------------+
+ *   | NUMBER OF COLUMN FAMILIES CHANGED (vint)   |
+ *   +--------------------------------------------+
+ *   | PER-FAMILY DATA (repeated)                 |
+ *   |   +--------------------------------------+ |
+ *   |   | COLUMN FAMILY NAME LENGTH (vint)     | |
+ *   |   | COLUMN FAMILY NAME (byte[])          | |
+ *   |   | NUMBER OF CELLS IN FAMILY (vint)     | |
+ *   |   +--------------------------------------+ |
+ *   |   | PER-CELL DATA (repeated)             | |
+ *   |   |   +––––––––––––----------------–--–+ | |
+ *   |   |   | COLUMN QUALIFIER LENGTH (vint) | | |
+ *   |   |   | COLUMN QUALIFIER (byte[])      | | |
+ *   |   |   | VALUE LENGTH (vint)            | | |
+ *   |   |   | VALUE (byte[])                 | | |
+ *   |   |   +–––––––––––––--------------––--–+ | |
+ *   |   +--------------------------------------+ |
+ *   +--------------------------------------------+
+ * </pre>
  */
 public class LogFileCodec implements LogFile.Codec {
 
@@ -112,13 +131,13 @@ public class LogFileCodec implements LogFile.Codec {
             recordOut.writeLong(mutation.getTimestamp());
 
             Map<byte[], List<Cell>> familyMap = mutation.getFamilyCellMap();
-            int colCount = familyMap.size();
-            WritableUtils.writeVInt(recordOut, colCount);
+            int cfCount = familyMap.size();
+            WritableUtils.writeVInt(recordOut, cfCount);
 
             for (Map.Entry<byte[], List<Cell>> entry: familyMap.entrySet()) {
-                byte[] column = entry.getKey();
-                WritableUtils.writeVInt(recordOut, column.length);
-                recordOut.write(column);
+                byte[] columnFamily = entry.getKey();
+                WritableUtils.writeVInt(recordOut, columnFamily.length);
+                recordOut.write(columnFamily);
                 List<Cell> cells = entry.getValue();
                 WritableUtils.writeVInt(recordOut, cells.size());
                 for (Cell cell: cells) {
