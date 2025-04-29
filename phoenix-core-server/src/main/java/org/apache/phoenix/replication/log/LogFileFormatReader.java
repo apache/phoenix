@@ -246,8 +246,8 @@ public class LogFileFormatReader implements Closeable {
                 long blockEndOffset = startPos + blockHeader.getSerializedHeaderLength()
                     + blockHeader.getCompressedDataSize() + Bytes.SIZEOF_LONG;
                 if (blockEndOffset > endOfDataOffset) {
-                    throw new IOException("Possible block at offset " + startPos +
-                        " extends beyond end of data offset " + endOfDataOffset);
+                    throw new IOException("Possible block at offset " + startPos
+                        + " extends beyond end of data offset " + endOfDataOffset);
                 }
                 // If we reached here, the header seems structurally valid.
                 LOG.warn("Found valid block header at offset {}", startPos);

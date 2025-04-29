@@ -248,17 +248,17 @@ public class LogFileCodec implements LogFile.Codec {
                         }
                         switch (type) {
                         case PUT:
-                            ((Put)mutation).addColumn(column, qual, ts, value);
+                            ((Put) mutation).addColumn(column, qual, ts, value);
                             break;
                         case DELETE:
                         case DELETECOLUMN:
-                            ((Delete)mutation).addColumn(column, qual, ts);
+                            ((Delete) mutation).addColumn(column, qual, ts);
                             break;
                         case DELETEFAMILYVERSION:
-                            ((Delete)mutation).addFamilyVersion(column, ts);
+                            ((Delete) mutation).addFamilyVersion(column, ts);
                             break;
                         case DELETEFAMILY:
-                            ((Delete)mutation).addFamily(column);
+                            ((Delete) mutation).addFamily(column);
                             break;
                         default:
                             throw new UnsupportedOperationException("Unhandled mutation type "
