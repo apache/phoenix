@@ -273,10 +273,12 @@ public class TableTTLIT extends BaseTest {
                         Thread.sleep(1);
                     }
                     flush(TableName.valueOf(tableName));
-                    // Flushes dump and retain all the cells to HFile.
-                    // Doing MAX_COLUMN_INDEX + 1 to account for empty cells
-                    assertEquals(TestUtil.getRawCellCount(conn, TableName.valueOf(tableName), row),
-                            rowUpdateCounter * (MAX_COLUMN_INDEX + 1));
+                    // At every flush, extra cell versions should be removed.
+                    // MAX_COLUMN_INDEX table columns and one empty column will be retained for
+                    // each row version.
+                    int rawCellCount = TestUtil.getRawCellCount(
+                            conn, TableName.valueOf(tableName), row);
+                    assertEquals((i + 1) * (MAX_COLUMN_INDEX + 1) * versions, rawCellCount);
                 }
                 // Run one minor compaction (in case no minor compaction has happened yet)
                 TestUtil.minorCompact(utility, TableName.valueOf(tableName));

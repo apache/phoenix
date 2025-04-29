@@ -60,6 +60,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControllerFactory;
+import org.apache.hadoop.hbase.regionserver.FlushLifeCycleTracker;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -609,6 +610,28 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     private boolean areMutationsInSameTable(Table targetHTable, Region region) {
         return (targetHTable == null || Bytes.compareTo(targetHTable.getName().getName(),
                 region.getTableDescriptor().getTableName().getName()) == 0);
+    }
+
+    @Override
+    public InternalScanner preFlush(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
+                                    InternalScanner scanner, FlushLifeCycleTracker tracker) throws IOException {
+        if (!isPhoenixTableTTLEnabled(c.getEnvironment().getConfiguration())) {
+            return scanner;
+        } else {
+            return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
+                @Override public InternalScanner run() throws Exception {
+                    String tableName = c.getEnvironment().getRegion().getRegionInfo().getTable()
+                            .getNameAsString();
+                    Configuration conf = c.getEnvironment().getConfiguration();
+                    long maxLookbackInMillis =
+                            BaseScannerRegionObserverConstants.getMaxLookbackInMillis(conf);
+                    maxLookbackInMillis = CompactionScanner.getMaxLookbackInMillis(tableName,
+                            store.getColumnFamilyName(), maxLookbackInMillis);
+                    return new CompactionScanner(c.getEnvironment(), store, scanner,
+                            maxLookbackInMillis, false, true, null);
+                }
+            });
+        }
     }
 
     @Override

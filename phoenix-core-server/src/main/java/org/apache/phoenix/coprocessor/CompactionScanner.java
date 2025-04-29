@@ -65,6 +65,7 @@ import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.filter.RowKeyComparisonFilter.RowKeyTuple;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.CompiledConditionalTTLExpression;
@@ -144,13 +145,13 @@ public class CompactionScanner implements InternalScanner {
     private final long maxLookbackInMillis;
     private int minVersion;
     private int maxVersion;
-    private final boolean emptyCFStore;
+    private boolean emptyCFStore;
     private final boolean localIndex;
     private final int familyCount;
     private KeepDeletedCells keepDeletedCells;
     private long compactionTime;
-    private final byte[] emptyCF;
-    private final byte[] emptyCQ;
+    private byte[] emptyCF;
+    private byte[] emptyCQ;
     private final byte[] storeColumnFamily;
     private final String tableName;
     private final String columnFamilyName;
@@ -180,13 +181,13 @@ public class CompactionScanner implements InternalScanner {
         // Empty column family and qualifier are always needed to compute which all empty cells to retain
         // even during minor compactions. If required empty cells are not retained during
         // minor compactions then we can run into the risk of partial row expiry on next major compaction.
-        this.emptyCF = SchemaUtil.getEmptyColumnFamily(table);
-        this.emptyCQ = SchemaUtil.getEmptyColumnQualifier(table);
+        this.emptyCF = table != null ? SchemaUtil.getEmptyColumnFamily(table) : EMPTY_BYTE_ARRAY;
+        this.emptyCQ = table != null ? SchemaUtil.getEmptyColumnQualifier(table) : EMPTY_BYTE_ARRAY;
         compactionTime = EnvironmentEdgeManager.currentTimeMillis();
         columnFamilyName = store.getColumnFamilyName();
         storeColumnFamily = columnFamilyName.getBytes();
         tableName = region.getRegionInfo().getTable().getNameAsString();
-        String dataTableName = table.getName().toString();
+        String dataTableName = table != null ? table.getName().toString() : "";
         Long overriddenMaxLookback = maxLookbackMap.get(tableName + SEPARATOR + columnFamilyName);
         this.maxLookbackInMillis = overriddenMaxLookback == null ?
                 maxLookbackAgeInMillis : Math.max(maxLookbackAgeInMillis, overriddenMaxLookback);
@@ -416,11 +417,32 @@ public class CompactionScanner implements InternalScanner {
         }
     }
 
+    private void determineEmptyCfCq(List<Cell> result) {
+        for (Cell cell : result) {
+            emptyCF = CellUtil.cloneFamily(cell);
+            if(ScanUtil.isEmptyColumn(cell, emptyCF, QueryConstants.EMPTY_COLUMN_BYTES)) {
+                emptyCQ = QueryConstants.EMPTY_COLUMN_BYTES;
+                emptyCFStore = true;
+                break;
+            } //Empty column is always encoded in FOUR_BYTE format, since it's a reserved qualifier. See EncodedColumnsUtil#isReservedColumnQualifier
+            else if(ScanUtil.isEmptyColumn(cell, emptyCF, QueryConstants.ENCODED_EMPTY_COLUMN_BYTES)) {
+                emptyCQ = QueryConstants.ENCODED_EMPTY_COLUMN_BYTES;
+                emptyCFStore = true;
+                break;
+            }
+        }
+    }
+
     @Override
     public boolean next(List<Cell> result) throws IOException {
         boolean hasMore = storeScanner.next(result);
         inputCellCount += result.size();
         if (!result.isEmpty()) {
+            // This will happen only during flushes as then we don't pass PTable object
+            // to determine emptyCF and emptyCQ
+            if (emptyCQ == EMPTY_BYTE_ARRAY) {
+                determineEmptyCfCq(result);
+            }
            // This is for debugging
            // printRow(result, "Input for " + tableName + " " + columnFamilyName, true, false);
             phoenixLevelRowCompactor.compact(result, false);
