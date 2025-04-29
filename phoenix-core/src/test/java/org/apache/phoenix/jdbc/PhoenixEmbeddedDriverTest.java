@@ -600,6 +600,16 @@ public class PhoenixEmbeddedDriverTest {
 
     @Test
     public void testRPCIPv6() throws SQLException{
+        assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.5.0") >= 0);
+        try {
+            Configuration config =
+                    HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+            config.set("hbase.client.registry.impl",
+                    "org.apache.hadoop.hbase.client.RpcConnectionRegistry");
+            ConnectionInfo.create("jdbc:phoenix+rpc", config, null, null);
+            fail("Should have thrown exception");
+        } catch (SQLException e) {
+        }
         Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
         config.set("hbase.client.registry.impl",
                 "org.apache.hadoop.hbase.client.RpcConnectionRegistry");
