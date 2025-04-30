@@ -26,6 +26,7 @@ import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvai
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -36,6 +37,7 @@ import java.util.Collection;
 import java.util.Properties;
 
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.junit.AfterClass;
@@ -93,6 +95,10 @@ public class HighAvailabilityTestingUtilityIT {
 
     @Before
     public void setup() throws Exception {
+        //RPC Registry is only there in hbase version greater than 2.5.0
+        if (registryType == ClusterRoleRecord.RegistryType.RPC) {
+            assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.5.0")>=0);
+        }
         haGroupName = testName.getMethodName();
         clientProperties = HighAvailabilityTestingUtility.getHATestProperties();
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName);

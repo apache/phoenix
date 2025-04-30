@@ -19,6 +19,7 @@ package org.apache.phoenix.jdbc;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.curator.shaded.com.google.common.collect.Lists;
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.ParallelPhoenixResultSetFactory.ParallelPhoenixResultSetType;
 import org.apache.phoenix.query.BaseTest;
@@ -54,6 +55,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeTrue;
 
 /**
  * Use case basic tests basics for {@link ParallelPhoenixConnection}.
@@ -215,6 +217,9 @@ public class ParallelPhoenixConnectionWorkflowIT {
 
     @Before
     public void setup() throws Exception {
+        if (registryType == ClusterRoleRecord.RegistryType.RPC) {
+            assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.5.0")>=0);
+        }
         String haGroupName = testName.getMethodName();
         clientProperties = new Properties(GLOBAL_PROPERTIES);
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName);

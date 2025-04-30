@@ -18,6 +18,7 @@
 package org.apache.phoenix.jdbc;
 
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.RegistryType;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -51,6 +52,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeTrue;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -95,6 +97,9 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
 
     @Before
     public void setup() throws Exception {
+        if (registryType == ClusterRoleRecord.RegistryType.RPC) {
+            assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.5.0")>=0);
+        }
         parallelHAGroupName = testName.getMethodName() + "_" + HighAvailabilityPolicy.PARALLEL.name();
         failoverHAGroupName = testName.getMethodName() + "_" + HighAvailabilityPolicy.FAILOVER.name();
         parallelClientProperties = HighAvailabilityTestingUtility.getHATestProperties();
@@ -489,6 +494,8 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
         ClusterRoleRecord.RegistryType newRegistry;
         if (registryType == RegistryType.MASTER) {
             newRegistry = RegistryType.RPC;
+            //RPC Registry is only there in hbase version greater than 2.5.0
+            assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.5.0")>=0);
         } else {
             newRegistry = RegistryType.ZK;
         }
