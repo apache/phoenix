@@ -429,8 +429,7 @@ public class CompactionScanner implements InternalScanner {
             if (ScanUtil.isEmptyColumn(cell, emptyCF, QueryConstants.EMPTY_COLUMN_BYTES)) {
                 emptyCQ = QueryConstants.EMPTY_COLUMN_BYTES;
                 break;
-            }
-            else if (ScanUtil.isEmptyColumn(cell, emptyCF,
+            } else if (ScanUtil.isEmptyColumn(cell, emptyCF,
                     QueryConstants.ENCODED_EMPTY_COLUMN_BYTES)) {
                 //Empty column is always encoded in FOUR_BYTE format, since it's a reserved
                 // qualifier. See EncodedColumnsUtil#isReservedColumnQualifier.

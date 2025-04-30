@@ -614,7 +614,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
 
     @Override
     public InternalScanner preFlush(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
-                                    InternalScanner scanner, FlushLifeCycleTracker tracker) throws IOException {
+                                    InternalScanner scanner, FlushLifeCycleTracker tracker)
+            throws IOException {
         if (!isPhoenixTableTTLEnabled(c.getEnvironment().getConfiguration())) {
             return scanner;
         } else {
