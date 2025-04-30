@@ -128,8 +128,8 @@ public class TableTTLIT extends BaseTest {
                     { false, false, KeepDeletedCells.FALSE, 1, 100, null},
                     { false, false, KeepDeletedCells.TRUE, 5, 50, null},
                     { false, false, KeepDeletedCells.TTL, 1, 25, null},
-                    { true, false, KeepDeletedCells.FALSE, 5, 50, null},
-                    { true, false, KeepDeletedCells.TRUE, 1, 25, null},
+                    { true, false, KeepDeletedCells.FALSE, 5, 50, 0},
+                    { true, false, KeepDeletedCells.TRUE, 1, 25, 0},
                     { true, false, KeepDeletedCells.TTL, 5, 100, null},
                     { false, false, KeepDeletedCells.FALSE, 1, 100, 0},
                     { false, false, KeepDeletedCells.TRUE, 5, 50, 0},
@@ -246,7 +246,7 @@ public class TableTTLIT extends BaseTest {
     }
 
     @Test
-    public void testMinorCompactionShouldNotRetainCellsWhenMaxLookbackIsDisabled()
+    public void testMinorCompactionAndFlushesShouldNotRetainCellsWhenMaxLookbackIsDisabled()
             throws Exception {
         if (tableLevelMaxLookback == null || tableLevelMaxLookback != 0) {
             return;
@@ -274,16 +274,30 @@ public class TableTTLIT extends BaseTest {
                     }
                     flush(TableName.valueOf(tableName));
                     // At every flush, extra cell versions should be removed.
-                    // MAX_COLUMN_INDEX table columns and one empty column will be retained for
-                    // each row version.
+                    // MAX_COLUMN_INDEX table columns will be retained for each row version.
+                    int expectedMaxRawCellCount;
+                    if (multiCF) {
+                        // All empty cells are retained for multiCF tables for flushes and minor
+                        // compactions
+                        expectedMaxRawCellCount =
+                                ((i + 1) * MAX_COLUMN_INDEX * versions) + rowUpdateCounter;
+                    }
+                    else {
+                        // Only empty column is retained for each row version
+                        expectedMaxRawCellCount = (i + 1) * (MAX_COLUMN_INDEX + 1) * versions;
+                    }
                     int rawCellCount = TestUtil.getRawCellCount(
                             conn, TableName.valueOf(tableName), row);
-                    assertEquals((i + 1) * (MAX_COLUMN_INDEX + 1) * versions, rawCellCount);
+                    // Need inequality check here as a minor compaction could have happened
+                    assertTrue(rawCellCount <= expectedMaxRawCellCount);
                 }
                 // Run one minor compaction (in case no minor compaction has happened yet)
                 TestUtil.minorCompact(utility, TableName.valueOf(tableName));
-                assertEquals(TestUtil.getRawCellCount(conn, TableName.valueOf(tableName),
-                                Bytes.toBytes("a")), (MAX_COLUMN_INDEX + 1) * versions);
+                int rawCellCount = TestUtil.getRawCellCount(conn, TableName.valueOf(tableName),
+                        Bytes.toBytes("a"));
+                int expectedRawCellCount = (MAX_COLUMN_INDEX * versions)
+                        + (multiCF ? rowUpdateCounter : versions);
+                assertEquals(expectedRawCellCount, rawCellCount);
             } catch (AssertionError e) {
                 TestUtil.dumpTable(conn, TableName.valueOf(tableName));
                 throw e;

@@ -604,8 +604,8 @@ public class MaxLookbackExtendedIT extends BaseTest {
             TestUtil.dumpTable(conn, dataTableName);
             ResultSet rs = stmt.executeQuery("select * from " + dataTableName + " where id = 'a'");
             while(rs.next()) {
-                assertNotNull(rs.getString(3));
-                assertNotNull(rs.getString(4));
+                assertEquals("abc", rs.getString(3));
+                assertEquals("abcd", rs.getString(4));
             }
         }
     }
@@ -633,17 +633,38 @@ public class MaxLookbackExtendedIT extends BaseTest {
             stmt.execute("upsert into " + tableName + " values ('a', 'ab3')");
             conn.commit();
             injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000);
+
             TestUtil.dumpTable(conn, dataTableName);
+            byte[] rowKey = Bytes.toBytes("a");
+            int rawCellCount = TestUtil.getRawCellCount(conn, dataTableName, rowKey);
+            // 6 non-empty cells (ab3, ab2, ab1, ab, abc, abcd) + 4 empty cells (for 4 upserts)
+            assertEquals(10, rawCellCount);
+
             TestUtil.flush(utility, dataTableName);
             injectEdge.incrementValue(1);
+            rawCellCount = TestUtil.getRawCellCount(conn, dataTableName, rowKey);
+            // 1 non-empty cell (ab3) and 1 empty cell in max lookback window are
+            // immediately retained.
+            // 3 non-empty cells outside max lookback window will be retained (ab2, abc, abcd)
+            // 3 (for multi-CF)/ 2 (single-CF) empty cells will be retained outside
+            // max lookback window
+            assertEquals(multiCF ? 8 : 7, rawCellCount);
             TestUtil.dumpTable(conn, dataTableName);
+
             majorCompact(dataTableName);
             injectEdge.incrementValue(1);
+            rawCellCount = TestUtil.getRawCellCount(conn, dataTableName, rowKey);
+            // 1 non-empty cell (ab3) and 1 empty cell at the edge of max lookback window will be
+            // retained
+            // 2 non-empty cells outside max lookback window will be retained (abc, abcd)
+            // 2 empty cells will be retained outside max lookback window
+            assertEquals(6, rawCellCount);
             TestUtil.dumpTable(conn, dataTableName);
+
             ResultSet rs = stmt.executeQuery("select * from " + dataTableName + " where id = 'a'");
             while(rs.next()) {
-                assertNotNull(rs.getString(3));
-                assertNotNull(rs.getString(4));
+                assertEquals("abc", rs.getString(3));
+                assertEquals("abcd", rs.getString(4));
             }
         }
     }

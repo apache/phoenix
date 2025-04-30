@@ -163,6 +163,7 @@ public class CompactionScanner implements InternalScanner {
     private long outputCellCount = 0;
     private boolean phoenixLevelOnly = false;
     private boolean isCDCIndex;
+    private boolean isEmptyCfCqInitialized;
 
     // Only for forcing minor compaction while testing
     private static boolean forceMinorCompaction = false;
@@ -181,8 +182,10 @@ public class CompactionScanner implements InternalScanner {
         // Empty column family and qualifier are always needed to compute which all empty cells to retain
         // even during minor compactions. If required empty cells are not retained during
         // minor compactions then we can run into the risk of partial row expiry on next major compaction.
-        this.emptyCF = table != null ? SchemaUtil.getEmptyColumnFamily(table) : EMPTY_BYTE_ARRAY;
-        this.emptyCQ = table != null ? SchemaUtil.getEmptyColumnQualifier(table) : EMPTY_BYTE_ARRAY;
+        this.emptyCF = table != null ? SchemaUtil.getEmptyColumnFamily(table) : null;
+        this.emptyCQ = table != null ? SchemaUtil.getEmptyColumnQualifier(table) : null;
+        // PTable will be null only for flushes
+        this.isEmptyCfCqInitialized = table != null;
         compactionTime = EnvironmentEdgeManager.currentTimeMillis();
         columnFamilyName = store.getColumnFamilyName();
         storeColumnFamily = columnFamilyName.getBytes();
@@ -418,19 +421,29 @@ public class CompactionScanner implements InternalScanner {
     }
 
     private void determineEmptyCfCq(List<Cell> result) {
+        // This should be called only per instance
+        assert ! isEmptyCfCqInitialized;
+        byte[] emptyCF = null;
         for (Cell cell : result) {
             emptyCF = CellUtil.cloneFamily(cell);
-            if(ScanUtil.isEmptyColumn(cell, emptyCF, QueryConstants.EMPTY_COLUMN_BYTES)) {
+            if (ScanUtil.isEmptyColumn(cell, emptyCF, QueryConstants.EMPTY_COLUMN_BYTES)) {
                 emptyCQ = QueryConstants.EMPTY_COLUMN_BYTES;
-                emptyCFStore = true;
                 break;
-            } //Empty column is always encoded in FOUR_BYTE format, since it's a reserved qualifier. See EncodedColumnsUtil#isReservedColumnQualifier
-            else if(ScanUtil.isEmptyColumn(cell, emptyCF, QueryConstants.ENCODED_EMPTY_COLUMN_BYTES)) {
+            }
+            else if (ScanUtil.isEmptyColumn(cell, emptyCF,
+                    QueryConstants.ENCODED_EMPTY_COLUMN_BYTES)) {
+                //Empty column is always encoded in FOUR_BYTE format, since it's a reserved
+                // qualifier. See EncodedColumnsUtil#isReservedColumnQualifier.
                 emptyCQ = QueryConstants.ENCODED_EMPTY_COLUMN_BYTES;
-                emptyCFStore = true;
                 break;
             }
         }
+        if (emptyCQ == QueryConstants.EMPTY_COLUMN_BYTES
+                || emptyCQ == QueryConstants.ENCODED_EMPTY_COLUMN_BYTES) {
+            this.emptyCF = emptyCF;
+            this.emptyCFStore = true;
+        }
+        this.isEmptyCfCqInitialized = true;
     }
 
     @Override
@@ -440,7 +453,7 @@ public class CompactionScanner implements InternalScanner {
         if (!result.isEmpty()) {
             // This will happen only during flushes as then we don't pass PTable object
             // to determine emptyCF and emptyCQ
-            if (emptyCQ == EMPTY_BYTE_ARRAY) {
+            if (!this.isEmptyCfCqInitialized) {
                 determineEmptyCfCq(result);
             }
            // This is for debugging
@@ -2481,7 +2494,8 @@ public class CompactionScanner implements InternalScanner {
                 }
                 if (cell.getType() == Cell.Type.Put) {
                     lastRowVersion.add(cell);
-                    if (ScanUtil.isEmptyColumn(cell, emptyCF, emptyCQ)) {
+                    if (emptyCF != null && emptyCQ != null
+                            && ScanUtil.isEmptyColumn(cell, emptyCF, emptyCQ)) {
                         index = addEmptyColumn(result, currentColumnCell, index, emptyColumn);
                     } else {
                         index = skipColumn(result, currentColumnCell, retainedCells, index);
