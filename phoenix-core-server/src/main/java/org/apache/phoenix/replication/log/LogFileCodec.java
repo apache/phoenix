@@ -135,9 +135,9 @@ public class LogFileCodec implements LogFile.Codec {
             WritableUtils.writeVInt(recordOut, cfCount);
 
             for (Map.Entry<byte[], List<Cell>> entry: familyMap.entrySet()) {
-                byte[] columnFamily = entry.getKey();
-                WritableUtils.writeVInt(recordOut, columnFamily.length);
-                recordOut.write(columnFamily);
+                byte[] cf = entry.getKey();
+                WritableUtils.writeVInt(recordOut, cf.length);
+                recordOut.write(cf);
                 List<Cell> cells = entry.getValue();
                 WritableUtils.writeVInt(recordOut, cells.size());
                 for (Cell cell: cells) {
@@ -225,15 +225,15 @@ public class LogFileCodec implements LogFile.Codec {
                 long ts = in.readLong();
                 mutation.setTimestamp(ts);
 
-                int colCount = WritableUtils.readVInt(in);
-                for (int i = 0; i < colCount; i++) {
+                int cfCount = WritableUtils.readVInt(in);
+                for (int i = 0; i < cfCount; i++) {
                     // Col name
-                    int columnLen = WritableUtils.readVInt(in);
-                    byte[] column = new byte[columnLen];
-                    in.readFully(column);
+                    int cfLen = WritableUtils.readVInt(in);
+                    byte[] cf = new byte[cfLen];
+                    in.readFully(cf);
                     // Qualifiers+Values Count
-                    int valuesCount = WritableUtils.readVInt(in);
-                    for (int j = 0; j < valuesCount; j++) {
+                    int columnValuePairsCount = WritableUtils.readVInt(in);
+                    for (int j = 0; j < columnValuePairsCount; j++) {
                         // Qualifier name
                         int qualLen = WritableUtils.readVInt(in);
                         byte[] qual = new byte[qualLen];
@@ -248,17 +248,17 @@ public class LogFileCodec implements LogFile.Codec {
                         }
                         switch (type) {
                         case PUT:
-                            ((Put) mutation).addColumn(column, qual, ts, value);
+                            ((Put) mutation).addColumn(cf, qual, ts, value);
                             break;
                         case DELETE:
                         case DELETECOLUMN:
-                            ((Delete) mutation).addColumn(column, qual, ts);
+                            ((Delete) mutation).addColumn(cf, qual, ts);
                             break;
                         case DELETEFAMILYVERSION:
-                            ((Delete) mutation).addFamilyVersion(column, ts);
+                            ((Delete) mutation).addFamilyVersion(cf, ts);
                             break;
                         case DELETEFAMILY:
-                            ((Delete) mutation).addFamily(column);
+                            ((Delete) mutation).addFamily(cf);
                             break;
                         default:
                             throw new UnsupportedOperationException("Unhandled mutation type "

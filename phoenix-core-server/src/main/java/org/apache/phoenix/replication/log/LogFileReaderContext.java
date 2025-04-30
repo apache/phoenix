@@ -18,7 +18,6 @@
 package org.apache.phoenix.replication.log;
 
 import java.io.IOException;
-import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -43,9 +42,9 @@ public class LogFileReaderContext {
     private LogFileCodec codec;
     private long fileSize = -1;
     private boolean isSkipCorruptBlocks;
-    private AtomicLong blocksRead = new AtomicLong();
-    private AtomicLong recordsRead = new AtomicLong();
-    private AtomicLong corruptBlocksSkipped = new AtomicLong();
+    private long blocksRead;
+    private long recordsRead;
+    private long corruptBlocksSkipped;
 
     public LogFileReaderContext(Configuration conf) {
         this.conf = conf;
@@ -109,41 +108,41 @@ public class LogFileReaderContext {
     }
 
     public void incrementBlocksRead() {
-        blocksRead.incrementAndGet();
+        blocksRead++;
     }
 
     public long getBlocksRead() {
-        return blocksRead.get();
+        return blocksRead;
     }
 
     public LogFileReaderContext setBlocksRead(long value) {
-        blocksRead.set(value);
+        blocksRead = value;
         return this;
     }
 
     public void incrementRecordsRead() {
-        recordsRead.incrementAndGet();
+        recordsRead++;
     }
 
     public long getRecordsRead() {
-        return recordsRead.get();
+        return recordsRead;
     }
 
     public LogFileReaderContext setRecordsRead(long value) {
-        recordsRead.set(value);
+        recordsRead = value;
         return this;
     }
 
     public void incrementCorruptBlocksSkipped() {
-        corruptBlocksSkipped.incrementAndGet();
+        corruptBlocksSkipped++;
     }
 
     public long getCorruptBlocksSkipped() {
-        return corruptBlocksSkipped.get();
+        return corruptBlocksSkipped;
     }
 
     public LogFileReaderContext setCorruptBlocksSkipped(long value) {
-        corruptBlocksSkipped.set(value);
+        corruptBlocksSkipped = value;
         return this;
     }
 
