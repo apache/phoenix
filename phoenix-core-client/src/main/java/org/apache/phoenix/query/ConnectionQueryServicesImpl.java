@@ -78,15 +78,7 @@ import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_FAIL
 import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_SUCCESS;
 import static org.apache.phoenix.monitoring.MetricType.TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_ENABLED;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_ENABLED;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THRESHOLD_MILLISECONDS;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SYSTEM_CATALOG_INDEXES_ENABLED;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TIMEOUT_DURING_UPGRADE_MS;
+import static org.apache.phoenix.query.QueryServicesOptions.*;
 import static org.apache.phoenix.util.UpgradeUtil.addParentToChildLinks;
 import static org.apache.phoenix.util.UpgradeUtil.addViewIndexToParentLinks;
 import static org.apache.phoenix.util.UpgradeUtil.copyTTLValuesFromPhoenixTTLColumnToTTLColumn;
@@ -118,22 +110,7 @@ import java.util.Objects;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
@@ -417,6 +394,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private Connection invalidateMetadataCacheConnection = null;
     private final Object invalidateMetadataCacheConnLock = new Object();
     private MetricsMetadataCachingSource metricsMetadataCachingSource;
+    private ThreadPoolExecutor threadPoolExecutor;
     public static final String INVALIDATE_SERVER_METADATA_CACHE_EX_MESSAGE =
             "Cannot invalidate server metadata cache on a non-server connection";
 
@@ -471,6 +449,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
         if (connectionInfo.getPrincipal() != null) {
             config.set(QUERY_SERVICES_NAME, connectionInfo.getPrincipal());
+        }
+
+        if (config.getBoolean(PROFILE_BASED_THREAD_POOL_ENABLED, DEFAULT_PROFILE_BASED_THREAD_POOL_ENABLED)) {
+            int keepAlive = config.getInt(PROFILE_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS, DEFAULT_PROFILE_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS);
+            int corePoolSize = config.getInt(PROFILE_BASED_THREAD_POOL_CORE_POOL_SIZE, DEFAULT_PROFILE_BASED_THREAD_POOL_CORE_POOL_SIZE);
+            int maxThreads = config.getInt(PROFILE_BASED_THREAD_POOL_MAX_THREADS, DEFAULT_PROFILE_BASED_THREAD_POOL_MAX_THREADS);
+            int maxQueue = config.getInt(PROFILE_BASED_THREAD_POOL_MAX_QUEUE, DEFAULT_PROFILE_BASED_THREAD_POOL_MAX_QUEUE);
+            this.threadPoolExecutor = new ThreadPoolExecutor(corePoolSize, maxThreads, keepAlive, TimeUnit.SECONDS,
+                    new ArrayBlockingQueue<>(maxQueue), new DaemonThreadFactory());
         }
         LOGGER.info(String.format("CQS initialized with connection query service : %s",
                 config.get(QUERY_SERVICES_NAME)));
@@ -634,7 +621,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public Table getTable(byte[] tableName) throws SQLException {
         try {
             return HBaseFactoryProvider.getHTableFactory().getTable(tableName,
-                connection, null);
+                connection, threadPoolExecutor);
         } catch (IOException e) {
             throw new SQLException(e);
         }
@@ -6780,5 +6767,36 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             builder.addInvalidateServerMetadataCacheRequests(innerBuilder.build());
         }
         return builder.build();
+    }
+
+    private static class DaemonThreadFactory implements ThreadFactory {
+        static final AtomicInteger poolNumber = new AtomicInteger(1);
+        final ThreadGroup group;
+        final AtomicInteger threadNumber = new AtomicInteger(1);
+        final String namePrefix;
+
+        DaemonThreadFactory() {
+            SecurityManager s = System.getSecurityManager();
+            group = (s != null) ? s.getThreadGroup() : Thread.currentThread().getThreadGroup();
+            namePrefix = "protected-htable-pool" + poolNumber.getAndIncrement() + "-thread-";
+        }
+
+        @Override
+        public Thread newThread(Runnable r) {
+            LOGGER.debug("Creating new thread for runnable " + r.toString());
+            Thread t = new Thread(group, r, namePrefix + threadNumber.getAndIncrement(), 0);
+            if (!t.isDaemon()) {
+                t.setDaemon(true);
+            }
+            if (t.getPriority() != Thread.NORM_PRIORITY) {
+                t.setPriority(Thread.NORM_PRIORITY);
+            }
+            return t;
+        }
+
+        @Override
+        public String toString() {
+            return namePrefix;
+        }
     }
 }
