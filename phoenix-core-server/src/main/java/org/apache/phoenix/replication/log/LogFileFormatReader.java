@@ -96,9 +96,9 @@ public class LogFileFormatReader implements Closeable {
         header.readFields(input);
     }
 
-    public LogFile.Record next(LogFile.Record reuse) throws IOException {
+    public LogFile.Record next() throws IOException {
         while (true) { // Loop to handle skipping blocks or reaching end of current block
-            if (decoder == null || !decoder.advance(reuse)) {
+            if (decoder == null || !decoder.advance()) {
                 currentBlockBuffer = readNextBlock(); // Reads, validates checksum, decompresses
                 if (currentBlockBuffer == null) {
                     // End of file or unrecoverable error after skipping blocks
@@ -108,7 +108,7 @@ public class LogFileFormatReader implements Closeable {
                 // Initialize decoder for the new block buffer
                 decoder = context.getCodec().getDecoder(currentBlockBuffer);
                 // Try advancing again within the new block
-                if (!decoder.advance(reuse)) {
+                if (!decoder.advance()) {
                     // Block was empty or immediately failed after loading? Should not happen if
                     // next() succeeded.
                     LOG.warn("Empty or invalid block loaded at position {}", currentPosition);

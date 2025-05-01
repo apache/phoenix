@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
-import org.apache.hadoop.hbase.client.Mutation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,7 +34,6 @@ public class LogFileReader implements LogFile.Reader  {
     private static final Logger LOG = LoggerFactory.getLogger(LogFileReader.class);
     private LogFileReaderContext context;
     private LogFileFormatReader reader;
-    private LogFile.Record current;
     private boolean closed = false;
 
     public LogFileReader() {
@@ -56,23 +54,21 @@ public class LogFileReader implements LogFile.Reader  {
     }
 
     @Override
-    public Mutation next() throws IOException {
+    public LogFile.Record next() throws IOException {
         if (closed) {
             throw new IOException("LogFileReader has been closed");
         }
-        current = reader.next(current);
-        if (current == null) {
+        LogFile.Record r = reader.next();
+        if (r == null) {
             return null;
         }
-        // NOTE: We don't currently do anything with the Record's table name or commit id, but may
-        // some day.
-        return current.getMutation();
+        return r;
     }
 
     @Override
-    public Iterator<Mutation> iterator() {
-        return new Iterator<Mutation>() {
-            private Mutation next = null;
+    public Iterator<LogFile.Record> iterator() {
+        return new Iterator<LogFile.Record>() {
+            private LogFile.Record next = null;
             private boolean fetched = false;
 
             @Override
@@ -92,15 +88,15 @@ public class LogFileReader implements LogFile.Reader  {
             }
 
             @Override
-            public Mutation next() {
+            public LogFile.Record next() {
                 if (!hasNext()) {
                     throw new NoSuchElementException("No more records in the Log");
                 }
-                Mutation mutation = next;
+                LogFile.Record r = next;
                 // Reset state for the next hasNext() call
                 next = null;
                 fetched = false;
-                return mutation;
+                return r;
             }
 
             @Override
@@ -148,7 +144,7 @@ public class LogFileReader implements LogFile.Reader  {
     @Override
     public String toString() {
         return "LogFileReader [readerContext=" + context + ", formatReader=" + reader
-            + ", currentRecord=" + current + ", closed=" + closed + "]";
+            + ", closed=" + closed + "]";
     }
 
 }

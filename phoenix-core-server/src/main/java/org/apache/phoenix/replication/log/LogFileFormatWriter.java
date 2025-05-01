@@ -125,10 +125,10 @@ public class LogFileFormatWriter implements Closeable {
                 compressor.reset();
                 compressor.setInput(uncompressedBytes, 0, uncompressedBytes.length);
                 compressor.finish(); // We are going to one-shot this.
-                // Give 20% overhead for pathological cases
+                // Give 25% overhead for pathological cases
                 // We can't go below this by much because the Snappy compressor will require more
-                // than 10% overhead or else it will refuse to try.
-                int compressBuffNeeded = (int) (uncompressedBytes.length * 1.2f);
+                // than 20% overhead in some cases or else it will refuse to try.
+                int compressBuffNeeded = (int) (uncompressedBytes.length * 1.25f);
                 if (compressBuf == null || compressBuf.capacity() < compressBuffNeeded) {
                     compressBuf = ByteBuffer.allocate(compressBuffNeeded);
                 }

@@ -350,7 +350,7 @@ public interface LogFile {
     }
 
     /** Interface for reading replication logs */
-    interface Reader extends Closeable, Iterable<Mutation> {
+    interface Reader extends Closeable, Iterable<Record> {
         /**
          * Initializes the reader with necessary context.
          * This typically involves opening the file and reading the header.
@@ -364,7 +364,7 @@ public interface LogFile {
          * @return The next Record, or null if the end of the file has been reached.
          * @throws IOException if an I/O error occurs during reading or parsing.
          */
-        Mutation next() throws IOException;
+        Record next() throws IOException;
 
         /**
          * Returns the Header information read from the log file during initialization.
@@ -400,12 +400,11 @@ public interface LogFile {
              * Moves the decoder to the next record in the buffer. If a non-null {@code reuse}
              * object is provided and is compatible, it will be populated with the data instead
              * of creating a new object internally.
-             * @param reuse An optional existing Record object to reuse.
              * @return true if a record was successfully read, false if the end of the stream
              *         is reached.
              * @throws IOException if an error occurs during reading.
              */
-            boolean advance(Record reuse) throws IOException;
+            boolean advance() throws IOException;
             /**
              * Returns the current record, which might be the object passed in the last successful
              * call to {@code advance(reuse)} or an internal object if reuse was null.

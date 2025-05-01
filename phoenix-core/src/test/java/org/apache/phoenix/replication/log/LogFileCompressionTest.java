@@ -31,7 +31,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.compress.Compression;
 import org.junit.After;
 import org.junit.Before;
@@ -128,11 +127,12 @@ public class LogFileCompressionTest {
     public void testLogFileSingleBlockWithCompression() throws IOException {
         LOG.info("Testing single block with compression {}", compression.getName());
         initLogFileWriter(LogFileWriterContext.DEFAULT_LOGFILE_BLOCK_SIZE);
-        List<Mutation> originals = new ArrayList<>();
+        List<LogFile.Record> originals = new ArrayList<>();
         for (int i = 0; i < 100; i++) {
-            Mutation mutation = LogFileTestUtil.newPut("row" + i, 100L + i, 2);
-            originals.add(mutation);
-            writer.append("TBL1", i, mutation);
+            LogFile.Record record = LogFileTestUtil.newPutRecord("TBLSBWC", i, "row" + i,
+                100L + i, 2);
+            originals.add(record);
+            writer.append(record.getHBaseTableName(), record.getCommitId(), record.getMutation());
         }
         writer.close();
         initLogFileReader();
@@ -144,12 +144,13 @@ public class LogFileCompressionTest {
         LOG.info("Testing multiple blocks with compression {}", compression.getName());
         // Use a small block size to force multiple blocks
         initLogFileWriter(8 * 1024); // 8k
-        List<Mutation> originals = new ArrayList<>();
+        List<LogFile.Record> originals = new ArrayList<>();
         // Generate enough records to span multiple blocks
         for (int i = 0; i < 100_000; i++) {
-            Mutation mutation = LogFileTestUtil.newPut("row" + i, 200L + i, 5);
-            originals.add(mutation);
-            writer.append("TBL_MULTI", i, mutation);
+            LogFile.Record record = LogFileTestUtil.newPutRecord("TBLMBWC", i, "row" + i,
+                100L + i, 5);
+            originals.add(record);
+            writer.append(record.getHBaseTableName(), record.getCommitId(), record.getMutation());
         }
         writer.close();
         initLogFileReader();
@@ -167,7 +168,7 @@ public class LogFileCompressionTest {
         reader.close();
     }
 
-    private void readAndVerifyRecords(List<Mutation> originals, long expectedBlockCount)
+    private void readAndVerifyRecords(List<LogFile.Record> originals, long expectedBlockCount)
             throws IOException {
         assertTrue("Test file does not exist: " + filePath, localFs.exists(filePath));
         assertTrue("Test file has zero length: " + filePath,
@@ -178,8 +179,8 @@ public class LogFileCompressionTest {
         assertNotNull("Header should not be null", header);
 
         // Read records using iterator
-        List<Mutation> decoded = new ArrayList<>();
-        Iterator<Mutation> iterator = reader.iterator();
+        List<LogFile.Record> decoded = new ArrayList<>();
+        Iterator<LogFile.Record> iterator = reader.iterator();
         while (iterator.hasNext()) {
             decoded.add(iterator.next());
         }
@@ -188,7 +189,7 @@ public class LogFileCompressionTest {
         assertEquals("Number of decoded records mismatch", originals.size(),
             decoded.size());
         for (int i = 0; i < originals.size(); i++) {
-            LogFileTestUtil.assertMutationEquals("Record " + i + " mismatch", originals.get(i),
+            LogFileTestUtil.assertRecordEquals("Record " + i + " mismatch", originals.get(i),
                 decoded.get(i));
         }
 

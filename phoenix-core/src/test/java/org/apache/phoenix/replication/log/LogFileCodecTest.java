@@ -19,7 +19,6 @@ package org.apache.phoenix.replication.log;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayInputStream;
@@ -86,7 +85,7 @@ public class LogFileCodecTest {
         DataInputStream dis = new DataInputStream(bais);
         LogFile.Codec.Decoder decoder = codec.getDecoder(dis);
 
-        assertTrue("Should be able to advance decoder", decoder.advance(null));
+        assertTrue("Should be able to advance decoder", decoder.advance());
         LogFileRecord decoded = (LogFileRecord) decoder.current();
         LOG.debug("Decoded " + decoded);
 
@@ -96,48 +95,7 @@ public class LogFileCodecTest {
         LogFileTestUtil.assertRecordEquals("Decoded record should match original", original,
             decoded);
 
-        assertFalse("Should be no more records", decoder.advance(null));
-    }
-
-    @Test
-    public void testLogFileCodecReuseRecord() throws IOException {
-        LogFileCodec codec = new LogFileCodec();
-        LogFile.Record original1 = LogFileTestUtil.newPutRecord("TBL1", 100L, "row1", 12345L, 1);
-        LogFile.Record original2 = LogFileTestUtil.newPutRecord("TBL2", 101L, "row2", 12346L, 2);
-
-        // Encode
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        DataOutputStream dos = new DataOutputStream(baos);
-        LogFile.Codec.Encoder encoder = codec.getEncoder(dos);
-        encoder.write(original1);
-        LOG.debug("Encoded " + original1);
-        encoder.write(original2);
-        LOG.debug("Encoded " + original2);
-        dos.close();
-        byte[] encodedBytes = baos.toByteArray();
-
-        // Decode
-        ByteArrayInputStream bais = new ByteArrayInputStream(encodedBytes);
-        DataInputStream dis = new DataInputStream(bais);
-        LogFile.Codec.Decoder decoder = codec.getDecoder(dis);
-
-        LogFileRecord reusableRecord = new LogFileRecord();
-
-        assertTrue("Should advance to first record", decoder.advance(reusableRecord));
-        LogFileRecord decoded1 = (LogFileRecord) decoder.current();
-        LOG.debug("Decoded: " + decoded1);
-        assertSame("Should reuse the provided object for first record", reusableRecord, decoded1);
-        LogFileTestUtil.assertRecordEquals("First decoded record should match", original1,
-            decoded1);
-
-        assertTrue("Should advance to second record", decoder.advance(reusableRecord));
-        LogFileRecord decoded2 = (LogFileRecord) decoder.current();
-        LOG.debug("Decoded: " + decoded2);
-        assertSame("Should reuse the provided object for second record", reusableRecord, decoded2);
-        LogFileTestUtil.assertRecordEquals("Second decoded record should match", original2,
-            decoded2);
-
-        assertFalse("Should be no more records", decoder.advance(reusableRecord));
+        assertFalse("Should be no more records", decoder.advance());
     }
 
     @Test
@@ -166,7 +124,7 @@ public class LogFileCodecTest {
         LogFile.Codec.Decoder decoder = codec.getDecoder(dis);
 
         List<LogFile.Record> decodedRecords = new ArrayList<>();
-        while (decoder.advance(null)) {
+        while (decoder.advance()) {
             LogFile.Record record = decoder.current();
             LOG.info("Decoded: record={}", record);
             decodedRecords.add(record);
@@ -229,7 +187,7 @@ public class LogFileCodecTest {
         LogFile.Codec.Decoder decoder = codec.getDecoder(dis);
         List<LogFile.Record> decodedRecords = new ArrayList<>();
         start = System.currentTimeMillis();
-        while (decoder.advance(null)) {
+        while (decoder.advance()) {
             LogFile.Record record = decoder.current();
             decodedRecords.add(record);
         }
@@ -264,11 +222,11 @@ public class LogFileCodecTest {
         ByteBuffer buffer = ByteBuffer.wrap(encodedBytes);
         LogFile.Codec.Decoder decoder = codec.getDecoder(buffer);
 
-        assertTrue("Should be able to advance decoder from ByteBuffer", decoder.advance(null));
+        assertTrue("Should be able to advance decoder from ByteBuffer", decoder.advance());
         LogFileRecord decoded = (LogFileRecord) decoder.current();
         LogFileTestUtil.assertRecordEquals("Decoded record from ByteBuffer should match original",
             original, decoded);
-        assertFalse("Should be no more records in ByteBuffer", decoder.advance(null));
+        assertFalse("Should be no more records in ByteBuffer", decoder.advance());
     }
 
 }

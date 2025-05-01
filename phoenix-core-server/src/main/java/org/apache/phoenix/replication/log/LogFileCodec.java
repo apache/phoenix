@@ -177,17 +177,12 @@ public class LogFileCodec implements LogFile.Codec {
         }
 
         @Override
-        public boolean advance(LogFile.Record reuse) throws IOException {
+        public boolean advance() throws IOException {
             try {
                 int recordDataLength = WritableUtils.readVInt(in);
                 recordDataLength += WritableUtils.getVIntSize(recordDataLength);
 
-                // If we are reusing a record object, prepare it for new data
-                if (reuse == null || !(reuse instanceof LogFileRecord)) {
-                    current = new LogFileRecord();
-                } else {
-                    current = (LogFileRecord) reuse;
-                }
+                current = new LogFileRecord();
                 // Set the total serialized length on the record
                 current.setSerializedLength(recordDataLength);
 

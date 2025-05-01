@@ -91,15 +91,15 @@ public class LogFileFormatTest {
         assertEquals("Minor version mismatch", LogFileHeader.VERSION_MINOR,
             reader.getHeader().getMinorVersion());
 
-        LogFile.Record decoded1 = reader.next(null);
+        LogFile.Record decoded1 = reader.next();
         assertNotNull("First record should not be null", decoded1);
         LogFileTestUtil.assertRecordEquals("First record mismatch", r1, decoded1);
 
-        LogFile.Record decoded2 = reader.next(null);
+        LogFile.Record decoded2 = reader.next();
         assertNotNull("Second record should not be null", decoded2);
         LogFileTestUtil.assertRecordEquals("Second record mismatch", r2, decoded2);
 
-        assertNull("Should be no more records", reader.next(null));
+        assertNull("Should be no more records", reader.next());
 
         LogFile.Trailer trailer = reader.getTrailer();
         assertNotNull("Trailer should exist", trailer);
@@ -132,7 +132,7 @@ public class LogFileFormatTest {
 
         List<LogFile.Record> decoded = new ArrayList<>();
         LogFile.Record r;
-        while ((r = reader.next(null)) != null) {
+        while ((r = reader.next()) != null) {
             decoded.add(r);
         }
 
@@ -161,7 +161,7 @@ public class LogFileFormatTest {
         initLogFileReader(data);
         assertEquals("Major version mismatch", LogFileHeader.VERSION_MAJOR,
             reader.getHeader().getMajorVersion());
-        assertNull("Should be no records", reader.next(null));
+        assertNull("Should be no records", reader.next());
         LogFileTrailer trailer = (LogFileTrailer) reader.getTrailer();
         assertNotNull("Trailer should exist", trailer);
         assertEquals("Trailer record count should be 0", 0, trailer.getRecordCount());
@@ -301,7 +301,7 @@ public class LogFileFormatTest {
         List<LogFile.Record> decoded = new ArrayList<>();
         LogFile.Record r;
         try {
-            while ((r = reader.next(null)) != null) {
+            while ((r = reader.next()) != null) {
                 decoded.add(r);
             }
             // Depending on where truncation happened, next() might throw or return null.
@@ -568,7 +568,7 @@ public class LogFileFormatTest {
     private List<LogFile.Record> readRecords(LogFileFormatReader reader) throws IOException {
         List<LogFile.Record> decoded = new ArrayList<>();
         LogFile.Record r;
-        while ((r = reader.next(null)) != null) {
+        while ((r = reader.next()) != null) {
             decoded.add(r);
         }
         return decoded;
