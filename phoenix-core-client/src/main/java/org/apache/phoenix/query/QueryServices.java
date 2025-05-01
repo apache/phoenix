@@ -384,11 +384,11 @@ public interface QueryServices extends SQLCloseable {
     public static final String PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT = "phoenix.view.ttl.tenant_views_per_scan.limit";
     // Block mutations based on cluster role record
     public static final String CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED = "phoenix.cluster.role.based.mutation.block.enabled";
-    public static final String PROFILE_BASED_THREAD_POOL_ENABLED = "phoenix.profile.based.thread.pool.enabled";
-    public static final String PROFILE_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS = "phoenix.profile.based.thread.pool.keepalive.seconds";
-    public static final String PROFILE_BASED_THREAD_POOL_CORE_POOL_SIZE = "phoenix.profile.based.thread.pool.core.size";
-    public static final String PROFILE_BASED_THREAD_POOL_MAX_THREADS = "phoenix.profile.based.thread.pool.max.threads";
-    public static final String PROFILE_BASED_THREAD_POOL_MAX_QUEUE = "phoenix.profile.based.thread.pool.max.queue";
+    public static final String PRINCIPAL_BASED_THREAD_POOL_ENABLED = "phoenix.principal.based.thread.pool.enabled";
+    public static final String PRINCIPAL_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS = "phoenix.principal.based.thread.pool.keepalive.seconds";
+    public static final String PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE = "phoenix.principal.based.thread.pool.core.size";
+    public static final String PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS = "phoenix.principal.based.thread.pool.max.threads";
+    public static final String PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE = "phoenix.principal.based.thread.pool.max.queue";
 
     // Before 4.15 when we created a view we included the parent table column metadata in the view
     // metadata. After PHOENIX-3534 we allow SYSTEM.CATALOG to split and no longer store the parent

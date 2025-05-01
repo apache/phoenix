@@ -451,11 +451,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             config.set(QUERY_SERVICES_NAME, connectionInfo.getPrincipal());
         }
 
-        if (config.getBoolean(PROFILE_BASED_THREAD_POOL_ENABLED, DEFAULT_PROFILE_BASED_THREAD_POOL_ENABLED)) {
-            int keepAlive = config.getInt(PROFILE_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS, DEFAULT_PROFILE_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS);
-            int corePoolSize = config.getInt(PROFILE_BASED_THREAD_POOL_CORE_POOL_SIZE, DEFAULT_PROFILE_BASED_THREAD_POOL_CORE_POOL_SIZE);
-            int maxThreads = config.getInt(PROFILE_BASED_THREAD_POOL_MAX_THREADS, DEFAULT_PROFILE_BASED_THREAD_POOL_MAX_THREADS);
-            int maxQueue = config.getInt(PROFILE_BASED_THREAD_POOL_MAX_QUEUE, DEFAULT_PROFILE_BASED_THREAD_POOL_MAX_QUEUE);
+        if (config.getBoolean(PRINCIPAL_BASED_THREAD_POOL_ENABLED, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_ENABLED)) {
+            int keepAlive = config.getInt(PRINCIPAL_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS);
+            int corePoolSize = config.getInt(PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE);
+            int maxThreads = config.getInt(PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS);
+            int maxQueue = config.getInt(PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE);
             this.threadPoolExecutor = new ThreadPoolExecutor(corePoolSize, maxThreads, keepAlive, TimeUnit.SECONDS,
                     new ArrayBlockingQueue<>(maxQueue), new DaemonThreadFactory());
         }
