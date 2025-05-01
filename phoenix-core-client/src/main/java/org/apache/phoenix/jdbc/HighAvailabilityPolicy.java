@@ -19,6 +19,7 @@
 package org.apache.phoenix.jdbc;
 
 import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.ACTIVE;
+import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY;
 import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.STANDBY;
 
 import java.sql.Connection;
@@ -47,6 +48,25 @@ public enum HighAvailabilityPolicy {
             return new FailoverPhoenixConnection(context);
         }
 
+        /**
+         * Cluster Role Transitions for Failover High Availability Policy, Here we are trying to
+         * close connections late to allow existing reads to continue during Failover.
+         * ACTIVE --> ACTIVE_TO_STANDBY (Doing Nothing as we are in process of moving the current
+         *      to STANDBY and at this step we are blocking write to drain replication this allows
+         *      us to continue existing reads to continue)
+         * ACTIVE|ACTIVE_TO_STANDBY --> STANDBY (Closing all current connections)
+         *
+         * STANDBY --> ACTIVE (Invalidate CQSI as connections has been closed and now being cleared)
+         * STANDBY --> ACTIVE_TO_STANDBY (Should not be a case but in case of failover Rollback we
+         *      are going back to ACTIVE_TO_STANDBY state invalidating earlier here as connections
+         *      are already closed)
+         * ACTIVE_TO_STANDBY --> ACTIVE (Doing nothing as we have already invalidated cqsi when we
+         *      transitioned from STANDBY to ACTIVE_TO_STANDBY)
+         * @param haGroup The high availability (HA) group
+         * @param oldRecord The older cluster role record cached in this client for the given HA group
+         * @param newRecord New cluster role record read from one ZooKeeper cluster znode
+         * @throws SQLException
+         */
         @Override
         void transitClusterRole(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
                 ClusterRoleRecord newRecord) throws SQLException {
@@ -55,16 +75,20 @@ public enum HighAvailabilityPolicy {
                         "Doing nothing for Cluster Role Change");
                 return;
             }
-            if (oldRecord.getRole1() == ACTIVE && newRecord.getRole1() == STANDBY) {
+            if ((oldRecord.getRole1() == ACTIVE || oldRecord.getRole1() == ACTIVE_TO_STANDBY)
+                    && newRecord.getRole1() == STANDBY) {
                 transitStandby(haGroup, oldRecord.getUrl1(), oldRecord.getRegistryType());
             }
-            if (oldRecord.getRole2() == ACTIVE && newRecord.getRole2() == STANDBY) {
+            if ((oldRecord.getRole2() == ACTIVE || oldRecord.getRole2() == ACTIVE_TO_STANDBY)
+                    && newRecord.getRole2() == STANDBY) {
                 transitStandby(haGroup, oldRecord.getUrl2(), oldRecord.getRegistryType());
             }
-            if (oldRecord.getRole1() != ACTIVE && newRecord.getRole1() == ACTIVE) {
+            if ((oldRecord.getRole1() != ACTIVE && oldRecord.getRole1() != ACTIVE_TO_STANDBY)
+                    && (newRecord.getRole1() == ACTIVE || newRecord.getRole1() == ACTIVE_TO_STANDBY)) {
                 transitActive(haGroup, oldRecord.getUrl1(), oldRecord.getRegistryType());
             }
-            if (oldRecord.getRole2() != ACTIVE && newRecord.getRole2() == ACTIVE) {
+            if ((oldRecord.getRole2() != ACTIVE && oldRecord.getRole2() != ACTIVE_TO_STANDBY)
+                    && (newRecord.getRole2() == ACTIVE || newRecord.getRole2() == ACTIVE_TO_STANDBY)) {
                 transitActive(haGroup, oldRecord.getUrl2(), oldRecord.getRegistryType());
             }
         }
