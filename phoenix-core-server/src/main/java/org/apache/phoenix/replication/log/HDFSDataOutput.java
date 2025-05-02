@@ -35,11 +35,6 @@ public class HDFSDataOutput implements SyncableDataOutput {
     }
 
     @Override
-    public void sync() throws IOException {
-        delegate.hsync();
-    }
-
-    @Override
     public long getPos() throws IOException {
         return delegate.getPos();
     }
@@ -117,6 +112,21 @@ public class HDFSDataOutput implements SyncableDataOutput {
     @Override
     public void writeUTF(String s) throws IOException {
         delegate.writeUTF(s);
+    }
+
+    @Override
+    public void hflush() throws IOException {
+        delegate.hflush();
+    }
+
+    @Override
+    public void hsync() throws IOException {
+        delegate.hsync();
+    }
+
+    @Override
+    public void sync() throws IOException {
+        delegate.hsync();
     }
 
 }

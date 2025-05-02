@@ -20,6 +20,8 @@ package org.apache.phoenix.replication.log;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 
+import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,9 +52,9 @@ public class LogFileWriter implements LogFile.Writer {
         this.writer = new LogFileFormatWriter();
         // TODO: Handle stream creation with proper permissions and overwrite options based on
         // config. For now we overwrite.
-        this.writer.init(context,
-            new HDFSDataOutput(context.getFileSystem().create(context.getFilePath(),
-                true)));
+        FileSystem fs = context.getFileSystem();
+        FSDataOutputStream out = fs.create(context.getFilePath(), true);
+        this.writer.init(context, new HDFSDataOutput(out));
         LOG.debug("Initialized LogFileWriter for path {}", context.getFilePath());
     }
 

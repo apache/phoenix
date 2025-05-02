@@ -17,7 +17,13 @@
  */
 package org.apache.phoenix.replication.log;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
+import java.io.OutputStream;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellBuilderFactory;
@@ -125,6 +131,304 @@ public interface LogFileTestUtil {
         } catch (IOException e) {
             throw new AssertionError(e.getMessage());
         }
+    }
+
+    static class SeekableByteArrayInputStream extends ByteArrayInputStream
+            implements SeekableDataInput {
+
+        // A view of ourselves as a data input stream
+        private DataInputStream stream;
+
+        public SeekableByteArrayInputStream(byte[] buf) {
+            super(buf);
+            this.stream = new DataInputStream(this);
+        }
+
+        public SeekableByteArrayInputStream(byte[] buf, int offset, int length) {
+            super(buf, offset, length);
+            this.stream = new DataInputStream(this);
+        }
+
+        @Override
+        public void seek(long pos) throws IOException {
+            if (pos < 0) {
+                throw new IOException("Cannot seek to negative position");
+            }
+            if (pos > Integer.MAX_VALUE) {
+                throw new IllegalArgumentException("Cannot seek beyond Integer.MAX_VALUE");
+            }
+            if (pos >= count) {
+                this.pos = count; // Position at the end
+                if (pos > count) {
+                    throw new EOFException("Seek position is past the end of the stream");
+                }
+            } else {
+                this.pos = (int) pos;
+            }
+        }
+
+        @Override
+        public long getPos() throws IOException {
+            return pos;
+        }
+
+        @Override
+        public boolean seekToNewSource(long pos) throws IOException {
+            seek(pos);
+            return false;
+        }
+
+        @Override
+        public int read(long position, byte[] buffer, int offset, int length) throws IOException {
+            if (buffer == null) {
+                throw new NullPointerException();
+            }
+            if (offset < 0 || length < 0 || offset + length > buffer.length) {
+                throw new IndexOutOfBoundsException(String.format(
+                    "Offset %d or length %d is invalid for buffer of size %d", offset, length,
+                    buffer.length));
+            }
+            if (position < 0) {
+                throw new IOException("Position cannot be negative");
+            }
+            if (position > Integer.MAX_VALUE) {
+                throw new IllegalArgumentException("Position cannot exceed Integer.MAX_VALUE");
+            }
+            if (length == 0) {
+                return 0;
+            }
+            int pos = (int) position;
+            if (pos >= count) {
+                return -1;
+            }
+            int avail = count - pos;
+            int n = Math.min(length, avail);
+            System.arraycopy(buf, pos, buffer, offset, n);
+            return n;
+        }
+
+        @Override
+        public void readFully(long position, byte[] buffer, int offset, int length)
+                throws IOException {
+            if (buffer == null) {
+                throw new NullPointerException("Buffer cannot be null");
+            }
+            if (offset < 0 || length < 0 || offset + length > buffer.length) {
+                throw new IndexOutOfBoundsException(String.format(
+                    "Offset %d or length %d is invalid for buffer of size %d", offset, length,
+                    buffer.length));
+            }
+            if (position < 0) {
+                throw new IOException("Position cannot be negative");
+            }
+            if (position > Integer.MAX_VALUE) {
+                throw new IllegalArgumentException("Position cannot exceed Integer.MAX_VALUE");
+            }
+            if (length == 0) {
+                return;
+            }
+            int pos = (int) position;
+            if (pos >= count) {
+                throw new EOFException("Read position is at or past the end of the stream");
+            }
+            int avail = count - pos;
+            if (length > avail) {
+                throw new EOFException(String.format(
+                    "Premature EOF from stream: expected %d bytes, but only %d available", length,
+                    avail));
+            }
+            System.arraycopy(buf, pos, buffer, offset, length);
+        }
+
+        @Override
+        public void readFully(long position, byte[] buffer) throws IOException {
+            readFully(position, buffer, 0, buffer.length);
+        }
+
+        @Override
+        public void readFully(byte[] b) throws IOException {
+            stream.readFully(b);
+        }
+
+        @Override
+        public void readFully(byte[] b, int off, int len) throws IOException {
+            stream.readFully(b, off, len);
+        }
+
+        @Override
+        public int skipBytes(int n) throws IOException {
+            return stream.skipBytes(n);
+        }
+
+        @Override
+        public boolean readBoolean() throws IOException {
+            return stream.readBoolean();
+        }
+
+        @Override
+        public byte readByte() throws IOException {
+            return stream.readByte();
+        }
+
+        @Override
+        public int readUnsignedByte() throws IOException {
+            return stream.readUnsignedByte();
+        }
+
+        @Override
+        public short readShort() throws IOException {
+            return stream.readShort();
+        }
+
+        @Override
+        public int readUnsignedShort() throws IOException {
+            return stream.readUnsignedShort();
+        }
+
+        @Override
+        public char readChar() throws IOException {
+            return stream.readChar();
+        }
+
+        @Override
+        public int readInt() throws IOException {
+            return stream.readInt();
+        }
+
+        @Override
+        public long readLong() throws IOException {
+            return stream.readLong();
+        }
+
+        @Override
+        public float readFloat() throws IOException {
+            return stream.readFloat();
+        }
+
+        @Override
+        public double readDouble() throws IOException {
+            return stream.readDouble();
+        }
+
+        @Override
+        @Deprecated
+        public String readLine() throws IOException {
+            return stream.readLine();
+        }
+
+        @Override
+        public String readUTF() throws IOException {
+            return stream.readUTF();
+        }
+
+    }
+
+    static class SyncableByteArrayOutputStream extends OutputStream
+          implements SyncableDataOutput {
+
+        private ByteArrayOutputStream out = new ByteArrayOutputStream();
+        // A view of ourselves as a data output stream
+        private DataOutputStream stream;
+
+        public SyncableByteArrayOutputStream() {
+            this.stream = new DataOutputStream(out);
+        }
+
+        @Override
+        public void writeBoolean(boolean v) throws IOException {
+            stream.writeBoolean(v);;
+        }
+
+        @Override
+        public void writeByte(int v) throws IOException {
+            stream.writeByte(v);
+        }
+
+        @Override
+        public void writeShort(int v) throws IOException {
+            stream.writeShort(v);
+        }
+
+        @Override
+        public void writeChar(int v) throws IOException {
+            stream.writeChar(v);
+        }
+
+        @Override
+        public void writeInt(int v) throws IOException {
+            stream.writeInt(v);
+        }
+
+        @Override
+        public void writeLong(long v) throws IOException {
+            stream.writeLong(v);
+        }
+
+        @Override
+        public void writeFloat(float v) throws IOException {
+            stream.writeFloat(v);
+        }
+
+        @Override
+        public void writeDouble(double v) throws IOException {
+            stream.writeDouble(v);
+        }
+
+        @Override
+        public void writeBytes(String s) throws IOException {
+            stream.writeBytes(s);
+        }
+
+        @Override
+        public void writeChars(String s) throws IOException {
+            stream.writeChars(s);
+        }
+
+        @Override
+        public void writeUTF(String s) throws IOException {
+            stream.writeUTF(s);
+        }
+
+        @Override
+        public long getPos() throws IOException {
+            return out.size();
+        }
+
+        @Override
+        public void write(int b) throws IOException {
+            out.write(b);
+        }
+
+        @Override
+        public void write(byte[] b) throws IOException {
+            out.write(b);
+        }
+
+        @Override
+        public void write(byte[] b, int off, int len) throws IOException {
+            out.write(b, off, len);
+        }
+
+        @Override
+        public void close() throws IOException {
+
+        }
+
+        @Override
+        public void hflush() throws IOException {
+
+        }
+
+        @Override
+        public void hsync() throws IOException {
+
+        }
+
+        @Override
+        public void sync() throws IOException {
+
+        }
+
     }
 
 }

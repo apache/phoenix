@@ -38,20 +38,6 @@ public class AsyncFSDataOutput implements SyncableDataOutput {
     }
 
     @Override
-    public void sync() throws IOException {
-        try {
-            // Our sync method is synchronous, as intended.
-            delegate.flush(true).get();
-        } catch (InterruptedException e) {
-            InterruptedIOException ioe = new InterruptedIOException();
-            ioe.initCause(e);
-            throw ioe;
-        } catch (ExecutionException e) {
-            throw new IOException(e);
-        }
-    }
-
-    @Override
     public long getPos() throws IOException {
         return delegate.getSyncedLength() + delegate.buffered();
     }
@@ -146,6 +132,39 @@ public class AsyncFSDataOutput implements SyncableDataOutput {
     @Override
     public void writeUTF(String s) throws IOException {
         delegate.write(Bytes.toBytes(s));
+    }
+
+    @Override
+    public void hflush() throws IOException {
+        try {
+            // Our sync method is synchronous, as intended.
+            delegate.flush(false).get();
+        } catch (InterruptedException e) {
+            InterruptedIOException ioe = new InterruptedIOException();
+            ioe.initCause(e);
+            throw ioe;
+        } catch (ExecutionException e) {
+            throw new IOException(e);
+        }
+    }
+
+    @Override
+    public void hsync() throws IOException {
+        try {
+            // Our sync method is synchronous, as intended.
+            delegate.flush(true).get();
+        } catch (InterruptedException e) {
+            InterruptedIOException ioe = new InterruptedIOException();
+            ioe.initCause(e);
+            throw ioe;
+        } catch (ExecutionException e) {
+            throw new IOException(e);
+        }
+    }
+
+    @Override
+    public void sync() throws IOException {
+        hsync();
     }
 
 }

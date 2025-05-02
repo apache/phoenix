@@ -21,12 +21,14 @@ import java.io.Closeable;
 import java.io.DataOutput;
 import java.io.IOException;
 
+import org.apache.hadoop.fs.Syncable;
+
 /**
  * Extends DataOutput with a sync method for durability guarantees.
  * Allows abstracting over different underlying output stream implementations
  * like FSDataOutputStream or AsyncFSOutput.
  */
-public interface SyncableDataOutput extends DataOutput, Closeable {
+public interface SyncableDataOutput extends DataOutput, Syncable, Closeable {
 
     /**
      * Flushes buffered data and ensures durability based on the underlying

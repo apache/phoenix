@@ -54,7 +54,7 @@ public class LogFileFormatWriter implements Closeable {
 
     }
 
-    public void init(LogFileWriterContext context, HDFSDataOutput output) throws IOException {
+    public void init(LogFileWriterContext context, SyncableDataOutput output) throws IOException {
         this.output = output;
         this.context = context;
         this.currentBlockBytes = new ByteArrayOutputStream();
