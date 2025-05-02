@@ -39,6 +39,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -51,6 +52,7 @@ import java.util.concurrent.CompletableFuture;
 
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
@@ -578,6 +580,8 @@ public class ParallelPhoenixConnectionIT {
             connectionList.add(getParallelConnection());
         }
         ClusterRoleRecord.RegistryType newRegistry = ClusterRoleRecord.RegistryType.RPC;
+        //RPC Registry is only there in hbase version greater than 2.5.0
+        assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.5.0")>=0);
         CLUSTERS.transitClusterRoleRecordRegistry(haGroup, newRegistry);
 
         for (short i = 0; i < numberOfConnections; i++) {
