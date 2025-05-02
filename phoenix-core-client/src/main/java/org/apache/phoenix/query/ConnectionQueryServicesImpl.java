@@ -482,12 +482,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
 
         if (config.getBoolean(PRINCIPAL_BASED_THREAD_POOL_ENABLED, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_ENABLED)) {
-            int keepAlive = config.getInt(PRINCIPAL_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS);
-            int corePoolSize = config.getInt(PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE);
-            int maxThreads = config.getInt(PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS);
-            int maxQueue = config.getInt(PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE);
+            final int keepAlive = config.getInt(PRINCIPAL_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS);
+            final int corePoolSize = config.getInt(PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE);
+            final int maxThreads = config.getInt(PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS);
+            final int maxQueue = config.getInt(PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE);
+            final String threadPoolName = connectionInfo.getPrincipal() != null ? connectionInfo.getPrincipal() : "default";
             this.threadPoolExecutor = new ThreadPoolExecutor(corePoolSize, maxThreads, keepAlive, TimeUnit.SECONDS,
-                    new ArrayBlockingQueue<>(maxQueue), new DaemonThreadFactory());
+                    new ArrayBlockingQueue<>(maxQueue), new DaemonThreadFactory(threadPoolName));
         }
         LOGGER.info(String.format("CQS initialized with connection query service : %s",
                 config.get(QUERY_SERVICES_NAME)));
@@ -6799,21 +6800,24 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return builder.build();
     }
 
-    private static class DaemonThreadFactory implements ThreadFactory {
-        static final AtomicInteger poolNumber = new AtomicInteger(1);
-        final ThreadGroup group;
-        final AtomicInteger threadNumber = new AtomicInteger(1);
-        final String namePrefix;
+    /**
+     * Ripped directly from org.apache.hadoop.hbase
+     *
+     */
+    public static class DaemonThreadFactory implements ThreadFactory {
+        private static final AtomicInteger poolNumber = new AtomicInteger(1);
+        private final ThreadGroup group;
+        private final AtomicInteger threadNumber = new AtomicInteger(1);
+        private final String namePrefix;
 
-        DaemonThreadFactory() {
+        public DaemonThreadFactory(String name) {
             SecurityManager s = System.getSecurityManager();
             group = (s != null) ? s.getThreadGroup() : Thread.currentThread().getThreadGroup();
-            namePrefix = "protected-htable-pool" + poolNumber.getAndIncrement() + "-thread-";
+            namePrefix = name + poolNumber.getAndIncrement() + "-thread-";
         }
 
         @Override
         public Thread newThread(Runnable r) {
-            LOGGER.debug("Creating new thread for runnable " + r.toString());
             Thread t = new Thread(group, r, namePrefix + threadNumber.getAndIncrement(), 0);
             if (!t.isDaemon()) {
                 t.setDaemon(true);
@@ -6822,11 +6826,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 t.setPriority(Thread.NORM_PRIORITY);
             }
             return t;
-        }
-
-        @Override
-        public String toString() {
-            return namePrefix;
         }
     }
 }
