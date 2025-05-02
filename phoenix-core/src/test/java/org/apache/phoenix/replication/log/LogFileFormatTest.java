@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -358,6 +359,167 @@ public class LogFileFormatTest {
         assertEquals("Blocks read count mismatch", 1, readerContext.getBlocksRead());
         assertEquals("Records read count mismatch", block1Records.size(),
             readerContext.getRecordsRead());
+    }
+
+    @Test
+    public void testLogFileCorruptionPartialTrailer() throws IOException {
+        initLogFileWriter();
+        List<LogFile.Record> block1Records = writeBlock(writer, "B1", 0, 10);
+        List<LogFile.Record> block2Records = writeBlock(writer, "B2", 10, 10);
+        writer.close(); // Writes trailer
+        byte[] data = writerBaos.toByteArray();
+
+        // Truncate partially into the trailer
+        int truncationPoint = data.length - (LogFileTrailer.FIXED_TRAILER_SIZE / 2);
+        byte[] truncatedData = Arrays.copyOf(data, truncationPoint);
+
+        // Re-initialize reader with truncated data
+        PositionedByteArrayInputStream input = new PositionedByteArrayInputStream(truncatedData);
+        readerContext.setFileSize(truncatedData.length);
+        // Init should log a warning but succeed by ignoring the trailer
+        reader.init(readerContext, input);
+
+        List<LogFile.Record> decoded = readRecords(reader);
+
+        // Should read all records from both blocks
+        int totalRecords = block1Records.size() + block2Records.size();
+        assertEquals("Should read all records from block 1 and 2", totalRecords, decoded.size());
+        for (int i = 0; i < block1Records.size(); i++) {
+            LogFileTestUtil.assertRecordEquals("Block 1 record " + i + " mismatch",
+                block1Records.get(i), decoded.get(i));
+        }
+        for (int i = 0; i < block2Records.size(); i++) {
+            LogFileTestUtil.assertRecordEquals("Block 2 record " + i + " mismatch",
+                block2Records.get(i), decoded.get(i + block1Records.size()));
+        }
+
+        assertNull("Trailer should be null due to corruption/truncation", reader.getTrailer());
+
+        // Because the trailer is corrupt we don't know when to stop trying to find blocks, and the
+        // last "block" will be the start of the truncated trailer, so we count it.
+        assertEquals("Corrupt blocks skipped should be 1", 1,
+            readerContext.getCorruptBlocksSkipped());
+
+        // However we should have read all of the blocks and records.
+        assertEquals("Blocks read count mismatch", 2, readerContext.getBlocksRead());
+        assertEquals("Records read count mismatch", totalRecords, readerContext.getRecordsRead());
+    }
+
+    @Test
+    public void testLogFileCorruptionFirstBlockChecksum() throws IOException {
+        initLogFileWriter();
+        List<LogFile.Record> block1Records = writeBlock(writer, "B1", 0, 5);
+        List<LogFile.Record> block2Records = writeBlock(writer, "B2", 5, 5);
+        List<LogFile.Record> block3Records = writeBlock(writer, "B3", 10, 5);
+        writer.close();
+        byte[] data = writerBaos.toByteArray();
+
+        // Find offset of first block's checksum and corrupt it
+        long block1End = findBlockEndOffset(data, (int) writer.getBlocksStartOffset());
+        int block1ChecksumOffset = (int) (block1End - Bytes.SIZEOF_LONG);
+        data[block1ChecksumOffset] ^= 0xFF; // Flip some bits
+
+        initLogFileReader(data);
+        List<LogFile.Record> decoded = readRecords(reader);
+
+        // Should read blocks 2 and 3, skipping block 1
+        int shouldHave = block2Records.size() + block3Records.size();
+        assertEquals("Should read records from block 2 and 3", shouldHave, decoded.size());
+        for (int i = 0; i < block2Records.size(); i++) {
+            LogFileTestUtil.assertRecordEquals("Block 2 record " + i + " mismatch",
+                block2Records.get(i), decoded.get(i));
+        }
+        for (int i = 0; i < block3Records.size(); i++) {
+            LogFileTestUtil.assertRecordEquals("Block 3 record " + i + " mismatch",
+                block3Records.get(i), decoded.get(i + block2Records.size()));
+        }
+
+        assertEquals("Should have skipped 1 corrupt block (block 1)", 1,
+            readerContext.getCorruptBlocksSkipped());
+        assertEquals("Blocks read count should be 2 (blocks 2 and 3)", 2,
+            readerContext.getBlocksRead());
+    }
+
+    @Test
+    public void testLogFileCorruptionLastBlockChecksum() throws IOException {
+        initLogFileWriter();
+        List<LogFile.Record> block1Records = writeBlock(writer, "B1", 0, 5);
+        List<LogFile.Record> block2Records = writeBlock(writer, "B2", 5, 5);
+        List<LogFile.Record> block3Records = writeBlock(writer, "B3", 10, 5);
+        writer.close(); // Close includes trailer
+        byte[] data = writerBaos.toByteArray();
+
+        // Find offset of last block's checksum and corrupt it
+        long block1End = findBlockEndOffset(data, (int) writer.getBlocksStartOffset());
+        long block2End = findBlockEndOffset(data, (int) block1End);
+        long block3End = findBlockEndOffset(data, (int) block2End); // This should be trailer start
+        int block3ChecksumOffset = (int) (block3End - Bytes.SIZEOF_LONG);
+        data[block3ChecksumOffset] ^= 0xFF; // Flip some bits
+
+        initLogFileReader(data);
+        List<LogFile.Record> decoded = readRecords(reader);
+
+        // Should read blocks 1 and 2, skipping block 3
+        int shouldHave = block1Records.size() + block2Records.size();
+        assertEquals("Should read records from block 1 and 2", shouldHave, decoded.size());
+        for (int i = 0; i < block1Records.size(); i++) {
+            LogFileTestUtil.assertRecordEquals("Block 1 record " + i + " mismatch",
+                block1Records.get(i), decoded.get(i));
+        }
+        for (int i = 0; i < block2Records.size(); i++) {
+            LogFileTestUtil.assertRecordEquals("Block 2 record " + i + " mismatch",
+                block2Records.get(i), decoded.get(i + block1Records.size()));
+        }
+
+        assertEquals("Should have skipped 1 corrupt block (block 3)", 1,
+            readerContext.getCorruptBlocksSkipped());
+        assertEquals("Blocks read count should be 2 (blocks 1 and 2)", 2,
+            readerContext.getBlocksRead());
+        // Trailer should still be readable as it's read first
+        assertNotNull("Trailer should still be readable", reader.getTrailer());
+    }
+
+    @Test
+    public void testLogFileCorruptionLastBlockPayloadNearEnd() throws IOException {
+        initLogFileWriter();
+        List<LogFile.Record> block1Records = writeBlock(writer, "B1", 0, 5);
+        List<LogFile.Record> block2Records = writeBlock(writer, "B2", 5, 5);
+        List<LogFile.Record> block3Records = writeBlock(writer, "B3", 10, 5);
+        writer.close(); // Close includes trailer
+        byte[] data = writerBaos.toByteArray();
+
+        // Find offset near the end of the last block's payload and corrupt it
+        long block1End = findBlockEndOffset(data, (int) writer.getBlocksStartOffset());
+        long block2End = findBlockEndOffset(data, (int) block1End);
+        long block3End = findBlockEndOffset(data, (int) block2End); // This should be trailer start
+        int block3PayloadEndOffset = (int) (block3End - Bytes.SIZEOF_LONG);
+        int corruptionOffset = block3PayloadEndOffset - 5; // Corrupt 5 bytes before checksum
+        if (corruptionOffset > block2End + LogBlockHeader.HEADER_SIZE) { // Ensure we are in payload
+             data[corruptionOffset] ^= 0xFF; // Flip some bits
+        } else {
+            fail("Calculated corruption offset is not within the last block's payload.");
+        }
+
+        initLogFileReader(data);
+        List<LogFile.Record> decoded = readRecords(reader);
+
+        // Should read blocks 1 and 2, skipping block 3 due to checksum mismatch
+        int shouldHave = block1Records.size() + block2Records.size();
+        assertEquals("Should read records from block 1 and 2", shouldHave, decoded.size());
+        for (int i = 0; i < block1Records.size(); i++) {
+            LogFileTestUtil.assertRecordEquals("Block 1 record " + i + " mismatch",
+                block1Records.get(i), decoded.get(i));
+        }
+        for (int i = 0; i < block2Records.size(); i++) {
+            LogFileTestUtil.assertRecordEquals("Block 2 record " + i + " mismatch",
+                block2Records.get(i), decoded.get(i + block1Records.size()));
+        }
+
+        assertEquals("Should have skipped 1 corrupt block (block 3)", 1,
+            readerContext.getCorruptBlocksSkipped());
+        assertEquals("Blocks read count should be 2 (blocks 1 and 2)", 2,
+            readerContext.getBlocksRead());
+        assertNotNull("Trailer should still be readable", reader.getTrailer());
     }
 
     static class PositionedByteArrayInputStream extends ByteArrayInputStream
