@@ -31,6 +31,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
+
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -227,6 +232,106 @@ public class LogFileCodecTest {
         LogFileTestUtil.assertRecordEquals("Decoded record from ByteBuffer should match original",
             original, decoded);
         assertFalse("Should be no more records in ByteBuffer", decoder.advance());
+    }
+
+    // Edge cases
+
+    @Test
+    public void testCodecWithEmptyTableName() throws IOException {
+        singleRecordTest(LogFileTestUtil.newPutRecord("", 1L, "row", 12345L, 1));
+    }
+
+    @Test
+    public void testCodecWithEmptyFamily() throws IOException {
+        long ts = 12345L;
+        Put put = new Put(Bytes.toBytes("row"));
+        put.setTimestamp(ts);
+        put.addColumn(HConstants.EMPTY_BYTE_ARRAY, Bytes.toBytes("q"), ts, Bytes.toBytes("v"));
+        singleRecordTest(new LogFileRecord().setHBaseTableName("TBLEMPTYFAM").setCommitId(1L)
+            .setMutation(put));
+    }
+
+    @Test
+    public void testCodecWithEmptyQualifier() throws IOException {
+        long ts = 12345L;
+        Put put = new Put(Bytes.toBytes("row"));
+        put.setTimestamp(ts);
+        put.addColumn(Bytes.toBytes("cf"), HConstants.EMPTY_BYTE_ARRAY, ts, Bytes.toBytes("v"));
+        singleRecordTest(new LogFileRecord().setHBaseTableName("TBLEMPTYFAM").setCommitId(1L)
+            .setMutation(put));
+    }
+
+    @Test
+    public void testCodecWithEmptyValue() throws IOException {
+        long ts = 12345L;
+        Put put = new Put(Bytes.toBytes("row"));
+        put.setTimestamp(ts);
+        put.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("q"), ts, HConstants.EMPTY_BYTE_ARRAY);
+        singleRecordTest(new LogFileRecord().setHBaseTableName("TBLEMPTYVAL").setCommitId(1L)
+            .setMutation(put));
+    }
+
+    @Test
+    public void testCodecWithManyValues() throws IOException {
+        // 100 columns
+        singleRecordTest(LogFileTestUtil.newPutRecord("TBLMANYVALS", 1L, "row", 12345L, 100));
+    }
+
+    @Test
+    public void testCodecWithEmptyPut() throws IOException {
+        long ts = 12345L;
+        Put put = new Put(Bytes.toBytes("row"));
+        put.setTimestamp(ts);
+        singleRecordTest(new LogFileRecord().setHBaseTableName("TBLEMPTYPUT").setCommitId(1L)
+            .setMutation(put));
+    }
+
+    @Test
+    public void testCodecWithEmptyDelete() throws IOException {
+        long ts = 12345L;
+        Delete delete = new Delete(Bytes.toBytes("row"));
+        delete.setTimestamp(ts);
+        singleRecordTest(new LogFileRecord().setHBaseTableName("TBLEMPTYDEL").setCommitId(1L)
+            .setMutation(delete));
+    }
+
+    @Test
+    public void testCodecWithLargeRowKey() throws IOException {
+        long ts = 12345L;
+        byte[] largeRowKey = new byte[HConstants.MAX_ROW_LENGTH];
+        RNG.nextBytes(largeRowKey);
+        Put put = new Put(largeRowKey);
+        put.setTimestamp(ts);
+        put.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("q"), ts, Bytes.toBytes("v"));
+        singleRecordTest(new LogFileRecord().setHBaseTableName("TBLLRK").setCommitId(1L)
+            .setMutation(put));
+    }
+
+    @Test
+    public void testCodecWithLargeValue() throws IOException {
+        long ts = 12345L;
+        byte[] largeValue = new byte[1024 * 1024 * 10]; // 10 MB value
+        RNG.nextBytes(largeValue);
+        Put put = new Put(Bytes.toBytes("row"));
+        put.setTimestamp(ts);
+        put.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("q"), ts, largeValue);
+        singleRecordTest(new LogFileRecord().setHBaseTableName("TBLLVAL").setCommitId(1L)
+            .setMutation(put));
+    }
+
+    @Test
+    public void testCodecWithVeryLargeRecord() throws IOException {
+        // This is a stupidly large record... a key of MAX_ROW_LENGTH and 100,000 column/values.
+        long ts = 12345L;
+        byte[] largeRowKey = new byte[HConstants.MAX_ROW_LENGTH];
+        RNG.nextBytes(largeRowKey);
+        Put put = new Put(largeRowKey);
+        put.setTimestamp(ts);
+        for (int i = 0; i < 100_000; i++) {
+            put.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("q" + i), ts, Bytes.toBytes("v" + i));
+        }
+        singleRecordTest(new LogFileRecord().setHBaseTableName("TBLVLRK").setCommitId(1L)
+            .setMutation(put));
     }
 
 }

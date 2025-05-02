@@ -142,13 +142,14 @@ public class LogFileRecord implements LogFile.Record {
             if (mutation instanceof Put) {
                 return PUT;
             } else if (mutation instanceof Delete) {
+                CellScanner s = mutation.cellScanner();
+                if (!s.advance()) {
+                    // No cell in delete. A simple delete of a row.
+                    return DELETE;
+                }
                 // This assumes that either there is only one cell in the Delete, or all cells in
                 // the delete have the same cell type, which is correct as of today. We only need
                 // to look at the first.
-                CellScanner s = mutation.cellScanner();
-                if (!s.advance()) {
-                    throw new UnsupportedOperationException("No cell in delete");
-                }
                 Cell cell = s.current();
                 switch (cell.getType()) {
                 case Delete:
