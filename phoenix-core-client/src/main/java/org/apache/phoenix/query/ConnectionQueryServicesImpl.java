@@ -6801,8 +6801,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     /**
-     * Ripped directly from org.apache.hadoop.hbase
-     *
+     * Source:org.apache.hadoop.hbase.DaemonThreadFactory
      */
     public static class DaemonThreadFactory implements ThreadFactory {
         private static final AtomicInteger poolNumber = new AtomicInteger(1);
