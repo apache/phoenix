@@ -16,6 +16,48 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 -->
+# PHOENIX  5.2.2 Release Notes
+
+These release notes cover new developer and user-facing incompatibilities, important issues, features, and major improvements.
+
+
+---
+
+* [PHOENIX-7550](https://issues.apache.org/jira/browse/PHOENIX-7550) | *Major* | **Update OWASP plugin to 12.1.0**
+
+Phoenix now uses the 12.1.0 version of WASP plugin, which requires Java 11.
+
+This Java requirement only applies when running the site plugin, and does not affect the normal build.
+
+
+---
+
+* [PHOENIX-7539](https://issues.apache.org/jira/browse/PHOENIX-7539) | *Major* | **Update default HBase 2.5 version to 2.5.11**
+
+Phoenix with the HBase 2.5 profile is no built with Hbase 2.5.11 and Hadoop 3.4.1.
+
+To build Phoenix with Hbase 2.5.10 or earlier the hbase.properties system properties to the corresponding value.
+
+
+---
+
+* [PHOENIX-7532](https://issues.apache.org/jira/browse/PHOENIX-7532) | *Major* | **Update default Hbase 2.6 version to 2.6.2**
+
+Phoenix with the HBase 2.6 profile is now built with Hbase 2.6.2 and Hadoop 3.4.1.
+
+To build Phoenix with Hbase 2.6.0 or 2.6.1, use the HBase 2.6.0 profile, which uses Hadoop 3.3.6.
+
+
+---
+
+* [PHOENIX-7520](https://issues.apache.org/jira/browse/PHOENIX-7520) | *Major* | **Use HBASE\_OPTS from hbase-env.sh in startup scripts**
+
+The Phoenix startup scripts (sqlline.py, psql.py, performance.py) now try to parse and apply environment variables set in hbase-env.sh / hbase-env.cmd.
+Also, the contents of the HBASE\_OPTS enviroment variable is now added to the java command when starting the above scripts
+This new behaviour can be disabled by setting the SKIP\_HBASE\_ENV environment variable to any value.
+
+
+
 # PHOENIX  5.2.1 Release Notes
 
 These release notes cover new developer and user-facing incompatibilities, important issues, features, and major improvements.

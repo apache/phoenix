@@ -18,6 +18,77 @@
 -->
 # PHOENIX Changelog
 
+## Release 5.2.2 - Unreleased (as of 2025-05-03)
+
+
+
+### NEW FEATURES:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-5117](https://issues.apache.org/jira/browse/PHOENIX-5117) | Return the count of rows scanned in HBase |  Major | . |
+
+
+### IMPROVEMENTS:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-7515](https://issues.apache.org/jira/browse/PHOENIX-7515) | Add metric for count of Phoenix client batches used by a commit call |  Minor | . |
+| [PHOENIX-7449](https://issues.apache.org/jira/browse/PHOENIX-7449) | Bypass disable table during drop if table is already disabled in HBase |  Minor | core |
+| [PHOENIX-7576](https://issues.apache.org/jira/browse/PHOENIX-7576) | Update Jetty to 9.4.57.v20241219 |  Minor | core, queryserver |
+| [PHOENIX-7186](https://issues.apache.org/jira/browse/PHOENIX-7186) | Support Square Brackets Notation for IPv6 in JDBC URL |  Minor | core |
+| [PHOENIX-7575](https://issues.apache.org/jira/browse/PHOENIX-7575) | Update Netty to 4.1.119 |  Blocker | phoenix |
+| [PHOENIX-7563](https://issues.apache.org/jira/browse/PHOENIX-7563) | Use HBASE\_OPTS as a fallback for PHOENIX\_OPTS |  Major | . |
+| [PHOENIX-7572](https://issues.apache.org/jira/browse/PHOENIX-7572) | Update OMID to 1.1.3 |  Critical | . |
+| [PHOENIX-7553](https://issues.apache.org/jira/browse/PHOENIX-7553) | Support Python 3.13 |  Minor | python |
+| [PHOENIX-7546](https://issues.apache.org/jira/browse/PHOENIX-7546) | When hbase client metrics is enabled set hbase client metrics scope |  Minor | . |
+| [PHOENIX-7529](https://issues.apache.org/jira/browse/PHOENIX-7529) | Optimize exception log printing in CSVCommonsLoader |  Major | . |
+| [PHOENIX-7520](https://issues.apache.org/jira/browse/PHOENIX-7520) | Use HBASE\_OPTS from hbase-env.sh in startup scripts |  Major | core |
+| [PHOENIX-7453](https://issues.apache.org/jira/browse/PHOENIX-7453) | Fix Phoenix to compile with commons-cli 1.9 |  Major | . |
+
+
+### BUG FIXES:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-7574](https://issues.apache.org/jira/browse/PHOENIX-7574) | Phoenix Compaction doesn't correctly handle DeleteFamilyVersion markers |  Major | . |
+| [PHOENIX-7533](https://issues.apache.org/jira/browse/PHOENIX-7533) | Fix broken compatibility for Zookeeper based ConnectionInfo |  Major | . |
+| [PHOENIX-7580](https://issues.apache.org/jira/browse/PHOENIX-7580) | Data in last salt bucket is not being scanned for range scan |  Blocker | . |
+| [PHOENIX-7543](https://issues.apache.org/jira/browse/PHOENIX-7543) | Wrong result returned when query is served by index and some columns are null |  Major | . |
+| [PHOENIX-7577](https://issues.apache.org/jira/browse/PHOENIX-7577) | Update commons-lang3 to 3.17.0 |  Major | connectors, core |
+| [PHOENIX-7527](https://issues.apache.org/jira/browse/PHOENIX-7527) | NPE thrown when extract table schema using sqlline. |  Major | . |
+| [PHOENIX-7550](https://issues.apache.org/jira/browse/PHOENIX-7550) | Update OWASP plugin to 12.1.0 |  Major | . |
+| [PHOENIX-7470](https://issues.apache.org/jira/browse/PHOENIX-7470) | Simplify Kerberos login in ConnectionInfo |  Major | core |
+| [PHOENIX-7501](https://issues.apache.org/jira/browse/PHOENIX-7501) | GC issues in TTLRegionScanner when gap is more than TTL |  Major | . |
+| [PHOENIX-7516](https://issues.apache.org/jira/browse/PHOENIX-7516) | TableNotFoundException thrown when not specify schema in CsvBulkloadTool |  Major | . |
+| [PHOENIX-7477](https://issues.apache.org/jira/browse/PHOENIX-7477) | Set java.util.logging.config.class in scripts |  Major | core, queryserver |
+| [PHOENIX-7492](https://issues.apache.org/jira/browse/PHOENIX-7492) | Subquery with join and union not working together when one side of union finds no result |  Major | core |
+| [PHOENIX-7494](https://issues.apache.org/jira/browse/PHOENIX-7494) | NPE thrown when enable applyTimeZone |  Major | core |
+| [PHOENIX-7464](https://issues.apache.org/jira/browse/PHOENIX-7464) | Performance Regression in Connection Initialization due to Configuration Handling in ConnInfo |  Major | . |
+| [PHOENIX-7497](https://issues.apache.org/jira/browse/PHOENIX-7497) | ExplainPlanV2 regionserver location is not updated for less than max regions |  Major | . |
+| [PHOENIX-7491](https://issues.apache.org/jira/browse/PHOENIX-7491) | Mixed-cased alias doesn't work in select statement of “INNER JOIN” |  Major | phoenix |
+| [PHOENIX-7268](https://issues.apache.org/jira/browse/PHOENIX-7268) | Namespace mapped system catalog table not snapshotted before upgrade |  Major | core |
+| [PHOENIX-7448](https://issues.apache.org/jira/browse/PHOENIX-7448) | Phoenix Compaction can miss retaining some cells when there is a gap more than TTL |  Major | . |
+
+
+### SUB-TASKS:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-7441](https://issues.apache.org/jira/browse/PHOENIX-7441) | Integrate the Spotless plugin and update the code template |  Major | phoenix |
+
+
+### OTHER:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-7539](https://issues.apache.org/jira/browse/PHOENIX-7539) | Update default HBase 2.5 version to 2.5.11 |  Major | core |
+| [PHOENIX-7532](https://issues.apache.org/jira/browse/PHOENIX-7532) | Update default Hbase 2.6 version to 2.6.2 |  Major | core |
+| [PHOENIX-7475](https://issues.apache.org/jira/browse/PHOENIX-7475) |  Bump commons-io:commons-io from 2.14.0 to 2.18.0 |  Major | core, queryserver |
+| [PHOENIX-7417](https://issues.apache.org/jira/browse/PHOENIX-7417) | Remove commons-collections dependency |  Major | core |
+
+
+
 ## Release 5.2.1 - Unreleased (as of 2024-10-22)
 
 
