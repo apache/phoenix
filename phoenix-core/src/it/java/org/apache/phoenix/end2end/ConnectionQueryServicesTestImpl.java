@@ -64,7 +64,7 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
     private final PhoenixTransactionService[] txServices = new PhoenixTransactionService[TransactionFactory.Provider.values().length];
     
     public ConnectionQueryServicesTestImpl(QueryServices services, ConnectionInfo info, Properties props) throws SQLException {
-        super(services, info, props);
+        super(services, info, props, null);
     }
     
     @Override

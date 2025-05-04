@@ -389,6 +389,8 @@ public interface QueryServices extends SQLCloseable {
     public static final String PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE = "phoenix.principal.based.thread.pool.core.size";
     public static final String PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS = "phoenix.principal.based.thread.pool.max.threads";
     public static final String PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE = "phoenix.principal.based.thread.pool.max.queue";
+    // Enables https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ThreadPoolExecutor.html#allowCoreThreadTimeOut-boolean-
+    public static final String PRINCIPAL_BASED_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT = "phoenix.principal.based.thread.pool.allow.core.thread.timeout";
 
     // Before 4.15 when we created a view we included the parent table column metadata in the view
     // metadata. After PHOENIX-3534 we allow SYSTEM.CATALOG to split and no longer store the parent

@@ -79,6 +79,7 @@ import static org.apache.phoenix.query.QueryServices.NUM_RETRIES_FOR_SCHEMA_UPDA
 import static org.apache.phoenix.query.QueryServices.PRINCIPAL_BASED_THREAD_POOL_ENABLED;
 import static org.apache.phoenix.query.QueryServices.PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS;
 import static org.apache.phoenix.query.QueryServices.PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE;
+import static org.apache.phoenix.query.QueryServices.PRINCIPAL_BASED_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT;
 import static org.apache.phoenix.query.QueryServices.PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE;
 import static org.apache.phoenix.query.QueryServices.PRINCIPAL_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_ACLS_ENABLED;
@@ -462,9 +463,10 @@ public class QueryServicesOptions {
     public static final Boolean DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED = false;
     public static final Boolean DEFAULT_PRINCIPAL_BASED_THREAD_POOL_ENABLED = false;
     public static final int DEFAULT_PRINCIPAL_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS = 60;
-    public static final int DEFAULT_PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE = 50;
-    public static final int DEFAULT_PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS = 100;
+    public static final int DEFAULT_PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE = 25;
+    public static final int DEFAULT_PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS = 25;
     public static final int DEFAULT_PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE = 512;
+    public static final Boolean DEFAULT_PRINCIPAL_BASED_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT = true;
 
 
     private final Configuration config;
@@ -575,7 +577,8 @@ public class QueryServicesOptions {
             .setIfUnset(PRINCIPAL_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS)
             .setIfUnset(PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE)
             .setIfUnset(PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS)
-            .setIfUnset(PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE);
+            .setIfUnset(PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE)
+            .setIfUnset(PRINCIPAL_BASED_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT);
 
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
