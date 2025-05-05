@@ -148,9 +148,9 @@ public class ConnectionQueryServicesImplTest {
     }
 
     @Test
-    public void testPrincipalBasedThreadPoolCreation() throws SQLException, NoSuchFieldException, IllegalAccessException {
+    public void testCQSIThreadPoolCreation() throws SQLException, NoSuchFieldException, IllegalAccessException {
         QueryServices mockQueryServices = Mockito.mock(QueryServices.class);
-        ReadOnlyProps readOnlyProps = createPrincipalBasedThreadPoolReadOnlyProps();
+        ReadOnlyProps readOnlyProps = createCQSIThreadPoolReadOnlyProps();
         when(mockQueryServices.getProps()).thenReturn(readOnlyProps);
         ConnectionInfo mockConnectionInfo = Mockito.mock(ConnectionInfo.class);
         when(mockConnectionInfo.asProps()).thenReturn(readOnlyProps);
@@ -168,7 +168,7 @@ public class ConnectionQueryServicesImplTest {
         assertTrue(threadPoolExecutor.allowsCoreThreadTimeOut());
     }
 
-    private static ReadOnlyProps createPrincipalBasedThreadPoolReadOnlyProps() {
+    private static ReadOnlyProps createCQSIThreadPoolReadOnlyProps() {
         Map<String, String> props = new HashMap<>();
         props.put(CQSI_THREAD_POOL_ENABLED, Boolean.toString(true));
         props.put(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS, Integer.toString(13));
