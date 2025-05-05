@@ -21,12 +21,12 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_FOR_MUTEX;
-import static org.apache.phoenix.query.QueryServices.PRINCIPAL_BASED_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT;
-import static org.apache.phoenix.query.QueryServices.PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE;
-import static org.apache.phoenix.query.QueryServices.PRINCIPAL_BASED_THREAD_POOL_ENABLED;
-import static org.apache.phoenix.query.QueryServices.PRINCIPAL_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS;
-import static org.apache.phoenix.query.QueryServices.PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE;
-import static org.apache.phoenix.query.QueryServices.PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_CORE_POOL_SIZE;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ENABLED;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_MAX_QUEUE;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_MAX_THREADS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -150,35 +150,33 @@ public class ConnectionQueryServicesImplTest {
     @Test
     public void testPrincipalBasedThreadPoolCreation() throws SQLException, NoSuchFieldException, IllegalAccessException {
         QueryServices mockQueryServices = Mockito.mock(QueryServices.class);
-        Map<String,String> queryServicesProps = new HashMap<>();
-        ReadOnlyProps readOnlyProps = new ReadOnlyProps(queryServicesProps);
+        ReadOnlyProps readOnlyProps = createPrincipalBasedThreadPoolReadOnlyProps();
         when(mockQueryServices.getProps()).thenReturn(readOnlyProps);
         ConnectionInfo mockConnectionInfo = Mockito.mock(ConnectionInfo.class);
         when(mockConnectionInfo.asProps()).thenReturn(readOnlyProps);
         Properties properties = new Properties();
-        Configuration config = createPrincipalBasedThreadPoolConfig();
-        ConnectionQueryServicesImpl cqs = new ConnectionQueryServicesImpl(mockQueryServices, mockConnectionInfo, properties, config);
+        ConnectionQueryServicesImpl cqs = new ConnectionQueryServicesImpl(mockQueryServices, mockConnectionInfo, properties);
         Field props = cqs.getClass().getDeclaredField("threadPoolExecutor");
         props.setAccessible(true);
         ThreadPoolExecutor threadPoolExecutor = (ThreadPoolExecutor) props.get(cqs);
         assertNotNull(threadPoolExecutor);
-        assertEquals(config.getInt(PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE, -1), threadPoolExecutor.getCorePoolSize());
-        assertEquals(config.getInt(PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS,-1), threadPoolExecutor.getMaximumPoolSize());
+        assertEquals(readOnlyProps.getInt(CQSI_THREAD_POOL_CORE_POOL_SIZE, -1), threadPoolExecutor.getCorePoolSize());
+        assertEquals(readOnlyProps.getInt(CQSI_THREAD_POOL_MAX_THREADS,-1), threadPoolExecutor.getMaximumPoolSize());
         assertEquals(ArrayBlockingQueue.class, threadPoolExecutor.getQueue().getClass());
-        assertEquals(config.getInt(PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE, -1), threadPoolExecutor.getQueue().remainingCapacity());
-        assertEquals(config.getInt(PRINCIPAL_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS, -1), threadPoolExecutor.getKeepAliveTime(TimeUnit.SECONDS));
+        assertEquals(readOnlyProps.getInt(CQSI_THREAD_POOL_MAX_QUEUE, -1), threadPoolExecutor.getQueue().remainingCapacity());
+        assertEquals(readOnlyProps.getInt(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS, -1), threadPoolExecutor.getKeepAliveTime(TimeUnit.SECONDS));
         assertTrue(threadPoolExecutor.allowsCoreThreadTimeOut());
     }
 
-    private static Configuration createPrincipalBasedThreadPoolConfig() {
-        Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
-        config.setBoolean(PRINCIPAL_BASED_THREAD_POOL_ENABLED, true);
-        config.setInt(PRINCIPAL_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS, 13);
-        config.setInt(PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE, 17);
-        config.setInt(PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS, 19);
-        config.setInt(PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE, 23);
-        config.setBoolean(PRINCIPAL_BASED_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT, true);
-        return config;
+    private static ReadOnlyProps createPrincipalBasedThreadPoolReadOnlyProps() {
+        Map<String, String> props = new HashMap<>();
+        props.put(CQSI_THREAD_POOL_ENABLED, Boolean.toString(true));
+        props.put(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS, Integer.toString(13));
+        props.put(CQSI_THREAD_POOL_CORE_POOL_SIZE,  Integer.toString(17));
+        props.put(CQSI_THREAD_POOL_MAX_THREADS,  Integer.toString(19));
+        props.put(CQSI_THREAD_POOL_MAX_QUEUE,  Integer.toString(23));
+        props.put(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT, Boolean.toString(true));
+        return new ReadOnlyProps(props);
     }
 
     @SuppressWarnings("unchecked")

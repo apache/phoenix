@@ -76,12 +76,12 @@ import static org.apache.phoenix.query.QueryServices.METRIC_PUBLISHER_ENABLED;
 import static org.apache.phoenix.query.QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.NUM_RETRIES_FOR_SCHEMA_UPDATE_CHECK;
-import static org.apache.phoenix.query.QueryServices.PRINCIPAL_BASED_THREAD_POOL_ENABLED;
-import static org.apache.phoenix.query.QueryServices.PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS;
-import static org.apache.phoenix.query.QueryServices.PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE;
-import static org.apache.phoenix.query.QueryServices.PRINCIPAL_BASED_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT;
-import static org.apache.phoenix.query.QueryServices.PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE;
-import static org.apache.phoenix.query.QueryServices.PRINCIPAL_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ENABLED;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_MAX_THREADS;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_CORE_POOL_SIZE;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_MAX_QUEUE;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_ACLS_ENABLED;
 import static org.apache.phoenix.query.QueryServices.QUERY_SERVICES_NAME;
 import static org.apache.phoenix.query.QueryServices.QUEUE_SIZE_ATTRIB;
@@ -461,12 +461,12 @@ public class QueryServicesOptions {
 
 
     public static final Boolean DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED = false;
-    public static final Boolean DEFAULT_PRINCIPAL_BASED_THREAD_POOL_ENABLED = false;
-    public static final int DEFAULT_PRINCIPAL_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS = 60;
-    public static final int DEFAULT_PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE = 25;
-    public static final int DEFAULT_PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS = 25;
-    public static final int DEFAULT_PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE = 512;
-    public static final Boolean DEFAULT_PRINCIPAL_BASED_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT = true;
+    public static final Boolean DEFAULT_CQSI_THREAD_POOL_ENABLED = false;
+    public static final int DEFAULT_CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS = 60;
+    public static final int DEFAULT_CQSI_THREAD_POOL_CORE_POOL_SIZE = 25;
+    public static final int DEFAULT_CQSI_THREAD_POOL_MAX_THREADS = 25;
+    public static final int DEFAULT_CQSI_THREAD_POOL_MAX_QUEUE = 512;
+    public static final Boolean DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT = true;
 
 
     private final Configuration config;
@@ -573,12 +573,12 @@ public class QueryServicesOptions {
             .setIfUnset(CONNECTION_ACTIVITY_LOGGING_ENABLED, DEFAULT_CONNECTION_ACTIVITY_LOGGING_ENABLED)
             .setIfUnset(CONNECTION_ACTIVITY_LOGGING_INTERVAL, DEFAULT_CONNECTION_ACTIVITY_LOGGING_INTERVAL_IN_MINS)
             .setIfUnset(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED)
-            .setIfUnset(PRINCIPAL_BASED_THREAD_POOL_ENABLED, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_ENABLED)
-            .setIfUnset(PRINCIPAL_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS)
-            .setIfUnset(PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE)
-            .setIfUnset(PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS)
-            .setIfUnset(PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE)
-            .setIfUnset(PRINCIPAL_BASED_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT);
+            .setIfUnset(CQSI_THREAD_POOL_ENABLED, DEFAULT_CQSI_THREAD_POOL_ENABLED)
+            .setIfUnset(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS, DEFAULT_CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS)
+            .setIfUnset(CQSI_THREAD_POOL_CORE_POOL_SIZE, DEFAULT_CQSI_THREAD_POOL_CORE_POOL_SIZE)
+            .setIfUnset(CQSI_THREAD_POOL_MAX_THREADS, DEFAULT_CQSI_THREAD_POOL_MAX_THREADS)
+            .setIfUnset(CQSI_THREAD_POOL_MAX_QUEUE, DEFAULT_CQSI_THREAD_POOL_MAX_QUEUE)
+            .setIfUnset(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT, DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT);
 
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set

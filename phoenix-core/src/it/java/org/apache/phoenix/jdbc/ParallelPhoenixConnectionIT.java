@@ -35,12 +35,12 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_PARALL
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_PARALLEL_POOL2_TASK_QUEUE_WAIT_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_PARALLEL_POOL2_TASK_REJECTED_COUNTER;
 import static org.apache.phoenix.query.QueryServices.AUTO_COMMIT_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.PRINCIPAL_BASED_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT;
-import static org.apache.phoenix.query.QueryServices.PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE;
-import static org.apache.phoenix.query.QueryServices.PRINCIPAL_BASED_THREAD_POOL_ENABLED;
-import static org.apache.phoenix.query.QueryServices.PRINCIPAL_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS;
-import static org.apache.phoenix.query.QueryServices.PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE;
-import static org.apache.phoenix.query.QueryServices.PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_CORE_POOL_SIZE;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ENABLED;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_MAX_QUEUE;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_MAX_THREADS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotSame;
@@ -117,12 +117,12 @@ public class ParallelPhoenixConnectionIT {
         GLOBAL_PROPERTIES.setProperty(AUTO_COMMIT_ATTRIB, "true");
         GLOBAL_PROPERTIES.setProperty(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
         GLOBAL_PROPERTIES.setProperty(QueryServices.LOG_LEVEL, LogLevel.DEBUG.name()); //Need logging for query metrics
-        GLOBAL_PROPERTIES.setProperty(PRINCIPAL_BASED_THREAD_POOL_ENABLED, String.valueOf(true));
-        GLOBAL_PROPERTIES.setProperty(PRINCIPAL_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS, String.valueOf(13));
-        GLOBAL_PROPERTIES.setProperty(PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE, String.valueOf(17));
-        GLOBAL_PROPERTIES.setProperty(PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS, String.valueOf(19));
-        GLOBAL_PROPERTIES.setProperty(PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE, String.valueOf(23));
-        GLOBAL_PROPERTIES.setProperty(PRINCIPAL_BASED_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT, String.valueOf(true));
+        GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_ENABLED, String.valueOf(true));
+        GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS, String.valueOf(13));
+        GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_CORE_POOL_SIZE, String.valueOf(17));
+        GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_MAX_THREADS, String.valueOf(19));
+        GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_MAX_QUEUE, String.valueOf(23));
+        GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT, String.valueOf(true));
 
     }
 

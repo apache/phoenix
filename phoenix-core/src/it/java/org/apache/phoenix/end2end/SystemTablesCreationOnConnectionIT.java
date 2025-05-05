@@ -116,7 +116,7 @@ public class SystemTablesCreationOnConnectionIT {
 
         PhoenixSysCatCreationServices(QueryServices services,
                                       ConnectionInfo connectionInfo, Properties info) {
-            super(services, connectionInfo, info, null);
+            super(services, connectionInfo, info);
         }
 
         @Override

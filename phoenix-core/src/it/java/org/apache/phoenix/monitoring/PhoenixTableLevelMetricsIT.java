@@ -1651,7 +1651,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
 
         PhoenixMetricsTestingQueryServices(QueryServices services,
                 ConnectionInfo connectionInfo, Properties info) {
-            super(services, connectionInfo, info, null);
+            super(services, connectionInfo, info);
         }
 
         @Override

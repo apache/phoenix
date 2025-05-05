@@ -81,12 +81,12 @@ import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_ENABLED;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PRINCIPAL_BASED_THREAD_POOL_ENABLED;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PRINCIPAL_BASED_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PRINCIPAL_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_POOL_ENABLED;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_POOL_MAX_QUEUE;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_POOL_MAX_THREADS;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_POOL_CORE_POOL_SIZE;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THRESHOLD_MILLISECONDS;
@@ -460,12 +460,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * Construct a ConnectionQueryServicesImpl that represents a connection to an HBase
      * cluster.
      *
-     * @param services         base services from where we derive our default configuration
-     * @param connectionInfo   to provide connection information
-     * @param info             hbase configuration properties
-     * @param additionalConfig additionalConfig to be added to existing config
+     * @param services       base services from where we derive our default configuration
+     * @param connectionInfo to provide connection information
+     * @param info           hbase configuration properties
      */
-    public ConnectionQueryServicesImpl(QueryServices services, ConnectionInfo connectionInfo, Properties info, Configuration additionalConfig) {
+    public ConnectionQueryServicesImpl(QueryServices services, ConnectionInfo connectionInfo, Properties info) {
         super(services);
         Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
         for (Entry<String,String> entry : services.getProps()) {
@@ -482,19 +481,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (connectionInfo.getPrincipal() != null) {
             config.set(QUERY_SERVICES_NAME, connectionInfo.getPrincipal());
         }
-        if (additionalConfig != null) {
-            config.addResource(additionalConfig);
-        }
-        if (config.getBoolean(PRINCIPAL_BASED_THREAD_POOL_ENABLED, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_ENABLED)) {
-            final int keepAlive = config.getInt(PRINCIPAL_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_KEEP_ALIVE_SECONDS);
-            final int corePoolSize = config.getInt(PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_CORE_POOL_SIZE);
-            final int maxThreads = config.getInt(PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_MAX_THREADS);
-            final int maxQueue = config.getInt(PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE, DEFAULT_PRINCIPAL_BASED_THREAD_POOL_MAX_QUEUE);
+        if (config.getBoolean(CQSI_THREAD_POOL_ENABLED, DEFAULT_CQSI_THREAD_POOL_ENABLED)) {
+            final int keepAlive = config.getInt(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS, DEFAULT_CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS);
+            final int corePoolSize = config.getInt(CQSI_THREAD_POOL_CORE_POOL_SIZE, DEFAULT_CQSI_THREAD_POOL_CORE_POOL_SIZE);
+            final int maxThreads = config.getInt(CQSI_THREAD_POOL_MAX_THREADS, DEFAULT_CQSI_THREAD_POOL_MAX_THREADS);
+            final int maxQueue = config.getInt(CQSI_THREAD_POOL_MAX_QUEUE, DEFAULT_CQSI_THREAD_POOL_MAX_QUEUE);
             final String threadPoolName = connectionInfo.getPrincipal() != null ? connectionInfo.getPrincipal() : "Default";
             this.threadPoolExecutor = new ThreadPoolExecutor(corePoolSize, maxThreads, keepAlive, TimeUnit.SECONDS,
                     new ArrayBlockingQueue<>(maxQueue), new DaemonThreadFactory(threadPoolName));
-            this.threadPoolExecutor.allowCoreThreadTimeOut(config.getBoolean(PRINCIPAL_BASED_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT,
-                    DEFAULT_PRINCIPAL_BASED_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT));
+            this.threadPoolExecutor.allowCoreThreadTimeOut(config.getBoolean(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT,
+                    DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT));
         }
         LOGGER.info(String.format("CQS initialized with connection query service : %s",
                 config.get(QUERY_SERVICES_NAME)));

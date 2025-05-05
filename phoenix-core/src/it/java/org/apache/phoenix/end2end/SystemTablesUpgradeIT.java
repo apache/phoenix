@@ -57,7 +57,7 @@ public class SystemTablesUpgradeIT extends BaseTest {
 
     private static class PhoenixUpgradeCountingServices extends ConnectionQueryServicesImpl {
         public PhoenixUpgradeCountingServices(QueryServices services, ConnectionInfo connectionInfo, Properties info) {
-            super(services, connectionInfo, info, null);
+            super(services, connectionInfo, info);
         }
 
         @Override
