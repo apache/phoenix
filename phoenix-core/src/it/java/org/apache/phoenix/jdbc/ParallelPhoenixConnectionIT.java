@@ -190,7 +190,7 @@ public class ParallelPhoenixConnectionIT {
     }
 
     @Test
-    public void testMultipleThreadPoolsForParallelConnection() throws Exception {
+    public void testDifferentCQSIThreadPoolsForParallelConnection() throws Exception {
         try (Connection conn = getParallelConnection()) {
             ParallelPhoenixConnection pr = conn.unwrap(ParallelPhoenixConnection.class);
             PhoenixConnection pConn;
