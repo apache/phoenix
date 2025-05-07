@@ -43,10 +43,12 @@ public class LogFileFormatReader implements Closeable {
     private LogFile.Codec.Decoder decoder;
     private SeekableDataInput input;
     private LogFile.Header header;
-    private LogFile.Trailer trailer = null;
-    private long currentPosition = 0;
-    private ByteBuffer currentBlockBuffer = null;
-    private boolean trailerValidated = false;
+    private LogFile.Trailer trailer;
+    private long currentPosition;
+    private ByteBuffer currentBlockBuffer;
+    private long currentBlockDataBytes;
+    private long currentBlockConsumedBytes;
+    private boolean trailerValidated;
     private CRC64 crc = new CRC64();
 
     public LogFileFormatReader() {
@@ -56,6 +58,8 @@ public class LogFileFormatReader implements Closeable {
     public void init(LogFileReaderContext context, SeekableDataInput input) throws IOException {
         this.context = context;
         this.input = input;
+        this.currentBlockDataBytes = -1;
+        this.currentBlockConsumedBytes = 0;
         try {
             readAndValidateTrailer();
             trailerValidated = true;
@@ -92,35 +96,62 @@ public class LogFileFormatReader implements Closeable {
         header = new LogFileHeader();
         // Seek to start of file
         input.seek(0);
-        // Read header
         header.readFields(input);
     }
 
     public LogFile.Record next() throws IOException {
-        while (true) { // Loop to handle skipping blocks or reaching end of current block
-            if (decoder == null || !decoder.advance()) {
-                currentBlockBuffer = readNextBlock(); // Reads, validates checksum, decompresses
+        while (true) {
+            // Check if we need a new block. Either we haven't started yet or the current block
+            // is fully consumed.
+            if (decoder == null || currentBlockConsumedBytes >= currentBlockDataBytes) {
+                currentBlockBuffer = readNextBlock();
                 if (currentBlockBuffer == null) {
                     // End of file or unrecoverable error after skipping blocks
                     validateReadCounts(); // Validate counts if trailer was read
                     return null;
                 }
-                // Initialize decoder for the new block buffer
+                currentBlockConsumedBytes = 0;
+                // The limit of the buffer will be the size of the data in the block.
+                currentBlockDataBytes = currentBlockBuffer.limit();
                 decoder = context.getCodec().getDecoder(currentBlockBuffer);
-                // Try advancing again within the new block
-                if (!decoder.advance()) {
-                    // Block was empty or immediately failed after loading? Should not happen if
-                    // next() succeeded.
-                    LOG.warn("Empty or invalid block loaded at position {}", currentPosition);
-                    continue; // Try reading the next block
-                }
             }
-            // If we got here, recordDecoder.advance() was successful
-
-            LogFile.Record record = decoder.current();
-            context.incrementRecordsRead();
-
-            return record;
+            // Advance the codec.
+            try {
+                if (decoder.advance()) {
+                    // We advanced the codec, process the record.
+                    LogFile.Record record = decoder.current();
+                    int recordSize = record.getSerializedLength();
+                    if (recordSize <= 0) {
+                        // The codec must set the serialized length correctly. If it didn't this is
+                        // likely a codec implementation problem but we will consider it an
+                        // indication of block corruption.
+                        throw new IOException("Codec failed to set serialized length for record at"
+                            + " position " + (currentPosition + currentBlockConsumedBytes));
+                    }
+                    currentBlockConsumedBytes += recordSize;
+                    context.incrementRecordsRead();
+                    return record;
+                } else {
+                    // We failed to advance the codec but know we have bytes left in the block.
+                    throw new IOException("Decoder failed to advance at position "
+                        + (currentPosition + currentBlockConsumedBytes));
+                }
+            } catch (IOException e) {
+                String message =
+                    String.format("Encountered corrupt block at offset %d for path: %s",
+                        currentPosition + currentBlockConsumedBytes, context.getFilePath());
+                LOG.warn(message, e);
+                context.incrementCorruptBlocksSkipped();
+                if (!context.isSkipCorruptBlocks()) {
+                    throw new IOException(message, e);
+                }
+                // Resync from the start of the current block
+                if (!resyncReader(currentPosition)) {
+                    return null;
+                }
+                decoder = null; // Force reading the next block
+                continue; // Retry reading from the next block
+            }
         }
     }
 
@@ -339,9 +370,12 @@ public class LogFileFormatReader implements Closeable {
 
     @Override
     public String toString() {
-        return "LogFileFormatReader [readerContext=" + context + ", header=" + header
-            + ", trailer=" + trailer + ", recordDecoder=" + decoder + ", currentPosition="
-            + currentPosition + ", trailerValidated=" + trailerValidated + "]";
+        return "LogFileFormatReader [context=" + context + ", decoder=" + decoder + ", input="
+            + input + ", header=" + header + ", trailer=" + trailer + ", currentPosition="
+            + currentPosition + ", currentBlockBuffer=" + currentBlockBuffer
+            + ", currentBlockUncompressedSize=" + currentBlockDataBytes
+            + ", currentBlockConsumedBytes=" + currentBlockConsumedBytes
+            + ", trailerValidated=" + trailerValidated + "]";
     }
 
     LogFile.Header getHeader() {
