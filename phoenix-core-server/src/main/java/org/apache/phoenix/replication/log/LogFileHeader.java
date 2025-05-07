@@ -77,8 +77,9 @@ public class LogFileHeader implements LogFile.Header {
         }
         majorVersion = in.readByte();
         minorVersion = in.readByte();
-        // Basic version check for now
-        if (majorVersion != VERSION_MAJOR && minorVersion > VERSION_MINOR) {
+        // Basic version check for now. We assume semver conventions where only higher major
+        // versions may be incompatible.
+        if (majorVersion > VERSION_MAJOR) {
             throw new IOException("Unsupported LogFile version. Got major=" + majorVersion
                 + " minor=" + minorVersion + ", expected major=" + VERSION_MAJOR
                 + " minor=" + VERSION_MINOR);
@@ -116,8 +117,9 @@ public class LogFileHeader implements LogFile.Header {
         }
         int majorVersion = in.readByte();
         int minorVersion = in.readByte();
-        // Basic version check for now
-        if (majorVersion != VERSION_MAJOR && minorVersion > VERSION_MINOR) {
+        // Basic version check for now. We assume semver conventions where only higher major
+        // versions may be incompatible.
+        if (majorVersion > VERSION_MAJOR) {
             return false;
         }
         return true;

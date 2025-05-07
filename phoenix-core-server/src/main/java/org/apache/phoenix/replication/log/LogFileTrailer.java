@@ -119,9 +119,9 @@ public class LogFileTrailer implements LogFile.Trailer {
         this.trailerStartOffset = in.readLong();
         this.majorVersion = in.readByte();
         this.minorVersion = in.readByte();
-        // Basic version check for now
-        if (this.majorVersion != LogFileHeader.VERSION_MAJOR
-                && this.minorVersion > LogFileHeader.VERSION_MINOR) {
+        // Basic version check for now. We assume semver conventions where only higher major
+        // versions may be incompatible.
+        if (majorVersion > LogFileHeader.VERSION_MAJOR) {
             throw new IOException("Unsupported LogFile version. Got major=" + majorVersion
                 + " minor=" + minorVersion + ", expected major=" + LogFileHeader.VERSION_MAJOR
                 + " minor=" + LogFileHeader.VERSION_MINOR);
@@ -191,9 +191,9 @@ public class LogFileTrailer implements LogFile.Trailer {
         }
         int majorVersion = in.readByte();
         int minorVersion = in.readByte();
-        // Basic version check for now
-        if (majorVersion != LogFileHeader.VERSION_MAJOR
-                && minorVersion > LogFileHeader.VERSION_MINOR) {
+        // Basic version check for now. We assume semver conventions where only higher major
+        // versions may be incompatible.
+        if (majorVersion > LogFileHeader.VERSION_MAJOR) {
             return false;
         }
         return true;

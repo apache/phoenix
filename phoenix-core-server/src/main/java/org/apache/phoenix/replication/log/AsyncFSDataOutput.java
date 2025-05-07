@@ -47,9 +47,12 @@ public class AsyncFSDataOutput implements SyncableDataOutput {
         delegate.close();
     }
 
+    private byte[] byteBuf = new byte[1];
+
     @Override
     public void write(int b) throws IOException {
-        delegate.writeInt(b);
+        byteBuf[0] = (byte) b;
+        delegate.write(byteBuf);
     }
 
     @Override
@@ -61,14 +64,6 @@ public class AsyncFSDataOutput implements SyncableDataOutput {
     public void write(byte[] b, int off, int len) throws IOException {
         delegate.write(b, off, len);
     }
-
-    // The below DataOutput interface methods must be adapted to AsyncFSOutput because
-    // AsyncFSOutput only implements write(byte[]), write(byte[], int, int) and writeInt(int).
-    // Most will never be called. We only need these so we can conform to the SyncableDataOutput
-    // interface contract. The methods we really care about for performance have been directly
-    // delegated above.
-
-    private byte[] byteBuf = new byte[1];
 
     @Override
     public void writeByte(int v) throws IOException {
