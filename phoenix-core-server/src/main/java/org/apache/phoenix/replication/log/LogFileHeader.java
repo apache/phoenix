@@ -116,7 +116,7 @@ public class LogFileHeader implements LogFile.Header {
             return false;
         }
         int majorVersion = in.readByte();
-        int minorVersion = in.readByte();
+        in.readByte(); // minorVersion, for now we don't use it
         // Basic version check for now. We assume semver conventions where only higher major
         // versions may be incompatible.
         if (majorVersion > VERSION_MAJOR) {
