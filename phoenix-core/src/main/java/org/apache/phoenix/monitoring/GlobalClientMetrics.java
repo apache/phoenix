@@ -131,11 +131,16 @@ public enum GlobalClientMetrics {
     private GlobalMetric metric;
 
     static {
-        initPhoenixGlobalClientMetrics();
-        if (isGlobalMetricsEnabled) {
-            MetricRegistry metricRegistry = createMetricRegistry();
-            registerPhoenixMetricsToRegistry(metricRegistry);
-            GlobalMetricRegistriesAdapter.getInstance().registerMetricRegistry(metricRegistry);
+        try {
+            initPhoenixGlobalClientMetrics();
+            if (isGlobalMetricsEnabled) {
+                MetricRegistry metricRegistry = createMetricRegistry();
+                registerPhoenixMetricsToRegistry(metricRegistry);
+                GlobalMetricRegistriesAdapter.getInstance().registerMetricRegistry(metricRegistry);
+            }
+        } catch (Throwable t) {
+            LOGGER.error("Failed to initialize GlobalClientMetrics", t);
+            throw t;
         }
     }
 
