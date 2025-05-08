@@ -1626,6 +1626,16 @@ public class ScanUtil {
                 table.getTableName().getBytes());
         scan.setAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString(),
                 table.getType().getValue().getBytes());
+        if (scan.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME) ==
+                null) {
+            scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME,
+                    SchemaUtil.getEmptyColumnFamily(table));
+        }
+        if (scan.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME) ==
+                null) {
+            scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME,
+                    SchemaUtil.getEmptyColumnQualifier(table));
+        }
         if (table.getLastDDLTimestamp() != null) {
             scan.setAttribute(MutationState.MutationMetadataType.TIMESTAMP.toString(),
                     Bytes.toBytes(table.getLastDDLTimestamp()));
@@ -1648,6 +1658,8 @@ public class ScanUtil {
      * @param logicalTableName logical table name.
      * @param tableType table type.
      * @param timestamp last ddl timestamp.
+     * @param emptyCF empty column family name.
+     * @param emptyCQ empty column qualifier name.
      * @param mutation mutation object to attach attributes.
      */
     public static void annotateMutationWithMetadataAttributes(byte[] tenantId,
@@ -1655,6 +1667,8 @@ public class ScanUtil {
                                                               byte[] logicalTableName,
                                                               byte[] tableType,
                                                               byte[] timestamp,
+                                                              byte[] emptyCF,
+                                                              byte[] emptyCQ,
                                                               Mutation mutation) {
         if (tenantId != null) {
             mutation.setAttribute(MutationState.MutationMetadataType.TENANT_ID.toString(),
@@ -1666,6 +1680,14 @@ public class ScanUtil {
                 logicalTableName);
         mutation.setAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString(),
                 tableType);
+        if (emptyCF != null) {
+            mutation.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME,
+                    emptyCF);
+        }
+        if (emptyCQ != null) {
+            mutation.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME,
+                    emptyCQ);
+        }
         if (timestamp != null) {
             mutation.setAttribute(MutationState.MutationMetadataType.TIMESTAMP.toString(),
                     timestamp);
@@ -1690,6 +1712,19 @@ public class ScanUtil {
                 oldScan.getAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString());
         byte[] timestamp =
                 oldScan.getAttribute(MutationState.MutationMetadataType.TIMESTAMP.toString());
+        byte[] emptyCF =
+                oldScan.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME);
+        byte[] emptyCQ =
+                oldScan.getAttribute(
+                        BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME);
+        if (emptyCF != null) {
+            newScan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME,
+                    emptyCF);
+        }
+        if (emptyCQ != null) {
+            newScan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME,
+                    emptyCQ);
+        }
         if (tenantId != null) {
             newScan.setAttribute(MutationState.MutationMetadataType.TENANT_ID.toString(), tenantId);
         }
@@ -1723,6 +1758,10 @@ public class ScanUtil {
             mutation.setAttribute(MutationState.MutationMetadataType.TENANT_ID.toString(),
                     table.getTenantId().getBytes());
         }
+        mutation.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME,
+                SchemaUtil.getEmptyColumnFamily(table));
+        mutation.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME,
+                SchemaUtil.getEmptyColumnQualifier(table));
         mutation.setAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString(),
                 table.getSchemaName().getBytes());
         mutation.setAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString(),
