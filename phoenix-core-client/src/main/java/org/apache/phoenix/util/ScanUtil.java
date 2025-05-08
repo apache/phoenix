@@ -29,6 +29,7 @@ import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
@@ -1171,7 +1172,7 @@ public class ScanUtil {
     public static CompiledTTLExpression getTTLExpression(Scan scan) throws IOException {
         byte[] phoenixTTL = scan.getAttribute(BaseScannerRegionObserverConstants.TTL);
         if (phoenixTTL == null) {
-            return TTL_EXPRESSION_FOREVER;
+            return TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR;
         }
         return TTLExpressionFactory.create(phoenixTTL);
     }
@@ -1454,7 +1455,6 @@ public class ScanUtil {
         // Otherwise, we can cache stale values and keep reusing the stale values which can give
         // incorrect results.
         CompiledTTLExpression ttlExpr = table.getCompiledTTLExpression(phoenixConnection);
-        LOGGER.info("ScanUtil: table/view = {}, ttl-expr = {}", table.getTableName().toString(), ttlExpr.toString());
         byte[] ttlForScan = ttlExpr.serialize();
         if (ttlForScan != null) {
             byte[] emptyColumnFamilyName = SchemaUtil.getEmptyColumnFamily(table);

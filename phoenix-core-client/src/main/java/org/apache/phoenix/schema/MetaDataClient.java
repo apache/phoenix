@@ -2570,7 +2570,6 @@ public class MetaDataClient {
                             tableProps);
                 }
             }
-            LOGGER.info("MetadataClient: table/view = {}, ttl-prop = {}, ttl-from-hierarchy = {}", tableName, ttl.toString(), ttlFromHierarchy.toString());
 
             Boolean isChangeDetectionEnabledProp =
                 (Boolean) TableProperty.CHANGE_DETECTION_ENABLED.getValue(tableProps);

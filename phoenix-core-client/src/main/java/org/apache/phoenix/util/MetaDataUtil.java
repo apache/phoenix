@@ -22,6 +22,7 @@ import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_DEFI
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_DEFINED;
 import static org.apache.phoenix.schema.PTableType.TABLE;
+import static org.apache.phoenix.schema.PTableType.VIEW;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 import java.nio.charset.StandardCharsets;
@@ -30,6 +31,7 @@ import java.sql.SQLException;
 import java.util.*;
 
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ConditionalTTLExpression;
@@ -1227,7 +1229,14 @@ public class MetaDataUtil {
      * if expression == TTL_NOT_DEFINED OR FOREVER then
      * TTL_NOT_DEFINED will be stores in SYSTEM.CATALOG
      */
-    public static TTLExpression getCompatibleTTLExpression(TTLExpression expression, PTableType tableType) {
+    public static TTLExpression getCompatibleTTLExpression(TTLExpression expression, PTableType tableType)
+            throws SQLException {
+        if (tableType != TABLE && tableType != VIEW) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.
+                    TTL_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY)
+                    .build()
+                    .buildException();
+        }
         TTLExpression ttl;
         if (tableType != TABLE || expression instanceof ConditionalTTLExpression) {
             ttl = expression;
