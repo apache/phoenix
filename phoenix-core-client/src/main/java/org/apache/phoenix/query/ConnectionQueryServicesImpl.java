@@ -495,7 +495,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             final BlockingQueue<Runnable> workQueue = new LinkedBlockingQueue<>(maxQueue);
             this.threadPoolExecutor =
                     new ThreadPoolExecutor(corePoolSize, maxThreads, keepAlive, TimeUnit.SECONDS, workQueue,
-                            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("CQSI-" + threadPoolName + "-" + threadPoolNumber.incrementAndGet()  + "-shared -pool-%d")
+                            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("CQSI-" + threadPoolName + "-" + threadPoolNumber.incrementAndGet()  + "-shared-pool-%d")
                                     .setUncaughtExceptionHandler(Threads.LOGGING_EXCEPTION_HANDLER).build());
             this.threadPoolExecutor.allowCoreThreadTimeOut(config.getBoolean(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT,
                     DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT));
