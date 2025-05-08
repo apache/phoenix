@@ -163,7 +163,7 @@ public class GoogleChartGenerator {
     	sb.append("dataTable.addRows([\n");
     	for (Map.Entry<String, DataNode> dn : datanodes.entrySet()) {
     		String currentKeyPrefix = dn.getKey().substring(0, dn.getKey().indexOf('|'));
-    		if (!lastKeyPrefix.equalsIgnoreCase(currentKeyPrefix) && lastKeyPrefix != "") {
+    		if (!lastKeyPrefix.equalsIgnoreCase(currentKeyPrefix) && !lastKeyPrefix.equals("")) {
     			sb.append(getBlankRow());
     		}
     		lastKeyPrefix = currentKeyPrefix;
@@ -183,7 +183,7 @@ public class GoogleChartGenerator {
 		String thresholdString = Math.round((threshold*100)) + "%"; 
 		String footer = StaticGoogleChartsRenderingData.FOOTER
 				.replace("[summary]",
-						((verifyWithinThreshold(threshold) == true ? "<font color=green>PASSED | Results are within ": 
+						((verifyWithinThreshold(threshold) ? "<font color=green>PASSED | Results are within ":
 							"<font color=red>FAILED | Results are outside "))
 								+ "set threshold of " + thresholdString + "</font><br>"
 								+ new SimpleDateFormat("yyyy/MM/dd ha z").format(new Date()));
@@ -197,23 +197,30 @@ public class GoogleChartGenerator {
      * @return
      */
     private String getBlankRow() {
-    	String ret = "['" + new String(new char[60]).replace("\0", ".") + "'";
-    	for (int i=0; i<labels.length; i++)
-    		ret += ",0,''";
-    	ret += "],";
-    	return ret;
-	}
+        StringBuilder sb = new StringBuilder("['");
+        sb.append(new String(new char[60]).replace("\0", "."));
+        sb.append("'");
+        for (int i = 0; i < labels.length; i++) {
+            sb.append(",0,''");
+        }
+        sb.append("],");
+        return sb.toString();
+    }
 
     /**
      * Render tooltip as HTML table
      * @param nodeDataSet
      * @return
      */
-	private String getToolTipAsHTML(Map<String, Node> nodeDataSet) {
-       	String ret = "<table width=1000 cellpadding=1 cellspacing=0 border=0 bgcolor=#F4F4F4><tr>";
-    	for (Map.Entry<String, Node> nodeSet : nodeDataSet.entrySet())	
-    		ret += "<td>" + getToolText(nodeSet.getValue()) + "</td>";
-    	return ret + "</tr></table>";
+    private String getToolTipAsHTML(Map<String, Node> nodeDataSet) {
+		StringBuilder sb = new StringBuilder("<table width=1000 cellpadding=1 cellspacing=0 border=0 bgcolor=#F4F4F4><tr>");
+        for (Map.Entry<String, Node> nodeSet : nodeDataSet.entrySet()) {
+            sb.append("<td>");
+            sb.append(getToolText(nodeSet.getValue()));
+            sb.append("</td>");
+        }
+        sb.append("</tr></table>");
+        return sb.toString();
     }
     
 	/**
