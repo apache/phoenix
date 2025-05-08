@@ -120,18 +120,19 @@ public class UncoveredLocalIndexRegionScanner extends UncoveredIndexRegionScanne
 
     @Override
     protected boolean scanIndexTableRows(List<Cell> result,
-                                         final long startTime) throws IOException {
-        return scanIndexTableRows(result, startTime, actualStartKey, offset);
+                                         final long startTime,
+                                         ScannerContext scannerContext) throws IOException {
+        return scanIndexTableRows(result, startTime, actualStartKey, offset, scannerContext);
     }
 
     @Override
-    public boolean next(List<Cell> result) throws IOException {
-        boolean hasMore = super.next(result);
+    public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+        boolean hasMore = super.next(result, scannerContext);
         ServerIndexUtil.wrapResultUsingOffset(result, offset);
         return hasMore;
     }
 
-    public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
-        return next(result);
+    public boolean next(List<Cell> result) throws IOException {
+        return next(result, null);
     }
 }
