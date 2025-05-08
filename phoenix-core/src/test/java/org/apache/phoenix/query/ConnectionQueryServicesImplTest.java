@@ -35,6 +35,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
@@ -50,11 +51,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -162,7 +162,7 @@ public class ConnectionQueryServicesImplTest {
         assertNotNull(threadPoolExecutor);
         assertEquals(readOnlyProps.getInt(CQSI_THREAD_POOL_CORE_POOL_SIZE, -1), threadPoolExecutor.getCorePoolSize());
         assertEquals(readOnlyProps.getInt(CQSI_THREAD_POOL_MAX_THREADS,-1), threadPoolExecutor.getMaximumPoolSize());
-        assertEquals(ArrayBlockingQueue.class, threadPoolExecutor.getQueue().getClass());
+        assertEquals(LinkedBlockingQueue.class, threadPoolExecutor.getQueue().getClass());
         assertEquals(readOnlyProps.getInt(CQSI_THREAD_POOL_MAX_QUEUE, -1), threadPoolExecutor.getQueue().remainingCapacity());
         assertEquals(readOnlyProps.getInt(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS, -1), threadPoolExecutor.getKeepAliveTime(TimeUnit.SECONDS));
         assertTrue(threadPoolExecutor.allowsCoreThreadTimeOut());
@@ -375,26 +375,26 @@ public class ConnectionQueryServicesImplTest {
     public void testGetSysMutexTableWithName() throws Exception {
         when(mockAdmin.tableExists(any())).thenReturn(true);
         when(mockConn.getAdmin()).thenReturn(mockAdmin);
-        when(mockConn.getTable(TableName.valueOf("SYSTEM.MUTEX")))
+        when(mockConn.getTable(eq(TableName.valueOf("SYSTEM.MUTEX")), any()))
                 .thenReturn(mockTable);
         assertSame(mockCqs.getSysMutexTable(), mockTable);
         verify(mockAdmin, Mockito.times(1)).tableExists(any());
         verify(mockConn, Mockito.times(1)).getAdmin();
         verify(mockConn, Mockito.times(1))
-                .getTable(TableName.valueOf("SYSTEM.MUTEX"));
+                .getTable(eq(TableName.valueOf("SYSTEM.MUTEX")), any());
     }
 
     @Test
     public void testGetSysMutexTableWithNamespace() throws Exception {
         when(mockAdmin.tableExists(any())).thenReturn(false);
         when(mockConn.getAdmin()).thenReturn(mockAdmin);
-        when(mockConn.getTable(TableName.valueOf("SYSTEM:MUTEX")))
+        when(mockConn.getTable(eq(TableName.valueOf("SYSTEM:MUTEX")), any()))
                 .thenReturn(mockTable);
         assertSame(mockCqs.getSysMutexTable(), mockTable);
         verify(mockAdmin, Mockito.times(1)).tableExists(any());
         verify(mockConn, Mockito.times(1)).getAdmin();
         verify(mockConn, Mockito.times(1))
-                .getTable(TableName.valueOf("SYSTEM:MUTEX"));
+                .getTable(eq(TableName.valueOf("SYSTEM:MUTEX")), any());
     }
 
     @Test

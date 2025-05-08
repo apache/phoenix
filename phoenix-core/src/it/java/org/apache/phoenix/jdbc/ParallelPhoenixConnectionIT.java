@@ -34,6 +34,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_PARALL
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_PARALLEL_POOL2_TASK_EXECUTION_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_PARALLEL_POOL2_TASK_QUEUE_WAIT_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_PARALLEL_POOL2_TASK_REJECTED_COUNTER;
+import static org.apache.phoenix.query.BaseTest.extractThreadPoolExecutorFromCQSI;
 import static org.apache.phoenix.query.QueryServices.AUTO_COMMIT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT;
 import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_CORE_POOL_SIZE;
@@ -207,26 +208,20 @@ public class ParallelPhoenixConnectionIT {
             ConnectionQueryServices cqsi = PhoenixDriver.INSTANCE.getConnectionQueryServices(CLUSTERS.getJdbcUrl1(haGroup), clientProperties);
             ConnectionQueryServices cqsiFromConn = pConn.getQueryServices();
             // Check that same ThreadPoolExecutor object is used for CQSIs
-            ThreadPoolExecutor threadPoolExecutor1 = extractThreadPoolExecutor(cqsi);
-            Assert.assertSame(threadPoolExecutor1, extractThreadPoolExecutor(cqsiFromConn));
+            ThreadPoolExecutor threadPoolExecutor1 = extractThreadPoolExecutorFromCQSI(cqsi);
+            Assert.assertSame(threadPoolExecutor1, extractThreadPoolExecutorFromCQSI(cqsiFromConn));
 
             // verify connection#2
             cqsi = PhoenixDriver.INSTANCE.getConnectionQueryServices(CLUSTERS.getJdbcUrl2(haGroup), clientProperties);
             cqsiFromConn = pConn2.getQueryServices();
             Assert.assertSame(cqsi, cqsiFromConn);
             // Check that same ThreadPoolExecutor object is used for CQSIs
-            ThreadPoolExecutor threadPoolExecutor2 = extractThreadPoolExecutor(cqsi);
-            Assert.assertSame(extractThreadPoolExecutor(cqsi), extractThreadPoolExecutor(cqsiFromConn));
+            ThreadPoolExecutor threadPoolExecutor2 = extractThreadPoolExecutorFromCQSI(cqsi);
+            Assert.assertSame(extractThreadPoolExecutorFromCQSI(cqsi), extractThreadPoolExecutorFromCQSI(cqsiFromConn));
 
             // Check that both threadPools for parallel connections are different.
             assertNotSame(threadPoolExecutor1, threadPoolExecutor2);
         }
-    }
-
-    private ThreadPoolExecutor extractThreadPoolExecutor(final ConnectionQueryServices cqs) throws NoSuchFieldException, IllegalAccessException {
-        Field props = cqs.getClass().getDeclaredField("threadPoolExecutor");
-        props.setAccessible(true);
-        return (ThreadPoolExecutor) props.get(cqs);
     }
 
     /**
