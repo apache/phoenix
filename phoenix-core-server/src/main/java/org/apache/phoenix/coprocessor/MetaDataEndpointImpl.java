@@ -1492,7 +1492,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
             // TODO: Need to Update Cache for Alter Commands, can use PHOENIX-6883.
         }
-        LOGGER.info("Found TTL entity: {}, ttl = {}", Bytes.toStringBinary(tableNameBytes), ttl.getTTLExpression());
 
         Cell rowKeyMatcherKv = tableKeyValues[ROW_KEY_MATCHER_INDEX];
         byte[] rowKeyMatcher = rowKeyMatcherKv != null
@@ -1733,7 +1732,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
         byte[] tableKey = null;
         do {
-            LOGGER.info("Checking current-view: {}", Bytes.toStringBinary(viewKey));
 
             if (result == null) {
                 return TTL_EXPRESSION_NOT_DEFINED;
@@ -1751,8 +1749,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             if (result.getValue(TABLE_FAMILY_BYTES, TTL_BYTES) != null) {
                 String ttlStr = (String) PVarchar.INSTANCE.toObject(
                         result.getValue(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES));
-                LOGGER.info("Found TTL current-view: {}, ttl = {}", Bytes.toStringBinary(viewKey), ttlStr);
-
                 return TTLExpressionFactory.create(ttlStr);
             } else if (linkTypeBytes != null ) {
                 String parentSchema =SchemaUtil.getSchemaNameFromFullName(
@@ -1768,7 +1764,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                             PARENT_TENANT_ID_BYTES);
                     byte[] parentViewKey = SchemaUtil.getTableKey(parentViewTenantId,
                             parentViewSchemaName, parentViewName);
-                    LOGGER.info("Checking current-view = {}, parent-view: {}", Bytes.toStringBinary(viewKey), Bytes.toStringBinary(parentViewKey));
                     return getTTLFromHierarchy(parentViewKey, clientTimeStamp, false);
                 }
 
