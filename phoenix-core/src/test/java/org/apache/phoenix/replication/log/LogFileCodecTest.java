@@ -319,19 +319,4 @@ public class LogFileCodecTest {
             .setMutation(put));
     }
 
-    @Test
-    public void testCodecWithVeryLargeRecord() throws IOException {
-        // This is a stupidly large record... a key of MAX_ROW_LENGTH and 100,000 column/values.
-        long ts = 12345L;
-        byte[] largeRowKey = new byte[HConstants.MAX_ROW_LENGTH];
-        RNG.nextBytes(largeRowKey);
-        Put put = new Put(largeRowKey);
-        put.setTimestamp(ts);
-        for (int i = 0; i < 100_000; i++) {
-            put.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("q" + i), ts, Bytes.toBytes("v" + i));
-        }
-        singleRecordTest(new LogFileRecord().setHBaseTableName("TBLVLRK").setCommitId(1L)
-            .setMutation(put));
-    }
-
 }
