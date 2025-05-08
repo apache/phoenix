@@ -87,6 +87,7 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_POOL_CORE_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_QUERY_SERVICES_NAME;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THRESHOLD_MILLISECONDS;
@@ -124,6 +125,7 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -192,6 +194,7 @@ import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.hadoop.hbase.util.Threads;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
 import org.apache.hadoop.ipc.RemoteException;
@@ -425,6 +428,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final Object invalidateMetadataCacheConnLock = new Object();
     private MetricsMetadataCachingSource metricsMetadataCachingSource;
     private ThreadPoolExecutor threadPoolExecutor;
+    private static AtomicInteger threadPoolNumber = new AtomicInteger(1);
     public static final String INVALIDATE_SERVER_METADATA_CACHE_EX_MESSAGE =
             "Cannot invalidate server metadata cache on a non-server connection";
 
@@ -486,9 +490,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             final int corePoolSize = config.getInt(CQSI_THREAD_POOL_CORE_POOL_SIZE, DEFAULT_CQSI_THREAD_POOL_CORE_POOL_SIZE);
             final int maxThreads = config.getInt(CQSI_THREAD_POOL_MAX_THREADS, DEFAULT_CQSI_THREAD_POOL_MAX_THREADS);
             final int maxQueue = config.getInt(CQSI_THREAD_POOL_MAX_QUEUE, DEFAULT_CQSI_THREAD_POOL_MAX_QUEUE);
-            final String threadPoolName = connectionInfo.getPrincipal() != null ? connectionInfo.getPrincipal() : "Default";
-            this.threadPoolExecutor = new ThreadPoolExecutor(corePoolSize, maxThreads, keepAlive, TimeUnit.SECONDS,
-                    new ArrayBlockingQueue<>(maxQueue), new DaemonThreadFactory(threadPoolName));
+            final String threadPoolName = connectionInfo.getPrincipal() != null ? connectionInfo.getPrincipal() : DEFAULT_QUERY_SERVICES_NAME;
+            // Based on implementations used in org.apache.hadoop.hbase.client.ConnectionImplementation
+            final BlockingQueue<Runnable> workQueue = new LinkedBlockingQueue<>(maxQueue);
+            this.threadPoolExecutor =
+                    new ThreadPoolExecutor(corePoolSize, maxThreads, keepAlive, TimeUnit.SECONDS, workQueue,
+                            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("CQSI-" + threadPoolName + "-" + threadPoolNumber.incrementAndGet()  + "-shared -pool-%d")
+                                    .setUncaughtExceptionHandler(Threads.LOGGING_EXCEPTION_HANDLER).build());
             this.threadPoolExecutor.allowCoreThreadTimeOut(config.getBoolean(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT,
                     DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT));
         }
@@ -6800,33 +6808,5 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             builder.addInvalidateServerMetadataCacheRequests(innerBuilder.build());
         }
         return builder.build();
-    }
-
-    /**
-     * Source:org.apache.hadoop.hbase.DaemonThreadFactory
-     */
-    public static class DaemonThreadFactory implements ThreadFactory {
-        private static final AtomicInteger poolNumber = new AtomicInteger(1);
-        private final ThreadGroup group;
-        private final AtomicInteger threadNumber = new AtomicInteger(1);
-        private final String namePrefix;
-
-        public DaemonThreadFactory(String name) {
-            SecurityManager s = System.getSecurityManager();
-            group = (s != null) ? s.getThreadGroup() : Thread.currentThread().getThreadGroup();
-            namePrefix = "CQSI-" + name + poolNumber.getAndIncrement() + "-thread-";
-        }
-
-        @Override
-        public Thread newThread(Runnable r) {
-            Thread t = new Thread(group, r, namePrefix + threadNumber.getAndIncrement(), 0);
-            if (!t.isDaemon()) {
-                t.setDaemon(true);
-            }
-            if (t.getPriority() != Thread.NORM_PRIORITY) {
-                t.setPriority(Thread.NORM_PRIORITY);
-            }
-            return t;
-        }
     }
 }
