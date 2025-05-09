@@ -586,6 +586,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             GLOBAL_HCONNECTIONS_COUNTER.increment();
             LOGGER.info("HConnection established. Stacktrace for informational purposes: "
                     + localConnection + " " +  LogUtil.getCallerStackTrace());
+	    LOGGER.info("Test established. Stacktrace for informational purposes: "
+	    	    + localConnection + " " +  LogUtil.getCallerStackTrace());
         } catch (IOException e) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION)
             .setRootCause(e).build().buildException();
