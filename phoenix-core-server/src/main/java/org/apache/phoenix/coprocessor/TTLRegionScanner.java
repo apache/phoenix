@@ -32,8 +32,6 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.schema.CompiledTTLExpression;
 import org.apache.phoenix.schema.TTLExpressionFactory;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -44,7 +42,6 @@ import org.slf4j.LoggerFactory;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.isPhoenixCompactionEnabled;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME;
-import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.IS_PHOENIX_TTL_SCAN_TABLE_SYSTEM;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
 
@@ -78,12 +75,10 @@ public class TTLRegionScanner extends BaseRegionScanner {
         emptyCF = scan.getAttribute(EMPTY_COLUMN_FAMILY_NAME);
         currentTime = scan.getTimeRange().getMax() == HConstants.LATEST_TIMESTAMP
                 ? EnvironmentEdgeManager.currentTimeMillis() : scan.getTimeRange().getMax();
-        byte[] isSystemTable = scan.getAttribute(IS_PHOENIX_TTL_SCAN_TABLE_SYSTEM);
         CompiledTTLExpression scanTTLExpression = ScanUtil.getTTLExpression(scan);
         boolean fromScan = false;
         if (isPhoenixCompactionEnabled(env.getConfiguration()) &&
-                (!scanTTLExpression.equals(TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR)) &&
-                (isSystemTable == null || !Bytes.toBoolean(isSystemTable))) {
+                (!scanTTLExpression.equals(TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR))) {
             ttlExpression = scanTTLExpression;
             fromScan = true;
         } else {
@@ -97,8 +92,7 @@ public class TTLRegionScanner extends BaseRegionScanner {
         // be done here. We also disable masking when TTL is HConstants.FOREVER.
         isMaskingEnabled = emptyCF != null && emptyCQ != null
                 && !ttlExpression.equals(TTL_EXPRESSION_FOREVER)
-                && (isPhoenixCompactionEnabled(env.getConfiguration()) && (isSystemTable == null
-                || !Bytes.toBoolean(isSystemTable)));
+                && (isPhoenixCompactionEnabled(env.getConfiguration()));
     }
 
     private void init() throws IOException {
