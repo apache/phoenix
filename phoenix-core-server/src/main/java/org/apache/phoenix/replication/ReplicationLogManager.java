@@ -455,34 +455,28 @@ public class ReplicationLogManager implements Closeable {
 
         /**
          * Performs a sync operation, but only after verifying that the writer's generation stamp
-         * is still valid. Acquires the manager's lock during the check and the delegate sync
-         * operation. It is therefore impossible for a sync of the underlying writer and a log
-         * roll to happen concurrently. We are guaranteed the sync will succeed (or fail) without
-         * interference from the manager.
+         * is still valid.
          * @throws IOException             if the underlying sync fails.
          * @throws StaleLogWriterException if the writer instance has been rotated
          *                                 out since it was acquired.
          */
         @Override
         public void sync() throws IOException {
-            lock.lock(); // Acquire the manager's lock so sync doesn't race with a roll.
-            try {
-                long current = writerGeneration;
-                if (this.generation != current) {
-                    throw new StaleLogWriterException(
-                        "Log writer rotated during operation. Expected generation " + generation
-                            + ", found " + current);
-                }
-                // Generation is still valid, proceed with sync on the delegate writer
-                if (LOG.isTraceEnabled()) {
-                     LOG.trace("Syncing writer {} with generation {}", delegate, generation);
-                }
-                delegate.sync();
-                if (LOG.isTraceEnabled()) {
-                     LOG.trace("Sync successful for writer {} with generation {}", delegate, generation);
-                }
-            } finally {
-                lock.unlock(); // Release the manager's lock
+            long current = writerGeneration;
+            if (this.generation != current) {
+                throw new StaleLogWriterException(
+                    "Log writer rotated during operation. Expected generation " + generation
+                        + ", found " + current);
+            }
+            // Generation is still valid, proceed with sync on the delegate writer
+            if (LOG.isTraceEnabled()) {
+                LOG.trace("Syncing writer {} with generation {}", delegate, generation);
+            }
+            // We can drop the lock to do the actual sync. We only needed the lock to know the
+            // writer is still valid at the time we go to invoke sync on the delegate.
+            delegate.sync();
+            if (LOG.isTraceEnabled()) {
+                LOG.trace("Sync successful for writer {} with generation {}", delegate, generation);
             }
         }
 
