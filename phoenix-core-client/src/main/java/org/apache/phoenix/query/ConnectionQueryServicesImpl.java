@@ -81,11 +81,17 @@ import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_ENABLED;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_POOL_ENABLED;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_POOL_MAX_QUEUE;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_POOL_MAX_THREADS;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_POOL_CORE_POOL_SIZE;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_QUERY_SERVICES_NAME;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THRESHOLD_MILLISECONDS;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SYSTEM_CATALOG_INDEXES_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TIMEOUT_DURING_UPGRADE_MS;
 import static org.apache.phoenix.util.UpgradeUtil.addParentToChildLinks;
 import static org.apache.phoenix.util.UpgradeUtil.addViewIndexToParentLinks;
@@ -118,6 +124,8 @@ import java.util.Objects;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -132,6 +140,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -185,6 +194,7 @@ import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.hadoop.hbase.util.Threads;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
 import org.apache.hadoop.ipc.RemoteException;
@@ -417,6 +427,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private Connection invalidateMetadataCacheConnection = null;
     private final Object invalidateMetadataCacheConnLock = new Object();
     private MetricsMetadataCachingSource metricsMetadataCachingSource;
+    private ThreadPoolExecutor threadPoolExecutor = null;
+    private static final AtomicInteger threadPoolNumber = new AtomicInteger(1);
     public static final String INVALIDATE_SERVER_METADATA_CACHE_EX_MESSAGE =
             "Cannot invalidate server metadata cache on a non-server connection";
 
@@ -451,9 +463,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     /**
      * Construct a ConnectionQueryServicesImpl that represents a connection to an HBase
      * cluster.
-     * @param services base services from where we derive our default configuration
+     *
+     * @param services       base services from where we derive our default configuration
      * @param connectionInfo to provide connection information
-     * @param info hbase configuration properties
+     * @param info           hbase configuration properties
      */
     public ConnectionQueryServicesImpl(QueryServices services, ConnectionInfo connectionInfo, Properties info) {
         super(services);
@@ -479,6 +492,24 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // Without making a copy of the configuration we cons up, we lose some of our properties
         // on the server side during testing.
         this.config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration(config);
+
+        if (config.getBoolean(CQSI_THREAD_POOL_ENABLED, DEFAULT_CQSI_THREAD_POOL_ENABLED)) {
+            final int keepAlive = config.getInt(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS, DEFAULT_CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS);
+            final int corePoolSize = config.getInt(CQSI_THREAD_POOL_CORE_POOL_SIZE, DEFAULT_CQSI_THREAD_POOL_CORE_POOL_SIZE);
+            final int maxThreads = config.getInt(CQSI_THREAD_POOL_MAX_THREADS, DEFAULT_CQSI_THREAD_POOL_MAX_THREADS);
+            final int maxQueue = config.getInt(CQSI_THREAD_POOL_MAX_QUEUE, DEFAULT_CQSI_THREAD_POOL_MAX_QUEUE);
+            final String threadPoolName = connectionInfo.getPrincipal() != null ? connectionInfo.getPrincipal() : DEFAULT_QUERY_SERVICES_NAME;
+            // Based on implementations used in org.apache.hadoop.hbase.client.ConnectionImplementation
+            final BlockingQueue<Runnable> workQueue = new LinkedBlockingQueue<>(maxQueue);
+            this.threadPoolExecutor =
+                    new ThreadPoolExecutor(corePoolSize, maxThreads, keepAlive, TimeUnit.SECONDS, workQueue,
+                            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("CQSI-" + threadPoolName + "-" + threadPoolNumber.incrementAndGet()  + "-shared-pool-%d")
+                                    .setUncaughtExceptionHandler(Threads.LOGGING_EXCEPTION_HANDLER).build());
+            this.threadPoolExecutor.allowCoreThreadTimeOut(config.getBoolean(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT,
+                    DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT));
+        }
+
+
 
         LOGGER.info(
                 "CQS Configs {} = {} , {} = {} , {} = {} , {} = {} , {} = {} , {} = {} , {} = {}",
@@ -634,7 +665,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public Table getTable(byte[] tableName) throws SQLException {
         try {
             return HBaseFactoryProvider.getHTableFactory().getTable(tableName,
-                connection, null);
+                connection, threadPoolExecutor);
         } catch (IOException e) {
             throw new SQLException(e);
         }

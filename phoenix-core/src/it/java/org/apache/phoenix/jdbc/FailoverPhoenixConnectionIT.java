@@ -25,9 +25,17 @@ import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestin
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithStatement;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
+import static org.apache.phoenix.query.BaseTest.extractThreadPoolExecutorFromCQSI;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_CORE_POOL_SIZE;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ENABLED;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_MAX_QUEUE;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_MAX_THREADS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.doAnswer;
@@ -48,6 +56,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -113,6 +122,12 @@ public class FailoverPhoenixConnectionIT {
         haGroupName = testName.getMethodName();
         clientProperties = HighAvailabilityTestingUtility.getHATestProperties();
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName);
+        clientProperties.setProperty(CQSI_THREAD_POOL_ENABLED, String.valueOf(true));
+        clientProperties.setProperty(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS, String.valueOf(13));
+        clientProperties.setProperty(CQSI_THREAD_POOL_CORE_POOL_SIZE, String.valueOf(17));
+        clientProperties.setProperty(CQSI_THREAD_POOL_MAX_THREADS, String.valueOf(19));
+        clientProperties.setProperty(CQSI_THREAD_POOL_MAX_QUEUE, String.valueOf(23));
+        clientProperties.setProperty(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT, String.valueOf(true));
 
         // Make first cluster ACTIVE
         CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER);
@@ -135,6 +150,22 @@ public class FailoverPhoenixConnectionIT {
                     .close();
         } catch (Exception e) {
             LOG.error("Fail to tear down the HA group and the CQS. Will ignore", e);
+        }
+    }
+
+    @Test
+    public void testCQSIThreadPoolCreation() throws Exception {
+        try (Connection conn = createFailoverConnection()) {
+            FailoverPhoenixConnection failoverConn = conn.unwrap(FailoverPhoenixConnection.class);
+
+            // verify connection#1
+            ConnectionQueryServices cqsi = PhoenixDriver.INSTANCE.getConnectionQueryServices(CLUSTERS.getJdbcUrl1(haGroup), clientProperties);
+            ConnectionQueryServices cqsiFromConn = failoverConn.getWrappedConnection().getQueryServices();
+            // Check that same ThreadPoolExecutor object is used for CQSIs
+            Assert.assertSame(extractThreadPoolExecutorFromCQSI(cqsi), extractThreadPoolExecutorFromCQSI(cqsiFromConn));
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw e;
         }
     }
 
