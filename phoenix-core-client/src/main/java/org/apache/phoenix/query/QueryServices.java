@@ -376,6 +376,10 @@ public interface QueryServices extends SQLCloseable {
     public static final String PHOENIX_SERVER_PAGE_SIZE_MS = "phoenix.server.page.size.ms";
     // Phoenix TTL implemented by CompactionScanner and TTLRegionScanner is enabled
     public static final String PHOENIX_TABLE_TTL_ENABLED = "phoenix.table.ttl.enabled";
+    // Enable CompactionScanner for flushes to remove extra versions
+    public static final String PHOENIX_COMPACTION_SCANNER_FOR_FLUSHES_ENABLED =
+            "phoenix.compaction.scanner.for.flushes.enabled";
+    public static final boolean DEFAULT_PHOENIX_COMPACTION_SCANNER_FOR_FLUSHES_ENABLED = true;
     // Copied here to avoid dependency on hbase-server
     public static final String WAL_EDIT_CODEC_ATTRIB = "hbase.regionserver.wal.codec";
     //Property to know whether TTL at View Level is enabled

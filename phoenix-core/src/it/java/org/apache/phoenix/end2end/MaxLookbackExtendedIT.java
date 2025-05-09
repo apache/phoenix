@@ -565,7 +565,7 @@ public class MaxLookbackExtendedIT extends BaseTest {
     }
 
     @Test(timeout=60000)
-    public void testRetainingLastRowVersion() throws Exception {
+    public void testRetainingLastRowVersionForMinorCompaction() throws Exception {
         try(Connection conn = DriverManager.getConnection(getUrl())) {
             String tableName = generateUniqueName();
             createTable(tableName);
