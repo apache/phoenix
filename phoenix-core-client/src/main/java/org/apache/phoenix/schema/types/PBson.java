@@ -43,16 +43,6 @@ public class PBson extends PVarbinary {
     }
 
     @Override
-    public boolean canBePrimaryKey() {
-        return false;
-    }
-
-    @Override
-    public boolean isComparisonSupported() {
-        return false;
-    }
-
-    @Override
     public int toBytes(Object object, byte[] bytes, int offset) {
         if (object == null) {
             return 0;

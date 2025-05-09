@@ -27,11 +27,13 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.schema.types.PDouble;
 import org.bson.BsonArray;
 import org.bson.BsonBinary;
@@ -167,7 +169,7 @@ public class Bson4IT extends ParallelStatsDisabledIT {
 
       assertFalse(rs.next());
 
-      validateIndexUsed(ps, indexName2);
+      validateExplainPlan(ps, indexName2, "RANGE SCAN ");
 
       ps = conn.prepareStatement("SELECT PK1, COL FROM " + tableName
           + " WHERE BSON_VALUE(COL, 'rather[3].outline.clock', 'VARCHAR') = ?");
@@ -182,7 +184,7 @@ public class Bson4IT extends ParallelStatsDisabledIT {
 
       assertFalse(rs.next());
 
-      validateIndexUsed(ps, indexName1);
+      validateExplainPlan(ps, indexName1, "RANGE SCAN ");
 
       BsonDocument updateExp = new BsonDocument()
               .append("$ADD", new BsonDocument()
@@ -230,7 +232,7 @@ public class Bson4IT extends ParallelStatsDisabledIT {
       rs = ps.executeQuery();
       assertFalse(rs.next());
 
-      validateIndexUsed(ps, indexName1);
+      validateExplainPlan(ps, indexName1, "RANGE SCAN ");
 
       ps = conn.prepareStatement("SELECT PK1, COL FROM " + tableName
           + " WHERE BSON_VALUE(COL, 'result[1].location.coordinates.longitude', 'DOUBLE') = ?");
@@ -239,7 +241,7 @@ public class Bson4IT extends ParallelStatsDisabledIT {
       rs = ps.executeQuery();
       assertFalse(rs.next());
 
-      validateIndexUsed(ps, indexName2);
+      validateExplainPlan(ps, indexName2, "RANGE SCAN ");
     }
   }
 
@@ -426,6 +428,127 @@ public class Bson4IT extends ParallelStatsDisabledIT {
     }
   }
 
+  @Test
+  public void testBsonPk() throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    String tableName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.setAutoCommit(true);
+      String ddl = "CREATE TABLE " + tableName
+              + " (PK1 BSON NOT NULL, C1 VARCHAR"
+              + " CONSTRAINT pk PRIMARY KEY(PK1))";
+      conn.createStatement().execute(ddl);
+
+      String sample1 = getJsonString("json/sample_01.json");
+      String sample2 = getJsonString("json/sample_02.json");
+      String sample3 = getJsonString("json/sample_03.json");
+      BsonDocument bsonDocument1 = RawBsonDocument.parse(sample1);
+      BsonDocument bsonDocument2 = RawBsonDocument.parse(sample2);
+      BsonDocument bsonDocument3 = RawBsonDocument.parse(sample3);
+
+      upsertRowsWithBsonPkCol(conn, tableName, bsonDocument1, bsonDocument2, bsonDocument3);
+
+      String conditionExpression =
+              "press = :press AND track[0].shot[2][0].city.standard[5] = :softly";
+
+      BsonDocument conditionDoc = new BsonDocument();
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", new BsonDocument()
+              .append(":press", new BsonString("beat"))
+              .append(":softly", new BsonString("softly")));
+
+      String query = "SELECT * FROM " + tableName +
+              " WHERE PK1 = ?";
+      PreparedStatement pst = conn.prepareStatement(query);
+      pst.setObject(1, bsonDocument1);
+      ResultSet rs = pst.executeQuery(query);
+
+      assertTrue(rs.next());
+      assertEquals("0002", rs.getString(2));
+      BsonDocument document1 = (BsonDocument) rs.getObject(1);
+      assertEquals(bsonDocument1, document1);
+
+      assertFalse(rs.next());
+
+      validateExplainPlan(pst, tableName, "POINT LOOKUP ON 1 KEY ");
+
+      query = "SELECT * FROM " + tableName +
+              " WHERE PK1 = CAST('" + sample2 + "' AS BSON)";
+      Statement stmt = conn.createStatement();
+      rs = stmt.executeQuery(query);
+
+      assertTrue(rs.next());
+      assertEquals("1010", rs.getString(2));
+      BsonDocument document2 = (BsonDocument) rs.getObject(1);
+      assertEquals(bsonDocument2, document2);
+
+      assertFalse(rs.next());
+
+      // TODO : Fix this separately, using CAST with PK column results into full table scan due
+      //  to bug.
+      // validateExplainPlan(stmt, query, tableName, "POINT LOOKUP ON 1 KEY ");
+
+      query = "SELECT * FROM " + tableName +
+              " WHERE PK1 != CAST('" + sample1 + "' AS BSON)";
+      stmt = conn.createStatement();
+      rs = stmt.executeQuery(query);
+
+      assertTrue(rs.next());
+      assertEquals("1011", rs.getString(2));
+      document2 = (BsonDocument) rs.getObject(1);
+      assertEquals(bsonDocument3, document2);
+
+      assertTrue(rs.next());
+      assertEquals("1010", rs.getString(2));
+      BsonDocument document3 = (BsonDocument) rs.getObject(1);
+      assertEquals(bsonDocument2, document3);
+
+      assertFalse(rs.next());
+
+      validateExplainPlan(stmt, query, tableName, "FULL SCAN ");
+
+      query = "SELECT * FROM " + tableName;
+      rs = conn.createStatement().executeQuery(query);
+
+      assertTrue(rs.next());
+      assertEquals("0002", rs.getString(2));
+      document1 = (BsonDocument) rs.getObject(1);
+      assertEquals(bsonDocument1, document1);
+
+      assertTrue(rs.next());
+      assertEquals("1011", rs.getString(2));
+      document2 = (BsonDocument) rs.getObject(1);
+      assertEquals(bsonDocument3, document2);
+
+      assertTrue(rs.next());
+      assertEquals("1010", rs.getString(2));
+      document3 = (BsonDocument) rs.getObject(1);
+      assertEquals(bsonDocument2, document3);
+
+      assertFalse(rs.next());
+    }
+  }
+
+  private static void upsertRowsWithBsonPkCol(Connection conn, String tableName,
+                                              BsonDocument bsonDocument1,
+                                              BsonDocument bsonDocument2,
+                                              BsonDocument bsonDocument3)
+          throws SQLException {
+    PreparedStatement stmt =
+            conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?)");
+    stmt.setString(2, "0002");
+    stmt.setObject(1, bsonDocument1);
+    stmt.executeUpdate();
+
+    stmt.setString(2, "1010");
+    stmt.setObject(1, bsonDocument2);
+    stmt.executeUpdate();
+
+    stmt.setString(2, "1011");
+    stmt.setObject(1, bsonDocument3);
+    stmt.executeUpdate();
+  }
+
   private static void upsertRows(Connection conn, String tableName, BsonDocument bsonDocument1,
                                 BsonDocument bsonDocument2, BsonDocument bsonDocument3)
           throws SQLException {
@@ -495,13 +618,24 @@ public class Bson4IT extends ParallelStatsDisabledIT {
     assertEquals(RawBsonDocument.parse(getJsonString(jsonPath)), resultSet.getObject(3));
   }
 
-  private static void validateIndexUsed(PreparedStatement ps, String indexName)
+  private static void validateExplainPlan(PreparedStatement ps, String tableName, String scanType)
       throws SQLException {
     ExplainPlan plan = ps.unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
+    validatePlan(tableName, scanType, plan);
+  }
+
+  private static void validateExplainPlan(Statement stmt, String query, String tableName,
+                                          String scanType)
+          throws SQLException {
+    ExplainPlan plan = stmt.unwrap(PhoenixStatement.class).optimizeQuery(query).getExplainPlan();
+    validatePlan(tableName, scanType, plan);
+  }
+
+  private static void validatePlan(String tableName, String scanType, ExplainPlan plan) {
     ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals(indexName, explainPlanAttributes.getTableName());
+    assertEquals(tableName, explainPlanAttributes.getTableName());
     assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
+    assertEquals(scanType, explainPlanAttributes.getExplainScanType());
   }
 
 }
