@@ -17,14 +17,11 @@
  */
 package org.apache.phoenix.util;
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_BYTES;
-import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME_BYTES;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_DEFINED_IN_TABLE_DESCRIPTOR;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.CURRENT_CLIENT_VERSION;
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.getVersion;
@@ -71,6 +68,7 @@ import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_BYTES;
 import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_VALUE_BYTES;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TIMEOUT_DURING_UPGRADE_MS;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SCAN_PAGE_SIZE;
+import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 import java.io.IOException;
 import java.math.BigInteger;
@@ -86,7 +84,6 @@ import java.sql.Types;
 import java.text.Format;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -107,7 +104,10 @@ import javax.annotation.Nullable;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hbase.CompareOperator;
+import org.apache.hadoop.hbase.filter.BinaryComparator;
+import org.apache.hadoop.hbase.filter.QualifierFilter;
 import org.apache.phoenix.coprocessorclient.MetaDataEndpointImplConstants;
+import org.apache.phoenix.schema.TTLExpression;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -1481,7 +1481,7 @@ public class UpgradeUtil {
         ReadOnlyProps readOnlyProps = oldMetaConnection.getQueryServices().getProps();
         TableName sysCat = SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME, readOnlyProps);
 
-        LOGGER.debug(String.format("SYSTEM CATALOG table use for copying TTL values: %s", sysCat.toString()));
+        LOGGER.info(String.format("SYSTEM CATALOG table use for copying TTL values: %s", sysCat.toString()));
         Configuration conf = oldMetaConnection.getQueryServices().getConfiguration();
         try (org.apache.hadoop.hbase.client.Connection moveTTLConnection =  getHBaseConnection(conf, options);
              Table sysCatalogTable = moveTTLConnection.getTable(sysCat);
@@ -1494,16 +1494,18 @@ public class UpgradeUtil {
                     Scan scan = new Scan();
                     scan.addFamily(DEFAULT_COLUMN_FAMILY_BYTES);
                     // Push down the filter to hbase to avoid transfer
-                    SingleColumnValueFilter tableFilter = new SingleColumnValueFilter(
+                    QualifierFilter tableTypeQualifierFilter = new QualifierFilter(
+                            CompareOperator.EQUAL, new BinaryComparator(TABLE_TYPE_BYTES));
+
+                    SingleColumnValueFilter tableTypeFilter = new SingleColumnValueFilter(
                             DEFAULT_COLUMN_FAMILY_BYTES,
                             TABLE_TYPE_BYTES, CompareOperator.EQUAL,
                             PTableType.TABLE.getSerializedValue().getBytes(StandardCharsets.UTF_8));
-
-                    tableFilter.setFilterIfMissing(true);
+                    tableTypeFilter.setFilterIfMissing(true);
                     // Limit number of records
                     PageFilter pf = new PageFilter(DEFAULT_SCAN_PAGE_SIZE);
 
-                    scan.setFilter(new FilterList(FilterList.Operator.MUST_PASS_ALL, pf, tableFilter));
+                    scan.setFilter(new FilterList(FilterList.Operator.MUST_PASS_ALL, pf, tableTypeQualifierFilter, tableTypeFilter));
                     if (pageMore) {
                         scan.withStartRow(lastRowKey, false);
                     }
@@ -1518,42 +1520,35 @@ public class UpgradeUtil {
                             byte[] tmpKey = new byte[lastRowKey.length];
                             System.arraycopy(lastRowKey, 0, tmpKey, 0, tmpKey.length);
                             rowKeys.add(tmpKey);
-                            String tableName = SchemaUtil.getTableName(rr.getValue(
-                                            DEFAULT_COLUMN_FAMILY_BYTES, TABLE_SCHEM_BYTES),
-                                    rr.getValue(DEFAULT_COLUMN_FAMILY_BYTES, TABLE_NAME_BYTES));
-                            if (tableName == null || Arrays.equals(rr.getValue(DEFAULT_COLUMN_FAMILY_BYTES,
-                                    TABLE_SCHEM_BYTES), SYSTEM_SCHEMA_NAME_BYTES)) {
+                            byte[][] rowKeyMetaData = new byte[3][];
+                            getVarChars(tmpKey, 3, rowKeyMetaData);
+                            byte[] schemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
+                            byte[] tableName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
+
+                            String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+                            if (SchemaUtil.isSystemTable(SchemaUtil.getTableNameAsBytes(schemaName, tableName))) {
                                 //We do not support system table ttl through phoenix ttl, and it will be moved to a
                                 //constant value in future commit.
                                 continue;
                             }
                             TableDescriptor tableDesc = admin.getDescriptor(SchemaUtil.getPhysicalTableName(
-                                    tableName, readOnlyProps));
+                                    fullTableName, readOnlyProps));
                             int ttl = tableDesc.getColumnFamily(DEFAULT_COLUMN_FAMILY_BYTES).
                                     getTimeToLive();
-                            if (ttl != ColumnFamilyDescriptorBuilder.DEFAULT_TTL) {
-                                //As we have ttl defined fot this table create a Put to set TTL.
-                                long rowTS = rr.rawCells()[0].getTimestamp();
-                                Put put = new Put(tmpKey);
-                                put.addColumn(DEFAULT_COLUMN_FAMILY_BYTES, EMPTY_COLUMN_BYTES, rowTS,
-                                        EMPTY_COLUMN_VALUE_BYTES);
+                            // As we have ttl defined for this table create a Put to set TTL with
+                            // backward compatibility in mind.
+                            long rowTS = EnvironmentEdgeManager.currentTimeMillis();
+                            Put put = new Put(tmpKey);
+                            put.addColumn(DEFAULT_COLUMN_FAMILY_BYTES, EMPTY_COLUMN_BYTES, rowTS,
+                                    EMPTY_COLUMN_VALUE_BYTES);
+                            if (ttl == HConstants.FOREVER || ttl == TTL_NOT_DEFINED) {
                                 put.addColumn(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES, rowTS,
-                                        PVarchar.INSTANCE.toBytes(String.valueOf(ttl)));
-                                puts.add(put);
-
-                                //Set TTL to Default at CF level when Phoenix level ttl is enabled
-                                if (oldMetaConnection.getQueryServices().getConfiguration().getBoolean(
-                                        QueryServices.PHOENIX_TABLE_TTL_ENABLED, DEFAULT_PHOENIX_TABLE_TTL_ENABLED)) {
-                                    ColumnFamilyDescriptor columnFamilyDescriptor = ColumnFamilyDescriptorBuilder
-                                            .newBuilder(DEFAULT_COLUMN_FAMILY_BYTES).setTimeToLive(
-                                                    ColumnFamilyDescriptorBuilder.DEFAULT_TTL).build();
-                                    TableDescriptor tableDescriptor = TableDescriptorBuilder.newBuilder(
-                                            admin.getDescriptor(SchemaUtil.getPhysicalTableName(
-                                            tableName, readOnlyProps))).modifyColumnFamily(
-                                                    columnFamilyDescriptor).build();
-                                    admin.modifyTable(tableDescriptor);
-                                }
+                                        PVarchar.INSTANCE.toBytes(String.valueOf(TTL_NOT_DEFINED)));
+                            } else {
+                                put.addColumn(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES, rowTS,
+                                        PVarchar.INSTANCE.toBytes(String.valueOf(TTL_DEFINED_IN_TABLE_DESCRIPTOR)));
                             }
+                            puts.add(put);
                         }
 
                         if (!puts.isEmpty()) {
@@ -2491,6 +2486,13 @@ public class UpgradeUtil {
         Put put = new Put(tableHeaderRowKey, clientTimeStamp);
         put.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                 MetaDataEndpointImplConstants.ROW_KEY_ORDER_OPTIMIZABLE_BYTES, PBoolean.INSTANCE.toBytes(true));
+        tableMetadata.add(put);
+    }
+
+    public static void addTTLForClientOlderThan530(List<Mutation> tableMetadata, byte[] tableHeaderRowKey, long clientTimeStamp, TTLExpression ttlExpression) {
+        Put put = new Put(tableHeaderRowKey, clientTimeStamp);
+        put.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                TTL_BYTES, PVarchar.INSTANCE.toBytes(ttlExpression.getTTLExpression()));
         tableMetadata.add(put);
     }
 

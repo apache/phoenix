@@ -22,6 +22,8 @@ import static org.apache.phoenix.query.BaseTest.generateUniqueName;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_NAME;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
 import static org.apache.phoenix.util.PhoenixRuntime.CONNECTIONLESS;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
@@ -1404,18 +1406,71 @@ public class TestUtil {
         assertEquals(code.getSQLState(), se.getSQLState());
     }
 
-    public static void assertTableHasTtl(Connection conn, TableName tableName, int ttl, boolean phoenixTTLEnabled)
-        throws SQLException, IOException {
+    /**
+     * In 5.3.0 release the TTL column will be created in SYSTEM.CATALOG and used to store TTL
+     * values, but the TTL values for tables with literal expressions will continue to be stored
+     * in the HBase TableDescriptor for backward compatibility. Table level TTL values will be
+     * moved from the HBase TableDescriptor and stored in SYSTEM.CATALOG in a future release.
+     */
+    public static void assertTTLValue(Connection conn, TableName tableName, int ttl,
+            boolean checkTTLInSystemCatalog) throws SQLException, IOException {
         TTLExpression tableTTL;
-        if (phoenixTTLEnabled) {
-            tableTTL = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,
-                    tableName.getNameAsString())).getTTLExpression();
+        if (checkTTLInSystemCatalog) {
+            tableTTL =
+                    conn.unwrap(PhoenixConnection.class)
+                            .getTable(new PTableKey(null, tableName.getNameAsString()))
+                            .getTTLExpression();
         } else {
-            tableTTL = TTLExpressionFactory.create(
-                    getColumnDescriptor(conn, tableName).getTimeToLive());
+            tableTTL =
+                    TTLExpressionFactory.create(
+                            getColumnDescriptor(conn, tableName).getTimeToLive());
         }
         TTLExpression expectedTTL = TTLExpressionFactory.create(ttl);
         Assert.assertEquals(expectedTTL, tableTTL);
+    }
+
+    /**
+     * In 5.3.0 release the TTL column will be created in SYSTEM.CATALOG and used to store TTL
+     * values, but the TTL values for tables with literal expressions will continue to be stored
+     * in the HBase TableDescriptor for backward compatibility.
+     * When table type != TABLE (i.e. VIEW TTL) OR expression is ConditionalExpression then
+     * actual TTL value is stored in SYSTEM.CATALOG and TableDescriptor will be set to FOREVER
+     * When table type == TABLE (i.e. Table TTL) and expression is LiteralExpression then actual
+     * TTL value is stored in TableDescriptor and SYSTEM.CATALOG will be set to
+     * TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR. if expression == TTL_NOT_DEFINED OR FOREVER
+     * then TTL_NOT_DEFINED will be stores in SYSTEM.CATALOG
+     */
+
+    public static void assertTTLValue(Connection conn, TTLExpression expected, String name)
+            throws SQLException, IOException {
+        PTable pTable = PhoenixRuntime.getTableNoCache(conn, name);
+        assertTTLValue(conn, pTable, expected);
+    }
+
+    public static void assertTTLValue(Connection conn, TableName tableName, int ttl)
+            throws SQLException, IOException {
+        assertTTLValue(conn, tableName.getNameAsString(), TTLExpressionFactory.create(ttl));
+    }
+
+    public static  void assertTTLValue(Connection conn, String name, TTLExpression expected)
+            throws SQLException, IOException {
+        PTable pTable = PhoenixRuntime.getTableNoCache(conn, name);
+        assertTTLValue(conn, pTable, expected);
+    }
+
+    public static void assertTTLValue(Connection conn, PTable pTable, TTLExpression expected)
+            throws SQLException, IOException {
+        TTLExpression actualInSyscat = pTable.getTTLExpression();
+        byte[] hbaseTableName = pTable.getPhysicalName().getBytes();
+        ColumnFamilyDescriptor cfd = getColumnDescriptor(conn, TableName.valueOf(hbaseTableName));
+        TTLExpression actual = actualInSyscat;
+        if (actualInSyscat.equals(TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR)) {
+            actual = TTLExpressionFactory.create(cfd.getTimeToLive());
+        } else {
+            assertEquals("Table descriptor TTL value did not match :-", TTL_EXPRESSION_FOREVER,
+                    TTLExpressionFactory.create(cfd.getTimeToLive()));
+        }
+        assertEquals("TTL value did not match :-", expected, actual);
     }
 
     public static void assertTableHasVersions(Connection conn, TableName tableName, int versions)

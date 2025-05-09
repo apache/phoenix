@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema;
 
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_DEFINED;
 import static org.junit.Assert.assertEquals;
@@ -61,6 +62,12 @@ public class TTLExpressionTest {
     }
 
     @Test
+    public void testTableTTLInTableDescriptor() {
+        assertEquals(TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR,
+                TTLExpressionFactory.create(PhoenixDatabaseMetaData.TTL_DEFINED_IN_TABLE_DESCRIPTOR));
+    }
+
+    @Test
     public void testNone() throws SQLException {
         assertEquals(TTL_EXPRESSION_NOT_DEFINED,
                 TTLExpressionFactory.create(PhoenixDatabaseMetaData.NONE_TTL));
@@ -71,7 +78,7 @@ public class TTLExpressionTest {
 
     @Test(expected = IllegalArgumentException.class)
     public void testInvalidLiteral() {
-        TTLExpressionFactory.create(-1);
+        TTLExpressionFactory.create(-10);
     }
 
     @Test

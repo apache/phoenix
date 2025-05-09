@@ -36,6 +36,7 @@ import java.util.Set;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.LiteralTTLExpression;
+import org.apache.phoenix.schema.TTLExpression;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.hadoop.conf.Configuration;
@@ -70,6 +71,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_TTL;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_DEFINED;
 
 /**
@@ -343,10 +345,12 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
                 cqsi = connection.unwrap(PhoenixConnection.class).getQueryServices();
         String physicalTable = getSourceTableName(pSourceTable,
                 SchemaUtil.isNamespaceMappingEnabled(null, cqsi.getProps()));
-        if (configuration.getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
-                QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED)) {
-            return pSourceTable.getTTLExpression().equals(TTL_EXPRESSION_NOT_DEFINED) ? DEFAULT_TTL
-                    : ((LiteralTTLExpression) pSourceTable.getTTLExpression()).getTTLValue(); // TODO
+        TTLExpression ttlExpression = pSourceTable.getTTLExpression();
+        if (ttlExpression == null) return DEFAULT_TTL;
+        if (!ttlExpression.equals(TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR)) {
+            return ttlExpression.equals(TTL_EXPRESSION_NOT_DEFINED) ? DEFAULT_TTL
+                    // TODO What happens in the case of Conditional TTL
+                    : ((LiteralTTLExpression) ttlExpression).getTTLValue(); // TODO
         } else {
             TableDescriptor tableDesc;
             try (Admin admin = cqsi.getAdmin()) {
