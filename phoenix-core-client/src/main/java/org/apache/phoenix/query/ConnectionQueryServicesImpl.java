@@ -427,7 +427,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private Connection invalidateMetadataCacheConnection = null;
     private final Object invalidateMetadataCacheConnLock = new Object();
     private MetricsMetadataCachingSource metricsMetadataCachingSource;
-    private ThreadPoolExecutor threadPoolExecutor;
+    private ThreadPoolExecutor threadPoolExecutor = null;
     private static AtomicInteger threadPoolNumber = new AtomicInteger(1);
     public static final String INVALIDATE_SERVER_METADATA_CACHE_EX_MESSAGE =
             "Cannot invalidate server metadata cache on a non-server connection";

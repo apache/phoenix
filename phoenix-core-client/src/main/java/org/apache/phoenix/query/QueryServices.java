@@ -384,7 +384,9 @@ public interface QueryServices extends SQLCloseable {
     public static final String PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT = "phoenix.view.ttl.tenant_views_per_scan.limit";
     // Block mutations based on cluster role record
     public static final String CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED = "phoenix.cluster.role.based.mutation.block.enabled";
+    //Enable Thread Pool Creation in CQSI to be used for HBase Client.
     public static final String CQSI_THREAD_POOL_ENABLED = "phoenix.cqsi.thread.pool.enabled";
+    //CQSI Thread Pool Related Configuration.
     public static final String CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS = "phoenix.cqsi.thread.pool.keepalive.seconds";
     public static final String CQSI_THREAD_POOL_CORE_POOL_SIZE = "phoenix.cqsi.thread.pool.core.size";
     public static final String CQSI_THREAD_POOL_MAX_THREADS = "phoenix.cqsi.thread.pool.max.threads";
