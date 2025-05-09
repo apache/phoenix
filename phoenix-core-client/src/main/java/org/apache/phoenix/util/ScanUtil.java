@@ -25,6 +25,7 @@ import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverCons
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_STOP_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.CDC_DATA_TABLE_DEF;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_TTL;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_DEFINED_IN_TABLE_DESCRIPTOR;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED;
@@ -1172,7 +1173,7 @@ public class ScanUtil {
     public static CompiledTTLExpression getTTLExpression(Scan scan) throws IOException {
         byte[] phoenixTTL = scan.getAttribute(BaseScannerRegionObserverConstants.TTL);
         if (phoenixTTL == null) {
-            return TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR;
+            return null;
         }
         return TTLExpressionFactory.create(phoenixTTL);
     }
@@ -1412,16 +1413,14 @@ public class ScanUtil {
             return;
         }
 
-        // If is a system table then set the scan attribute.
-        if (SchemaUtil.isSystemTable(
-                SchemaUtil.getTableNameAsBytes(table.getSchemaName().getString(),
+        // If is a system table or If Phoenix level TTL/compaction  is not enabled
+        // then set the TTL scan attribute to TTL_DEFINED_IN_TABLE_DESCRIPTOR.
+        if ((!isPhoenixCompactionEnabled(phoenixConnection.getQueryServices().getConfiguration())) ||
+                SchemaUtil.isSystemTable(
+                        SchemaUtil.getTableNameAsBytes(table.getSchemaName().getString(),
                         table.getTableName().getString()))) {
-            scan.setAttribute(BaseScannerRegionObserverConstants.IS_PHOENIX_TTL_SCAN_TABLE_SYSTEM,
-                    Bytes.toBytes(true));
-        }
-
-        // If Phoenix level TTL is not enabled
-        if (!isPhoenixCompactionEnabled(phoenixConnection.getQueryServices().getConfiguration())) {
+            byte[] ttlForScan = TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR.serialize();
+            scan.setAttribute(BaseScannerRegionObserverConstants.TTL, ttlForScan);
             return;
         }
 
