@@ -428,7 +428,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final Object invalidateMetadataCacheConnLock = new Object();
     private MetricsMetadataCachingSource metricsMetadataCachingSource;
     private ThreadPoolExecutor threadPoolExecutor = null;
-    private static AtomicInteger threadPoolNumber = new AtomicInteger(1);
+    private static final AtomicInteger threadPoolNumber = new AtomicInteger(1);
     public static final String INVALIDATE_SERVER_METADATA_CACHE_EX_MESSAGE =
             "Cannot invalidate server metadata cache on a non-server connection";
 
@@ -485,6 +485,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (connectionInfo.getPrincipal() != null) {
             config.set(QUERY_SERVICES_NAME, connectionInfo.getPrincipal());
         }
+        LOGGER.info(String.format("CQS initialized with connection query service : %s",
+                config.get(QUERY_SERVICES_NAME)));
+        this.connectionInfo = connectionInfo;
+
+        // Without making a copy of the configuration we cons up, we lose some of our properties
+        // on the server side during testing.
+        this.config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration(config);
+
         if (config.getBoolean(CQSI_THREAD_POOL_ENABLED, DEFAULT_CQSI_THREAD_POOL_ENABLED)) {
             final int keepAlive = config.getInt(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS, DEFAULT_CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS);
             final int corePoolSize = config.getInt(CQSI_THREAD_POOL_CORE_POOL_SIZE, DEFAULT_CQSI_THREAD_POOL_CORE_POOL_SIZE);
@@ -500,13 +508,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             this.threadPoolExecutor.allowCoreThreadTimeOut(config.getBoolean(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT,
                     DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT));
         }
-        LOGGER.info(String.format("CQS initialized with connection query service : %s",
-                config.get(QUERY_SERVICES_NAME)));
-        this.connectionInfo = connectionInfo;
 
-        // Without making a copy of the configuration we cons up, we lose some of our properties
-        // on the server side during testing.
-        this.config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration(config);
+
 
         LOGGER.info(
                 "CQS Configs {} = {} , {} = {} , {} = {} , {} = {} , {} = {} , {} = {} , {} = {}",
