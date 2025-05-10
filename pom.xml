@@ -131,6 +131,7 @@
     <javax.servlet-api.version>3.1.0</javax.servlet-api.version>
     <json-path.version>2.9.0</json-path.version>
     <bson.version>5.3.1</bson.version>
+    <disruptor.version>3.3.6</disruptor.version>
     <!-- Test Dependencies -->
     <mockito.version>4.11.0</mockito.version>
     <junit.version>4.13.1</junit.version>
@@ -1837,6 +1838,11 @@
         <groupId>org.mongodb</groupId>
         <artifactId>bson</artifactId>
         <version>${bson.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.lmax</groupId>
+        <artifactId>disruptor</artifactId>
+        <version>${disruptor.version}</version>
       </dependency>
 
       <!-- Other test dependencies -->
