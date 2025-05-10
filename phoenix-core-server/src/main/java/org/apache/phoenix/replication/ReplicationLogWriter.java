@@ -153,7 +153,7 @@ public class ReplicationLogWriter implements Closeable {
      * are batched and provided to the underlying LogWriter, which will then be synced. If there is
      * a problem syncing the LogWriter we will retry, up to the retry limit, rolling the writer for
      * each retry.
-     * <p> 
+     * <p>
      * NOTE: When the ReplicationLogManager is capable of switching between synchronous and
      * fallback (store-and-forward) writers, then this will be pretty bullet proof. Right now we
      * will still try to roll the synchronous writer a few times before giving up.
@@ -320,8 +320,8 @@ public class ReplicationLogWriter implements Closeable {
                     futureToComplete.complete(null);
                 } else {
                     // syncException should be set by attemptWriteAndSyncWithRetries
-                    futureToComplete.completeExceptionally(syncException != null ? syncException :
-                        new IOException("Sync failed after retries"));
+                    futureToComplete.completeExceptionally(syncException != null ? syncException
+                        : new IOException("Sync failed after retries"));
                 }
             }
         }

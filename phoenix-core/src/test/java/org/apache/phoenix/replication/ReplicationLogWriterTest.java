@@ -224,9 +224,9 @@ public class ReplicationLogWriterTest {
             // Simulate the actual rotation behavior: close old, create new
             logManager.closeWriter(writerBeforeRoll); // Close the failing writer
             logManager.currentWriter = logManager.new Writer(writerAfterRoll,
-                logManager.writerGeneration + 1);
-            logManager.writerGeneration++;
-            logManager.lastRotationTime = EnvironmentEdgeManager.currentTimeMillis();
+                logManager.writerGeneration.get() + 1);
+            logManager.writerGeneration.incrementAndGet();
+            logManager.lastRotationTime.set(EnvironmentEdgeManager.currentTimeMillis());
             return logManager.currentWriter;
         }).when(logManager).rotateLog();
 

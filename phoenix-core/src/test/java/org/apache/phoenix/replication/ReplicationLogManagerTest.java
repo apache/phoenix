@@ -309,11 +309,11 @@ public class ReplicationLogManagerTest {
 
         // Expose internal state for testing
         long getLastRotationTime() {
-            return lastRotationTime;
+            return lastRotationTime.get();
         }
 
         long getWriterGeneration() {
-            return writerGeneration;
+            return writerGeneration.get();
         }
 
         LogFile.Writer getCurrentInternalWriter() {

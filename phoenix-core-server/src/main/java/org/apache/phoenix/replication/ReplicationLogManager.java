@@ -26,6 +26,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.hadoop.conf.Configuration;
@@ -50,6 +51,8 @@ import org.slf4j.LoggerFactory;
  * TODO: This class will switch between active (synchronous) and store-and-forward fallback
  * writer depending on error handling/retry strategy.
  */
+@edu.umd.cs.findbugs.annotations.SuppressWarnings(value = { "EI_EXPOSE_REP", "EI_EXPOSE_REP2" },
+    justification = "Intentional")
 public class ReplicationLogManager implements Closeable {
 
     /** The path on the standby HDFS where log files should be written. (The "IN" directory.) */
@@ -92,7 +95,7 @@ public class ReplicationLogManager implements Closeable {
 
     private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogManager.class);
 
-    private static volatile ReplicationLogManager INSTANCE;
+    private static volatile ReplicationLogManager instance;
 
     private final Configuration conf;
     private final RegionServerServices rsServices;
@@ -108,8 +111,8 @@ public class ReplicationLogManager implements Closeable {
     protected volatile LogFile.Writer currentWriter; // Current writer
     //private volatile LogFile.Writer activeWriter; // Current active side writer (future use)
     //private volatile LogFile.Writer fallbackWriter; // Current fallback writer (future use)
-    protected volatile long lastRotationTime;
-    protected volatile long writerGeneration;
+    protected final AtomicLong lastRotationTime = new AtomicLong();
+    protected final AtomicLong writerGeneration = new AtomicLong();
     private ScheduledExecutorService rotationExecutor;
     private final AtomicBoolean started = new AtomicBoolean(false);
     private final AtomicBoolean closed = new AtomicBoolean(false);
@@ -124,15 +127,17 @@ public class ReplicationLogManager implements Closeable {
      */
     public static ReplicationLogManager getInstance(Configuration conf,
             RegionServerServices rsServices) throws IOException {
-        if (INSTANCE == null) {
+        if (instance == null) {
             synchronized (ReplicationLogManager.class) {
-                if (INSTANCE == null) {
-                    INSTANCE = new ReplicationLogManager(conf, rsServices);
-                    INSTANCE.init();
+                if (instance == null) {
+                    // Complete initialization before assignment
+                    ReplicationLogManager logManager = new ReplicationLogManager(conf, rsServices);
+                    logManager.init();
+                    instance = logManager;
                 }
             }
         }
-        return INSTANCE;
+        return instance;
     }
 
     protected ReplicationLogManager(Configuration conf, RegionServerServices rsServices) {
@@ -146,10 +151,6 @@ public class ReplicationLogManager implements Closeable {
             DEFAULT_REPLICATION_LOG_ROTATION_SIZE_PERCENTAGE);
         this.rotationSizeBytes = (long) (rotationSize * rotationSizePercent);
         this.numShards = conf.getInt(REPLICATION_NUM_SHARDS_KEY, DEFAULT_REPLICATION_NUM_SHARDS);
-        if (numShards > MAX_REPLICATION_NUM_SHARDS) {
-            throw new IllegalArgumentException(REPLICATION_NUM_SHARDS_KEY + " is " + numShards
-                + ", but the limit is " + MAX_REPLICATION_NUM_SHARDS);
-        }
         String compressionName = conf.get(REPLICATION_LOG_COMPRESSION_ALGORITHM_KEY,
             DEFAULT_REPLICATION_LOG_COMPRESSION_ALGORITHM);
         Compression.Algorithm compression = Compression.Algorithm.NONE;
@@ -164,13 +165,17 @@ public class ReplicationLogManager implements Closeable {
     }
 
     public void init() throws IOException {
+        if (numShards > MAX_REPLICATION_NUM_SHARDS) {
+            throw new IllegalArgumentException(REPLICATION_NUM_SHARDS_KEY + " is " + numShards
+                + ", but the limit is " + MAX_REPLICATION_NUM_SHARDS);
+        }
         if (started.get()) {
             return;
         }
         initializeFileSystems();
         // For now we just initialize currentWriter
-        currentWriter = new Writer(createNewWriter(standbyFs, standbyUrl), writerGeneration);
-        lastRotationTime = EnvironmentEdgeManager.currentTimeMillis();
+        currentWriter = new Writer(createNewWriter(standbyFs, standbyUrl), writerGeneration.get());
+        lastRotationTime.set(EnvironmentEdgeManager.currentTimeMillis());
         startRotationExecutor();
         started.set(true);
     }
@@ -285,9 +290,10 @@ public class ReplicationLogManager implements Closeable {
         }
         // Check time threshold
         long now = EnvironmentEdgeManager.currentTimeMillis();
-        if (now - lastRotationTime >= rotationTimeMs) {
+        long last = lastRotationTime.get();
+        if (now - last >= rotationTimeMs) {
             LOG.debug("Rotating log file due to time threshold ({} ms elapsed, threshold {} ms)",
-                now - lastRotationTime, rotationTimeMs);
+                now - last, rotationTimeMs);
             return true;
         }
 
@@ -315,11 +321,12 @@ public class ReplicationLogManager implements Closeable {
                 closeWriter(currentWriter);
                 currentWriter = null;
             }
-            currentWriter = new Writer(createNewWriter(standbyFs, standbyUrl), writerGeneration);
+            currentWriter = new Writer(createNewWriter(standbyFs, standbyUrl),
+                writerGeneration.get());
             LOG.debug("Created new writer: {}", currentWriter);
             // Increment the writer generation
-            writerGeneration++;
-            lastRotationTime = EnvironmentEdgeManager.currentTimeMillis();
+            writerGeneration.incrementAndGet();
+            lastRotationTime.set(EnvironmentEdgeManager.currentTimeMillis());
             return currentWriter;
         } finally {
             lock.unlock();
@@ -337,8 +344,8 @@ public class ReplicationLogManager implements Closeable {
         Path shardPath = new Path(url.getPath(), String.format(SHARD_DIR_FORMAT, shard));
         // Ensure the shard directory exists. We track which shard directories we have probed or
         // created to avoid a round trip to the namenode for repeats.
-        IOException exception[] = new IOException[1];
-        shardMap.computeIfAbsent(shardPath, (p) -> {
+        IOException[] exception = new IOException[1];
+        shardMap.computeIfAbsent(shardPath, p -> {
             try {
                 if (!fs.exists(p)) {
                     if (!fs.mkdirs(p)) {
@@ -444,7 +451,7 @@ public class ReplicationLogManager implements Closeable {
         @Override
         public void append(String tableName, long commitId, Mutation mutation) throws IOException {
             // No need to acquire the lock just to check the generation stamp in append.
-            long current = writerGeneration;
+            long current = writerGeneration.get();
             if (this.generation != current) {
                 throw new StaleLogWriterException(
                     "Log writer rotated during operation. Expected generation " + generation
@@ -462,7 +469,7 @@ public class ReplicationLogManager implements Closeable {
          */
         @Override
         public void sync() throws IOException {
-            long current = writerGeneration;
+            long current = writerGeneration.get();
             if (this.generation != current) {
                 throw new StaleLogWriterException(
                     "Log writer rotated during operation. Expected generation " + generation
@@ -532,13 +539,15 @@ public class ReplicationLogManager implements Closeable {
                     }
                     // Check only the time condition here, size is handled by getWriter
                     long now = EnvironmentEdgeManager.currentTimeMillis();
-                    if (currentWriter != null && now - lastRotationTime >= rotationTimeMs) {
+                    long last = lastRotationTime.get();
+                    if (currentWriter != null && now - last >= rotationTimeMs) {
                         LOG.debug("Time based rotation needed ({} ms elapsed, threshold {} ms).",
-                              now - lastRotationTime, rotationTimeMs);
+                              now - last, rotationTimeMs);
                         try {
                             rotateLog(); // rotateLog updates lastRotationTime
                         } catch (IOException e) {
-                            LOG.error("Failed to rotate log, currentWriter is {}", currentWriter, e);
+                            LOG.error("Failed to rotate log, currentWriter is {}", currentWriter,
+                                e);
                             // More robust error handling goes here once the store-and-forward
                             // fallback is implemented. For now we just log the error and continue.
                         }
@@ -555,6 +564,16 @@ public class ReplicationLogManager implements Closeable {
                 }
             }
         }
+    }
+
+    @Override
+    public String toString() {
+        return "ReplicationLogManager [numShards=" + numShards + ", standbyUrl=" + standbyUrl
+            + ", fallbackUrl=" + fallbackUrl + ", rotationTimeMs=" + rotationTimeMs
+            + ", rotationSizeBytes=" + rotationSizeBytes + ", compression=" + compression
+            + ", currentWriter=" + currentWriter + ", lastRotationTime=" + lastRotationTime
+            + ", writerGeneration=" + writerGeneration + ", started=" + started + ", closed="
+            + closed + "]";
     }
 
 }
