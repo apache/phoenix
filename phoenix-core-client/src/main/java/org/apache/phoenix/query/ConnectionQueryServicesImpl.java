@@ -493,11 +493,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // on the server side during testing.
         this.config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration(config);
 
-        if (config.getBoolean(CQSI_THREAD_POOL_ENABLED, DEFAULT_CQSI_THREAD_POOL_ENABLED)) {
-            final int keepAlive = config.getInt(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS, DEFAULT_CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS);
-            final int corePoolSize = config.getInt(CQSI_THREAD_POOL_CORE_POOL_SIZE, DEFAULT_CQSI_THREAD_POOL_CORE_POOL_SIZE);
-            final int maxThreads = config.getInt(CQSI_THREAD_POOL_MAX_THREADS, DEFAULT_CQSI_THREAD_POOL_MAX_THREADS);
-            final int maxQueue = config.getInt(CQSI_THREAD_POOL_MAX_QUEUE, DEFAULT_CQSI_THREAD_POOL_MAX_QUEUE);
+        if (this.config.getBoolean(CQSI_THREAD_POOL_ENABLED, DEFAULT_CQSI_THREAD_POOL_ENABLED)) {
+            final int keepAlive = this.config.getInt(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS, DEFAULT_CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS);
+            final int corePoolSize = this.config.getInt(CQSI_THREAD_POOL_CORE_POOL_SIZE, DEFAULT_CQSI_THREAD_POOL_CORE_POOL_SIZE);
+            final int maxThreads = this.config.getInt(CQSI_THREAD_POOL_MAX_THREADS, DEFAULT_CQSI_THREAD_POOL_MAX_THREADS);
+            final int maxQueue = this.config.getInt(CQSI_THREAD_POOL_MAX_QUEUE, DEFAULT_CQSI_THREAD_POOL_MAX_QUEUE);
             final String threadPoolName = connectionInfo.getPrincipal() != null ? connectionInfo.getPrincipal() : DEFAULT_QUERY_SERVICES_NAME;
             // Based on implementations used in org.apache.hadoop.hbase.client.ConnectionImplementation
             final BlockingQueue<Runnable> workQueue = new LinkedBlockingQueue<>(maxQueue);
@@ -505,7 +505,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     new ThreadPoolExecutor(corePoolSize, maxThreads, keepAlive, TimeUnit.SECONDS, workQueue,
                             new ThreadFactoryBuilder().setDaemon(true).setNameFormat("CQSI-" + threadPoolName + "-" + threadPoolNumber.incrementAndGet()  + "-shared-pool-%d")
                                     .setUncaughtExceptionHandler(Threads.LOGGING_EXCEPTION_HANDLER).build());
-            this.threadPoolExecutor.allowCoreThreadTimeOut(config.getBoolean(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT,
+            this.threadPoolExecutor.allowCoreThreadTimeOut(this.config.getBoolean(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT,
                     DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT));
         }
 
