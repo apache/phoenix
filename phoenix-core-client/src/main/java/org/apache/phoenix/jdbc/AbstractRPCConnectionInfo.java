@@ -51,7 +51,7 @@ public abstract class AbstractRPCConnectionInfo extends ConnectionInfo {
 
     @Override
     public String getZookeeperConnectionString() {
-        throw new UnsupportedOperationException("MasterRegistry is used");
+        throw new UnsupportedOperationException("MasterRegistry/RPCRegistry is used");
     }
 
     @Override

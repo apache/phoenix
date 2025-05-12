@@ -36,6 +36,7 @@ import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
+import org.apache.phoenix.jdbc.RPCConnectionInfo;
 import org.apache.phoenix.jdbc.ZKConnectionInfo;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.query.ConfigurationFactory;
@@ -146,6 +147,11 @@ public class ConnectionIT {
     public void testRPCConnections() throws SQLException {
         assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.5.0") >= 0);
         String masterHosts = conf.get(HConstants.MASTER_ADDRS_KEY);
+        // HBase does fall back to MasterRpcRegistry if the boostrap servers are not set, but
+        // ConnectionInfo normalization does not handle that.
+
+        // Set BOOTSTRAP_NODES so that we can test the default case
+        conf.set(RPCConnectionInfo.BOOTSTRAP_NODES, masterHosts);
 
         try (PhoenixConnection conn1 =
                 (PhoenixConnection) DriverManager.getConnection("jdbc:phoenix+rpc");
