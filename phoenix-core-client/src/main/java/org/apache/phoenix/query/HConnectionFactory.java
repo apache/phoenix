@@ -18,6 +18,7 @@
 package org.apache.phoenix.query;
 
 import java.io.IOException;
+import java.util.concurrent.ExecutorService;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Connection;
@@ -39,12 +40,28 @@ public interface HConnectionFactory {
     Connection createConnection(Configuration conf) throws IOException;
 
     /**
+     * Creates HConnection to access HBase clusters.
+     *
+     * @param conf object
+     * @param pool object
+     * @return A HConnection instance
+     */
+    default Connection createConnection(Configuration conf, ExecutorService pool) throws IOException {
+        return createConnection(conf);
+    }
+
+    /**
      * Default implementation.  Uses standard HBase HConnections.
      */
     static class HConnectionFactoryImpl implements HConnectionFactory {
         @Override
         public Connection createConnection(Configuration conf) throws IOException {
             return ConnectionFactory.createConnection(conf);
+        }
+
+        @Override
+        public Connection createConnection(Configuration conf, ExecutorService pool) throws IOException {
+            return ConnectionFactory.createConnection(conf, pool);
         }
     }
 }

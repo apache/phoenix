@@ -4,6 +4,7 @@ package org.apache.phoenix.query;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.client.ConnectionImplementation;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
@@ -130,6 +131,37 @@ public class ConnectionQueryServicesImplThreadPoolIT extends BaseTest {
     }
 
     @Test
+    public void checkHConnectionThreadPoolExecutorSame() throws Exception {
+        // Extract Conn1 instance from CQSI1
+        ConnectionImplementation conn1 = extractConnectionFromCQSI(createCQSI("hello"));
+        // Extract batchPool from connection in CQSI1
+        ThreadPoolExecutor threadPoolExecutor1FromConnection = extractBatchPool(conn1);
+        // Create another CQSI2
+        ConnectionQueryServices connQueryServices2 = createCQSI("bye");
+        // Extract the ThreadPoolExecutor from CQSI2 instance
+        ThreadPoolExecutor threadPoolExecutor2 = extractThreadPoolExecutorFromCQSI(connQueryServices2);
+        // Extract Conn2 from CQSI2
+        ConnectionImplementation conn2 = extractConnectionFromCQSI(createCQSI("bye"));
+        // Extract batchPool from connection2 in CQSI2
+        ThreadPoolExecutor threadPoolExecutor2FromConnection = extractBatchPool(conn2);
+        // Check if ThreadPoolExecutor2 from CQSI and from Connection are Same
+        assertSame(threadPoolExecutor2, threadPoolExecutor2FromConnection);
+        // Check if threadPoolExecutor from connection1 and from conn2 are different
+        assertNotSame(threadPoolExecutor1FromConnection, threadPoolExecutor2FromConnection);
+
+        // Validate the properties for ThreadPoolExecutors
+        validateThreadPoolExecutor(threadPoolExecutor1FromConnection);
+        validateThreadPoolExecutor(threadPoolExecutor2FromConnection);
+        validateThreadPoolExecutor(threadPoolExecutor2);
+    }
+
+    private static ThreadPoolExecutor extractBatchPool(ConnectionImplementation conn) throws NoSuchFieldException, IllegalAccessException {
+        Field batchPoolField = conn.getClass().getDeclaredField("batchPool");
+        batchPoolField.setAccessible(true);
+        return (ThreadPoolExecutor) batchPoolField.get(conn);
+    }
+
+    @Test
     public void testMultipleCQSIThreadPoolsInParallel() throws Exception {
         ConnectionQueryServices cqsiExternal1  = createCQSI(CONN_QUERY_SERVICE_1);
         ConnectionQueryServices cqsiExternal2  = createCQSI(CONN_QUERY_SERVICE_2);
@@ -226,5 +258,11 @@ public class ConnectionQueryServicesImplThreadPoolIT extends BaseTest {
             e.printStackTrace();
             throw e;
         }
+    }
+
+    private ConnectionImplementation extractConnectionFromCQSI(ConnectionQueryServices cqsi) throws NoSuchFieldException, IllegalAccessException {
+        Field connectionField1 = cqsi.getClass().getDeclaredField("connection");
+        connectionField1.setAccessible(true);
+        return (ConnectionImplementation) connectionField1.get(cqsi);
     }
 }

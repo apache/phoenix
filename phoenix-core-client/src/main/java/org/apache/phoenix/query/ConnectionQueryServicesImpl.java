@@ -613,7 +613,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private Connection openConnection(Configuration conf) throws SQLException {
         Connection localConnection;
         try {
-            localConnection = HBaseFactoryProvider.getHConnectionFactory().createConnection(conf);
+            localConnection = HBaseFactoryProvider.getHConnectionFactory().createConnection(conf, threadPoolExecutor);
             GLOBAL_HCONNECTIONS_COUNTER.increment();
             LOGGER.info("HConnection established. Stacktrace for informational purposes: "
                     + localConnection + " " +  LogUtil.getCallerStackTrace());
@@ -791,6 +791,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     try {
                         tableStatsCache.invalidateAll();
                         super.close();
+                        shutdownThreadPool(this.threadPoolExecutor);
                     } catch (SQLException e) {
                         if (sqlE == null) {
                             sqlE = e;
@@ -801,6 +802,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         if (sqlE != null) { throw sqlE; }
                     }
                 }
+            }
+        }
+    }
+
+    // Based on org.apache.hadoop.hbase.client.ConnectionImplementation
+    private void shutdownThreadPool(ThreadPoolExecutor pool) {
+        if (pool != null && !pool.isShutdown()) {
+            pool.shutdown();
+            try {
+                if (!pool.awaitTermination(10, TimeUnit.SECONDS)) {
+                    pool.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                pool.shutdownNow();
             }
         }
     }
