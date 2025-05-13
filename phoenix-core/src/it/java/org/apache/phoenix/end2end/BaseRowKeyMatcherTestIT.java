@@ -26,8 +26,6 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.filter.BinaryComparator;
-import org.apache.hadoop.hbase.filter.BinaryComponentComparator;
 import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.PrefixFilter;
 import org.apache.hadoop.hbase.filter.RowFilter;
@@ -58,7 +56,6 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.ResultTuple;
-import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
@@ -73,14 +70,12 @@ import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.ViewUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -109,8 +104,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_LINK_HBASE_
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -664,7 +657,8 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
             }
             ;
         } catch (SQLException | IOException e) {
-            throw new RuntimeException(e);
+            LOGGER.info(e.getMessage());
+            fail();
         }
         return viewToRowKeyMap;
 
@@ -749,17 +743,18 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
             allRows.setFilter(andFilter);
             ResultScanner scanner = tbl.getScanner(allRows);
             int numMatchingRows = 0;
+            //TestUtil.dumpTable(connection, org.apache.hadoop.hbase.TableName.valueOf(hbaseTableName));
             for (Result result = scanner.next(); result != null; result = scanner.next()) {
                 rowkey = result.getRow();
                 numMatchingRows++;
             }
-            assertEquals(String.format("Expected rows do match for table = %s, rowId = %s",
-                    Bytes.toString(hbaseTableName), rowId), 1, numMatchingRows);
-
             PrefixFilter matchFilter = new PrefixFilter(prefix);
             LOGGER.debug(String.format("row-key = %s, tenantId = %s, prefix = %s, matched = %s",
                     Bytes.toStringBinary(rowkey), tenantId, Bytes.toStringBinary(prefix),
                     !matchFilter.filterRowKey(KeyValueUtil.createFirstOnRow(rowkey))));
+            assertEquals(String.format("Expected rows do match for table = %s, rowId = %s",
+                    Bytes.toString(hbaseTableName), rid), 1, numMatchingRows);
+
         }
     }
 
@@ -856,15 +851,6 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
             List<PDataType[]> testCases = getTestCases();
             SortOrder[][] sortOrders = getSortOrders();
 
-            try (Connection conn = DriverManager.getConnection(getUrl());
-                    Statement stmt = conn.createStatement()) {
-                //TestUtil.dumpTable(conn, TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES));
-                stmt.execute("CREATE INDEX IF NOT EXISTS SYS_VIEW_HDR_IDX ON SYSTEM.CATALOG(TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY) INCLUDE (TABLE_TYPE, VIEW_STATEMENT, TTL, ROW_KEY_MATCHER) WHERE TABLE_TYPE = 'v'");
-                stmt.execute("CREATE INDEX IF NOT EXISTS SYS_ROW_KEY_MATCHER_IDX ON SYSTEM.CATALOG(ROW_KEY_MATCHER, TTL, TABLE_TYPE, TENANT_ID, TABLE_SCHEM, TABLE_NAME) INCLUDE (VIEW_STATEMENT) WHERE TABLE_TYPE = 'v' AND ROW_KEY_MATCHER IS NOT NULL");
-                stmt.execute("CREATE INDEX IF NOT EXISTS SYS_VIEW_INDEX_HDR_IDX ON SYSTEM.CATALOG(DECODE_VIEW_INDEX_ID(VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE), TENANT_ID, TABLE_SCHEM, TABLE_NAME) INCLUDE(TABLE_TYPE, LINK_TYPE, VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE)  WHERE TABLE_TYPE = 'i' AND LINK_TYPE IS NULL AND VIEW_INDEX_ID IS NOT NULL");
-                conn.commit();
-            }
-
             String tableName = "";
             tableName = createViewHierarchy(
                     testCases, sortOrders, 500, 5000, 3,
@@ -879,7 +865,6 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
                     SchemaUtil.getTableNameFromFullName(tableName));
 
         } catch (Exception e) {
-            e.printStackTrace();
             LOGGER.error(e.getMessage());
         }
     }
@@ -928,7 +913,6 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
                     SchemaUtil.getTableNameFromFullName(tableName));
 
         } catch (Exception e) {
-            e.printStackTrace();
             LOGGER.error(e.getMessage());
         }
     }
@@ -965,7 +949,6 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
                     SchemaUtil.getTableNameFromFullName(tableName));
 
         } catch (Exception e) {
-            e.printStackTrace();
             LOGGER.error(e.getMessage());
         }
 
