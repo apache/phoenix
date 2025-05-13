@@ -490,16 +490,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
         // Without making a copy of the configuration we cons up, we lose some of our properties
         // on the server side during testing.
-        this.config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration(config);
+        Configuration finalConfig = HBaseFactoryProvider
+                                        .getConfigurationFactory().getConfiguration(config);
+        this.config = finalConfig;
 
-        if (this.config.getBoolean(CQSI_THREAD_POOL_ENABLED, DEFAULT_CQSI_THREAD_POOL_ENABLED)) {
-            final int keepAlive = this.config.getInt(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS,
+        if (finalConfig.getBoolean(CQSI_THREAD_POOL_ENABLED, DEFAULT_CQSI_THREAD_POOL_ENABLED)) {
+            final int keepAlive = finalConfig.getInt(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS,
                     DEFAULT_CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS);
-            final int corePoolSize = this.config.getInt(CQSI_THREAD_POOL_CORE_POOL_SIZE,
+            final int corePoolSize = finalConfig.getInt(CQSI_THREAD_POOL_CORE_POOL_SIZE,
                     DEFAULT_CQSI_THREAD_POOL_CORE_POOL_SIZE);
-            final int maxThreads = this.config.getInt(CQSI_THREAD_POOL_MAX_THREADS,
+            final int maxThreads = finalConfig.getInt(CQSI_THREAD_POOL_MAX_THREADS,
                     DEFAULT_CQSI_THREAD_POOL_MAX_THREADS);
-            final int maxQueue = this.config.getInt(CQSI_THREAD_POOL_MAX_QUEUE,
+            final int maxQueue = finalConfig.getInt(CQSI_THREAD_POOL_MAX_QUEUE,
                     DEFAULT_CQSI_THREAD_POOL_MAX_QUEUE);
             final String threadPoolName = connectionInfo.getPrincipal() != null
                     ? connectionInfo.getPrincipal()
@@ -517,7 +519,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                         .setUncaughtExceptionHandler(
                                                 Threads.LOGGING_EXCEPTION_HANDLER)
                                         .build());
-            this.threadPoolExecutor.allowCoreThreadTimeOut(this.config
+            this.threadPoolExecutor.allowCoreThreadTimeOut(finalConfig
                     .getBoolean(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT,
                     DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT));
         }
@@ -527,17 +529,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         LOGGER.info(
                 "CQS Configs {} = {} , {} = {} , {} = {} , {} = {} , {} = {} , {} = {} , {} = {}",
                 HConstants.ZOOKEEPER_QUORUM,
-                this.config.get(HConstants.ZOOKEEPER_QUORUM), HConstants.CLIENT_ZOOKEEPER_QUORUM,
-                this.config.get(HConstants.CLIENT_ZOOKEEPER_QUORUM),
+                finalConfig.get(HConstants.ZOOKEEPER_QUORUM), HConstants.CLIENT_ZOOKEEPER_QUORUM,
+                finalConfig.get(HConstants.CLIENT_ZOOKEEPER_QUORUM),
                 HConstants.CLIENT_ZOOKEEPER_CLIENT_PORT,
-                this.config.get(HConstants.CLIENT_ZOOKEEPER_CLIENT_PORT),
+                finalConfig.get(HConstants.CLIENT_ZOOKEEPER_CLIENT_PORT),
                 HConstants.ZOOKEEPER_CLIENT_PORT,
-                this.config.get(HConstants.ZOOKEEPER_CLIENT_PORT),
+                finalConfig.get(HConstants.ZOOKEEPER_CLIENT_PORT),
                 RPCConnectionInfo.BOOTSTRAP_NODES,
-                this.config.get(RPCConnectionInfo.BOOTSTRAP_NODES),
-                HConstants.MASTER_ADDRS_KEY, this.config.get(HConstants.MASTER_ADDRS_KEY),
+                finalConfig.get(RPCConnectionInfo.BOOTSTRAP_NODES),
+                HConstants.MASTER_ADDRS_KEY, finalConfig.get(HConstants.MASTER_ADDRS_KEY),
                 ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY,
-                this.config.get(ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY));
+                finalConfig.get(ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY));
 
         //Set the rpcControllerFactory if it is a server side connnection.
         boolean isServerSideConnection = config.getBoolean(QueryUtil.IS_SERVER_CONNECTION, false);
@@ -545,8 +547,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             this.serverSideRPCControllerFactory = new ServerSideRPCControllerFactory(config);
         }
         // set replication required parameter
-        ConfigUtil.setReplicationConfigIfAbsent(this.config);
-        this.props = new ReadOnlyProps(this.config.iterator());
+        ConfigUtil.setReplicationConfigIfAbsent(finalConfig);
+        this.props = new ReadOnlyProps(finalConfig.iterator());
         this.userName = connectionInfo.getPrincipal();
         this.user = connectionInfo.getUser();
         this.latestMetaData = newEmptyMetaData();
@@ -601,17 +603,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     .build();
         }
 
-        if (this.config.getBoolean(CLIENT_SIDE_METRICS_ENABLED_KEY, false)) {
+        if (finalConfig.getBoolean(CLIENT_SIDE_METRICS_ENABLED_KEY, false)) {
             // "hbase.client.metrics.scope" defined on
             // org.apache.hadoop.hbase.client.MetricsConnection#METRICS_SCOPE_KEY
             // however we cannot use the constant directly as long as we support HBase 2.4 profile.
-            this.config.set("hbase.client.metrics.scope", config.get(QUERY_SERVICES_NAME));
+            finalConfig.set("hbase.client.metrics.scope", config.get(QUERY_SERVICES_NAME));
         }
 
         if (!QueryUtil.isServerConnection(props)) {
             //Start queryDistruptor everytime as log level can be change at connection level as well, but we can avoid starting for server connections.
             try {
-                this.queryDisruptor = new QueryLoggerDisruptor(this.config);
+                this.queryDisruptor = new QueryLoggerDisruptor(finalConfig);
             } catch (SQLException e) {
                 LOGGER.warn("Unable to initiate query logging service !!");
                 e.printStackTrace();
