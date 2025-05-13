@@ -1986,11 +1986,14 @@ public class MetaDataClient {
         Properties props = connection.getClientInfo();
         props.put(INDEX_CREATE_DEFAULT_STATE, "ACTIVE");
 
+        String escapedDataTableFullName
+                = SchemaUtil.getFullTableNameWithQuotes(statement.getDataTable().getSchemaName(),
+                statement.getDataTable().getTableName(), true, true);
         String
                 createIndexSql =
                 "CREATE UNCOVERED INDEX " + (statement.isIfNotExists() ? "IF NOT EXISTS " : "")
                         + "\"" + CDCUtil.getCDCIndexName(cdcObjName)
-                        + "\" ON \"" + dataTableFullName + "\" ("
+                        + "\" ON " + escapedDataTableFullName + " ("
                         + PartitionIdFunction.NAME + "(), " + PhoenixRowTimestampFunction.NAME
                         + "()) ASYNC";
         List<String> indexProps = new ArrayList<>();
