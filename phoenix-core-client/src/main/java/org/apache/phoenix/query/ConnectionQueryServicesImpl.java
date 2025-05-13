@@ -489,7 +489,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         this.connectionInfo = connectionInfo;
 
         // Without making a copy of the configuration we cons up, we lose some of our properties
-        // on the server side during testing.
+        // on the server side during testing. This allows the application overridden
+        // ConfigurationFactory to inject/modify configs
         Configuration finalConfig = HBaseFactoryProvider
                                         .getConfigurationFactory().getConfiguration(config);
         this.config = finalConfig;
@@ -522,12 +523,25 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             this.threadPoolExecutor.allowCoreThreadTimeOut(finalConfig
                     .getBoolean(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT,
                     DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT));
+            LOGGER.info("For ConnectionQueryService = {} , " +
+                            "CQSI ThreadPool Configs {} = {}, {} = {}, {} = {}, {} = {}, {} = {}",
+                    threadPoolName,
+                    CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS,
+                    finalConfig.get(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS),
+                    CQSI_THREAD_POOL_CORE_POOL_SIZE,
+                    finalConfig.get(CQSI_THREAD_POOL_CORE_POOL_SIZE),
+                    CQSI_THREAD_POOL_MAX_THREADS,
+                    finalConfig.get(CQSI_THREAD_POOL_MAX_THREADS),
+                    CQSI_THREAD_POOL_MAX_QUEUE,
+                    finalConfig.get(CQSI_THREAD_POOL_MAX_QUEUE),
+                    CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT,
+                    finalConfig.get(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT));
         }
 
 
 
         LOGGER.info(
-                "CQS Configs {} = {} , {} = {} , {} = {} , {} = {} , {} = {} , {} = {} , {} = {}",
+                "CQS Configs {} = {} , {} = {} , {} = {} , {} = {} , {} = {} , {} = {} , {} = {}, {} = {}",
                 HConstants.ZOOKEEPER_QUORUM,
                 finalConfig.get(HConstants.ZOOKEEPER_QUORUM), HConstants.CLIENT_ZOOKEEPER_QUORUM,
                 finalConfig.get(HConstants.CLIENT_ZOOKEEPER_QUORUM),
@@ -539,7 +553,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 finalConfig.get(RPCConnectionInfo.BOOTSTRAP_NODES),
                 HConstants.MASTER_ADDRS_KEY, finalConfig.get(HConstants.MASTER_ADDRS_KEY),
                 ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY,
-                finalConfig.get(ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY));
+                finalConfig.get(ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY),
+                QueryServices.CQSI_THREAD_POOL_ENABLED,
+                finalConfig.get(QueryServices.CQSI_THREAD_POOL_ENABLED));
 
         //Set the rpcControllerFactory if it is a server side connnection.
         boolean isServerSideConnection = config.getBoolean(QueryUtil.IS_SERVER_CONNECTION, false);
