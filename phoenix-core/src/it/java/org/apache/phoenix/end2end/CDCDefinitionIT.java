@@ -129,6 +129,25 @@ public class CDCDefinitionIT extends CDCBaseIT {
     }
 
     @Test
+    public void testCreateCaseSensitiveTable() throws Exception {
+        Connection conn = newConnection();
+        String tableName = "\"" + generateUniqueName().toLowerCase() + "\"";
+        conn.createStatement().execute(
+                "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER,"
+                        + " v2 DATE) TTL=100");
+        if (forView) {
+            String viewName = "\"" + generateUniqueName().toLowerCase() + "\"";
+            conn.createStatement().execute(
+                    "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName);
+            tableName = viewName;
+        }
+        String cdcName = "\"" + generateUniqueName().toLowerCase() + "\"";
+        String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
+        conn.createStatement().execute(cdc_sql);
+        conn.createStatement().executeQuery("SELECT * FROM " + cdcName);
+    }
+
+    @Test
     public void testCreateWithSchemaName() throws Exception {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);

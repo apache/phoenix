@@ -227,7 +227,7 @@ public class QueryOptimizer {
         PTable table = dataPlan.getTableRef().getTable();
         if (table.getType() == PTableType.CDC) {
             NamedTableNode indexTableNode = FACTORY.namedTable(null,
-                    FACTORY.table(table.getSchemaName().getString(),
+                    TableName.create(table.getSchemaName().getString(),
                             CDCUtil.getCDCIndexName(table.getTableName().getString())),
                     select.getTableSamplingRate());
             indexResolver = FromCompiler.getResolver(indexTableNode,

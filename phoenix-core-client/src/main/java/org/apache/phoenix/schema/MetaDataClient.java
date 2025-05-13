@@ -1989,8 +1989,8 @@ public class MetaDataClient {
         String
                 createIndexSql =
                 "CREATE UNCOVERED INDEX " + (statement.isIfNotExists() ? "IF NOT EXISTS " : "")
-                        + CDCUtil.getCDCIndexName(cdcObjName)
-                        + " ON " + dataTableFullName + " ("
+                        + "\"" + CDCUtil.getCDCIndexName(cdcObjName)
+                        + "\" ON \"" + dataTableFullName + "\" ("
                         + PartitionIdFunction.NAME + "(), " + PhoenixRowTimestampFunction.NAME
                         + "()) ASYNC";
         List<String> indexProps = new ArrayList<>();
@@ -2041,7 +2041,7 @@ public class MetaDataClient {
             tableProps.put(TableProperty.MULTI_TENANT.getPropertyName(), Boolean.TRUE);
         }
         CreateTableStatement tableStatement = FACTORY.createTable(
-                FACTORY.table(dataTable.getSchemaName().getString(), cdcObjName),
+                FACTORY.table(dataTable.getSchemaName().getString(), statement.getCdcObjName().toString()),
                 null, columnDefs, FACTORY.primaryKey(null, pkColumnDefs),
                 Collections.emptyList(), PTableType.CDC, statement.isIfNotExists(), null, null,
                 statement.getBindCount(), null);
