@@ -147,7 +147,7 @@ public class ConnectionIT {
     public void testRPCConnections() throws SQLException {
         assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.5.0") >= 0);
         String masterHosts = conf.get(HConstants.MASTER_ADDRS_KEY);
-        // HBase does fall back to MasterRpcRegistry if the boostrap servers are not set, but
+        // HBase does fall back to MasterRpcRegistry if the bootstrap servers are not set, but
         // ConnectionInfo normalization does not handle that.
 
         // Set BOOTSTRAP_NODES so that we can test the default case
