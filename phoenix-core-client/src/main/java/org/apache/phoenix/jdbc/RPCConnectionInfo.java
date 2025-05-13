@@ -34,7 +34,8 @@ import org.apache.phoenix.util.ReadOnlyProps;
  */
 public class RPCConnectionInfo extends AbstractRPCConnectionInfo {
 
-    // We may be on an older HBase version, which does not even have RpcConnectionRegistry
+    // We may be compiling with an older HBase version, which does not even have
+    // RpcConnectionRegistry
     public static final String BOOTSTRAP_NODES = "hbase.client.bootstrap.servers";
     private static final String RPC_REGISTRY_CLASS_NAME =
             "org.apache.hadoop.hbase.client.RpcConnectionRegistry";
