@@ -149,9 +149,10 @@ public class CoerceExpression extends BaseSingleExpression {
     @Override
     public boolean isStateless() {
         // It is important to associate the stateless-ness of the CoerceExpression
-        // child with the CoerceExpression. Without this, ComparisonExpression used
-        // by WhereOptimizer would always select Full table scan even for the query
-        // that is supposed to use Range scan or Point lookup on the single row.
+        // child with the CoerceExpression. Without this, ComparisonExpression and
+        // KeyExpressionVisitor used by WhereOptimizer always select Full table scan
+        // even for the query that is supposed to use Range scan or Point lookup
+        // on the single row.
         // Jira: PHOENIX-7610.
         return getChild().isStateless();
     }
