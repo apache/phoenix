@@ -2502,10 +2502,13 @@ public class PTableImpl implements PTable {
     }
 
     private void buildIndexWhereExpression(PhoenixConnection connection) throws SQLException {
+        // escape the full table name to be able to compile the select query in case tablename had lowercase characters
         PhoenixPreparedStatement
                 pstmt =
                 new PhoenixPreparedStatement(connection,
-                        "select * from " + SchemaUtil.getTableName(parentSchemaName, parentTableName).getString() + " where " + indexWhere);
+                        "select * from "
+                                + SchemaUtil.getEscapedTableName(parentSchemaName.getString(), parentTableName.getString())
+                                + " where " + indexWhere);
         QueryPlan plan = pstmt.compileQuery();
         ParseNode where = plan.getStatement().getWhere();
         plan.getContext().setResolver(FromCompiler.getResolver(plan.getTableRef()));

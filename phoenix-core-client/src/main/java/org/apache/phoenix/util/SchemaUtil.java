@@ -929,13 +929,13 @@ public class SchemaUtil {
     
     /**
      * Replaces all occurrences of {@link #ESCAPE_CHARACTER} with an empty character. 
-     * @param fullColumnName
+     * @param fullName
      * @return 
      */
-    public static String getUnEscapedFullColumnName(String fullColumnName) {
-        checkArgument(!isNullOrEmpty(fullColumnName), "Column name cannot be null or empty");
-        fullColumnName = fullColumnName.replaceAll(ESCAPE_CHARACTER, "");
-       	return fullColumnName.trim();
+    public static String getUnEscapedFullName(String fullName) {
+        checkArgument(!isNullOrEmpty(fullName), "Given name cannot be null or empty");
+        fullName = fullName.replaceAll(ESCAPE_CHARACTER, "");
+       	return fullName.trim();
     }
     
     /**
