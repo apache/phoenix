@@ -124,7 +124,6 @@ import java.util.Objects;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
@@ -494,18 +493,32 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         this.config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration(config);
 
         if (this.config.getBoolean(CQSI_THREAD_POOL_ENABLED, DEFAULT_CQSI_THREAD_POOL_ENABLED)) {
-            final int keepAlive = this.config.getInt(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS, DEFAULT_CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS);
-            final int corePoolSize = this.config.getInt(CQSI_THREAD_POOL_CORE_POOL_SIZE, DEFAULT_CQSI_THREAD_POOL_CORE_POOL_SIZE);
-            final int maxThreads = this.config.getInt(CQSI_THREAD_POOL_MAX_THREADS, DEFAULT_CQSI_THREAD_POOL_MAX_THREADS);
-            final int maxQueue = this.config.getInt(CQSI_THREAD_POOL_MAX_QUEUE, DEFAULT_CQSI_THREAD_POOL_MAX_QUEUE);
-            final String threadPoolName = connectionInfo.getPrincipal() != null ? connectionInfo.getPrincipal() : DEFAULT_QUERY_SERVICES_NAME;
-            // Based on implementations used in org.apache.hadoop.hbase.client.ConnectionImplementation
+            final int keepAlive = this.config.getInt(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS,
+                    DEFAULT_CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS);
+            final int corePoolSize = this.config.getInt(CQSI_THREAD_POOL_CORE_POOL_SIZE,
+                    DEFAULT_CQSI_THREAD_POOL_CORE_POOL_SIZE);
+            final int maxThreads = this.config.getInt(CQSI_THREAD_POOL_MAX_THREADS,
+                    DEFAULT_CQSI_THREAD_POOL_MAX_THREADS);
+            final int maxQueue = this.config.getInt(CQSI_THREAD_POOL_MAX_QUEUE,
+                    DEFAULT_CQSI_THREAD_POOL_MAX_QUEUE);
+            final String threadPoolName = connectionInfo.getPrincipal() != null
+                    ? connectionInfo.getPrincipal()
+                    : DEFAULT_QUERY_SERVICES_NAME;
+            // Based on implementations used in
+            // org.apache.hadoop.hbase.client.ConnectionImplementation
             final BlockingQueue<Runnable> workQueue = new LinkedBlockingQueue<>(maxQueue);
             this.threadPoolExecutor =
-                    new ThreadPoolExecutor(corePoolSize, maxThreads, keepAlive, TimeUnit.SECONDS, workQueue,
-                            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("CQSI-" + threadPoolName + "-" + threadPoolNumber.incrementAndGet()  + "-shared-pool-%d")
-                                    .setUncaughtExceptionHandler(Threads.LOGGING_EXCEPTION_HANDLER).build());
-            this.threadPoolExecutor.allowCoreThreadTimeOut(this.config.getBoolean(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT,
+                    new ThreadPoolExecutor(corePoolSize, maxThreads, keepAlive, TimeUnit.SECONDS,
+                            workQueue, new ThreadFactoryBuilder()
+                                        .setDaemon(true)
+                                        .setNameFormat("CQSI-" + threadPoolName
+                                                + "-" + threadPoolNumber.incrementAndGet()
+                                                + "-shared-pool-%d")
+                                        .setUncaughtExceptionHandler(
+                                                Threads.LOGGING_EXCEPTION_HANDLER)
+                                        .build());
+            this.threadPoolExecutor.allowCoreThreadTimeOut(this.config
+                    .getBoolean(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT,
                     DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT));
         }
 
@@ -613,7 +626,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private Connection openConnection(Configuration conf) throws SQLException {
         Connection localConnection;
         try {
-            localConnection = HBaseFactoryProvider.getHConnectionFactory().createConnection(conf, threadPoolExecutor);
+            localConnection = HBaseFactoryProvider.getHConnectionFactory()
+                    .createConnection(conf, threadPoolExecutor);
             GLOBAL_HCONNECTIONS_COUNTER.increment();
             LOGGER.info("HConnection established. Stacktrace for informational purposes: "
                     + localConnection + " " +  LogUtil.getCallerStackTrace());

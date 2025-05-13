@@ -46,7 +46,8 @@ public interface HConnectionFactory {
      * @param pool object
      * @return A HConnection instance
      */
-    default Connection createConnection(Configuration conf, ExecutorService pool) throws IOException {
+    default Connection createConnection(Configuration conf, ExecutorService pool)
+            throws IOException {
         return createConnection(conf);
     }
 
@@ -60,7 +61,8 @@ public interface HConnectionFactory {
         }
 
         @Override
-        public Connection createConnection(Configuration conf, ExecutorService pool) throws IOException {
+        public Connection createConnection(Configuration conf, ExecutorService pool)
+                throws IOException {
             return ConnectionFactory.createConnection(conf, pool);
         }
     }
