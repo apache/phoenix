@@ -2044,7 +2044,7 @@ public class MetaDataClient {
             tableProps.put(TableProperty.MULTI_TENANT.getPropertyName(), Boolean.TRUE);
         }
         CreateTableStatement tableStatement = FACTORY.createTable(
-                FACTORY.table(dataTable.getSchemaName().getString(), statement.getCdcObjName().toString()),
+                TableName.create(dataTable.getSchemaName().getString(), cdcObjName),
                 null, columnDefs, FACTORY.primaryKey(null, pkColumnDefs),
                 Collections.emptyList(), PTableType.CDC, statement.isIfNotExists(), null, null,
                 statement.getBindCount(), null);
