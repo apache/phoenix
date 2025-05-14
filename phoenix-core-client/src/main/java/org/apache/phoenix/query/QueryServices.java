@@ -384,6 +384,16 @@ public interface QueryServices extends SQLCloseable {
     public static final String PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT = "phoenix.view.ttl.tenant_views_per_scan.limit";
     // Block mutations based on cluster role record
     public static final String CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED = "phoenix.cluster.role.based.mutation.block.enabled";
+    //Enable Thread Pool Creation in CQSI to be used for HBase Client.
+    String CQSI_THREAD_POOL_ENABLED = "phoenix.cqsi.thread.pool.enabled";
+    //CQSI Thread Pool Related Configuration.
+    String CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS = "phoenix.cqsi.thread.pool.keepalive.seconds";
+    String CQSI_THREAD_POOL_CORE_POOL_SIZE = "phoenix.cqsi.thread.pool.core.size";
+    String CQSI_THREAD_POOL_MAX_THREADS = "phoenix.cqsi.thread.pool.max.threads";
+    String CQSI_THREAD_POOL_MAX_QUEUE = "phoenix.cqsi.thread.pool.max.queue";
+    // Enables https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ThreadPoolExecutor.html#allowCoreThreadTimeOut-boolean-
+    String CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT
+            = "phoenix.cqsi.thread.pool.allow.core.thread.timeout";
 
     // Before 4.15 when we created a view we included the parent table column metadata in the view
     // metadata. After PHOENIX-3534 we allow SYSTEM.CATALOG to split and no longer store the parent

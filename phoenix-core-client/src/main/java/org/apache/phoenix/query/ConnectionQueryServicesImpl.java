@@ -81,11 +81,17 @@ import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_ENABLED;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_POOL_ENABLED;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_POOL_MAX_QUEUE;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_POOL_MAX_THREADS;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_POOL_CORE_POOL_SIZE;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_QUERY_SERVICES_NAME;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THRESHOLD_MILLISECONDS;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SYSTEM_CATALOG_INDEXES_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TIMEOUT_DURING_UPGRADE_MS;
 import static org.apache.phoenix.util.UpgradeUtil.addParentToChildLinks;
 import static org.apache.phoenix.util.UpgradeUtil.addViewIndexToParentLinks;
@@ -118,6 +124,7 @@ import java.util.Objects;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -132,6 +139,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -185,6 +193,7 @@ import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.hadoop.hbase.util.Threads;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
 import org.apache.hadoop.ipc.RemoteException;
@@ -417,6 +426,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private Connection invalidateMetadataCacheConnection = null;
     private final Object invalidateMetadataCacheConnLock = new Object();
     private MetricsMetadataCachingSource metricsMetadataCachingSource;
+    private ThreadPoolExecutor threadPoolExecutor = null;
+    private static final AtomicInteger threadPoolNumber = new AtomicInteger(1);
     public static final String INVALIDATE_SERVER_METADATA_CACHE_EX_MESSAGE =
             "Cannot invalidate server metadata cache on a non-server connection";
 
@@ -451,9 +462,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     /**
      * Construct a ConnectionQueryServicesImpl that represents a connection to an HBase
      * cluster.
-     * @param services base services from where we derive our default configuration
+     *
+     * @param services       base services from where we derive our default configuration
      * @param connectionInfo to provide connection information
-     * @param info hbase configuration properties
+     * @param info           hbase configuration properties
      */
     public ConnectionQueryServicesImpl(QueryServices services, ConnectionInfo connectionInfo, Properties info) {
         super(services);
@@ -477,23 +489,73 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         this.connectionInfo = connectionInfo;
 
         // Without making a copy of the configuration we cons up, we lose some of our properties
-        // on the server side during testing.
-        this.config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration(config);
+        // on the server side during testing. This allows the application overridden
+        // ConfigurationFactory to inject/modify configs
+        Configuration finalConfig = HBaseFactoryProvider
+                                        .getConfigurationFactory().getConfiguration(config);
+        this.config = finalConfig;
+
+        if (finalConfig.getBoolean(CQSI_THREAD_POOL_ENABLED, DEFAULT_CQSI_THREAD_POOL_ENABLED)) {
+            final int keepAlive = finalConfig.getInt(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS,
+                    DEFAULT_CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS);
+            final int corePoolSize = finalConfig.getInt(CQSI_THREAD_POOL_CORE_POOL_SIZE,
+                    DEFAULT_CQSI_THREAD_POOL_CORE_POOL_SIZE);
+            final int maxThreads = finalConfig.getInt(CQSI_THREAD_POOL_MAX_THREADS,
+                    DEFAULT_CQSI_THREAD_POOL_MAX_THREADS);
+            final int maxQueue = finalConfig.getInt(CQSI_THREAD_POOL_MAX_QUEUE,
+                    DEFAULT_CQSI_THREAD_POOL_MAX_QUEUE);
+            final String threadPoolName = connectionInfo.getPrincipal() != null
+                    ? connectionInfo.getPrincipal()
+                    : DEFAULT_QUERY_SERVICES_NAME;
+            // Based on implementations used in
+            // org.apache.hadoop.hbase.client.ConnectionImplementation
+            final BlockingQueue<Runnable> workQueue = new LinkedBlockingQueue<>(maxQueue);
+            this.threadPoolExecutor =
+                    new ThreadPoolExecutor(corePoolSize, maxThreads, keepAlive, TimeUnit.SECONDS,
+                            workQueue, new ThreadFactoryBuilder()
+                                        .setDaemon(true)
+                                        .setNameFormat("CQSI-" + threadPoolName
+                                                + "-" + threadPoolNumber.incrementAndGet()
+                                                + "-shared-pool-%d")
+                                        .setUncaughtExceptionHandler(
+                                                Threads.LOGGING_EXCEPTION_HANDLER)
+                                        .build());
+            this.threadPoolExecutor.allowCoreThreadTimeOut(finalConfig
+                    .getBoolean(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT,
+                    DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT));
+            LOGGER.info("For ConnectionQueryService = {} , " +
+                            "CQSI ThreadPool Configs {} = {}, {} = {}, {} = {}, {} = {}, {} = {}",
+                    threadPoolName,
+                    CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS,
+                    finalConfig.get(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS),
+                    CQSI_THREAD_POOL_CORE_POOL_SIZE,
+                    finalConfig.get(CQSI_THREAD_POOL_CORE_POOL_SIZE),
+                    CQSI_THREAD_POOL_MAX_THREADS,
+                    finalConfig.get(CQSI_THREAD_POOL_MAX_THREADS),
+                    CQSI_THREAD_POOL_MAX_QUEUE,
+                    finalConfig.get(CQSI_THREAD_POOL_MAX_QUEUE),
+                    CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT,
+                    finalConfig.get(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT));
+        }
+
+
 
         LOGGER.info(
-                "CQS Configs {} = {} , {} = {} , {} = {} , {} = {} , {} = {} , {} = {} , {} = {}",
+                "CQS Configs {} = {} , {} = {} , {} = {} , {} = {} , {} = {} , {} = {} , {} = {}, {} = {}",
                 HConstants.ZOOKEEPER_QUORUM,
-                this.config.get(HConstants.ZOOKEEPER_QUORUM), HConstants.CLIENT_ZOOKEEPER_QUORUM,
-                this.config.get(HConstants.CLIENT_ZOOKEEPER_QUORUM),
+                finalConfig.get(HConstants.ZOOKEEPER_QUORUM), HConstants.CLIENT_ZOOKEEPER_QUORUM,
+                finalConfig.get(HConstants.CLIENT_ZOOKEEPER_QUORUM),
                 HConstants.CLIENT_ZOOKEEPER_CLIENT_PORT,
-                this.config.get(HConstants.CLIENT_ZOOKEEPER_CLIENT_PORT),
+                finalConfig.get(HConstants.CLIENT_ZOOKEEPER_CLIENT_PORT),
                 HConstants.ZOOKEEPER_CLIENT_PORT,
-                this.config.get(HConstants.ZOOKEEPER_CLIENT_PORT),
+                finalConfig.get(HConstants.ZOOKEEPER_CLIENT_PORT),
                 RPCConnectionInfo.BOOTSTRAP_NODES,
-                this.config.get(RPCConnectionInfo.BOOTSTRAP_NODES),
-                HConstants.MASTER_ADDRS_KEY, this.config.get(HConstants.MASTER_ADDRS_KEY),
+                finalConfig.get(RPCConnectionInfo.BOOTSTRAP_NODES),
+                HConstants.MASTER_ADDRS_KEY, finalConfig.get(HConstants.MASTER_ADDRS_KEY),
                 ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY,
-                this.config.get(ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY));
+                finalConfig.get(ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY),
+                QueryServices.CQSI_THREAD_POOL_ENABLED,
+                finalConfig.get(QueryServices.CQSI_THREAD_POOL_ENABLED));
 
         //Set the rpcControllerFactory if it is a server side connnection.
         boolean isServerSideConnection = config.getBoolean(QueryUtil.IS_SERVER_CONNECTION, false);
@@ -501,8 +563,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             this.serverSideRPCControllerFactory = new ServerSideRPCControllerFactory(config);
         }
         // set replication required parameter
-        ConfigUtil.setReplicationConfigIfAbsent(this.config);
-        this.props = new ReadOnlyProps(this.config.iterator());
+        ConfigUtil.setReplicationConfigIfAbsent(finalConfig);
+        this.props = new ReadOnlyProps(finalConfig.iterator());
         this.userName = connectionInfo.getPrincipal();
         this.user = connectionInfo.getUser();
         this.latestMetaData = newEmptyMetaData();
@@ -557,17 +619,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     .build();
         }
 
-        if (this.config.getBoolean(CLIENT_SIDE_METRICS_ENABLED_KEY, false)) {
+        if (finalConfig.getBoolean(CLIENT_SIDE_METRICS_ENABLED_KEY, false)) {
             // "hbase.client.metrics.scope" defined on
             // org.apache.hadoop.hbase.client.MetricsConnection#METRICS_SCOPE_KEY
             // however we cannot use the constant directly as long as we support HBase 2.4 profile.
-            this.config.set("hbase.client.metrics.scope", config.get(QUERY_SERVICES_NAME));
+            finalConfig.set("hbase.client.metrics.scope", config.get(QUERY_SERVICES_NAME));
         }
 
         if (!QueryUtil.isServerConnection(props)) {
             //Start queryDistruptor everytime as log level can be change at connection level as well, but we can avoid starting for server connections.
             try {
-                this.queryDisruptor = new QueryLoggerDisruptor(this.config);
+                this.queryDisruptor = new QueryLoggerDisruptor(finalConfig);
             } catch (SQLException e) {
                 LOGGER.warn("Unable to initiate query logging service !!");
                 e.printStackTrace();
@@ -582,7 +644,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private Connection openConnection(Configuration conf) throws SQLException {
         Connection localConnection;
         try {
-            localConnection = HBaseFactoryProvider.getHConnectionFactory().createConnection(conf);
+            localConnection = HBaseFactoryProvider.getHConnectionFactory()
+                    .createConnection(conf, threadPoolExecutor);
             GLOBAL_HCONNECTIONS_COUNTER.increment();
             LOGGER.info("HConnection established. Stacktrace for informational purposes: "
                     + localConnection + " " +  LogUtil.getCallerStackTrace());
@@ -634,7 +697,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public Table getTable(byte[] tableName) throws SQLException {
         try {
             return HBaseFactoryProvider.getHTableFactory().getTable(tableName,
-                connection, null);
+                connection, threadPoolExecutor);
         } catch (IOException e) {
             throw new SQLException(e);
         }
@@ -760,6 +823,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     try {
                         tableStatsCache.invalidateAll();
                         super.close();
+                        shutdownThreadPool(this.threadPoolExecutor);
                     } catch (SQLException e) {
                         if (sqlE == null) {
                             sqlE = e;
@@ -770,6 +834,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         if (sqlE != null) { throw sqlE; }
                     }
                 }
+            }
+        }
+    }
+
+    // Based on org.apache.hadoop.hbase.client.ConnectionImplementation
+    private void shutdownThreadPool(ThreadPoolExecutor pool) {
+        if (pool != null && !pool.isShutdown()) {
+            pool.shutdown();
+            try {
+                if (!pool.awaitTermination(10, TimeUnit.SECONDS)) {
+                    pool.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                pool.shutdownNow();
             }
         }
     }
