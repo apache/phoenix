@@ -47,9 +47,11 @@ public interface HTableFactory {
      */
     static class HTableFactoryImpl implements HTableFactory {
         @Override
-        public Table getTable(byte[] tableName, Connection connection, ExecutorService pool) throws IOException {
-            // Let the HBase client manage the thread pool instead of passing ours through
-            return connection.getTable(TableName.valueOf(tableName));
+        public Table getTable(byte[] tableName, Connection connection, ExecutorService pool)
+                throws IOException {
+            // If CQSI_THREAD_POOL_ENABLED then we pass ExecutorService created in CQSI to
+            // HBase Client, else it is null(default), let the HBase client manage the thread pool
+            return connection.getTable(TableName.valueOf(tableName), pool);
         }
     }
 }
