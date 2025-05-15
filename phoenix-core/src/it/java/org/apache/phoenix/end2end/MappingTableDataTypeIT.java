@@ -60,15 +60,15 @@ public class MappingTableDataTypeIT extends ParallelStatsDisabledIT {
         PhoenixConnection conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
         
         Admin admin = conn.getQueryServices().getAdmin();
+        Table t = null;
         try {
             // Create table then get the single region for our new table.
             TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(tableName);
             builder.setColumnFamily(ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("cf1")))
                     .setColumnFamily(ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("cf2")));
             admin.createTable(builder.build());
-            Table t = conn.getQueryServices().getTable(Bytes.toBytes(mtest));
+            t = conn.getQueryServices().getTable(Bytes.toBytes(mtest));
             insertData(tableName.getName(), admin, t);
-            t.close();
             // create phoenix table that maps to existing HBase table
             createPhoenixTable(mtest);
             
@@ -100,6 +100,9 @@ public class MappingTableDataTypeIT extends ParallelStatsDisabledIT {
             assertEquals("Column Value", "value2", Bytes.toString(kvs.get(0).getValueArray(), kvs.get(0).getValueOffset(), kvs.get(0).getValueLength()));
             assertNull("Expected single row", results.next());
         } finally {
+            if(t != null) {
+                t.close();
+            }
             admin.close();
         }
     }
