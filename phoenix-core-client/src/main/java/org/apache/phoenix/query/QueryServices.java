@@ -367,6 +367,16 @@ public interface QueryServices extends SQLCloseable {
     public static final String PHOENIX_TABLE_TTL_ENABLED = "phoenix.table.ttl.enabled";
     // Copied here to avoid dependency on hbase-server
     public static final String WAL_EDIT_CODEC_ATTRIB = "hbase.regionserver.wal.codec";
+    //Enable Thread Pool Creation in CQSI to be used for HBase Client.
+    String CQSI_THREAD_POOL_ENABLED = "phoenix.cqsi.thread.pool.enabled";
+    //CQSI Thread Pool Related Configuration.
+    String CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS = "phoenix.cqsi.thread.pool.keepalive.seconds";
+    String CQSI_THREAD_POOL_CORE_POOL_SIZE = "phoenix.cqsi.thread.pool.core.size";
+    String CQSI_THREAD_POOL_MAX_THREADS = "phoenix.cqsi.thread.pool.max.threads";
+    String CQSI_THREAD_POOL_MAX_QUEUE = "phoenix.cqsi.thread.pool.max.queue";
+    // Enables https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ThreadPoolExecutor.html#allowCoreThreadTimeOut-boolean-
+    String CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT
+            = "phoenix.cqsi.thread.pool.allow.core.thread.timeout";
 
     // Before 4.15 when we created a view we included the parent table column metadata in the view
     // metadata. After PHOENIX-3534 we allow SYSTEM.CATALOG to split and no longer store the parent

@@ -34,12 +34,21 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_PARALL
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_PARALLEL_POOL2_TASK_EXECUTION_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_PARALLEL_POOL2_TASK_QUEUE_WAIT_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_PARALLEL_POOL2_TASK_REJECTED_COUNTER;
+import static org.apache.phoenix.query.BaseTest.extractThreadPoolExecutorFromCQSI;
 import static org.apache.phoenix.query.QueryServices.AUTO_COMMIT_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_CORE_POOL_SIZE;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ENABLED;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_MAX_QUEUE;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_MAX_THREADS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.lang.reflect.Field;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -49,6 +58,8 @@ import java.sql.Statement;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadPoolExecutor;
+
 
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
@@ -100,6 +111,13 @@ public class ParallelPhoenixConnectionIT {
         GLOBAL_PROPERTIES.setProperty(AUTO_COMMIT_ATTRIB, "true");
         GLOBAL_PROPERTIES.setProperty(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
         GLOBAL_PROPERTIES.setProperty(QueryServices.LOG_LEVEL, LogLevel.DEBUG.name()); //Need logging for query metrics
+        GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_ENABLED, String.valueOf(true));
+        GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS, String.valueOf(13));
+        GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_CORE_POOL_SIZE, String.valueOf(17));
+        GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_MAX_THREADS, String.valueOf(19));
+        GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_MAX_QUEUE, String.valueOf(23));
+        GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT, String.valueOf(true));
+
     }
 
     @AfterClass
@@ -160,6 +178,40 @@ public class ParallelPhoenixConnectionIT {
             cqsiFromConn = pConn.getQueryServices();
             Assert.assertEquals(HBaseTestingUtilityPair.PRINCIPAL, cqsiFromConn.getUserName());
             Assert.assertTrue(cqsi == cqsiFromConn);
+        }
+    }
+
+    @Test
+    public void testDifferentCQSIThreadPoolsForParallelConnection() throws Exception {
+        try (Connection conn = getParallelConnection()) {
+            ParallelPhoenixConnection pr = conn.unwrap(ParallelPhoenixConnection.class);
+            PhoenixConnection pConn;
+            PhoenixConnection pConn2;
+            if (CLUSTERS.getJdbcUrl1().equals(pr.getFutureConnection1().get().getURL())) {
+                pConn = pr.getFutureConnection1().get();
+                pConn2 = pr.getFutureConnection2().get();
+            } else {
+                pConn = pr.getFutureConnection2().get();
+                pConn2 = pr.getFutureConnection1().get();
+            }
+
+            // verify connection#1
+            ConnectionQueryServices cqsi = PhoenixDriver.INSTANCE.getConnectionQueryServices(CLUSTERS.getJdbcUrl1(), clientProperties);
+            ConnectionQueryServices cqsiFromConn = pConn.getQueryServices();
+            // Check that same ThreadPoolExecutor object is used for CQSIs
+            ThreadPoolExecutor threadPoolExecutor1 = extractThreadPoolExecutorFromCQSI(cqsi);
+            Assert.assertSame(threadPoolExecutor1, extractThreadPoolExecutorFromCQSI(cqsiFromConn));
+
+            // verify connection#2
+            cqsi = PhoenixDriver.INSTANCE.getConnectionQueryServices(CLUSTERS.getJdbcUrl2(), clientProperties);
+            cqsiFromConn = pConn2.getQueryServices();
+            Assert.assertSame(cqsi, cqsiFromConn);
+            // Check that same ThreadPoolExecutor object is used for CQSIs
+            ThreadPoolExecutor threadPoolExecutor2 = extractThreadPoolExecutorFromCQSI(cqsi);
+            Assert.assertSame(extractThreadPoolExecutorFromCQSI(cqsi), extractThreadPoolExecutorFromCQSI(cqsiFromConn));
+
+            // Check that both threadPools for parallel connections are different.
+            assertNotSame(threadPoolExecutor1, threadPoolExecutor2);
         }
     }
 

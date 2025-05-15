@@ -82,6 +82,7 @@ import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -109,6 +110,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -2161,5 +2163,11 @@ public abstract class BaseTest {
             }
         }
         return false;
+    }
+
+    public static ThreadPoolExecutor extractThreadPoolExecutorFromCQSI(final ConnectionQueryServices cqs) throws NoSuchFieldException, IllegalAccessException {
+        Field props = cqs.getClass().getDeclaredField("threadPoolExecutor");
+        props.setAccessible(true);
+        return (ThreadPoolExecutor) props.get(cqs);
     }
 }
