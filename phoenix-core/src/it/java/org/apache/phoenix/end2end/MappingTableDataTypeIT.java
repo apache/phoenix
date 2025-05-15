@@ -100,6 +100,7 @@ public class MappingTableDataTypeIT extends ParallelStatsDisabledIT {
             assertEquals("Column Value", "value2", Bytes.toString(kvs.get(0).getValueArray(), kvs.get(0).getValueOffset(), kvs.get(0).getValueLength()));
             assertNull("Expected single row", results.next());
         } finally {
+            // We should close the table only after we are done using it.
             if(t != null) {
                 t.close();
             }
