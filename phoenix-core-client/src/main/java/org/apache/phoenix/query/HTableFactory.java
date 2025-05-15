@@ -51,9 +51,6 @@ public interface HTableFactory {
                 throws IOException {
             // If CQSI_THREAD_POOL_ENABLED then we pass ExecutorService created in CQSI to
             // HBase Client, else it is null(default), let the HBase client manage the thread pool
-            // There is a difference between these 2 implementations in HBase Client Code and when
-            // the pool is terminated on HTable close()
-            // So we need to use these 2 implementations based on value of pool.
             return connection.getTable(TableName.valueOf(tableName), pool);
         }
     }
