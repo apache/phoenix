@@ -299,14 +299,8 @@ public class CDCQueryIT extends CDCBaseIT {
     @Test
     public void testSelectCDC() throws Exception {
         String cdcName, cdc_sql;
-        String schemaName = withSchemaName
-                ? caseSensitiveNames
-                    ? SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase())
-                    : generateUniqueName()
-                : null;
-        String tableName = caseSensitiveNames
-                ? SchemaUtil.getTableName(schemaName, SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase()))
-                : SchemaUtil.getTableName(schemaName, generateUniqueName());
+        String schemaName = getSchemaName();
+        String tableName = getTableOrViewName(schemaName);
         String datatableName = tableName;
         try (Connection conn = newConnection()) {
             createTable(conn, "CREATE TABLE  " + tableName + " ("
@@ -315,16 +309,12 @@ public class CDCQueryIT extends CDCBaseIT {
                     + "CONSTRAINT PK PRIMARY KEY " + (multitenant ? "(TENANT_ID, k) " : "(k)")
                     + ")", encodingScheme, multitenant, tableSaltBuckets, false, null);
             if (forView) {
-                String viewName = caseSensitiveNames
-                                    ? SchemaUtil.getTableName(schemaName,  SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase()))
-                                    : SchemaUtil.getTableName(schemaName, generateUniqueName());
+                String viewName = getTableOrViewName(schemaName);
                 createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
                         encodingScheme);
                 tableName = viewName;
             }
-            cdcName = caseSensitiveNames
-                        ? SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase())
-                        : generateUniqueName();
+            cdcName = getCDCName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
             createCDC(conn, cdc_sql, encodingScheme);
         }
@@ -438,14 +428,8 @@ public class CDCQueryIT extends CDCBaseIT {
     @Test
     public void testSelectGeneric() throws Exception {
         String cdcName, cdc_sql;
-        String schemaName = withSchemaName
-                ? caseSensitiveNames
-                ? SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase())
-                : generateUniqueName()
-                : null;
-        String tableName = caseSensitiveNames
-                ? SchemaUtil.getTableName(schemaName, SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase()))
-                : SchemaUtil.getTableName(schemaName, generateUniqueName());
+        String schemaName = getSchemaName();
+        String tableName = getTableOrViewName(schemaName);
         String datatableName = tableName;
         Map<String, String> pkColumns = new TreeMap<String, String>() {{
             put("K1", "INTEGER");
@@ -475,9 +459,7 @@ public class CDCQueryIT extends CDCBaseIT {
                         encodingScheme);
                 tableName = viewName;
             }
-            cdcName = caseSensitiveNames
-                    ? SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase())
-                    : generateUniqueName();
+            cdcName = getCDCName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName + " INCLUDE (change)";
             createCDC(conn, cdc_sql, encodingScheme);
         }
@@ -551,14 +533,8 @@ public class CDCQueryIT extends CDCBaseIT {
     private void _testSelectCDCImmutable(PTable.ImmutableStorageScheme immutableStorageScheme)
             throws Exception {
         String cdcName, cdc_sql;
-        String schemaName = withSchemaName
-                ? caseSensitiveNames
-                ? SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase())
-                : generateUniqueName()
-                : null;
-        String tableName = caseSensitiveNames
-                ? SchemaUtil.getTableName(schemaName, SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase()))
-                : SchemaUtil.getTableName(schemaName, generateUniqueName());
+        String schemaName = getSchemaName();
+        String tableName = getTableOrViewName(schemaName);
         String datatableName = tableName;
         try (Connection conn = newConnection()) {
            createTable(conn, "CREATE TABLE  " + tableName + " (" +
@@ -567,17 +543,13 @@ public class CDCQueryIT extends CDCBaseIT {
                             (multitenant ? "(TENANT_ID, k) " : "(k)") + ")", encodingScheme, multitenant,
                     tableSaltBuckets, true, immutableStorageScheme);
             if (forView) {
-                String viewName = caseSensitiveNames
-                        ? SchemaUtil.getTableName(schemaName,  SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase()))
-                        : SchemaUtil.getTableName(schemaName, generateUniqueName());
+                String viewName = getTableOrViewName(schemaName);
 
                 createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
                         encodingScheme);
                 tableName = viewName;
             }
-            cdcName = caseSensitiveNames
-                    ? SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase())
-                    : generateUniqueName();
+            cdcName = getCDCName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
 
             createCDC(conn, cdc_sql, encodingScheme);
@@ -634,14 +606,8 @@ public class CDCQueryIT extends CDCBaseIT {
     @Test
     public void testSelectWithTimeRange() throws Exception {
         String cdcName, cdc_sql;
-        String schemaName = withSchemaName
-                ? caseSensitiveNames
-                ? SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase())
-                : generateUniqueName()
-                : null;
-        String tableName = caseSensitiveNames
-                ? SchemaUtil.getTableName(schemaName, SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase()))
-                : SchemaUtil.getTableName(schemaName, generateUniqueName());
+        String schemaName = getSchemaName();
+        String tableName = getTableOrViewName(schemaName);
         String datatableName = tableName;
         Map<String, String> pkColumns = new TreeMap<String, String>() {{
             put("K1", "INTEGER");
@@ -653,16 +619,12 @@ public class CDCQueryIT extends CDCBaseIT {
             createTable(conn, tableName, pkColumns, dataColumns, multitenant, encodingScheme,
                     tableSaltBuckets, false, null);
             if (forView) {
-                String viewName = caseSensitiveNames
-                        ? SchemaUtil.getTableName(schemaName,  SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase()))
-                        : SchemaUtil.getTableName(schemaName, generateUniqueName());
+                String viewName = getTableOrViewName(schemaName);
                 createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
                         encodingScheme);
                 tableName = viewName;
             }
-            cdcName = caseSensitiveNames
-                    ? SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase())
-                    : generateUniqueName();
+            cdcName = getCDCName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName + " INCLUDE (change)";
             createCDC(conn, cdc_sql, encodingScheme);
             cdcIndexShouldNotBeUsedForDataTableQueries(conn, tableName,cdcName);
@@ -720,14 +682,8 @@ public class CDCQueryIT extends CDCBaseIT {
 
     @Test
     public void testSelectCDCWithDDL() throws Exception {
-        String schemaName = withSchemaName
-                ? caseSensitiveNames
-                ? SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase())
-                : generateUniqueName()
-                : null;
-        String tableName = caseSensitiveNames
-                ? SchemaUtil.getTableName(schemaName, SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase()))
-                : SchemaUtil.getTableName(schemaName, generateUniqueName());
+        String schemaName = getSchemaName();
+        String tableName = getTableOrViewName(schemaName);
         String datatableName = tableName;
         String cdcName, cdc_sql;
         try (Connection conn = newConnection()) {
@@ -738,17 +694,13 @@ public class CDCQueryIT extends CDCBaseIT {
                     (multitenant ? "(TENANT_ID, k) " : "(k)") + ")", encodingScheme, multitenant,
                     tableSaltBuckets, false, null);
             if (forView) {
-                String viewName = caseSensitiveNames
-                        ? SchemaUtil.getTableName(schemaName,  SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase()))
-                        : SchemaUtil.getTableName(schemaName, generateUniqueName());
+                String viewName = getTableOrViewName(schemaName);
                 createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
                         encodingScheme);
                 tableName = viewName;
             }
 
-            cdcName = caseSensitiveNames
-                    ? SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase())
-                    : generateUniqueName();
+            cdcName = getCDCName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
             createCDC(conn, cdc_sql, encodingScheme);
             conn.createStatement().execute("ALTER TABLE " + datatableName + " DROP COLUMN v0");
@@ -783,14 +735,8 @@ public class CDCQueryIT extends CDCBaseIT {
 
     @Test
     public void testSelectCDCFailDataTableUpdate() throws Exception {
-        String schemaName = withSchemaName
-                ? caseSensitiveNames
-                ? SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase())
-                : generateUniqueName()
-                : null;
-        String tableName = caseSensitiveNames
-                ? SchemaUtil.getTableName(schemaName, SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase()))
-                : SchemaUtil.getTableName(schemaName, generateUniqueName());
+        String schemaName = getSchemaName();
+        String tableName = getTableOrViewName(schemaName);
         String cdcName, cdc_sql;
         try (Connection conn = newConnection()) {
             createTable(conn, "CREATE TABLE  " + tableName + " (" +
@@ -800,16 +746,12 @@ public class CDCQueryIT extends CDCBaseIT {
                             (multitenant ? "(TENANT_ID, k) " : "(k)") + ")", encodingScheme, multitenant,
                     tableSaltBuckets, false, null);
             if (forView) {
-                String viewName = caseSensitiveNames
-                        ? SchemaUtil.getTableName(schemaName,  SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase()))
-                        : SchemaUtil.getTableName(schemaName, generateUniqueName());
+                String viewName = getTableOrViewName(schemaName);
                 createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
                         encodingScheme);
                 tableName = viewName;
             }
-            cdcName = caseSensitiveNames
-                    ? SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase())
-                    : generateUniqueName();
+            cdcName = getCDCName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
             createCDC(conn, cdc_sql, encodingScheme);
             cdcIndexShouldNotBeUsedForDataTableQueries(conn, tableName, cdcName);
@@ -1003,5 +945,25 @@ public class CDCQueryIT extends CDCBaseIT {
                     expectedRawRowCount);
 
         }
+    }
+
+    private String getSchemaName() {
+        return withSchemaName
+                ? caseSensitiveNames
+                    ? SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase())
+                    : generateUniqueName()
+                : null;
+    }
+
+    private String getTableOrViewName(String schemaName) {
+        return caseSensitiveNames
+                ? SchemaUtil.getTableName(schemaName, SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase()))
+                : SchemaUtil.getTableName(schemaName, generateUniqueName());
+    }
+
+    private String getCDCName() {
+        return caseSensitiveNames
+                ? SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase())
+                : generateUniqueName();
     }
 }
