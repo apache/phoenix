@@ -22,6 +22,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_DEFINED_IN_TABLE_DESCRIPTOR;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_DEFINED;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.CURRENT_CLIENT_VERSION;
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.getVersion;
@@ -106,7 +108,9 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.filter.BinaryComparator;
 import org.apache.hadoop.hbase.filter.QualifierFilter;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.coprocessorclient.MetaDataEndpointImplConstants;
+import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.schema.TTLExpression;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.hbase.Cell;
@@ -1513,7 +1517,7 @@ public class UpgradeUtil {
                     try (ResultScanner scanner = sysCatalogTable.getScanner(scan)) {
                         int count = 0;
                         List<byte[]> rowKeys = new ArrayList<>();
-                        List<Put> puts = new ArrayList<>();
+                        List<Mutation> mutations = new ArrayList<>();
                         for (Result rr = scanner.next(); rr != null; rr = scanner.next()) {
                             count++;
                             lastRowKey = rr.getRow();
@@ -1538,27 +1542,35 @@ public class UpgradeUtil {
                             // As we have ttl defined for this table create a Put to set TTL with
                             // backward compatibility in mind.
                             long rowTS = EnvironmentEdgeManager.currentTimeMillis();
-                            Put put = new Put(tmpKey);
-                            put.addColumn(DEFAULT_COLUMN_FAMILY_BYTES, EMPTY_COLUMN_BYTES, rowTS,
-                                    EMPTY_COLUMN_VALUE_BYTES);
+
                             if (ttl == HConstants.FOREVER || ttl == TTL_NOT_DEFINED) {
-                                put.addColumn(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES, rowTS,
-                                        PVarchar.INSTANCE.toBytes(String.valueOf(TTL_NOT_DEFINED)));
+                                // Set the TTL column to null
+                                Delete deleteColumn = new Delete(tmpKey);
+                                KeyValue kv = GenericKeyValueBuilder.INSTANCE.buildDeleteColumns(
+                                        new ImmutableBytesWritable(tmpKey),
+                                        new ImmutableBytesWritable(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES),
+                                        new ImmutableBytesWritable(TTL_BYTES), rowTS);
+                                deleteColumn.add(kv);
+                                mutations.add(deleteColumn);
                             } else {
+                                // set the TTL column to TTL_DEFINED_IN_TABLE_DESCRIPTOR
+                                Put put = new Put(tmpKey);
+                                put.addColumn(DEFAULT_COLUMN_FAMILY_BYTES, EMPTY_COLUMN_BYTES, rowTS,
+                                        EMPTY_COLUMN_VALUE_BYTES);
                                 put.addColumn(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES, rowTS,
-                                        PVarchar.INSTANCE.toBytes(String.valueOf(TTL_DEFINED_IN_TABLE_DESCRIPTOR)));
+                                        PVarchar.INSTANCE.toBytes(TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR.getTTLExpression()));
+                                mutations.add(put);
                             }
-                            puts.add(put);
                         }
 
-                        if (!puts.isEmpty()) {
-                            Object[] putResults = new Object[puts.size()];
+                        if (!mutations.isEmpty()) {
+                            Object[] mutationResults = new Object[mutations.size()];
                             try (Table moveTTLTable = moveTTLConnection.getTable(sysCat)) {
                                 // Process a batch of ttl values
-                                moveTTLTable.batch(puts, putResults);
+                                moveTTLTable.batch(mutations, mutationResults);
                                 int numMoved = 0;
-                                for (Object putResult : putResults) {
-                                    if (java.util.Objects.nonNull(putResult)) {
+                                for (Object mutationResult : mutationResults) {
+                                    if (java.util.Objects.nonNull(mutationResult)) {
                                         numMoved++;
                                     }
                                 }
@@ -2489,11 +2501,26 @@ public class UpgradeUtil {
         tableMetadata.add(put);
     }
 
-    public static void addTTLForClientOlderThan530(List<Mutation> tableMetadata, byte[] tableHeaderRowKey, long clientTimeStamp, TTLExpression ttlExpression) {
-        Put put = new Put(tableHeaderRowKey, clientTimeStamp);
-        put.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
-                TTL_BYTES, PVarchar.INSTANCE.toBytes(ttlExpression.getTTLExpression()));
-        tableMetadata.add(put);
+    public static void addTTLForClientOlderThan530(List<Mutation> tableMetadata, byte[] tableHeaderRowKey, long clientTimeStamp, int clientVersion, ColumnFamilyDescriptor cfd)
+            throws IOException {
+        if (cfd.getTimeToLive() == HConstants.FOREVER || cfd.getTimeToLive() == 0) {
+            // Set the TTL column to null
+            Delete deleteColumn = new Delete(tableHeaderRowKey);
+            KeyValue kv = GenericKeyValueBuilder.INSTANCE.buildDeleteColumns(
+                    new ImmutableBytesWritable(tableHeaderRowKey),
+                    new ImmutableBytesWritable(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES),
+                    new ImmutableBytesWritable(TTL_BYTES), clientTimeStamp);
+            deleteColumn.add(kv);
+            tableMetadata.add(deleteColumn);
+        } else {
+            Put putColumn = new Put(tableHeaderRowKey, clientTimeStamp).addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                    TTL_BYTES,
+                    PVarchar.INSTANCE.toBytes(TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR.getTTLExpression()));
+            tableMetadata.add(putColumn);
+        }
+        LOGGER.info("Adding backward compatible TTL (create {}) for table-key {} with ttl value {}",
+                clientVersion,
+                Bytes.toStringBinary(tableHeaderRowKey), cfd.getTimeToLive());
     }
 
     public static boolean truncateStats(Table metaTable, Table statsTable)

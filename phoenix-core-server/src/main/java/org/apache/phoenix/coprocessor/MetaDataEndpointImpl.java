@@ -2512,20 +2512,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     UpgradeUtil.addRowKeyOrderOptimizableCell(tableMetadata, tableKey, clientTimeStamp);
                 }
 
+                // Handle backward compatibility from older clients
                 if ((tableType == PTableType.TABLE) && (clientVersion < MetaDataProtocol.MIN_VERSION_TABLE_TTL_IN_SYSTEM_CATALOG)) {
                     Table hTable = ServerUtil.getHTableForCoprocessorScan(env, TableName.valueOf(cPhysicalName));
                     ColumnFamilyDescriptor cfd =
                             hTable.getTableDescriptor().getColumnFamilies()[0];
-                    TTLExpression ttlExpression;
-                    if (cfd.getTimeToLive() == HConstants.FOREVER) {
-                        ttlExpression = TTL_EXPRESSION_NOT_DEFINED;
-                    } else {
-                        ttlExpression = TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR;
-                    }
-                    LOGGER.info("Adding backward compatible TTL (create {}) for table-key {} with ttl value {}",
-                            clientVersion,
-                            Bytes.toStringBinary(tableKey), ttlExpression.toString());
-                    UpgradeUtil.addTTLForClientOlderThan530(tableMetadata, tableKey, clientTimeStamp, ttlExpression);
+                    UpgradeUtil.addTTLForClientOlderThan530(tableMetadata, tableKey, clientTimeStamp, clientVersion, cfd);
                 }
 
                 // If the parent table of the view has the auto partition sequence name attribute, modify the

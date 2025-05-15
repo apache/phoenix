@@ -68,6 +68,7 @@ import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY_BYTE
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TIMEOUT_DURING_UPGRADE_MS;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class MoveTTLDuringUpgradeIT extends ParallelStatsDisabledIT {
@@ -95,7 +96,7 @@ public class MoveTTLDuringUpgradeIT extends ParallelStatsDisabledIT {
             conn.getQueryServices().clearCache();
             phxMetaConn.getQueryServices().clearCache();
 
-            TestUtil.dumpTable(conn, TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES));
+            //TestUtil.dumpTable(conn, TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES));
 
             String sql = String.format("SELECT TABLE_NAME, TTL FROM SYSTEM.CATALOG WHERE TABLE_SCHEM = '%s' AND TABLE_TYPE = '%s' AND TTL IS NOT NULL", schema,
                     PTableType.TABLE.getSerializedValue());
@@ -117,13 +118,9 @@ public class MoveTTLDuringUpgradeIT extends ParallelStatsDisabledIT {
                                     null,
                                             SchemaUtil.getTableName(Bytes.toBytes(schema),
                                                     Bytes.toBytes(table))).getTTLExpression());
-                } else if (ttlInSyscat == TTL_NOT_DEFINED) {
-                    assertEquals(HConstants.FOREVER, columnFamilies[0].getTimeToLive());
-                    assertEquals(new LiteralTTLExpression(TTL_NOT_DEFINED),
-                            phxMetaConn.unwrap(PhoenixConnection.class).getTable(
-                                    new PTableKey(null,
-                                            SchemaUtil.getTableName(Bytes.toBytes(schema),
-                                                    Bytes.toBytes(table)))).getTTLExpression());
+                } else {
+                    // Should not have any value other than TTL_DEFINED_IN_TABLE_DESCRIPTOR when TTL is not null
+                    fail();
                 }
 
             }

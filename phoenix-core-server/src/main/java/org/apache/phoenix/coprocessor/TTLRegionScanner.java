@@ -76,18 +76,29 @@ public class TTLRegionScanner extends BaseRegionScanner {
         currentTime = scan.getTimeRange().getMax() == HConstants.LATEST_TIMESTAMP
                 ? EnvironmentEdgeManager.currentTimeMillis() : scan.getTimeRange().getMax();
         CompiledTTLExpression scanTTLExpression = ScanUtil.getTTLExpression(scan);
-        boolean fromScan = false;
+        /**
+         * In 5.3.0 release the TTL column will be created in SYSTEM.CATALOG and used to store TTL
+         * values, but the TTL values for tables and SYSTEM tables with literal expressions
+         * will continue to be stored in the HBase TableDescriptor for backward compatibility
+         * and SYSTEM.CATALOG will store a special literal TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR.
+         *
+         * The newer 5.3.x clients will be sending a Compiled TTL expression in the
+         * BaseScannerRegionObserverConstants.TTL scan attribute.
+         * Older 5.2 client will not have any scan attribute set and thus will be null.
+         *
+         * To achieve backward compatibility
+         * When scanTTLExpression is null or equals TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR
+         * we will use the TableDescriptor as the source of truth.
+         */
         if (isPhoenixCompactionEnabled(
                 env.getConfiguration()) && scanTTLExpression != null && !scanTTLExpression.equals(
                 TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR)) {
             ttlExpression = scanTTLExpression;
-            fromScan = true;
         } else {
             ColumnFamilyDescriptor cfd =
                     env.getRegion().getTableDescriptor().getColumnFamilies()[0];
             ttlExpression = TTLExpressionFactory.create(cfd.getTimeToLive());
         }
-        LOG.info(String.format("TTL expression(from scan = %s): %s", fromScan, ttlExpression));
         // Regardless if the Phoenix Table TTL feature is disabled cluster wide or the client is
         // an older client and does not supply the empty column parameters, the masking should not
         // be done here. We also disable masking when TTL is HConstants.FOREVER.
