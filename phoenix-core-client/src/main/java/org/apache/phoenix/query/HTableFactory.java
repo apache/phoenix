@@ -54,6 +54,8 @@ public interface HTableFactory {
             // There is a difference between these 2 implementations in HBase Client Code and when
             // the pool is terminated on HTable close()
             // So we need to use these 2 implementations based on value of pool.
+            // If Externally provided pool is null, we use the default behavior of
+            // ConnectionImplementation to manage the pool.
             if (pool == null) {
                 return connection.getTable(TableName.valueOf(tableName));
             } else {
