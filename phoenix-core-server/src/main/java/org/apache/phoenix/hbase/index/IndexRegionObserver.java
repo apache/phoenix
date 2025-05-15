@@ -139,7 +139,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.apache.hadoop.hbase.HConstants.OperationStatusCode.SUCCESS;
-import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.applyNew;
+import static org.apache.phoenix.coprocessor.GlobalIndexRegionScanner.apply;
 import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.removeColumn;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.UPSERT_CF;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.UPSERT_STATUS_CQ;
@@ -706,16 +706,17 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             for (List<Cell> cells : currentVersion.getFamilyCellMap().values()) {
                 for (Cell cell : cells) {
                     boolean masked = true;
+                    byte[] family = CellUtil.cloneFamily(cell);
+                    byte[] qualifier = CellUtil.cloneQualifier(cell);
                     for (Integer pos : positions) {
                         Mutation m = miniBatchOp.getOperation(pos);
-                        if (m.has(cell.getFamilyArray(), cell.getQualifierArray())) {
+                        if (m.has(family, qualifier)) {
                             masked = false;
                             break;
                         }
                     }
                     if (masked) {
-                        ColumnReference colRef = new ColumnReference(CellUtil.cloneFamily(cell),
-                                CellUtil.cloneQualifier(cell));
+                        ColumnReference colRef = new ColumnReference(family, qualifier);
                         colsToBeMasked.add(colRef);
                     }
                 }
@@ -910,7 +911,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                 context.dataRowStates.put(rowKeyPtr, dataRowState);
             }
             Put nextDataRowState = dataRowState.getSecond();
-            dataRowState.setSecond((nextDataRowState != null) ? applyNew((Put) m, nextDataRowState) : new Put((Put) m));
+            // Need to deep copy the references to the cells in the mutation
+            Put copied = IndexUtil.copyPut((Put) m);
+            if (nextDataRowState != null) {
+                apply(copied, nextDataRowState);
+            }
+            dataRowState.setSecond(copied);
 
             Mutation[] mutationsAddedByCP = miniBatchOp.getOperationsFromCoprocessors(i);
             if (mutationsAddedByCP != null) {
@@ -1091,7 +1097,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                 byte[] rowKey = CellUtil.cloneRow(cells.get(0));
                 Put put = new Put(rowKey);
                 for (Cell cell : cells) {
-                    put.add(cell);
+                    // Need to deep copy the reference to the cell
+                    put.add(CellUtil.cloneIfNecessary(cell));
                 }
                 context.dataRowStates.put(new ImmutableBytesPtr(rowKey), new Pair<Put, Put>(put, new Put(put)));
             }
