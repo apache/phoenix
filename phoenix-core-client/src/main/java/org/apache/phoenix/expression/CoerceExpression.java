@@ -150,7 +150,8 @@ public class CoerceExpression extends BaseSingleExpression {
     public boolean isStateless() {
         // It is important to associate the stateless-ness of the CoerceExpression
         // child with the CoerceExpression. Without this, ComparisonExpression and
-        // KeyExpressionVisitor used by WhereOptimizer always select Full table scan
+        // KeyExpressionVisitor will not be evaluated on the client side, and
+        // thus WhereOptimizer will always select Full table scan
         // even for the query that is supposed to use Range scan or Point lookup
         // on the single row.
         // Jira: PHOENIX-7610.
