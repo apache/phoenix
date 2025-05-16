@@ -857,40 +857,6 @@ public class IndexUtil {
     }
 
     /**
-     * Creates a true deep copy of the Put Mutation, including deep copies of all cells if the
-     * cells are backed by off-heap. The Mutation(Mutation source) constructor always does a
-     * shallow copy of the cells.
-     * @param original The original Put Mutation to copy
-     * @return A new Put Mutation with deep copies of all fields and Cells
-     */
-    public static Put copyPut(Put original) throws IOException {
-        // Copies the bytes internally
-        Put copy = new Put(original.getRow());
-
-        // Copy the fields in Mutation class
-        // Copy timestamp
-        copy.setTimestamp(original.getTimestamp());
-        // Copy durability
-        copy.setDurability(original.getDurability());
-
-        // Copy the fields in OperationWithAttributes class
-        // Copy attributes
-        for (Map.Entry<String, byte[]> entry : original.getAttributesMap().entrySet()) {
-            copy.setAttribute(entry.getKey(), entry.getValue().clone());
-        }
-        // copy priority
-        copy.setPriority(original.getPriority());
-
-        for ( List<Cell> cells : original.getFamilyCellMap().values()) {
-            for (Cell cell : cells) {
-                // copy cell if needed
-                copy.add(CellUtil.cloneIfNecessary(cell));
-            }
-        }
-        return copy;
-    }
-
-    /**
      * Enable indexing on the given table
      * @param descBuilder {@link TableDescriptor} for the table on which indexing should be enabled
      * @param indexBuilderClassName class name to use when building the index for this table

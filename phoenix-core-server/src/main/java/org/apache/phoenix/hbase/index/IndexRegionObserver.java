@@ -111,6 +111,7 @@ import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.MutationUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerIndexUtil;
@@ -912,7 +913,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             }
             Put nextDataRowState = dataRowState.getSecond();
             // Need to deep copy the references to the cells in the mutation
-            Put copied = IndexUtil.copyPut((Put) m);
+            Put copied = MutationUtil.copyPut((Put) m);
             if (nextDataRowState != null) {
                 apply(copied, nextDataRowState);
             }
