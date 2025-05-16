@@ -366,25 +366,25 @@ public class ConnectionQueryServicesImplTest {
     public void testGetSysMutexTableWithName() throws Exception {
         when(mockAdmin.tableExists(any())).thenReturn(true);
         when(mockConn.getAdmin()).thenReturn(mockAdmin);
-        when(mockConn.getTable(eq(TableName.valueOf("SYSTEM.MUTEX")), any()))
+        when(mockConn.getTable(eq(TableName.valueOf("SYSTEM.MUTEX"))))
                 .thenReturn(mockTable);
         assertSame(mockCqs.getSysMutexTable(), mockTable);
         verify(mockAdmin, Mockito.times(1)).tableExists(any());
         verify(mockConn, Mockito.times(1)).getAdmin();
         verify(mockConn, Mockito.times(1))
-                .getTable(eq(TableName.valueOf("SYSTEM.MUTEX")), any());
+                .getTable(eq(TableName.valueOf("SYSTEM.MUTEX")));
     }
 
     @Test
     public void testGetSysMutexTableWithNamespace() throws Exception {
         when(mockAdmin.tableExists(any())).thenReturn(false);
         when(mockConn.getAdmin()).thenReturn(mockAdmin);
-        when(mockConn.getTable(eq(TableName.valueOf("SYSTEM:MUTEX")), any()))
+        when(mockConn.getTable(eq(TableName.valueOf("SYSTEM:MUTEX"))))
                 .thenReturn(mockTable);
         assertSame(mockCqs.getSysMutexTable(), mockTable);
         verify(mockAdmin, Mockito.times(1)).tableExists(any());
         verify(mockConn, Mockito.times(1)).getAdmin();
         verify(mockConn, Mockito.times(1))
-                .getTable(eq(TableName.valueOf("SYSTEM:MUTEX")), any());
+                .getTable(eq(TableName.valueOf("SYSTEM:MUTEX")));
     }
 }
