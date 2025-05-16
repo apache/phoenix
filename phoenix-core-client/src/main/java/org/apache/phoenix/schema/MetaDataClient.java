@@ -1986,11 +1986,14 @@ public class MetaDataClient {
         Properties props = connection.getClientInfo();
         props.put(INDEX_CREATE_DEFAULT_STATE, "ACTIVE");
 
+        String escapedDataTableFullName
+                = SchemaUtil.getFullTableNameWithQuotes(statement.getDataTable().getSchemaName(),
+                statement.getDataTable().getTableName(), true, true);
         String
                 createIndexSql =
                 "CREATE UNCOVERED INDEX " + (statement.isIfNotExists() ? "IF NOT EXISTS " : "")
-                        + CDCUtil.getCDCIndexName(cdcObjName)
-                        + " ON " + dataTableFullName + " ("
+                        + "\"" + CDCUtil.getCDCIndexName(cdcObjName)
+                        + "\" ON " + escapedDataTableFullName + " ("
                         + PartitionIdFunction.NAME + "(), " + PhoenixRowTimestampFunction.NAME
                         + "()) ASYNC";
         List<String> indexProps = new ArrayList<>();
@@ -2041,7 +2044,7 @@ public class MetaDataClient {
             tableProps.put(TableProperty.MULTI_TENANT.getPropertyName(), Boolean.TRUE);
         }
         CreateTableStatement tableStatement = FACTORY.createTable(
-                FACTORY.table(dataTable.getSchemaName().getString(), cdcObjName),
+                TableName.create(dataTable.getSchemaName().getString(), cdcObjName),
                 null, columnDefs, FACTORY.primaryKey(null, pkColumnDefs),
                 Collections.emptyList(), PTableType.CDC, statement.isIfNotExists(), null, null,
                 statement.getBindCount(), null);
