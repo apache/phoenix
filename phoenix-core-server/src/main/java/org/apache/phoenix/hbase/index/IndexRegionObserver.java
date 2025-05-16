@@ -1101,6 +1101,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                     // Need to deep copy the reference to the cell
                     put.add(CellUtil.cloneIfNecessary(cell));
                 }
+                // we cloned the cells above before adding to Put mutation
                 context.dataRowStates.put(new ImmutableBytesPtr(rowKey), new Pair<Put, Put>(put, new Put(put)));
             }
         }
