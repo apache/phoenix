@@ -1074,13 +1074,13 @@ public class PartialIndexIT extends BaseTest {
 
             stmt.execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + (local ? "LOCAL " : " ")
                 + "INDEX " + indexName1 + " on " + dataTableName + " (v1) " +
-                (uncovered ? "" : "INCLUDE (\"CoL\", \"coLUmn3\")"));
+                (uncovered ? "" : "INCLUDE (\"CoL\", \"coLUmn3\")") + "WHERE v1='b'");
             stmt.execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + (local ? "LOCAL " : " ")
                 + "INDEX " + indexName2 + " on " + dataTableName + " (\"CoL\") " +
-                (uncovered ? "" : "INCLUDE (v1, \"coLUmn3\")"));
+                (uncovered ? "" : "INCLUDE (v1, \"coLUmn3\")") + " WHERE \"CoL\"='c'");
             stmt.execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + (local ? "LOCAL " : " ")
                 + "INDEX " + indexName3 + " on " + dataTableName + " (\"coLUmn3\") " +
-                (uncovered ? "" : "INCLUDE (\"CoL\", v1)"));
+                (uncovered ? "" : "INCLUDE (\"CoL\", v1)") + " WHERE \"coLUmn3\"='d'");
 
             stmt.execute("UPSERT INTO " + dataTableName + " VALUES ('a', 'b', 'c', 'd')");
             conn.commit();
@@ -1096,6 +1096,29 @@ public class PartialIndexIT extends BaseTest {
             rs = stmt.executeQuery("SELECT \"CoL\" FROM " + dataTableName + " WHERE \"coLUmn3\"='d'");
             Assert.assertTrue(rs.next());
             Assert.assertEquals(indexName3, stmt.getQueryPlan().getTableRef().getTable().getTableName().toString());
+        }
+    }
+
+    @Test
+    public void testPartialIndexOnTableWithCaseSensitiveName() throws Exception {
+        try(Connection conn = DriverManager.getConnection(getUrl());
+            PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class)) {
+            String dataTableName = "\"" + generateUniqueName().toLowerCase() + "\"";
+            String indexName1 = generateUniqueName();
+
+            stmt.execute("CREATE TABLE " + dataTableName
+                    + " (\"hashKeY\" VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, \"CoL\" VARCHAR, \"coLUmn3\" VARCHAR)"
+                    + (salted ? " SALT_BUCKETS=4" : ""));
+            stmt.execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + (local ? "LOCAL " : " ")
+                    + "INDEX " + indexName1 + " on " + dataTableName + " (\"CoL\") " +
+                    (uncovered ? "" : "INCLUDE (v1, \"coLUmn3\")") + " WHERE \"CoL\"='c'");
+
+            stmt.execute("UPSERT INTO " + dataTableName + " VALUES ('a', 'b', 'c', 'd')");
+            conn.commit();
+
+            ResultSet rs = stmt.executeQuery("SELECT v1 FROM " + dataTableName + " WHERE \"CoL\"='c'");
+            Assert.assertTrue(rs.next());
+            Assert.assertEquals(indexName1, stmt.getQueryPlan().getTableRef().getTable().getTableName().toString());
         }
     }
 

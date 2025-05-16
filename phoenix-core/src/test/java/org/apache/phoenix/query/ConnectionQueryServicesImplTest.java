@@ -21,13 +21,21 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_FOR_MUTEX;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_CORE_POOL_SIZE;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ENABLED;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_MAX_QUEUE;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_MAX_THREADS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
@@ -42,6 +50,10 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
@@ -58,6 +70,7 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.phoenix.SystemExitRule;
 import org.apache.phoenix.exception.PhoenixIOException;
+import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -132,6 +145,38 @@ public class ConnectionQueryServicesImplTest {
         when(mockCqs.getTable(Mockito.any())).thenCallRealMethod();
         when(mockCqs.getTableIfExists(Mockito.any())).thenCallRealMethod();
         doCallRealMethod().when(mockCqs).dropTables(Mockito.any());
+    }
+
+    @Test
+    public void testCQSIThreadPoolCreation() throws SQLException, NoSuchFieldException, IllegalAccessException {
+        QueryServices mockQueryServices = Mockito.mock(QueryServices.class);
+        ReadOnlyProps readOnlyProps = createCQSIThreadPoolReadOnlyProps();
+        when(mockQueryServices.getProps()).thenReturn(readOnlyProps);
+        ConnectionInfo mockConnectionInfo = Mockito.mock(ConnectionInfo.class);
+        when(mockConnectionInfo.asProps()).thenReturn(readOnlyProps);
+        Properties properties = new Properties();
+        ConnectionQueryServicesImpl cqs = new ConnectionQueryServicesImpl(mockQueryServices, mockConnectionInfo, properties);
+        Field props = cqs.getClass().getDeclaredField("threadPoolExecutor");
+        props.setAccessible(true);
+        ThreadPoolExecutor threadPoolExecutor = (ThreadPoolExecutor) props.get(cqs);
+        assertNotNull(threadPoolExecutor);
+        assertEquals(readOnlyProps.getInt(CQSI_THREAD_POOL_CORE_POOL_SIZE, -1), threadPoolExecutor.getCorePoolSize());
+        assertEquals(readOnlyProps.getInt(CQSI_THREAD_POOL_MAX_THREADS,-1), threadPoolExecutor.getMaximumPoolSize());
+        assertEquals(LinkedBlockingQueue.class, threadPoolExecutor.getQueue().getClass());
+        assertEquals(readOnlyProps.getInt(CQSI_THREAD_POOL_MAX_QUEUE, -1), threadPoolExecutor.getQueue().remainingCapacity());
+        assertEquals(readOnlyProps.getInt(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS, -1), threadPoolExecutor.getKeepAliveTime(TimeUnit.SECONDS));
+        assertTrue(threadPoolExecutor.allowsCoreThreadTimeOut());
+    }
+
+    private static ReadOnlyProps createCQSIThreadPoolReadOnlyProps() {
+        Map<String, String> props = new HashMap<>();
+        props.put(CQSI_THREAD_POOL_ENABLED, Boolean.toString(true));
+        props.put(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS, Integer.toString(13));
+        props.put(CQSI_THREAD_POOL_CORE_POOL_SIZE,  Integer.toString(17));
+        props.put(CQSI_THREAD_POOL_MAX_THREADS,  Integer.toString(19));
+        props.put(CQSI_THREAD_POOL_MAX_QUEUE,  Integer.toString(23));
+        props.put(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT, Boolean.toString(true));
+        return new ReadOnlyProps(props);
     }
 
     @SuppressWarnings("unchecked")
@@ -330,26 +375,26 @@ public class ConnectionQueryServicesImplTest {
     public void testGetSysMutexTableWithName() throws Exception {
         when(mockAdmin.tableExists(any())).thenReturn(true);
         when(mockConn.getAdmin()).thenReturn(mockAdmin);
-        when(mockConn.getTable(TableName.valueOf("SYSTEM.MUTEX")))
+        when(mockConn.getTable(eq(TableName.valueOf("SYSTEM.MUTEX"))))
                 .thenReturn(mockTable);
         assertSame(mockCqs.getSysMutexTable(), mockTable);
         verify(mockAdmin, Mockito.times(1)).tableExists(any());
         verify(mockConn, Mockito.times(1)).getAdmin();
         verify(mockConn, Mockito.times(1))
-                .getTable(TableName.valueOf("SYSTEM.MUTEX"));
+                .getTable(eq(TableName.valueOf("SYSTEM.MUTEX")));
     }
 
     @Test
     public void testGetSysMutexTableWithNamespace() throws Exception {
         when(mockAdmin.tableExists(any())).thenReturn(false);
         when(mockConn.getAdmin()).thenReturn(mockAdmin);
-        when(mockConn.getTable(TableName.valueOf("SYSTEM:MUTEX")))
+        when(mockConn.getTable(eq(TableName.valueOf("SYSTEM:MUTEX"))))
                 .thenReturn(mockTable);
         assertSame(mockCqs.getSysMutexTable(), mockTable);
         verify(mockAdmin, Mockito.times(1)).tableExists(any());
         verify(mockConn, Mockito.times(1)).getAdmin();
         verify(mockConn, Mockito.times(1))
-                .getTable(TableName.valueOf("SYSTEM:MUTEX"));
+                .getTable(eq(TableName.valueOf("SYSTEM:MUTEX")));
     }
 
     @Test

@@ -32,6 +32,7 @@ import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.expression.function.PhoenixRowTimestampFunction;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.NamedTableNode;
+import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TerminalParseNode;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
@@ -275,7 +276,7 @@ public class QueryCompiler {
             TableRef cdcTableRef = dataPlanForCDC.getTableRef();
             PTable cdcTable = cdcTableRef.getTable();
             NamedTableNode cdcDataTableName = NODE_FACTORY.namedTable(null,
-                    NODE_FACTORY.table(cdcTable.getSchemaName().getString(),
+                    TableName.create(cdcTable.getSchemaName().getString(),
                             cdcTable.getParentTableName().getString()),
                     select.getTableSamplingRate());
             ColumnResolver dataTableResolver = FromCompiler.getResolver(cdcDataTableName,

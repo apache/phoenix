@@ -88,7 +88,7 @@ public class CDCUtil {
     }
 
     public static String getCDCIndexName(String cdcName) {
-        return CDC_INDEX_PREFIX + SchemaUtil.getTableNameFromFullName(cdcName.toUpperCase());
+        return CDC_INDEX_PREFIX + SchemaUtil.getTableNameFromFullName(cdcName);
     }
 
     public static boolean isCDCIndex(String indexName) {

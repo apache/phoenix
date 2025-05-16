@@ -498,6 +498,8 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
     }
 
     public static void dumpTable(String tableName) throws Exception {
+        // this method is also used by CDCBaseIT where case sensitive tableNames are also used
+        tableName = tableName.replaceAll("\"", "");
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             Table
                     hTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(tableName.getBytes());

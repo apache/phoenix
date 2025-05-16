@@ -34,12 +34,22 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_PARALL
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_PARALLEL_POOL2_TASK_EXECUTION_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_PARALLEL_POOL2_TASK_QUEUE_WAIT_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_PARALLEL_POOL2_TASK_REJECTED_COUNTER;
+import static org.apache.phoenix.query.BaseTest.extractThreadPoolExecutorFromCQSI;
 import static org.apache.phoenix.query.QueryServices.AUTO_COMMIT_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_CORE_POOL_SIZE;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ENABLED;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_MAX_QUEUE;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_MAX_THREADS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeTrue;
 
+import java.lang.reflect.Field;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -48,9 +58,12 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadPoolExecutor;
 
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
@@ -60,6 +73,8 @@ import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.monitoring.GlobalMetric;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.ConnectionQueryServicesImpl;
+import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -105,6 +120,13 @@ public class ParallelPhoenixConnectionIT {
         GLOBAL_PROPERTIES.setProperty(AUTO_COMMIT_ATTRIB, "true");
         GLOBAL_PROPERTIES.setProperty(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
         GLOBAL_PROPERTIES.setProperty(QueryServices.LOG_LEVEL, LogLevel.DEBUG.name()); //Need logging for query metrics
+        GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_ENABLED, String.valueOf(true));
+        GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS, String.valueOf(13));
+        GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_CORE_POOL_SIZE, String.valueOf(17));
+        GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_MAX_THREADS, String.valueOf(19));
+        GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_MAX_QUEUE, String.valueOf(23));
+        GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT, String.valueOf(true));
+
     }
 
     @AfterClass
@@ -167,6 +189,40 @@ public class ParallelPhoenixConnectionIT {
             cqsiFromConn = pConn2.getQueryServices();
             Assert.assertEquals(HBaseTestingUtilityPair.PRINCIPAL, cqsiFromConn.getUserName());
             Assert.assertSame(cqsi, cqsiFromConn);
+        }
+    }
+
+    @Test
+    public void testDifferentCQSIThreadPoolsForParallelConnection() throws Exception {
+        try (Connection conn = getParallelConnection()) {
+            ParallelPhoenixConnection pr = conn.unwrap(ParallelPhoenixConnection.class);
+            PhoenixConnection pConn;
+            PhoenixConnection pConn2;
+            if (CLUSTERS.getJdbcUrl1(haGroup).equals(pr.getFutureConnection1().get().getURL())) {
+                pConn = pr.getFutureConnection1().get();
+                pConn2 = pr.getFutureConnection2().get();
+            } else {
+                pConn = pr.getFutureConnection2().get();
+                pConn2 = pr.getFutureConnection1().get();
+            }
+
+            // verify connection#1
+            ConnectionQueryServices cqsi = PhoenixDriver.INSTANCE.getConnectionQueryServices(CLUSTERS.getJdbcUrl1(haGroup), clientProperties);
+            ConnectionQueryServices cqsiFromConn = pConn.getQueryServices();
+            // Check that same ThreadPoolExecutor object is used for CQSIs
+            ThreadPoolExecutor threadPoolExecutor1 = extractThreadPoolExecutorFromCQSI(cqsi);
+            Assert.assertSame(threadPoolExecutor1, extractThreadPoolExecutorFromCQSI(cqsiFromConn));
+
+            // verify connection#2
+            cqsi = PhoenixDriver.INSTANCE.getConnectionQueryServices(CLUSTERS.getJdbcUrl2(haGroup), clientProperties);
+            cqsiFromConn = pConn2.getQueryServices();
+            Assert.assertSame(cqsi, cqsiFromConn);
+            // Check that same ThreadPoolExecutor object is used for CQSIs
+            ThreadPoolExecutor threadPoolExecutor2 = extractThreadPoolExecutorFromCQSI(cqsi);
+            Assert.assertSame(extractThreadPoolExecutorFromCQSI(cqsi), extractThreadPoolExecutorFromCQSI(cqsiFromConn));
+
+            // Check that both threadPools for parallel connections are different.
+            assertNotSame(threadPoolExecutor1, threadPoolExecutor2);
         }
     }
 
@@ -578,6 +634,8 @@ public class ParallelPhoenixConnectionIT {
             connectionList.add(getParallelConnection());
         }
         ClusterRoleRecord.RegistryType newRegistry = ClusterRoleRecord.RegistryType.RPC;
+        //RPC Registry is only there in hbase version greater than 2.5.0
+        assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.5.0")>=0);
         CLUSTERS.transitClusterRoleRecordRegistry(haGroup, newRegistry);
 
         for (short i = 0; i < numberOfConnections; i++) {

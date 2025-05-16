@@ -10,7 +10,6 @@
 
 package org.apache.phoenix.util;
 
-import java.sql.Types;
 import java.util.List;
 import java.util.Objects;
 import java.util.regex.Matcher;
@@ -85,7 +84,7 @@ public class ColumnInfo {
      * @return
      */
     public String getDisplayName() {
-    	final String unescapedColumnName = SchemaUtil.getUnEscapedFullColumnName(columnName);
+    	final String unescapedColumnName = SchemaUtil.getUnEscapedFullName(columnName);
         int index = unescapedColumnName.indexOf(QueryConstants.NAME_SEPARATOR);
         if (index < 0) {
             return unescapedColumnName; 
