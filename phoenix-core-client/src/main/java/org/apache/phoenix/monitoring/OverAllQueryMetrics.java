@@ -26,6 +26,8 @@ import static org.apache.phoenix.monitoring.MetricType.QUERY_SCAN_FAILED_COUNTER
 import static org.apache.phoenix.monitoring.MetricType.QUERY_SCAN_TIMEOUT_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_TIMEOUT_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.RESULT_SET_TIME_MS;
+import static org.apache.phoenix.monitoring.MetricType.WALL_CLOCK_QUERY_TASK_END_TO_END_TIME;
+import static org.apache.phoenix.monitoring.MetricType.WALL_CLOCK_QUERY_WAIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.WALL_CLOCK_TIME_MS;
 
 import java.util.HashMap;
@@ -50,6 +52,8 @@ public class OverAllQueryMetrics {
     private final CombinableMetric queryPointLookupFailed;
     private final CombinableMetric queryScanFailed;
     private final CombinableMetric cacheRefreshedDueToSplits;
+    private final CombinableMetric queryWaitTime;
+    private final CombinableMetric queryTaskEndToEndTime;
 
     public OverAllQueryMetrics(boolean isRequestMetricsEnabled, LogLevel connectionLogLevel) {
         queryWatch = MetricUtil.getMetricsStopWatch(isRequestMetricsEnabled, connectionLogLevel,
@@ -72,6 +76,11 @@ public class OverAllQueryMetrics {
         queryScanFailed = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,connectionLogLevel, QUERY_SCAN_FAILED_COUNTER);
         cacheRefreshedDueToSplits = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,
                 connectionLogLevel, CACHE_REFRESH_SPLITS_COUNTER);
+        queryWaitTime = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,
+                connectionLogLevel, WALL_CLOCK_QUERY_WAIT_TIME);
+        queryTaskEndToEndTime = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,
+                connectionLogLevel, WALL_CLOCK_QUERY_TASK_END_TO_END_TIME);
+
     }
 
     public void updateNumParallelScans(long numParallelScans) {
@@ -132,6 +141,14 @@ public class OverAllQueryMetrics {
         }
     }
 
+    public void updateQueryWaitTime(long queryWaitTime) {
+        this.queryWaitTime.change(queryWaitTime);
+    }
+
+    public void updateQueryTaskEndToEndTime(long queryTaskEndToEndTime) {
+        this.queryTaskEndToEndTime.change(queryTaskEndToEndTime);
+    }
+
     @VisibleForTesting
     long getWallClockTimeMs() {
         return wallClockTimeMS.getValue();
@@ -154,6 +171,9 @@ public class OverAllQueryMetrics {
         metricsForPublish.put(queryPointLookupFailed.getMetricType(), queryPointLookupFailed.getValue());
         metricsForPublish.put(queryScanFailed.getMetricType(), queryScanFailed.getValue());
         metricsForPublish.put(cacheRefreshedDueToSplits.getMetricType(), cacheRefreshedDueToSplits.getValue());
+        metricsForPublish.put(queryWaitTime.getMetricType(), queryWaitTime.getValue());
+        metricsForPublish.put(queryTaskEndToEndTime.getMetricType(),
+                queryTaskEndToEndTime.getValue());
         return metricsForPublish;
     }
 
@@ -170,6 +190,8 @@ public class OverAllQueryMetrics {
         cacheRefreshedDueToSplits.reset();
         queryWatch.stop();
         resultSetWatch.stop();
+        queryWaitTime.reset();
+        queryTaskEndToEndTime.reset();
     }
 
     public OverAllQueryMetrics combine(OverAllQueryMetrics metric) {
@@ -183,6 +205,8 @@ public class OverAllQueryMetrics {
         numParallelScans.combine(metric.numParallelScans);
         wallClockTimeMS.combine(metric.wallClockTimeMS);
         resultSetTimeMS.combine(metric.resultSetTimeMS);
+        queryWaitTime.combine(metric.queryWaitTime);
+        queryTaskEndToEndTime.combine(metric.queryTaskEndToEndTime);
         return this;
     }
 
