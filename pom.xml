@@ -99,10 +99,10 @@
     <jackson-bom.version>2.14.1</jackson-bom.version>
     <netty-bom.version>4.1.119.Final</netty-bom.version>
     <antlr.version>3.5.2</antlr.version>
+    <disruptor.version>3.3.6</disruptor.version>
     <!-- Only used for tests with HBase 2.1-2.4 -->
     <reload4j.version>1.2.19</reload4j.version>
     <log4j2.version>2.18.0</log4j2.version>
-    <disruptor.version>3.3.6</disruptor.version>
     <slf4j.version>1.7.36</slf4j.version>
     <!-- com.google repo will be used except on Aarch64 platform. -->
     <protobuf.group>com.google.protobuf</protobuf.group>
