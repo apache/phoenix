@@ -233,7 +233,7 @@ public class TupleUtil {
     public static ResultSet getResultSet(Tuple toProject, String tableName, Connection conn)
         throws SQLException {
         try (PhoenixResultSet resultSet = (PhoenixResultSet) conn.createStatement()
-            .executeQuery("SELECT * FROM " + tableName)) {
+            .executeQuery("SELECT * FROM \"" + tableName + "\"")) {
             PTable pTable =
                 resultSet.getStatement().getQueryPlan().getContext().getResolver().getTables()
                     .get(0).getTable();
