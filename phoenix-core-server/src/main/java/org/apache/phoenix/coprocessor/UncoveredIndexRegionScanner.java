@@ -253,8 +253,8 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
             List<Cell> row = new ArrayList<Cell>();
             if (result.isEmpty()) {
                 hasMore = scannerContext != null
-                        ? innerScanner.nextRaw(result, scannerContext)
-                        : innerScanner.nextRaw(result);
+                        ? innerScanner.nextRaw(row, scannerContext)
+                        : innerScanner.nextRaw(row);
             } else {
                 row.addAll(result);
                 result.clear();
