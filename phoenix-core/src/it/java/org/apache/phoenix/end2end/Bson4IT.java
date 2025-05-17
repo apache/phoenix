@@ -484,9 +484,7 @@ public class Bson4IT extends ParallelStatsDisabledIT {
 
       assertFalse(rs.next());
 
-      // TODO : Fix this separately, using CAST with PK column results into full table scan due
-      //  to bug.
-      // validateExplainPlan(stmt, query, tableName, "POINT LOOKUP ON 1 KEY ");
+      validateExplainPlan(stmt, query, tableName, "POINT LOOKUP ON 1 KEY ");
 
       query = "SELECT * FROM " + tableName +
               " WHERE PK1 != CAST('" + sample1 + "' AS BSON)";
