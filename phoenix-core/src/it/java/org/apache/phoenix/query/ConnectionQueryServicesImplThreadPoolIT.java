@@ -21,7 +21,7 @@ package org.apache.phoenix.query;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.client.ConnectionImplementation;
+import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
@@ -150,7 +150,7 @@ public class ConnectionQueryServicesImplThreadPoolIT extends BaseTest {
     @Test
     public void checkHConnectionThreadPoolExecutorSame() throws Exception {
         // Extract Conn1 instance from CQSI1
-        ConnectionImplementation conn1 = extractConnectionFromCQSI(createCQSI("hello"));
+        ClusterConnection conn1 = extractConnectionFromCQSI(createCQSI("hello"));
         // Extract batchPool from connection in CQSI1
         ThreadPoolExecutor threadPoolExecutor1FromConnection = extractBatchPool(conn1);
         // Create another CQSI2
@@ -158,7 +158,7 @@ public class ConnectionQueryServicesImplThreadPoolIT extends BaseTest {
         // Extract the ThreadPoolExecutor from CQSI2 instance
         ThreadPoolExecutor threadPoolExecutor2 = extractThreadPoolExecutorFromCQSI(connQueryServices2);
         // Extract Conn2 from CQSI2
-        ConnectionImplementation conn2 = extractConnectionFromCQSI(createCQSI("bye"));
+        ClusterConnection conn2 = extractConnectionFromCQSI(createCQSI("bye"));
         // Extract batchPool from connection2 in CQSI2
         ThreadPoolExecutor threadPoolExecutor2FromConnection = extractBatchPool(conn2);
         // Check if ThreadPoolExecutor2 from CQSI and from Connection are Same
@@ -172,7 +172,7 @@ public class ConnectionQueryServicesImplThreadPoolIT extends BaseTest {
         validateThreadPoolExecutor(threadPoolExecutor2);
     }
 
-    private static ThreadPoolExecutor extractBatchPool(ConnectionImplementation conn) throws NoSuchFieldException, IllegalAccessException {
+    private static ThreadPoolExecutor extractBatchPool(ClusterConnection conn) throws NoSuchFieldException, IllegalAccessException {
         Field batchPoolField = conn.getClass().getDeclaredField("batchPool");
         batchPoolField.setAccessible(true);
         return (ThreadPoolExecutor) batchPoolField.get(conn);
@@ -277,9 +277,9 @@ public class ConnectionQueryServicesImplThreadPoolIT extends BaseTest {
         }
     }
 
-    private ConnectionImplementation extractConnectionFromCQSI(ConnectionQueryServices cqsi) throws NoSuchFieldException, IllegalAccessException {
+    private ClusterConnection extractConnectionFromCQSI(ConnectionQueryServices cqsi) throws NoSuchFieldException, IllegalAccessException {
         Field connectionField1 = cqsi.getClass().getDeclaredField("connection");
         connectionField1.setAccessible(true);
-        return (ConnectionImplementation) connectionField1.get(cqsi);
+        return (ClusterConnection) connectionField1.get(cqsi);
     }
 }
