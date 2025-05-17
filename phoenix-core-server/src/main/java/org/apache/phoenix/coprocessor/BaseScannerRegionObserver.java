@@ -543,4 +543,11 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         return conf.getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
                 QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
     }
+
+    public static boolean isCompactionScannerEnabledForFlushes(Configuration conf) {
+        boolean isPhoenixTableTTLEnabled = isPhoenixTableTTLEnabled(conf);
+        return isPhoenixTableTTLEnabled && conf.getBoolean(
+                QueryServices.PHOENIX_COMPACTION_SCANNER_FOR_FLUSHES_ENABLED,
+                QueryServices.DEFAULT_PHOENIX_COMPACTION_SCANNER_FOR_FLUSHES_ENABLED);
+    }
 }
