@@ -78,6 +78,12 @@ import static org.apache.phoenix.monitoring.MetricType.SELECT_AGGREGATE_FAILURE_
 import static org.apache.phoenix.monitoring.MetricType.ATOMIC_UPSERT_COMMIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.ATOMIC_UPSERT_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.ATOMIC_UPSERT_SQL_QUERY_TIME;
+import static org.apache.phoenix.monitoring.MetricType.UPSERT_PLAN_CREATION_TIME;
+import static org.apache.phoenix.monitoring.MetricType.UPSERT_PLAN_EXECUTION_TIME;
+import static org.apache.phoenix.monitoring.MetricType.DELETE_PLAN_CREATION_TIME;
+import static org.apache.phoenix.monitoring.MetricType.DELETE_PLAN_EXECUTION_TIME;
+import static org.apache.phoenix.monitoring.MetricType.UPSERT_EXECUTE_MUTATION_TIME;
+import static org.apache.phoenix.monitoring.MetricType.DELETE_EXECUTE_MUTATION_TIME;
 
 /**
  * This is used by TableMetricsManager class to store instance of
@@ -139,7 +145,13 @@ public class TableClientMetrics {
                 TABLE_NUM_SYSTEM_TABLE_RPC_FAILURES(NUM_SYSTEM_TABLE_RPC_FAILURES),
                 TABLE_NUM_METADATA_LOOKUP_FAILURES(NUM_METADATA_LOOKUP_FAILURES),
                 TABLE_TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS(TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS),
-                TABLE_MUTATION_BATCH_SUCCESS_COUNTER(MUTATION_BATCH_COUNTER);
+                TABLE_MUTATION_BATCH_SUCCESS_COUNTER(MUTATION_BATCH_COUNTER),
+                TABLE_UPSERT_PLAN_CREATION_TIME(UPSERT_PLAN_CREATION_TIME),
+                TABLE_UPSERT_PLAN_EXECUTION_TIME(UPSERT_PLAN_EXECUTION_TIME),
+                TABLE_DELETE_PLAN_CREATION_TIME(DELETE_PLAN_CREATION_TIME),
+                TABLE_DELETE_PLAN_EXECUTION_TIME(DELETE_PLAN_EXECUTION_TIME),
+                TABLE_UPSERT_EXECUTE_MUTATION_TIME(UPSERT_EXECUTE_MUTATION_TIME),
+                TABLE_DELETE_EXECUTE_MUTATION_TIME(DELETE_EXECUTE_MUTATION_TIME);
 
         private MetricType metricType;
         private PhoenixTableMetric metric;
