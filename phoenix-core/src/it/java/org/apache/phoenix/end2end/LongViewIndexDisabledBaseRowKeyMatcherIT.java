@@ -34,13 +34,15 @@ import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.apache.phoenix.query.QueryServices.SYSTEM_CATALOG_INDEXES_ENABLED;
+
 @Category(NeedsOwnMiniClusterTest.class)
 public class LongViewIndexDisabledBaseRowKeyMatcherIT extends BaseRowKeyMatcherTestIT {
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         final Configuration conf = HBaseConfiguration.create();
-        conf.set(QueryServices.PHOENIX_TABLE_TTL_ENABLED, String.valueOf(true));
+        conf.set(QueryServices.PHOENIX_COMPACTION_ENABLED, String.valueOf(true));
         conf.set(QueryServices.SYSTEM_CATALOG_INDEXES_ENABLED, String.valueOf(true));
         conf.set(QueryServices.LONG_VIEW_INDEX_ENABLED_ATTRIB, String.valueOf(false));
         conf.set(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB, "true");
@@ -81,7 +83,6 @@ public class LongViewIndexDisabledBaseRowKeyMatcherIT extends BaseRowKeyMatcherT
             stmt.execute("CREATE INDEX IF NOT EXISTS SYS_VIEW_INDEX_HDR_IDX ON SYSTEM.CATALOG(DECODE_VIEW_INDEX_ID(VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE), TENANT_ID, TABLE_SCHEM, TABLE_NAME) INCLUDE(TABLE_TYPE, LINK_TYPE, VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE)  WHERE TABLE_TYPE = 'i' AND LINK_TYPE IS NULL AND VIEW_INDEX_ID IS NOT NULL");
             conn.commit();
         }
-
     }
 
     @Override

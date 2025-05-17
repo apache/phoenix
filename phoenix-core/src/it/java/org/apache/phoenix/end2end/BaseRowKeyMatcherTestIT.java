@@ -850,7 +850,6 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
         try {
             List<PDataType[]> testCases = getTestCases();
             SortOrder[][] sortOrders = getSortOrders();
-
             String tableName = "";
             tableName = createViewHierarchy(
                     testCases, sortOrders, 500, 5000, 3,

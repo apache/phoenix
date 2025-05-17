@@ -400,6 +400,7 @@ public class ViewUtil {
                 tableInfoList.add(new TableInfo(viewTenantId, viewSchemaName, viewName));
                 if (scanSysCatForTTLDefinedOnAnyChildPair.getFirst()) {
                     byte[] viewKey = SchemaUtil.getTableKey(viewTenantId, viewSchemaName, viewName);
+
                     Scan ttlScan = MetaDataUtil.newTableRowsScan(viewKey,
                             MetaDataProtocol.MIN_TABLE_TIMESTAMP, timestamp);
                     Result ttlResult = sysCat.getScanner(ttlScan).next();

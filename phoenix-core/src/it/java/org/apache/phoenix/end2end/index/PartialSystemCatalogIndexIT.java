@@ -207,7 +207,6 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
         // Turn on the View TTL feature
         Map<String, String> DEFAULT_PROPERTIES = new HashMap<String, String>() {{
             put(QueryServices.SYSTEM_CATALOG_INDEXES_ENABLED, String.valueOf(true));
-            put(QueryServices.PHOENIX_TABLE_TTL_ENABLED, String.valueOf(true));
             // no max lookback
             put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(0));
             put(QueryServices.PHOENIX_VIEW_TTL_ENABLED, Boolean.toString(true));

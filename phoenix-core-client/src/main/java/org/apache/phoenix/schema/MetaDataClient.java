@@ -139,6 +139,7 @@ import static org.apache.phoenix.schema.PTableType.VIEW;
 import static org.apache.phoenix.schema.types.PDataType.FALSE_BYTES;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.CDCUtil.CDC_STREAM_NAME_FORMAT;
+import static org.apache.phoenix.util.MetaDataUtil.getCompatibleTTLExpression;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -181,7 +182,6 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.coprocessorclient.TableInfo;
 import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
 import org.apache.phoenix.query.DelegateQueryServices;
-import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hbase.HConstants;
@@ -1245,17 +1245,20 @@ public class MetaDataClient {
                             .setMessage("Property: " + prop.getFirst()).build()
                             .buildException();
                 }
-                //Keeping TTL value as Phoenix Table property irrespective of PhoenixTTLEnabled or
-                //not to store the value in SYSCAT. To keep PTableImpl.getTTL() consistent
-                //for client side.
+                // Handle when TTL property is set
                 if (prop.getFirst().equalsIgnoreCase(TTL) && tableType != PTableType.SYSTEM) {
                     tableProps.put(prop.getFirst(), prop.getSecond());
-                    if (!isPhoenixTTLEnabled()) {
-                        //Handling FOREVER and NONE case for TTL when phoenix.table.ttl.enable is false.
-                        Object value = ConnectionQueryServicesImpl.convertForeverAndNoneTTLValue(prop.getSecond(), false);
-                        commonFamilyProps.put(prop.getFirst(), value);
+                    if (prop.getSecond() != null) {
+                        TTLExpression ttlExpr = MetaDataUtil.convertForeverAndNoneTTLValue(prop.getSecond(), false);
+                        // Keeping TTL value in HTable descriptor when expression is a Literal Expression
+                        if ((ttlExpr instanceof LiteralTTLExpression ) && (tableType != PTableType.VIEW)) {
+                            // only literal TTL expression
+                            Integer value = ((LiteralTTLExpression) ttlExpr).getTTLValue();
+                            //Even though TTL is really a HColumnProperty we treat it
+                            //specially. We enforce that all CFs have the same TTL.
+                            commonFamilyProps.put(prop.getFirst(), value);
+                        }
                     }
-                    //If phoenix.table.ttl.enabled is true doesn't store TTL as columnFamilyProp
                     continue;
                 }
 
@@ -1274,12 +1277,6 @@ public class MetaDataClient {
                 }
             }
         }
-    }
-
-    private boolean isPhoenixTTLEnabled() {
-        return connection.getQueryServices().getConfiguration().
-                getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
-                QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
     }
 
     private boolean isViewTTLEnabled() {
@@ -2566,7 +2563,7 @@ public class MetaDataClient {
                             .build()
                             .buildException();
                 }
-                ttl = ttlProp;
+                ttl = getCompatibleTTLExpression(ttlProp, tableType);
             } else {
                 ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent, tableName);
                 if (!ttlFromHierarchy.equals(TTL_EXPRESSION_NOT_DEFINED)) {
@@ -2795,8 +2792,7 @@ public class MetaDataClient {
                 .setSchemaName(schemaName).setTableName(tableName)
                 .build().buildException();
             }
-            if ((isPhoenixTTLEnabled() ? ttlProp != null
-                    : TableProperty.TTL.getValue(commonFamilyProps) != null)
+            if ((ttlProp != null || TableProperty.TTL.getValue(commonFamilyProps) != null)
                     && transactionProvider != null 
                     && transactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.SET_TTL)) {
                 throw new SQLExceptionInfo.Builder(PhoenixTransactionProvider.Feature.SET_TTL.getCode())
@@ -6188,7 +6184,8 @@ public class MetaDataClient {
             if (metaProperties.getTTL() != table.getTTLExpression()) {
                 TTLExpression newTTL = metaProperties.getTTL();
                 newTTL.validateTTLOnAlter(connection, table);
-                metaPropertiesEvaluated.setTTL(metaProperties.getTTL());
+                metaPropertiesEvaluated.setTTL(
+                        getCompatibleTTLExpression(metaProperties.getTTL(), table.getType()));
                 changingPhoenixTableProperty = true;
             }
             //Updating Introducing TTL variable to true so that we will check if TTL is already

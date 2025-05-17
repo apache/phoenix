@@ -61,7 +61,6 @@ import static org.apache.phoenix.util.TestUtil.assertRawCellCount;
 import static org.apache.phoenix.util.TestUtil.assertRawRowCount;
 import static org.apache.phoenix.util.TestUtil.assertRowExistsAtSCN;
 import static org.apache.phoenix.util.TestUtil.assertRowHasExpectedValueAtSCN;
-import static org.apache.phoenix.util.TestUtil.assertTableHasTtl;
 import static org.apache.phoenix.util.TestUtil.assertTableHasVersions;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -370,8 +369,8 @@ public class MaxLookbackExtendedIT extends BaseTest {
             long afterFirstInsertSCN = EnvironmentEdgeManager.currentTimeMillis();
             TableName dataTable = TableName.valueOf(dataTableName);
             TableName indexTable = TableName.valueOf(indexName);
-            assertTableHasTtl(conn, dataTable, ttl, true);
-            assertTableHasTtl(conn, indexTable, ttl, true);
+            TestUtil.assertTTLValue(conn, dataTable, ttl);
+            TestUtil.assertTTLValue(conn, indexTable, ttl);
             //first make sure we inserted correctly
             String sql = String.format("SELECT val2 FROM %s WHERE id = 'a'", dataTableName);
             String indexSql = String.format("SELECT val2 FROM %s WHERE val1 = 'ab'", dataTableName);
@@ -564,12 +563,13 @@ public class MaxLookbackExtendedIT extends BaseTest {
         }
     }
 
+
     @Test(timeout=60000)
     public void testRetainingLastRowVersion() throws Exception {
         try(Connection conn = DriverManager.getConnection(getUrl())) {
             String tableName = generateUniqueName();
             createTable(tableName);
-            long timeIntervalBetweenTwoUpserts = (ttl / 2) + 1;
+            long timeIntervalBetweenTwoUpserts = (ttl / 4) + 1;
             injectEdge.setValue(System.currentTimeMillis());
             EnvironmentEdgeManager.injectEdge(injectEdge);
             TableName dataTableName = TableName.valueOf(tableName);
@@ -590,14 +590,21 @@ public class MaxLookbackExtendedIT extends BaseTest {
             injectEdge.incrementValue(timeIntervalBetweenTwoUpserts * 1000);
             flush(dataTableName);
             injectEdge.incrementValue(1);
-            stmt.execute("upsert into " + tableName + " values ('a', 'ab3')");
-            conn.commit();
-            injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000);
-            flush(dataTableName);
-            injectEdge.incrementValue(1);
-            TestUtil.dumpTable(conn, dataTableName);
             TestUtil.minorCompact(utility, dataTableName);
             injectEdge.incrementValue(1);
+            stmt.execute("upsert into " + tableName + " values ('a', 'ab3')");
+            conn.commit();
+            injectEdge.incrementValue(timeIntervalBetweenTwoUpserts * 1000);
+            flush(dataTableName);
+            injectEdge.incrementValue(1);
+            stmt.execute("upsert into " + tableName + " values ('a', 'ab4')");
+            conn.commit();
+            injectEdge.incrementValue(1);
+            flush(dataTableName);
+            TestUtil.dumpTable(conn, dataTableName);
+            injectEdge.incrementValue(1);
+            TestUtil.minorCompact(utility, dataTableName);
+            injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000 - 1);
             TestUtil.dumpTable(conn, dataTableName);
             majorCompact(dataTableName);
             injectEdge.incrementValue(1);

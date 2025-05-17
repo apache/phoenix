@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_DEFINED;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY;
@@ -31,13 +32,14 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.TableDescriptor;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.LiteralTTLExpression;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -52,12 +54,6 @@ public class FlappingAlterTableIT extends ParallelStatsDisabledIT {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
         props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
-        /**
-         * This test checks Table properties at ColumnFamilyDescriptor level, turing phoenix_table_ttl
-         * to false for them to test TTL and other props at HBase level. TTL being set at phoenix level
-         * is being tested in {@link TTLAsPhoenixTTLIT}
-         */
-        props.put(QueryServices.PHOENIX_TABLE_TTL_ENABLED, Boolean.toString(false));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
@@ -67,6 +63,7 @@ public class FlappingAlterTableIT extends ParallelStatsDisabledIT {
         String dataTableName = generateUniqueName();
         dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
     }
+
 
     @Test
     public void testAddColumnForNewColumnFamily() throws Exception {
@@ -82,6 +79,8 @@ public class FlappingAlterTableIT extends ParallelStatsDisabledIT {
         conn1.createStatement().execute(ddl);
         ddl = "ALTER TABLE " + dataTableFullName + " ADD CF.STRING VARCHAR";
         conn1.createStatement().execute(ddl);
+        TestUtil.assertTTLValue(conn1, dataTableFullName, TTL_EXPRESSION_NOT_DEFINED);
+
         try (Admin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
             ColumnFamilyDescriptor[] columnFamilies = admin.getDescriptor(TableName.valueOf(dataTableFullName)).getColumnFamilies();
             assertEquals(2, columnFamilies.length);
@@ -106,6 +105,7 @@ public class FlappingAlterTableIT extends ParallelStatsDisabledIT {
         conn1.createStatement().execute(ddl);
         ddl = "ALTER TABLE " + dataTableFullName + " ADD CF.STRING VARCHAR";
         conn1.createStatement().execute(ddl);
+        TestUtil.assertTTLValue(conn1, dataTableFullName, new LiteralTTLExpression((1000)));
         try (Admin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
             TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(dataTableFullName));
             ColumnFamilyDescriptor[] columnFamilies = tableDesc.getColumnFamilies();

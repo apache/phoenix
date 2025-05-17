@@ -18,6 +18,11 @@
 package org.apache.phoenix.util;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.*;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_DEFINED;
+import static org.apache.phoenix.schema.PTableType.TABLE;
+import static org.apache.phoenix.schema.PTableType.VIEW;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 import java.nio.charset.StandardCharsets;
@@ -25,8 +30,11 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.*;
 
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
+import org.apache.phoenix.schema.ConditionalTTLExpression;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PName;
@@ -36,6 +44,7 @@ import org.apache.phoenix.schema.PTableRef;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TTLExpression;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.schema.types.PVarchar;
@@ -1190,4 +1199,53 @@ public class MetaDataUtil {
                 connection.getMetaDataCache().getAge(tableRef) <
                         effectiveUpdateCacheFreq;
     }
+
+
+    public static TTLExpression convertForeverAndNoneTTLValue(Object propValue, boolean forSystemCatalog) {
+        //Handle FOREVER and NONE value for TTL at HBase level TTL.
+        if (propValue == null) {
+            return forSystemCatalog ? TTL_EXPRESSION_NOT_DEFINED : TTL_EXPRESSION_FOREVER;
+        }
+        if (propValue instanceof String) {
+            String strValue = (String) propValue;
+            if ("FOREVER".equalsIgnoreCase(strValue) || "NONE".equalsIgnoreCase(strValue) || "0".equalsIgnoreCase(strValue)) {
+                propValue = forSystemCatalog ? TTL_NOT_DEFINED : HConstants.FOREVER;
+            }
+        } else if (propValue instanceof Integer && propValue.equals(TTL_NOT_DEFINED)) {
+            propValue = forSystemCatalog ? TTL_NOT_DEFINED : HConstants.FOREVER;
+        }
+        return (TTLExpression) TableProperty.TTL.getValue(propValue);
+    }
+
+    /**
+     * In 5.3.0 release the TTL column will be created in SYSTEM.CATALOG and used to store TTL values,
+     * but the TTL values for tables with literal expressions will continue to be stored in
+     * the HBase TableDescriptor for backward compatibility.
+     * When table type != TABLE (i.e. VIEW TTL) OR expression is ConditionalExpression then
+     * actual TTL value is stored in SYSTEM.CATALOG and TableDescriptor will be set to FOREVER
+     * When table type == TABLE (i.e. Table TTL) and expression is LiteralExpression then
+     * actual TTL value is stored in TableDescriptor
+     * and SYSTEM.CATALOG will be set to TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR.
+     * if expression == TTL_NOT_DEFINED OR FOREVER then
+     * TTL_NOT_DEFINED will be stores in SYSTEM.CATALOG
+     */
+    public static TTLExpression getCompatibleTTLExpression(TTLExpression expression, PTableType tableType)
+            throws SQLException {
+        if (tableType != TABLE && tableType != VIEW) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.
+                    TTL_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY)
+                    .build()
+                    .buildException();
+        }
+        TTLExpression ttl;
+        if (tableType != TABLE || expression instanceof ConditionalTTLExpression) {
+            ttl = expression;
+        } else if (expression.equals(TTL_EXPRESSION_NOT_DEFINED) || expression.equals(TTL_EXPRESSION_FOREVER)) {
+            ttl = TTL_EXPRESSION_NOT_DEFINED;
+        } else {
+            ttl = TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR;
+        }
+        return ttl;
+    }
+
 }

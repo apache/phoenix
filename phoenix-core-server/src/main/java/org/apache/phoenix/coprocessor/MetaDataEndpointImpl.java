@@ -75,6 +75,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION_BYTES;
@@ -87,6 +88,7 @@ import static org.apache.phoenix.query.QueryServices.INDEX_MUTATE_BATCH_SIZE_THR
 import static org.apache.phoenix.query.QueryServices.SKIP_SYSTEM_TABLES_EXISTENCE_CHECK;
 import static org.apache.phoenix.query.QueryServices.SYSTEM_CATALOG_INDEXES_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SYSTEM_CATALOG_INDEXES_ENABLED;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR;
 import static org.apache.phoenix.schema.PTable.LinkType.PHYSICAL_TABLE;
 import static org.apache.phoenix.schema.PTable.LinkType.VIEW_INDEX_PARENT_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CDC_INCLUDE_BYTES;
@@ -138,6 +140,7 @@ import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.TagUtil;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -2508,6 +2511,15 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 if (tableType != PTableType.VIEW) {
                     UpgradeUtil.addRowKeyOrderOptimizableCell(tableMetadata, tableKey, clientTimeStamp);
                 }
+
+                // Handle backward compatibility from older clients
+                if ((tableType == PTableType.TABLE) && (clientVersion < MetaDataProtocol.MIN_VERSION_TABLE_TTL_IN_SYSTEM_CATALOG)) {
+                    Table hTable = ServerUtil.getHTableForCoprocessorScan(env, TableName.valueOf(cPhysicalName));
+                    ColumnFamilyDescriptor cfd =
+                            hTable.getTableDescriptor().getColumnFamilies()[0];
+                    UpgradeUtil.addTTLForClientOlderThan530(tableMetadata, tableKey, clientTimeStamp, clientVersion, cfd);
+                }
+
                 // If the parent table of the view has the auto partition sequence name attribute, modify the
                 // tableMetadata and set the view statement and partition column correctly
                 if (parentTable != null && parentTable.getAutoPartitionSeqName() != null) {
