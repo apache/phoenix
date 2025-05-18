@@ -33,6 +33,9 @@ import java.sql.ResultSet;
 import java.util.Collection;
 import java.util.Properties;
 
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -142,26 +145,54 @@ public class CastAndCoerceIT extends BaseQueryIT {
             conn.close();
         }
     }
-    
+
     @Test
     public void testCoerceTinyIntToSmallInt() throws Exception {
-        String query = "SELECT entity_id FROM " + tableName + " WHERE organization_id=? AND a_byte >= a_short";
+        String query = "SELECT entity_id FROM " + tableName
+                + " WHERE organization_id=? AND a_byte >= a_short";
         String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
-        try {
+        try (Connection conn = DriverManager.getConnection(url, props)) {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
             assertEquals(ROW9, rs.getString(1));
             assertFalse(rs.next());
-        } finally {
-            conn.close();
+
+            ExplainPlan plan = statement.unwrap(PhoenixPreparedStatement.class).optimizeQuery(query)
+                    .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
+            assertEquals(tableName, explainPlanAttributes.getTableName());
+            assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
         }
     }
 
-    
+    @Test
+    public void testCoerceWithRangeScan() throws Exception {
+        String query = "SELECT entity_id FROM " + tableName
+                + " WHERE organization_id = cast(? as varchar) AND "
+                + "cast(a_byte as smallint) >= a_short";
+        String url = getUrl();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(url, props)) {
+            PreparedStatement statement = conn.prepareStatement(query);
+            statement.setString(1, tenantId);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(ROW9, rs.getString(1));
+            assertFalse(rs.next());
+
+            ExplainPlan plan = statement.unwrap(PhoenixPreparedStatement.class).optimizeQuery(query)
+                    .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
+            assertEquals(tableName, explainPlanAttributes.getTableName());
+            assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
+        }
+    }
+
     @Test
     public void testCoerceDateToBigInt() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
