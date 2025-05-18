@@ -172,6 +172,7 @@ public class ConnectionQueryServicesImplThreadPoolIT extends BaseTest {
         validateThreadPoolExecutor(threadPoolExecutor2);
     }
 
+
     private static ThreadPoolExecutor extractBatchPool(ClusterConnection conn) throws NoSuchFieldException, IllegalAccessException {
         Field batchPoolField = conn.getClass().getDeclaredField("batchPool");
         batchPoolField.setAccessible(true);
