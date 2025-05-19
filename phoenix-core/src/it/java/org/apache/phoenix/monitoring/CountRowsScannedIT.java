@@ -216,6 +216,26 @@ public class CountRowsScannedIT extends BaseTest {
     }
 
     @Test
+    public void testQueryUncoveredIndex() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        stmt.execute("CREATE TABLE " + tableName
+                + " (A UNSIGNED_LONG NOT NULL PRIMARY KEY, Z UNSIGNED_LONG)");
+        stmt.execute("CREATE UNCOVERED INDEX " + indexName + " ON " + tableName + "(Z)");
+        for (int i = 1; i <= 100; i++) {
+            String sql = String.format("UPSERT INTO %s VALUES (%d, %d)", tableName, i, i);
+            stmt.execute(sql);
+        }
+        conn.commit();
+        String selectQuery = "SELECT A FROM " + tableName + " WHERE Z > 34 AND Z < 63";
+        long count = countRowsScannedFromSql(stmt, selectQuery);
+        assertEquals(28, count);
+        Assert.assertEquals(indexName, stmt.getQueryPlan().getTableRef().getTable().getTableName().toString());
+    }
+
+    @Test
     public void testJoin() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String tableName1 = generateUniqueName();
