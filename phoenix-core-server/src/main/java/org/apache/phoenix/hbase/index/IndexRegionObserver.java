@@ -1811,7 +1811,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                   ptr.set(EMPTY_BYTE_ARRAY);
                   expression.evaluate(tuple, ptr);
                   PColumn column = table.getColumns().get(i + adjust);
-                  Object value = expression.getDataType().toObject(ptr, column.getSortOrder());
+                  Object value = expression.isNullable() ? null :
+                          expression.getDataType().toObject(ptr, column.getSortOrder());
                   // We are guaranteed that the two column will have the same type
                   if (!column.getDataType().isSizeCompatible(ptr, value, column.getDataType(),
                       expression.getSortOrder(), expression.getMaxLength(), expression.getScale(),
