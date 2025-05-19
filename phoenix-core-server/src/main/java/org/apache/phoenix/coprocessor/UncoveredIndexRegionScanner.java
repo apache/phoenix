@@ -212,11 +212,14 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
     protected boolean scanIndexTableRows(List<Cell> result,
                                          final long startTime,
                                          final byte[] actualStartKey,
-                                         final int offset) throws IOException {
+                                         final int offset,
+                                         ScannerContext scannerContext) throws IOException {
         boolean hasMore = false;
         if (actualStartKey != null) {
             do {
-                hasMore = innerScanner.nextRaw(result);
+                hasMore = scannerContext != null
+                        ? innerScanner.nextRaw(result, scannerContext)
+                        : innerScanner.nextRaw(result);
                 if (result.isEmpty()) {
                     return hasMore;
                 }
@@ -241,7 +244,9 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
         do {
             List<Cell> row = new ArrayList<Cell>();
             if (result.isEmpty()) {
-                hasMore = innerScanner.nextRaw(row);
+                hasMore = scannerContext != null
+                        ? innerScanner.nextRaw(row, scannerContext)
+                        : innerScanner.nextRaw(row);
             } else {
                 row.addAll(result);
                 result.clear();
@@ -282,8 +287,9 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
     }
 
     protected boolean scanIndexTableRows(List<Cell> result,
-                                         final long startTime) throws IOException {
-        return scanIndexTableRows(result, startTime, null, 0);
+                                         final long startTime,
+                                         ScannerContext scannerContext) throws IOException {
+        return scanIndexTableRows(result, startTime, null, 0, scannerContext);
     }
 
     private boolean verifyIndexRowAndRepairIfNecessary(Result dataRow, byte[] indexRowKey,
@@ -360,8 +366,8 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
         }
     }
 
-    public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
-        return next(result);
+    public boolean next(List<Cell> result) throws IOException {
+        return next(result, null);
     }
 
     /**
@@ -378,7 +384,7 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
      * @throws IOException
      */
     @Override
-    public boolean next(List<Cell> result) throws IOException {
+    public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
         boolean hasMore;
         region.startRegionOperation();
@@ -395,7 +401,7 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
                     state = State.SCANNING_INDEX;
                 }
                 if (state == State.SCANNING_INDEX) {
-                    hasMore = scanIndexTableRows(result, startTime);
+                    hasMore = scanIndexTableRows(result, startTime, scannerContext);
                     if (isDummy(result)) {
                         updateDummyWithPrevRowKey(result, initStartRowKey, includeInitStartRowKey,
                                 scan);
