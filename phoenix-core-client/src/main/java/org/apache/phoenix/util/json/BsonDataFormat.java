@@ -21,7 +21,7 @@ import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.Option;
 import com.jayway.jsonpath.PathNotFoundException;
-import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.util.ByteUtil;
 import org.bson.BsonBinaryReader;
 import org.bson.BsonDocument;
 import org.bson.BsonDocumentReader;
@@ -38,9 +38,10 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class BsonDataFormat implements JsonDataFormat {
+
     @Override
     public byte[] toBytes(Object object) {
-        return Bytes.toBytes(((RawBsonDocument) object).getByteBuffer().asNIO());
+        return ByteUtil.toBytes(((RawBsonDocument) object).getByteBuffer().asNIO());
     }
 
     @Override

@@ -23,6 +23,7 @@ import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -838,5 +839,20 @@ public class ByteUtil {
      */
     public static byte[] closestPossibleRowAfter(byte[] row) {
         return Arrays.copyOf(row, row.length + 1);
+    }
+
+    /**
+     * Returns a new byte array, copied from the given {@code buf}, from the buffer's current
+     * position to the limit (exclusive).
+     * The position and the other index parameters are not changed.
+     *
+     * @param buf a byte buffer
+     * @return the byte array
+     */
+    public static byte[] toBytes(ByteBuffer buf) {
+        ByteBuffer dup = buf.duplicate();
+        byte[] result = new byte[dup.remaining()];
+        dup.get(result);
+        return result;
     }
 }
