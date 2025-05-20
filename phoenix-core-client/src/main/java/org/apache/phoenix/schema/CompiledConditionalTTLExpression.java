@@ -216,7 +216,7 @@ public class CompiledConditionalTTLExpression implements CompiledTTLExpression {
             return false;
         }
         Object value = PBoolean.INSTANCE.toObject(ptr);
-        return value != null ? value.equals(Boolean.TRUE) : false;
+        return Boolean.TRUE.equals(value);
     }
 
     /**
