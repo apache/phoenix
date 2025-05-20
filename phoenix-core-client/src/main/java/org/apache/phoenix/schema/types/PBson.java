@@ -22,7 +22,6 @@ import org.bson.BsonDocument;
 import org.bson.RawBsonDocument;
 import org.bson.codecs.BsonDocumentCodec;
 
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 
@@ -61,11 +60,11 @@ public class PBson extends PVarbinary {
             throw new IllegalArgumentException("The object should be of type BsonDocument");
         }
         if (object instanceof RawBsonDocument) {
-            return Bytes.toBytes(((RawBsonDocument) object).getByteBuffer().asNIO());
+            return ByteUtil.toBytes(((RawBsonDocument) object).getByteBuffer().asNIO());
         } else {
             RawBsonDocument rawBsonDocument =
                 new RawBsonDocument((BsonDocument) object, new BsonDocumentCodec());
-            return Bytes.toBytes((rawBsonDocument).getByteBuffer().asNIO());
+            return ByteUtil.toBytes(rawBsonDocument.getByteBuffer().asNIO());
         }
     }
 
@@ -116,7 +115,7 @@ public class PBson extends PVarbinary {
 
     @Override
     public boolean isBytesComparableWith(@SuppressWarnings("rawtypes") PDataType otherType) {
-        return otherType == PVarbinary.INSTANCE;
+        return otherType == PVarbinary.INSTANCE || otherType == PBson.INSTANCE;
     }
 
     @Override
