@@ -28,8 +28,10 @@ import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEF
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
+import static org.apache.phoenix.util.TestUtil.retainSingleQuotes;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -531,7 +533,6 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
         String ttlExpression = String.format(
                 "TO_NUMBER(CURRENT_TIME()) - TO_NUMBER(PHOENIX_ROW_TIMESTAMP()) >= %d", ttl);
         createTable(ttlExpression);
-        createTable(ttlExpression);
         String tableName = schemaBuilder.getEntityTableName();
         injectEdge();
         int rowCount = 5;
@@ -678,6 +679,78 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
                 IndexToolIT.dumpMRJobCounters(mrJobCounters);
                 throw e;
             }
+        }
+    }
+
+    @Test
+    public void testNullPKColumn() throws Exception {
+        if (tableLevelMaxLookback != 0) {
+            return;
+        }
+        String tableName = "T_" + generateUniqueName();
+        String indexName = "I_" + generateUniqueName();
+        String ddlTemplate = "create table %s (id1 varchar, id2 varchar, col1 varchar, " +
+                "col2 varchar constraint pk primary key(id1, id2)) %s";
+        String ttlExpression = "id1='a'";
+        tableDDLOptions += " ,IMMUTABLE_ROWS=true";
+        if (!columnEncoded) {
+            tableDDLOptions += " ,IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN'";
+        } else {
+            tableDDLOptions += " ,IMMUTABLE_STORAGE_SCHEME='SINGLE_CELL_ARRAY_WITH_OFFSETS'";
+        }
+        String ddl = String.format(ddlTemplate, tableName,
+                String.format(tableDDLOptions, retainSingleQuotes(ttlExpression)));
+        String indexDDL = String.format("create index %s ON %s (col1) INCLUDE(col2) " +
+                "\"phoenix.max.lookback.age.seconds\" = %d", indexName, tableName,
+                tableLevelMaxLookback);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute(indexDDL);
+            // populate rows
+            conn.createStatement().execute("upsert into " + tableName +
+                    " values('a', '0', 'col1', 'col2')");
+            conn.createStatement().execute("upsert into " + tableName +
+                    " values('a', '1', null, 'col2')");
+            conn.createStatement().execute("upsert into " + tableName +
+                    " values('b','0', 'col1', 'col2')");
+            conn.createStatement().execute("upsert into " + tableName +
+                    " values('b','1', null, 'col2')");
+            conn.createStatement().execute("upsert into " + tableName +
+                    " values(null, '0', 'col1', 'col2')");
+            conn.commit();
+            long actual = TestUtil.getRowCount(conn, tableName, true);
+            assertEquals(3, actual);
+            actual = TestUtil.getRowCountFromIndex(conn, tableName, indexName);
+            assertEquals(3, actual);
+
+            // alter the ttl
+            ttlExpression = "id1 is null";
+            ddl = "alter table %s set TTL='%s'";
+            conn.createStatement().execute(String.format(ddl, tableName, ttlExpression));
+            conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+            actual = TestUtil.getRowCount(conn, tableName, true);
+            assertEquals(4, actual);
+            PTable table = PhoenixRuntime.getTableNoCache(conn, tableName);
+            assertEquals(TTLExpressionFactory.create(ttlExpression), table.getTTLExpression());
+            PTable index = PhoenixRuntime.getTableNoCache(conn, indexName);
+            assertEquals(TTLExpressionFactory.create(ttlExpression), index.getTTLExpression());
+            actual = TestUtil.getRowCountFromIndex(conn, tableName, indexName);
+            assertEquals(4, actual);
+
+            // alter the ttl
+            ttlExpression = "col1='col1'";
+            ddl = "alter table %s set TTL='%s'";
+            conn.createStatement().execute(String.format(ddl, tableName,
+                    retainSingleQuotes(ttlExpression)));
+            conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+            actual = TestUtil.getRowCount(conn, tableName, true);
+            assertEquals(2, actual);
+            table = PhoenixRuntime.getTableNoCache(conn, tableName);
+            assertEquals(TTLExpressionFactory.create(ttlExpression), table.getTTLExpression());
+            index = PhoenixRuntime.getTableNoCache(conn, indexName);
+            assertEquals(TTLExpressionFactory.create(ttlExpression), index.getTTLExpression());
+            actual = TestUtil.getRowCountFromIndex(conn, tableName, indexName);
+            assertEquals(2, actual);
         }
     }
 
