@@ -71,6 +71,7 @@ import org.apache.phoenix.monitoring.HistogramDistribution;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.monitoring.PhoenixTableMetric;
 import org.apache.phoenix.monitoring.TableMetricsManager;
+import org.apache.phoenix.monitoring.ThreadPoolMetricsManager;
 import org.apache.phoenix.monitoring.connectionqueryservice.ConnectionQueryServicesMetricsManager;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
@@ -1415,6 +1416,10 @@ public class PhoenixRuntime {
 
     public static Map<String, List<HistogramDistribution>> getSizeHistograms() {
         return TableMetricsManager.getSizeHistogramsForAllTables();
+    }
+
+    public static Map<String, List<HistogramDistribution>> getCQSIThreadPoolHistograms() {
+        return ThreadPoolMetricsManager.getHistogramsForAllThreadPools();
     }
 
     public static Map<String, List<HistogramDistribution>> getAllConnectionQueryServicesHistograms() {

@@ -78,6 +78,7 @@ import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_FAIL
 import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_SUCCESS;
 import static org.apache.phoenix.monitoring.MetricType.TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_POOL_METRICS_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_ENABLED;
@@ -243,15 +244,19 @@ import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.iterate.TableResultIterator;
 import org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus;
+import org.apache.phoenix.jdbc.AbstractRPCConnectionInfo;
 import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.RPCConnectionInfo;
+import org.apache.phoenix.jdbc.ZKConnectionInfo;
+import org.apache.phoenix.job.ThreadPoolWithUtilizationStats;
 import org.apache.phoenix.log.ConnectionLimiter;
 import org.apache.phoenix.log.DefaultConnectionLimiter;
 import org.apache.phoenix.log.LoggingConnectionLimiter;
 import org.apache.phoenix.log.QueryLoggerDisruptor;
 import org.apache.phoenix.monitoring.TableMetricsManager;
+import org.apache.phoenix.monitoring.ThreadPoolHistograms;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.protobuf.ProtobufUtil;
@@ -510,16 +515,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // Based on implementations used in
             // org.apache.hadoop.hbase.client.ConnectionImplementation
             final BlockingQueue<Runnable> workQueue = new LinkedBlockingQueue<>(maxQueue);
+            ThreadPoolHistograms threadPoolHistograms = getThreadPoolHistograms(maxThreads,
+                    maxQueue);
             this.threadPoolExecutor =
-                    new ThreadPoolExecutor(corePoolSize, maxThreads, keepAlive, TimeUnit.SECONDS,
-                            workQueue, new ThreadFactoryBuilder()
-                                        .setDaemon(true)
-                                        .setNameFormat("CQSI-" + threadPoolName
-                                                + "-" + threadPoolNumber.incrementAndGet()
-                                                + "-shared-pool-%d")
-                                        .setUncaughtExceptionHandler(
-                                                Threads.LOGGING_EXCEPTION_HANDLER)
-                                        .build());
+                    new ThreadPoolWithUtilizationStats(corePoolSize, maxThreads, keepAlive,
+                            TimeUnit.SECONDS, workQueue, new ThreadFactoryBuilder()
+                            .setDaemon(true)
+                            .setNameFormat("CQSI-" + threadPoolName
+                                    + "-" + threadPoolNumber.incrementAndGet()
+                                    + "-shared-pool-%d")
+                            .setUncaughtExceptionHandler(
+                                    Threads.LOGGING_EXCEPTION_HANDLER)
+                            .build(), threadPoolHistograms);
             this.threadPoolExecutor.allowCoreThreadTimeOut(finalConfig
                     .getBoolean(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT,
                     DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT));
@@ -639,6 +646,27 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
         this.metricsMetadataCachingSource = MetricsPhoenixCoprocessorSourceFactory.getInstance()
                 .getMetadataCachingSource();
+    }
+
+    private ThreadPoolHistograms getThreadPoolHistograms(int maxThreadPoolSize, int maxQueueSize) {
+        if (this.config.getBoolean(CQSI_THREAD_POOL_METRICS_ENABLED,
+                DEFAULT_CQSI_THREAD_POOL_METRICS_ENABLED)) {
+            ThreadPoolHistograms threadPoolHistogram = new ThreadPoolHistograms(maxThreadPoolSize,
+                    maxQueueSize);
+            if (connectionInfo instanceof ZKConnectionInfo) {
+                threadPoolHistogram.addServerTag(((ZKConnectionInfo) connectionInfo).getZkHosts());
+            }
+            else if (connectionInfo instanceof AbstractRPCConnectionInfo) {
+                threadPoolHistogram.addServerTag(
+                        ((AbstractRPCConnectionInfo) connectionInfo).getBoostrapServers());
+            }
+            else {
+                throw new IllegalStateException("Unexpected connection info type!!");
+            }
+            threadPoolHistogram.addConnectionProfileTag(connectionInfo.getPrincipal());
+            return threadPoolHistogram;
+        }
+        return null;
     }
 
     private Connection openConnection(Configuration conf) throws SQLException {

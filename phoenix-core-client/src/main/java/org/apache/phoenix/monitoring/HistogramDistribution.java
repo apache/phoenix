@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.monitoring;
 
+import java.util.Collections;
 import java.util.Map;
 
 public interface HistogramDistribution {
@@ -30,4 +31,12 @@ public interface HistogramDistribution {
 
     public Map<String, Long> getRangeDistributionMap();
 
+    default Map<String, Long> getPercentileDistributionMap() {
+        throw new UnsupportedOperationException("Percentile Histogram Distribution is not "
+                + "supported!!");
+    }
+
+    default Map<String, String> getTags() {
+        return Collections.emptyMap();
+    }
 }
