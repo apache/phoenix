@@ -35,3 +35,6 @@ phoenix-hbase-compat-1.5.0/
 
 # Vim swap files
 .*.sw*
+
+# Code generators
+.codegenie
