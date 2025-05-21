@@ -578,6 +578,12 @@
       <artifactId>commons-configuration2</artifactId>
       <version>${commons-configuration2.excludeonly.version}</version>
       <scope>provided</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>commons-logging</groupId>
+          <artifactId>commons-logging</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
 
 
@@ -587,6 +593,11 @@
       <!-- HBase-shaded already provides this -->
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>jcl-over-slf4j</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
