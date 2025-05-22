@@ -224,9 +224,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         ignoreWritingDeleteColumnsToIndex = ignore;
     }
 
-  public enum BatchMutatePhase {
-      PRE, POST, FAILED
-  }
+    public enum BatchMutatePhase {
+        INIT, PRE, POST, FAILED
+    }
 
   // Hack to get around not being able to save any state between
   // coprocessor calls. TODO: remove after HBASE-18127 when available
@@ -240,7 +240,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    */
 
   public static class BatchMutateContext {
-      private volatile BatchMutatePhase currentPhase = BatchMutatePhase.PRE;
+      private volatile BatchMutatePhase currentPhase = BatchMutatePhase.INIT;
       // The max of reference counts on the pending rows of this batch at the time this batch arrives
       private int maxPendingRowCount = 0;
       private final int clientVersion;
@@ -1281,6 +1281,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             return;
         }
         lockRows(context);
+        // acquired the locks, move to the next phase PRE
+        context.currentPhase = BatchMutatePhase.PRE;
         long onDupCheckTime = 0;
 
         if (context.hasAtomic || context.hasGlobalIndex || context.hasUncoveredIndex || context.hasTransform) {
@@ -1437,6 +1439,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           return;
       }
       try {
+          // We add to pending rows only after we have locked all the rows in the batch
+          // If we are in the INIT phase that means we failed to acquire the locks before the
+          // PRE phase
+          if (context.getCurrentPhase() != BatchMutatePhase.INIT) {
+              removePendingRows(context);
+          }
           if (success) {
               context.currentPhase = BatchMutatePhase.POST;
               if(context.hasAtomic && miniBatchOp.size() == 1) {
@@ -1454,7 +1462,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
               context.currentPhase = BatchMutatePhase.FAILED;
           }
           context.countDownAllLatches();
-          removePendingRows(context);
           if (context.indexUpdates != null) {
               context.indexUpdates.clear();
           }
