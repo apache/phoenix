@@ -141,6 +141,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.apache.hadoop.hbase.HConstants.OperationStatusCode.SUCCESS;
 import static org.apache.phoenix.coprocessor.GlobalIndexRegionScanner.apply;
+import static org.apache.phoenix.coprocessor.GlobalIndexRegionScanner.applyNew;
 import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.removeColumn;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.UPSERT_CF;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.UPSERT_STATUS_CQ;
@@ -912,13 +913,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                 context.dataRowStates.put(rowKeyPtr, dataRowState);
             }
             Put nextDataRowState = dataRowState.getSecond();
-            // Need to deep copy the references to the cells in the mutation
-            // We don't need to copy the attributes
-            Put copied = MutationUtil.copyPut((Put) m, true);
-            if (nextDataRowState != null) {
-                apply(copied, nextDataRowState);
-            }
-            dataRowState.setSecond(copied);
+            dataRowState.setSecond((nextDataRowState != null) ? applyNew((Put) m, nextDataRowState) : new Put((Put) m));
 
             Mutation[] mutationsAddedByCP = miniBatchOp.getOperationsFromCoprocessors(i);
             if (mutationsAddedByCP != null) {
@@ -1046,7 +1041,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                         }
                         Put put = lastContext.getNextDataRowState(rowKeyPtr);
                         if (put != null) {
-                            context.dataRowStates.put(rowKeyPtr, new Pair<>(put, new Put(put)));
+                            context.dataRowStates.put(rowKeyPtr, new Pair<>(put, MutationUtil.copyPut(put)));
                         }
                     } else {
                         // The last batch for this row key failed. We cannot use the memory state.
