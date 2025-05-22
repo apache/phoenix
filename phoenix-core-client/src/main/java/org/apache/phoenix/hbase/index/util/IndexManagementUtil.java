@@ -199,7 +199,7 @@ public class IndexManagementUtil {
         try {
             throw e;
         } catch (IOException | FatalIndexBuildingFailureException e1) {
-            LOGGER.info("Rethrowing " + e);
+            LOGGER.info("Rethrowing ", e);
             throw e1;
         }
         catch (Throwable e1) {
