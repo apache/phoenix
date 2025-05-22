@@ -47,7 +47,8 @@ public class ParallelPhoenixPreparedStatementTest {
     @Before
     public void init() throws Exception {
         context = new ParallelPhoenixContext(new Properties(), Mockito.mock(HighAvailabilityGroup.class),
-            HighAvailabilityTestingUtility.getListOfSingleThreadExecutorServices(), null);
+            HighAvailabilityTestingUtility.getListOfSingleThreadExecutorServices(), null,
+                Mockito.mock(HAURLInfo.class));
 
         statement1 = Mockito.mock(PhoenixMonitoredPreparedStatement.class);
         statement2 = Mockito.mock(PhoenixMonitoredPreparedStatement.class);
