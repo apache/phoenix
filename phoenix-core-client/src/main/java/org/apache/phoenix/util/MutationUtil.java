@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -27,6 +27,8 @@ import org.apache.hadoop.hbase.client.Put;
 
 public class MutationUtil {
 
+    private MutationUtil() {}
+
     /**
      * Creates a true deep copy of the Put Mutation, including deep copies of all cells if the
      * cells are backed by off-heap. The Mutation(Mutation source) constructor always does a
@@ -35,6 +37,18 @@ public class MutationUtil {
      * @return A new Put Mutation with deep copies of all fields and Cells
      */
     public static Put copyPut(Put original) throws IOException {
+        return copyPut(original, false);
+    }
+
+    /**
+     * Creates a true deep copy of the Put Mutation, including deep copies of all cells if the
+     * cells are backed by off-heap. The Mutation(Mutation source) constructor always does a
+     * shallow copy of the cells.
+     * @param original The original Put Mutation to copy
+     * @param skipAttributes If true, the attributes are not copied
+     * @return A new Put Mutation with deep copies of all fields and Cells
+     */
+    public static Put copyPut(Put original, boolean skipAttributes) throws IOException {
         // Copies the bytes internally
         Put copy = new Put(original.getRow());
 
@@ -46,8 +60,10 @@ public class MutationUtil {
 
         // Copy the fields in OperationWithAttributes class
         // Copy attributes
-        for (Map.Entry<String, byte[]> entry : original.getAttributesMap().entrySet()) {
-            copy.setAttribute(entry.getKey(), entry.getValue().clone());
+        if (!skipAttributes) {
+            for (Map.Entry<String, byte[]> entry : original.getAttributesMap().entrySet()) {
+                copy.setAttribute(entry.getKey(), entry.getValue().clone());
+            }
         }
         // copy priority
         copy.setPriority(original.getPriority());

@@ -913,7 +913,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             }
             Put nextDataRowState = dataRowState.getSecond();
             // Need to deep copy the references to the cells in the mutation
-            Put copied = MutationUtil.copyPut((Put) m);
+            // We don't need to copy the attributes
+            Put copied = MutationUtil.copyPut((Put) m, true);
             if (nextDataRowState != null) {
                 apply(copied, nextDataRowState);
             }

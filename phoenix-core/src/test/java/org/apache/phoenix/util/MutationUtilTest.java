@@ -77,6 +77,8 @@ public class MutationUtilTest {
         assertEquals(sourceCells.size(), copiedCells.size());
         sourceCells.stream().allMatch(cell -> cell instanceof ByteBufferKeyValue);
         copiedCells.stream().allMatch(cell -> cell instanceof KeyValue);
+        copied = MutationUtil.copyPut(source, true);
+        assertTrue(copied.getAttributesMap().isEmpty());
     }
 
     private Cell createOffHeapCell(byte[] rowKey,
