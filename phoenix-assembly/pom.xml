@@ -217,7 +217,10 @@
       <version>${sqlline.version}</version>
       <classifier>jar-with-dependencies</classifier>
     </dependency>
-
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>jul-to-slf4j</artifactId>
+    </dependency>
   </dependencies>
 
   <profiles>
