@@ -140,7 +140,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.apache.hadoop.hbase.HConstants.OperationStatusCode.SUCCESS;
-import static org.apache.phoenix.coprocessor.GlobalIndexRegionScanner.apply;
 import static org.apache.phoenix.coprocessor.GlobalIndexRegionScanner.applyNew;
 import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.removeColumn;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.UPSERT_CF;
@@ -1094,10 +1093,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                 byte[] rowKey = CellUtil.cloneRow(cells.get(0));
                 Put put = new Put(rowKey);
                 for (Cell cell : cells) {
-                    // Need to deep copy the reference to the cell
-                    put.add(CellUtil.cloneIfNecessary(cell));
+                    put.add(cell);
                 }
-                // we cloned the cells above before adding to Put mutation
                 context.dataRowStates.put(new ImmutableBytesPtr(rowKey), new Pair<Put, Put>(put, new Put(put)));
             }
         }
