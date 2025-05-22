@@ -51,7 +51,7 @@ public class MaxTimestampFilter extends FilterBase {
     return kv;
   }
 
-  @Override
+  // No @Override for HBase 3 compatibility
   public ReturnCode filterKeyValue(Cell v) {
     return this.filterCell(v);
   }

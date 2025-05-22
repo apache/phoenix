@@ -18,7 +18,7 @@
 
 package org.apache.phoenix.index;
 
-import org.apache.hadoop.hbase.util.ByteStringer;
+import org.apache.phoenix.compat.hbase.ByteStringer;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.TupleProjectionCompiler;
 import org.apache.phoenix.coprocessor.generated.CDCInfoProtos;
