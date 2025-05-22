@@ -843,6 +843,66 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testUpsertSelectWithOrderBy() throws Exception {
+        Properties props = new Properties();
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+                allowServerSideMutations);
+        props.setProperty(QueryServices.AUTO_COMMIT_ATTRIB, "true");
+        String uniqueName = generateUniqueName();
+        String tableName1 = uniqueName + "_1";
+        String tableName2 = uniqueName + "_2";
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("create table " + tableName1 +
+                    " (c1 char(3) not null primary key, c2 char(3), c3 char(3)) SALT_BUCKETS=16");
+            stmt.execute("create table " + tableName2 +
+                    " (cc1 char(3) not null primary key, cc2 char(3), cc3 char(3)) SALT_BUCKETS=16");
+            conn.commit();
+        }
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+             Statement stmt = conn.createStatement()) {
+            // c1 c2 c3
+            // 000 a 512
+            // 001 a 511
+            // ...
+            // 512 a 000
+            int maxNums = 512;
+            for (int i = 0; i <= maxNums; i++) {
+                String c1Val = String.format("%03d", i);
+                String c3Val = String.format("%03d", maxNums - i);
+                stmt.execute("upsert into " + tableName1 +
+                        " values ('" + c1Val + "','a','" + c3Val + "')");
+            }
+            conn.commit();
+        }
+
+        // select c2,c1,c3 from tableName1 order by c3
+        // The result should be:
+        // c2 c1 c3
+        // a 512 000
+        // a 511 001
+        // ...
+        // a 000 512
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("upsert into " + tableName2 +
+                    "(cc1,cc2,cc3) select c2,c1,c3 from " + tableName1 + " order by c3");
+            conn.commit();
+        }
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+             Statement stmt = conn.createStatement()) {
+            ResultSet rs = stmt.executeQuery("select * from " + tableName2);
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertEquals("000", rs.getString(2));
+            assertEquals("512", rs.getString(3));
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
     public void testUpsertSelectWithSequence() throws Exception {
         Properties props = new Properties();
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
