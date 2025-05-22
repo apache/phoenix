@@ -565,7 +565,7 @@ public class MaxLookbackExtendedIT extends BaseTest {
     }
 
     @Test(timeout=60000)
-    public void testRetainingLastRowVersion() throws Exception {
+    public void testRetainingLastRowVersionForMinorCompaction() throws Exception {
         try(Connection conn = DriverManager.getConnection(getUrl())) {
             String tableName = generateUniqueName();
             createTable(tableName);
@@ -604,8 +604,67 @@ public class MaxLookbackExtendedIT extends BaseTest {
             TestUtil.dumpTable(conn, dataTableName);
             ResultSet rs = stmt.executeQuery("select * from " + dataTableName + " where id = 'a'");
             while(rs.next()) {
-                assertNotNull(rs.getString(3));
-                assertNotNull(rs.getString(4));
+                assertEquals("abc", rs.getString(3));
+                assertEquals("abcd", rs.getString(4));
+            }
+        }
+    }
+
+    @Test(timeout=60000)
+    public void testRetainingLastRowVersionForFlushes() throws Exception {
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            createTable(tableName);
+            long timeIntervalBetweenTwoUpserts = (ttl / 2) + 1;
+            injectEdge.setValue(System.currentTimeMillis());
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            TableName dataTableName = TableName.valueOf(tableName);
+            injectEdge.incrementValue(1);
+            Statement stmt = conn.createStatement();
+            stmt.execute("upsert into " + tableName + " values ('a', 'ab', 'abc', 'abcd')");
+            conn.commit();
+            injectEdge.incrementValue(timeIntervalBetweenTwoUpserts * 1000);
+            stmt.execute("upsert into " + tableName + " values ('a', 'ab1')");
+            conn.commit();
+            injectEdge.incrementValue(timeIntervalBetweenTwoUpserts * 1000);
+            stmt.execute("upsert into " + tableName + " values ('a', 'ab2')");
+            conn.commit();
+            injectEdge.incrementValue(timeIntervalBetweenTwoUpserts * 1000);
+            stmt.execute("upsert into " + tableName + " values ('a', 'ab3')");
+            conn.commit();
+            injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000);
+
+            TestUtil.dumpTable(conn, dataTableName);
+            byte[] rowKey = Bytes.toBytes("a");
+            int rawCellCount = TestUtil.getRawCellCount(conn, dataTableName, rowKey);
+            // 6 non-empty cells (ab3, ab2, ab1, ab, abc, abcd) + 4 empty cells (for 4 upserts)
+            assertEquals(10, rawCellCount);
+
+            TestUtil.flush(utility, dataTableName);
+            injectEdge.incrementValue(1);
+            rawCellCount = TestUtil.getRawCellCount(conn, dataTableName, rowKey);
+            // 1 non-empty cell (ab3) and 1 empty cell in max lookback window are
+            // immediately retained.
+            // 3 non-empty cells outside max lookback window will be retained (ab2, abc, abcd)
+            // 3 (for multi-CF)/ 2 (single-CF) empty cells will be retained outside
+            // max lookback window
+            assertEquals(multiCF ? 8 : 7, rawCellCount);
+            TestUtil.dumpTable(conn, dataTableName);
+
+            majorCompact(dataTableName);
+            injectEdge.incrementValue(1);
+            rawCellCount = TestUtil.getRawCellCount(conn, dataTableName, rowKey);
+            // 1 non-empty cell (ab3) and 1 empty cell at the edge of max lookback window will be
+            // retained
+            // 2 non-empty cells outside max lookback window will be retained (abc, abcd)
+            // 2 empty cells will be retained outside max lookback window
+            assertEquals(6, rawCellCount);
+            TestUtil.dumpTable(conn, dataTableName);
+
+            ResultSet rs = stmt.executeQuery("select * from " + dataTableName + " where id = 'a'");
+            while(rs.next()) {
+                assertEquals("abc", rs.getString(3));
+                assertEquals("abcd", rs.getString(4));
             }
         }
     }
