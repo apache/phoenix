@@ -96,18 +96,11 @@ import org.junit.experimental.categories.Category;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class CreateTableIT extends ParallelStatsDisabledIT {
-
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
         props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
-        /**
-         * This test checks Table properties at ColumnFamilyDescriptor level, turing phoenix_table_ttl
-         * to false for them to test TTL and other props at HBase level. TTL being set at phoenix level
-         * is being tested in {@link TTLAsPhoenixTTLIT}
-         */
-        props.put(QueryServices.PHOENIX_TABLE_TTL_ENABLED, Boolean.toString(false));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -475,8 +468,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         assertEquals(1, columnFamilies.length);
         assertEquals(86400, columnFamilies[0].getTimeToLive());
         //Check if TTL is stored in SYSCAT as well and we are getting ttl from get api in PTable
-        assertEquals(new LiteralTTLExpression(86400), conn.unwrap(PhoenixConnection.class).getTable(
-                new PTableKey(null, tableName)).getTTLExpression());
+        TestUtil.assertTTLValue(conn, tableName, new LiteralTTLExpression(86400));
     }
 
     @Test
@@ -534,8 +526,8 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         assertEquals(86400, columnFamilies[1].getTimeToLive());
         assertEquals("C", columnFamilies[1].getNameAsString());
         //Check if TTL is stored in SYSCAT as well and we are getting ttl from get api in PTable
-        assertEquals(new LiteralTTLExpression(86400), conn.unwrap(PhoenixConnection.class).getTable(
-                new PTableKey(null, tableName)).getTTLExpression());
+        TestUtil.assertTTLValue(conn, tableName,
+                new LiteralTTLExpression(86400));
     }
 
     /**
@@ -563,8 +555,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         assertEquals("B", columnFamilies[1].getNameAsString());
         assertEquals(86400, columnFamilies[1].getTimeToLive());
         //Check if TTL is stored in SYSCAT as well and we are getting ttl from get api in PTable
-        assertEquals(new LiteralTTLExpression(86400), conn.unwrap(PhoenixConnection.class).getTable(
-                new PTableKey(null, tableName)).getTTLExpression());
+        TestUtil.assertTTLValue(conn, tableName, new LiteralTTLExpression(86400));
     }
 
     /**
@@ -644,8 +635,8 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         assertEquals("a", columnFamilies[0].getNameAsString());
         assertEquals(10000, columnFamilies[0].getTimeToLive());
         //Check if TTL is stored in SYSCAT as well and we are getting ttl from get api in PTable
-        assertEquals(new LiteralTTLExpression(10000), conn.unwrap(PhoenixConnection.class).getTable(
-                new PTableKey(null, tableName)).getTTLExpression());
+        TestUtil.assertTTLValue(conn, tableName,
+                new LiteralTTLExpression(10000));
     }
 
     /**
@@ -669,8 +660,8 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         assertEquals("a", columnFamilies[0].getNameAsString());
         assertEquals(10000, columnFamilies[0].getTimeToLive());
         //Check if TTL is stored in SYSCAT as well and we are getting ttl from get api in PTable
-        assertEquals(new LiteralTTLExpression(10000), conn.unwrap(PhoenixConnection.class).getTable(
-                new PTableKey(null, tableName)).getTTLExpression());
+        TestUtil.assertTTLValue(conn, tableName,
+                new LiteralTTLExpression(10000));
     }
 
     @Test

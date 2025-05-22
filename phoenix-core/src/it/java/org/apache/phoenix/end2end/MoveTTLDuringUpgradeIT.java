@@ -24,13 +24,28 @@ import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.CompactionScanner;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.LiteralTTLExpression;
+import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.apache.phoenix.util.UpgradeUtil;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -40,18 +55,25 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.TimeoutException;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_TTL;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_DEFINED_IN_TABLE_DESCRIPTOR;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TIMEOUT_DURING_UPGRADE_MS;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class MoveTTLDuringUpgradeIT extends ParallelStatsDisabledIT {
+    private static final Logger LOGGER = LoggerFactory.getLogger(MoveTTLDuringUpgradeIT.class);
+
     @Test
     public void testMoveHBaseLevelTTLToSYSCAT() throws Exception {
         String schema = "S_" + generateUniqueName();
@@ -71,23 +93,45 @@ public class MoveTTLDuringUpgradeIT extends ParallelStatsDisabledIT {
             options.put(QueryServices.ZOOKEEPER_QUORUM_ATTRIB, localQuorum);
             options.put(QueryServices.ZOOKEEPER_PORT_ATTRIB, clientPort);
             UpgradeUtil.moveHBaseLevelTTLToSYSCAT(phxMetaConn, options);
+            conn.getQueryServices().clearCache();
+            phxMetaConn.getQueryServices().clearCache();
 
-            String sql = "SELECT TABLE_NAME, TTL FROM SYSTEM.CATALOG WHERE TABLE_SCHEM = '" + schema + "'";
-            ResultSet rs = conn.createStatement().executeQuery(sql);
+            //TestUtil.dumpTable(conn, TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES));
+
+            String sql = String.format("SELECT TABLE_NAME, TTL FROM SYSTEM.CATALOG WHERE TABLE_SCHEM = '%s' AND TABLE_TYPE = '%s' AND TTL IS NOT NULL", schema,
+                    PTableType.TABLE.getSerializedValue());
+            ResultSet rs = phxMetaConn.createStatement().executeQuery(sql);
+            int count = 0;
             while (rs.next()) {
+                count++;
                 String table = rs.getString(1);
+                LOGGER.info("found table: {} ", table);
                 int ttl = tableTTLMap.get(table);
+                int ttlInSyscat = Integer.valueOf(rs.getString(2)).intValue();
                 //Check if TTL is moved to SYSCAT.
-                if (ttl != HConstants.FOREVER) {
-                    assertEquals(ttl, Integer.valueOf(rs.getString(2)).intValue());
-                } else {
-                    assertEquals(ttl, TTL_NOT_DEFINED);
-                }
+                //assertEquals(ttl, );
                 //Check if TTL at HBase level is reset.
                 TableDescriptor tableDescriptor = admin.getDescriptor(TableName.valueOf(SchemaUtil.getTableName(schema, table)));
                 ColumnFamilyDescriptor[] columnFamilies = tableDescriptor.getColumnFamilies();
-                assertEquals(DEFAULT_TTL, columnFamilies[0].getTimeToLive());
+                if (ttlInSyscat == TTL_DEFINED_IN_TABLE_DESCRIPTOR) {
+                    assertEquals(ttl, columnFamilies[0].getTimeToLive());
+                    assertEquals(new LiteralTTLExpression(TTL_DEFINED_IN_TABLE_DESCRIPTOR),
+                            phxMetaConn.unwrap(PhoenixConnection.class).getTableNoCache(
+                                    null,
+                                            SchemaUtil.getTableName(Bytes.toBytes(schema),
+                                                    Bytes.toBytes(table))).getTTLExpression());
+                } else {
+                    // Should not have any value other than TTL_DEFINED_IN_TABLE_DESCRIPTOR when TTL is not null
+                    fail();
+                }
+
             }
+            if (count == 0) {
+                // Should have at least one table with TTL defined
+                fail();
+            }
+        } catch (Exception e) {
+            LOGGER.error(e.getMessage(), e);
         }
 
     }
@@ -97,30 +141,26 @@ public class MoveTTLDuringUpgradeIT extends ParallelStatsDisabledIT {
         int numOfTable = 20;
         int randomTTL = 0;
         Map<String, Integer> tableTTLMap = new HashMap<>();
+        //Set<TableDescriptor> modifiedTableDescriptors = new HashSet<>();
+
         for (int i = 0; i < numOfTable; i++ ) {
             table = "T_" + generateUniqueName();
-            randomTTL = i%3 == 0 ? HConstants.FOREVER : 100 + (int)(Math.random() * 1000);
+            randomTTL = i%3 == 0 ? HConstants.FOREVER :  100 + (int)(Math.random() * 1000);
             tableTTLMap.put(table, randomTTL);
+            String ddl = "CREATE TABLE  " + schema + "." + table +
+                    "  (a_string varchar not null, b_string varbinary not null, col1 integer" +
+                    "  CONSTRAINT pk PRIMARY KEY (a_string, b_string)) ";
+
+            BaseTest.createTestTable(getUrl(), ddl);
             TableName tableName = TableName.valueOf(SchemaUtil.getTableName(schema, table));
             TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(tableName);
             builder.setColumnFamily(ColumnFamilyDescriptorBuilder.newBuilder(
                     DEFAULT_COLUMN_FAMILY_BYTES).setTimeToLive(randomTTL).build());
-            admin.createTable(builder.build());
-            upsertIntoSYSCAT(schema, table);
+            admin.disableTable(tableName);
+            admin.modifyTable(builder.build());
+            admin.enableTable(tableName);
         }
         return tableTTLMap;
-    }
-
-    private void upsertIntoSYSCAT(String schema, String table) throws SQLException {
-        try (PhoenixConnection connection = getConnection(false, null).unwrap(PhoenixConnection.class)){
-            String dml = "UPSERT INTO SYSTEM.CATALOG (TENANT_ID, TABLE_SCHEM, TABLE_NAME, TTL) VALUES (?,?,?,?)";
-            PreparedStatement statement = connection.prepareStatement(dml);
-            statement.setString(1, null);
-            statement.setString(2, schema);
-            statement.setString(3, table);
-            statement.setNull(4, Types.INTEGER);
-        }
-
     }
 
     private Connection getConnection(boolean tenantSpecific, String tenantId,

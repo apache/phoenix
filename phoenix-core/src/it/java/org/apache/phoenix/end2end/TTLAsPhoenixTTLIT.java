@@ -22,10 +22,13 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
+import org.apache.phoenix.schema.LiteralTTLExpression;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
@@ -33,11 +36,13 @@ import org.apache.phoenix.schema.TTLExpression;
 import org.apache.phoenix.schema.TTLExpressionFactory;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -49,6 +54,8 @@ import java.util.Properties;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX;
 import static org.apache.phoenix.exception.SQLExceptionCode.TTL_ALREADY_DEFINED_IN_HIERARCHY;
 import static org.apache.phoenix.exception.SQLExceptionCode.TTL_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY;
+import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_DEFINED;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
@@ -118,7 +125,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
         try (Connection conn = DriverManager.getConnection(getUrl());) {
             PTable table = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,
                     createTableWithOrWithOutTTLAsItsProperty(conn, true)));
-            assertTTLValue(table, defaultTTL);
+            TestUtil.assertTTLValue(conn, table, defaultTTL);
             assertTrue("RowKeyMatcher should be Null",
                     (Bytes.compareTo(HConstants.EMPTY_BYTE_ARRAY, table.getRowKeyMatcher()) == 0));
         }
@@ -129,7 +136,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
         try (Connection conn = DriverManager.getConnection(getUrl());) {
             PTable table = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,
                     createTableWithOrWithOutTTLAsItsProperty(conn, false)));
-            assertTTLValue(table, TTL_EXPRESSION_NOT_DEFINED);
+            TestUtil.assertTTLValue(conn, table, TTL_EXPRESSION_NOT_DEFINED);
             assertFalse(table.hasConditionalTTL());
         }
     }
@@ -140,7 +147,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, true);
             PTable table = conn.unwrap(PhoenixConnection.class).
                     getTable(new PTableKey(null, tableName));
-            assertTTLValue(table, defaultTTL);
+            TestUtil.assertTTLValue(conn, table, defaultTTL);
             assertTrue(table.hasConditionalTTL() == useExpression);
             // Switch from cond ttl to value or vice versa
             String alterTTL = useExpression ? String.valueOf(DEFAULT_TTL_FOR_ALTER) :
@@ -150,7 +157,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             TTLExpression expected = useExpression ?
                     TTLExpressionFactory.create(DEFAULT_TTL_FOR_ALTER) :
                     TTLExpressionFactory.create(DEFAULT_TTL_EXPRESSION_FOR_ALTER);
-            assertTTLValue(conn.unwrap(PhoenixConnection.class), expected, tableName);
+            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), expected, tableName);
         }
     }
 
@@ -173,13 +180,12 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute(ddl);
         TTLExpression expected = TTLExpressionFactory.create(DEFAULT_TTL_FOR_TEST);
-        assertTTLValue(conn.unwrap(PhoenixConnection.class), expected, tableName);
-        //Setting TTL should not be stored as CF Descriptor properties when
-        //phoenix.table.ttl.enabled is true
+        TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), expected, tableName);
+        //Setting TTL should also stored in CF Descriptor properties for Backward compatibility
         Admin admin = driver.getConnectionQueryServices(getUrl(), new Properties()).getAdmin();
         ColumnFamilyDescriptor[] columnFamilies =
                 admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
-        assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_TTL, columnFamilies[0].getTimeToLive());
+        assertEquals(DEFAULT_TTL_FOR_TEST, columnFamilies[0].getTimeToLive());
     }
 
     @Test
@@ -195,19 +201,19 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
                         + " ) TTL=FOREVER";
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute(ddl);
-            assertTTLValue(conn.unwrap(PhoenixConnection.class),
-                    TTL_EXPRESSION_FOREVER, tableName);
+            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class),
+                    TTL_EXPRESSION_NOT_DEFINED, tableName);
 
             ddl = "ALTER TABLE  " + tableName + " SET TTL=NONE";
             conn.createStatement().execute(ddl);
-            assertTTLValue(conn.unwrap(PhoenixConnection.class),
+            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class),
                     TTL_EXPRESSION_NOT_DEFINED, tableName);
             //Setting TTL should not be stored as CF Descriptor properties when
             //phoenix.table.ttl.enabled is true
             Admin admin = driver.getConnectionQueryServices(getUrl(), new Properties()).getAdmin();
             ColumnFamilyDescriptor[] columnFamilies =
                     admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
-            assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_TTL, columnFamilies[0].getTimeToLive());
+            assertEquals(HConstants.FOREVER, columnFamilies[0].getTimeToLive());
 
             tableName = generateUniqueName();
             ddl =
@@ -216,13 +222,13 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
                             + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
                             + " ) TTL=NONE";
             conn.createStatement().execute(ddl);
-            assertTTLValue(conn.unwrap(PhoenixConnection.class),
+            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class),
                     TTL_EXPRESSION_NOT_DEFINED, tableName);
 
             ddl = "ALTER TABLE  " + tableName + " SET TTL=FOREVER";
             conn.createStatement().execute(ddl);
-            assertTTLValue(conn.unwrap(PhoenixConnection.class),
-                    TTL_EXPRESSION_FOREVER, tableName);
+            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class),
+                    TTL_EXPRESSION_NOT_DEFINED, tableName);
             //Setting TTL should not be stored as CF Descriptor properties when
             //phoenix.table.ttl.enabled is true
             columnFamilies =
@@ -237,17 +243,18 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
              PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);){
             String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, false);
             //Checking Default TTL in case of PhoenixTTLEnabled
-            assertTTLValue(conn.unwrap(PhoenixConnection.class), TTL_EXPRESSION_NOT_DEFINED, tableName);
+            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), TTL_EXPRESSION_NOT_DEFINED, tableName);
 
             String ddl = "ALTER TABLE  " + tableName + " SET TTL = " + this.alterTTLDDLOption;
             conn.createStatement().execute(ddl);
-            assertTTLValue(conn.unwrap(PhoenixConnection.class), this.alterTTL, tableName);
+            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), this.alterTTL, tableName);
             //Asserting TTL should not be stored as CF Descriptor properties when
             //phoenix.table.ttl.enabled is true
             Admin admin = driver.getConnectionQueryServices(getUrl(), new Properties()).getAdmin();
             ColumnFamilyDescriptor[] columnFamilies =
                     admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
-            assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_TTL, columnFamilies[0].getTimeToLive());
+            PTable pTable = pConn.getTableNoCache(tableName);
+            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), this.alterTTL, tableName);
         }
     }
 
@@ -261,7 +268,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             createIndexOnTableOrViewProvidedWithTTL(conn, tableName, PTable.IndexType.GLOBAL, false);
             List<PTable> indexes = PhoenixRuntime.getTable(conn, tableName).getIndexes();
             for (PTable index : indexes) {
-                assertTTLValue(index, defaultTTL);
+                TestUtil.assertTTLValue(conn, index, defaultTTL);
             }
 
             tableName = createTableWithOrWithOutTTLAsItsProperty(conn, false);
@@ -270,7 +277,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             String globalIndexName = createIndexOnTableOrViewProvidedWithTTL(conn, tableName, PTable.IndexType.GLOBAL, false);
             indexes = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, tableName)).getIndexes();
             for (PTable index : indexes) {
-                assertTTLValue(index, TTL_EXPRESSION_NOT_DEFINED);
+                TestUtil.assertTTLValue(conn, index, TTL_EXPRESSION_NOT_DEFINED);
                 assertTrue(Bytes.compareTo(
                         index.getRowKeyMatcher(), HConstants.EMPTY_BYTE_ARRAY) == 0
                 );
@@ -332,10 +339,10 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             String ttl = "ID2 = 34 AND COL2 > CURRENT_DATE() + 1000";
             conn.createStatement().execute(String.format(ddl, tableName, ttl));
             TTLExpression expected = TTLExpressionFactory.create(ttl);
-            assertTTLValue(conn.unwrap(PhoenixConnection.class), expected, tableName);
+            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), expected, tableName);
 
             conn.createStatement().execute(String.format("ALTER TABLE %s SET TTL=NONE", tableName));
-            assertTTLValue(conn.unwrap(PhoenixConnection.class), TTL_EXPRESSION_NOT_DEFINED, tableName);
+            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), TTL_EXPRESSION_NOT_DEFINED, tableName);
 
             try {
                 conn.createStatement().execute(String.format("ALTER TABLE %s SET TTL='%s'",
@@ -358,13 +365,13 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             ttl = "COL2 > CURRENT_DATE() + 200 AND VINT > 123";
             conn.createStatement().execute(String.format(ddl, viewName, tableName, ttl));
             expected = TTLExpressionFactory.create(ttl);
-            assertTTLValue(conn.unwrap(PhoenixConnection.class), expected, viewName);
+            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), expected, viewName);
 
             ttl = "COL2 > CURRENT_DATE() + 500 AND VINT > 123";
             conn.createStatement().execute(String.format("ALTER VIEW %s SET TTL='%s'",
                     viewName, ttl));
             expected = TTLExpressionFactory.create(ttl);
-            assertTTLValue(conn.unwrap(PhoenixConnection.class), expected, viewName);
+            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), expected, viewName);
         }
     }
 
@@ -383,7 +390,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             Connection tenantConn1 = DriverManager.getConnection(getUrl(), props1);
 
             String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, true);
-            assertTTLValue(conn.unwrap(PhoenixConnection.class), defaultTTL, tableName);
+            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), defaultTTL, tableName);
 
             //Setting TTL on views is not allowed if Table already has TTL
             try {
@@ -405,14 +412,14 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
 
             //View should have gotten TTL from parent table.
             String viewName = createUpdatableViewOnTableWithTTL(conn, tableName, false);
-            assertTTLValue(conn.unwrap(PhoenixConnection.class), defaultTTL, viewName);
+            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), defaultTTL, viewName);
 
             //Child View's PTable gets TTL from parent View's PTable which gets from Table.
             String childView = createViewOnViewWithTTL(tenantConn, viewName, false);
-            assertTTLValue(tenantConn.unwrap(PhoenixConnection.class), defaultTTL, childView);
+            TestUtil.assertTTLValue(tenantConn.unwrap(PhoenixConnection.class), defaultTTL, childView);
 
             String childView1 = createViewOnViewWithTTL(tenantConn1, viewName, false);
-            assertTTLValue(tenantConn1.unwrap(PhoenixConnection.class), defaultTTL, childView1);
+            TestUtil.assertTTLValue(tenantConn1.unwrap(PhoenixConnection.class), defaultTTL, childView1);
 
             createIndexOnTableOrViewProvidedWithTTL(conn, viewName, PTable.IndexType.GLOBAL,
                     false);
@@ -423,7 +430,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
                     conn.unwrap(PhoenixConnection.class), viewName).getIndexes();
 
             for (PTable index : indexes) {
-                assertTTLValue(index, defaultTTL);
+                TestUtil.assertTTLValue(conn, index, defaultTTL);
             }
 
             createIndexOnTableOrViewProvidedWithTTL(conn, tableName, PTable.IndexType.GLOBAL, false);
@@ -431,7 +438,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
                     conn.unwrap(PhoenixConnection.class), tableName).getIndexes();
 
             for (PTable index : tIndexes) {
-                assertTTLValue(index, defaultTTL);
+                TestUtil.assertTTLValue(conn, index, defaultTTL);
             }
         }
     }
@@ -446,7 +453,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             Connection tenantConn = DriverManager.getConnection(getUrl(), props);
 
             String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, true);
-            assertTTLValue(conn.unwrap(PhoenixConnection.class), defaultTTL, tableName);
+            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), defaultTTL, tableName);
 
             //Setting TTL on views is not allowed if Table already has TTL
             try {
@@ -460,14 +467,14 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             String ddl = "ALTER TABLE " + tableName + " SET TTL=NONE";
             conn.createStatement().execute(ddl);
 
-            assertTTLValue(conn.unwrap(PhoenixConnection.class),
+            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class),
                     TTL_EXPRESSION_NOT_DEFINED, tableName);
 
             String viewName = createUpdatableViewOnTableWithTTL(conn, tableName, true);
             TTLExpression expectedChildTTl = useExpression ?
                     TTLExpressionFactory.create(DEFAULT_TTL_EXPRESSION) :
                     TTLExpressionFactory.create(DEFAULT_TTL_FOR_CHILD);
-            assertTTLValue(conn.unwrap(PhoenixConnection.class), expectedChildTTl, viewName);
+            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), expectedChildTTl, viewName);
 
             try {
                 createViewOnViewWithTTL(tenantConn, viewName, true);
@@ -492,12 +499,12 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             conn.createStatement().execute(ddl);
 
             String childView = createViewOnViewWithTTL(tenantConn, viewName, true);
-            assertTTLValue(tenantConn.unwrap(PhoenixConnection.class), expectedChildTTl, childView);
+            TestUtil.assertTTLValue(tenantConn.unwrap(PhoenixConnection.class), expectedChildTTl, childView);
 
             ddl = "ALTER VIEW " + childView + " SET TTL=NONE";
             tenantConn.createStatement().execute(ddl);
 
-            assertTTLValue(tenantConn.unwrap(PhoenixConnection.class),
+            TestUtil.assertTTLValue(tenantConn.unwrap(PhoenixConnection.class),
                     TTL_EXPRESSION_NOT_DEFINED, childView);
 
             ddl = "ALTER VIEW " + viewName + " SET TTL=" + ttlAlter;
@@ -505,7 +512,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             TTLExpression expectedAlterTTl = useExpression ?
                     TTLExpressionFactory.create(DEFAULT_TTL_EXPRESSION_FOR_ALTER) :
                     TTLExpressionFactory.create(DEFAULT_TTL_FOR_ALTER);
-            assertTTLValue(conn.unwrap(PhoenixConnection.class), expectedAlterTTl, viewName);
+            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), expectedAlterTTl, viewName);
         }
     }
 
@@ -524,18 +531,18 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             Connection tenantConn1 = DriverManager.getConnection(getUrl(), props1);
 
             String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, true);
-            assertTTLValue(conn.unwrap(PhoenixConnection.class), defaultTTL, tableName);
+            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), defaultTTL, tableName);
 
             //View should have gotten TTL from parent table.
             String viewName = createUpdatableViewOnTableWithTTL(conn, tableName, false);
-            assertTTLValue(conn.unwrap(PhoenixConnection.class), defaultTTL, viewName);
+            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), defaultTTL, viewName);
 
             //Child View's PTable gets TTL from parent View's PTable which gets from Table.
             String childView = createViewOnViewWithTTL(tenantConn, viewName, false);
-            assertTTLValue(tenantConn.unwrap(PhoenixConnection.class), defaultTTL, childView);
+            TestUtil.assertTTLValue(tenantConn.unwrap(PhoenixConnection.class), defaultTTL, childView);
 
             String childView1 = createViewOnViewWithTTL(tenantConn1, viewName, false);
-            assertTTLValue(tenantConn1.unwrap(PhoenixConnection.class), defaultTTL, childView1);
+            TestUtil.assertTTLValue(tenantConn1.unwrap(PhoenixConnection.class), defaultTTL, childView1);
 
             String ttlAlter = (useExpression ?
                     String.format("'%s'", DEFAULT_TTL_EXPRESSION_FOR_ALTER) :
@@ -553,19 +560,10 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
                     TTLExpressionFactory.create(DEFAULT_TTL_EXPRESSION_FOR_ALTER) :
                     TTLExpressionFactory.create(DEFAULT_TTL_FOR_ALTER);
             //Assert TTL for each entity again with altered value
-            assertTTLValue(conn.unwrap(PhoenixConnection.class), expectedAlterTTl, viewName);
-            assertTTLValue(tenantConn.unwrap(PhoenixConnection.class), expectedAlterTTl, childView);
-            assertTTLValue(tenantConn1.unwrap(PhoenixConnection.class), expectedAlterTTl, childView1);
+            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), expectedAlterTTl, viewName);
+            TestUtil.assertTTLValue(tenantConn.unwrap(PhoenixConnection.class), expectedAlterTTl, childView);
+            TestUtil.assertTTLValue(tenantConn1.unwrap(PhoenixConnection.class), expectedAlterTTl, childView1);
         }
-    }
-
-    private void assertTTLValue(PhoenixConnection conn, TTLExpression expected, String name) throws SQLException {
-        assertEquals("TTL value did not match :-", expected,
-                PhoenixRuntime.getTableNoCache(conn, name).getTTLExpression());
-    }
-
-    private void assertTTLValue(PTable table, TTLExpression expected) {
-        assertEquals("TTL value did not match :-", expected, table.getTTLExpression());
     }
 
     private String createTableWithOrWithOutTTLAsItsProperty(Connection conn, boolean withTTL) throws SQLException {

@@ -98,7 +98,8 @@ public class ViewTTLIT extends BaseViewTTLIT {
     public static void doSetup() throws Exception {
         // Turn on the View TTL feature
         Map<String, String> DEFAULT_PROPERTIES = new HashMap<String, String>() {{
-            put(QueryServices.PHOENIX_TABLE_TTL_ENABLED, String.valueOf(true));
+            put(QueryServices.PHOENIX_COMPACTION_ENABLED, String.valueOf(true));
+            put(QueryServices.PHOENIX_VIEW_TTL_ENABLED, Boolean.toString(true));
             put(QueryServices.LONG_VIEW_INDEX_ENABLED_ATTRIB, String.valueOf(false));
             put("hbase.procedure.remote.dispatcher.delay.msec", "0");
             // no max lookback
