@@ -1,25 +1,23 @@
 package org.apache.phoenix.monitoring;
 
-import org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.hbase.thirdparty.com.google.common.collect.ImmutableList;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class ThreadPoolHistograms {
+public class HTableThreadPoolHistograms {
     public enum Tag {
         server,
         connectionProfile,
     }
 
-    final private Map<String, String> tags;
     final private UtilizationHistogram activeThreadsHisto;
     final private UtilizationHistogram queuedSizeHisto;
 
-    public ThreadPoolHistograms(long maxThreadPoolSize, long maxQueueSize) {
+    public HTableThreadPoolHistograms(long maxThreadPoolSize, long maxQueueSize) {
         activeThreadsHisto = new UtilizationHistogram(maxThreadPoolSize, "ActiveThreadsCount");
         queuedSizeHisto = new UtilizationHistogram(maxQueueSize, "QueueSize");
-        tags = new HashMap<>();
     }
 
     public void updateActiveThreads(long activeThreads) {

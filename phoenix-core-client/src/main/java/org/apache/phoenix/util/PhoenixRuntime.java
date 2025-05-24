@@ -54,7 +54,6 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hbase.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.OrderByExpression;
@@ -71,9 +70,8 @@ import org.apache.phoenix.monitoring.HistogramDistribution;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.monitoring.PhoenixTableMetric;
 import org.apache.phoenix.monitoring.TableMetricsManager;
-import org.apache.phoenix.monitoring.ThreadPoolMetricsManager;
+import org.apache.phoenix.monitoring.HTableThreadPoolMetricsManager;
 import org.apache.phoenix.monitoring.connectionqueryservice.ConnectionQueryServicesMetricsManager;
-import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.AmbiguousColumnException;
@@ -1418,8 +1416,8 @@ public class PhoenixRuntime {
         return TableMetricsManager.getSizeHistogramsForAllTables();
     }
 
-    public static Map<String, List<HistogramDistribution>> getCQSIThreadPoolHistograms() {
-        return ThreadPoolMetricsManager.getHistogramsForAllThreadPools();
+    public static Map<String, List<HistogramDistribution>> getHTableThreadPoolHistograms() {
+        return HTableThreadPoolMetricsManager.getHistogramsForAllThreadPools();
     }
 
     public static Map<String, List<HistogramDistribution>> getAllConnectionQueryServicesHistograms() {
