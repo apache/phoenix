@@ -274,7 +274,7 @@ public class SequenceRegionObserver implements RegionObserver, RegionCoprocessor
 					limitReached = SequenceUtil.checkIfLimitReached(currentValue, minValue, maxValue, incrementBy, cacheSize, numSlotsToAllocate);
 					
                     // update currentValue
-					currentValue += incrementBy * (SequenceUtil.isBulkAllocation(numSlotsToAllocate) ? numSlotsToAllocate : cacheSize);
+					currentValue += incrementBy * (SequenceUtil.isBulkAllocation(numSlotsToAllocate) ? Math.max(numSlotsToAllocate, cacheSize) : cacheSize);
 					// update the currentValue of the Result row
 					Cell newCurrentValueKV = createKeyValue(row, PhoenixDatabaseMetaData.CURRENT_VALUE_BYTES, currentValue, timestamp);
 		            Sequence.replaceCurrentValueKV(cells, newCurrentValueKV);
