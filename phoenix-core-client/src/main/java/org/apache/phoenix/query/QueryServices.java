@@ -507,6 +507,8 @@ public interface QueryServices extends SQLCloseable {
      */
     String TESTS_MINI_CLUSTER_NUM_REGION_SERVERS = "phoenix.tests.minicluster.numregionservers";
 
+    String TESTS_MINI_CLUSTER_NUM_MASTERS = "phoenix.tests.minicluster.nummasters";
+
 
     /**
      * Config to inject any processing after the client retrieves dummy result from the server.

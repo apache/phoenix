@@ -2,6 +2,7 @@ package org.apache.phoenix.monitoring;
 
 import org.HdrHistogram.ConcurrentHistogram;
 import org.HdrHistogram.Histogram;
+import org.HdrHistogram.Recorder;
 import org.apache.hbase.thirdparty.com.google.common.collect.ImmutableMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,7 +23,8 @@ public abstract class PercentileHistogram {
     String NINETIETH_PERCENTILE_METRIC_NAME = "_90th_percentile";
     String NINETY_FIFTH_PERCENTILE_METRIC_NAME = "_95th_percentile";
 
-    private Histogram histogram;
+    private Histogram prevHistogram = null;
+    private final Recorder recorder;
     final private String name;
     final private long maxUtil;
     private Map<String, String> tags = null;
@@ -30,35 +32,25 @@ public abstract class PercentileHistogram {
     PercentileHistogram(long maxUtil, String name) {
         this.name = name;
         this.maxUtil = maxUtil;
-        // Keeping same precision as {@link RangeHistogram}
-        this.histogram = new ConcurrentHistogram(maxUtil, 2);
-    }
-
-    private void init() {
-        this.histogram = new ConcurrentHistogram(maxUtil, 2);
+        this.recorder = new Recorder(maxUtil, 2);
     }
 
     public void addValue(long value) {
-        if (value > histogram.getHighestTrackableValue()) {
+        if (value > maxUtil) {
             // Ignoring recording value more than maximum trackable value.
             LOGGER.warn("Histogram recording higher value than maximum. Ignoring it.");
             return;
         }
-        histogram.recordValue(value);
-    }
-
-    private Histogram getSnapshotAndReset() {
-        Histogram snapshot = histogram;
-        init();
-        return snapshot;
+        recorder.recordValue(value);
     }
 
     public HistogramDistribution getPercentileHistogramDistribution() {
-        Histogram percentileHistogram = getSnapshotAndReset();
+        Histogram histogram = this.recorder.getIntervalHistogram(prevHistogram);
         HistogramDistribution distribution =
-                new PercentileHistogramDistribution(name, histogram.getMinValue(),
+                new PercentileHistogramDistribution(name,histogram.getMinValue(),
                         histogram.getMaxValue(), histogram.getTotalCount(),
-                        generateDistributionMap(percentileHistogram), ImmutableMap.copyOf(tags));
+                        generateDistributionMap(histogram), ImmutableMap.copyOf(tags));
+        this.prevHistogram = histogram;
         return distribution;
     }
 
