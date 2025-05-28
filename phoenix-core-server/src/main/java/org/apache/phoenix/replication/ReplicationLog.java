@@ -156,6 +156,9 @@ public class ReplicationLog {
     public static final String REPLICATION_LOG_SYNC_RETRIES_KEY =
         "phoenix.replication.log.sync.retries";
     public static final int DEFAULT_REPLICATION_LOG_SYNC_RETRIES = 5;
+    public static final String REPLICATION_LOG_ROTATION_RETRIES_KEY =
+        "phoenix.replication.log.rotation.retries";
+    public static final int DEFAULT_REPLICATION_LOG_ROTATION_RETRIES = 5;
 
     public static final String SHARD_DIR_FORMAT = "shard%05d";
     public static final String FILE_NAME_FORMAT = "%d-%s.plog";
@@ -176,11 +179,13 @@ public class ReplicationLog {
     protected URI fallbackUrl; // For store-and-forward (future use)
     protected final long rotationTimeMs;
     protected final long rotationSizeBytes;
+    protected final int maxRotationRetries;
     protected final Compression.Algorithm compression;
     protected final ReentrantLock lock = new ReentrantLock();
     protected volatile LogFileWriter currentWriter; // Current writer
     protected final AtomicLong lastRotationTime = new AtomicLong();
     protected final AtomicLong writerGeneration = new AtomicLong();
+    protected final AtomicLong rotationFailures = new AtomicLong(0);
     protected ScheduledExecutorService rotationExecutor;
     protected final int ringBufferSize;
     protected final long syncTimeoutMs;
@@ -315,6 +320,8 @@ public class ReplicationLog {
         double rotationSizePercent = conf.getDouble(REPLICATION_LOG_ROTATION_SIZE_PERCENTAGE_KEY,
             DEFAULT_REPLICATION_LOG_ROTATION_SIZE_PERCENTAGE);
         this.rotationSizeBytes = (long) (rotationSize * rotationSizePercent);
+        this.maxRotationRetries = conf.getInt(REPLICATION_LOG_ROTATION_RETRIES_KEY,
+            DEFAULT_REPLICATION_LOG_ROTATION_RETRIES);
         this.numShards = conf.getInt(REPLICATION_NUM_SHARDS_KEY, DEFAULT_REPLICATION_NUM_SHARDS);
         String compressionName = conf.get(REPLICATION_LOG_COMPRESSION_ALGORITHM_KEY,
             DEFAULT_REPLICATION_LOG_COMPRESSION_ALGORITHM);
@@ -596,7 +603,28 @@ public class ReplicationLog {
         return false;
     }
 
-    /** Closes the current log writer and opens a new one, updating rotation metrics. */
+    /**
+     * Closes the current log writer and opens a new one, updating rotation metrics.
+     * <p>
+     * This method handles the rotation of log files, which can be triggered by:
+     * <ul>
+     *   <li>Time threshold exceeded (TIME)</li>
+     *   <li>Size threshold exceeded (SIZE)</li>
+     *   <li>Error condition requiring rotation (ERROR)</li>
+     * </ul>
+     * <p>
+     * The method implements retry logic for handling rotation failures.  If rotation fails, it
+     * retries up to maxRotationRetries times. If the number of failures exceeds
+     * maxRotationRetries, an exception is thrown. Otherwise, it logs a warning and continues with
+     * the current writer.
+     * <p>
+     * The method is thread-safe and uses a lock to ensure atomic rotation operations.
+     *
+     * @param reason The reason for requesting log rotation
+     * @return The new LogFileWriter instance if rotation succeeded, or the current writer if
+     * rotation failed
+     * @throws IOException if rotation fails after exceeding maxRotationRetries
+     */
     @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = "UL_UNRELEASED_LOCK",
         justification = "False positive")
     protected LogFileWriter rotateLog(RotationReason reason) throws IOException {
@@ -612,29 +640,38 @@ public class ReplicationLog {
                 closeWriter(currentWriter);
             }
             currentWriter = newWriter;
-            // Update metrics based on rotation reason
+            lastRotationTime.set(EnvironmentEdgeManager.currentTimeMillis());
+            rotationFailures.set(0);
+            metrics.incrementRotationCount();
             switch (reason) {
             case TIME:
-                metrics.incrementTimeBasedRotationCounter();
+                metrics.incrementTimeBasedRotationCount();
                 break;
             case SIZE:
-                metrics.incrementSizeBasedRotationCounter();
+                metrics.incrementSizeBasedRotationCount();
                 break;
             case ERROR:
-                metrics.incrementErrorBasedRotationCounter();
+                metrics.incrementErrorBasedRotationCount();
                 break;
             }
-            metrics.incrementTotalRotationCounter();
-            return currentWriter;
+        } catch (IOException e) {
+            // If we fail to rotate the log, we increment the failure counter. If we have exceeded
+            // the maximum number of retries, we close the log and throw the exception. Otherwise
+            // we log a warning and continue.
+            metrics.incrementRotationFailureCount();
+            long numFailures = rotationFailures.getAndIncrement();
+            if (numFailures >= maxRotationRetries) {
+                LOG.warn("Failed to rotate log (attempt {}/{}), closing log", numFailures,
+                    maxRotationRetries, e);
+                closeOnError();
+                throw e;
+            }
+            LOG.warn("Failed to rotate log (attempt {}/{}), retrying...", numFailures,
+                maxRotationRetries, e);
         } finally {
-            // Update the last rotation time no matter what. We will try again next time. We do
-            // this so we are not constantly trying to rotate the log instead of making progress
-            // with the existing writer when there is some hopefully transient issue during
-            // rolling.
-            // TODO: Escalate error response after some consecutive number of failed rolls.
-            lastRotationTime.set(EnvironmentEdgeManager.currentTimeMillis());
             lock.unlock();
         }
+        return currentWriter;
     }
 
     /**

@@ -24,6 +24,7 @@ public class ReplicationLogMetricValues {
     private final long sizeBasedRotationCount;
     private final long errorBasedRotationCount;
     private final long totalRotationCount;
+    private final long rotationFailuresCount;
     private final long appendTime;
     private final long syncTime;
     private final long rotationTime;
@@ -35,6 +36,7 @@ public class ReplicationLogMetricValues {
         this.sizeBasedRotationCount = builder.sizeBasedRotationCounter;
         this.errorBasedRotationCount = builder.errorBasedRotationCounter;
         this.totalRotationCount = builder.totalRotationCounter;
+        this.rotationFailuresCount = builder.rotationFailuresCounter;
         this.appendTime = builder.appendTimeCount;
         this.syncTime = builder.syncTimeCount;
         this.rotationTime = builder.rotationTimeCount;
@@ -55,6 +57,10 @@ public class ReplicationLogMetricValues {
 
     public long getTotalRotationCount() {
         return totalRotationCount;
+    }
+
+    public long getRotationFailuresCount() {
+        return rotationFailuresCount;
     }
 
     public long getAppendTime() {
@@ -78,6 +84,7 @@ public class ReplicationLogMetricValues {
         private long sizeBasedRotationCounter;
         private long errorBasedRotationCounter;
         private long totalRotationCounter;
+        private long rotationFailuresCounter;
         private long appendTimeCount;
         private long syncTimeCount;
         private long rotationTimeCount;
@@ -98,8 +105,13 @@ public class ReplicationLogMetricValues {
             return this;
         }
 
-        public Builder setTotalRotationCount(long totalRotationCounter) {
+        public Builder setRotationCount(long totalRotationCounter) {
             this.totalRotationCounter = totalRotationCounter;
+            return this;
+        }
+
+        public Builder setRotationFailuresCount(long rotationFailuresCounter) {
+            this.rotationFailuresCounter = rotationFailuresCounter;
             return this;
         }
 

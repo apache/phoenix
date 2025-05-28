@@ -28,7 +28,8 @@ public class MetricsReplicationLogSourceImpl extends BaseSourceImpl
     private final MutableFastCounter timeBasedRotationCount;
     private final MutableFastCounter sizeBasedRotationCount;
     private final MutableFastCounter errorBasedRotationCount;
-    private final MutableFastCounter totalRotationCount;
+    private final MutableFastCounter rotationCount;
+    private final MutableFastCounter rotationFailuresCount;
     private final MetricHistogram appendTime;
     private final MetricHistogram syncTime;
     private final MetricHistogram rotationTime;
@@ -36,14 +37,16 @@ public class MetricsReplicationLogSourceImpl extends BaseSourceImpl
 
     public MetricsReplicationLogSourceImpl() {
         super(METRICS_NAME, METRICS_DESCRIPTION, METRICS_CONTEXT, METRICS_JMX_CONTEXT);
-        timeBasedRotationCount = getMetricsRegistry().newCounter(TIME_BASED_ROTATION_COUNTER,
-            TIME_BASED_ROTATION_COUNTER_DESC, 0L);
-        sizeBasedRotationCount = getMetricsRegistry().newCounter(SIZE_BASED_ROTATION_COUNTER,
-            SIZE_BASED_ROTATION_COUNTER_DESC, 0L);
-        errorBasedRotationCount = getMetricsRegistry().newCounter(ERROR_BASED_ROTATION_COUNTER,
-            ERROR_BASED_ROTATION_COUNTER_DESC, 0L);
-        totalRotationCount = getMetricsRegistry().newCounter(TOTAL_ROTATION_COUNTER,
-            TOTAL_ROTATION_COUNTER_DESC, 0L);
+        timeBasedRotationCount = getMetricsRegistry().newCounter(TIME_BASED_ROTATION_COUNT,
+            TIME_BASED_ROTATION_COUNT_DESC, 0L);
+        sizeBasedRotationCount = getMetricsRegistry().newCounter(SIZE_BASED_ROTATION_COUNT,
+            SIZE_BASED_ROTATION_COUNT_DESC, 0L);
+        errorBasedRotationCount = getMetricsRegistry().newCounter(ERROR_BASED_ROTATION_COUNT,
+            ERROR_BASED_ROTATION_COUNT_DESC, 0L);
+        rotationCount = getMetricsRegistry().newCounter(ROTATION_COUNT, ROTATION_COUNT_DESC,
+            0L);
+        rotationFailuresCount = getMetricsRegistry().newCounter(ROTATION_FAILURES,
+            ROTATION_FAILURES_DESC, 0L);
         appendTime = getMetricsRegistry().newHistogram(APPEND_TIME, APPEND_TIME_DESC);
         syncTime = getMetricsRegistry().newHistogram(SYNC_TIME, SYNC_TIME_DESC);
         rotationTime = getMetricsRegistry().newHistogram(ROTATION_TIME, ROTATION_TIME_DESC);
@@ -52,23 +55,28 @@ public class MetricsReplicationLogSourceImpl extends BaseSourceImpl
     }
 
     @Override
-    public void incrementTimeBasedRotationCounter() {
+    public void incrementTimeBasedRotationCount() {
         timeBasedRotationCount.incr();
     }
 
     @Override
-    public void incrementSizeBasedRotationCounter() {
+    public void incrementSizeBasedRotationCount() {
         sizeBasedRotationCount.incr();
     }
 
     @Override
-    public void incrementErrorBasedRotationCounter() {
+    public void incrementErrorBasedRotationCount() {
         errorBasedRotationCount.incr();
     }
 
     @Override
-    public void incrementTotalRotationCounter() {
-        totalRotationCount.incr();
+    public void incrementRotationCount() {
+        rotationCount.incr();
+    }
+
+    @Override
+    public void incrementRotationFailureCount() {
+        rotationFailuresCount.incr();
     }
 
     @Override
@@ -98,7 +106,8 @@ public class MetricsReplicationLogSourceImpl extends BaseSourceImpl
             .setTimeBasedRotationCount(timeBasedRotationCount.value())
             .setSizeBasedRotationCount(sizeBasedRotationCount.value())
             .setErrorBasedRotationCount(errorBasedRotationCount.value())
-            .setTotalRotationCount(totalRotationCount.value())
+            .setRotationCount(rotationCount.value())
+            .setRotationFailuresCount(rotationFailuresCount.value())
             .setAppendTime(appendTime.getCount())
             .setSyncTime(syncTime.getCount())
             .setRotationTime(rotationTime.getCount())

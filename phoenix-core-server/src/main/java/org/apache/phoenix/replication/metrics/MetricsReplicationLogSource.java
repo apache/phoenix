@@ -27,19 +27,22 @@ public interface MetricsReplicationLogSource extends BaseSource {
     String METRICS_DESCRIPTION = "Metrics about Phoenix Replication Log Operations";
     String METRICS_JMX_CONTEXT = "RegionServer,sub=" + METRICS_NAME;
 
-    String TIME_BASED_ROTATION_COUNTER = "timeBasedRotationCounter";
-    String TIME_BASED_ROTATION_COUNTER_DESC = "Number of time-based log rotations";
+    String TIME_BASED_ROTATION_COUNT = "timeBasedRotationCount";
+    String TIME_BASED_ROTATION_COUNT_DESC = "Number of time-based log rotations";
 
-    String SIZE_BASED_ROTATION_COUNTER = "sizeBasedRotationCounter";
-    String SIZE_BASED_ROTATION_COUNTER_DESC = "Number of size-based log rotations";
+    String SIZE_BASED_ROTATION_COUNT = "sizeBasedRotationCount";
+    String SIZE_BASED_ROTATION_COUNT_DESC = "Number of size-based log rotations";
 
-    String ERROR_BASED_ROTATION_COUNTER = "errorBasedRotationCounter";
-    String ERROR_BASED_ROTATION_COUNTER_DESC =
+    String ERROR_BASED_ROTATION_COUNT = "errorBasedRotationCount";
+    String ERROR_BASED_ROTATION_COUNT_DESC =
         "Number of times rotateLog was called due to errors";
 
-    String TOTAL_ROTATION_COUNTER = "totalRotationCounter";
-    String TOTAL_ROTATION_COUNTER_DESC = "Total number of times rotateLog was called";
+    String ROTATION_COUNT = "rotationCount";
+    String ROTATION_COUNT_DESC = "Total number of times rotateLog was called";
 
+    String ROTATION_FAILURES = "rotationFailures";
+
+    String ROTATION_FAILURES_DESC = "Number of times log rotation has failed";
     String APPEND_TIME = "appendTimeMs";
     String APPEND_TIME_DESC = "Histogram of time taken for append operations in nanoseconds";
 
@@ -56,25 +59,25 @@ public interface MetricsReplicationLogSource extends BaseSource {
      * Increments the counter for time-based log rotations.
      * This counter tracks the number of times the log was rotated due to time threshold.
      */
-    void incrementTimeBasedRotationCounter();
+    void incrementTimeBasedRotationCount();
 
     /**
      * Increments the counter for size-based log rotations.
      * This counter tracks the number of times the log was rotated due to size threshold.
      */
-    void incrementSizeBasedRotationCounter();
+    void incrementSizeBasedRotationCount();
 
     /**
      * Increments the counter for error-based log rotations.
      * This counter tracks the number of times the log was rotated due to errors.
      */
-    void incrementErrorBasedRotationCounter();
+    void incrementErrorBasedRotationCount();
 
     /**
      * Increments the counter for total log rotations.
      * This counter tracks the total number of times the log was rotated, regardless of reason.
      */
-    void incrementTotalRotationCounter();
+    void incrementRotationCount();
 
     /**
      * Update the time taken for an append operation in nanoseconds.
@@ -99,6 +102,12 @@ public interface MetricsReplicationLogSource extends BaseSource {
      * @param timeNs Time spent in nanoseconds
      */
     void updateRingBufferTime(long timeNs);
+
+    /**
+     * Increments the counter for log rotation failures.
+     * This counter tracks the number of times log rotation has failed.
+     */
+    void incrementRotationFailureCount();
 
     // Get current values for testing
     ReplicationLogMetricValues getCurrentMetricValues();

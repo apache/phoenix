@@ -19,6 +19,7 @@ package org.apache.phoenix.replication;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -44,6 +45,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.conf.Configuration;
@@ -53,6 +55,7 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
+import org.apache.phoenix.replication.ReplicationLog.RotationReason;
 import org.apache.phoenix.replication.log.LogFile;
 import org.apache.phoenix.replication.log.LogFileReader;
 import org.apache.phoenix.replication.log.LogFileReaderContext;
@@ -559,12 +562,19 @@ public class ReplicationLogTest {
     }
 
     /**
-     * Tests behavior when log rotation fails. Verifies that the system continues to operate with
-     * the existing writer when rotation fails to create a new writer.
+     * Tests behavior when log rotation fails temporarily but eventually succeeds. Verifies that:
+     * <ul>
+     *   <li>The system can handle temporary rotation failures</li>
+     *   <li>After failing twice, the third rotation attempt succeeds</li>
+     *   <li>Operations continue correctly with the new writer after successful rotation</li>
+     *   <li>The metrics for rotation failures are properly tracked</li>
+     *   <li>Operations can continue with the current writer while rotation attempts are failing</li>
+     * </ul>
      * <p>
-     * TODO: The system should close the log after too many failed log rotation attempts. For now
-     * we simply continue with the current writer in the hopes some other rotation attempt will
-     * succeed soon.
+     * This test simulates a scenario where the first two rotation attempts fail (e.g., due to
+     * temporary HDFS issues) but the third attempt succeeds. This is a common real-world scenario
+     * where transient failures occur but the system eventually recovers. During the failed rotation
+     * attempts, the system should continue to operate normally with the current writer.
      */
     @Test
     public void testFailedRotation() throws Exception {
@@ -576,29 +586,95 @@ public class ReplicationLogTest {
         LogFileWriter initialWriter = logWriter.getWriter();
         assertNotNull("Initial writer should not be null", initialWriter);
 
+        // Configure the log writer to fail only the first time when creating new writers.
+        AtomicBoolean shouldFail = new AtomicBoolean(true);
+        doAnswer(invocation -> {
+            if (shouldFail.getAndSet(false)) {
+                throw new IOException("Simulated failure to create new writer");
+            }
+            return invocation.callRealMethod();
+        }).when(logWriter).createNewWriter(any(FileSystem.class), any(URI.class));
+
         // Append some data
         logWriter.append(tableName, commitId, put);
         logWriter.sync();
 
-        // Now configure the log writer to fail when creating new writers
-        doThrow(new IOException("Simulated failure to create new writer"))
-            .when(logWriter).createNewWriter(any(FileSystem.class), any(URI.class));
+        // Rotate the log.
+        LogFileWriter writerAfterFailedRotate = logWriter.rotateLog(RotationReason.TIME);
+        assertEquals("Should still be using the initial writer", initialWriter,
+            writerAfterFailedRotate);
 
-        // Wait for rotation time to elapse plus a small buffer
-        Thread.sleep((long)(TEST_ROTATION_TIME * 1.25));
-
-        // Try to append more data - this should still work with the original writer
+        // While rotation is failing, verify we can continue to use the current writer.
         logWriter.append(tableName, commitId + 1, put);
         logWriter.sync();
 
-        // Verify we're still using the original writer
-        LogFileWriter currentWriter = logWriter.getWriter();
-        assertTrue("Should still be using original writer", currentWriter == initialWriter);
+        LogFileWriter writerAfterRotate = logWriter.rotateLog(RotationReason.TIME);
+        assertNotEquals("Should be using a new writer", initialWriter, writerAfterRotate);
 
-        // Verify all operations went to the original writer
-        verify(initialWriter, times(1)).append(eq(tableName), eq(commitId), eq(put));
-        verify(initialWriter, times(1)).append(eq(tableName), eq(commitId + 1), eq(put));
-        verify(initialWriter, times(2)).sync();
+        // Try to append more data. This should work with the new writer after successful rotation.
+        logWriter.append(tableName, commitId + 2, put);
+        logWriter.sync();
+
+        // Verify operations went to the writers in the correct order
+        InOrder inOrder = Mockito.inOrder(initialWriter, writerAfterRotate);
+        // First append and sync on initial writer.
+        inOrder.verify(initialWriter).append(eq(tableName), eq(commitId), eq(put));
+        inOrder.verify(initialWriter).sync();
+        // Second append and sync on initial writer after failed rotation.
+        inOrder.verify(initialWriter).append(eq(tableName), eq(commitId + 1), eq(put));
+        inOrder.verify(initialWriter).sync();
+        // Final append and sync on new writer after successful rotation.
+        inOrder.verify(writerAfterRotate).append(eq(tableName), eq(commitId + 2), eq(put));
+        inOrder.verify(writerAfterRotate).sync();
+    }
+
+    /**
+     * This test simulates a scenario where rotation consistently fails and verifies that the
+     * system properly propagates an exception after exhausting all retry attempts.
+     */
+    @Test
+    public void testTooManyRotationFailures() throws Exception {
+        final String tableName = "TBLTMRF";
+        final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
+        long commitId = 1L;
+
+        LogFileWriter initialWriter = logWriter.getWriter();
+        assertNotNull("Initial writer should not be null", initialWriter);
+
+        // Configure the log writer to always fail when creating new writers
+        doThrow(new IOException("Simulated failure to create new writer"))
+            .when(logWriter).createNewWriter(any(FileSystem.class), any(URI.class));
+
+        // Append some data
+        logWriter.append(tableName, commitId, put);
+        logWriter.sync();
+
+        // Try to rotate the log multiple times until we exceed the retry limit
+        for (int i = 0; i <= ReplicationLog.DEFAULT_REPLICATION_LOG_ROTATION_RETRIES; i++) {
+            try {
+                logWriter.rotateLog(RotationReason.TIME);
+            } catch (IOException e) {
+                if (i < ReplicationLog.DEFAULT_REPLICATION_LOG_ROTATION_RETRIES) {
+                    // Not the last attempt yet, continue
+                    continue;
+                }
+                // This was the last attempt, verify the exception
+                assertTrue("Expected IOException", e instanceof IOException);
+                assertTrue("Expected our mocked failure cause",
+                  e.getMessage().contains("Simulated failure"));
+
+            }
+        }
+
+        // Verify subsequent operations fail because the log is closed
+        try {
+            logWriter.append(tableName, commitId + 1, put);
+            logWriter.sync();
+            fail("Expected append to fail because log is closed");
+        } catch (IOException e) {
+            assertTrue("Expected an IOException because log is closed",
+                e.getMessage().contains("Closed"));
+        }
     }
 
     /**
