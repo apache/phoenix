@@ -388,6 +388,10 @@ public class ReplicationLog {
      * buffer become full, which is not expected under normal operation but could (and should)
      * happen if the log file writer is unable to make progress, due to a HDFS level disruption.
      * Should we enter that condition this method will block until the append can be inserted.
+     * <p>
+     * An internal error may trigger fail-stop behavior. Subsequent to fail-stop, this method will
+     * throw an IOException("Closed"). No further appends are allowed.
+     *
      * @param tableName The name of the HBase table the mutation applies to.
      * @param commitId  The commit identifier (e.g., SCN) associated with the mutation.
      * @param mutation  The HBase Mutation (Put or Delete) to be logged.
@@ -421,6 +425,9 @@ public class ReplicationLog {
      * are batched and provided to the underlying LogWriter, which will then be synced. If there is
      * a problem syncing the LogWriter we will retry, up to the retry limit, rolling the writer for
      * each retry.
+     * <p>
+     * An internal error may trigger fail-stop behavior. Subsequent to fail-stop, this method will
+     * throw an IOException("Closed"). No further syncs are allowed.
      * <p>
      * NOTE: When the ReplicationLogManager is capable of switching between synchronous and
      * fallback (store-and-forward) writers, then this will be pretty bullet proof. Right now we
@@ -738,7 +745,12 @@ public class ReplicationLog {
         }
     }
 
-    /** Force closes the log upon an unrecoverable internal error. */
+    /**
+     * Force closes the log upon an unrecoverable internal error. This is a fail-stop behavior:
+     * once called, the log is marked as closed, the Disruptor is halted, and all subsequent
+     * append() and sync() calls will throw an IOException("Closed"). This ensures that no
+     * further operations are attempted on a log that has encountered a critical error.
+     */
     protected void closeOnError() {
         lock.lock();
         try {
