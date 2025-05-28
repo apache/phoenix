@@ -18,6 +18,7 @@
 package org.apache.phoenix.monitoring;
 
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.jdbc.ZKConnectionInfo;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -27,6 +28,8 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -34,6 +37,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,16 +54,29 @@ import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_MAX_THREAD
 import static org.apache.phoenix.query.QueryServices.HTABLE_THREAD_POOL_METRICS_ENABLED;
 
 @Category(NeedsOwnMiniClusterTest.class)
+@RunWith(Parameterized.class)
 public class HTableThreadPoolMetricsIT extends BaseTest {
     private static final int ROWS_TO_LOAD_INITIALLY = 10000;
     private static final int CONCURRENT_QUERIES = 100;
 
+    private final String registryClassName;
+
+    public HTableThreadPoolMetricsIT(String registryClassName) {
+        this.registryClassName = registryClassName;
+    }
 
     @BeforeClass
     public static void setUp() throws Exception {
         Map<String, String> props = new HashMap<>();
         props.put(QueryServices.TESTS_MINI_CLUSTER_NUM_MASTERS, "2");
         setUpTestDriver(new ReadOnlyProps(props));
+    }
+
+    @Parameterized.Parameters(name = "HTableThreadPoolMetricsIT_registryClassName={0}")
+    public static Collection<String> data() {
+        return Arrays.asList(ZKConnectionInfo.ZK_REGISTRY_NAME,
+                "org.apache.hadoop.hbase.client.RpcConnectionRegistry",
+                "org.apache.hadoop.hbase.client.MasterRegistry");
     }
 
     @Test
