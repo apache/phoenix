@@ -58,8 +58,36 @@ import com.lmax.disruptor.dsl.Disruptor;
 import com.lmax.disruptor.dsl.ProducerType;
 
 /**
- * Manages the lifecycle of replication log files on the active cluster side. It handles log
- * rotation based on time and size thresholds and provides the currently active LogFileWriter.
+ * The ReplicationLog implements a high-performance logging system for mutations that need to be
+ * replicated to another cluster.
+ * <p>
+ * Key features:
+ * <ul>
+ *   <li>Asynchronous append operations with batching for high throughput</li>
+ *   <li>Controlled blocking sync operations with timeout and retry logic</li>
+ *   <li>Automatic log rotation based on time and size thresholds</li>
+ *   <li>Sharded directory structure for better HDFS performance</li>
+ *   <li>Metrics for monitoring</li>
+ *   <li>Fail-stop behavior on critical errors</li>
+ * </ul>
+ * <p>
+ * The class supports three replication modes (though currently only SYNC is implemented):
+ * <ul>
+ *   <li>SYNC: Direct writes to standby cluster (default)</li>
+ *   <li>STORE_AND_FORWARD: Local storage when standby is unavailable</li>
+ *   <li>SYNC_AND_FORWARD: Concurrent direct writes and queue draining</li>
+ * </ul>
+ * <p>
+ * Key configuration properties:
+ * <ul>
+ *   <li>{@link #REPLICATION_STANDBY_HDFS_URL_KEY}: URL for standby cluster HDFS</li>
+ *   <li>{@link #REPLICATION_FALLBACK_HDFS_URL_KEY}: URL for local fallback storage</li>
+ *   <li>{@link #REPLICATION_NUM_SHARDS_KEY}: Number of shard directories</li>
+ *   <li>{@link #REPLICATION_LOG_ROTATION_TIME_MS_KEY}: Time-based rotation interval</li>
+ *   <li>{@link #REPLICATION_LOG_ROTATION_SIZE_BYTES_KEY}: Size-based rotation threshold</li>
+ *   <li>{@link #REPLICATION_LOG_COMPRESSION_ALGORITHM_KEY}: Compression algorithm</li>
+ * </ul>
+ * <p>
  * This class is intended to be thread-safe.
  * <p>
  * Architecture Overview:
@@ -74,7 +102,6 @@ import com.lmax.disruptor.dsl.ProducerType;
  * │  │   sync)     │     │  │ Event 1 │ │ Event 2 │ │ Event 3 │ ...   │  │
  * │  │             │     │  └─────────┘ └─────────┘ └─────────┘       │  │
  * │  └─────────────┘     └────────────────────────────────────────────┘  │
- * │                                │                                     │
  * │                                │                                     │
  * │                                ▼                                     │
  * │  ┌─────────────────────────────────────────────────────────────┐     │
@@ -102,12 +129,12 @@ import com.lmax.disruptor.dsl.ProducerType;
  * └──────────────────────────────────────────────────────────────────────┘
  * </pre>
  * <p>
- * The Disruptor provides a high-performance ring buffer that decouples the API from the complexity
- * of writer management. Producers (callers of append/sync) simply publish events to the ring
- * buffer and generally return quickly, except for sync(), where the writer will suspend the caller
- * until the sync operation is successful. The LogEventHandler processes these events, handling the
- * complexity of batching mutations for efficiency, rotating writers based on time or size, error
- * handling and retries, and mode transitions for store-and-forward.
+ * A high-performance ring buffer decouples the API from the complexity of writer management.
+ * Callers of append and sync generally return quickly, except for sync, where the writer must
+ * suspend the caller until the sync operation is successful (or times out). An internal single
+ * threaded process handles these events, encapsulating the complexity of batching mutations for
+ * efficiency, consolidating multiple in-flight syncs, rotating writers based on time or size,
+ * error handling and retries, and mode transitions.
  */
 @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = { "EI_EXPOSE_REP", "EI_EXPOSE_REP2",
     "MS_EXPOSE_REP" }, justification = "Intentional")
