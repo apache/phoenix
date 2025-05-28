@@ -186,6 +186,9 @@ public class ReplicationLog {
     public static final String REPLICATION_LOG_ROTATION_RETRIES_KEY =
         "phoenix.replication.log.rotation.retries";
     public static final int DEFAULT_REPLICATION_LOG_ROTATION_RETRIES = 5;
+    public static final String REPLICATION_LOG_RETRY_DELAY_MS_KEY =
+        "phoenix.replication.log.retry.delay.ms";
+    public static final long DEFAULT_REPLICATION_LOG_RETRY_DELAY_MS = 100L;
 
     public static final String SHARD_DIR_FORMAT = "shard%05d";
     public static final String FILE_NAME_FORMAT = "%d-%s.plog";
@@ -899,6 +902,7 @@ public class ReplicationLog {
      */
     protected class LogEventHandler implements EventHandler<LogEvent> {
         protected final int maxRetries; // Configurable max retries for sync
+        protected final long retryDelayMs; // Configurable delay between retries
         protected final List<Record> currentBatch = new ArrayList<>();
         protected final List<CompletableFuture<Void>> pendingSyncFutures = new ArrayList<>();
         protected LogFileWriter writer;
@@ -907,6 +911,8 @@ public class ReplicationLog {
         protected LogEventHandler() {
             this.maxRetries = conf.getInt(REPLICATION_LOG_SYNC_RETRIES_KEY,
                 DEFAULT_REPLICATION_LOG_SYNC_RETRIES);
+            this.retryDelayMs = conf.getLong(REPLICATION_LOG_RETRY_DELAY_MS_KEY,
+                DEFAULT_REPLICATION_LOG_RETRY_DELAY_MS);
         }
 
         protected void init() throws IOException {
@@ -986,6 +992,10 @@ public class ReplicationLog {
          * If an IOException occurs, the method will attempt to rotate the writer and retry the
          * operation up to the configured maximum number of retries. If all retries fail, it will
          * fail all pending syncs and throw the exception.
+         * <p>
+         * The retry logic includes a configurable delay between attempts to prevent tight loops
+         * when there are persistent HDFS issues. This delay helps mitigate the risk of rapid
+         * cycling through writers when the underlying storage system is experiencing problems.
          *
          * @param event The event to process
          * @param sequence The sequence number of the event
@@ -1040,10 +1050,17 @@ public class ReplicationLog {
                 } catch (IOException e) {
                     // IO exception, force a rotation.
                     LOG.debug("Attempt " + (attempt + 1) + "/" + maxRetries + " failed", e);
-                    attempt++;
-                    if (attempt > maxRetries) {
+                    if (attempt >= maxRetries) {
                         failPendingSyncs(sequence, e);
                         throw e;
+                    }
+                    attempt++;
+                    // Add delay before retrying to prevent tight loops
+                    try {
+                        Thread.sleep(retryDelayMs);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new InterruptedIOException("Interrupted during retry delay");
                     }
                     writer = rotateLog(RotationReason.ERROR);
                 }
