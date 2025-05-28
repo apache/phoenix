@@ -18,8 +18,8 @@
 package org.apache.phoenix.replication.metrics;
 
 import org.apache.hadoop.hbase.metrics.BaseSourceImpl;
-import org.apache.hadoop.metrics2.MetricHistogram;
 import org.apache.hadoop.metrics2.lib.MutableFastCounter;
+import org.apache.hadoop.metrics2.lib.MutableHistogram;
 
 /** Implementation of metrics source for ReplicationLog operations. */
 public class MetricsReplicationLogSourceImpl extends BaseSourceImpl
@@ -30,21 +30,25 @@ public class MetricsReplicationLogSourceImpl extends BaseSourceImpl
     private final MutableFastCounter errorBasedRotationCount;
     private final MutableFastCounter rotationCount;
     private final MutableFastCounter rotationFailuresCount;
-    private final MetricHistogram appendTime;
-    private final MetricHistogram syncTime;
-    private final MetricHistogram rotationTime;
-    private final MetricHistogram ringBufferTime;
+    private final MutableHistogram appendTime;
+    private final MutableHistogram syncTime;
+    private final MutableHistogram rotationTime;
+    private final MutableHistogram ringBufferTime;
 
     public MetricsReplicationLogSourceImpl() {
-        super(METRICS_NAME, METRICS_DESCRIPTION, METRICS_CONTEXT, METRICS_JMX_CONTEXT);
+        this(METRICS_NAME, METRICS_DESCRIPTION, METRICS_CONTEXT, METRICS_JMX_CONTEXT);
+    }
+
+    public MetricsReplicationLogSourceImpl(String metricsName, String metricsDescription,
+        String metricsContext, String metricsJmxContext) {
+        super(metricsName, metricsDescription, metricsContext, metricsJmxContext);
         timeBasedRotationCount = getMetricsRegistry().newCounter(TIME_BASED_ROTATION_COUNT,
             TIME_BASED_ROTATION_COUNT_DESC, 0L);
         sizeBasedRotationCount = getMetricsRegistry().newCounter(SIZE_BASED_ROTATION_COUNT,
             SIZE_BASED_ROTATION_COUNT_DESC, 0L);
         errorBasedRotationCount = getMetricsRegistry().newCounter(ERROR_BASED_ROTATION_COUNT,
             ERROR_BASED_ROTATION_COUNT_DESC, 0L);
-        rotationCount = getMetricsRegistry().newCounter(ROTATION_COUNT, ROTATION_COUNT_DESC,
-            0L);
+        rotationCount = getMetricsRegistry().newCounter(ROTATION_COUNT, ROTATION_COUNT_DESC, 0L);
         rotationFailuresCount = getMetricsRegistry().newCounter(ROTATION_FAILURES,
             ROTATION_FAILURES_DESC, 0L);
         appendTime = getMetricsRegistry().newHistogram(APPEND_TIME, APPEND_TIME_DESC);
@@ -100,19 +104,38 @@ public class MetricsReplicationLogSourceImpl extends BaseSourceImpl
     }
 
     @Override
-    // Visible for testing
     public ReplicationLogMetricValues getCurrentMetricValues() {
-        return new ReplicationLogMetricValues.Builder()
-            .setTimeBasedRotationCount(timeBasedRotationCount.value())
-            .setSizeBasedRotationCount(sizeBasedRotationCount.value())
-            .setErrorBasedRotationCount(errorBasedRotationCount.value())
-            .setRotationCount(rotationCount.value())
-            .setRotationFailuresCount(rotationFailuresCount.value())
-            .setAppendTime(appendTime.getCount())
-            .setSyncTime(syncTime.getCount())
-            .setRotationTime(rotationTime.getCount())
-            .setRingBufferTime(ringBufferTime.getCount())
-            .build();
+        return new ReplicationLogMetricValues(
+            timeBasedRotationCount.value(),
+            sizeBasedRotationCount.value(),
+            errorBasedRotationCount.value(),
+            rotationCount.value(),
+            rotationFailuresCount.value(),
+            appendTime.getMax(),
+            syncTime.getMax(),
+            rotationTime.getMax(),
+            ringBufferTime.getMax()
+        );
+    }
+
+    @Override
+    public String getMetricsName() {
+        return METRICS_NAME;
+    }
+
+    @Override
+    public String getMetricsDescription() {
+        return METRICS_DESCRIPTION;
+    }
+
+    @Override
+    public String getMetricsContext() {
+        return METRICS_CONTEXT;
+    }
+
+    @Override
+    public String getMetricsJmxContext() {
+        return METRICS_JMX_CONTEXT;
     }
 
 }

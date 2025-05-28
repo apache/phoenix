@@ -17,30 +17,31 @@
  */
 package org.apache.phoenix.replication.metrics;
 
-/** Class to hold the current values of all ReplicationLog metrics. */
+/** Class to hold the values of all metrics tracked by the ReplicationLog metrics source. */
 public class ReplicationLogMetricValues {
 
     private final long timeBasedRotationCount;
     private final long sizeBasedRotationCount;
     private final long errorBasedRotationCount;
-    private final long totalRotationCount;
+    private final long rotationCount;
     private final long rotationFailuresCount;
     private final long appendTime;
     private final long syncTime;
     private final long rotationTime;
     private final long ringBufferTime;
 
-
-    private ReplicationLogMetricValues(Builder builder) {
-        this.timeBasedRotationCount = builder.timeBasedRotationCounter;
-        this.sizeBasedRotationCount = builder.sizeBasedRotationCounter;
-        this.errorBasedRotationCount = builder.errorBasedRotationCounter;
-        this.totalRotationCount = builder.totalRotationCounter;
-        this.rotationFailuresCount = builder.rotationFailuresCounter;
-        this.appendTime = builder.appendTimeCount;
-        this.syncTime = builder.syncTimeCount;
-        this.rotationTime = builder.rotationTimeCount;
-        this.ringBufferTime = builder.ringBufferTimeCount;
+    public ReplicationLogMetricValues(long timeBasedRotationCount, long sizeBasedRotationCount,
+        long errorBasedRotationCount, long rotationCount, long rotationFailuresCount,
+        long appendTime, long syncTime, long rotationTime, long ringBufferTime) {
+        this.timeBasedRotationCount = timeBasedRotationCount;
+        this.sizeBasedRotationCount = sizeBasedRotationCount;
+        this.errorBasedRotationCount = errorBasedRotationCount;
+        this.rotationCount = rotationCount;
+        this.rotationFailuresCount = rotationFailuresCount;
+        this.appendTime = appendTime;
+        this.syncTime = syncTime;
+        this.rotationTime = rotationTime;
+        this.ringBufferTime = ringBufferTime;
     }
 
     public long getTimeBasedRotationCount() {
@@ -55,8 +56,8 @@ public class ReplicationLogMetricValues {
         return errorBasedRotationCount;
     }
 
-    public long getTotalRotationCount() {
-        return totalRotationCount;
+    public long getRotationCount() {
+        return rotationCount;
     }
 
     public long getRotationFailuresCount() {
@@ -77,67 +78,6 @@ public class ReplicationLogMetricValues {
 
     public long getRingBufferTime() {
         return ringBufferTime;
-    }
-
-    public static class Builder {
-        private long timeBasedRotationCounter;
-        private long sizeBasedRotationCounter;
-        private long errorBasedRotationCounter;
-        private long totalRotationCounter;
-        private long rotationFailuresCounter;
-        private long appendTimeCount;
-        private long syncTimeCount;
-        private long rotationTimeCount;
-        private long ringBufferTimeCount;
-
-        public Builder setTimeBasedRotationCount(long timeBasedRotationCounter) {
-            this.timeBasedRotationCounter = timeBasedRotationCounter;
-            return this;
-        }
-
-        public Builder setSizeBasedRotationCount(long sizeBasedRotationCounter) {
-            this.sizeBasedRotationCounter = sizeBasedRotationCounter;
-            return this;
-        }
-
-        public Builder setErrorBasedRotationCount(long errorBasedRotationCounter) {
-            this.errorBasedRotationCounter = errorBasedRotationCounter;
-            return this;
-        }
-
-        public Builder setRotationCount(long totalRotationCounter) {
-            this.totalRotationCounter = totalRotationCounter;
-            return this;
-        }
-
-        public Builder setRotationFailuresCount(long rotationFailuresCounter) {
-            this.rotationFailuresCounter = rotationFailuresCounter;
-            return this;
-        }
-
-        public Builder setAppendTime(long appendTimeCount) {
-            this.appendTimeCount = appendTimeCount;
-            return this;
-        }
-
-        public Builder setSyncTime(long syncTimeCount) {
-            this.syncTimeCount = syncTimeCount;
-            return this;
-        }
-
-        public Builder setRotationTime(long rotationTimeCount) {
-            this.rotationTimeCount = rotationTimeCount;
-            return this;
-        }
-
-        public Builder setRingBufferTime(long ringBufferTimeCount) {
-            this.ringBufferTimeCount = ringBufferTimeCount;
-            return this;
-        }
-
-        public ReplicationLogMetricValues build() {
-            return new ReplicationLogMetricValues(this);
-        }
     }
 
 }
