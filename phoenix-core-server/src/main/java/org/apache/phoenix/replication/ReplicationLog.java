@@ -891,7 +891,7 @@ public class ReplicationLog {
          */
         protected void processPendingSyncs(long sequence) throws IOException {
             if (pendingSyncFutures.isEmpty()) {
-              return;
+                return;
             }
             writer.sync();
             // Complete all pending sync futures
@@ -918,7 +918,7 @@ public class ReplicationLog {
          */
         protected void failPendingSyncs(long sequence, IOException e) {
             if (pendingSyncFutures.isEmpty()) {
-              return;
+                return;
             }
             for (CompletableFuture<Void> future : pendingSyncFutures) {
                 future.completeExceptionally(e);
