@@ -19,14 +19,16 @@ limitations under the License.
 
 A command-line tool for analyzing Phoenix Replication Log files.
 
-This tool can read a log file or a directory of log files, print the header, trailer (if present),
-and block headers, optionally decode and print the LogRecord contents in a human-readable format,
-verify checksums for each block, and report any corruption or format violations.
+This tool can read a log file or a directory of log files, print the header,
+trailer (if present), and block headers, optionally decode and print the
+LogRecord contents in a human-readable format, verify checksums for each block,
+and report any corruption or format violations.
 
 ## Usage
 
 ```bash
-hadoop jar phoenix-server.jar org.apache.phoenix.replication.tool.LogFileAnalyzer [options] \
+hadoop jar phoenix-server.jar \
+    org.apache.phoenix.replication.tool.LogFileAnalyzer [options] \
     <log-file-or-directory>
 ```
 
@@ -35,34 +37,34 @@ hadoop jar phoenix-server.jar org.apache.phoenix.replication.tool.LogFileAnalyze
 - `-h, --help`: Print help message
 - `-v, --verbose`: Print verbose output including block headers
 - `-c, --check`: Verify checksums and report any corruption
-- `-d, --decode`: Decode and print LogRecord contents in human-readable format
+- `-d, --decode`: Decode and print record contents in human-readable format
 
 ### Examples
 
-1. Basic analysis of a log file:
+#### Basic analysis of a log file:
 
 ```bash
-hadoop jar phoenix-server.jar org.apache.phoenix.replication.tool.LogFileAnalyzer \
-    /my/log.plog
+hadoop jar phoenix-server.jar \
+    org.apache.phoenix.replication.tool.LogFileAnalyzer /path/to/log.plog
 ```
 
-1. Analyze with record decoding:
+#### Analyze with record decoding:
 
 ```bash
-hadoop jar phoenix-server.jar org.apache.phoenix.replication.tool.LogFileAnalyzer -d \
-    /my/log.plog
+hadoop jar phoenix-server.jar \
+    org.apache.phoenix.replication.tool.LogFileAnalyzer -d /path/to/log.plog
 ```
 
-1. Verify checksums and report corruption:
+#### Verify checksums and report corruption:
 
 ```bash
-hadoop jar phoenix-server.jar org.apache.phoenix.replication.tool.LogFileAnalyzer -c \
-    /my/log.plog
+hadoop jar phoenix-server.jar \
+    org.apache.phoenix.replication.tool.LogFileAnalyzer -c /path/to/log.plog
 ```
 
-1. Analyze all log files in a directory with verbose output:
+#### Analyze all log files in a directory with verbose output:
 
 ```bash
-hadoop jar phoenix-server.jar org.apache.phoenix.replication.tool.LogFileAnalyzer -v \
-    /my/logs/
+hadoop jar phoenix-server.jar \
+    org.apache.phoenix.replication.tool.LogFileAnalyzer -v /path/to/logs/
 ```
