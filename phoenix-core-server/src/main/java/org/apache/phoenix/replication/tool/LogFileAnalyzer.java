@@ -29,9 +29,9 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
+import org.apache.phoenix.replication.log.LogFile.Record;
 import org.apache.phoenix.replication.log.LogFileReader;
 import org.apache.phoenix.replication.log.LogFileReaderContext;
-import org.apache.phoenix.replication.log.LogFile.Record;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -130,8 +130,8 @@ public class LogFileAnalyzer extends Configured implements Tool {
 
             // Print header information
             System.out.println("Header:");
-            System.out.println("  Version: " + reader.getHeader().getMajorVersion() + "." +
-                reader.getHeader().getMinorVersion());
+            System.out.println("  Version: " + reader.getHeader().getMajorVersion() + "."
+                + reader.getHeader().getMinorVersion());
 
             // Process records
             int recordCount = 0;
