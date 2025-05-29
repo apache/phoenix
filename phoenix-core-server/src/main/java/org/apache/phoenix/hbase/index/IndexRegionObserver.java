@@ -1040,6 +1040,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                         }
                         Put put = lastContext.getNextDataRowState(rowKeyPtr);
                         if (put != null) {
+                            // We have detected a concurrent update so do a deep copy of the
+                            // previous update 
                             Put copy = MutationUtil.copyPut(put);
                             context.dataRowStates.put(rowKeyPtr, new Pair<>(copy, copy));
                         }
