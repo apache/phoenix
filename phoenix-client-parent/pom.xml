@@ -165,6 +165,9 @@
                   <!-- Phoenix classes -->
                   <exclude>org/apache/phoenix/**</exclude>
                   <exclude>org/apache/omid/**</exclude>
+                  <!-- Xerial Snappy has a JNI component so cannot be shaded or
+                       else native symbols won't link -->
+                  <exclude>org/xerial/snappy/**</exclude>
                 </excludes>
               </relocation>
               <relocation>
