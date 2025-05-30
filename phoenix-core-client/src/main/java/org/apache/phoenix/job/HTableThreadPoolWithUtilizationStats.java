@@ -46,9 +46,9 @@ public class HTableThreadPoolWithUtilizationStats extends ThreadPoolExecutor {
     public void execute(Runnable runnable) {
         Preconditions.checkNotNull(runnable);
         if (hTableThreadPoolHistogramsSupplier != null) {
-            HTableThreadPoolMetricsManager.getInstance().updateActiveThreads(threadPoolName,
+            HTableThreadPoolMetricsManager.updateActiveThreads(threadPoolName,
                     this.getActiveCount(), hTableThreadPoolHistogramsSupplier);
-            HTableThreadPoolMetricsManager.getInstance().updateQueueSize(threadPoolName,
+            HTableThreadPoolMetricsManager.updateQueueSize(threadPoolName,
                     this.getQueue().size(), hTableThreadPoolHistogramsSupplier);
         }
         super.execute(runnable);

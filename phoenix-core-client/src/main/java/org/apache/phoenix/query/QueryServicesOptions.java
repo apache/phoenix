@@ -36,7 +36,7 @@ import static org.apache.phoenix.query.QueryServices.CONNECTION_QUERY_SERVICE_ME
 import static org.apache.phoenix.query.QueryServices.CONNECTION_QUERY_SERVICE_METRICS_PUBLISHER_ENABLED;
 import static org.apache.phoenix.query.QueryServices.CONNECTION_QUERY_SERVICE_METRICS_PUBLISHER_CLASSNAME;
 import static org.apache.phoenix.query.QueryServices.COST_BASED_OPTIMIZER_ENABLED;
-import static org.apache.phoenix.query.QueryServices.HTABLE_THREAD_POOL_METRICS_ENABLED;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_METRICS_ENABLED;
 import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.DELAY_FOR_SCHEMA_UPDATE_CHECK;
@@ -467,7 +467,7 @@ public class QueryServicesOptions {
     public static final int DEFAULT_CQSI_THREAD_POOL_MAX_THREADS = 25;
     public static final int DEFAULT_CQSI_THREAD_POOL_MAX_QUEUE = 512;
     public static final Boolean DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT = true;
-    public static final Boolean DEFAULT_HTABLE_THREAD_POOL_METRICS_ENABLED = false;
+    public static final Boolean DEFAULT_CQSI_THREAD_POOL_METRICS_ENABLED = false;
 
 
     private final Configuration config;
@@ -583,7 +583,8 @@ public class QueryServicesOptions {
             .setIfUnset(CQSI_THREAD_POOL_MAX_THREADS, DEFAULT_CQSI_THREAD_POOL_MAX_THREADS)
             .setIfUnset(CQSI_THREAD_POOL_MAX_QUEUE, DEFAULT_CQSI_THREAD_POOL_MAX_QUEUE)
             .setIfUnset(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT,
-                    DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT);
+                    DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT)
+            .setIfUnset(CQSI_THREAD_POOL_METRICS_ENABLED, DEFAULT_CQSI_THREAD_POOL_METRICS_ENABLED);
 
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
@@ -825,12 +826,12 @@ public class QueryServicesOptions {
     }
 
     public boolean isHTableThreadPoolMetricsEnabled() {
-        return config.getBoolean(HTABLE_THREAD_POOL_METRICS_ENABLED,
-                DEFAULT_HTABLE_THREAD_POOL_METRICS_ENABLED);
+        return config.getBoolean(CQSI_THREAD_POOL_METRICS_ENABLED,
+                DEFAULT_CQSI_THREAD_POOL_METRICS_ENABLED);
     }
 
     public void setHTableThreadPoolMetricsEnabled(boolean enabled) {
-        config.setBoolean(HTABLE_THREAD_POOL_METRICS_ENABLED, enabled);
+        config.setBoolean(CQSI_THREAD_POOL_METRICS_ENABLED, enabled);
     }
 
     public void setTableLevelMetricsEnabled() {

@@ -78,7 +78,7 @@ import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_FAIL
 import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_SUCCESS;
 import static org.apache.phoenix.monitoring.MetricType.TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_HTABLE_THREAD_POOL_METRICS_ENABLED;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_POOL_METRICS_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_ENABLED;
@@ -651,8 +651,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private Supplier<HTableThreadPoolHistograms> getThreadPoolHistogramsSupplier(
             int maxThreadPoolSize, int maxQueueSize) {
-        if (this.config.getBoolean(HTABLE_THREAD_POOL_METRICS_ENABLED,
-                DEFAULT_HTABLE_THREAD_POOL_METRICS_ENABLED)) {
+        if (this.config.getBoolean(CQSI_THREAD_POOL_METRICS_ENABLED,
+                DEFAULT_CQSI_THREAD_POOL_METRICS_ENABLED)) {
             return new Supplier<HTableThreadPoolHistograms>() {
                 @Override
                 public HTableThreadPoolHistograms get() {
@@ -669,8 +669,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     else {
                         throw new IllegalStateException("Unexpected connection info type!!");
                     }
-                    hTableThreadPoolHistograms.addConnectionProfileTag(
-                            connectionInfo.getPrincipal());
+                    String connectionProfile = connectionInfo.getPrincipal();
+                    hTableThreadPoolHistograms.addConnectionProfileTag(connectionProfile != null
+                            ? connectionProfile : DEFAULT_QUERY_SERVICES_NAME);
                     return hTableThreadPoolHistograms;
                 }
             };

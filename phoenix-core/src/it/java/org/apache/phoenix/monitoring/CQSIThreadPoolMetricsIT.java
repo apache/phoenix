@@ -1,0 +1,198 @@
+package org.apache.phoenix.monitoring;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.jdbc.AbstractRPCConnectionInfo;
+import org.apache.phoenix.jdbc.ConnectionInfo;
+import org.apache.phoenix.jdbc.ZKConnectionInfo;
+import org.apache.phoenix.query.ConfigurationFactory;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.InstanceResolver;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+
+import static org.apache.phoenix.jdbc.ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ENABLED;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_METRICS_ENABLED;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_QUERY_SERVICES_NAME;
+
+@Category(NeedsOwnMiniClusterTest.class)
+@RunWith(Parameterized.class)
+public class CQSIThreadPoolMetricsIT extends BaseHTableThreadPoolMetricsIT {
+
+    private final String registryClassName;
+    private final Properties props = new Properties();
+
+    public CQSIThreadPoolMetricsIT(String registryClassName) {
+        this.registryClassName = registryClassName;
+    }
+
+    @BeforeClass
+    public static void setUp() throws Exception {
+        final Configuration conf = HBaseConfiguration.create();
+        setUpConfigForMiniCluster(conf);
+        conf.setBoolean(CQSI_THREAD_POOL_METRICS_ENABLED, true);
+        conf.setBoolean(CQSI_THREAD_POOL_ENABLED, true);
+
+        InstanceResolver.clearSingletons();
+        // Override to get required config for static fields loaded that require HBase config
+        InstanceResolver.getSingleton(ConfigurationFactory.class, new ConfigurationFactory() {
+
+            @Override public Configuration getConfiguration() {
+                return conf;
+            }
+
+            @Override public Configuration getConfiguration(Configuration confToClone) {
+                Configuration copy = new Configuration(conf);
+                copy.addResource(confToClone);
+                return copy;
+            }
+        });
+
+        Map<String, String> props = new HashMap<>();
+        props.put(QueryServices.TESTS_MINI_CLUSTER_NUM_MASTERS, "2");
+        setUpTestDriver(new ReadOnlyProps(props));
+    }
+
+    @Before
+    public void testCaseSetup() {
+        props.setProperty(CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, registryClassName);
+    }
+
+    @After
+    public void cleanup() throws Exception {
+        driver.cleanUpCQSICache();
+        HTableThreadPoolMetricsManager.clearHTableThreadPoolHistograms();
+        props.clear();
+    }
+
+    @Parameterized.Parameters(name = "ExternalHTableThreadPoolMetricsIT_registryClassName={0}")
+    public synchronized static Collection<String> data() {
+        return Arrays.asList(ZKConnectionInfo.ZK_REGISTRY_NAME,
+                "org.apache.hadoop.hbase.client.RpcConnectionRegistry",
+                "org.apache.hadoop.hbase.client.MasterRegistry");
+    }
+
+    @Test
+    public void testHistogramsPerConnInfo() throws Exception {
+        String tableName = generateUniqueName();
+        String histogramKey;
+        String connectionProfileService1 = "service1";
+        String connectionProfileService2 = "service2";
+
+        // Create a connection for "service1" connection profile
+        String url = QueryUtil.getConnectionUrl(props, utility.getConfiguration(),
+                connectionProfileService1);
+        Map<String, List<HistogramDistribution>> htableThreadPoolHistograms;
+        try (Connection conn = driver.connect(url, props)) {
+            createTableAndUpsertData(conn, tableName);
+
+            htableThreadPoolHistograms = runQueryAndGetHistograms(conn, tableName);
+
+            histogramKey = getHistogramKey(url);
+            assertHTableThreadPoolUsed(htableThreadPoolHistograms, histogramKey);
+            Map<String, String> expectedTagKeyValues = getExpectedTagKeyValues(url,
+                    connectionProfileService1);
+            assertHistogramTags(htableThreadPoolHistograms, expectedTagKeyValues, histogramKey);
+        }
+
+        // Create a connection for "service2" connection profile
+        url = QueryUtil.getConnectionUrl(props, utility.getConfiguration(),
+                connectionProfileService2);
+        htableThreadPoolHistograms = PhoenixRuntime.getHTableThreadPoolHistograms();
+        // Assert that HTableThreadPoolHistograms for service2 is not there yet
+        Assert.assertNull(htableThreadPoolHistograms.get(getHistogramKey(url)));
+        try (Connection conn = driver.connect(url, props)) {
+            htableThreadPoolHistograms = runQueryAndGetHistograms(conn, tableName);
+
+            assertHTableThreadPoolNotUsed(htableThreadPoolHistograms, histogramKey);
+            Map<String, String> expectedTagKeyValues = getExpectedTagKeyValues(url,
+                    connectionProfileService1);
+            assertHistogramTags(htableThreadPoolHistograms, expectedTagKeyValues, histogramKey);
+
+            histogramKey = getHistogramKey(url);
+            // We have HTableThreadPoolHistograms for service1 and service2 CQSI instances
+            assertHTableThreadPoolUsed(htableThreadPoolHistograms, histogramKey);
+            expectedTagKeyValues = getExpectedTagKeyValues(url,
+                    connectionProfileService2);
+            assertHistogramTags(htableThreadPoolHistograms, expectedTagKeyValues, histogramKey);
+        }
+    }
+
+    @Test
+    public void testCQSIThreadPoolHistogramsDisabled() throws Exception {
+        String tableName = generateUniqueName();
+        String connectionProfile = "service1";
+        props.setProperty(CQSI_THREAD_POOL_METRICS_ENABLED, "false");
+        props.setProperty(CQSI_THREAD_POOL_ENABLED, "true");
+        String url = QueryUtil.getConnectionUrl(props, utility.getConfiguration(),
+                connectionProfile);
+        try (Connection conn = driver.connect(url, props)) {
+            createTableAndUpsertData(conn, tableName);
+
+            Map<String, List<HistogramDistribution>> htableThreadPoolHistograms =
+                    runQueryAndGetHistograms(conn, tableName);
+            String histogramKey = getHistogramKey(url);
+            Assert.assertNull(htableThreadPoolHistograms.get(histogramKey));
+        }
+    }
+
+    @Test
+    public void testDefaultConnectionProfileHistograms() throws Exception {
+        String tableName = generateUniqueName();
+
+        String url = QueryUtil.getConnectionUrl(props, utility.getConfiguration());
+        Map<String, List<HistogramDistribution>> htableThreadPoolHistograms;
+        try (Connection conn = driver.connect(url, props)) {
+            createTableAndUpsertData(conn, tableName);
+
+            htableThreadPoolHistograms = runQueryAndGetHistograms(conn, tableName);
+
+            String histogramKey = getHistogramKey(url);
+            assertHTableThreadPoolUsed(htableThreadPoolHistograms, histogramKey);
+            Map<String, String> expectedTagKeyValues = getExpectedTagKeyValues(url,
+                    DEFAULT_QUERY_SERVICES_NAME);
+            assertHistogramTags(htableThreadPoolHistograms, expectedTagKeyValues, histogramKey);
+        }
+    }
+
+    private String getHistogramKey(String url) throws SQLException {
+        return ConnectionInfo.createNoLogin(url, null, null).toUrl();
+    }
+
+    private Map<String, String> getExpectedTagKeyValues(String url, String connectionProfile)
+            throws SQLException {
+        Map<String, String> expectedTagKeyValues = new HashMap<>();
+        ConnectionInfo connInfo = ConnectionInfo.createNoLogin(url, null, null);
+        if (registryClassName.equals(ZKConnectionInfo.ZK_REGISTRY_NAME)) {
+            expectedTagKeyValues.put(HTableThreadPoolHistograms.Tag.servers.name(),
+                    ((ZKConnectionInfo) connInfo).getZkHosts());
+        }
+        else {
+            expectedTagKeyValues.put(HTableThreadPoolHistograms.Tag.servers.name(),
+                    ((AbstractRPCConnectionInfo) connInfo).getBoostrapServers());
+        }
+        expectedTagKeyValues.put(HTableThreadPoolHistograms.Tag.connectionProfile.name(),
+                connectionProfile);
+        return expectedTagKeyValues;
+    }
+}

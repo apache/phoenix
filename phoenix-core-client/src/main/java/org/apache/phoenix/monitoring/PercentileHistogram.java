@@ -14,14 +14,14 @@ public abstract class PercentileHistogram {
     private static final Logger LOGGER = LoggerFactory.getLogger(PercentileHistogram.class);
 
     // Strings used to create metrics names.
-    String NUM_OPS_METRIC_NAME = "_num_ops";
-    String MIN_METRIC_NAME = "_min";
-    String MAX_METRIC_NAME = "_max";
-    String MEDIAN_METRIC_NAME = "_median";
-    String TWENTY_FIFTH_PERCENTILE_METRIC_NAME = "_25th_percentile";
-    String SEVENTY_FIFTH_PERCENTILE_METRIC_NAME = "_75th_percentile";
-    String NINETIETH_PERCENTILE_METRIC_NAME = "_90th_percentile";
-    String NINETY_FIFTH_PERCENTILE_METRIC_NAME = "_95th_percentile";
+    public static final String NUM_OPS_METRIC_NAME = "_num_ops";
+    public static final String MIN_METRIC_NAME = "_min";
+    public static final String MAX_METRIC_NAME = "_max";
+    public static final String MEDIAN_METRIC_NAME = "_median";
+    public static final String TWENTY_FIFTH_PERCENTILE_METRIC_NAME = "_25th_percentile";
+    public static final String SEVENTY_FIFTH_PERCENTILE_METRIC_NAME = "_75th_percentile";
+    public static final String NINETIETH_PERCENTILE_METRIC_NAME = "_90th_percentile";
+    public static final String NINETY_FIFTH_PERCENTILE_METRIC_NAME = "_95th_percentile";
 
     private Histogram prevHistogram = null;
     private final Recorder recorder;
@@ -46,10 +46,17 @@ public abstract class PercentileHistogram {
 
     public HistogramDistribution getPercentileHistogramDistribution() {
         Histogram histogram = this.recorder.getIntervalHistogram(prevHistogram);
-        HistogramDistribution distribution =
-                new PercentileHistogramDistribution(name,histogram.getMinValue(),
-                        histogram.getMaxValue(), histogram.getTotalCount(),
-                        generateDistributionMap(histogram), ImmutableMap.copyOf(tags));
+        HistogramDistribution distribution;
+        if (tags == null) {
+            distribution = new PercentileHistogramDistribution(name, histogram.getMinValue(),
+                    histogram.getMaxValue(), histogram.getTotalCount(),
+                    generateDistributionMap(histogram));
+        }
+        else {
+            distribution = new PercentileHistogramDistribution(name, histogram.getMinValue(),
+                    histogram.getMaxValue(), histogram.getTotalCount(),
+                    generateDistributionMap(histogram), ImmutableMap.copyOf(tags));
+        }
         this.prevHistogram = histogram;
         return distribution;
     }

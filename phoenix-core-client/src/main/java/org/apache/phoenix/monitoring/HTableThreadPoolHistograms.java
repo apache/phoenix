@@ -23,16 +23,22 @@ import java.util.List;
 
 public class HTableThreadPoolHistograms {
     public enum Tag {
-        server,
+        servers,
         connectionProfile,
+    }
+
+    public enum HistogramName {
+        ActiveThreadsCount,
+        QueueSize,
     }
 
     final private UtilizationHistogram activeThreadsHisto;
     final private UtilizationHistogram queuedSizeHisto;
 
     public HTableThreadPoolHistograms(long maxThreadPoolSize, long maxQueueSize) {
-        activeThreadsHisto = new UtilizationHistogram(maxThreadPoolSize, "ActiveThreadsCount");
-        queuedSizeHisto = new UtilizationHistogram(maxQueueSize, "QueueSize");
+        activeThreadsHisto = new UtilizationHistogram(maxThreadPoolSize,
+                HistogramName.ActiveThreadsCount.name());
+        queuedSizeHisto = new UtilizationHistogram(maxQueueSize, HistogramName.QueueSize.name());
     }
 
     public void updateActiveThreads(long activeThreads) {
@@ -44,7 +50,7 @@ public class HTableThreadPoolHistograms {
     }
 
     public void addServerTag(String value) {
-        addTag(Tag.server.name(), value);
+        addTag(Tag.servers.name(), value);
     }
 
     public void addConnectionProfileTag(String value) {

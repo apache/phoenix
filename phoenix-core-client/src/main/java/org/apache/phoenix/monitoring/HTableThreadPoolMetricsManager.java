@@ -32,36 +32,11 @@ public class HTableThreadPoolMetricsManager {
     private static final Logger LOGGER =
             LoggerFactory.getLogger(HTableThreadPoolMetricsManager.class);
 
-    volatile private static ConcurrentHashMap<String, HTableThreadPoolHistograms>
-            threadPoolHistogramsMap = null;
-
-    private static HTableThreadPoolMetricsManager hTableThreadPoolMetricsManager = null;
-
-    protected HTableThreadPoolMetricsManager() {
-        threadPoolHistogramsMap = new ConcurrentHashMap<>();
-    }
-
-    public static HTableThreadPoolMetricsManager getInstance() {
-        if (hTableThreadPoolMetricsManager == null) {
-            synchronized (HTableThreadPoolMetricsManager.class) {
-                if (hTableThreadPoolMetricsManager == null) {
-                    QueryServicesOptions options = QueryServicesOptions.withDefaults();
-                    if (!options.isHTableThreadPoolMetricsEnabled()) {
-                        hTableThreadPoolMetricsManager =
-                                NoOpHTableThreadPoolMetricsManager.noOpHTableThreadPoolMetricManager;
-                    }
-                    hTableThreadPoolMetricsManager = new HTableThreadPoolMetricsManager();
-                }
-            }
-        }
-        return hTableThreadPoolMetricsManager;
-    }
+    private static final ConcurrentHashMap<String, HTableThreadPoolHistograms>
+            threadPoolHistogramsMap = new ConcurrentHashMap<>();
 
    public static Map<String, List<HistogramDistribution>> getHistogramsForAllThreadPools() {
         Map<String, List<HistogramDistribution>> map = new HashMap<>();
-        if (threadPoolHistogramsMap == null) {
-            return map;
-        }
         for (Map.Entry<String, HTableThreadPoolHistograms> entry :
                 threadPoolHistogramsMap.entrySet()) {
             HTableThreadPoolHistograms hTableThreadPoolHistograms = entry.getValue();
@@ -71,17 +46,17 @@ public class HTableThreadPoolMetricsManager {
         return map;
    }
 
-   private HTableThreadPoolHistograms getThreadPoolHistograms(
-           String threadPoolName, Supplier<HTableThreadPoolHistograms> supplier) {
+   private static HTableThreadPoolHistograms getThreadPoolHistograms(
+           String histogramKey, Supplier<HTableThreadPoolHistograms> supplier) {
         HTableThreadPoolHistograms hTableThreadPoolHistograms =
-                threadPoolHistogramsMap.get(threadPoolName);
+                threadPoolHistogramsMap.get(histogramKey);
         if (hTableThreadPoolHistograms == null) {
             synchronized (HTableThreadPoolMetricsManager.class) {
-                hTableThreadPoolHistograms = threadPoolHistogramsMap.get(threadPoolName);
+                hTableThreadPoolHistograms = threadPoolHistogramsMap.get(histogramKey);
                 if (hTableThreadPoolHistograms == null) {
                     hTableThreadPoolHistograms = supplier.get();
                     if (hTableThreadPoolHistograms != null) {
-                        threadPoolHistogramsMap.put(threadPoolName, hTableThreadPoolHistograms);
+                        threadPoolHistogramsMap.put(histogramKey, hTableThreadPoolHistograms);
                     }
                 }
             }
@@ -89,19 +64,19 @@ public class HTableThreadPoolMetricsManager {
         return hTableThreadPoolHistograms;
    }
 
-   public void updateActiveThreads(String threadPoolName, int activeThreads,
+   public static void updateActiveThreads(String histogramKey, int activeThreads,
                                    Supplier<HTableThreadPoolHistograms> supplier) {
         HTableThreadPoolHistograms hTableThreadPoolHistograms =
-                getThreadPoolHistograms(threadPoolName, supplier);
+                getThreadPoolHistograms(histogramKey, supplier);
         if (hTableThreadPoolHistograms != null) {
             hTableThreadPoolHistograms.updateActiveThreads(activeThreads);
         }
         else {
-           logWarningForNullSupplier(threadPoolName);
+           logWarningForNullSupplier(histogramKey);
         }
    }
 
-   public void updateQueueSize(String threadPoolName, int queueSize,
+   public static void updateQueueSize(String threadPoolName, int queueSize,
                                Supplier<HTableThreadPoolHistograms> supplier) {
         HTableThreadPoolHistograms hTableThreadPoolHistograms =
                 getThreadPoolHistograms(threadPoolName, supplier);
@@ -113,7 +88,11 @@ public class HTableThreadPoolMetricsManager {
         }
    }
 
-   private void logWarningForNullSupplier(String threadPoolName) {
+   private static void logWarningForNullSupplier(String threadPoolName) {
        LOGGER.warn("No HTable thread pool histograms created for thread pool {}", threadPoolName);
+   }
+
+   public static void clearHTableThreadPoolHistograms() {
+       threadPoolHistogramsMap.clear();
    }
 }
