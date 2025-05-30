@@ -12,6 +12,9 @@ import java.util.Map;
 /**
  * Creates a histogram with specified max possible value that can be recorded and exposes
  * percentile distribution of the recorded values along the count of no. of recorded values.
+ * <br/><br/>
+ * Supports capturing additional metadata about the values being recorded as key/value pairs a.k
+ * .a tags.
  */
 public abstract class PercentileHistogram {
     private static final Logger LOGGER = LoggerFactory.getLogger(PercentileHistogram.class);
