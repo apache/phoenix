@@ -1041,9 +1041,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                         Put put = lastContext.getNextDataRowState(rowKeyPtr);
                         if (put != null) {
                             // We have detected a concurrent update so do a deep copy of the
-                            // previous update 
+                            // previous update
                             Put copy = MutationUtil.copyPut(put);
-                            context.dataRowStates.put(rowKeyPtr, new Pair<>(copy, copy));
+                            context.dataRowStates.put(rowKeyPtr, new Pair<>(copy, new Put(copy)));
                         }
                     } else {
                         // The last batch for this row key failed. We cannot use the memory state.
