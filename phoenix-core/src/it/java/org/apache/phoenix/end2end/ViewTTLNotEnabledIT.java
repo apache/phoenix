@@ -51,7 +51,7 @@ import java.util.Properties;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.fail;
 
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class})
 public class ViewTTLNotEnabledIT extends ParallelStatsDisabledIT {
 
     @BeforeClass

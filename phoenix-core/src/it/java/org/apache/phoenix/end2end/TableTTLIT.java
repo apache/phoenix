@@ -52,7 +52,7 @@ import java.util.Random;
 
 import static org.junit.Assert.*;
 
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class})
 @RunWith(Parameterized.class)
 public class TableTTLIT extends BaseTest {
     private static final Logger LOG =
