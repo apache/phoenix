@@ -1,6 +1,5 @@
 package org.apache.phoenix.monitoring;
 
-import org.HdrHistogram.ConcurrentHistogram;
 import org.HdrHistogram.Histogram;
 import org.HdrHistogram.Recorder;
 import org.apache.hbase.thirdparty.com.google.common.collect.ImmutableMap;
@@ -10,6 +9,10 @@ import org.slf4j.LoggerFactory;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Creates a histogram with specified max possible value that can be recorded and exposes
+ * percentile distribution of the recorded values along the count of no. of recorded values.
+ */
 public abstract class PercentileHistogram {
     private static final Logger LOGGER = LoggerFactory.getLogger(PercentileHistogram.class);
 

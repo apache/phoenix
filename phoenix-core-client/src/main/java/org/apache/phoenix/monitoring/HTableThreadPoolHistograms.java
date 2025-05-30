@@ -21,6 +21,24 @@ import org.apache.hbase.thirdparty.com.google.common.collect.ImmutableList;
 
 import java.util.List;
 
+/**
+ * Creates a collection of histograms for capturing multiple stats related to HTable thread pool
+ * utilization and contention.
+ * <br/><br/>
+ * Supports capturing additional metadata about the stats in the form of key/value pairs a.k.a. tags
+ * .  By default supports two tags i.e. servers and connectionProfile. "servers" tag specified
+ * the quorum string used in URL for establishing Phoenix connection. This can ZK quorum,
+ * master quorum, etc., based on the HBase connection registry. "connectionProfile" identifies
+ * the principal used in URL to create separate CQSI instances for different principals.
+ * <br/>
+ * Custom tags can also be specified as String key/value pairs using
+ * {@link #addTag(String, String)}.
+ * <br/><br/>
+ * Internally this class uses {@link org.HdrHistogram.Histogram}. At the time of instantiation of
+ * an instance of this class HdrHistograms get initialized for each of the stats being collected.
+ * <br/><br/>
+ * To view list of the stats being collected please refer {@link HistogramName}.
+ */
 public class HTableThreadPoolHistograms {
     public enum Tag {
         servers,

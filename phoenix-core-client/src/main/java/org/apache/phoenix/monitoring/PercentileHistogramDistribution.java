@@ -3,6 +3,10 @@ package org.apache.phoenix.monitoring;
 import java.util.Collections;
 import java.util.Map;
 
+/**
+ * Exposes percentiles captured using {@link PercentileHistogram} to the consumers w/o exposing
+ * underlying {@link org.HdrHistogram.Histogram} instances.
+ */
 public class PercentileHistogramDistribution extends HistogramDistributionImpl {
     private final Map<String, Long> percentileDistributionMap;
     private Map<String, String> tags = null;

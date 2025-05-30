@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.monitoring;
 
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,6 +26,10 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
+/**
+ * Central place where we keep track of all the HTable thread pool utilization and contention
+ * level metrics for all the HTable thread pools.
+ */
 public class HTableThreadPoolMetricsManager {
 
     private static final Logger LOGGER =
