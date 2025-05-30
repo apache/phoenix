@@ -25,6 +25,7 @@
       <includes>
         <include>sqlline:sqlline:jar:jar-with-dependencies</include>
         <include>org.slf4j:jul-to-slf4j</include>
+        <include>org.slf4j:jcl-over-slf4j</include>
         <include>org.apache.logging.log4j:log4j-slf4j-impl</include>
         <include>org.apache.logging.log4j:log4j-api</include>
         <include>org.apache.logging.log4j:log4j-core</include>

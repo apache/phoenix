@@ -153,6 +153,10 @@
               <artifactItems>
                 <artifactItem>
                   <groupId>org.slf4j</groupId>
+                  <artifactId>jcl-over-slf4j</artifactId>
+                </artifactItem>
+                <artifactItem>
+                  <groupId>org.slf4j</groupId>
                   <artifactId>jul-to-slf4j</artifactId>
                 </artifactItem>
                 <artifactItem>
