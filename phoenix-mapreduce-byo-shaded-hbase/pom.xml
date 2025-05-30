@@ -578,12 +578,6 @@
       <artifactId>commons-configuration2</artifactId>
       <version>${commons-configuration2.excludeonly.version}</version>
       <scope>provided</scope>
-      <exclusions>
-        <exclusion>
-          <groupId>commons-logging</groupId>
-          <artifactId>commons-logging</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
 
 
