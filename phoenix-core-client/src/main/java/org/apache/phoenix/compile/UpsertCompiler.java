@@ -579,10 +579,12 @@ public class UpsertCompiler {
              * 5) no limit clause, as the limit clause requires client-side post processing
              * 6) no sequences, as sequences imply that the order of upsert must match the order of
              *    selection. TODO: change this and only force client side if there's a ORDER BY on the sequence value
+             * 7) no order by, upsert order should same as select order.
              * Otherwise, run the query to pull the data from the server
              * and populate the MutationState (upto a limit).
             */
-            if (! (select.isAggregate() || select.isDistinct() || select.getLimit() != null || select.hasSequence()) ) {
+            if (!(select.isAggregate() || select.isDistinct() || select.getLimit() != null
+                    || select.hasSequence() || select.haveOrderBy())) {
                 // We can pipeline the upsert select instead of spooling everything to disk first,
                 // if we don't have any post processing that's required.
                 parallelIteratorFactoryToBe = new UpsertingParallelIteratorFactory(connection, tableRefToBe, useServerTimestampToBe);
