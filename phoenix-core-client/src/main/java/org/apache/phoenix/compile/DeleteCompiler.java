@@ -884,9 +884,7 @@ public class DeleteCompiler {
          * @throws SQLException If something goes wrong with server side operation.
          */
         private MutationState deleteRowAndGetMutationState(PTable table) throws SQLException {
-            Table hTable =
-                    connection.getQueryServices()
-                            .getTable(table.getTableName().getBytes());
+            Table hTable = connection.getQueryServices().getTable(table.getName().getBytes());
             try (ResultScanner scanner = hTable.getScanner(
                     new Scan(context.getScan()))) {
                 Result res = scanner.next();

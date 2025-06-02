@@ -687,10 +687,14 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                     queryLogger.syncAudit();
                                 }
                                 success = true;
+                                TableName tableNameVal = isUpsert ?
+                                        ((ExecutableUpsertStatement) stmt).getTable().getName() :
+                                        (isDelete ? ((ExecutableDeleteStatement) stmt)
+                                                .getTable().getName() : null);
                                 return new Pair<>(lastUpdateCount,
                                     result == null || result.isEmpty() ?
                                         null : TupleUtil.getResultSet(new ResultTuple(result),
-                                        tableName, connection));
+                                        tableNameVal, connection));
                             }
                             //Force update cache and retry if meta not found error occurs
                             catch (MetaDataEntityNotFoundException e) {
