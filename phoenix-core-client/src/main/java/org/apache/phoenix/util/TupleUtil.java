@@ -44,6 +44,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixPrefetchedResultSet;
+import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
@@ -230,10 +231,13 @@ public class TupleUtil {
      * @return ResultSet for the give single row.
      * @throws SQLException If any SQL operation fails.
      */
-    public static ResultSet getResultSet(Tuple toProject, String tableName, Connection conn)
+    public static ResultSet getResultSet(Tuple toProject, TableName tableName, Connection conn)
         throws SQLException {
+        if (tableName == null) {
+            return null;
+        }
         try (PhoenixResultSet resultSet = (PhoenixResultSet) conn.createStatement()
-            .executeQuery("SELECT * FROM \"" + tableName + "\"")) {
+            .executeQuery("SELECT * FROM " + tableName)) {
             PTable pTable =
                 resultSet.getStatement().getQueryPlan().getContext().getResolver().getTables()
                     .get(0).getTable();

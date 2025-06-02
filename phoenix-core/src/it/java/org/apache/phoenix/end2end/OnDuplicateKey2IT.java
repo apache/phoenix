@@ -231,6 +231,108 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testReturnRowResult4() throws Exception {
+        Assume.assumeTrue("Set correct result to RegionActionResult on hbase versions " +
+                "2.4.18+, 2.5.9+, and 2.6.0+", isSetCorrectResultEnabledOnHBase());
+        // NOTE - Tuple result projection does not work well with local index because
+        // this assertion can be false: CellUtil.matchingRows(kvs[0], kvs[kvs.length-1])
+        // as the Tuple contains different rowkeys.
+        Assume.assumeTrue("ResultSet return does not work with local index",
+                !indexDDL.startsWith("create local index"));
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String sample1 = getJsonString("json/sample_01.json");
+        String sample2 = getJsonString("json/sample_02.json");
+        BsonDocument bsonDocument1 = RawBsonDocument.parse(sample1);
+        BsonDocument bsonDocument2 = RawBsonDocument.parse(sample2);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            String tableName = "XYZ.\"abc123" + generateUniqueName() + "\"";
+            String ddl = "CREATE TABLE " + tableName
+                    + "(PK1 VARCHAR, PK2 DOUBLE NOT NULL, PK3 VARCHAR, COUNTER1 DOUBLE,"
+                    + " COUNTER2 VARCHAR,"
+                    + " COL3 BSON, COL4 INTEGER, CONSTRAINT pk PRIMARY KEY(PK1, PK2, PK3))";
+            conn.createStatement().execute(ddl);
+            if (!indexDDL.isEmpty()) {
+                String indexDdl =
+                        String.format(indexDDL, "abc123" + generateUniqueName(), tableName);
+                conn.createStatement().execute(indexDdl);
+            }
+
+            validateAtomicUpsertReturnRow(tableName, conn, bsonDocument1, bsonDocument2);
+
+            PhoenixPreparedStatement ps =
+                    conn.prepareStatement(
+                                    "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 " +
+                                            "= ? AND PK3 = ? AND COL4 = ?")
+                            .unwrap(PhoenixPreparedStatement.class);
+            ps.setString(1, "pk000");
+            ps.setDouble(2, -123.98);
+            ps.setString(3, "pk003");
+            ps.setInt(4, 235);
+            validateReturnedRowAfterDelete(ps, "col2_001", true, false, bsonDocument2, 234);
+
+            ps = conn.prepareStatement("DELETE FROM " + tableName
+                            + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ?")
+                    .unwrap(PhoenixPreparedStatement.class);
+            ps.setString(1, "pk000");
+            ps.setDouble(2, -123.98);
+            ps.setString(3, "pk003");
+            ps.setInt(4, 234);
+            validateReturnedRowAfterDelete(ps, "col2_001", true, true, bsonDocument2, 234);
+
+            validateReturnedRowAfterDelete(ps, "col2_001", true, false, bsonDocument2, 234);
+
+            validateMultiRowDelete(tableName, conn, bsonDocument2);
+        }
+    }
+
+    @Test
+    public void testReturnRowResult3() throws Exception {
+        Assume.assumeTrue("Set correct result to RegionActionResult on hbase versions " +
+                "2.4.18+, 2.5.9+, and 2.6.0+", isSetCorrectResultEnabledOnHBase());
+        // NOTE - Tuple result projection does not work well with local index because
+        // this assertion can be false: CellUtil.matchingRows(kvs[0], kvs[kvs.length-1])
+        // as the Tuple contains different rowkeys.
+        Assume.assumeTrue("ResultSet return does not work with local index",
+                !indexDDL.startsWith("create local index"));
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String sample1 = getJsonString("json/sample_01.json");
+        String sample2 = getJsonString("json/sample_02.json");
+        BsonDocument bsonDocument1 = RawBsonDocument.parse(sample1);
+        BsonDocument bsonDocument2 = RawBsonDocument.parse(sample2);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            String tableName = "XYZ.\"abc123" + generateUniqueName() + "\"";
+            String ddl = "CREATE TABLE " + tableName
+                    + "(PK1 VARCHAR, PK2 DOUBLE NOT NULL, PK3 VARCHAR, COUNTER1 DOUBLE,"
+                    + " COUNTER2 VARCHAR,"
+                    + " COL3 BSON, COL4 INTEGER, CONSTRAINT pk PRIMARY KEY(PK1, PK2, PK3))";
+            conn.createStatement().execute(ddl);
+            if (!indexDDL.isEmpty()) {
+                String indexDdl =
+                        String.format(indexDDL, "abc123" + generateUniqueName(), tableName);
+                conn.createStatement().execute(indexDdl);
+            }
+
+            validateAtomicUpsertReturnRow(tableName, conn, bsonDocument1, bsonDocument2);
+
+            PhoenixPreparedStatement ps =
+                    conn.prepareStatement(
+                            "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 " +
+                                    "= ? AND PK3 = ?").unwrap(PhoenixPreparedStatement.class);
+            ps.setString(1, "pk000");
+            ps.setDouble(2, -123.98);
+            ps.setString(3, "pk003");
+            validateReturnedRowAfterDelete(ps, "col2_001", true, true, bsonDocument2, 234);
+            validateReturnedRowAfterDelete(ps, "col2_001", true, false, bsonDocument2, 234);
+
+            validateMultiRowDelete(tableName, conn, bsonDocument2);
+        }
+    }
+
     private void verifyIndexRow(Connection conn, String tableName, boolean deleted) throws SQLException {
         PreparedStatement preparedStatement =
                 conn.prepareStatement("SELECT COUNTER2 FROM " + tableName + " WHERE COUNTER1 " +
@@ -408,7 +510,6 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
         }
         assertEquals(success ? 1 : 0, resultPair.getFirst().intValue());
         ResultSet resultSet = resultPair.getSecond();
-        PTable table = conn.unwrap(PhoenixConnection.class).getTable(tableName);
 
         assertEquals("pk000", resultSet.getString(1));
         assertEquals(-123.98, resultSet.getDouble(2), 0.0);
