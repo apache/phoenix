@@ -108,6 +108,9 @@
                         <ignoredUnusedDeclaredDependency>
                             org.slf4j:jul-to-slf4j
                         </ignoredUnusedDeclaredDependency>
+                        <ignoredUnusedDeclaredDependency>
+                            org.slf4j:jcl-over-slf4j
+                        </ignoredUnusedDeclaredDependency>
                     </ignoredUnusedDeclaredDependencies>
                     <ignoredUsedUndeclaredDependencies>
                     </ignoredUsedUndeclaredDependencies>
@@ -469,6 +472,11 @@
 	</dependency>
 
         <!-- logging -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>jcl-over-slf4j</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>jul-to-slf4j</artifactId>
