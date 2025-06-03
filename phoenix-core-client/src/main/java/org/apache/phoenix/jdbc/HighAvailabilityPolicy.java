@@ -103,6 +103,7 @@ public enum HighAvailabilityPolicy {
                 LOG.info("Cluster {} has a change in registryType in HA group {}, now closing "
                         + "all its connections", activeUrl.get(), oldRecord.getRegistryType());
                 closeConnections(haGroup, activeUrl.get(), oldRecord.getRegistryType());
+                invalidateCQSIs(haGroup, activeUrl.get(), oldRecord.getRegistryType());
             } else {
                 LOG.info("None of the cluster in HA Group {} is active", haGroup);
             }
@@ -138,11 +139,13 @@ public enum HighAvailabilityPolicy {
                         LOG.info("Active url of clusterRoleRecord changed from {} to {}, " +
                                         "closing old connections", activeUrl.get(), newActiveUrl.get());
                         closeConnections(haGroup, activeUrl.get(), oldRecord.getRegistryType());
+                        invalidateCQSIs(haGroup, activeUrl.get(), oldRecord.getRegistryType());
                     }
                 } else {
                     LOG.info("Couldn't find active url in new ClusterRoleRecord," +
                             "Closing old connections");
                     closeConnections(haGroup, activeUrl.get(), oldRecord.getRegistryType());
+                    invalidateCQSIs(haGroup, activeUrl.get(), oldRecord.getRegistryType());
                 }
             } else {
                 LOG.info("Couldn't find active url in old ClusterRoleRecord, " +
@@ -161,12 +164,7 @@ public enum HighAvailabilityPolicy {
         private void transitActive(HighAvailabilityGroup haGroup, String url,
                                    ClusterRoleRecord.RegistryType registryType) throws SQLException {
             // Invalidate CQS cache if any that has been closed but has not been cleared
-                for (HAURLInfo haurlInfo : HighAvailabilityGroup.URLS.get(haGroup.getGroupInfo())) {
-                    String jdbcUrl = HighAvailabilityGroup.getJDBCUrl(url, haurlInfo, registryType);
-                    LOG.info("invalidating cqs cache for zkUrl: " + jdbcUrl);
-                    PhoenixDriver.INSTANCE.invalidateCache(jdbcUrl,
-                            haGroup.getProperties());
-                }
+            invalidateCQSIs(haGroup, url, registryType);
         }
     },
 
@@ -203,10 +201,12 @@ public enum HighAvailabilityPolicy {
             //Close connections of both clusters as there is a change in registryType
             LOG.info("Cluster {} and {} has a change in registryType in HA group {}, now closing all its connections",
                     oldRecord.getUrl1(), oldRecord.getUrl2() , oldRecord.getRegistryType());
-            //close connections for cluster 1
+            //close connections for cluster 1 and invalidate cqsi
             closeConnections(haGroup, oldRecord.getUrl1(), oldRecord.getRegistryType());
-            //close connections for cluster 2
+            invalidateCQSIs(haGroup, oldRecord.getUrl1(), oldRecord.getRegistryType());
+            //close connections for cluster 2 and invalidate cqsi
             closeConnections(haGroup, oldRecord.getUrl2(), oldRecord.getRegistryType());
+            invalidateCQSIs(haGroup, oldRecord.getUrl2(), oldRecord.getRegistryType());
         }
 
         /**
@@ -225,12 +225,14 @@ public enum HighAvailabilityPolicy {
                 LOG.info("Cluster {} is changed to {} in HA group {}, now closing all its connections",
                         oldRecord.getUrl1(), newRecord.getUrl1(), haGroup);
                 closeConnections(haGroup, oldRecord.getUrl1(), oldRecord.getRegistryType());
+                invalidateCQSIs(haGroup, oldRecord.getUrl1(), oldRecord.getRegistryType());
             }
             if (!Objects.equals(oldRecord.getUrl2(), newRecord.getUrl2()) &&
                     !Objects.equals(oldRecord.getUrl2(), newRecord.getUrl1())) {
                 LOG.info("Cluster {} is changed to {} in HA group {}, now closing all its connections",
                         oldRecord.getUrl2(), newRecord.getUrl2(), haGroup);
                 closeConnections(haGroup, oldRecord.getUrl2(), oldRecord.getRegistryType());
+                invalidateCQSIs(haGroup, oldRecord.getUrl2(), oldRecord.getRegistryType());
             }
 
         }
@@ -270,6 +272,23 @@ public enum HighAvailabilityPolicy {
                     LOG.info("Successfully closed CQS after clusterRoleRecord change for '{}'", url);
                 }
             }
+        }
+    }
+
+    /**
+     * Utility to invalidate CQS cache for a given url of a haGroup
+     * @param haGroup The High Availability (HA) Group
+     * @param url The url for which cqs are present
+     * @param registryType The registry Type of connections affiliate to cqs
+     * @throws SQLException if fails to invalidate the cqs
+     */
+    private static void invalidateCQSIs(HighAvailabilityGroup haGroup, String url,
+                                        ClusterRoleRecord.RegistryType registryType) throws SQLException {
+        for (HAURLInfo haurlInfo : HighAvailabilityGroup.URLS.get(haGroup.getGroupInfo())) {
+            String jdbcUrl = HighAvailabilityGroup.getJDBCUrl(url, haurlInfo, registryType);
+            LOG.info("invalidating cqs cache for url: " + jdbcUrl);
+            PhoenixDriver.INSTANCE.invalidateCache(jdbcUrl,
+                    haGroup.getProperties());
         }
     }
 

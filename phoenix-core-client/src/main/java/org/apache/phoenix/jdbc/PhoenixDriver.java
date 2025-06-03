@@ -33,6 +33,7 @@ import java.util.stream.Collectors;
 
 import javax.annotation.concurrent.GuardedBy;
 
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.cache.*;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -390,6 +391,11 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
         case WRITE:
             closeLock.writeLock().unlock();
         }
+    }
+
+    @VisibleForTesting
+    protected boolean checkIfCQSIIsInCache(ConnectionInfo connInfo) {
+        return connectionQueryServicesCache.getIfPresent(connInfo) != null;
     }
 
 }
