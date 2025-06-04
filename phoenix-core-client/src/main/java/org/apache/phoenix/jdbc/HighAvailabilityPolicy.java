@@ -276,7 +276,10 @@ public enum HighAvailabilityPolicy {
     }
 
     /**
-     * Utility to invalidate CQS cache for a given url of a haGroup
+     * Utility to invalidate CQS cache for a given url of a haGroup, it's recommended to invalidate
+     * cqsi after closing it, as cqsi creation is heavy and is mostly cached at clients and if
+     * invalidation doesn't happen it can lead to usage of closed cqsi which won't allow new
+     * phoenix connection creation.
      * @param haGroup The High Availability (HA) Group
      * @param url The url for which cqs are present
      * @param registryType The registry Type of connections affiliate to cqs
