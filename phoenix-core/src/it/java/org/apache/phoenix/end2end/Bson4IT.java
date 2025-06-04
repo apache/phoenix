@@ -56,6 +56,7 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.PropertiesUtil;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -242,6 +243,251 @@ public class Bson4IT extends ParallelStatsDisabledIT {
       assertFalse(rs.next());
 
       validateExplainPlan(ps, indexName2, "RANGE SCAN ");
+    }
+  }
+
+  @Test
+  public void testBsonValueWithBinaryEncoded() throws Exception {
+
+    byte[] doc1Field1 = {
+            0, 1, 2, 3, 0, 1, 5, 6, 7, 8, 0,
+            10, 11, 12, 13, 0, 0, -1, 15, 16, 17, 18, 19};
+    byte[] doc1Field2 = {
+            1, 0, 2, 3, 4, 0, 6, 7, 8, 9,
+            0, 11, 12, 13, 14, 0, 16, 17, 18, 19, 20};
+    byte[] doc1Field3 = {
+            1, 2, 0, 3, 4, 5, 0, 7, 8, 9,
+            10, 0, 12, 13, 14, 15, 0, 17, 18, 19, 20, 21};
+    byte[] doc1Field4 = {
+            1, 2, 3, 0, 4, 5, 6, 0, 8, 9,
+            10, 11, 0, 13, 14, 15, 16, 0, 18, 19, 20, 21, 22};
+    byte[] doc1Field5 = {
+            1, 2, 3, 4, 0, 5, 6, 7, 0, 9,
+            10, 11, 12, 0, 14, 15, 16, 17, 0, 19, 20, 21, 22, 23};
+
+    byte[] doc2Field1 = {
+            0, 25, 35, 45, 0, 55, 65, 75, 85, 0,
+            95, 105, 115, 125, 0, 15, 25, 35, 45, 55};
+    byte[] doc2Field2 = {
+            25, 0, 35, 45, 55, 0, 65, 75, 85, 95,
+            0, 105, 115, 125, -125, 0, 15, 25, 35, 45, 55};
+    byte[] doc2Field3 = {
+            25, 35, 0, 45, 55, 65, 0, 75, 85, 95,
+            105, 0, 115, 125, -125, -115, 0, 15, 25, 35, 45, 55};
+    byte[] doc2Field4 = {
+            25, 35, 45, 0, 55, 65, 75, 0, 85, 95,
+            105, 115, 0, 125, -125, -115, -105, 0, 15, 25, 35, 45, 55};
+    byte[] doc2Field5 = {
+            25, 35, 45, 55, 0, 65, 75, 85, 0, 95,
+            105, 115, 125, 0, -125, -115, -105, -95, 0, 15, 25, 35, 45, 55};
+
+    byte[] doc3Field1 = {
+            0, -1, -2, -3, 0, -5, -6, -7, -8, 0,
+            -10, -11, -12, -13, 0, -15, -16, -17, -18, -19};
+    byte[] doc3Field2 = {
+            -1, 0, -2, -3, -4, 0, -6, -7, -8, -9,
+            0, -11, -12, -13, -14, 0, -16, -17, -18, -19, -20};
+    byte[] doc3Field3 = {
+            -1, -2, 0, -3, -4, -5, 0, -7, -8, -9,
+            -10, 0, -12, -13, -14, -15, 0, -17, -18, -19, -20, -21};
+    byte[] doc3Field4 = {
+            -1, -2, -3, 0, -4, -5, -6, 0, -8, -9,
+            -10, -11, 0, -13, -14, -15, -16, 0, -18, -19, -20, -21, -22};
+    byte[] doc3Field5 = {
+            -1, -2, -3, -4, 0, -5, -6, -7, 0, -9,
+            -10, -11, -12, 0, -14, -15, -16, -17, 0, -19, -20, -21, -22, -23};
+
+    byte[] doc4Field1 = {
+            0, -1, -2, -3, 0, 0, 1 - 5, -6, -7, -8, 0,
+            -10, -11, -12, -13, 0, -15, -16, -17, -18, -19};
+    byte[] doc4Field2 = {
+            -1, 0, -2, -3, -4, 0, 6, -7, -8, -9,
+            0, -11, -12, -13, -14, 0, -16, -17, -18, -19, -20};
+    byte[] doc4Field30 = {
+            -1, -2, 0, -3, -4, -5, 0, 0, -7, 8, -9,
+            -10, -1, 0, -1, -12, -13, -14, -15, 0, -17, -18, -19, -20, -21};
+    byte[] doc4Field4 = {
+            -1, -2, -3, 0, -4, -5, -6, 0, -8, -9,
+            -10, -11, -1, 0, 1, -13, -14, -15, -16, 0, -18, -19, -20, -21, -22};
+    byte[] doc4Field5 = {
+            -1, -1, 0, -2, -3, -4, 0, -5, -6, -7, 0, -9,
+            -10, -11, -12, 0, -14, -15, -16, -17, 0, -19, -20, -21, -22, -23};
+
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    String tableName = generateUniqueName();
+    String indexName1 = "IDX1_" + tableName;
+    String indexName2 = "IDX2_" + tableName;
+
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+
+      String ddl = "CREATE TABLE " + tableName
+              + " (PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON"
+              + " CONSTRAINT pk PRIMARY KEY(PK1))";
+
+      final String indexDdl1;
+      if (!this.coveredIndex) {
+        indexDdl1 = "CREATE UNCOVERED INDEX " + indexName1 + " ON " + tableName
+                + "(BSON_VALUE(COL, 'binary_field1', 'VARBINARY_ENCODED')) WHERE "
+                + "BSON_VALUE(COL, 'binary_field1', 'VARBINARY_ENCODED') IS NOT NULL";
+      } else {
+        indexDdl1 = "CREATE INDEX " + indexName1 + " ON " + tableName
+                + "(BSON_VALUE(COL, 'binary_field1', 'VARBINARY_ENCODED')) INCLUDE(COL, C1) WHERE "
+                + "BSON_VALUE(COL, 'binary_field1', 'VARBINARY_ENCODED') IS NOT NULL";
+      }
+
+      final String indexDdl2;
+      if (!this.coveredIndex) {
+        indexDdl2 = "CREATE UNCOVERED INDEX " + indexName2 + " ON " + tableName
+                + "(BSON_VALUE(COL, 'binary_field3', 'VARBINARY_ENCODED')) WHERE "
+                + "BSON_VALUE(COL, 'binary_field3', 'VARBINARY_ENCODED') IS NOT NULL";
+      } else {
+        indexDdl2 = "CREATE INDEX " + indexName2 + " ON " + tableName
+                + "(BSON_VALUE(COL, 'binary_field3', 'VARBINARY_ENCODED')) INCLUDE(COL, C1) WHERE "
+                + "BSON_VALUE(COL, 'binary_field3', 'VARBINARY_ENCODED') IS NOT NULL";
+      }
+
+      conn.createStatement().execute(ddl);
+      conn.createStatement().execute(indexDdl1);
+      conn.createStatement().execute(indexDdl2);
+
+      BsonDocument doc1 = new BsonDocument()
+              .append("binary_field1", new BsonBinary(doc1Field1))
+              .append("binary_field2", new BsonBinary(doc1Field2))
+              .append("binary_field3", new BsonBinary(doc1Field3))
+              .append("binary_field4", new BsonBinary(doc1Field4))
+              .append("binary_field5", new BsonBinary(doc1Field5));
+
+      BsonDocument doc2 = new BsonDocument()
+              .append("binary_field1", new BsonBinary(doc2Field1))
+              .append("binary_field2", new BsonBinary(doc2Field2))
+              .append("binary_field3", new BsonBinary(doc2Field3))
+              .append("binary_field4", new BsonBinary(doc2Field4))
+              .append("binary_field5", new BsonBinary(doc2Field5));
+
+      BsonDocument doc3 = new BsonDocument()
+              .append("binary_field1", new BsonBinary(doc3Field1))
+              .append("binary_field2", new BsonBinary(doc3Field2))
+              .append("binary_field3", new BsonBinary(doc3Field3))
+              .append("binary_field4", new BsonBinary(doc3Field4))
+              .append("binary_field5", new BsonBinary(doc3Field5));
+
+      BsonDocument doc4 = new BsonDocument()
+              .append("binary_field1", new BsonBinary(doc4Field1))
+              .append("binary_field2", new BsonBinary(doc4Field2))
+              .append("binary_field30", new BsonBinary(doc4Field30))
+              .append("binary_field4", new BsonBinary(doc4Field4))
+              .append("binary_field5", new BsonBinary(doc4Field5));
+
+      PreparedStatement stmt =
+              conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
+
+      stmt.setString(1, "pk1");
+      stmt.setString(2, "c1_value1");
+      stmt.setObject(3, doc1);
+      stmt.executeUpdate();
+
+      stmt.setString(1, "pk2");
+      stmt.setString(2, "c1_value2");
+      stmt.setObject(3, doc2);
+      stmt.executeUpdate();
+
+      stmt.setString(1, "pk3");
+      stmt.setString(2, "c1_value3");
+      stmt.setObject(3, doc3);
+      stmt.executeUpdate();
+
+      stmt.setString(1, "pk4");
+      stmt.setString(2, "c1_value4");
+      stmt.setObject(3, doc4);
+      stmt.executeUpdate();
+
+      conn.commit();
+
+      ResultSet rs = conn.createStatement().executeQuery("SELECT count(*) FROM " + tableName);
+      assertTrue(rs.next());
+      assertEquals(4, rs.getInt(1));
+
+      rs = conn.createStatement().executeQuery("SELECT count(*) FROM " + indexName1);
+      assertTrue(rs.next());
+      assertEquals(4, rs.getInt(1));
+
+      rs = conn.createStatement().executeQuery("SELECT count(*) FROM " + indexName2);
+      assertTrue(rs.next());
+      assertEquals(3, rs.getInt(1));
+
+      PreparedStatement ps = conn.prepareStatement(
+              "SELECT PK1, C1, COL, BSON_VALUE(COL, 'binary_field2', 'VARBINARY_ENCODED') FROM "
+                      + tableName
+                      + " WHERE BSON_VALUE(COL, 'binary_field1', 'VARBINARY_ENCODED') = ?");
+      ps.setBytes(1, doc1Field1);
+
+      rs = ps.executeQuery();
+      assertTrue(rs.next());
+      assertEquals("pk1", rs.getString(1));
+      assertEquals("c1_value1", rs.getString(2));
+      BsonDocument actualDoc = (BsonDocument) rs.getObject(3);
+      assertEquals(doc1, actualDoc);
+      assertArrayEquals(doc1Field2, rs.getBytes(4));
+      assertFalse(rs.next());
+
+      validateExplainPlan(ps, indexName1, "RANGE SCAN ");
+
+      ps = conn.prepareStatement("SELECT PK1, C1, COL FROM " + tableName
+              + " WHERE BSON_VALUE(COL, 'binary_field3', 'VARBINARY_ENCODED') = ?");
+      ps.setBytes(1, doc2Field3);
+
+      rs = ps.executeQuery();
+      assertTrue(rs.next());
+      assertEquals("pk2", rs.getString(1));
+      assertEquals("c1_value2", rs.getString(2));
+      actualDoc = (BsonDocument) rs.getObject(3);
+      assertEquals(doc2, actualDoc);
+      assertFalse(rs.next());
+
+      validateExplainPlan(ps, indexName2, "RANGE SCAN ");
+
+      ps = conn.prepareStatement("SELECT PK1, C1, COL FROM " + tableName
+              + " WHERE BSON_VALUE(COL, 'binary_field1', 'VARBINARY_ENCODED') = ?");
+      ps.setBytes(1, new byte[]{
+              0, 1, 2, 3, 0, 0, 1, 5, 6, 7, 8, 0,
+              10, 11, 12, 13, 0, 0, -1, 15, 16, 17, 18, 19});
+
+      rs = ps.executeQuery();
+      assertFalse(rs.next());
+
+      validateExplainPlan(ps, indexName1, "RANGE SCAN ");
+
+      ps = conn.prepareStatement(
+              "SELECT PK1, C1, COL, BSON_VALUE(COL, 'binary_field5', 'VARBINARY_ENCODED') FROM "
+                      + tableName + " WHERE C1 = ? AND "
+                      + "BSON_VALUE(COL, 'binary_field1', 'VARBINARY_ENCODED') = ?");
+      ps.setString(1, "c1_value2");
+      ps.setBytes(2, doc2Field1);
+
+      rs = ps.executeQuery();
+      assertTrue(rs.next());
+      assertEquals("pk2", rs.getString(1));
+      assertEquals("c1_value2", rs.getString(2));
+      actualDoc = (BsonDocument) rs.getObject(3);
+      assertEquals(doc2, actualDoc);
+      assertArrayEquals(doc2Field5, rs.getBytes(4));
+      assertFalse(rs.next());
+
+      validateExplainPlan(ps, indexName1, "RANGE SCAN ");
+
+      ps = conn.prepareStatement("SELECT PK1, C1, COL FROM " + tableName
+              + " WHERE C1 = ?");
+      ps.setString(1, "c1_value3");
+
+      rs = ps.executeQuery();
+      assertTrue(rs.next());
+      assertEquals("pk3", rs.getString(1));
+      assertEquals("c1_value3", rs.getString(2));
+      actualDoc = (BsonDocument) rs.getObject(3);
+      assertEquals(doc3, actualDoc);
+      assertFalse(rs.next());
+
+      validateExplainPlan(ps, tableName, "FULL SCAN ");
     }
   }
 
