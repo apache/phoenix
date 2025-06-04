@@ -47,6 +47,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -385,6 +386,11 @@ public class FailoverPhoenixConnection2IT {
         for (short i = 0; i < numberOfConnections; i++) {
             connectionList.add(createFailoverConnection());
         }
+        ConnectionQueryServicesImpl cqsi = (ConnectionQueryServicesImpl) PhoenixDriver.INSTANCE.
+                getConnectionQueryServices(CLUSTERS.getJdbcUrl1(haGroup), clientProperties);
+        ConnectionInfo connInfo = ConnectionInfo.create(CLUSTERS.getJdbcUrl1(haGroup),
+                PhoenixDriver.INSTANCE.getQueryServices().getProps(), clientProperties);
+
         ClusterRoleRecord.RegistryType newRegistry = ClusterRoleRecord.RegistryType.MASTER;
         CLUSTERS.transitClusterRoleRecordRegistry(haGroup, newRegistry);
 
@@ -393,6 +399,16 @@ public class FailoverPhoenixConnection2IT {
             FailoverPhoenixConnection conn = ((FailoverPhoenixConnection) connectionList.get(i));
             assertFalse(conn.isClosed());
             assertTrue(conn.getWrappedConnection().isClosed());
+        }
+        //CQSI should be closed
+        try {
+            cqsi.checkClosed();
+            fail("Should have thrown an exception as cqsi should be closed");
+        } catch (IllegalStateException e) {
+            //Exception Expected cqsi should have been invalidated as well
+            assertFalse(PhoenixDriver.INSTANCE.checkIfCQSIIsInCache(connInfo));
+        } catch (Exception e) {
+            fail("Should have thrown on IllegalStateException as cqsi should be closed");
         }
     }
 
@@ -409,6 +425,11 @@ public class FailoverPhoenixConnection2IT {
         for (short i = 0; i < numberOfConnections; i++) {
             connectionList.add(createFailoverConnection());
         }
+        ConnectionQueryServicesImpl cqsi = (ConnectionQueryServicesImpl) PhoenixDriver.INSTANCE.
+                getConnectionQueryServices(CLUSTERS.getJdbcUrl1(haGroup), clientProperties);
+        ConnectionInfo connInfo = ConnectionInfo.create(CLUSTERS.getJdbcUrl1(haGroup),
+                PhoenixDriver.INSTANCE.getQueryServices().getProps(), clientProperties);
+
         ClusterRoleRecord.RegistryType newRegistry = ClusterRoleRecord.RegistryType.RPC;
         //RPC Registry is only there in hbase version greater than 2.5.0
         assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.5.0")>=0);
@@ -419,6 +440,16 @@ public class FailoverPhoenixConnection2IT {
             FailoverPhoenixConnection conn = ((FailoverPhoenixConnection) connectionList.get(i));
             assertFalse(conn.isClosed());
             assertTrue(conn.getWrappedConnection().isClosed());
+        }
+        //CQSI should be closed
+        try {
+            cqsi.checkClosed();
+            fail("Should have thrown an exception as cqsi should be closed");
+        } catch (IllegalStateException e) {
+            //Expected cqsi should have been invalidated as well
+            assertFalse(PhoenixDriver.INSTANCE.checkIfCQSIIsInCache(connInfo));
+        } catch (Exception e) {
+            fail("Should have thrown on IllegalStateException as cqsi should be closed");
         }
     }
 
@@ -435,6 +466,10 @@ public class FailoverPhoenixConnection2IT {
         for (short i = 0; i < numberOfConnections; i++) {
             connectionList.add(createFailoverConnection());
         }
+        ConnectionQueryServicesImpl cqsi = (ConnectionQueryServicesImpl) PhoenixDriver.INSTANCE.
+                getConnectionQueryServices(CLUSTERS.getJdbcUrl1(haGroup), clientProperties);
+        ConnectionInfo connInfo = ConnectionInfo.create(CLUSTERS.getJdbcUrl1(haGroup),
+                PhoenixDriver.INSTANCE.getQueryServices().getProps(), clientProperties);
 
         //Restart Cluster 1 with new ports
         CLUSTERS.restartCluster1();
@@ -447,6 +482,16 @@ public class FailoverPhoenixConnection2IT {
             assertFalse(conn.isClosed());
             assertTrue(conn.getWrappedConnection().isClosed());
             conn.close();
+        }
+        //CQSI should be closed
+        try {
+            cqsi.checkClosed();
+            fail("Should have thrown an exception as cqsi should be closed");
+        } catch (IllegalStateException e) {
+            //Exception cqsi should have been invalidated as well
+            assertFalse(PhoenixDriver.INSTANCE.checkIfCQSIIsInCache(connInfo));
+        } catch (Exception e) {
+            fail("Should have thrown on IllegalStateException as cqsi should be closed");
         }
     }
 
@@ -463,6 +508,8 @@ public class FailoverPhoenixConnection2IT {
         for (short i = 0; i < numberOfConnections; i++) {
             connectionList.add(createFailoverConnection());
         }
+        ConnectionQueryServicesImpl cqsi = (ConnectionQueryServicesImpl) PhoenixDriver.INSTANCE.
+                getConnectionQueryServices(CLUSTERS.getJdbcUrl2(haGroup), clientProperties);
 
         //Restart Cluster 2 with new ports
         CLUSTERS.restartCluster2();
@@ -475,6 +522,12 @@ public class FailoverPhoenixConnection2IT {
             assertFalse(conn.isClosed());
             assertFalse(conn.getWrappedConnection().isClosed());
             conn.close();
+        }
+        //CQSI should not be closed
+        try {
+            cqsi.checkClosed();
+        } catch (Exception e) {
+            fail("Should not through any excepetion as cqsi is not closed");
         }
     }
 

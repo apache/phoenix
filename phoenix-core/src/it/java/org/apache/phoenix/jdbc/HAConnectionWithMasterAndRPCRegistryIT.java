@@ -455,6 +455,15 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
             newRegistry = RegistryType.MASTER;
         }
 
+        ConnectionQueryServicesImpl cqsiF = (ConnectionQueryServicesImpl) PhoenixDriver.INSTANCE.
+                getConnectionQueryServices(CLUSTERS.getJdbcUrl1(failoverHAGroup), failoverClientProperties);
+        ConnectionQueryServicesImpl cqsiP = (ConnectionQueryServicesImpl) PhoenixDriver.INSTANCE.
+                getConnectionQueryServices(CLUSTERS.getJdbcUrl1(parallelHAGroup), parallelClientProperties);
+        ConnectionInfo connInfoF = ConnectionInfo.create(CLUSTERS.getJdbcUrl1(failoverHAGroup),
+                PhoenixDriver.INSTANCE.getQueryServices().getProps(), failoverClientProperties);
+        ConnectionInfo connInfoP = ConnectionInfo.create(CLUSTERS.getJdbcUrl1(parallelHAGroup),
+                PhoenixDriver.INSTANCE.getQueryServices().getProps(), failoverClientProperties);
+
         CLUSTERS.transitClusterRoleRecordRegistry(failoverHAGroup, newRegistry);
         CLUSTERS.transitClusterRoleRecordRegistry(parallelHAGroup, newRegistry);
 
@@ -469,6 +478,27 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
             assertTrue(conn2.futureConnection1.get().isClosed());
             assertTrue(conn2.futureConnection1.get().isClosed());
             conn2.close();
+        }
+
+        //Both CQSI should be closed
+        try {
+            cqsiF.checkClosed();
+            fail("Should have thrown an exception as cqsi should be closed");
+        } catch (IllegalStateException e) {
+            //Exception cqsi should have been invalidated as well
+            assertFalse(PhoenixDriver.INSTANCE.checkIfCQSIIsInCache(connInfoF));
+        } catch (Exception e) {
+            fail("Should have thrown on IllegalStateException as cqsi should be closed");
+        }
+
+        try {
+            cqsiP.checkClosed();
+            fail("Should have thrown an exception as cqsi should be closed");
+        } catch (IllegalStateException e) {
+            //Exception cqsi should have been invalidated as well
+            assertFalse(PhoenixDriver.INSTANCE.checkIfCQSIIsInCache(connInfoP));
+        } catch (Exception e) {
+            fail("Should have thrown on IllegalStateException as cqsi should be closed");
         }
     }
 
@@ -499,6 +529,14 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
         } else {
             newRegistry = RegistryType.ZK;
         }
+        ConnectionQueryServicesImpl cqsiF = (ConnectionQueryServicesImpl) PhoenixDriver.INSTANCE.
+                getConnectionQueryServices(CLUSTERS.getJdbcUrl1(failoverHAGroup), failoverClientProperties);
+        ConnectionQueryServicesImpl cqsiP = (ConnectionQueryServicesImpl) PhoenixDriver.INSTANCE.
+                getConnectionQueryServices(CLUSTERS.getJdbcUrl1(parallelHAGroup), parallelClientProperties);
+        ConnectionInfo connInfoF = ConnectionInfo.create(CLUSTERS.getJdbcUrl1(failoverHAGroup),
+                PhoenixDriver.INSTANCE.getQueryServices().getProps(), failoverClientProperties);
+        ConnectionInfo connInfoP = ConnectionInfo.create(CLUSTERS.getJdbcUrl1(parallelHAGroup),
+                PhoenixDriver.INSTANCE.getQueryServices().getProps(), failoverClientProperties);
 
         CLUSTERS.transitClusterRoleRecordRegistry(failoverHAGroup, newRegistry);
         CLUSTERS.transitClusterRoleRecordRegistry(parallelHAGroup, newRegistry);
@@ -514,6 +552,27 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
             assertTrue(conn2.futureConnection1.get().isClosed());
             assertTrue(conn2.futureConnection1.get().isClosed());
             conn2.close();
+        }
+
+        //Both CQSI should be closed
+        try {
+            cqsiF.checkClosed();
+            fail("Should have thrown an exception as cqsi should be closed");
+        } catch (IllegalStateException e) {
+            //Exception cqsi should have been invalidated as well
+            assertFalse(PhoenixDriver.INSTANCE.checkIfCQSIIsInCache(connInfoF));
+        } catch (Exception e) {
+            fail("Should have thrown on IllegalStateException as cqsi should be closed");
+        }
+
+        try {
+            cqsiP.checkClosed();
+            fail("Should have thrown an exception as cqsi should be closed");
+        } catch (IllegalStateException e) {
+            //Exception cqsi should have been invalidated as well
+            assertFalse(PhoenixDriver.INSTANCE.checkIfCQSIIsInCache(connInfoP));
+        } catch (Exception e) {
+            fail("Should have thrown on IllegalStateException as cqsi should be closed");
         }
     }
 

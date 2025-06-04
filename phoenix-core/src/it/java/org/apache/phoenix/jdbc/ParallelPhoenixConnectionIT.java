@@ -608,6 +608,11 @@ public class ParallelPhoenixConnectionIT {
         for (short i = 0; i < numberOfConnections; i++) {
             connectionList.add(getParallelConnection());
         }
+        ConnectionQueryServicesImpl cqsi = (ConnectionQueryServicesImpl) PhoenixDriver.INSTANCE.
+                getConnectionQueryServices(CLUSTERS.getJdbcUrl1(haGroup), clientProperties);
+        ConnectionInfo connInfo = ConnectionInfo.create(CLUSTERS.getJdbcUrl1(haGroup),
+                PhoenixDriver.INSTANCE.getQueryServices().getProps(), clientProperties);
+
         ClusterRoleRecord.RegistryType newRegistry = ClusterRoleRecord.RegistryType.MASTER;
         CLUSTERS.transitClusterRoleRecordRegistry(haGroup, newRegistry);
 
@@ -617,6 +622,16 @@ public class ParallelPhoenixConnectionIT {
             assertFalse(conn.isClosed());
             assertTrue(conn.futureConnection1.get().isClosed());
             assertTrue(conn.futureConnection2.get().isClosed());
+        }
+        //CQSI should be closed
+        try {
+            cqsi.checkClosed();
+            fail("Should have thrown an exception as cqsi should be closed");
+        } catch (IllegalStateException e) {
+            //Exception cqsi should have been invalidated as well
+            assertFalse(PhoenixDriver.INSTANCE.checkIfCQSIIsInCache(connInfo));
+        } catch (Exception e) {
+            fail("Should have thrown on IllegalStateException as cqsi should be closed");
         }
     }
 
@@ -633,6 +648,11 @@ public class ParallelPhoenixConnectionIT {
         for (short i = 0; i < numberOfConnections; i++) {
             connectionList.add(getParallelConnection());
         }
+        ConnectionQueryServicesImpl cqsi = (ConnectionQueryServicesImpl) PhoenixDriver.INSTANCE.
+                getConnectionQueryServices(CLUSTERS.getJdbcUrl1(haGroup), clientProperties);
+        ConnectionInfo connInfo = ConnectionInfo.create(CLUSTERS.getJdbcUrl1(haGroup),
+                PhoenixDriver.INSTANCE.getQueryServices().getProps(), clientProperties);
+
         ClusterRoleRecord.RegistryType newRegistry = ClusterRoleRecord.RegistryType.RPC;
         //RPC Registry is only there in hbase version greater than 2.5.0
         assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.5.0")>=0);
@@ -644,6 +664,16 @@ public class ParallelPhoenixConnectionIT {
             assertFalse(conn.isClosed());
             assertTrue(conn.futureConnection1.get().isClosed());
             assertTrue(conn.futureConnection2.get().isClosed());
+        }
+        //CQSI should be closed
+        try {
+            cqsi.checkClosed();
+            fail("Should have thrown an exception as cqsi should be closed");
+        } catch (IllegalStateException e) {
+            //Exception cqsi should have been invalidated as well
+            assertFalse(PhoenixDriver.INSTANCE.checkIfCQSIIsInCache(connInfo));
+        } catch (Exception e) {
+            fail("Should have thrown on IllegalStateException as cqsi should be closed");
         }
     }
 
