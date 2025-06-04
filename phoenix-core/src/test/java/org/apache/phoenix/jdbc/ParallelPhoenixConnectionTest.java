@@ -53,7 +53,7 @@ public class ParallelPhoenixConnectionTest {
     @Before
     public void init() throws SQLException {
         context = new ParallelPhoenixContext(new Properties(), Mockito.mock(HighAvailabilityGroup.class),
-            HighAvailabilityTestingUtility.getListOfSingleThreadExecutorServices(), null);
+            HighAvailabilityTestingUtility.getListOfSingleThreadExecutorServices(), null, Mockito.mock(HAURLInfo.class));
         parallelPhoenixConnection = new ParallelPhoenixConnection(context,CompletableFuture.completedFuture(connection1),CompletableFuture.completedFuture(connection2));
     }
 
@@ -185,7 +185,8 @@ public class ParallelPhoenixConnectionTest {
                 "1000");
         ParallelPhoenixContext context =
                 new ParallelPhoenixContext(properties, Mockito.mock(HighAvailabilityGroup.class),
-                        HighAvailabilityTestingUtility.getListOfSingleThreadExecutorServices(), null);
+                        HighAvailabilityTestingUtility.getListOfSingleThreadExecutorServices(), null,
+                        Mockito.mock(HAURLInfo.class));
 
         CountDownLatch cdl = new CountDownLatch(1);
         CompletableFuture<PhoenixConnection> futureConnection1 = CompletableFuture.supplyAsync(getDelayConnectionSupplier(cdl, connection1));
@@ -212,7 +213,8 @@ public class ParallelPhoenixConnectionTest {
                 "1000");
         ParallelPhoenixContext context =
                 new ParallelPhoenixContext(properties, Mockito.mock(HighAvailabilityGroup.class),
-                        HighAvailabilityTestingUtility.getListOfSingleThreadExecutorServices(), null);
+                        HighAvailabilityTestingUtility.getListOfSingleThreadExecutorServices(), null,
+                        Mockito.mock(HAURLInfo.class));
 
         CountDownLatch cdl = new CountDownLatch(1);
         CompletableFuture<PhoenixConnection> futureConnection1 = CompletableFuture.completedFuture(connection1);
@@ -239,7 +241,8 @@ public class ParallelPhoenixConnectionTest {
                 "1000");
         ParallelPhoenixContext context =
                 new ParallelPhoenixContext(properties, Mockito.mock(HighAvailabilityGroup.class),
-                        HighAvailabilityTestingUtility.getListOfSingleThreadExecutorServices(), null);
+                        HighAvailabilityTestingUtility.getListOfSingleThreadExecutorServices(), null,
+                        Mockito.mock(HAURLInfo.class));
 
         CountDownLatch cdl1 = new CountDownLatch(1);
         CompletableFuture<PhoenixConnection> futureConnection1 = CompletableFuture.supplyAsync(getDelayConnectionSupplier(cdl1, connection1));
@@ -346,7 +349,8 @@ public class ParallelPhoenixConnectionTest {
             "1000");
         ParallelPhoenixContext context =
                 new ParallelPhoenixContext(properties, Mockito.mock(HighAvailabilityGroup.class),
-                    HighAvailabilityTestingUtility.getListOfSingleThreadExecutorServices(), null);
+                    HighAvailabilityTestingUtility.getListOfSingleThreadExecutorServices(), null,
+                        Mockito.mock(HAURLInfo.class));
         parallelPhoenixConnection =
                 new ParallelPhoenixConnection(context,
                         CompletableFuture.completedFuture(connection1),
