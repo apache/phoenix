@@ -42,7 +42,8 @@ public class PhoenixPrefetchedResultSet extends PhoenixResultSet {
 
   @Override
   protected Tuple getCurrentRowImpl() {
-    return prefetchedRows.get(prefetchedRowsIndex++);
+    return prefetchedRows.size() > prefetchedRowsIndex ? prefetchedRows.get(prefetchedRowsIndex++)
+            : null;
   }
 
 }

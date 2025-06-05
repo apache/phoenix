@@ -575,10 +575,15 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         return target;
     }
 
+    private boolean isResultSetExpected(final CompilableStatement stmt) {
+        return stmt instanceof ExecutableUpsertStatement &&
+                ((ExecutableUpsertStatement) stmt).getOnDupKeyPairs() != null;
+    }
 
     protected int executeMutation(final CompilableStatement stmt,
                                   final AuditQueryLogger queryLogger) throws SQLException {
-        return executeMutation(stmt, true, queryLogger, ReturnResult.ROW).getFirst();
+        return executeMutation(stmt, true, queryLogger,
+                isResultSetExpected(stmt) ? ReturnResult.ROW : null).getFirst();
     }
 
     Pair<Integer, ResultSet> executeMutation(final CompilableStatement stmt,
