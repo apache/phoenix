@@ -17,16 +17,16 @@
  */
 package org.apache.phoenix.job;
 
-import org.apache.hbase.thirdparty.com.google.common.base.Preconditions;
-import org.apache.phoenix.monitoring.HTableThreadPoolHistograms;
-import org.apache.phoenix.monitoring.HTableThreadPoolMetricsManager;
-import org.apache.phoenix.util.PhoenixRuntime;
-
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
+
+import org.apache.hbase.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.monitoring.HTableThreadPoolHistograms;
+import org.apache.phoenix.monitoring.HTableThreadPoolMetricsManager;
+import org.apache.phoenix.util.PhoenixRuntime;
 
 
 /**

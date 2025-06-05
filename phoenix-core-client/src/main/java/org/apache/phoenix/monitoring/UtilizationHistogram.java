@@ -17,10 +17,10 @@
  */
 package org.apache.phoenix.monitoring;
 
-import org.HdrHistogram.Histogram;
-
 import java.util.HashMap;
 import java.util.Map;
+
+import org.HdrHistogram.Histogram;
 
 public class UtilizationHistogram extends PercentileHistogram {
 

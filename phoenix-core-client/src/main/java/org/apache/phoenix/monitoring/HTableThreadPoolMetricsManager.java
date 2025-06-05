@@ -17,15 +17,15 @@
  */
 package org.apache.phoenix.monitoring;
 
-import org.apache.hbase.thirdparty.com.google.common.annotations.VisibleForTesting;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
+
+import org.apache.hbase.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Central place where we keep track of HTable thread pool utilization and contention
@@ -37,36 +37,29 @@ public class HTableThreadPoolMetricsManager {
             LoggerFactory.getLogger(HTableThreadPoolMetricsManager.class);
 
     private static final ConcurrentHashMap<String, HTableThreadPoolHistograms>
-            threadPoolHistogramsMap = new ConcurrentHashMap<>();
+        THREAD_POOL_HISTOGRAMS_MAP = new ConcurrentHashMap<>();
 
-   public static Map<String, List<HistogramDistribution>> getHistogramsForAllThreadPools() {
+    private HTableThreadPoolMetricsManager() {
+    }
+
+    public static Map<String, List<HistogramDistribution>> getHistogramsForAllThreadPools() {
         Map<String, List<HistogramDistribution>> map = new HashMap<>();
-        for (Map.Entry<String, HTableThreadPoolHistograms> entry :
-                threadPoolHistogramsMap.entrySet()) {
+        for (Map.Entry<String, HTableThreadPoolHistograms> entry
+            : THREAD_POOL_HISTOGRAMS_MAP.entrySet()) {
             HTableThreadPoolHistograms hTableThreadPoolHistograms = entry.getValue();
             map.put(entry.getKey(),
-                    hTableThreadPoolHistograms.getThreadPoolHistogramsDistribution());
+                hTableThreadPoolHistograms.getThreadPoolHistogramsDistribution());
         }
         return map;
-   }
+    }
 
-   private static HTableThreadPoolHistograms getThreadPoolHistograms(
-           String histogramKey, Supplier<HTableThreadPoolHistograms> supplier) {
-        HTableThreadPoolHistograms hTableThreadPoolHistograms =
-                threadPoolHistogramsMap.get(histogramKey);
-        if (hTableThreadPoolHistograms == null) {
-            synchronized (HTableThreadPoolMetricsManager.class) {
-                hTableThreadPoolHistograms = threadPoolHistogramsMap.get(histogramKey);
-                if (hTableThreadPoolHistograms == null) {
-                    hTableThreadPoolHistograms = supplier.get();
-                    if (hTableThreadPoolHistograms != null) {
-                        threadPoolHistogramsMap.put(histogramKey, hTableThreadPoolHistograms);
-                    }
-                }
-            }
+    private static HTableThreadPoolHistograms getThreadPoolHistograms(
+        String histogramKey, Supplier<HTableThreadPoolHistograms> supplier) {
+        if (supplier == null) {
+            return null;
         }
-        return hTableThreadPoolHistograms;
-   }
+        return THREAD_POOL_HISTOGRAMS_MAP.computeIfAbsent(histogramKey, k -> supplier.get());
+    }
 
     /**
      * Records the value of no. of active threads in HTable thread pool in
@@ -86,17 +79,17 @@ public class HTableThreadPoolMetricsManager {
      * @param activeThreads Number of active threads in the thread pool.
      * @param supplier An idempotent supplier of {@link HTableThreadPoolHistograms}.
      */
-   public static void updateActiveThreads(String histogramKey, int activeThreads,
-                                   Supplier<HTableThreadPoolHistograms> supplier) {
+    public static void updateActiveThreads(String histogramKey, int activeThreads,
+        Supplier<HTableThreadPoolHistograms> supplier) {
         HTableThreadPoolHistograms hTableThreadPoolHistograms =
-                getThreadPoolHistograms(histogramKey, supplier);
+            getThreadPoolHistograms(histogramKey, supplier);
         if (hTableThreadPoolHistograms != null) {
             hTableThreadPoolHistograms.updateActiveThreads(activeThreads);
         }
         else {
-           logWarningForNullSupplier(histogramKey);
+            logWarningForNullSupplier(histogramKey);
         }
-   }
+    }
 
     /**
      * Records the value of no. of tasks in the HTable thread pool's queue in
@@ -116,24 +109,24 @@ public class HTableThreadPoolMetricsManager {
      * @param queueSize Number of tasks in the HTable thread pool's queue.
      * @param supplier An idempotent supplier of {@link HTableThreadPoolHistograms}.
      */
-   public static void updateQueueSize(String histogramKey, int queueSize,
-                                      Supplier<HTableThreadPoolHistograms> supplier) {
+    public static void updateQueueSize(String histogramKey, int queueSize,
+        Supplier<HTableThreadPoolHistograms> supplier) {
         HTableThreadPoolHistograms hTableThreadPoolHistograms =
-                getThreadPoolHistograms(histogramKey, supplier);
+            getThreadPoolHistograms(histogramKey, supplier);
         if (hTableThreadPoolHistograms != null) {
             hTableThreadPoolHistograms.updateQueuedSize(queueSize);
         }
         else {
             logWarningForNullSupplier(histogramKey);
         }
-   }
+    }
 
-   private static void logWarningForNullSupplier(String threadPoolName) {
-       LOGGER.warn("No HTable thread pool histograms created for thread pool {}", threadPoolName);
-   }
+    private static void logWarningForNullSupplier(String threadPoolName) {
+        LOGGER.warn("No HTable thread pool histograms created for thread pool {}", threadPoolName);
+    }
 
-   @VisibleForTesting
-   public static void clearHTableThreadPoolHistograms() {
-       threadPoolHistogramsMap.clear();
-   }
+    @VisibleForTesting
+    public static void clearHTableThreadPoolHistograms() {
+        THREAD_POOL_HISTOGRAMS_MAP.clear();
+    }
 }

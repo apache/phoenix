@@ -17,14 +17,14 @@
  */
 package org.apache.phoenix.monitoring;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import org.HdrHistogram.Histogram;
 import org.HdrHistogram.Recorder;
 import org.apache.hbase.thirdparty.com.google.common.collect.ImmutableMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Creates a histogram with specified max possible value that can be recorded and exposes
@@ -49,8 +49,8 @@ public abstract class PercentileHistogram {
 
     private Histogram prevHistogram = null;
     private final Recorder recorder;
-    final private String name;
-    final private long maxUtil;
+    private final String name;
+    private final long maxUtil;
     private Map<String, String> tags = null;
 
     PercentileHistogram(long maxUtil, String name) {
@@ -79,7 +79,7 @@ public abstract class PercentileHistogram {
         else {
             distribution = new PercentileHistogramDistribution(name, histogram.getMinValue(),
                     histogram.getMaxValue(), histogram.getTotalCount(),
-                    generateDistributionMap(histogram), ImmutableMap.copyOf(tags));
+                    generateDistributionMap(histogram), tags);
         }
         this.prevHistogram = histogram;
         return distribution;

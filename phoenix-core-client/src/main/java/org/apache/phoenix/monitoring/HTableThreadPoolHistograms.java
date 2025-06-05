@@ -17,9 +17,9 @@
  */
 package org.apache.phoenix.monitoring;
 
-import org.apache.hbase.thirdparty.com.google.common.collect.ImmutableList;
-
 import java.util.List;
+
+import org.apache.hbase.thirdparty.com.google.common.collect.ImmutableList;
 
 /**
  * Creates a collection of histograms for capturing multiple stats related to HTable thread pool
@@ -53,8 +53,8 @@ public class HTableThreadPoolHistograms {
         QueueSize,
     }
 
-    final private UtilizationHistogram activeThreadsHisto;
-    final private UtilizationHistogram queuedSizeHisto;
+    private final UtilizationHistogram activeThreadsHisto;
+    private final UtilizationHistogram queuedSizeHisto;
 
     public HTableThreadPoolHistograms(long maxThreadPoolSize, long maxQueueSize) {
         activeThreadsHisto = new UtilizationHistogram(maxThreadPoolSize,

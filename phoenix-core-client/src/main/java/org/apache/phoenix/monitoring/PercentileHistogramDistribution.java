@@ -20,6 +20,8 @@ package org.apache.phoenix.monitoring;
 import java.util.Collections;
 import java.util.Map;
 
+import org.apache.hbase.thirdparty.com.google.common.collect.ImmutableMap;
+
 /**
  * Exposes percentiles captured using {@link PercentileHistogram} to the consumers w/o exposing
  * underlying {@link org.HdrHistogram.Histogram} instances.
@@ -34,14 +36,14 @@ public class PercentileHistogramDistribution extends HistogramDistributionImpl {
     public PercentileHistogramDistribution(String histoName, long min, long max, long count,
                                            Map<String, Long> percentileDistributionMap) {
         super(histoName, min, max, count, Collections.emptyMap());
-        this.percentileDistributionMap = percentileDistributionMap;
+        this.percentileDistributionMap = ImmutableMap.copyOf(percentileDistributionMap);
     }
 
     public PercentileHistogramDistribution(String histoName, long min, long max, long count,
                                            Map<String, Long> percentileDistributionMap,
                                            Map<String, String> tags) {
         this(histoName, min, max, count, percentileDistributionMap);
-        this.tags = tags;
+        this.tags = ImmutableMap.copyOf(tags);
     }
 
     public Map<String, Long> getPercentileDistributionMap() {
