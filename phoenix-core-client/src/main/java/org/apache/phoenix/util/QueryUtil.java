@@ -136,6 +136,8 @@ public final class QueryUtil {
     public static final int DATA_TYPE_NAME_POSITION = 6;
 
     public static final String IS_SERVER_CONNECTION = "IS_SERVER_CONNECTION";
+    public static final String REGIONS = "regions";
+    public static final String HOSTNAMES = "hostnames";
     private static final String SELECT = "SELECT";
     private static final String FROM = "FROM";
     private static final String WHERE = "WHERE";
