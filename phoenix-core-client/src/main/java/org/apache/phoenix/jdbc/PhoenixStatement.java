@@ -290,7 +290,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     private static final int NO_UPDATE = -1;
     private static final String TABLE_UNKNOWN = "";
     private QueryPlan lastQueryPlan;
-    private PhoenixResultSet lastResultSet;
+    private ResultSet lastResultSet;
     private int lastUpdateCount = NO_UPDATE;
 
     private String lastUpdateTable = TABLE_UNKNOWN;
@@ -320,14 +320,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
     }
 
-    protected List<PhoenixResultSet> getResultSets() {
-        if (lastResultSet != null) {
-            return Collections.singletonList(lastResultSet);
-        } else {
-            return Collections.emptyList();
-        }
-    }
-    
     public PhoenixResultSet newResultSet(ResultIterator iterator, RowProjector projector, StatementContext context) throws SQLException {
         return new PhoenixResultSet(iterator, projector, context);
     }
@@ -586,7 +578,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
     protected int executeMutation(final CompilableStatement stmt,
                                   final AuditQueryLogger queryLogger) throws SQLException {
-        return executeMutation(stmt, true, queryLogger, null).getFirst();
+        return executeMutation(stmt, true, queryLogger, ReturnResult.ROW).getFirst();
     }
 
     Pair<Integer, ResultSet> executeMutation(final CompilableStatement stmt,
@@ -691,10 +683,11 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                         ((ExecutableUpsertStatement) stmt).getTable().getName() :
                                         (isDelete ? ((ExecutableDeleteStatement) stmt)
                                                 .getTable().getName() : null);
-                                return new Pair<>(lastUpdateCount,
-                                    result == null || result.isEmpty() ?
+                                ResultSet rs = result == null || result.isEmpty() ?
                                         null : TupleUtil.getResultSet(new ResultTuple(result),
-                                        tableNameVal, connection));
+                                        tableNameVal, connection);
+                                setLastResultSet(rs);
+                                return new Pair<>(lastUpdateCount, rs);
                             }
                             //Force update cache and retry if meta not found error occurs
                             catch (MetaDataEntityNotFoundException e) {
@@ -2466,7 +2459,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         
         CompilableStatement stmt = parseStatement(sql);
         if (stmt.getOperation().isMutation()) {
-            throw new ExecuteQueryNotApplicableException(sql);
+            return executeMutation(stmt, createAuditQueryLogger(stmt, sql), MutationState.ReturnResult.ROW).getSecond();
         }
         return executeQuery(stmt, createQueryLogger(stmt, sql));
     }
@@ -2531,7 +2524,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             }
             executeMutation(stmt, createAuditQueryLogger(stmt, sql));
             flushIfNecessary();
-            return false;
+            return true;
         }
         
         executeQuery(stmt, createQueryLogger(stmt, sql));
@@ -2777,11 +2770,11 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         return closeOnCompletion;
     }
 
-    private PhoenixResultSet getLastResultSet() {
+    private ResultSet getLastResultSet() {
         return lastResultSet;
     }
 
-    void setLastResultSet(PhoenixResultSet lastResultSet) {
+    void setLastResultSet(ResultSet lastResultSet) {
         this.lastResultSet = lastResultSet;
     }
 

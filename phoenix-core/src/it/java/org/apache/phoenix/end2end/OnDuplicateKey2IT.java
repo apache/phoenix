@@ -53,7 +53,6 @@ import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
@@ -498,19 +497,20 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                                                        BsonDocument expectedDoc,
                                                        Integer col4)
             throws SQLException {
-        final Pair<Integer, ResultSet> resultPair;
+        int updateCount;
+        ResultSet resultSet;
         if (inputDoc != null) {
             PhoenixPreparedStatement ps =
                     conn.prepareStatement(upsertSql).unwrap(PhoenixPreparedStatement.class);
             ps.setObject(1, inputDoc);
-            resultPair = ps.executeAtomicUpdateReturnRow();
+            updateCount = ps.executeUpdate();
+            resultSet =  ps.getResultSet();
         } else {
-            resultPair = conn.createStatement().unwrap(PhoenixStatement.class)
-                    .executeAtomicUpdateReturnRow(upsertSql);
+            Statement stmt = conn.createStatement();
+            resultSet = stmt.execute(upsertSql) ? stmt.getResultSet() : null;
+            updateCount = stmt.getUpdateCount();
         }
-        assertEquals(success ? 1 : 0, resultPair.getFirst().intValue());
-        ResultSet resultSet = resultPair.getSecond();
-
+        assertEquals(success ? 1 : 0, updateCount);
         assertEquals("pk000", resultSet.getString(1));
         assertEquals(-123.98, resultSet.getDouble(2), 0.0);
         assertEquals("pk003", resultSet.getString(3));
