@@ -28,29 +28,38 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
+
+/**
+ * A wrapper over traditional ThreadPoolExecutor with instrumentation for capturing utilization
+ * metrics i.e. active thread count and queue size.
+ * <br/><br/>
+ * While instantiating this thread pool executor, one needs to specify an idempotent supplier
+ * which will return an instance of {@link HTableThreadPoolHistograms}. Inside the supplier while
+ * instantiating {@link HTableThreadPoolHistograms} users can also attach the tags. To know more
+ * about tags please refer documentation of {@link HTableThreadPoolHistograms}.
+ * <br/><br/>
+ * To consume the collected metrics as percentile distribution, call
+ * {@link PhoenixRuntime#getHTableThreadPoolHistograms()}. Use htableThreadPoolHistogramsName as
+ * key to retrieve the list of {@link org.apache.phoenix.monitoring.PercentileHistogramDistribution}
+ * instances. The list will have one instance per metric.
+ * <br/><br/>
+ * Please refer documentation of
+ * {@link org.apache.phoenix.monitoring.PercentileHistogramDistribution} to understand how to
+ * retrieve percentile distribution of the recorde values.
+ * <br/><br/>
+ * To better understand how to use this wrapper ThreadPoolExecutor along with
+ * {@link HTableThreadPoolHistograms} please refer ITs:
+ * <li>CQSIThreadPoolMetricsIT</li>
+ * <li>ExternalHTableThreadPoolMetricsIT</li>
+ */
 public class HTableThreadPoolWithUtilizationStats extends ThreadPoolExecutor {
 
     private final String htableThreadPoolHistogramsName;
     private final Supplier<HTableThreadPoolHistograms> hTableThreadPoolHistogramsSupplier;
 
     /**
-     * A wrapper over traditional ThreadPoolExecutor with instrumentation for capturing utilization
-     * metrics i.e. active thread count and queue size. When a new task arrives in the thread pool,
-     * active thread count and queue size stats at that moment are record in histograms.
-     * <br/><br/>
-     * For utilization stats to be recorded a {@link HTableThreadPoolHistograms} supplier should be
-     * provided and should be non-null. The supplier should be idempotent.
-     * <br/><br/>
-     * Please refer documentation of {@link HTableThreadPoolHistograms} to understand how stats
-     * are recorded.
-     * <br/><br/>
      * All parameters are same as the ones accepted by {@link ThreadPoolExecutor} in addition to
      * few extra for the purpose of collecting stats.
-     * <br/><br/>
-     * To better understand how to use this wrapper ThreadPoolExecutor along with
-     * {@link HTableThreadPoolHistograms} please refer ITs:
-     * <li>CQSIThreadPoolMetricsIT</li>
-     * <li>ExternalHTableThreadPoolMetricsIT</li>
      * @param htableThreadPoolHistogramsName Name of the {@link HTableThreadPoolHistograms}
      *                                       instance. This will be used as key in the map
      *                                       returned by

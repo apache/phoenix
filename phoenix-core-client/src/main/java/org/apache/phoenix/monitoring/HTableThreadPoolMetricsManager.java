@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.monitoring;
 
+import org.apache.hbase.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,7 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 /**
- * Central place where we keep track of all the HTable thread pool utilization and contention
+ * Central place where we keep track of HTable thread pool utilization and contention
  * level metrics for all the HTable thread pools.
  */
 public class HTableThreadPoolMetricsManager {
@@ -67,6 +68,24 @@ public class HTableThreadPoolMetricsManager {
         return hTableThreadPoolHistograms;
    }
 
+    /**
+     * Records the value of no. of active threads in HTable thread pool in
+     * {@link HTableThreadPoolHistograms}.
+     * <br/><br/>
+     * HistogramKey is used to uniquely identify {@link HTableThreadPoolHistograms} instance for
+     * recording metrics. This can be same as HTable thread pool name but not necessary. Ex- for
+     * CQSI level HTable thread pool, histogramKey is the URL returned by ConnectionInfo. By
+     * setting histogramKey same as Connection URL, even if multiple CQSI instances are there
+     * per connection info (one just evicted from cache vs other newly created) they will share
+     * same {@link HTableThreadPoolHistograms} instance.
+     * <br/>
+     * Ex- if one client connects to multiple HBase clusters such that for each HBase cluster a
+     * separate HTable thread pool is used (like HA scenario), then histogramKey can be same as
+     * thread pool name.
+     * @param histogramKey Key to uniquely identify {@link HTableThreadPoolHistograms} instance.
+     * @param activeThreads Number of active threads in the thread pool.
+     * @param supplier An idempotent supplier of {@link HTableThreadPoolHistograms}.
+     */
    public static void updateActiveThreads(String histogramKey, int activeThreads,
                                    Supplier<HTableThreadPoolHistograms> supplier) {
         HTableThreadPoolHistograms hTableThreadPoolHistograms =
@@ -79,15 +98,33 @@ public class HTableThreadPoolMetricsManager {
         }
    }
 
-   public static void updateQueueSize(String threadPoolName, int queueSize,
-                               Supplier<HTableThreadPoolHistograms> supplier) {
+    /**
+     * Records the value of no. of tasks in the HTable thread pool's queue in
+     * {@link HTableThreadPoolHistograms}.
+     * <br/><br/>
+     * HistogramKey is used to uniquely identify {@link HTableThreadPoolHistograms} instance for
+     * recording metrics. This can be same as HTable thread pool name but not necessary. Ex- for
+     * CQSI level HTable thread pool, histogramKey is the URL returned by ConnectionInfo. By
+     * setting histogramKey same as Connection URL, even if multiple CQSI instances are there
+     * per connection info (one just evicted from cache vs other newly created) they will share
+     * same {@link HTableThreadPoolHistograms} instance.
+     * <br/>
+     * Ex- if one client connects to multiple HBase clusters such that for each HBase cluster a
+     * separate HTable thread pool is used (like HA scenario), then histogramKey can be same as
+     * thread pool name.
+     * @param histogramKey Key to uniquely identify {@link HTableThreadPoolHistograms} instance.
+     * @param queueSize Number of tasks in the HTable thread pool's queue.
+     * @param supplier An idempotent supplier of {@link HTableThreadPoolHistograms}.
+     */
+   public static void updateQueueSize(String histogramKey, int queueSize,
+                                      Supplier<HTableThreadPoolHistograms> supplier) {
         HTableThreadPoolHistograms hTableThreadPoolHistograms =
-                getThreadPoolHistograms(threadPoolName, supplier);
+                getThreadPoolHistograms(histogramKey, supplier);
         if (hTableThreadPoolHistograms != null) {
             hTableThreadPoolHistograms.updateQueuedSize(queueSize);
         }
         else {
-            logWarningForNullSupplier(threadPoolName);
+            logWarningForNullSupplier(histogramKey);
         }
    }
 
@@ -95,6 +132,7 @@ public class HTableThreadPoolMetricsManager {
        LOGGER.warn("No HTable thread pool histograms created for thread pool {}", threadPoolName);
    }
 
+   @VisibleForTesting
    public static void clearHTableThreadPoolHistograms() {
        threadPoolHistogramsMap.clear();
    }

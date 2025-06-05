@@ -23,26 +23,29 @@ import java.util.List;
 
 /**
  * Creates a collection of histograms for capturing multiple stats related to HTable thread pool
- * utilization and contention.
+ * utilization and contention. Each of the histogram is an instance of {@link PercentileHistogram}.
  * <br/><br/>
  * Supports capturing additional metadata about the stats in the form of key/value pairs a.k.a. tags
- * .  By default supports two tags i.e. servers and connectionProfile. "servers" tag specified
- * the quorum string used in URL for establishing Phoenix connection. This can ZK quorum,
- * master quorum, etc., based on the HBase connection registry. "connectionProfile" identifies
- * the principal used in URL to create separate CQSI instances for different principals.
+ * .  By default, supports two tags i.e. servers and cqsiName. "servers" tag specifies
+ * the quorum string used in URL for establishing Phoenix connection. This can be ZK quorum,
+ * master quorum, etc., based on the HBase connection registry. "cqsiName" identifies
+ * the principal used in URL to create separate CQSI instances.
  * <br/>
  * Custom tags can also be specified as String key/value pairs using
  * {@link #addTag(String, String)}.
  * <br/><br/>
- * Internally this class uses {@link org.HdrHistogram.Histogram}. At the time of instantiation of
- * an instance of this class HdrHistograms get initialized for each of the stats being collected.
+ * The tags specified are attached to instances of {@link PercentileHistogram}.
  * <br/><br/>
  * To view list of the stats being collected please refer {@link HistogramName}.
+ * <br/><br/>
+ * For CQSI level HTable thread pool, only one instance of this class is created per connection
+ * info. Multiple CQSI instances sharing same connection info (one just evicted from cache vs
+ * other newly created) will share same instance of this class.
  */
 public class HTableThreadPoolHistograms {
     public enum Tag {
         servers,
-        connectionProfile,
+        cqsiName,
     }
 
     public enum HistogramName {
@@ -71,8 +74,8 @@ public class HTableThreadPoolHistograms {
         addTag(Tag.servers.name(), value);
     }
 
-    public void addConnectionProfileTag(String value) {
-        addTag(Tag.connectionProfile.name(), value);
+    public void addCqsiNameTag(String value) {
+        addTag(Tag.cqsiName.name(), value);
     }
 
     public void addTag(String key, String value) {
