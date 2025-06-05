@@ -30,6 +30,7 @@ import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION
 import static org.apache.phoenix.query.QueryServices.COLLECT_REQUEST_LEVEL_METRICS;
 import static org.apache.phoenix.query.QueryServices.COMMIT_STATS_ASYNC;
 import static org.apache.phoenix.query.QueryServices.CONNECTION_ACTIVITY_LOGGING_ENABLED;
+import static org.apache.phoenix.query.QueryServices.CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED;
 import static org.apache.phoenix.query.QueryServices.CONNECTION_ACTIVITY_LOGGING_INTERVAL;
 import static org.apache.phoenix.query.QueryServices.CONNECTION_QUERY_SERVICE_HISTOGRAM_SIZE_RANGES;
 import static org.apache.phoenix.query.QueryServices.CONNECTION_QUERY_SERVICE_METRICS_ENABLED;
@@ -371,6 +372,7 @@ public class QueryServicesOptions {
     public static final int DEFAULT_INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS = 0;
 
     public static final boolean DEFAULT_CONNECTION_ACTIVITY_LOGGING_ENABLED = false;
+    public static final boolean DEFAULT_CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED = false;
     public static final int DEFAULT_CONNECTION_ACTIVITY_LOGGING_INTERVAL_IN_MINS = 15;
     public static final boolean DEFAULT_STATS_COLLECTION_ENABLED = true;
     public static final boolean DEFAULT_USE_STATS_FOR_PARALLELIZATION = true;
@@ -571,6 +573,7 @@ public class QueryServicesOptions {
                 DEFAULT_SERVER_MERGE_FOR_UNCOVERED_INDEX)
             .setIfUnset(MAX_IN_LIST_SKIP_SCAN_SIZE, DEFAULT_MAX_IN_LIST_SKIP_SCAN_SIZE)
             .setIfUnset(CONNECTION_ACTIVITY_LOGGING_ENABLED, DEFAULT_CONNECTION_ACTIVITY_LOGGING_ENABLED)
+            .setIfUnset(CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED, DEFAULT_CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED)
             .setIfUnset(CONNECTION_ACTIVITY_LOGGING_INTERVAL,
                     DEFAULT_CONNECTION_ACTIVITY_LOGGING_INTERVAL_IN_MINS)
             .setIfUnset(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED,
