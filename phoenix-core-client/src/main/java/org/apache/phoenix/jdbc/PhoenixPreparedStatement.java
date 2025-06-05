@@ -36,6 +36,7 @@ import java.sql.RowId;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.SQLXML;
+import java.sql.Statement;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.time.ZoneOffset;
@@ -224,6 +225,8 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
      * @return The pair of int and ResultSet, where int represents value 1 for successful row update
      * and 0 for non-successful row update, and ResultSet represents the state of the row.
      * @throws SQLException If the statement cannot be executed.
+     * @deprecated Use one of the {@link #executeUpdate()} or {@link #execute()} variant in
+     *     combination with the {@link Statement#getResultSet()}.
      */
     public Pair<Integer, ResultSet> executeAtomicUpdateReturnRow() throws SQLException {
         if (!connection.getAutoCommit()) {
