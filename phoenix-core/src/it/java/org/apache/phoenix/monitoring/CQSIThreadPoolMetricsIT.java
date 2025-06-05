@@ -43,9 +43,11 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 
 import static org.apache.phoenix.jdbc.ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY;
 import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ENABLED;
@@ -113,12 +115,12 @@ public class CQSIThreadPoolMetricsIT extends BaseHTableThreadPoolMetricsIT {
     public void testHistogramsPerConnInfo() throws Exception {
         String tableName = generateUniqueName();
         String histogramKey;
-        String connectionProfileService1 = "service1";
-        String connectionProfileService2 = "service2";
+        String cqsiNameService1 = "service1";
+        String cqsiNameService2 = "service2";
 
         // Create a connection for "service1" connection profile
         String url = QueryUtil.getConnectionUrl(props, utility.getConfiguration(),
-                connectionProfileService1);
+                cqsiNameService1);
         Map<String, List<HistogramDistribution>> htableThreadPoolHistograms;
         try (Connection conn = driver.connect(url, props)) {
             createTableAndUpsertData(conn, tableName);
@@ -128,13 +130,12 @@ public class CQSIThreadPoolMetricsIT extends BaseHTableThreadPoolMetricsIT {
             histogramKey = getHistogramKey(url);
             assertHTableThreadPoolUsed(htableThreadPoolHistograms, histogramKey);
             Map<String, String> expectedTagKeyValues = getExpectedTagKeyValues(url,
-                    connectionProfileService1);
+                    cqsiNameService1);
             assertHistogramTags(htableThreadPoolHistograms, expectedTagKeyValues, histogramKey);
         }
 
         // Create a connection for "service2" connection profile
-        url = QueryUtil.getConnectionUrl(props, utility.getConfiguration(),
-                connectionProfileService2);
+        url = QueryUtil.getConnectionUrl(props, utility.getConfiguration(), cqsiNameService2);
         htableThreadPoolHistograms = PhoenixRuntime.getHTableThreadPoolHistograms();
         // Assert that HTableThreadPoolHistograms for service2 is not there yet
         Assert.assertNull(htableThreadPoolHistograms.get(getHistogramKey(url)));
@@ -143,14 +144,14 @@ public class CQSIThreadPoolMetricsIT extends BaseHTableThreadPoolMetricsIT {
 
             assertHTableThreadPoolNotUsed(htableThreadPoolHistograms, histogramKey);
             Map<String, String> expectedTagKeyValues = getExpectedTagKeyValues(url,
-                    connectionProfileService1);
+                    cqsiNameService1);
             assertHistogramTags(htableThreadPoolHistograms, expectedTagKeyValues, histogramKey);
 
             histogramKey = getHistogramKey(url);
             // We have HTableThreadPoolHistograms for service1 and service2 CQSI instances
             assertHTableThreadPoolUsed(htableThreadPoolHistograms, histogramKey);
             expectedTagKeyValues = getExpectedTagKeyValues(url,
-                    connectionProfileService2);
+                    cqsiNameService2);
             assertHistogramTags(htableThreadPoolHistograms, expectedTagKeyValues, histogramKey);
         }
     }
@@ -158,11 +159,10 @@ public class CQSIThreadPoolMetricsIT extends BaseHTableThreadPoolMetricsIT {
     @Test
     public void testCQSIThreadPoolHistogramsDisabled() throws Exception {
         String tableName = generateUniqueName();
-        String connectionProfile = "service1";
+        String cqsiName = "service1";
         props.setProperty(CQSI_THREAD_POOL_METRICS_ENABLED, "false");
         props.setProperty(CQSI_THREAD_POOL_ENABLED, "true");
-        String url = QueryUtil.getConnectionUrl(props, utility.getConfiguration(),
-                connectionProfile);
+        String url = QueryUtil.getConnectionUrl(props, utility.getConfiguration(), cqsiName);
         try (Connection conn = driver.connect(url, props)) {
             createTableAndUpsertData(conn, tableName);
 
@@ -174,7 +174,7 @@ public class CQSIThreadPoolMetricsIT extends BaseHTableThreadPoolMetricsIT {
     }
 
     @Test
-    public void testDefaultConnectionProfileHistograms() throws Exception {
+    public void testDefaultCQSIHistograms() throws Exception {
         String tableName = generateUniqueName();
 
         String url = QueryUtil.getConnectionUrl(props, utility.getConfiguration());
@@ -192,11 +192,47 @@ public class CQSIThreadPoolMetricsIT extends BaseHTableThreadPoolMetricsIT {
         }
     }
 
+    @Test
+    public void testThreadPoolHistogramsSharedAcrossCQSIWithSameConnInfo() throws Exception {
+        String tableName = generateUniqueName();
+        String histogramKey;
+        String cqsiName = "service1";
+
+        // Create a connection for "service1" connection profile
+        String url = QueryUtil.getConnectionUrl(props, utility.getConfiguration(), cqsiName);
+        Map<String, List<HistogramDistribution>> htableThreadPoolHistograms;
+        try (Connection conn = driver.connect(url, props)) {
+            createTableAndUpsertData(conn, tableName);
+
+            htableThreadPoolHistograms = runQueryAndGetHistograms(conn, tableName);
+
+            histogramKey = getHistogramKey(url);
+            assertHTableThreadPoolUsed(htableThreadPoolHistograms, histogramKey);
+            Map<String, String> expectedTagKeyValues = getExpectedTagKeyValues(url, cqsiName);
+            assertHistogramTags(htableThreadPoolHistograms, expectedTagKeyValues, histogramKey);
+        }
+
+        driver.cleanUpCQSICache();
+        try (Connection conn = driver.connect(url, props)) {
+            htableThreadPoolHistograms = runQueryAndGetHistograms(conn, tableName);
+            // Assert that no new HTableThreadPoolHistograms instance was created for a new CQSI
+            // instance
+            String histogramKeyForDefaultCQSI = getHistogramKey(QueryUtil.getConnectionUrl(
+                    new Properties(), utility.getConfiguration()));
+            Set<String> histogramKeySet =
+                    new HashSet<>(Arrays.asList(histogramKeyForDefaultCQSI, histogramKey));
+            Assert.assertTrue(histogramKeySet.containsAll(htableThreadPoolHistograms.keySet()));
+            assertHTableThreadPoolUsed(htableThreadPoolHistograms, histogramKey);
+            Map<String, String> expectedTagKeyValues = getExpectedTagKeyValues(url, cqsiName);
+            assertHistogramTags(htableThreadPoolHistograms, expectedTagKeyValues, histogramKey);
+        }
+    }
+
     private String getHistogramKey(String url) throws SQLException {
         return ConnectionInfo.createNoLogin(url, null, null).toUrl();
     }
 
-    private Map<String, String> getExpectedTagKeyValues(String url, String connectionProfile)
+    private Map<String, String> getExpectedTagKeyValues(String url, String cqsiName)
             throws SQLException {
         Map<String, String> expectedTagKeyValues = new HashMap<>();
         ConnectionInfo connInfo = ConnectionInfo.createNoLogin(url, null, null);
@@ -208,8 +244,7 @@ public class CQSIThreadPoolMetricsIT extends BaseHTableThreadPoolMetricsIT {
             expectedTagKeyValues.put(HTableThreadPoolHistograms.Tag.servers.name(),
                     ((AbstractRPCConnectionInfo) connInfo).getBoostrapServers());
         }
-        expectedTagKeyValues.put(HTableThreadPoolHistograms.Tag.cqsiName.name(),
-                connectionProfile);
+        expectedTagKeyValues.put(HTableThreadPoolHistograms.Tag.cqsiName.name(), cqsiName);
         return expectedTagKeyValues;
     }
 }

@@ -669,9 +669,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     else {
                         throw new IllegalStateException("Unexpected connection info type!!");
                     }
-                    String connectionProfile = connectionInfo.getPrincipal();
-                    hTableThreadPoolHistograms.addCqsiNameTag(connectionProfile != null
-                            ? connectionProfile : DEFAULT_QUERY_SERVICES_NAME);
+                    String cqsiName = connectionInfo.getPrincipal();
+                    hTableThreadPoolHistograms.addCqsiNameTag(cqsiName != null
+                            ? cqsiName : DEFAULT_QUERY_SERVICES_NAME);
                     return hTableThreadPoolHistograms;
                 }
             };
