@@ -2464,7 +2464,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         
         CompilableStatement stmt = parseStatement(sql);
         if (stmt.getOperation().isMutation()) {
-            return executeMutation(stmt, createAuditQueryLogger(stmt, sql), MutationState.ReturnResult.ROW).getSecond();
+            throw new ExecuteQueryNotApplicableException(sql);
         }
         return executeQuery(stmt, createQueryLogger(stmt, sql));
     }
