@@ -1514,6 +1514,7 @@ public class UpgradeUtil {
                         scan.withStartRow(lastRowKey, false);
                     }
                     // Collect the row keys to process them in batch
+                    String currentTableName = "";
                     try (ResultScanner scanner = sysCatalogTable.getScanner(scan)) {
                         int count = 0;
                         List<byte[]> rowKeys = new ArrayList<>();
@@ -1530,15 +1531,23 @@ public class UpgradeUtil {
                             byte[] tableName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
 
                             String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+                            currentTableName = fullTableName;
                             if (SchemaUtil.isSystemTable(SchemaUtil.getTableNameAsBytes(schemaName, tableName))) {
                                 //We do not support system table ttl through phoenix ttl, and it will be moved to a
                                 //constant value in future commit.
                                 continue;
                             }
+                            PTable pTable = oldMetaConnection.getTableFromServerNoCache(schemaName, tableName);
+                            byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(pTable);
                             TableDescriptor tableDesc = admin.getDescriptor(SchemaUtil.getPhysicalTableName(
                                     fullTableName, readOnlyProps));
-                            int ttl = tableDesc.getColumnFamily(DEFAULT_COLUMN_FAMILY_BYTES).
-                                    getTimeToLive();
+                            ColumnFamilyDescriptor cfd = tableDesc.getColumnFamily(emptyCF);
+                            if (cfd == null) {
+                                LOGGER.warn("Not upgrading HBase level TTL definition for table {}", fullTableName);
+                                continue;
+                            }
+                            LOGGER.info("Upgrading HBase level TTL definition for table {}", fullTableName);
+                            int ttl = cfd.getTimeToLive();
                             // As we have ttl defined for this table create a Put to set TTL with
                             // backward compatibility in mind.
                             long rowTS = EnvironmentEdgeManager.currentTimeMillis();
@@ -1578,6 +1587,12 @@ public class UpgradeUtil {
                         LOGGER.info(String.format("moveTTLValues From ColumnDescriptor to TTL Column is " +
                                         "in progress => numOfTableHasTTLMoved: %d",
                                 numOfTableThatHasTTLMoved));
+
+                    } catch (SQLException e) {
+                        LOGGER.error(String.format(
+                                "Failed moving ttl value to TTL" +
+                                        " column for %s with Exception :",
+                                currentTableName), e);
 
                     }
                 } while (pageMore);
