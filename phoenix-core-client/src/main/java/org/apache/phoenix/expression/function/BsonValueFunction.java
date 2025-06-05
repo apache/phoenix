@@ -20,6 +20,7 @@ package org.apache.phoenix.expression.function;
 import java.util.Date;
 import java.util.List;
 
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.bson.BsonBinary;
 import org.bson.BsonBoolean;
 import org.bson.BsonDateTime;
@@ -153,10 +154,9 @@ public class BsonValueFunction extends ScalarFunction {
             ptr.set(PBoolean.INSTANCE.toBytes(((BsonBoolean) bsonValue).getValue()));
         } else if (bsonValueDataType == PVarbinary.INSTANCE && bsonValue instanceof BsonBinary) {
             ptr.set(PVarbinary.INSTANCE.toBytes(((BsonBinary) bsonValue).getData()));
-//        TODO : uncomment after PHOENIX-7357
-//        } else if (bsonValueDataType == PVarbinaryEncoded.INSTANCE
-//            && bsonValue instanceof BsonBinary) {
-//            ptr.set(PVarbinaryEncoded.INSTANCE.toBytes(((BsonBinary) bsonValue).getData()));
+        } else if (bsonValueDataType == PVarbinaryEncoded.INSTANCE
+            && bsonValue instanceof BsonBinary) {
+            ptr.set(PVarbinaryEncoded.INSTANCE.toBytes(((BsonBinary) bsonValue).getData()));
         } else if (bsonValueDataType == PDate.INSTANCE && bsonValue instanceof BsonDateTime) {
             ptr.set(PDate.INSTANCE.toBytes(new Date(((BsonDateTime) bsonValue).getValue())));
         } else {

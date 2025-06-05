@@ -38,3 +38,4 @@ phoenix-hbase-compat-1.5.0/
 
 # Code generators
 .codegenie
+/.vscode/
