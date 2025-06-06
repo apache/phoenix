@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PDataType;
@@ -48,7 +49,7 @@ public class IndexColumnNames {
     private PTable pdataTable;
     private PTable pindexTable;
 
-    public IndexColumnNames(final PTable pdataTable, final PTable pindexTable) {
+    public IndexColumnNames(final PTable pdataTable, final PTable pindexTable) throws ColumnNotFoundException {
         this.pdataTable = pdataTable;
         this.pindexTable = pindexTable;
         List<PColumn> pindexCols = pindexTable.getColumns();
