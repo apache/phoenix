@@ -1537,13 +1537,13 @@ public class UpgradeUtil {
                                 //constant value in future commit.
                                 continue;
                             }
-                            PTable pTable = oldMetaConnection.getTableFromServerNoCache(schemaName, tableName);
+                            PTable pTable = oldMetaConnection.getTable(null, fullTableName);
                             byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(pTable);
                             TableDescriptor tableDesc = admin.getDescriptor(SchemaUtil.getPhysicalTableName(
                                     fullTableName, readOnlyProps));
                             ColumnFamilyDescriptor cfd = tableDesc.getColumnFamily(emptyCF);
                             if (cfd == null) {
-                                LOGGER.warn("Not upgrading HBase level TTL definition for table {}", fullTableName);
+                                LOGGER.warn("No emptyCF found. Not upgrading HBase level TTL definition for table {}", fullTableName);
                                 continue;
                             }
                             LOGGER.info("Upgrading HBase level TTL definition for table {}", fullTableName);
@@ -1580,6 +1580,7 @@ public class UpgradeUtil {
                                         "Failed moving ttl value batch from ColumnDescriptor to TTL" +
                                                 " column on %s with Exception :",
                                         SYSTEM_CATALOG_NAME), e);
+                                throw new IOException(e);
                             }
                         }
 
@@ -1588,11 +1589,11 @@ public class UpgradeUtil {
                                         "in progress => numOfTableHasTTLMoved: %d",
                                 numOfTableThatHasTTLMoved));
 
-                    } catch (SQLException e) {
+                    } catch (Exception e) {
                         LOGGER.error(String.format(
-                                "Failed moving ttl value to TTL" +
-                                        " column for %s with Exception :",
+                                "Failed moving ttl value to TTL column for %s with Exception :",
                                 currentTableName), e);
+                        throw new IOException(e);
 
                     }
                 } while (pageMore);
