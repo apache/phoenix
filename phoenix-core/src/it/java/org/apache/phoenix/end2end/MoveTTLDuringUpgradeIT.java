@@ -105,7 +105,7 @@ public class MoveTTLDuringUpgradeIT extends ParallelStatsDisabledIT {
             while (rs.next()) {
                 count++;
                 String table = rs.getString(1);
-                LOGGER.info("found table: {} ", table);
+                LOGGER.info("found table {} : {} ", count, table);
                 int ttl = tableTTLMap.get(table);
                 int ttlInSyscat = Integer.valueOf(rs.getString(2)).intValue();
                 //Check if TTL is moved to SYSCAT.
@@ -160,6 +160,26 @@ public class MoveTTLDuringUpgradeIT extends ParallelStatsDisabledIT {
             admin.modifyTable(builder.build());
             admin.enableTable(tableName);
         }
+
+        // Create table with non default column family
+        for (int i = numOfTable; i < numOfTable+2; i++ ) {
+            table = "T_" + generateUniqueName();
+            randomTTL = i%2 == 0 ? HConstants.FOREVER :  100 + (int)(Math.random() * 1000);
+            tableTTLMap.put(table, randomTTL);
+            String ddl = "CREATE TABLE  " + schema + "." + table +
+                    "  (a_string varchar not null, b_string varbinary not null, col1 integer" +
+                    "  CONSTRAINT pk PRIMARY KEY (a_string, b_string)) DEFAULT_COLUMN_FAMILY='Z'";
+
+            BaseTest.createTestTable(getUrl(), ddl);
+            TableName tableName = TableName.valueOf(SchemaUtil.getTableName(schema, table));
+            TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(tableName);
+            builder.setColumnFamily(ColumnFamilyDescriptorBuilder.newBuilder(
+                    Bytes.toBytes("Z")).setTimeToLive(randomTTL).build());
+            admin.disableTable(tableName);
+            admin.modifyTable(builder.build());
+            admin.enableTable(tableName);
+        }
+
         return tableTTLMap;
     }
 
