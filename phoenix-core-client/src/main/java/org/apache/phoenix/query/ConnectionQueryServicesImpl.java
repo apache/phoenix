@@ -661,12 +661,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     if (connectionInfo instanceof ZKConnectionInfo) {
                         hTableThreadPoolHistograms.addServerTag(
                                 ((ZKConnectionInfo) connectionInfo).getZkHosts());
-                    }
-                    else if (connectionInfo instanceof AbstractRPCConnectionInfo) {
+                    } else if (connectionInfo instanceof AbstractRPCConnectionInfo) {
                         hTableThreadPoolHistograms.addServerTag(
                                 ((AbstractRPCConnectionInfo) connectionInfo).getBoostrapServers());
-                    }
-                    else {
+                    } else {
                         throw new IllegalStateException("Unexpected connection info type!!");
                     }
                     String cqsiName = connectionInfo.getPrincipal();

@@ -22,7 +22,6 @@ import java.util.Map;
 
 import org.HdrHistogram.Histogram;
 import org.HdrHistogram.Recorder;
-import org.apache.hbase.thirdparty.com.google.common.collect.ImmutableMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -75,8 +74,7 @@ public abstract class PercentileHistogram {
             distribution = new PercentileHistogramDistribution(name, histogram.getMinValue(),
                     histogram.getMaxValue(), histogram.getTotalCount(),
                     generateDistributionMap(histogram));
-        }
-        else {
+        } else {
             distribution = new PercentileHistogramDistribution(name, histogram.getMinValue(),
                     histogram.getMaxValue(), histogram.getTotalCount(),
                     generateDistributionMap(histogram), tags);

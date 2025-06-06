@@ -30,8 +30,8 @@ import org.apache.hbase.thirdparty.com.google.common.collect.ImmutableMap;
  * . Call {@link #getTags()} to get the tags attached to the histogram.
  */
 public class PercentileHistogramDistribution extends HistogramDistributionImpl {
-    private final Map<String, Long> percentileDistributionMap;
-    private Map<String, String> tags = null;
+    private final ImmutableMap<String, Long> percentileDistributionMap;
+    private ImmutableMap<String, String> tags = null;
 
     public PercentileHistogramDistribution(String histoName, long min, long max, long count,
                                            Map<String, Long> percentileDistributionMap) {

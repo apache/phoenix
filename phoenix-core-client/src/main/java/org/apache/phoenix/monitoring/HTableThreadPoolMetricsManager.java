@@ -85,8 +85,7 @@ public class HTableThreadPoolMetricsManager {
             getThreadPoolHistograms(histogramKey, supplier);
         if (hTableThreadPoolHistograms != null) {
             hTableThreadPoolHistograms.updateActiveThreads(activeThreads);
-        }
-        else {
+        } else {
             logWarningForNullSupplier(histogramKey);
         }
     }
@@ -115,8 +114,7 @@ public class HTableThreadPoolMetricsManager {
             getThreadPoolHistograms(histogramKey, supplier);
         if (hTableThreadPoolHistograms != null) {
             hTableThreadPoolHistograms.updateQueuedSize(queueSize);
-        }
-        else {
+        } else {
             logWarningForNullSupplier(histogramKey);
         }
     }
