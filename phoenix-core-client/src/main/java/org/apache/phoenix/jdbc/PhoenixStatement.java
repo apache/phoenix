@@ -315,8 +315,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         this.queryTimeoutMillis = getDefaultQueryTimeoutMillis();
         this.validateLastDdlTimestamp = ValidateLastDDLTimestampUtil
                                             .getValidateLastDdlTimestampEnabled(this.connection);
-        this.explainPlanLoggingEnabled = connection.getQueryServices().getProps().getBoolean(CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED,
-                                                    QueryServicesOptions.DEFAULT_CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED);
+        this.explainPlanLoggingEnabled = connection.getQueryServices().getProps().getBoolean(
+                CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED,
+                QueryServicesOptions.DEFAULT_CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED);
     }
 
     /**
@@ -2884,7 +2885,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     }
 
     private void updateExplainPlanInformation(QueryPlan plan) throws SQLException {
-        if ( plan == null || !getConnection().getActivityLogger().isLevelEnabled(ActivityLogInfo.EXPLAIN_PLAN.getLogLevel())) {
+        if (plan == null || !getConnection().getActivityLogger()
+                .isLevelEnabled(ActivityLogInfo.EXPLAIN_PLAN.getLogLevel())) {
             return;
         }
 
@@ -2914,8 +2916,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                 .map(HRegionLocation::getHostname)
                 .collect(Collectors.joining(","));
 
-        return QueryUtil.REGIONS + "={" + regions + "}," +
-                QueryUtil.HOSTNAMES + "={" + hostnames + "}";
+        return QueryUtil.REGIONS + "={" + regions + "},"
+                + QueryUtil.HOSTNAMES + "={" + hostnames + "}";
     }
 
 }

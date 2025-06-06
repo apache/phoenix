@@ -152,7 +152,8 @@ public class ConnectionActivityLogger {
      * Get the Explain plan information.
      */
     public String getExplainPlanInfo() {
-        return isLevelEnabled(ActivityLogInfo.EXPLAIN_PLAN.getLogLevel()) ?
-                activityList.get(ActivityLogInfo.EXPLAIN_PLAN.ordinal()) : null;
+        return isLevelEnabled(ActivityLogInfo.EXPLAIN_PLAN.getLogLevel())
+                ? activityList.get(ActivityLogInfo.EXPLAIN_PLAN.ordinal())
+                : null;
     }
 }
