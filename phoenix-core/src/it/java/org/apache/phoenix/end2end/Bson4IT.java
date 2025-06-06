@@ -855,10 +855,9 @@ public class Bson4IT extends ParallelStatsDisabledIT {
                                               String jsonPath,
                                               boolean success)
           throws SQLException, IOException {
-    Pair<Integer, ResultSet> resultPair =
-        stmt.unwrap(PhoenixPreparedStatement.class).executeAtomicUpdateReturnRow();
-    assertEquals(success ? 1 : 0, resultPair.getFirst().intValue());
-    ResultSet resultSet = resultPair.getSecond();
+    stmt.execute();
+    assertEquals(success ? 1 : 0, stmt.getUpdateCount());
+    ResultSet resultSet = stmt.getResultSet();
     assertEquals(RawBsonDocument.parse(getJsonString(jsonPath)), resultSet.getObject(3));
   }
 
