@@ -2529,7 +2529,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             }
             executeMutation(stmt, createAuditQueryLogger(stmt, sql));
             flushIfNecessary();
-            return lastResultSet != null;
+            return isResultSetExpected(stmt);
         }
         
         executeQuery(stmt, createQueryLogger(stmt, sql));

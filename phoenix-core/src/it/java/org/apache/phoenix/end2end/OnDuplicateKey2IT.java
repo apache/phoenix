@@ -50,7 +50,6 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
-import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryConstants;
@@ -62,7 +61,6 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.bson.BsonDocument;
 import org.bson.RawBsonDocument;
-import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -380,8 +378,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
 
         upsertSql =
                 "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1) "
-                        + "VALUES('pk000', -123.98, 'pk003', 0) ON DUPLICATE"
-                        + " KEY IGNORE";
+                        + "VALUES('pk000', -123.98, 'pk003', 0) ON DUPLICATE KEY IGNORE";
         validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 1011.202, null, false,
                 null, bsonDocument1, 123);
 
@@ -439,8 +436,9 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                                                        BsonDocument expectedDoc,
                                                        Integer col4)
             throws SQLException {
-        ps.execute();
-        ResultSet resultSet = ps.getResultSet();
+        final Pair<Integer, ResultSet> resultPair =
+                ps.unwrap(PhoenixPreparedStatement.class).executeAtomicUpdateReturnRow();
+        ResultSet resultSet = resultPair.getSecond();
         if (!isSinglePointLookup) {
             assertNull(resultSet);
             return;
@@ -493,7 +491,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             resultSet = stmt.execute(upsertSql) ? stmt.getResultSet() : null;
             updateCount = stmt.getUpdateCount();
         }
-        if (conn.getAutoCommit()) {
+        boolean isOnDuplicateKey = upsertSql.toUpperCase().contains("ON DUPLICATE KEY");
+        if (conn.getAutoCommit() && isOnDuplicateKey) {
             assertEquals(success ? 1 : 0, updateCount);
             assertEquals("pk000", resultSet.getString(1));
             assertEquals(-123.98, resultSet.getDouble(2), 0.0);
