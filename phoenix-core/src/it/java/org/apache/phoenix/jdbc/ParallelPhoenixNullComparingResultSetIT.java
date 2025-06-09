@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.jdbc;
 
-import static org.apache.phoenix.jdbc.ClusterRoleRecordGeneratorTool.PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT;
+import static org.apache.phoenix.jdbc.HAGroupStoreGeneratorTool.PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
 import static org.apache.phoenix.jdbc.HighAvailabilityPolicy.PARALLEL;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair.doTestWhenOneHBaseDown;
@@ -108,12 +108,12 @@ public class ParallelPhoenixNullComparingResultSetIT {
 
     @Test
     public void testRowOnCluster1() throws SQLException {
-        testRowOnCluster(CLUSTERS.getURL(1, haGroup.getRoleRecord().getRegistryType()));
+        testRowOnCluster(CLUSTERS.getURL(1, haGroup.getHaGroupStore().getRegistryType()));
     }
 
     @Test
     public void testRowOnCluster2() throws SQLException {
-        testRowOnCluster(CLUSTERS.getURL(2, haGroup.getRoleRecord().getRegistryType()));
+        testRowOnCluster(CLUSTERS.getURL(2, haGroup.getHaGroupStore().getRegistryType()));
     }
 
     private void testRowOnCluster(String clusterUrl) throws SQLException {
@@ -156,11 +156,11 @@ public class ParallelPhoenixNullComparingResultSetIT {
     }
 
     private void addRowToCluster1(String tableName, int id, int v) throws SQLException {
-        addRowToCluster(CLUSTERS.getURL(1, haGroup.getRoleRecord().getRegistryType()), tableName, id, v);
+        addRowToCluster(CLUSTERS.getURL(1, haGroup.getHaGroupStore().getRegistryType()), tableName, id, v);
     }
 
     private void addRowToCluster2(String tableName, int id, int v) throws SQLException {
-        addRowToCluster(CLUSTERS.getURL(2, haGroup.getRoleRecord().getRegistryType()), tableName, id, v);
+        addRowToCluster(CLUSTERS.getURL(2, haGroup.getHaGroupStore().getRegistryType()), tableName, id, v);
     }
 
     private void addRowToCluster(String url, String tableName, int id, int v) throws SQLException {

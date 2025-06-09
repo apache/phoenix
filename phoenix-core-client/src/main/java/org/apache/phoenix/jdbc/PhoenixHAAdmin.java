@@ -44,10 +44,10 @@ import java.util.Optional;
 import java.util.Properties;
 
 /**
- * Helper class to update cluster role record for a ZK cluster.
+ * Helper class to update HAGroupStore for a ZK cluster.
  * The ZK client this accessor has is confined to a single ZK cluster, but it can be used to operate
  * multiple HA groups that are associated with this cluster.
- * This is not thread-safe yet. Multiple threads can update CRRs at same time potentially causing inconsistency.
+ * This is not thread-safe yet. Multiple threads can update HAGroupStores at same time potentially causing inconsistency.
  */
 public class PhoenixHAAdmin implements Closeable {
 
@@ -145,12 +145,12 @@ public class PhoenixHAAdmin implements Closeable {
         try {
             byte[] data = getCurator().getData().forPath(toPath(haGroupName));
 
-            Optional<ClusterRoleRecord> record = ClusterRoleRecord.fromJson(data);
+            Optional<HAGroupStore> record = HAGroupStore.fromJson(data);
             return record.isPresent() && record.get()
-                    .getRole(zkUrl) == ClusterRoleRecord.ClusterRole.ACTIVE;
+                    .getRole(zkUrl) == HAGroupStore.ClusterRole.ACTIVE;
         } catch (KeeperException.NoNodeException ne) {
             LOG.info(
-                    "No role record found for HA group {} on '{}', assuming it is not active",
+                    "No HaGroupStore found for HA group {} on '{}', assuming it is not active",
                     haGroupName, zkUrl);
             return false;
         } catch (Exception e) {
@@ -161,10 +161,10 @@ public class PhoenixHAAdmin implements Closeable {
     }
 
     /**
-     * This lists all cluster role records stored in the zookeeper nodes.
+     * This lists all HAGroupStores stored in the zookeeper nodes.
      * This read-only operation and hence no side effect on the ZK cluster.
      */
-    public List<ClusterRoleRecord> listAllClusterRoleRecordsOnZookeeper() throws IOException {
+    public List<HAGroupStore> listAllHAGroupStoresOnZookeeper() throws IOException {
         List<String> haGroupNames;
         try {
             haGroupNames = getCurator().getChildren().forPath(ZKPaths.PATH_SEPARATOR);
@@ -174,12 +174,12 @@ public class PhoenixHAAdmin implements Closeable {
             throw new IOException(msg, e);
         }
 
-        List<ClusterRoleRecord> records = new ArrayList<>();
+        List<HAGroupStore> records = new ArrayList<>();
         List<String> failedHaGroups = new ArrayList<>();
         for (String haGroupName : haGroupNames) {
             try {
                 byte[] data = getCurator().getData().forPath(ZKPaths.PATH_SEPARATOR + haGroupName);
-                Optional<ClusterRoleRecord> record = ClusterRoleRecord.fromJson(data);
+                Optional<HAGroupStore> record = HAGroupStore.fromJson(data);
                 if (record.isPresent()) {
                     records.add(record.get());
                 } else { // fail to deserialize data from JSON
@@ -196,7 +196,7 @@ public class PhoenixHAAdmin implements Closeable {
             String
                     msg =
                     String.format(
-                            "Found following HA groups: %s. Fail to read cluster " + "role records for following HA groups: %s",
+                            "Found following HA groups: %s. Fail to read cluster " + "HaGroupStores for following HA groups: %s",
                             String.join(",", haGroupNames), String.join(",", failedHaGroups));
             LOG.error(msg);
             throw new IOException(msg);
@@ -205,19 +205,19 @@ public class PhoenixHAAdmin implements Closeable {
     }
 
     /**
-     * Helper method to write the given cluster role records into the ZK clusters respectively.
+     * Helper method to write the given HAGroupStores into the ZK clusters respectively.
      *
      * // TODO: add retry logics
      *
-     * @param records The cluster role record list to save on ZK
+     * @param records The HAGroupStore list to save on ZK
      * @param forceful if true, this method will ignore errors on other clusters; otherwise it will
      *                 not update next cluster (in order) if there is any failure on current cluster
-     * @return a map of HA group name to list cluster's url for cluster role record failing to write
+     * @return a map of HA group name to list cluster's url for HAGroupStore failing to write
      */
-    public Map<String, List<String>> syncClusterRoleRecords(List<ClusterRoleRecord> records,
-            boolean forceful) throws IOException {
+    public Map<String, List<String>> syncHAGroupStores(List<HAGroupStore> records,
+                                                       boolean forceful) throws IOException {
         Map<String, List<String>> failedHaGroups = new HashMap<>();
-        for (ClusterRoleRecord record : records) {
+        for (HAGroupStore record : records) {
             String haGroupName = record.getHaGroupName();
             try (PhoenixHAAdmin admin1 = new PhoenixHAAdmin(record.getUrl1(), conf, HighAvailibilityCuratorProvider.INSTANCE);
                     PhoenixHAAdmin admin2 = new PhoenixHAAdmin(record.getUrl2(), conf, HighAvailibilityCuratorProvider.INSTANCE)) {
@@ -229,7 +229,7 @@ public class PhoenixHAAdmin implements Closeable {
                     pair = new PairOfSameType<>(admin1, admin2);
                 } else if (admin2.isCurrentActiveCluster(haGroupName)) {
                     pair = new PairOfSameType<>(admin2, admin1);
-                } else if (record.getRole(admin1.getZkUrl()) == ClusterRoleRecord.ClusterRole.STANDBY) {
+                } else if (record.getRole(admin1.getZkUrl()) == HAGroupStore.ClusterRole.STANDBY) {
                     pair = new PairOfSameType<>(admin1, admin2);
                 } else {
                     pair = new PairOfSameType<>(admin2, admin1);
@@ -264,15 +264,15 @@ public class PhoenixHAAdmin implements Closeable {
     }
 
     /**
-     * Verify cluster role records stored in local ZK nodes, and repair with remote znodes for any
+     * Verify HAGroupStores stored in local ZK nodes, and repair with remote znodes for any
      * inconsistency.
-     * @return a list of HA group names with inconsistent cluster role records, or empty list
+     * @return a list of HA group names with inconsistent HAGroupStores, or empty list
      */
     List<String> verifyAndRepairWithRemoteZnode() throws Exception {
         List<String> inconsistentHaGroups = new ArrayList<>();
-        for (ClusterRoleRecord record : listAllClusterRoleRecordsOnZookeeper()) {
+        for (HAGroupStore record : listAllHAGroupStoresOnZookeeper()) {
             // the remote znodes may be on different ZK clusters.
-            if (record.getRole(zkUrl) == ClusterRoleRecord.ClusterRole.UNKNOWN) {
+            if (record.getRole(zkUrl) == HAGroupStore.ClusterRole.UNKNOWN) {
                 LOG.warn("Unknown cluster role for cluster '{}' in record {}",
                         zkUrl, record);
                 continue;
@@ -280,11 +280,11 @@ public class PhoenixHAAdmin implements Closeable {
             String remoteZkUrl = record.getUrl1().equals(zkUrl) ? record.getUrl2() : record.getUrl1();
             try (PhoenixHAAdmin remoteAdmin = new PhoenixHAAdmin(remoteZkUrl, conf,
                     HighAvailibilityCuratorProvider.INSTANCE)) {
-                ClusterRoleRecord remoteRecord;
+                HAGroupStore remoteRecord;
                 try {
                     String zPath = toPath(record.getHaGroupName());
                     byte[] data = remoteAdmin.getCurator().getData().forPath(zPath);
-                    Optional<ClusterRoleRecord> recordOptional = ClusterRoleRecord.fromJson(data);
+                    Optional<HAGroupStore> recordOptional = HAGroupStore.fromJson(data);
                     if (!recordOptional.isPresent()) {
                         remoteAdmin.createOrUpdateDataOnZookeeper(record);
                         continue;
@@ -308,18 +308,18 @@ public class PhoenixHAAdmin implements Closeable {
                 if (!record.getHaGroupName().equals(remoteRecord.getHaGroupName())) {
                     inconsistentHaGroups.add(record.getHaGroupName());
                     LOG.error(
-                            "INTERNAL ERROR: got cluster role record for different HA groups." + " Local record: {}, remote record: {}",
+                            "INTERNAL ERROR: got HAGroupStore for different HA groups." + " Local record: {}, remote record: {}",
                             record, remoteRecord);
                 } else if (remoteRecord.isNewerThan(record)) {
                     createOrUpdateDataOnZookeeper(remoteRecord);
                 } else if (record.isNewerThan(remoteRecord)) {
                     remoteAdmin.createOrUpdateDataOnZookeeper(record);
                 } else if (record.equals(remoteRecord)) {
-                    LOG.info("Cluster role record {} is consistent", record);
+                    LOG.info("HAGroupStore {} is consistent", record);
                 } else {
                     inconsistentHaGroups.add(record.getHaGroupName());
                     LOG.error(
-                            "Cluster role record for HA group {} is inconsistent. On cluster " + "{} the record is {}; on cluster {} the record is {}",
+                            "HAGroupStore for HA group {} is inconsistent. On cluster " + "{} the record is {}; on cluster {} the record is {}",
                             record.getHaGroupName(), this, record, remoteAdmin, remoteRecord);
                 }
             }
@@ -333,11 +333,11 @@ public class PhoenixHAAdmin implements Closeable {
      * given record's version should be larger the existing record's version.  This is a way to help
      * avoiding manual update conflicts.  If the given record can not meet version check, it will
      * reject the update request and client (human operator or external system) should retry.
-     * @param record the new cluster role record to be saved on ZK
+     * @param record the new HAGroupStore to be saved on ZK
      * @return true if the data on ZK is updated otherwise false
      * @throws IOException if it fails to update the cluster role data on ZK
      */
-    public boolean createOrUpdateDataOnZookeeper(ClusterRoleRecord record) throws IOException {
+    public boolean createOrUpdateDataOnZookeeper(HAGroupStore record) throws IOException {
         String haGroupName = record.getHaGroupName();
         byte[] data;
         try {
@@ -353,29 +353,29 @@ public class PhoenixHAAdmin implements Closeable {
             String
                     msg =
                     String.format(
-                            "Fail to read cluster role record data for HA group %s " + "on cluster '%s'",
+                            "Fail to read HAGroupStore data for HA group %s " + "on cluster '%s'",
                             haGroupName, zkUrl);
             LOG.error(msg, e);
             throw new IOException(msg, e);
         }
 
-        Optional<ClusterRoleRecord> existingRecordOptional = ClusterRoleRecord.fromJson(data);
+        Optional<HAGroupStore> existingRecordOptional = HAGroupStore.fromJson(data);
         if (!existingRecordOptional.isPresent()) {
             String
                     msg =
                     String.format(
-                            "Fail to parse existing cluster role record data for HA " + "group %s",
+                            "Fail to parse existing HAGroupStore data for HA " + "group %s",
                             haGroupName);
             LOG.error(msg);
             throw new IOException(msg);
         }
 
-        ClusterRoleRecord existingRecord = existingRecordOptional.get();
+        HAGroupStore existingRecord = existingRecordOptional.get();
         if (record.getVersion() < existingRecord.getVersion()) {
             String
                     msg =
                     String.format(
-                            "Invalid new cluster role record for HA group '%s' " + "because new record's version V%d is smaller than existing V%d. " + "Existing role record: %s. New role record fail to save: %s",
+                            "Invalid new HAGroupStore for HA group '%s' " + "because new record's version V%d is smaller than existing V%d. " + "Existing HaGroupStore: %s. New HaGroupStore fail to save: %s",
                             haGroupName, record.getVersion(), existingRecord.getVersion(),
                             existingRecord, record);
             LOG.warn(msg);
@@ -391,7 +391,7 @@ public class PhoenixHAAdmin implements Closeable {
                 String
                         msg =
                         String.format(
-                                "Invalid new cluster role record for HA group '%s' " + "because it has the same version V%d but inconsistent data. " + "Existing role record: %s. New role record fail to save: %s",
+                                "Invalid new HAGroupStore for HA group '%s' " + "because it has the same version V%d but inconsistent data. " + "Existing HaGroupStore: %s. New HaGroupStore fail to save: %s",
                                 haGroupName, record.getVersion(), existingRecord, record);
                 LOG.error(msg);
                 throw new IOException(msg);
@@ -404,13 +404,13 @@ public class PhoenixHAAdmin implements Closeable {
     /**
      * Helper to create the znode on the ZK cluster.
      */
-    private void createDataOnZookeeper(ClusterRoleRecord record) throws IOException {
+    private void createDataOnZookeeper(HAGroupStore record) throws IOException {
         String haGroupName = record.getHaGroupName();
         // znode path for given haGroup name assuming namespace (prefix) has been set.
         String haGroupPath = toPath(haGroupName);
         try {
             getCurator().create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                    .forPath(haGroupPath, ClusterRoleRecord.toJson(record));
+                    .forPath(haGroupPath, HAGroupStore.toJson(record));
         } catch (KeeperException.NodeExistsException nee) {
             //this method assumes that the znode doesn't exist yet, but it could have been
             //created between now and the last time we checked. We swallow the exception and
@@ -427,7 +427,7 @@ public class PhoenixHAAdmin implements Closeable {
     /**
      * Helper to update the znode on ZK cluster assuming current data is the given old record.
      */
-    private boolean updateDataOnZookeeper(ClusterRoleRecord oldRecord, ClusterRoleRecord newRecord)
+    private boolean updateDataOnZookeeper(HAGroupStore oldRecord, HAGroupStore newRecord)
             throws IOException {
         // znode path for given haGroup name assuming namespace (prefix) has been set.
         String haGroupPath = toPath(newRecord.getHaGroupName());
@@ -438,10 +438,10 @@ public class PhoenixHAAdmin implements Closeable {
                     new DistributedAtomicValue(getCurator(), haGroupPath, retryPolicy);
             AtomicValue<byte[]>
                     result =
-                    v.compareAndSet(ClusterRoleRecord.toJson(oldRecord),
-                            ClusterRoleRecord.toJson(newRecord));
+                    v.compareAndSet(HAGroupStore.toJson(oldRecord),
+                            HAGroupStore.toJson(newRecord));
             LOG.info(
-                    "Updated cluster role record ({}->{}) for HA group {} on cluster '{}': {}",
+                    "Updated HAGroupStore ({}->{}) for HA group {} on cluster '{}': {}",
                     oldRecord.getVersion(), newRecord.getVersion(), newRecord.getHaGroupName(),
                     zkUrl, result.succeeded() ? "succeeded" : "failed");
             LOG.debug(
@@ -453,7 +453,7 @@ public class PhoenixHAAdmin implements Closeable {
             String
                     msg =
                     String.format(
-                            "Fail to update cluster role record to ZK for the HA " + "group %s due to '%s'." + "Existing role record: %s. New role record fail to save: %s",
+                            "Fail to update HAGroupStore to ZK for the HA " + "group %s due to '%s'." + "Existing HaGroupStore: %s. New HaGroupStore fail to save: %s",
                             haGroupPath, e.getMessage(), oldRecord, newRecord);
             LOG.error(msg, e);
             throw new IOException(msg, e);

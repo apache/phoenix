@@ -98,25 +98,25 @@ public class ParallelPhoenixConnectionWorkflowIT {
      */
     private HighAvailabilityGroup haGroup;
     /**
-     * registry Type to use in CRR
+     * registry Type to use in HAGroupStore
      */
-    private ClusterRoleRecord.RegistryType registryType;
+    private HAGroupStore.RegistryType registryType;
 
     @Parameters(name="ParallelPhoenixConnectionWorkflowIT_resultSetType={0}, registryType={1}") // name is used by failsafe as file name in reports
     public static Collection<Object[]> data() {
         return Arrays.asList( new Object[][]{
                 {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_RESULT_SET.getName(),
-                        ClusterRoleRecord.RegistryType.ZK},
+                        HAGroupStore.RegistryType.ZK},
                 {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_NULL_COMPARING_RESULT_SET.getName(),
-                        ClusterRoleRecord.RegistryType.ZK},
+                        HAGroupStore.RegistryType.ZK},
                 {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_RESULT_SET.getName(),
-                        ClusterRoleRecord.RegistryType.MASTER},
+                        HAGroupStore.RegistryType.MASTER},
                 {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_NULL_COMPARING_RESULT_SET.getName(),
-                        ClusterRoleRecord.RegistryType.MASTER},
+                        HAGroupStore.RegistryType.MASTER},
                 {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_RESULT_SET.getName(),
-                        ClusterRoleRecord.RegistryType.RPC},
+                        HAGroupStore.RegistryType.RPC},
                 {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_NULL_COMPARING_RESULT_SET.getName(),
-                        ClusterRoleRecord.RegistryType.RPC},
+                        HAGroupStore.RegistryType.RPC},
                 {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_RESULT_SET.getName(),
                         null},
                 {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_NULL_COMPARING_RESULT_SET.getName(),
@@ -210,14 +210,14 @@ public class ParallelPhoenixConnectionWorkflowIT {
     }
 
     public ParallelPhoenixConnectionWorkflowIT(String resultSetType,
-                                               ClusterRoleRecord.RegistryType registryType) {
+                                               HAGroupStore.RegistryType registryType) {
         GLOBAL_PROPERTIES.setProperty(ParallelPhoenixResultSetFactory.PHOENIX_PARALLEL_RESULTSET_TYPE, resultSetType);
         this.registryType = registryType;
     }
 
     @Before
     public void setup() throws Exception {
-        if (registryType == ClusterRoleRecord.RegistryType.RPC) {
+        if (registryType == HAGroupStore.RegistryType.RPC) {
             assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.5.0")>=0);
         }
         String haGroupName = testName.getMethodName();

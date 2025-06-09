@@ -30,7 +30,7 @@ import org.apache.curator.utils.ZKPaths;
 import org.apache.hadoop.hbase.util.PairOfSameType;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
-import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
+import org.apache.phoenix.jdbc.HAGroupStore.ClusterRole;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
@@ -86,7 +86,7 @@ public class HighAvailabilityGroup {
     public static final String PHOENIX_HA_ATTR_PREFIX = "phoenix.ha.";
     public static final String PHOENIX_HA_GROUP_ATTR = PHOENIX_HA_ATTR_PREFIX + "group.name";
     /**
-     * Should we fall back to single cluster when cluster role record is missing?
+     * Should we fall back to single cluster when HAGroupStore is missing?
      */
     public static final String PHOENIX_HA_SHOULD_FALLBACK_WHEN_MISSING_CRR_KEY =
             PHOENIX_HA_ATTR_PREFIX + "fallback.enabled";
@@ -129,8 +129,8 @@ public class HighAvailabilityGroup {
 
     /**
      * Two maps to store client provided info mapping to HighAvailabilityGroup.
-     * GROUPS which store HAGroupInfo (name and url of clusters where CRR resides)
-     * to HighAvailabilityGroup mapping, which is the information required to get roleRecord
+     * GROUPS which store HAGroupInfo (name and url of clusters where HAGroupStore resides)
+     * to HighAvailabilityGroup mapping, which is the information required to get haGroupStore
      * and URLS which store HAGroupInfo to HAURLInfo (name, principal) 1:n mapping
      * which represents a given group of clients trying to connect to a HighAvailabilityGroup,
      * this info is required to fetch the CQSI(s) linked to given HighAvailabilityGroup in case
@@ -144,7 +144,7 @@ public class HighAvailabilityGroup {
     static final Map<HAGroupInfo, HighAvailabilityGroup> GROUPS = new ConcurrentHashMap<>();
     static final Map<HAGroupInfo, Set<HAURLInfo>> URLS = new ConcurrentHashMap<>();
     @VisibleForTesting
-    static final Cache<HAGroupInfo, Boolean> MISSING_CRR_GROUPS_CACHE = CacheBuilder.newBuilder()
+    static final Cache<HAGroupInfo, Boolean> MISSING_HA_GROUP_STORES_CACHE = CacheBuilder.newBuilder()
             .expireAfterWrite(PHOENIX_HA_TRANSITION_TIMEOUT_MS_DEFAULT, TimeUnit.MILLISECONDS)
             .build();
     /**
@@ -174,7 +174,7 @@ public class HighAvailabilityGroup {
      */
     private final CountDownLatch roleManagerLatch = new CountDownLatch(1);
     /**
-     * Pair of role managers for watching cluster role records from the two ZK clusters.
+     * Pair of role managers for watching HAGroupStores from the two ZK clusters.
      */
     private final AtomicReference<PairOfSameType<HAClusterRoleManager>> roleManagers
             = new AtomicReference<>();
@@ -183,9 +183,9 @@ public class HighAvailabilityGroup {
      */
     private final ExecutorService nodeChangedExecutor = Executors.newFixedThreadPool(1);
     /**
-     * Current cluster role record for this HA group.
+     * Current HAGroupStore for this HA group.
      */
-    private volatile ClusterRoleRecord roleRecord;
+    private volatile HAGroupStore haGroupStore;
     /**
      * State of this HA group.
      */
@@ -201,14 +201,14 @@ public class HighAvailabilityGroup {
         this.properties = properties;
     }
     /**
-     * This is for test usage only. In production, the record should be retrieved from ZooKeeper.
+     * This is for test usage only. In production, the HaGroupStore should be retrieved from ZooKeeper.
      */
     @VisibleForTesting
-    HighAvailabilityGroup(HAGroupInfo info, Properties properties, ClusterRoleRecord record,
+    HighAvailabilityGroup(HAGroupInfo info, Properties properties, HAGroupStore haGroupStore,
                           State state) {
         this.info = info;
         this.properties = properties;
-        this.roleRecord = record;
+        this.haGroupStore = haGroupStore;
         this.state = state;
     }
 
@@ -333,16 +333,16 @@ public class HighAvailabilityGroup {
      * It will return the cached instance, if any, for the target HA group. The HA group creation
      * and initialization are blocking operations. Upon initialization failure, the HA group
      * information may be saved in a negative cache iff the cause is due to missing cluster role
-     * records. In presence of empty (not null or exception) return value, client may choose to fall
-     * back to a single cluster connection to compensate missing cluster role records.
+     * haGroupStores. In presence of empty (not null or exception) return value, client may choose to fall
+     * back to a single cluster connection to compensate missing HAGroupStores.
      *
-     * @return Optional of target HA group (initialized), or empty if missing cluster role records
+     * @return Optional of target HA group (initialized), or empty if missing HAGroupStores
      * @throws SQLException fails to get or initialize an HA group
      */
     public static Optional<HighAvailabilityGroup> get(String url, Properties properties)
             throws SQLException {
         HAGroupInfo info = getHAGroupInfo(url, properties);
-        if (MISSING_CRR_GROUPS_CACHE.getIfPresent(info) != null) {
+        if (MISSING_HA_GROUP_STORES_CACHE.getIfPresent(info) != null) {
             return Optional.empty();
         }
 
@@ -360,9 +360,9 @@ public class HighAvailabilityGroup {
                     Stat node1 = curator1.checkExists().forPath(info.getZkPath());
                     Stat node2 = curator2.checkExists().forPath(info.getZkPath());
                     if (node1 == null && node2 == null) {
-                        // The HA group fails to initialize due to missing cluster role records on
+                        // The HA group fails to initialize due to missing HAGroupStores on
                         // both ZK clusters. We will put this HA group into negative cache.
-                        MISSING_CRR_GROUPS_CACHE.put(info, true);
+                        MISSING_HA_GROUP_STORES_CACHE.put(info, true);
                         return Optional.empty();
                     }
                 }
@@ -384,7 +384,7 @@ public class HighAvailabilityGroup {
      * <p>
      * When getting HA group using {@link #get(String, Properties)}, it may return empty (not null
      * or exception) value. In that case client may choose to fall back to a single cluster
-     * connection to compensate missing cluster role records instead of throw errors.
+     * connection to compensate missing HAGroupStores instead of throw errors.
      *
      * @param url        The HA connection url optionally; empty optional if properties disables fallback
      * @param properties The client connection properties
@@ -407,7 +407,7 @@ public class HighAvailabilityGroup {
             LOG.error("Fallback to single cluster is enabled for the HA group {} but cluster key is"
                     + "empty per configuration 'phoenix.ha.fallback.cluster', and boostrap url "
                     + "cannot be used as fallback cluster as it can be different that urls present in"
-                    + "ClusterRoleRecords which are source of truth. HA url: '{}'.", haGroupInfo.getName(), url);
+                    + "HAGroupStores which are source of truth. HA url: '{}'.", haGroupInfo.getName(), url);
             return Optional.empty();
         }
 
@@ -525,7 +525,7 @@ public class HighAvailabilityGroup {
     }
 
     /**
-     * Initialize this HA group by registering ZK watchers and getting initial cluster role record.
+     * Initialize this HA group by registering ZK watchers and getting initial HAGroupStore.
      * <p>
      * If this is already initialized, calling this method is a no-op. This method is lock free as
      * current thread will either return fast or wait for the in-progress initialization or timeout.
@@ -557,8 +557,8 @@ public class HighAvailabilityGroup {
             throw e;
         }
 
-        assert roleRecord != null;
-        LOG.info("Initial cluster role for HA group {} is {}", info, roleRecord);
+        assert haGroupStore != null;
+        LOG.info("Initial cluster role for HA group {} is {}", info, haGroupStore);
     }
 
     /**
@@ -605,7 +605,7 @@ public class HighAvailabilityGroup {
                     .build()
                     .buildException();
         }
-        return roleRecord.getPolicy().provide(this, properties, haurlInfo);
+        return haGroupStore.getPolicy().provide(this, properties, haurlInfo);
     }
 
     /**
@@ -620,7 +620,7 @@ public class HighAvailabilityGroup {
     PhoenixConnection connectActive(final Properties properties, final HAURLInfo haurlInfo)
             throws SQLException {
         try {
-            Optional<String> url = roleRecord.getActiveUrl();
+            Optional<String> url = haGroupStore.getActiveUrl();
             if (state == State.READY && url.isPresent()) {
                 PhoenixConnection conn = connectToOneCluster(url.get(), properties, haurlInfo);
                 // After connection is created, double check if the cluster is still ACTIVE
@@ -656,8 +656,8 @@ public class HighAvailabilityGroup {
                         .buildException();
             }
         } catch (SQLException e) {
-            LOG.error("Failed to connect to active cluster in HA group {}, record: {}", info,
-                    roleRecord, e);
+            LOG.error("Failed to connect to active cluster in HA group {}, haGroupStore: {}", info,
+                    haGroupStore, e);
             throw new SQLExceptionInfo
                     .Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION)
                     .setMessage("Failed to connect to active cluster in HA group")
@@ -675,7 +675,7 @@ public class HighAvailabilityGroup {
         if (state != State.READY || connection == null) {
             return false;
         }
-        return roleRecord.getActiveUrl()
+        return haGroupStore.getActiveUrl()
                 .equals(Optional.of(JDBCUtil.formatUrl(connection.getURL())));
     }
 
@@ -693,13 +693,13 @@ public class HighAvailabilityGroup {
             Preconditions.checkArgument(url.length() > PhoenixRuntime.JDBC_PROTOCOL.length(),
                     "The URL '" + url + "' is not a valid Phoenix connection string");
         }
-        //we don't need to normalize here? as we already store url in roleRecord object as
+        //we don't need to normalize here? as we already store url in haGroupStore object as
         //normalized, or we are just normalizing for tests?
-        url = JDBCUtil.formatUrl(url, roleRecord.getRegistryType());
+        url = JDBCUtil.formatUrl(url, haGroupStore.getRegistryType());
 
-        String jdbcString = getJDBCUrl(url, haurlInfo, roleRecord.getRegistryType());
+        String jdbcString = getJDBCUrl(url, haurlInfo, haGroupStore.getRegistryType());
 
-        ClusterRole role = roleRecord.getRole(url);
+        ClusterRole role = haGroupStore.getRole(url);
         if (!role.canConnect()) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.HA_CLUSTER_CAN_NOT_CONNECT)
                     .setMessage("Can not connect to cluster '" + url + "' in '" + role + "' role")
@@ -724,8 +724,8 @@ public class HighAvailabilityGroup {
         return properties;
     }
 
-    public ClusterRoleRecord getRoleRecord() {
-        return roleRecord;
+    public HAGroupStore getHaGroupStore() {
+        return haGroupStore;
     }
 
     /**
@@ -757,54 +757,54 @@ public class HighAvailabilityGroup {
 
     @Override
     public String toString() {
-        return roleRecord == null
-                ? "HighAvailabilityGroup{roleRecord=null, info=" + info + ", state=" + state + "}"
-                : "HighAvailabilityGroup{roleRecord=" + roleRecord + ", state=" + state + "}";
+        return haGroupStore == null
+                ? "HighAvailabilityGroup{haGroupStore=null, info=" + info + ", state=" + state + "}"
+                : "HighAvailabilityGroup{haGroupStore=" + haGroupStore + ", state=" + state + "}";
     }
 
     /**
-     * Set the new cluster role record for this HA group.
+     * Set the new HAGroupStore for this HA group.
      * <p>
      * Calling this method will make HA group be in transition state where no request can be served.
      * The data source may come from either of the two clusters as seen by the ZK watcher.
      *
-     * @param newRoleRecord the new cluster role record to set
-     * @return true if the new record is set as current one; false otherwise
+     * @param newHaGroupStore the new HAGroupStore to set
+     * @return true if the new haGroupStore is set as current one; false otherwise
      */
-    private synchronized boolean applyClusterRoleRecord(@NonNull ClusterRoleRecord newRoleRecord) {
-        if (roleRecord == null) {
-            roleRecord = newRoleRecord;
+    private synchronized boolean applyHAGroupStore(@NonNull HAGroupStore newHaGroupStore) {
+        if (haGroupStore == null) {
+            haGroupStore = newHaGroupStore;
             state = State.READY;
-            LOG.info("HA group {} is now in {} state after getting initial V{} role record: {}",
-                    info, state, roleRecord.getVersion(), roleRecord);
+            LOG.info("HA group {} is now in {} state after getting initial V{} role haGroupStore: {}",
+                    info, state, haGroupStore.getVersion(), haGroupStore);
             LOG.debug("HA group {} is ready", this);
             return true;
         }
 
-        if (!newRoleRecord.isNewerThan(roleRecord)) {
-            LOG.warn("Does not apply new cluster role record as it does not have higher version. "
-                    + "Existing record: {}, new record: {}", roleRecord, newRoleRecord);
+        if (!newHaGroupStore.isNewerThan(haGroupStore)) {
+            LOG.warn("Does not apply new HAGroupStore as it does not have higher version. "
+                    + "Existing haGroupStore: {}, new haGroupStore: {}", haGroupStore, newHaGroupStore);
             return false;
         }
 
-        if (!roleRecord.hasSameInfo(newRoleRecord)) {
-            LOG.error("New record {} has different HA group information from old record {}",
-                    newRoleRecord, roleRecord);
+        if (!haGroupStore.hasSameInfo(newHaGroupStore)) {
+            LOG.error("New haGroupStore {} has different HA group information from old haGroupStore {}",
+                    newHaGroupStore, haGroupStore);
             return false;
         }
 
-        final ClusterRoleRecord oldRecord = roleRecord;
+        final HAGroupStore oldHaGroupStore = haGroupStore;
         state = State.IN_TRANSITION;
-        LOG.info("HA group {} is in {} to set V{} record", info, state, newRoleRecord.getVersion());
+        LOG.info("HA group {} is in {} to set V{} haGroupStore", info, state, newHaGroupStore.getVersion());
         Future<?> future = nodeChangedExecutor.submit(() -> {
             try {
-                roleRecord.getPolicy().transitClusterRoleRecord(this, roleRecord, newRoleRecord);
+                haGroupStore.getPolicy().transitHAGroupStore(this, haGroupStore, newHaGroupStore);
             } catch (SQLException e) {
                 throw new CompletionException(e);
             }
         });
 
-        // TODO: save timeout in the HA group info (aka cluster role record) instead in properties
+        // TODO: save timeout in the HA group info (aka HAGroupStore) instead in properties
         String transitionTimeoutProp = properties.getProperty(PHOENIX_HA_TRANSITION_TIMEOUT_MS_KEY);
         long maxTransitionTimeMs = StringUtils.isNotEmpty(transitionTimeoutProp)
                 ? Long.parseLong(transitionTimeoutProp)
@@ -817,18 +817,18 @@ public class HighAvailabilityGroup {
             Thread.currentThread().interrupt();
             return false;
         } catch (ExecutionException | TimeoutException e) {
-            LOG.error("HA group {} failed to transit cluster roles per policy {} to new record {}",
-                    info, roleRecord.getPolicy(), newRoleRecord, e);
+            LOG.error("HA group {} failed to transit cluster roles per policy {} to new haGroupStore {}",
+                    info, haGroupStore.getPolicy(), newHaGroupStore, e);
             // Calling back HA policy function for cluster switch is conducted with best effort.
             // HA group continues transition when its HA policy fails to deal with context switch
             // (e.g. to close existing connections)
             // The goal here is to gain higher availability even though existing resources against
             // previous ACTIVE cluster may have not been closed cleanly.
         }
-        roleRecord = newRoleRecord;
+        haGroupStore = newHaGroupStore;
         state = State.READY;
-        LOG.info("HA group {} is in {} state after applying V{} role record. Old: {}, new: {}",
-                info, state, roleRecord.getVersion(), oldRecord, roleRecord);
+        LOG.info("HA group {} is in {} state after applying V{} role haGroupStore. Old: {}, new: {}",
+                info, state, haGroupStore.getVersion(), oldHaGroupStore, haGroupStore);
         LOG.debug("HA group is ready: {}", this);
         return true;
     }
@@ -868,9 +868,9 @@ public class HighAvailabilityGroup {
             Preconditions.checkNotNull(url2);
             this.name = name;
             //Normalizing these urls with ZK protocol as these are the ZK urls of clusters where
-            //roleRecords resides.
-            url1 = JDBCUtil.formatUrl(url1, ClusterRoleRecord.RegistryType.ZK);
-            url2 = JDBCUtil.formatUrl(url2, ClusterRoleRecord.RegistryType.ZK);
+            //haGroupStores resides.
+            url1 = JDBCUtil.formatUrl(url1, HAGroupStore.RegistryType.ZK);
+            url2 = JDBCUtil.formatUrl(url2, HAGroupStore.RegistryType.ZK);
             Preconditions.checkArgument(!url1.equals(url2), "Two clusters have the same ZK!");
             // Ignore the given order of url1 and url2, and reorder for equals comparison.
             if (url1.compareTo(url2) > 0) {
@@ -893,11 +893,11 @@ public class HighAvailabilityGroup {
         }
 
         public String getJDBCUrl1(HAURLInfo haURLInfo) {
-            return getJDBCUrl(getUrl1(), haURLInfo, ClusterRoleRecord.RegistryType.ZK);
+            return getJDBCUrl(getUrl1(), haURLInfo, HAGroupStore.RegistryType.ZK);
         }
 
         public String getJDBCUrl2(HAURLInfo haURLInfo) {
-            return getJDBCUrl(getUrl2(), haURLInfo, ClusterRoleRecord.RegistryType.ZK);
+            return getJDBCUrl(getUrl2(), haURLInfo, HAGroupStore.RegistryType.ZK);
         }
 
         /**
@@ -952,7 +952,7 @@ public class HighAvailabilityGroup {
      * or jdbc:phoenix+master:master1\\:port1,master2\\:port2,master3\\:port3,master4\\:port4,master5\\:port5::principal:additionParams
      */
     public static String getJDBCUrl(String url, HAURLInfo haURLInfo,
-                                    ClusterRoleRecord.RegistryType type) {
+                                    HAGroupStore.RegistryType type) {
         //Need extra separator for Master and RPC connections for principal as no znode path is there
         boolean extraSeparator = false;
         StringBuilder sb = new StringBuilder();
@@ -1046,17 +1046,17 @@ public class HighAvailabilityGroup {
          */
         private void nodeChanged() {
             byte[] data = cache.getCurrentData().getData();
-            Optional<ClusterRoleRecord> newRecordOptional = ClusterRoleRecord.fromJson(data);
-            if (!newRecordOptional.isPresent()) {
-                LOG.error("Fail to deserialize new record; keep current record {}", roleRecord);
+            Optional<HAGroupStore> newHaGroupStoreOptional = HAGroupStore.fromJson(data);
+            if (!newHaGroupStoreOptional.isPresent()) {
+                LOG.error("Fail to deserialize new haGroupStore; keep current haGroupStore {}", haGroupStore);
                 return;
             }
-            ClusterRoleRecord newRecord = newRecordOptional.get();
-            LOG.info("HA group {} got a record from cluster {}: {}", info.name, jdbcUrl, newRecord);
+            HAGroupStore newHaGroupStore = newHaGroupStoreOptional.get();
+            LOG.info("HA group {} got a haGroupStore from cluster {}: {}", info.name, jdbcUrl, newHaGroupStore);
 
-            if (applyClusterRoleRecord(newRecord)) {
-                LOG.info("Successfully apply new cluster role record from cluster '{}', "
-                        + "new record: {}", jdbcUrl, newRecord);
+            if (applyHAGroupStore(newHaGroupStore)) {
+                LOG.info("Successfully apply new HAGroupStore from cluster '{}', "
+                        + "new haGroupStore: {}", jdbcUrl, newHaGroupStore);
                 roleManagerLatch.countDown();
             }
         }

@@ -20,7 +20,7 @@ package org.apache.phoenix.jdbc;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.jdbc.ClusterRoleRecord.RegistryType;
+import org.apache.phoenix.jdbc.HAGroupStore.RegistryType;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.junit.After;
@@ -58,7 +58,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 /**
- * Test HA basics for {@link ClusterRoleRecord} with {@link RegistryType} as MASTER.
+ * Test HA basics for {@link HAGroupStore} with {@link RegistryType} as MASTER.
  */
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
@@ -97,7 +97,7 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
 
     @Before
     public void setup() throws Exception {
-        if (registryType == ClusterRoleRecord.RegistryType.RPC) {
+        if (registryType == HAGroupStore.RegistryType.RPC) {
             assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.5.0")>=0);
         }
         parallelHAGroupName = testName.getMethodName() + "_" + HighAvailabilityPolicy.PARALLEL.name();
@@ -136,15 +136,15 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
         }
     }
 
-    @Parameterized.Parameters(name="ClusterRoleRecord_registryType={0}")
+    @Parameterized.Parameters(name="HAGroupStore_registryType={0}")
     public static Collection<Object> data() {
         return Arrays.asList(new Object[] {
-                ClusterRoleRecord.RegistryType.MASTER,
-                ClusterRoleRecord.RegistryType.RPC,
+                HAGroupStore.RegistryType.MASTER,
+                HAGroupStore.RegistryType.RPC,
         });
     }
 
-    public HAConnectionWithMasterAndRPCRegistryIT(ClusterRoleRecord.RegistryType registryType) {
+    public HAConnectionWithMasterAndRPCRegistryIT(HAGroupStore.RegistryType registryType) {
         this.registryType = registryType;
     }
 
@@ -185,7 +185,7 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
         // (ACTIVE, STANDBY) -> (STANDBY, ACTIVE)
         // The transition will finish as we set PHOENIX_HA_TRANSITION_TIMEOUT_MS_KEY for this class
         // even though the spied connection is stuck at the latch when closing
-        CLUSTERS.transitClusterRole(failoverHAGroup, ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE);
+        CLUSTERS.transitClusterRole(failoverHAGroup, HAGroupStore.ClusterRole.STANDBY, HAGroupStore.ClusterRole.ACTIVE);
 
         // Verify the spied object has been called once
         verify(spy, times(1)).close();
@@ -242,7 +242,7 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
 
             // So on-call engineer comes into play, and triggers a failover
             // Because cluster1 is down, new version record will only be updated in cluster2
-            CLUSTERS.transitClusterRole(failoverHAGroup, ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE);
+            CLUSTERS.transitClusterRole(failoverHAGroup, HAGroupStore.ClusterRole.STANDBY, HAGroupStore.ClusterRole.ACTIVE);
 
             // After failover, the FailoverPhoenixConnection should go to the second cluster
             try (Connection conn = getFailoverConnection()) {
@@ -259,7 +259,7 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
 
         LOG.info("Testing failover back to cluster1 when bot clusters are up and running");
         // Failover back to the first cluster since it is healthy after restart
-        CLUSTERS.transitClusterRole(failoverHAGroup, ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY);
+        CLUSTERS.transitClusterRole(failoverHAGroup, HAGroupStore.ClusterRole.ACTIVE, HAGroupStore.ClusterRole.STANDBY);
         // After ACTIVE ZK restarts and fail back, this should still work
         try (Connection conn = getFailoverConnection()) {
             doTestBasicOperationsWithConnection(conn, tableName, failoverHAGroupName);
@@ -281,7 +281,7 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
             }
 
             // Innocent on-call engineer triggers a failover to second cluster
-            CLUSTERS.transitClusterRole(failoverHAGroup, ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE);
+            CLUSTERS.transitClusterRole(failoverHAGroup, HAGroupStore.ClusterRole.STANDBY, HAGroupStore.ClusterRole.ACTIVE);
 
             try {
                 getFailoverConnection();
@@ -292,9 +292,9 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
             }
         });
 
-        /* As restarting HBase minicluster it changes the port of HMasters need to refresh the CRR */
-        CLUSTERS.refreshClusterRoleRecordAfterClusterRestart(failoverHAGroup,
-                ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE);
+        /* As restarting HBase minicluster it changes the port of HMasters need to refresh the HAGroupStore */
+        CLUSTERS.refreshHAGroupStoreAfterClusterRestart(failoverHAGroup,
+                HAGroupStore.ClusterRole.STANDBY, HAGroupStore.ClusterRole.ACTIVE);
         try (Connection conn = getFailoverConnection()) {
             doTestBasicOperationsWithConnection(conn, tableName, failoverHAGroupName);
         }
@@ -329,7 +329,7 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
             }
 
             // So on-call engineer comes into play, and triggers a failover
-            CLUSTERS.transitClusterRole(failoverHAGroup, ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE);
+            CLUSTERS.transitClusterRole(failoverHAGroup, HAGroupStore.ClusterRole.STANDBY, HAGroupStore.ClusterRole.ACTIVE);
 
             // After the second cluster (ACTIVE) HBase restarts, this should still work
             try (Connection conn = getFailoverConnection()) {
@@ -339,7 +339,7 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
     }
 
     /**
-     * Testing connection closure for roleRecord change from
+     * Testing connection closure for HaGroupStore change from
      * (URL1, ACTIVE, URL2, STANDBY) -> (URL3, ACTIVE, URL2, STANDBY)
      * All wrapped connections should have been closed
      */
@@ -358,10 +358,10 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
         //Restart Cluster 1 with new ports
         CLUSTERS.restartCluster1();
         //Basically applying new url for cluster 1
-        CLUSTERS.refreshClusterRoleRecordAfterClusterRestart(failoverHAGroup,
-                ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY);
-        CLUSTERS.refreshClusterRoleRecordAfterClusterRestart(parallelHAGroup,
-                ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY);
+        CLUSTERS.refreshHAGroupStoreAfterClusterRestart(failoverHAGroup,
+                HAGroupStore.ClusterRole.ACTIVE, HAGroupStore.ClusterRole.STANDBY);
+        CLUSTERS.refreshHAGroupStoreAfterClusterRestart(parallelHAGroup,
+                HAGroupStore.ClusterRole.ACTIVE, HAGroupStore.ClusterRole.STANDBY);
         for (short i = 0; i < numberOfConnections; i++) {
             LOG.info("Asserting connection number {}", i);
             FailoverPhoenixConnection conn = ((FailoverPhoenixConnection) connectionList.get(i));
@@ -384,7 +384,7 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
     }
 
     /**
-     * Testing connection closure for roleRecord change from
+     * Testing connection closure for HaGroupStore change from
      * (URL1, ACTIVE, URL2, STANDBY) -> (URL1, ACTIVE, URL3, STANDBY)
      * It should not have affected connections at all
      */
@@ -404,10 +404,10 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
         //Restart Cluster 2 with new ports
         CLUSTERS.restartCluster2();
         //Basically applying new url for cluster 2
-        CLUSTERS.refreshClusterRoleRecordAfterClusterRestart(failoverHAGroup,
-                ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY);
-        CLUSTERS.refreshClusterRoleRecordAfterClusterRestart(parallelHAGroup,
-                ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY);
+        CLUSTERS.refreshHAGroupStoreAfterClusterRestart(failoverHAGroup,
+                HAGroupStore.ClusterRole.ACTIVE, HAGroupStore.ClusterRole.STANDBY);
+        CLUSTERS.refreshHAGroupStoreAfterClusterRestart(parallelHAGroup,
+                HAGroupStore.ClusterRole.ACTIVE, HAGroupStore.ClusterRole.STANDBY);
         for (short i = 0; i < numberOfConnections; i++) {
             LOG.info("Asserting connection number {}", i);
             FailoverPhoenixConnection conn = ((FailoverPhoenixConnection) connectionList.get(i));
@@ -431,7 +431,7 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
 
     /**
      * This is to make sure all Phoenix connections are closed when registryType changes
-     * of a CRR.
+     * of a HAGroupStore.
      *      MASTER --> ZK
      *      RPC --> MASTER
      *
@@ -448,15 +448,15 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
             parallelConnectionList.add(getParallelConnection());
         }
 
-        ClusterRoleRecord.RegistryType newRegistry;
+        HAGroupStore.RegistryType newRegistry;
         if (registryType == RegistryType.MASTER) {
             newRegistry = RegistryType.ZK;
         } else {
             newRegistry = RegistryType.MASTER;
         }
 
-        CLUSTERS.transitClusterRoleRecordRegistry(failoverHAGroup, newRegistry);
-        CLUSTERS.transitClusterRoleRecordRegistry(parallelHAGroup, newRegistry);
+        CLUSTERS.transitHAGroupStoreRegistry(failoverHAGroup, newRegistry);
+        CLUSTERS.transitHAGroupStoreRegistry(parallelHAGroup, newRegistry);
 
         for (short i = 0; i < numberOfConnections; i++) {
             LOG.info("Asserting connection number {}", i);
@@ -474,7 +474,7 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
 
     /**
      * This is to make sure all Phoenix connections are closed when registryType changes
-     * of a CRR.
+     * of a HAGroupStore.
      *      MASTER --> RPC
      *      RPC --> ZK
      *
@@ -491,7 +491,7 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
             parallelConnectionList.add(getParallelConnection());
         }
 
-        ClusterRoleRecord.RegistryType newRegistry;
+        HAGroupStore.RegistryType newRegistry;
         if (registryType == RegistryType.MASTER) {
             newRegistry = RegistryType.RPC;
             //RPC Registry is only there in hbase version greater than 2.5.0
@@ -500,8 +500,8 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
             newRegistry = RegistryType.ZK;
         }
 
-        CLUSTERS.transitClusterRoleRecordRegistry(failoverHAGroup, newRegistry);
-        CLUSTERS.transitClusterRoleRecordRegistry(parallelHAGroup, newRegistry);
+        CLUSTERS.transitHAGroupStoreRegistry(failoverHAGroup, newRegistry);
+        CLUSTERS.transitHAGroupStoreRegistry(parallelHAGroup, newRegistry);
 
         for (short i = 0; i < numberOfConnections; i++) {
             LOG.info("Asserting connection number {}", i);

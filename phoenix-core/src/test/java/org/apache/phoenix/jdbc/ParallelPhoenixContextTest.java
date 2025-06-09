@@ -24,8 +24,6 @@ import static org.junit.Assert.fail;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -85,7 +83,7 @@ public class ParallelPhoenixContextTest {
                 new ParallelPhoenixContext(new Properties(),
                         new HighAvailabilityGroup(haGroupInfo,
                                 Mockito.mock(Properties.class),
-                                Mockito.mock(ClusterRoleRecord.class),
+                                Mockito.mock(HAGroupStore.class),
                                 HighAvailabilityGroup.State.READY),
                         executorList, Lists.newArrayList(Boolean.FALSE, Boolean.TRUE),
                         Mockito.mock(HAURLInfo.class));
@@ -106,7 +104,7 @@ public class ParallelPhoenixContextTest {
                 new ParallelPhoenixContext(new Properties(),
                         new HighAvailabilityGroup(haGroupInfo,
                                 Mockito.mock(Properties.class),
-                                Mockito.mock(ClusterRoleRecord.class),
+                                Mockito.mock(HAGroupStore.class),
                                 HighAvailabilityGroup.State.READY),
                         executorList, Lists.newArrayList(Boolean.TRUE, Boolean.FALSE),
                         Mockito.mock(HAURLInfo.class));

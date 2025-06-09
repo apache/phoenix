@@ -17,9 +17,9 @@
  */
 package org.apache.phoenix.jdbc;
 
-import static org.apache.phoenix.jdbc.ClusterRoleRecordGeneratorTool.PHOENIX_HA_GENERATOR_FILE_ATTR;
-import static org.apache.phoenix.jdbc.ClusterRoleRecordGeneratorTool.PHOENIX_HA_GROUPS_ATTR;
-import static org.apache.phoenix.jdbc.ClusterRoleRecordGeneratorTool.PHOENIX_HA_GROUP_POLICY_ATTR_FORMAT;
+import static org.apache.phoenix.jdbc.HAGroupStoreGeneratorTool.PHOENIX_HA_GENERATOR_FILE_ATTR;
+import static org.apache.phoenix.jdbc.HAGroupStoreGeneratorTool.PHOENIX_HA_GROUPS_ATTR;
+import static org.apache.phoenix.jdbc.HAGroupStoreGeneratorTool.PHOENIX_HA_GROUP_POLICY_ATTR_FORMAT;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -31,7 +31,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
+import org.apache.phoenix.jdbc.HAGroupStore.ClusterRole;
 import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -43,13 +43,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Integration test for {@link ClusterRoleRecordGeneratorTool}.
+ * Integration test for {@link HAGroupStoreGeneratorTool}.
  *
- * @see ClusterRoleRecordGeneratorToolTest
+ * @see HAGroupStoreGeneratorToolTest
  */
 @Category(NeedsOwnMiniClusterTest.class)
-public class ClusterRoleRecordGeneratorToolIT {
-    private static final Logger LOG = LoggerFactory.getLogger(ClusterRoleRecordGeneratorToolIT.class);
+public class HAGroupStoreGeneratorToolIT {
+    private static final Logger LOG = LoggerFactory.getLogger(HAGroupStoreGeneratorToolIT.class);
     private static final HBaseTestingUtilityPair CLUSTERS = new HBaseTestingUtilityPair();
 
     @Rule
@@ -67,7 +67,7 @@ public class ClusterRoleRecordGeneratorToolIT {
 
     @Test
     public void testRun() throws Exception {
-        ClusterRoleRecordGeneratorTool generator = new ClusterRoleRecordGeneratorTool();
+        HAGroupStoreGeneratorTool generator = new HAGroupStoreGeneratorTool();
         Configuration conf = new Configuration(CLUSTERS.getHBaseCluster1().getConfiguration());
         String haGroupNames = String.format("%s,%s,%s", testName.getMethodName(),
                 testName.getMethodName() + 1, testName.getMethodName() + 2);
@@ -78,7 +78,7 @@ public class ClusterRoleRecordGeneratorToolIT {
         conf.set(PHOENIX_HA_GENERATOR_FILE_ATTR, file.getAbsolutePath());
 
         generator.setConf(conf);
-        int ret = ToolRunner.run(conf, new ClusterRoleRecordGeneratorTool(), new String[]{});
+        int ret = ToolRunner.run(conf, new HAGroupStoreGeneratorTool(), new String[]{});
         assertEquals(0, ret);
         String recordJson = FileUtils.readFileToString(file);
         LOG.info("The created file content is: \n{}", recordJson);
@@ -89,7 +89,7 @@ public class ClusterRoleRecordGeneratorToolIT {
 
     @Test
     public void testListAllRecordsByGenerator1() throws Exception {
-        ClusterRoleRecordGeneratorTool generator1 = new ClusterRoleRecordGeneratorTool();
+        HAGroupStoreGeneratorTool generator1 = new HAGroupStoreGeneratorTool();
         Configuration conf1 = new Configuration(CLUSTERS.getHBaseCluster1().getConfiguration());
         conf1.set(PHOENIX_HA_GROUPS_ATTR, testName.getMethodName());
         // explicitly set the failover policy as FAILOVER
@@ -98,11 +98,11 @@ public class ClusterRoleRecordGeneratorToolIT {
         generator1.setConf(conf1);
 
         // created with cluster1's conf, so cluster1 is ACTIVE
-        List<ClusterRoleRecord> records = generator1.listAllRecordsByZk();
+        List<HAGroupStore> records = generator1.listAllRecordsByZk();
         assertNotNull(records);
         LOG.info("Generated following records from cluster1: {}", records);
         assertEquals(1, records.size());
-        for (ClusterRoleRecord record : records) {
+        for (HAGroupStore record : records) {
             assertEquals(HighAvailabilityPolicy.FAILOVER, record.getPolicy());
             assertEquals(ClusterRole.ACTIVE, record.getRole(CLUSTERS.getZkUrl1()));
             assertEquals(ClusterRole.STANDBY, record.getRole(CLUSTERS.getZkUrl2()));
@@ -111,7 +111,7 @@ public class ClusterRoleRecordGeneratorToolIT {
 
     @Test
     public void testListAllRecordsByGenerator2() throws Exception {
-        ClusterRoleRecordGeneratorTool generator2 = new ClusterRoleRecordGeneratorTool();
+        HAGroupStoreGeneratorTool generator2 = new HAGroupStoreGeneratorTool();
         Configuration conf2 = new Configuration(CLUSTERS.getHBaseCluster2().getConfiguration());
         // Here we set multiple (3) HA group names in conf for testing on store2
         String haGroupNames = String.format("%s,%s,%s", testName.getMethodName(),
@@ -120,11 +120,11 @@ public class ClusterRoleRecordGeneratorToolIT {
         generator2.setConf(conf2);
 
         // created with cluster2's conf, so cluster2 is ACTIVE
-        List<ClusterRoleRecord> records = generator2.listAllRecordsByZk();
+        List<HAGroupStore> records = generator2.listAllRecordsByZk();
         assertNotNull(records);
         LOG.info("Generated following records from cluster2: {}", records);
         assertEquals(3, records.size());
-        for (ClusterRoleRecord record : records) {
+        for (HAGroupStore record : records) {
             assertEquals(HighAvailabilityPolicy.PARALLEL, record.getPolicy());
             assertEquals(ClusterRole.ACTIVE, record.getRole(CLUSTERS.getZkUrl2()));
             assertEquals(ClusterRole.STANDBY, record.getRole(CLUSTERS.getZkUrl1()));

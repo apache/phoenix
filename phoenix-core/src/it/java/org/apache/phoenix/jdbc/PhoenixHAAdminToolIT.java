@@ -34,7 +34,7 @@ import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.utils.ZKPaths;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
+import org.apache.phoenix.jdbc.HAGroupStore.ClusterRole;
 import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -60,7 +60,7 @@ public class PhoenixHAAdminToolIT {
     private static final ByteArrayOutputStream STDOUT_CAPTURE = new ByteArrayOutputStream();
 
     private String haGroupName;
-    private ClusterRoleRecord recordV1, recordV2; // two versions of record for the same HA group
+    private HAGroupStore haGroupStoreV1, haGroupStoreV2; // two versions of haGroupStore for the same HA group
     private PhoenixHAAdminTool admin; // the HA admin to test; it's against cluster1.
 
     @Rule
@@ -83,18 +83,18 @@ public class PhoenixHAAdminToolIT {
         admin = new PhoenixHAAdminTool();
         admin.setConf(CLUSTERS.getHBaseCluster1().getConfiguration());
         haGroupName = testName.getMethodName();
-        recordV1 = new ClusterRoleRecord(
+        haGroupStoreV1 = new HAGroupStore(
                 haGroupName, HighAvailabilityPolicy.FAILOVER,
                 CLUSTERS.getZkUrl1(), ClusterRole.ACTIVE,
                 CLUSTERS.getZkUrl2(), ClusterRole.STANDBY,
                 1);
-        String jsonFileName = ClusterRoleRecordTest.createJsonFileWithRecords(recordV1);
+        String jsonFileName = HAGroupStoreTest.createJsonFileWithHaGroupStores(haGroupStoreV1);
         int ret = admin.run(new String[]{"-m", jsonFileName});
         if(ret != RET_SUCCESS) {
-            throw new RuntimeException("Failed to create initial records");
+            throw new RuntimeException("Failed to create initial haGroupStores");
         }
-        // the V2 record is for the same HA group; it is created but not populated yet
-        recordV2 = new ClusterRoleRecord(
+        // the V2 haGroupStore is for the same HA group; it is created but not populated yet
+        haGroupStoreV2 = new HAGroupStore(
                 haGroupName, HighAvailabilityPolicy.FAILOVER,
                 CLUSTERS.getZkUrl1(), ClusterRole.STANDBY,
                 CLUSTERS.getZkUrl2(), ClusterRole.ACTIVE,
@@ -108,22 +108,22 @@ public class PhoenixHAAdminToolIT {
     }
 
     /**
-     * Test that the initial cluster role record on ZK is populated to clients correctly.
+     * Test that the initial HAGroupStore on ZK is populated to clients correctly.
      */
     @Test(timeout = 180000)
     public void testCreateDataOnZookeeper() throws Exception {
-        doVerifyClusterRole(recordV1);
+        doVerifyClusterRole(haGroupStoreV1);
     }
 
     /**
-     * Test that sync the same cluster role record work since it is no-op.
+     * Test that sync the same HAGroupStore work since it is no-op.
      */
     @Test(timeout = 180000)
     public void testUpdateSameDataOnZookeeper() throws Exception {
-        String jsonFileName = ClusterRoleRecordTest.createJsonFileWithRecords(recordV1);
+        String jsonFileName = HAGroupStoreTest.createJsonFileWithHaGroupStores(haGroupStoreV1);
         int ret = admin.run(new String[]{"-m", jsonFileName});
         assertEquals(RET_SUCCESS, ret);
-        doVerifyClusterRole(recordV1);
+        doVerifyClusterRole(haGroupStoreV1);
     }
 
     /**
@@ -131,44 +131,44 @@ public class PhoenixHAAdminToolIT {
      */
     @Test(timeout = 180000)
     public void testUpdateDataOnZookeeper() throws Exception {
-        String jsonFileName = ClusterRoleRecordTest.createJsonFileWithRecords(recordV2);
+        String jsonFileName = HAGroupStoreTest.createJsonFileWithHaGroupStores(haGroupStoreV2);
         int ret = admin.run(new String[]{"-m", jsonFileName});
         assertEquals(RET_SUCCESS, ret);
-        // Eventually HA group should have see this updated cluster role record from ZK
-        doVerifyClusterRole(recordV2);
+        // Eventually HA group should have see this updated HAGroupStore from ZK
+        doVerifyClusterRole(haGroupStoreV2);
     }
 
     /**
-     * Test that the HA admin can support multiple cluster role records for different groups.
+     * Test that the HA admin can support multiple HAGroupStores for different groups.
      */
     @Test(timeout = 180000)
     public void testCreateOrUpdateDataOnZookeeperForMultipleHAGroups() throws Exception {
-        // Note it is for a different HA group, while recordV2 is for the same HA group as recordV1
+        // Note it is for a different HA group, while haGroupStoreV2 is for the same HA group as haGroupStoreV1
         String haGroupName2 = haGroupName + 2;
-        ClusterRoleRecord record2 = new ClusterRoleRecord(
+        HAGroupStore haGroupStore2 = new HAGroupStore(
                 haGroupName2, HighAvailabilityPolicy.FAILOVER,
                 CLUSTERS.getZkUrl1(), ClusterRole.ACTIVE,
                 CLUSTERS.getZkUrl2(), ClusterRole.STANDBY,
                 1);
         // For haGroupName it's update and for haGroupName2 it's create.
-        String jsonFileName = ClusterRoleRecordTest.createJsonFileWithRecords(recordV2, record2);
+        String jsonFileName = HAGroupStoreTest.createJsonFileWithHaGroupStores(haGroupStoreV2, haGroupStore2);
         int ret = admin.run(new String[]{"-m", jsonFileName});
         assertEquals(RET_SUCCESS, ret);
-        doVerifyClusterRole(recordV2);
-        doVerifyClusterRole(record2);
+        doVerifyClusterRole(haGroupStoreV2);
+        doVerifyClusterRole(haGroupStore2);
     }
 
     @Test(timeout = 180000)
-    public void testListAllClusterRoleRecordsOnZookeeper() throws Exception {
+    public void testListAllHAGroupStoresOnZookeeper() throws Exception {
         System.setOut(new PrintStream(STDOUT_CAPTURE));
         int ret = admin.run(new String[]{"-l"});
         assertEquals(RET_SUCCESS, ret);
-        assertStdoutShouldHaveHaGroup(recordV1);
+        assertStdoutShouldHaveHaGroup(haGroupStoreV1);
     }
 
-    private void assertStdoutShouldHaveHaGroup(ClusterRoleRecord record) {
+    private void assertStdoutShouldHaveHaGroup(HAGroupStore haGroupStore) {
         LOG.info("Got stdout: \n++++++++\n{}++++++++\n", STDOUT_CAPTURE.toString());
-        assertTrue(STDOUT_CAPTURE.toString().contains(record.getHaGroupName()));
+        assertTrue(STDOUT_CAPTURE.toString().contains(haGroupStore.getHaGroupName()));
     }
 
     /**
@@ -182,51 +182,51 @@ public class PhoenixHAAdminToolIT {
 
         // Update ZK1 with newer version
         String zpath = ZKPaths.PATH_SEPARATOR + haGroupName;
-        PhoenixHAAdminToolIT.this.getCurator1().setData().forPath(zpath, ClusterRoleRecord.toJson(recordV2));
-        doVerifyClusterRole(getCurator1(), recordV2);
-        doVerifyClusterRole(PhoenixHAAdminToolIT.this.getCurator2(), recordV1); // ZK2 still has old version
+        PhoenixHAAdminToolIT.this.getCurator1().setData().forPath(zpath, HAGroupStore.toJson(haGroupStoreV2));
+        doVerifyClusterRole(getCurator1(), haGroupStoreV2);
+        doVerifyClusterRole(PhoenixHAAdminToolIT.this.getCurator2(), haGroupStoreV1); // ZK2 still has old version
         ret = admin.run(new String[]{"--repair"}); // admin is created using cluster1 configuration
         assertEquals(RET_SUCCESS, ret);
-        doVerifyClusterRole(getCurator1(), recordV2);
-        doVerifyClusterRole(getCurator2(), recordV2);
+        doVerifyClusterRole(getCurator1(), haGroupStoreV2);
+        doVerifyClusterRole(getCurator2(), haGroupStoreV2);
 
-        ClusterRoleRecord recordV3 = new ClusterRoleRecord(
+        HAGroupStore haGroupStoreV3 = new HAGroupStore(
                 haGroupName, HighAvailabilityPolicy.FAILOVER,
                 CLUSTERS.getZkUrl1(), ClusterRole.ACTIVE,
                 CLUSTERS.getZkUrl2(), ClusterRole.STANDBY,
                 3);
-        getCurator2().setData().forPath(zpath, ClusterRoleRecord.toJson(recordV3));
-        doVerifyClusterRole(getCurator1(), recordV2);
-        doVerifyClusterRole(getCurator2(), recordV3); // ZK2 has newer version
+        getCurator2().setData().forPath(zpath, HAGroupStore.toJson(haGroupStoreV3));
+        doVerifyClusterRole(getCurator1(), haGroupStoreV2);
+        doVerifyClusterRole(getCurator2(), haGroupStoreV3); // ZK2 has newer version
         ret = admin.run(new String[]{"--repair"}); // admin is created using cluster1 configuration
         assertEquals(RET_SUCCESS, ret);
-        doVerifyClusterRole(getCurator1(), recordV3);
-        doVerifyClusterRole(getCurator2(), recordV3);
+        doVerifyClusterRole(getCurator1(), haGroupStoreV3);
+        doVerifyClusterRole(getCurator2(), haGroupStoreV3);
     }
 
     /**
-     * Test that --repair should report inconsistent records.
+     * Test that --repair should report inconsistent haGroupStores.
      */
     @Test(timeout = 180000)
-    public void testRepairGotInconsistentRecords() throws Exception {
+    public void testRepairGotInconsistentHaGroupStores() throws Exception {
         // Set ZK1 node with different HA policy and cluster roles but the same version v1
         String zpath = ZKPaths.PATH_SEPARATOR + haGroupName;
         try {
-            ClusterRoleRecord recordDifferent = new ClusterRoleRecord(
+            HAGroupStore haGroupStoreDifferent = new HAGroupStore(
                     haGroupName, HighAvailabilityPolicy.PARALLEL,
                     CLUSTERS.getZkUrl1(), ClusterRole.STANDBY,
                     CLUSTERS.getZkUrl2(), ClusterRole.STANDBY,
                     1);
-            getCurator1().setData().forPath(zpath, ClusterRoleRecord.toJson(recordDifferent));
-            doVerifyClusterRole(getCurator1(), recordDifferent);
+            getCurator1().setData().forPath(zpath, HAGroupStore.toJson(haGroupStoreDifferent));
+            doVerifyClusterRole(getCurator1(), haGroupStoreDifferent);
 
             System.setOut(new PrintStream(STDOUT_CAPTURE)); // capture stdout
             int ret = ToolRunner.run(admin, new String[] { "--repair" });
             assertEquals(RET_REPAIR_FOUND_INCONSISTENCIES, ret);
-            assertStdoutShouldHaveHaGroup(recordV1); // should be reported back
+            assertStdoutShouldHaveHaGroup(haGroupStoreV1); // should be reported back
         } finally {
-            // reset for this HA group so that other tests will not see inconsistent records.
-            getCurator1().setData().forPath(zpath, ClusterRoleRecord.toJson(recordV1));
+            // reset for this HA group so that other tests will not see inconsistent haGroupStores.
+            getCurator1().setData().forPath(zpath, HAGroupStore.toJson(haGroupStoreV1));
         }
     }
 
@@ -244,12 +244,12 @@ public class PhoenixHAAdminToolIT {
             LOG.info("Shutting down the first HBase cluster...");
             CLUSTERS.getHBaseCluster1().shutdownMiniZKCluster();
 
-            String jsonFileName = ClusterRoleRecordTest.createJsonFileWithRecords(recordV2);
+            String jsonFileName = HAGroupStoreTest.createJsonFileWithHaGroupStores(haGroupStoreV2);
             int ret = admin.run(new String[]{"-m", jsonFileName});
             assertEquals(RET_SYNC_ERROR, ret);
-            assertStdoutShouldHaveHaGroup(recordV1);
-            // cluster2 should still have the V1 record because we should update cluster1 first
-            doVerifyClusterRole(getCurator2(), recordV1);
+            assertStdoutShouldHaveHaGroup(haGroupStoreV1);
+            // cluster2 should still have the V1 haGroupStore because we should update cluster1 first
+            doVerifyClusterRole(getCurator2(), haGroupStoreV1);
             // can not test cluster1 because it is still down
         } finally {
             CLUSTERS.getHBaseCluster1().startMiniZKCluster(1, zkClientPort);
@@ -270,12 +270,12 @@ public class PhoenixHAAdminToolIT {
             LOG.info("Shutting down the first HBase cluster...");
             CLUSTERS.getHBaseCluster1().shutdownMiniZKCluster();
 
-            String jsonFileName = ClusterRoleRecordTest.createJsonFileWithRecords(recordV2);
+            String jsonFileName = HAGroupStoreTest.createJsonFileWithHaGroupStores(haGroupStoreV2);
             int ret = admin.run(new String[]{"-m", jsonFileName, "-F"});
             assertEquals(RET_SYNC_ERROR, ret);
-            assertStdoutShouldHaveHaGroup(recordV2);
+            assertStdoutShouldHaveHaGroup(haGroupStoreV2);
             // cluster2 should have been updated forcefully
-            doVerifyClusterRole(getCurator2(), recordV2);
+            doVerifyClusterRole(getCurator2(), haGroupStoreV2);
             // can not test cluster1 because it is still down
         } finally {
             CLUSTERS.getHBaseCluster1().startMiniZKCluster(1, zkClientPort);
@@ -283,29 +283,29 @@ public class PhoenixHAAdminToolIT {
     }
 
     /**
-     * Helper to verify cluster role is good on both ZK sides by comparing with the given record.
+     * Helper to verify cluster role is good on both ZK sides by comparing with the given haGroupStore.
      *
      * This is a side-effect free code. It only checks if the data on ZK is the same as given data.
      */
-    private static void doVerifyClusterRole(ClusterRoleRecord clusterRoleRecord) throws Exception {
-        doVerifyClusterRole(getCurator1(), clusterRoleRecord);
-        doVerifyClusterRole(getCurator2(), clusterRoleRecord);
+    private static void doVerifyClusterRole(HAGroupStore haGroupStore) throws Exception {
+        doVerifyClusterRole(getCurator1(), haGroupStore);
+        doVerifyClusterRole(getCurator2(), haGroupStore);
     }
 
     /**
-     * Helper to verify cluster role is good on one ZK side by comparing with the given record.
+     * Helper to verify cluster role is good on one ZK side by comparing with the given haGroupStore.
      *
      * This differs from above method since it is using only one curator ZK client for one cluster.
      * It internally will retry and timeout after some time, e.g. 15 seconds.
      */
     private static void doVerifyClusterRole(CuratorFramework curator,
-            ClusterRoleRecord clusterRoleRecord) throws Exception {
+            HAGroupStore haGroupStore) throws Exception {
         waitFor(() -> {
             try {
-                String path = ZKPaths.PATH_SEPARATOR + clusterRoleRecord.getHaGroupName();
+                String path = ZKPaths.PATH_SEPARATOR + haGroupStore.getHaGroupName();
                 byte[] data = curator.getData().forPath(path);
-                Optional<ClusterRoleRecord> recordFromZk = ClusterRoleRecord.fromJson(data);
-                return recordFromZk.isPresent() && recordFromZk.get().equals(clusterRoleRecord);
+                Optional<HAGroupStore> haGroupStoreFromZk = HAGroupStore.fromJson(data);
+                return haGroupStoreFromZk.isPresent() && haGroupStoreFromZk.get().equals(haGroupStore);
             } catch (Exception e) {
                 LOG.info("Got exception while waiting for znode is up to date: {}", e.getMessage());
                 return false;

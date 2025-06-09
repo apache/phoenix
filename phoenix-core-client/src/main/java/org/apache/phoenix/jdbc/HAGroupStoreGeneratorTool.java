@@ -28,7 +28,7 @@ import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.replication.ReplicationPeerConfig;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
-import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
+import org.apache.phoenix.jdbc.HAGroupStore.ClusterRole;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.util.JacksonUtil;
 import org.slf4j.Logger;
@@ -44,11 +44,11 @@ import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 
 
 /**
- * A tool which generates cluster role records into JSON file assuming this cluster is ACTIVE and
+ * A tool which generates HAGroupStores into JSON file assuming this cluster is ACTIVE and
  * peer cluster with (default id=1) is STANDBY.
  */
-public class ClusterRoleRecordGeneratorTool extends Configured implements Tool {
-    private static final Logger LOG = LoggerFactory.getLogger(ClusterRoleRecordGeneratorTool.class);
+public class HAGroupStoreGeneratorTool extends Configured implements Tool {
+    private static final Logger LOG = LoggerFactory.getLogger(HAGroupStoreGeneratorTool.class);
 
     /** Key/attribute prefix for this static store. */
     private static final String GENERATOR_ATTR_PREFIX = PHOENIX_HA_ATTR_PREFIX + "role.generator.";
@@ -80,7 +80,7 @@ public class ClusterRoleRecordGeneratorTool extends Configured implements Tool {
         }
     }
 
-    List<ClusterRoleRecord> listAllRecordsByZk() throws IOException {
+    List<HAGroupStore> listAllRecordsByZk() throws IOException {
         /* This current cluster's full ZK url for HBase, in host:port:/hbase format. */
         String localZkUrl = getLocalZkUrl(getConf());
         final String[] haGroupNames = getConf().getStrings(PHOENIX_HA_GROUPS_ATTR);
@@ -90,15 +90,15 @@ public class ClusterRoleRecordGeneratorTool extends Configured implements Tool {
             throw new IOException(msg);
         }
 
-        List<ClusterRoleRecord> records = new ArrayList<>();
+        List<HAGroupStore> records = new ArrayList<>();
         for (String haGroupName : haGroupNames) {
             String peerZkUrl = getPeerZkUrl(getConf(), haGroupName);
-            records.add(new ClusterRoleRecord(haGroupName, getHaPolicy(haGroupName),
+            records.add(new HAGroupStore(haGroupName, getHaPolicy(haGroupName),
                     localZkUrl, ClusterRole.ACTIVE,
                     peerZkUrl, ClusterRole.STANDBY,
                     1));
         }
-        LOG.debug("Returning all cluster role records discovered: {}", records);
+        LOG.debug("Returning all HAGroupStores discovered: {}", records);
         return records;
     }
 
@@ -155,7 +155,7 @@ public class ClusterRoleRecordGeneratorTool extends Configured implements Tool {
 
     public static void main(String[] args) throws Exception {
         Configuration conf = HBaseConfiguration.create();
-        int retCode = ToolRunner.run(conf, new ClusterRoleRecordGeneratorTool(), args);
+        int retCode = ToolRunner.run(conf, new HAGroupStoreGeneratorTool(), args);
         System.exit(retCode);
     }
 }

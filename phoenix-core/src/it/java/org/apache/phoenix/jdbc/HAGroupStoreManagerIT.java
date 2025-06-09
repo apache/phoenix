@@ -48,38 +48,38 @@ public class HAGroupStoreManagerIT extends BaseTest {
 
     @Before
     public void before() throws Exception {
-        // Clean up all the existing CRRs
-        List<ClusterRoleRecord> crrs = haAdmin.listAllClusterRoleRecordsOnZookeeper();
-        for (ClusterRoleRecord crr : crrs) {
-            haAdmin.getCurator().delete().forPath(toPath(crr.getHaGroupName()));
+        // Clean up all the existing HAGroupStores
+        List<HAGroupStore> haGroupStores = haAdmin.listAllHAGroupStoresOnZookeeper();
+        for (HAGroupStore haGroupStore : haGroupStores) {
+            haAdmin.getCurator().delete().forPath(toPath(haGroupStore.getHaGroupName()));
         }
     }
 
     @Test
-    public void testHAGroupStoreManagerWithSingleCRR() throws Exception {
+    public void testHAGroupStoreManagerWithSingleHAGroupStore() throws Exception {
         HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(config);
-        // Setup initial CRRs
-        ClusterRoleRecord crr1 = new ClusterRoleRecord("failover",
-                HighAvailabilityPolicy.FAILOVER, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE,
-                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 1L);
-        ClusterRoleRecord crr2 = new ClusterRoleRecord("parallel",
-                HighAvailabilityPolicy.PARALLEL, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE,
-                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 1L);
-        haAdmin.createOrUpdateDataOnZookeeper(crr1);
-        haAdmin.createOrUpdateDataOnZookeeper(crr2);
+        // Setup initial HAGroupStores
+        HAGroupStore haGroupStore = new HAGroupStore("failover",
+                HighAvailabilityPolicy.FAILOVER, haAdmin.getZkUrl(), HAGroupStore.ClusterRole.ACTIVE,
+                "random-zk-url", HAGroupStore.ClusterRole.STANDBY, 1L);
+        HAGroupStore haGroupStore1 = new HAGroupStore("parallel",
+                HighAvailabilityPolicy.PARALLEL, haAdmin.getZkUrl(), HAGroupStore.ClusterRole.ACTIVE,
+                "random-zk-url", HAGroupStore.ClusterRole.STANDBY, 1L);
+        haAdmin.createOrUpdateDataOnZookeeper(haGroupStore);
+        haAdmin.createOrUpdateDataOnZookeeper(haGroupStore1);
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         assertFalse(haGroupStoreManager.isMutationBlocked());
 
-        crr1 = new ClusterRoleRecord("failover",
-                HighAvailabilityPolicy.FAILOVER, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE,
-                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 2L);
-        crr2 = new ClusterRoleRecord("parallel",
-                HighAvailabilityPolicy.PARALLEL, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
-                "random-zk-url", ClusterRoleRecord.ClusterRole.STANDBY, 2L);
-        haAdmin.createOrUpdateDataOnZookeeper(crr1);
-        haAdmin.createOrUpdateDataOnZookeeper(crr2);
+        haGroupStore = new HAGroupStore("failover",
+                HighAvailabilityPolicy.FAILOVER, haAdmin.getZkUrl(), HAGroupStore.ClusterRole.ACTIVE,
+                "random-zk-url", HAGroupStore.ClusterRole.STANDBY, 2L);
+        haGroupStore1 = new HAGroupStore("parallel",
+                HighAvailabilityPolicy.PARALLEL, haAdmin.getZkUrl(), HAGroupStore.ClusterRole.ACTIVE_TO_STANDBY,
+                "random-zk-url", HAGroupStore.ClusterRole.STANDBY, 2L);
+        haAdmin.createOrUpdateDataOnZookeeper(haGroupStore);
+        haAdmin.createOrUpdateDataOnZookeeper(haGroupStore1);
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 

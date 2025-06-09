@@ -52,7 +52,7 @@ import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.api.ExistsBuilder;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
+import org.apache.phoenix.jdbc.HAGroupStore.ClusterRole;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -84,8 +84,8 @@ public class HighAvailabilityGroupTestIT {
 
     /** The client properties to create a JDBC connection. */
     private final Properties clientProperties = new Properties();
-    /** The mocked cluster role record of the HA group. */
-    private final ClusterRoleRecord record = mock(ClusterRoleRecord.class);
+    /** The mocked HAGroupStore of the HA group. */
+    private final HAGroupStore record = mock(HAGroupStore.class);
     /** The HA group to test. This is spied but not mocked. */
     private HighAvailabilityGroup haGroup;
     private HAURLInfo haURLInfo;
@@ -120,7 +120,7 @@ public class HighAvailabilityGroupTestIT {
         // By default the HA policy is FAILOVER
         when(record.getPolicy()).thenReturn(HighAvailabilityPolicy.FAILOVER);
         when(record.getHaGroupName()).thenReturn(haGroupName);
-        when(record.getRegistryType()).thenReturn(ClusterRoleRecord.RegistryType.ZK);
+        when(record.getRegistryType()).thenReturn(HAGroupStore.RegistryType.ZK);
         // Make ZK1 ACTIVE
         when(record.getActiveUrl()).thenReturn(Optional.of(ZK1));
         when(record.getUrl1()).thenReturn(ZK1);
@@ -274,12 +274,12 @@ public class HighAvailabilityGroupTestIT {
     }
 
     /**
-     * Test that when missing cluster role records, the HA connection request will fall back to the
+     * Test that when missing HAGroupStores, the HA connection request will fall back to the
      * single cluster connection.
      */
     @SuppressWarnings("UnstableApiUsage")
     @Test
-    public void testNegativeCacheWhenMissingClusterRoleRecords() throws Exception {
+    public void testNegativeCacheWhenMissingHAGroupStores() throws Exception {
         String haGroupName2 = testName.getMethodName() + RandomStringUtils.randomAlphabetic(3);
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName2);
         HAGroupInfo haGroupInfo2 = new HAGroupInfo(haGroupName2, ZK1, ZK2);
@@ -299,7 +299,7 @@ public class HighAvailabilityGroupTestIT {
             fail("Unexpected Exception" + e.toString());
         }
 
-        // Make ZK connectable and the cluster role record be missing
+        // Make ZK connectable and the HAGroupStore be missing
         CuratorFramework curator = mock(CuratorFramework.class);
         when(curator.blockUntilConnected(anyInt(), any(TimeUnit.class))).thenReturn(true);
         HighAvailabilityGroup.CURATOR_CACHE.put(ZK2, curator);

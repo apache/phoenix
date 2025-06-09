@@ -58,7 +58,7 @@ public class HAGroupStoreManager {
         if (mutationBlockEnabled) {
             HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstance(conf);
             if (haGroupStoreClient != null) {
-                return !haGroupStoreClient.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).isEmpty();
+                return !haGroupStoreClient.getGroupStoresByClusterRole(HAGroupStore.ClusterRole.ACTIVE_TO_STANDBY).isEmpty();
             }
             throw new IOException("HAGroupStoreClient is not initialized");
         }
