@@ -140,6 +140,7 @@
     <mockito.version>4.11.0</mockito.version>
     <junit.version>4.13.1</junit.version>
     <hdrhistogram.version>2.1.12</hdrhistogram.version>
+    <byte-buddy.version>1.15.11</byte-buddy.version>
 
     <!-- These are only used for exclusion when shading, and the exact version is completely
     irrelevant, but we need to keep them up to date to appease static checkers. While Phoenix does
@@ -1949,6 +1950,16 @@
         <version>${mockito.version}</version>
         <type>pom</type>
         <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>net.bytebuddy</groupId>
+        <artifactId>byte-buddy</artifactId>
+        <version>${byte-buddy.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>net.bytebuddy</groupId>
+        <artifactId>byte-buddy-agent</artifactId>
+        <version>${byte-buddy.version}</version>
       </dependency>
 
        <!-- Runtime dependencies -->
