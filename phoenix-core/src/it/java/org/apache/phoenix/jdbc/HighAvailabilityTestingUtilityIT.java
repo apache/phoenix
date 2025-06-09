@@ -72,12 +72,12 @@ public class HighAvailabilityTestingUtilityIT {
     /** Failover HA group for to test. */
     private HighAvailabilityGroup haGroup;
     private String haGroupName;
-    private final ClusterRoleRecord.RegistryType registryType;
+    private final HAGroupStore.RegistryType registryType;
 
     /** Table name per test case. */
     private String tableName;
 
-    public HighAvailabilityTestingUtilityIT(ClusterRoleRecord.RegistryType registryType) {
+    public HighAvailabilityTestingUtilityIT(HAGroupStore.RegistryType registryType) {
         this.registryType = registryType;
     }
 
@@ -96,7 +96,7 @@ public class HighAvailabilityTestingUtilityIT {
     @Before
     public void setup() throws Exception {
         //RPC Registry is only there in hbase version greater than 2.5.0
-        if (registryType == ClusterRoleRecord.RegistryType.RPC) {
+        if (registryType == HAGroupStore.RegistryType.RPC) {
             assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.5.0")>=0);
         }
         haGroupName = testName.getMethodName();
@@ -116,12 +116,12 @@ public class HighAvailabilityTestingUtilityIT {
         CLUSTERS.createTableOnClusterPair(haGroup, tableName);
     }
 
-    @Parameterized.Parameters(name="ClusterRoleRecord_registryType={0}")
+    @Parameterized.Parameters(name="HAGroupStore_registryType={0}")
     public static Collection<Object> data() {
         return Arrays.asList(new Object[] {
-                ClusterRoleRecord.RegistryType.ZK,
-                ClusterRoleRecord.RegistryType.MASTER,
-                ClusterRoleRecord.RegistryType.RPC,
+                HAGroupStore.RegistryType.ZK,
+                HAGroupStore.RegistryType.MASTER,
+                HAGroupStore.RegistryType.RPC,
                 null //For Backward Compatibility
         });
     }

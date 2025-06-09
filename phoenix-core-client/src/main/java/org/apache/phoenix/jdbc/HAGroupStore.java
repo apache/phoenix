@@ -35,15 +35,15 @@ import java.util.Arrays;
 import java.util.Optional;
 
 /**
- * Immutable class of a cluster role record for a pair of HBase clusters.
+ * Immutable class of a HAGroupStore for a pair of HBase clusters.
  *
  * This is the data model used by:
- * - Admin uses command line tool to write records of this class to ZK nodes
+ * - Admin uses command line tool to write HaGroupStores of this class to ZK nodes
  * - Clients reads and registers watcher to get data of this class from ZK nodes
  *
- * The cluster roles can be updated for a given HA group, in which case a new cluster role record
+ * The cluster roles can be updated for a given HA group, in which case a new HAGroupStore
  * will be saved in either configuration file for Admin tool or the znode data for clients.  For
- * any updates like that, the new cluster role record for that HA group should bump the version.
+ * any updates like that, the new HAGroupStore for that HA group should bump the version.
  * This is to ensure data integrity across updates.  Meanwhile, other fields are not allowed to
  * change for an existing HA group.  If the HA group needs to change its behavior, it will affect
  * all clients, which are not controlled or tracked by Phoenix HA framework.  To assist that
@@ -52,8 +52,8 @@ import java.util.Optional;
  *
  * This class is immutable.
  */
-public class ClusterRoleRecord {
-    private static final Logger LOG = LoggerFactory.getLogger(ClusterRoleRecord.class);
+public class HAGroupStore {
+    private static final Logger LOG = LoggerFactory.getLogger(HAGroupStore.class);
 
     /**
      * Enum for the current state of the cluster.  Exact meaning depends on the Policy but in general Active clusters
@@ -79,8 +79,8 @@ public class ClusterRoleRecord {
     }
 
     /**
-     * Enum for HBaseRegistryType being used in current clusterRoleRecord, final connection url
-     * are constructed based on RegistryType and urls stored in clusterRoleRecord
+     * Enum for HBaseRegistryType being used in current HAGroupStore, final connection url
+     * are constructed based on RegistryType and urls stored in HAGroupStore
      */
     public enum RegistryType {
         ZK, MASTER, RPC
@@ -96,36 +96,36 @@ public class ClusterRoleRecord {
     private final long version;
 
     /**
-     * To handle backward compatibility with old  ClusterRoleRecords which had zk1 and zk2 as keys
-     * for zk urls, This constructor is only being used {@link ClusterRoleRecord#fromJson} when we
-     * deserialize Cluster Role Record read from ZooKeeper ZNode. If CRR is in old format we will
+     * To handle backward compatibility with old  HAGroupStores which had zk1 and zk2 as keys
+     * for zk urls, This constructor is only being used {@link HAGroupStore#fromJson} when we
+     * deserialize HAGroupStore read from ZooKeeper ZNode. If HAGroupStore is in old format we will
      * read zk1 and zk2 and url1 and url2 will be null and if it is in new format zk1 and zk2 will
      * be null in both cases final url is being stored in url1 and url2
      * url will be stored in normalized forms which looks like zk1\\:port1,zk2\\:port2,zk3\\:port3,
      * zk4\\:port4,zk5\\:port5::znode or master1\\:port1,master2\\:port2,master3\\:port3,
      * master4\\:port4,master5\\:port5
-     * @param haGroupName HighAvailability Group name / CRR name
-     * @param policy Policy used by give CRR
+     * @param haGroupName HighAvailability Group name / HAGroupStore name
+     * @param policy Policy used by give HAGroupStore
      * @param registryType {@link RegistryType} to be used for given urls
      * @param url1 ZK/HMaster url based on registry type for first cluster
      * @param role1 {@link ClusterRole} which describes the current state of first cluster
      * @param url2 ZK/HMaster url based on registry type for second cluster
      * @param role2 {@link ClusterRole} which describes the current state of second cluster
-     * @param version version of a given CRR
-     * @param zk1 ZK url of first cluster when CRR is in old format for backward compatibility
-     * @param zk2 ZK url of second cluster when CRR is in old format for backward compatibility
+     * @param version version of a given HAGroupStore
+     * @param zk1 ZK url of first cluster when HAGroupStore is in old format for backward compatibility
+     * @param zk2 ZK url of second cluster when HAGroupStore is in old format for backward compatibility
      */
     @JsonCreator
-    public ClusterRoleRecord(@JsonProperty("haGroupName") String haGroupName,
-                             @JsonProperty("policy") HighAvailabilityPolicy policy,
-                             @JsonProperty("registryType") RegistryType registryType,
-                             @JsonProperty("url1") String url1,
-                             @JsonProperty("role1") ClusterRole role1,
-                             @JsonProperty("url2") String url2,
-                             @JsonProperty("role2") ClusterRole role2,
-                             @JsonProperty("version") long version,
-                             @JsonProperty("zk1") String zk1,
-                             @JsonProperty("zk2") String zk2) {
+    public HAGroupStore(@JsonProperty("haGroupName") String haGroupName,
+                        @JsonProperty("policy") HighAvailabilityPolicy policy,
+                        @JsonProperty("registryType") RegistryType registryType,
+                        @JsonProperty("url1") String url1,
+                        @JsonProperty("role1") ClusterRole role1,
+                        @JsonProperty("url2") String url2,
+                        @JsonProperty("role2") ClusterRole role2,
+                        @JsonProperty("version") long version,
+                        @JsonProperty("zk1") String zk1,
+                        @JsonProperty("zk2") String zk2) {
         this.haGroupName = haGroupName;
         this.policy = policy;
         this.registryType = registryType != null ? registryType : RegistryType.ZK;
@@ -138,7 +138,7 @@ public class ClusterRoleRecord {
         //accurate comparisons. We are passing registryType as these url most probably won't have
         //protocol in url, and it might be normalized based to wrong registry type, as we normalize
         //w.r.t {@link ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY},
-        //but considering source of truth of registryType is present in CLusterRoleRecord we are
+        //but considering source of truth of registryType is present in HAGroupStore we are
         //normalizing based on that.
         //url will be in form :- zk1\\:port1,zk2\\:port2,zk3\\:port3,zk4\\:port4,zk5\\:port5::znode
         //or master1\\:port1,master2\\:port2,master3\\:port3,master4\\:port4,master5\\:port5
@@ -164,35 +164,35 @@ public class ClusterRoleRecord {
         this.version = version;
     }
 
-    public ClusterRoleRecord(String haGroupName, HighAvailabilityPolicy policy,
-                             String url1, ClusterRole role1,
-                             String url2, ClusterRole role2,
-                             long version) {
+    public HAGroupStore(String haGroupName, HighAvailabilityPolicy policy,
+                        String url1, ClusterRole role1,
+                        String url2, ClusterRole role2,
+                        long version) {
         this(haGroupName, policy, RegistryType.ZK, url1, role1, url2, role2, version, null, null);
     }
 
-    public ClusterRoleRecord(String haGroupName, HighAvailabilityPolicy policy,
-                             RegistryType registryType,
-                             String url1, ClusterRole role1,
-                             String url2, ClusterRole role2,
-                             long version) {
+    public HAGroupStore(String haGroupName, HighAvailabilityPolicy policy,
+                        RegistryType registryType,
+                        String url1, ClusterRole role1,
+                        String url2, ClusterRole role2,
+                        long version) {
         this(haGroupName, policy, registryType, url1, role1, url2, role2, version, null, null);
     }
 
-    public static Optional<ClusterRoleRecord> fromJson(byte[] bytes) {
+    public static Optional<HAGroupStore> fromJson(byte[] bytes) {
         if (bytes == null) {
             return Optional.empty();
         }
         try {
-            return Optional.of(JacksonUtil.getObjectReader(ClusterRoleRecord.class).readValue(bytes));
+            return Optional.of(JacksonUtil.getObjectReader(HAGroupStore.class).readValue(bytes));
         } catch (Exception e) {
             LOG.error("Fail to deserialize data to a cluster role store", e);
             return Optional.empty();
         }
     }
 
-    public static byte[] toJson(ClusterRoleRecord record) throws IOException {
-        return JacksonUtil.getObjectWriter().writeValueAsBytes(record);
+    public static byte[] toJson(HAGroupStore haGroupStore) throws IOException {
+        return JacksonUtil.getObjectWriter().writeValueAsBytes(haGroupStore);
     }
 
     @JsonIgnore
@@ -207,16 +207,16 @@ public class ClusterRoleRecord {
     }
 
     /**
-     * @return true if this is newer than the given cluster role record.
+     * @return true if this is newer than the given HAGroupStore.
      */
-    public boolean isNewerThan(ClusterRoleRecord other) {
+    public boolean isNewerThan(HAGroupStore other) {
         if (other == null) {
             return true;
         }
         return this.hasSameInfo(other) && this.version > other.version;
     }
 
-    public boolean hasSameInfo(ClusterRoleRecord other) {
+    public boolean hasSameInfo(HAGroupStore other) {
         return haGroupName.equals(other.haGroupName) &&
                 policy.equals(other.policy);
     }
@@ -286,26 +286,26 @@ public class ClusterRoleRecord {
             return true;
         } else if (other == null) {
             return false;
-        } else if (!(other instanceof ClusterRoleRecord)) {
+        } else if (!(other instanceof HAGroupStore)) {
             return false;
         } else {
-            ClusterRoleRecord otherRecord = (ClusterRoleRecord) other;
+            HAGroupStore otherHaGroupStore = (HAGroupStore) other;
             return new EqualsBuilder()
-                    .append(haGroupName, otherRecord.haGroupName)
-                    .append(policy, otherRecord.policy)
-                    .append(registryType, otherRecord.registryType)
-                    .append(url1, otherRecord.url1)
-                    .append(role1, otherRecord.role1)
-                    .append(url2, otherRecord.url2)
-                    .append(role2, otherRecord.role2)
-                    .append(version, otherRecord.version)
+                    .append(haGroupName, otherHaGroupStore.haGroupName)
+                    .append(policy, otherHaGroupStore.policy)
+                    .append(registryType, otherHaGroupStore.registryType)
+                    .append(url1, otherHaGroupStore.url1)
+                    .append(role1, otherHaGroupStore.role1)
+                    .append(url2, otherHaGroupStore.url2)
+                    .append(role2, otherHaGroupStore.role2)
+                    .append(version, otherHaGroupStore.version)
                     .isEquals();
         }
     }
 
     @Override
     public String toString() {
-        return "ClusterRoleRecord{"
+        return "HAGroupStore{"
                 + "haGroupName='" + haGroupName + '\''
                 + ", policy=" + policy
                 + ", registryType=" + registryType

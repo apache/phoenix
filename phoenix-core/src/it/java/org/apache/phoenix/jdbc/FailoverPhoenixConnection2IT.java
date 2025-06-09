@@ -28,15 +28,12 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.junit.Assume.assumeTrue;
 
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.ExecutorService;
@@ -44,7 +41,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.junit.After;
@@ -131,15 +127,15 @@ public class FailoverPhoenixConnection2IT {
     @Test(timeout = 300000)
     public void testFailoverCanFinishWhenOneZKDown() throws Exception {
         doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
-            // Because cluster1 is down, any version record will only be updated in cluster2.
-            // Become ACTIVE cluster is still ACTIVE in current version record, no CQS to be closed.
-            CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.OFFLINE);
+            // Because cluster1 is down, any version haGroupStore will only be updated in cluster2.
+            // Become ACTIVE cluster is still ACTIVE in current version haGroupStore, no CQS to be closed.
+            CLUSTERS.transitClusterRole(haGroup, HAGroupStore.ClusterRole.ACTIVE, HAGroupStore.ClusterRole.OFFLINE);
 
             // Usually making this cluster STANDBY will close the CQS and all existing connections.
             // The HA group was created in setup() but no CQS is yet opened for this ACTIVE cluster.
             // As a result there is neither the CQS nor existing opened connections.
             // In this case, the failover should finish instead of failing to get/close the CQS.
-            CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE);
+            CLUSTERS.transitClusterRole(haGroup, HAGroupStore.ClusterRole.STANDBY, HAGroupStore.ClusterRole.ACTIVE);
 
             try (Connection conn = createFailoverConnection()) {
                 FailoverPhoenixConnection failoverConn = (FailoverPhoenixConnection) conn;
@@ -172,7 +168,7 @@ public class FailoverPhoenixConnection2IT {
             // As the target ZK is down, now existing CQS if any is in a bad state. In this case,
             // the failover should still finish. After all, this is the most important use case the
             // failover is designed for.
-            CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE);
+            CLUSTERS.transitClusterRole(haGroup, HAGroupStore.ClusterRole.STANDBY, HAGroupStore.ClusterRole.ACTIVE);
 
             try (Connection conn = createFailoverConnection()) {
                 FailoverPhoenixConnection failoverConn = (FailoverPhoenixConnection) conn;
@@ -209,8 +205,8 @@ public class FailoverPhoenixConnection2IT {
             }
 
             // So on-call engineer comes into play, and triggers a failover
-            // Because cluster1 is down, new version record will only be updated in cluster2
-            CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE);
+            // Because cluster1 is down, new version haGroupStore will only be updated in cluster2
+            CLUSTERS.transitClusterRole(haGroup, HAGroupStore.ClusterRole.STANDBY, HAGroupStore.ClusterRole.ACTIVE);
 
             // After failover, the FailoverPhoenixConnection should go to the second cluster
             try (Connection conn = createFailoverConnection()) {
@@ -219,8 +215,8 @@ public class FailoverPhoenixConnection2IT {
         });
 
         // After cluster1 comes back, new connection should still go to cluster2.
-        // This is the case where ZK1 believes itself is ACTIVE, with role record v1
-        // while ZK2 believes itself is ACTIVE, with role record v2.
+        // This is the case where ZK1 believes itself is ACTIVE, with role haGroupStore v1
+        // while ZK2 believes itself is ACTIVE, with role haGroupStore v2.
         // Client should believe ZK2 is ACTIVE in this case because high version wins.
         LOG.info("Testing failover connection when both clusters are up and running");
         try (Connection conn = createFailoverConnection()) {
@@ -231,7 +227,7 @@ public class FailoverPhoenixConnection2IT {
 
         LOG.info("Testing failover back to cluster1 when bot clusters are up and running");
         // Failover back to the first cluster since it is healthy after restart
-        CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY);
+        CLUSTERS.transitClusterRole(haGroup, HAGroupStore.ClusterRole.ACTIVE, HAGroupStore.ClusterRole.STANDBY);
         // After ACTIVE ZK restarts and fail back, this should still work
         try (Connection conn = createFailoverConnection()) {
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
@@ -253,7 +249,7 @@ public class FailoverPhoenixConnection2IT {
             }
 
             // Innocent on-call engineer triggers a failover to second cluster
-            CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE);
+            CLUSTERS.transitClusterRole(haGroup, HAGroupStore.ClusterRole.STANDBY, HAGroupStore.ClusterRole.ACTIVE);
 
             try {
                 createFailoverConnection();
@@ -297,7 +293,7 @@ public class FailoverPhoenixConnection2IT {
             }
 
             // So on-call engineer comes into play, and triggers a failover
-            CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE);
+            CLUSTERS.transitClusterRole(haGroup, HAGroupStore.ClusterRole.STANDBY, HAGroupStore.ClusterRole.ACTIVE);
 
             // After the second cluster (ACTIVE) ZK restarts, this should still work
             try (Connection conn = createFailoverConnection()) {
@@ -319,7 +315,7 @@ public class FailoverPhoenixConnection2IT {
             connectionList.add(createFailoverConnection());
         }
 
-        CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE);
+        CLUSTERS.transitClusterRole(haGroup, HAGroupStore.ClusterRole.STANDBY, HAGroupStore.ClusterRole.ACTIVE);
 
         for (short i = 0; i < numberOfConnections; i++) {
             LOG.info("Asserting connection number {}", i);
@@ -350,7 +346,7 @@ public class FailoverPhoenixConnection2IT {
                 connections.add(executor.submit(this::createFailoverConnection));
             }
             // The ACTIVE cluster goes down, and then on-call engineer triggers failover.
-            CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE);
+            CLUSTERS.transitClusterRole(haGroup, HAGroupStore.ClusterRole.STANDBY, HAGroupStore.ClusterRole.ACTIVE);
         });
 
         waitFor(() -> {
@@ -374,7 +370,7 @@ public class FailoverPhoenixConnection2IT {
 
     /**
      * This is to make sure all Phoenix connections are closed when registryType changes
-     * of a CRR. ZK --> MASTER
+     * of a HAGroupStore. ZK --> MASTER
      *
      * Test with many connections.
      */
@@ -385,8 +381,8 @@ public class FailoverPhoenixConnection2IT {
         for (short i = 0; i < numberOfConnections; i++) {
             connectionList.add(createFailoverConnection());
         }
-        ClusterRoleRecord.RegistryType newRegistry = ClusterRoleRecord.RegistryType.MASTER;
-        CLUSTERS.transitClusterRoleRecordRegistry(haGroup, newRegistry);
+        HAGroupStore.RegistryType newRegistry = HAGroupStore.RegistryType.MASTER;
+        CLUSTERS.transitHAGroupStoreRegistry(haGroup, newRegistry);
 
         for (short i = 0; i < numberOfConnections; i++) {
             LOG.info("Asserting connection number {}", i);
@@ -398,7 +394,7 @@ public class FailoverPhoenixConnection2IT {
 
     /**
      * This is to make sure all Phoenix connections are closed when registryType changes
-     * of a CRR. ZK --> RPC
+     * of a HAGroupStore. ZK --> RPC
      *
      * Test with many connections.
      */
@@ -409,10 +405,10 @@ public class FailoverPhoenixConnection2IT {
         for (short i = 0; i < numberOfConnections; i++) {
             connectionList.add(createFailoverConnection());
         }
-        ClusterRoleRecord.RegistryType newRegistry = ClusterRoleRecord.RegistryType.RPC;
+        HAGroupStore.RegistryType newRegistry = HAGroupStore.RegistryType.RPC;
         //RPC Registry is only there in hbase version greater than 2.5.0
         assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.5.0")>=0);
-        CLUSTERS.transitClusterRoleRecordRegistry(haGroup, newRegistry);
+        CLUSTERS.transitHAGroupStoreRegistry(haGroup, newRegistry);
 
         for (short i = 0; i < numberOfConnections; i++) {
             LOG.info("Asserting connection number {}", i);
@@ -423,7 +419,7 @@ public class FailoverPhoenixConnection2IT {
     }
 
     /**
-     * Testing connection closure for roleRecord change from
+     * Testing connection closure for HaGroupStore change from
      * (URL1, ACTIVE, URL2, STANDBY) -> (URL3, ACTIVE, URL2, STANDBY)
      * All wrapped connections should have been closed
      */
@@ -439,8 +435,8 @@ public class FailoverPhoenixConnection2IT {
         //Restart Cluster 1 with new ports
         CLUSTERS.restartCluster1();
         //Basically applying new url for cluster 1
-        CLUSTERS.refreshClusterRoleRecordAfterClusterRestart(haGroup,
-                ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY);
+        CLUSTERS.refreshHAGroupStoreAfterClusterRestart(haGroup,
+                HAGroupStore.ClusterRole.ACTIVE, HAGroupStore.ClusterRole.STANDBY);
         for (short i = 0; i < numberOfConnections; i++) {
             LOG.info("Asserting connection number {}", i);
             FailoverPhoenixConnection conn = ((FailoverPhoenixConnection) connectionList.get(i));
@@ -451,7 +447,7 @@ public class FailoverPhoenixConnection2IT {
     }
 
     /**
-     * Testing connection closure for roleRecord change from
+     * Testing connection closure for HaGroupStore change from
      * (URL1, ACTIVE, URL2, STANDBY) -> (URL1, ACTIVE, URL3, STANDBY)
      * It should not have affected connections at all
      */
@@ -467,8 +463,8 @@ public class FailoverPhoenixConnection2IT {
         //Restart Cluster 2 with new ports
         CLUSTERS.restartCluster2();
         //Basically applying new url for cluster 2
-        CLUSTERS.refreshClusterRoleRecordAfterClusterRestart(haGroup,
-                ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY);
+        CLUSTERS.refreshHAGroupStoreAfterClusterRestart(haGroup,
+                HAGroupStore.ClusterRole.ACTIVE, HAGroupStore.ClusterRole.STANDBY);
         for (short i = 0; i < numberOfConnections; i++) {
             LOG.info("Asserting connection number {}", i);
             FailoverPhoenixConnection conn = ((FailoverPhoenixConnection) connectionList.get(i));
@@ -503,8 +499,8 @@ public class FailoverPhoenixConnection2IT {
         }
 
         //Transit Role1 ACTIVE --> ACTIVE_TO_STANDBY
-        CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
-                ClusterRoleRecord.ClusterRole.STANDBY);
+        CLUSTERS.transitClusterRole(haGroup, HAGroupStore.ClusterRole.ACTIVE_TO_STANDBY,
+                HAGroupStore.ClusterRole.STANDBY);
         //Connections should be open
         assertFalse(connection.isClosed());
         for (short i = 0; i < numberOfConnections; i++) {
@@ -524,8 +520,8 @@ public class FailoverPhoenixConnection2IT {
         }
 
         //Transit Role1 ACTIVE_TO_STANDBY --> STANDBY
-        CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.STANDBY,
-                ClusterRoleRecord.ClusterRole.STANDBY);
+        CLUSTERS.transitClusterRole(haGroup, HAGroupStore.ClusterRole.STANDBY,
+                HAGroupStore.ClusterRole.STANDBY);
         //Connections should be closed
         for (short i = 0; i < numberOfConnections; i++) {
             FailoverPhoenixConnection conn = ((FailoverPhoenixConnection) connectionList.get(i));
@@ -562,8 +558,8 @@ public class FailoverPhoenixConnection2IT {
         }
 
         //Transit Role1 ACTIVE --> ACTIVE_TO_STANDBY
-        CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
-                ClusterRoleRecord.ClusterRole.STANDBY);
+        CLUSTERS.transitClusterRole(haGroup, HAGroupStore.ClusterRole.ACTIVE_TO_STANDBY,
+                HAGroupStore.ClusterRole.STANDBY);
         //Connections should be open
         for (short i = 0; i < numberOfConnections; i++) {
             FailoverPhoenixConnection conn = ((FailoverPhoenixConnection) connectionList.get(i));
@@ -572,8 +568,8 @@ public class FailoverPhoenixConnection2IT {
         }
 
         //Transit Role1 ACTIVE_TO_STANDBY --> ACTIVE
-        CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.ACTIVE,
-                ClusterRoleRecord.ClusterRole.STANDBY);
+        CLUSTERS.transitClusterRole(haGroup, HAGroupStore.ClusterRole.ACTIVE,
+                HAGroupStore.ClusterRole.STANDBY);
         //Connections should still be open
         for (short i = 0; i < numberOfConnections; i++) {
             FailoverPhoenixConnection conn = ((FailoverPhoenixConnection) connectionList.get(i));

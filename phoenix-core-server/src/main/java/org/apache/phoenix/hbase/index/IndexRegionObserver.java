@@ -540,7 +540,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           final Configuration conf = c.getEnvironment().getConfiguration();
           final HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(conf);
           if (haGroupStoreManager.isMutationBlocked()) {
-              throw new IOException("Blocking Mutation as Some CRRs are in ACTIVE_TO_STANDBY "
+              throw new IOException("Blocking Mutation as Some HAGroupStores are in ACTIVE_TO_STANDBY "
                       + "state and CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
           }
           preBatchMutateWithExceptions(c, miniBatchOp);

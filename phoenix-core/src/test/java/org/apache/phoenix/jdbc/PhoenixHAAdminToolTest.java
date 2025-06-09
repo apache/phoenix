@@ -47,7 +47,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.util.ToolRunner;
-import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
+import org.apache.phoenix.jdbc.HAGroupStore.ClusterRole;
 import org.apache.zookeeper.KeeperException.NoNodeException;
 import org.junit.After;
 import org.junit.Before;
@@ -80,7 +80,7 @@ public class PhoenixHAAdminToolTest {
             admin = new PhoenixHAAdmin(ZK1, new Configuration(), mockHighAvailibilityCuratorProvider);
 
     private String haGroupName;
-    private ClusterRoleRecord recordV1;
+    private HAGroupStore recordV1;
 
     @Rule
     public final TestName testName = new TestName();
@@ -89,7 +89,7 @@ public class PhoenixHAAdminToolTest {
     public void setup() throws Exception {
         when(mockHighAvailibilityCuratorProvider.getCurator(Mockito.anyString(), any(Properties.class))).thenReturn(curator);
         haGroupName = testName.getMethodName();
-        recordV1 = new ClusterRoleRecord(
+        recordV1 = new HAGroupStore(
                 haGroupName, HighAvailabilityPolicy.FAILOVER,
                 ZK1, ClusterRole.ACTIVE,
                 ZK2, ClusterRole.STANDBY,
@@ -138,26 +138,26 @@ public class PhoenixHAAdminToolTest {
     }
 
     /**
-     * Test that helper method works for reading cluster role records from JSON file.
+     * Test that helper method works for reading HAGroupStores from JSON file.
      */
     @Test
-    public void testReadRecordsFromFileJson() throws Exception {
+    public void testReadHaGroupStoresFromFileJson() throws Exception {
         { // one record in JSON file
-            String fileName = ClusterRoleRecordTest.createJsonFileWithRecords(recordV1);
-            List<ClusterRoleRecord> records = new PhoenixHAAdminTool().readRecordsFromFile(fileName);
+            String fileName = HAGroupStoreTest.createJsonFileWithHaGroupStores(recordV1);
+            List<HAGroupStore> records = new PhoenixHAAdminTool().readHaGroupStoresFromFile(fileName);
             assertEquals(1, records.size());
             assertTrue(records.contains(recordV1));
         }
 
         { // two records in JSON file
             String haGroupName2 = haGroupName + RandomStringUtils.randomAlphabetic(3);
-            ClusterRoleRecord record2 = new ClusterRoleRecord(
+            HAGroupStore record2 = new HAGroupStore(
                     haGroupName2, HighAvailabilityPolicy.FAILOVER,
                     ZK1, ClusterRole.ACTIVE,
                     ZK2, ClusterRole.STANDBY,
                     1);
-            String fileName = ClusterRoleRecordTest.createJsonFileWithRecords(recordV1, record2);
-            List<ClusterRoleRecord> records = new PhoenixHAAdminTool().readRecordsFromFile(fileName);
+            String fileName = HAGroupStoreTest.createJsonFileWithHaGroupStores(recordV1, record2);
+            List<HAGroupStore> records = new PhoenixHAAdminTool().readHaGroupStoresFromFile(fileName);
             assertEquals(2, records.size());
             assertTrue(records.contains(recordV1));
             assertTrue(records.contains(record2));
@@ -190,7 +190,7 @@ public class PhoenixHAAdminToolTest {
     public void testUpdate() throws Exception {
         boolean result = false;
         saveRecordV1ToZk();
-        ClusterRoleRecord recordV2 = new ClusterRoleRecord(
+        HAGroupStore recordV2 = new HAGroupStore(
                 haGroupName, HighAvailabilityPolicy.FAILOVER,
                 ZK1, ClusterRole.STANDBY,
                 ZK2 , ClusterRole.STANDBY,
@@ -211,7 +211,7 @@ public class PhoenixHAAdminToolTest {
     @Test
     public void testRejectLowerVersionRecord() throws Exception {
         saveRecordV1ToZk();
-        ClusterRoleRecord recordV0 = new ClusterRoleRecord(
+        HAGroupStore recordV0 = new HAGroupStore(
                 haGroupName, HighAvailabilityPolicy.FAILOVER,
                 ZK1, ClusterRole.STANDBY,
                 ZK2 , ClusterRole.STANDBY,
@@ -228,7 +228,7 @@ public class PhoenixHAAdminToolTest {
     @Test
     public void testRejectInconsistentData() throws Exception {
         saveRecordV1ToZk();
-        ClusterRoleRecord record2 = new ClusterRoleRecord(
+        HAGroupStore record2 = new HAGroupStore(
                 haGroupName, HighAvailabilityPolicy.FAILOVER,
                 ZK1, ClusterRole.STANDBY,
                 ZK2 , ClusterRole.STANDBY,
@@ -305,7 +305,7 @@ public class PhoenixHAAdminToolTest {
     /** Helper method to make curator return V1 record when agent reads data. */
     private void saveRecordV1ToZk() throws Exception {
         GetDataBuilder getDataBuilder = Mockito.mock(GetDataBuilder.class);
-        when(getDataBuilder.forPath(anyString())).thenReturn(ClusterRoleRecord.toJson(recordV1));
+        when(getDataBuilder.forPath(anyString())).thenReturn(HAGroupStore.toJson(recordV1));
         when(curator.getData()).thenReturn(getDataBuilder);
     }
 }

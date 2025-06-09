@@ -60,9 +60,9 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     private static final Option HELP_OPT = new Option("h", "help", false, "Show this help");
     private static final Option FORCEFUL_OPT =
             new Option("F", "forceful", false,
-                    "Forceful writing cluster role records ignoring errors on other clusters");
+                    "Forceful writing HAGroupStores ignoring errors on other clusters");
     private static final Option MANIFEST_OPT =
-            new Option("m", "manifest", true, "Manifest file containing cluster role records");
+            new Option("m", "manifest", true, "Manifest file containing HAGroupStores");
     private static final Option LIST_OPT =
             new Option("l", "list", false, "List all HA groups stored on this ZK cluster");
     private static final Option REPAIR_OPT = new Option("r", "repair", false,
@@ -95,15 +95,15 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
             String zkUrl = PhoenixHAAdmin.getLocalZkUrl(getConf()); // Admin is created against local ZK cluster
             if (commandLine.hasOption(LIST_OPT.getOpt())) { // list
                 try (PhoenixHAAdmin admin = new PhoenixHAAdmin(zkUrl, getConf(), HighAvailibilityCuratorProvider.INSTANCE)) {
-                    List<ClusterRoleRecord> records = admin.listAllClusterRoleRecordsOnZookeeper();
-                    JacksonUtil.getObjectWriterPretty().writeValue(System.out, records);
+                    List<HAGroupStore> haGroupStores = admin.listAllHAGroupStoresOnZookeeper();
+                    JacksonUtil.getObjectWriterPretty().writeValue(System.out, haGroupStores);
                 }
             } else if (commandLine.hasOption(MANIFEST_OPT.getOpt())) { // create or update
                 String fileName = commandLine.getOptionValue(MANIFEST_OPT.getOpt());
-                List<ClusterRoleRecord> records = readRecordsFromFile(fileName);
+                List<HAGroupStore> haGroupStores = readHaGroupStoresFromFile(fileName);
                 boolean forceful = commandLine.hasOption(FORCEFUL_OPT.getOpt());
                 try (PhoenixHAAdmin admin = new PhoenixHAAdmin(zkUrl, getConf(), HighAvailibilityCuratorProvider.INSTANCE)) {
-                    Map<String, List<String>> failedHaGroups = admin.syncClusterRoleRecords(records, forceful);
+                    Map<String, List<String>> failedHaGroups = admin.syncHAGroupStores(haGroupStores, forceful);
                     if (!failedHaGroups.isEmpty()) {
                         System.out.println("Found following HA groups are failing to write the clusters:");
                         failedHaGroups.forEach((k, v) ->
@@ -113,10 +113,10 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
                 }
             } else if (commandLine.hasOption(REPAIR_OPT.getOpt()))  { // verify and repair
                 try (PhoenixHAAdmin admin = new PhoenixHAAdmin(zkUrl, getConf(), HighAvailibilityCuratorProvider.INSTANCE)) {
-                    List<String> inconsistentRecord = admin.verifyAndRepairWithRemoteZnode();
-                    if (!inconsistentRecord.isEmpty()) {
-                        System.out.println("Found following inconsistent cluster role records: ");
-                        System.out.print(String.join(",", inconsistentRecord));
+                    List<String> inconsistentHaGroupStore = admin.verifyAndRepairWithRemoteZnode();
+                    if (!inconsistentHaGroupStore.isEmpty()) {
+                        System.out.println("Found following inconsistent HAGroupStores: ");
+                        System.out.print(String.join(",", inconsistentHaGroupStore));
                         return RET_REPAIR_FOUND_INCONSISTENCIES;
                     }
                 }
@@ -129,28 +129,28 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     }
 
     /**
-     * Read cluster role records defined in the file, given file name.
+     * Read HAGroupStores defined in the file, given file name.
      *
      * @param file The local manifest file name to read from
-     * @return list of cluster role records defined in the manifest file
+     * @return list of HAGroupStores defined in the manifest file
      * @throws Exception when parsing or reading from the input file
      */
     @VisibleForTesting
-    List<ClusterRoleRecord> readRecordsFromFile(String file) throws Exception {
+    List<HAGroupStore> readHaGroupStoresFromFile(String file) throws Exception {
         Preconditions.checkArgument(!StringUtils.isEmpty(file));
         String fileType = FilenameUtils.getExtension(file);
         switch (fileType) {
         case "json":
             // TODO: use jackson or standard JSON library according to PHOENIX-5789
             try (Reader reader = new FileReader(file)) {
-                ClusterRoleRecord[] records =
-                        JacksonUtil.getObjectReader(ClusterRoleRecord[].class).readValue(reader);
-                return Arrays.asList(records);
+                HAGroupStore[] haGroupStores =
+                        JacksonUtil.getObjectReader(HAGroupStore[].class).readValue(reader);
+                return Arrays.asList(haGroupStores);
             }
         case "yaml":
             LOG.error("YAML file is not yet supported. See W-8274533");
         default:
-            throw new Exception("Can not read cluster role records from file '" + file + "' " +
+            throw new Exception("Can not read HAGroupStores from file '" + file + "' " +
                     "reason: unsupported file type");
         }
     }

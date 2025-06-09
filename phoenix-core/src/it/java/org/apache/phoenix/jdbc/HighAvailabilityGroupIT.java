@@ -36,8 +36,6 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
@@ -47,9 +45,8 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.curator.utils.ZKPaths;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
+import org.apache.phoenix.jdbc.HAGroupStore.ClusterRole;
 import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -87,7 +84,7 @@ public class HighAvailabilityGroupIT {
     public final TestName testName = new TestName();
     @Rule
     public final Timeout globalTimeout = new Timeout(180, TimeUnit.SECONDS);
-    private final ClusterRoleRecord.RegistryType registryType = ClusterRoleRecord.RegistryType.ZK;
+    private final HAGroupStore.RegistryType registryType = HAGroupStore.RegistryType.ZK;
 
     @BeforeClass
     public static void setUpBeforeClass() throws Exception {
@@ -332,27 +329,27 @@ public class HighAvailabilityGroupIT {
     }
 
     /**
-     * Test that HA group should see latest version of cluster role record.
+     * Test that HA group should see latest version of HAGroupStore.
      */
     @Test
-    public void testGetWithDifferentRecordVersion() throws Exception {
+    public void testGetWithDifferentHaGroupStoreVersion() throws Exception {
         String haGroupName2 = testName.getMethodName() + RandomStringUtils.randomAlphabetic(3);
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName2);
 
-        // create cluster role records with different versions on two ZK clusters
+        // create HAGroupStores with different versions on two ZK clusters
         final String zpath = ZKPaths.PATH_SEPARATOR + haGroupName2;
-        ClusterRoleRecord record1 = new ClusterRoleRecord(
+        HAGroupStore haGroupStore = new HAGroupStore(
                 haGroupName2, HighAvailabilityPolicy.FAILOVER, registryType,
                 CLUSTERS.getURL(1, registryType), ClusterRole.ACTIVE,
                 CLUSTERS.getURL(2, registryType), ClusterRole.STANDBY,
                 1);
-        CLUSTERS.createCurator1().create().forPath(zpath, ClusterRoleRecord.toJson(record1));
-        ClusterRoleRecord record2 = new ClusterRoleRecord(
-                record1.getHaGroupName(), record1.getPolicy(), record1.getRegistryType(),
-                record1.getUrl1(), record1.getRole1(),
-                record1.getUrl2(), record1.getRole2(),
-                record1.getVersion() + 1); // record2 is newer
-        CLUSTERS.createCurator2().create().forPath(zpath, ClusterRoleRecord.toJson(record2));
+        CLUSTERS.createCurator1().create().forPath(zpath, HAGroupStore.toJson(haGroupStore));
+        HAGroupStore haGroupStore1 = new HAGroupStore(
+                haGroupStore.getHaGroupName(), haGroupStore.getPolicy(), haGroupStore.getRegistryType(),
+                haGroupStore.getUrl1(), haGroupStore.getRole1(),
+                haGroupStore.getUrl2(), haGroupStore.getRole2(),
+                haGroupStore.getVersion() + 1); // haGroupStore1 is newer
+        CLUSTERS.createCurator2().create().forPath(zpath, HAGroupStore.toJson(haGroupStore1));
 
         Optional<HighAvailabilityGroup> haGroup2 = Optional.empty();
         try {
@@ -361,7 +358,7 @@ public class HighAvailabilityGroupIT {
             assertNotSame(haGroup2.get(), haGroup);
             // HA group should see latest version when both role managers are started
             HighAvailabilityGroup finalHaGroup = haGroup2.get();
-            waitFor(() -> record2.equals(finalHaGroup.getRoleRecord()), 100, 30_000);
+            waitFor(() -> haGroupStore1.equals(finalHaGroup.getHaGroupStore()), 100, 30_000);
         } finally {
             haGroup2.ifPresent(HighAvailabilityGroup::close);
         }
@@ -374,7 +371,7 @@ public class HighAvailabilityGroupIT {
      * get the cached object, which has also been initialized.
      *
      * The reason this works is because getting an HA group depends on one ZK watcher connects to a
-     * ZK cluster to get the associated cluster role record. It does not depend on both ZK cluster
+     * ZK cluster to get the associated HAGroupStore. It does not depend on both ZK cluster
      * being up and running. It does not actually create HBase connection either.
      */
     @Test
@@ -568,13 +565,13 @@ public class HighAvailabilityGroupIT {
      */
     @Test
     public void testNodeChange() throws Exception {
-        assertEquals(ClusterRole.ACTIVE, haGroup.getRoleRecord().getRole(CLUSTERS.getURL(1, registryType)));
-        assertEquals(ClusterRole.STANDBY, haGroup.getRoleRecord().getRole(CLUSTERS.getURL(2, registryType)));
+        assertEquals(ClusterRole.ACTIVE, haGroup.getHaGroupStore().getRole(CLUSTERS.getURL(1, registryType)));
+        assertEquals(ClusterRole.STANDBY, haGroup.getHaGroupStore().getRole(CLUSTERS.getURL(2, registryType)));
 
         CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.ACTIVE);
 
-        assertEquals(ClusterRole.STANDBY, haGroup.getRoleRecord().getRole(CLUSTERS.getURL(1, registryType)));
-        assertEquals(ClusterRole.ACTIVE, haGroup.getRoleRecord().getRole(CLUSTERS.getURL(2, registryType)));
+        assertEquals(ClusterRole.STANDBY, haGroup.getHaGroupStore().getRole(CLUSTERS.getURL(1, registryType)));
+        assertEquals(ClusterRole.ACTIVE, haGroup.getHaGroupStore().getRole(CLUSTERS.getURL(2, registryType)));
     }
 
     //private helper methods
@@ -587,7 +584,7 @@ public class HighAvailabilityGroupIT {
         String testHAUrl = testPrincipal == null ? CLUSTERS.getJdbcHAUrl() :
                 CLUSTERS.getJdbcHAUrl(testPrincipal);
 
-        //As roleRecord store url in ascending order it might be the case that minicluster2 have
+        //As HaGroupStore store url in ascending order it might be the case that minicluster2 have
         //port smaller than minicluster1 and urls are stored in reverse order.
         assertTrue(getJdbcUrl1ForGivenHAGroup(haGroup, haURLInfo).equals(testUrl1) ||
                 getJdbcUrl1ForGivenHAGroup(haGroup, haURLInfo).equals(testUrl2));
@@ -597,18 +594,18 @@ public class HighAvailabilityGroupIT {
     }
 
     private String getJdbcUrl1ForGivenHAGroup(HighAvailabilityGroup haGroup, HAURLInfo haURLInfo) {
-        return HighAvailabilityGroup.getJDBCUrl(haGroup.getRoleRecord().getUrl1(), haURLInfo,
-                haGroup.getRoleRecord().getRegistryType());
+        return HighAvailabilityGroup.getJDBCUrl(haGroup.getHaGroupStore().getUrl1(), haURLInfo,
+                haGroup.getHaGroupStore().getRegistryType());
     }
 
     private String getJdbcUrl2ForGivenHAGroup(HighAvailabilityGroup haGroup, HAURLInfo haURLInfo) {
-        return HighAvailabilityGroup.getJDBCUrl(haGroup.getRoleRecord().getUrl2(), haURLInfo,
-                haGroup.getRoleRecord().getRegistryType());
+        return HighAvailabilityGroup.getJDBCUrl(haGroup.getHaGroupStore().getUrl2(), haURLInfo,
+                haGroup.getHaGroupStore().getRegistryType());
     }
 
     private String getJdbcHAUrlForGivenHAGroup(HAURLInfo haURLInfo) {
         return HighAvailabilityGroup.getJDBCUrl(String.format("[%s|%s]", CLUSTERS.getZkUrl1(),
                         CLUSTERS.getZkUrl2()), haURLInfo,
-                            ClusterRoleRecord.RegistryType.ZK);
+                            HAGroupStore.RegistryType.ZK);
     }
 }

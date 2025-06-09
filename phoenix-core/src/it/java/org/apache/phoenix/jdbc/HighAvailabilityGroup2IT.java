@@ -68,7 +68,7 @@ public class HighAvailabilityGroup2IT {
     public final TestName testName = new TestName();
     @Rule
     public final Timeout globalTimeout = new Timeout(180, TimeUnit.SECONDS);
-    private final ClusterRoleRecord.RegistryType registryType = ClusterRoleRecord.RegistryType.ZK;
+    private final HAGroupStore.RegistryType registryType = HAGroupStore.RegistryType.ZK;
 
     @BeforeClass
     public static void setUpBeforeClass() throws Exception {
@@ -150,7 +150,7 @@ public class HighAvailabilityGroup2IT {
      * Test that if STANDBY HBase cluster is down, connect to new HA group should work.
      *
      * This test covers only HBase cluster is down, and both ZK clusters are still healthy so
-     * clients will be able to get latest clusters role record from both clusters. This tests a new
+     * clients will be able to get latest clusters HaGroupStore from both clusters. This tests a new
      * HA group which will get initialized during the STANDBY HBase cluster down time.
      */
     @Test
@@ -251,41 +251,41 @@ public class HighAvailabilityGroup2IT {
     /**
      * Test when one ZK starts after the HA group has been initialized.
      *
-     * In this case, both cluster role managers will start and apply discovered cluster role record.
+     * In this case, both cluster role managers will start and apply discovered HAGroupStore.
      */
     @Test
     public void testOneZKStartsAfterInit() throws Exception {
         String haGroupName2 = testName.getMethodName() + RandomStringUtils.randomAlphabetic(3);
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName2);
 
-        // create cluster role records with different versions on two ZK clusters
+        // create HAGroupStores with different versions on two ZK clusters
         final String zpath = ZKPaths.PATH_SEPARATOR + haGroupName2;
-        ClusterRoleRecord record1 = new ClusterRoleRecord(
+        HAGroupStore record1 = new HAGroupStore(
                 haGroupName2, HighAvailabilityPolicy.FAILOVER, registryType,
-                CLUSTERS.getURL(1, registryType), ClusterRoleRecord.ClusterRole.ACTIVE,
-                CLUSTERS.getURL(2, registryType), ClusterRoleRecord.ClusterRole.STANDBY,
+                CLUSTERS.getURL(1, registryType), HAGroupStore.ClusterRole.ACTIVE,
+                CLUSTERS.getURL(2, registryType), HAGroupStore.ClusterRole.STANDBY,
                 1);
-        CLUSTERS.createCurator1().create().forPath(zpath, ClusterRoleRecord.toJson(record1));
-        ClusterRoleRecord record2 = new ClusterRoleRecord(
+        CLUSTERS.createCurator1().create().forPath(zpath, HAGroupStore.toJson(record1));
+        HAGroupStore record2 = new HAGroupStore(
                 record1.getHaGroupName(), record1.getPolicy(), record1.getRegistryType(),
                 record1.getUrl1(), record1.getRole1(),
                 record1.getUrl2(), record1.getRole2(),
                 record1.getVersion() + 1); // record2 is newer
-        CLUSTERS.createCurator2().create().forPath(zpath, ClusterRoleRecord.toJson(record2));
+        CLUSTERS.createCurator2().create().forPath(zpath, HAGroupStore.toJson(record2));
 
         doTestWhenOneZKDown(CLUSTERS.getHBaseCluster2(), () -> {
             Optional<HighAvailabilityGroup> haGroup2 = HighAvailabilityGroup.get(jdbcHAUrl, clientProperties);
             assertTrue(haGroup2.isPresent());
             assertNotSame(haGroup2.get(), haGroup);
-            // apparently the HA group cluster role record should be from the healthy cluster
-            assertEquals(record1, haGroup2.get().getRoleRecord());
+            // apparently the HA group HAGroupStore should be from the healthy cluster
+            assertEquals(record1, haGroup2.get().getHaGroupStore());
         });
 
-        // When ZK2 is connected, its cluster role manager should apply newer cluster role record
+        // When ZK2 is connected, its cluster role manager should apply newer HAGroupStore
         waitFor(() -> {
             try {
                 Optional<HighAvailabilityGroup> haGroup2 = HighAvailabilityGroup.get(jdbcHAUrl, clientProperties);
-                return haGroup2.isPresent() && record2.equals(haGroup2.get().getRoleRecord());
+                return haGroup2.isPresent() && record2.equals(haGroup2.get().getHaGroupStore());
             } catch (SQLException e) {
                 LOG.warn("Fail to get HA group {}", haGroupName2);
                 return false;
@@ -298,7 +298,7 @@ public class HighAvailabilityGroup2IT {
 
     /**
      * Test that HA connection request will fall back to the first cluster when HA group fails
-     * to initialize due to missing cluster role record (CRR).
+     * to initialize due to missing HAGroupStore (HAGroupStore).
      */
     @Test
     public void testFallbackToSingleConnection() throws Exception {
@@ -308,7 +308,7 @@ public class HighAvailabilityGroup2IT {
         String haGroupName2 = testName.getMethodName() + RandomStringUtils.randomAlphabetic(3);
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName2);
         clientProperties.setProperty(PHOENIX_HA_FALLBACK_CLUSTER_KEY, CLUSTERS.getJdbcUrl1(haGroup));
-        // no cluster role record for the HA group with name haGroupName2
+        // no HAGroupStore for the HA group with name haGroupName2
         try (Connection conn = DriverManager.getConnection(jdbcHAUrl, clientProperties)) {
             // connection is PhoenixConnection instead of HA connection (failover or parallel)
             assertTrue(conn instanceof PhoenixConnection);
@@ -318,7 +318,7 @@ public class HighAvailabilityGroup2IT {
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName2);
         }
 
-        // disable fallback feature even if the cluster role record is missing for this group
+        // disable fallback feature even if the HAGroupStore is missing for this group
         clientProperties.setProperty(PHOENIX_HA_SHOULD_FALLBACK_WHEN_MISSING_CRR_KEY, "false");
         try {
             DriverManager.getConnection(jdbcHAUrl, clientProperties);
@@ -338,11 +338,11 @@ public class HighAvailabilityGroup2IT {
         }
 
 
-        // Now create the cluster role record
+        // Now create the HAGroupStore
         CLUSTERS.initClusterRole(haGroupName2, HighAvailabilityPolicy.FAILOVER);
         // And invalidate the negative cache. We are doing it manually because the default time for
         // expireAfterWrite is too long for testing. We do not need to test the cache per se.
-        HighAvailabilityGroup.MISSING_CRR_GROUPS_CACHE.invalidateAll();
+        HighAvailabilityGroup.MISSING_HA_GROUP_STORES_CACHE.invalidateAll();
 
         // After it is expired in the negative cache, the HA group will start serving HA connections
         try (Connection conn = DriverManager.getConnection(jdbcHAUrl, clientProperties)) {

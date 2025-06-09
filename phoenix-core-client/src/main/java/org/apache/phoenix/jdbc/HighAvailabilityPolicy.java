@@ -18,9 +18,9 @@
 
 package org.apache.phoenix.jdbc;
 
-import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.ACTIVE;
-import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY;
-import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.STANDBY;
+import static org.apache.phoenix.jdbc.HAGroupStore.ClusterRole.ACTIVE;
+import static org.apache.phoenix.jdbc.HAGroupStore.ClusterRole.ACTIVE_TO_STANDBY;
+import static org.apache.phoenix.jdbc.HAGroupStore.ClusterRole.STANDBY;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -63,46 +63,46 @@ public enum HighAvailabilityPolicy {
          * ACTIVE_TO_STANDBY --> ACTIVE (Doing nothing as we have already invalidated cqsi when we
          *      transitioned from STANDBY to ACTIVE_TO_STANDBY)
          * @param haGroup The high availability (HA) group
-         * @param oldRecord The older cluster role record cached in this client for the given HA group
-         * @param newRecord New cluster role record read from one ZooKeeper cluster znode
+         * @param oldHaGroupStore The older HAGroupStore cached in this client for the given HA group
+         * @param newHaGroupStore New HAGroupStore read from one ZooKeeper cluster znode
          * @throws SQLException
          */
         @Override
-        void transitClusterRole(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
-                ClusterRoleRecord newRecord) throws SQLException {
-            if (newRecord.getRole1() == ACTIVE && newRecord.getRole2() == ACTIVE) {
+        void transitClusterRole(HighAvailabilityGroup haGroup, HAGroupStore oldHaGroupStore,
+                HAGroupStore newHaGroupStore) throws SQLException {
+            if (newHaGroupStore.getRole1() == ACTIVE && newHaGroupStore.getRole2() == ACTIVE) {
                 LOG.warn("Both cluster roles are ACTIVE which is invalid state for FailoverPolicy" +
                         "Doing nothing for Cluster Role Change");
                 return;
             }
-            if ((oldRecord.getRole1() == ACTIVE || oldRecord.getRole1() == ACTIVE_TO_STANDBY)
-                    && newRecord.getRole1() == STANDBY) {
-                transitStandby(haGroup, oldRecord.getUrl1(), oldRecord.getRegistryType());
+            if ((oldHaGroupStore.getRole1() == ACTIVE || oldHaGroupStore.getRole1() == ACTIVE_TO_STANDBY)
+                    && newHaGroupStore.getRole1() == STANDBY) {
+                transitStandby(haGroup, oldHaGroupStore.getUrl1(), oldHaGroupStore.getRegistryType());
             }
-            if ((oldRecord.getRole2() == ACTIVE || oldRecord.getRole2() == ACTIVE_TO_STANDBY)
-                    && newRecord.getRole2() == STANDBY) {
-                transitStandby(haGroup, oldRecord.getUrl2(), oldRecord.getRegistryType());
+            if ((oldHaGroupStore.getRole2() == ACTIVE || oldHaGroupStore.getRole2() == ACTIVE_TO_STANDBY)
+                    && newHaGroupStore.getRole2() == STANDBY) {
+                transitStandby(haGroup, oldHaGroupStore.getUrl2(), oldHaGroupStore.getRegistryType());
             }
-            if ((oldRecord.getRole1() != ACTIVE && oldRecord.getRole1() != ACTIVE_TO_STANDBY)
-                    && (newRecord.getRole1() == ACTIVE || newRecord.getRole1() == ACTIVE_TO_STANDBY)) {
-                transitActive(haGroup, oldRecord.getUrl1(), oldRecord.getRegistryType());
+            if ((oldHaGroupStore.getRole1() != ACTIVE && oldHaGroupStore.getRole1() != ACTIVE_TO_STANDBY)
+                    && (newHaGroupStore.getRole1() == ACTIVE || newHaGroupStore.getRole1() == ACTIVE_TO_STANDBY)) {
+                transitActive(haGroup, oldHaGroupStore.getUrl1(), oldHaGroupStore.getRegistryType());
             }
-            if ((oldRecord.getRole2() != ACTIVE && oldRecord.getRole2() != ACTIVE_TO_STANDBY)
-                    && (newRecord.getRole2() == ACTIVE || newRecord.getRole2() == ACTIVE_TO_STANDBY)) {
-                transitActive(haGroup, oldRecord.getUrl2(), oldRecord.getRegistryType());
+            if ((oldHaGroupStore.getRole2() != ACTIVE && oldHaGroupStore.getRole2() != ACTIVE_TO_STANDBY)
+                    && (newHaGroupStore.getRole2() == ACTIVE || newHaGroupStore.getRole2() == ACTIVE_TO_STANDBY)) {
+                transitActive(haGroup, oldHaGroupStore.getUrl2(), oldHaGroupStore.getRegistryType());
             }
         }
 
         @Override
-        void transitRoleRecordRegistry(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
-                                       ClusterRoleRecord newRecord) throws SQLException {
-            Optional<String> activeUrl = oldRecord.getActiveUrl();
+        void transitHAGroupStoreRegistry(HighAvailabilityGroup haGroup, HAGroupStore oldHaGroupStore,
+                                         HAGroupStore newHaGroupStore) throws SQLException {
+            Optional<String> activeUrl = oldHaGroupStore.getActiveUrl();
 
             //Close connections for Active HBase cluster as there is a change in Registry Type
             if (activeUrl.isPresent()) {
                 LOG.info("Cluster {} has a change in registryType in HA group {}, now closing "
-                        + "all its connections", activeUrl.get(), oldRecord.getRegistryType());
-                closeConnections(haGroup, activeUrl.get(), oldRecord.getRegistryType());
+                        + "all its connections", activeUrl.get(), oldHaGroupStore.getRegistryType());
+                closeConnections(haGroup, activeUrl.get(), oldHaGroupStore.getRegistryType());
             } else {
                 LOG.info("None of the cluster in HA Group {} is active", haGroup);
             }
@@ -110,8 +110,8 @@ public enum HighAvailabilityPolicy {
 
         /**
          * For FAILOVER Policy if there is a change in active url or there is no new active url then close all connections.
-         * In below examples only a portion of CRR is shown, url1, url2 are current urls present in
-         * clusterRoleRecord and url3, url4 are new urls in clusterRoleRecord
+         * In below examples only a portion of HAGroupStore is shown, url1, url2 are current urls present in
+         * HAGroupStore and url3, url4 are new urls in HAGroupStore
          * (url1, ACTIVE, url2, STANDBY) --> (url1, ACTIVE, url3, STANDBY) //Nothing is needed as only Standby url changed
          * (url1, ACTIVE, url2, STANDBY) --> (url3, ACTIVE, url2, STANDBY) //Active url change close connections
          * (url1, ACTIVE, url2, STANDBY) --> (url3, ACTIVE, url4, STANDBY) //Active url change close connections
@@ -120,38 +120,38 @@ public enum HighAvailabilityPolicy {
          * (url1, OFFLINE, url2, STANDBY) --> (url3, ACTIVE, url2, STANDBY) //Nothing to do as there were no connections
          * (url1, ACTIVE, url2, STANDBY) --> (url3, OFFLINE, url2, STANDBY) //Closing old connections as no new active url
          * @param haGroup The high availability (HA) group
-         * @param oldRecord The older cluster role record cached in this client for the given HA group
-         * @param newRecord New cluster role record read from one ZooKeeper cluster znode
+         * @param oldHaGroupStore The older HAGroupStore cached in this client for the given HA group
+         * @param newHaGroupStore New HAGroupStore read from one ZooKeeper cluster znode
          * @throws SQLException when not able to close connections
          */
         @Override
-        void transitClusterUrl(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
-                               ClusterRoleRecord newRecord) throws SQLException {
-            Optional<String> activeUrl = oldRecord.getActiveUrl();
-            Optional<String> newActiveUrl = newRecord.getActiveUrl();
+        void transitClusterUrl(HighAvailabilityGroup haGroup, HAGroupStore oldHaGroupStore,
+                               HAGroupStore newHaGroupStore) throws SQLException {
+            Optional<String> activeUrl = oldHaGroupStore.getActiveUrl();
+            Optional<String> newActiveUrl = newHaGroupStore.getActiveUrl();
             if (activeUrl.isPresent()) {
                 if (newActiveUrl.isPresent()) {
                     if (activeUrl.get().equals(newActiveUrl.get())) {
-                        LOG.info("Active URL is same after cluster role record transition" +
+                        LOG.info("Active URL is same after HAGroupStore transition" +
                                 "Doing nothing for FailoverPhoenixConnections");
                     } else {
-                        LOG.info("Active url of clusterRoleRecord changed from {} to {}, " +
+                        LOG.info("Active url of HAGroupStore changed from {} to {}, " +
                                         "closing old connections", activeUrl.get(), newActiveUrl.get());
-                        closeConnections(haGroup, activeUrl.get(), oldRecord.getRegistryType());
+                        closeConnections(haGroup, activeUrl.get(), oldHaGroupStore.getRegistryType());
                     }
                 } else {
-                    LOG.info("Couldn't find active url in new ClusterRoleRecord," +
+                    LOG.info("Couldn't find active url in new HAGroupStore," +
                             "Closing old connections");
-                    closeConnections(haGroup, activeUrl.get(), oldRecord.getRegistryType());
+                    closeConnections(haGroup, activeUrl.get(), oldHaGroupStore.getRegistryType());
                 }
             } else {
-                LOG.info("Couldn't find active url in old ClusterRoleRecord, " +
+                LOG.info("Couldn't find active url in old HAGroupStore, " +
                         "Doing nothing for FailoverPhoenixConnections");
             }
         }
 
         private void transitStandby(HighAvailabilityGroup haGroup, String url,
-                                    ClusterRoleRecord.RegistryType registryType) throws SQLException {
+                                    HAGroupStore.RegistryType registryType) throws SQLException {
             // Close connections when a previously ACTIVE HBase cluster becomes STANDBY.
             LOG.info("Cluster {} becomes STANDBY in HA group {}, now close all its connections",
                     url, haGroup.getGroupInfo());
@@ -159,7 +159,7 @@ public enum HighAvailabilityPolicy {
         }
 
         private void transitActive(HighAvailabilityGroup haGroup, String url,
-                                   ClusterRoleRecord.RegistryType registryType) throws SQLException {
+                                   HAGroupStore.RegistryType registryType) throws SQLException {
             // Invalidate CQS cache if any that has been closed but has not been cleared
                 for (HAURLInfo haurlInfo : HighAvailabilityGroup.URLS.get(haGroup.getGroupInfo())) {
                     String jdbcUrl = HighAvailabilityGroup.getJDBCUrl(url, haurlInfo, registryType);
@@ -191,46 +191,46 @@ public enum HighAvailabilityPolicy {
         }
 
         @Override
-        void transitClusterRole(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
-                ClusterRoleRecord newRecord) {
+        void transitClusterRole(HighAvailabilityGroup haGroup, HAGroupStore oldHaGroupStore,
+                HAGroupStore newHaGroupStore) {
             //No Action for Parallel Policy
         }
 
 
         @Override
-        void transitRoleRecordRegistry(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
-                                       ClusterRoleRecord newRecord) throws SQLException {
+        void transitHAGroupStoreRegistry(HighAvailabilityGroup haGroup, HAGroupStore oldHaGroupStore,
+                                         HAGroupStore newHaGroupStore) throws SQLException {
             //Close connections of both clusters as there is a change in registryType
             LOG.info("Cluster {} and {} has a change in registryType in HA group {}, now closing all its connections",
-                    oldRecord.getUrl1(), oldRecord.getUrl2() , oldRecord.getRegistryType());
+                    oldHaGroupStore.getUrl1(), oldHaGroupStore.getUrl2() , oldHaGroupStore.getRegistryType());
             //close connections for cluster 1
-            closeConnections(haGroup, oldRecord.getUrl1(), oldRecord.getRegistryType());
+            closeConnections(haGroup, oldHaGroupStore.getUrl1(), oldHaGroupStore.getRegistryType());
             //close connections for cluster 2
-            closeConnections(haGroup, oldRecord.getUrl2(), oldRecord.getRegistryType());
+            closeConnections(haGroup, oldHaGroupStore.getUrl2(), oldHaGroupStore.getRegistryType());
         }
 
         /**
          * For PARALLEL policy if there is a change in any of the url then ParallelPhoenixConnection
          * objects are invalid
          * @param haGroup The high availability (HA) group
-         * @param oldRecord The older cluster role record cached in this client for the given HA group
-         * @param newRecord New cluster role record read from one ZooKeeper cluster znode
+         * @param oldHaGroupStore The older HAGroupStore cached in this client for the given HA group
+         * @param newHaGroupStore New HAGroupStore read from one ZooKeeper cluster znode
          * @throws SQLException when not able to close connections
          */
         @Override
-        void transitClusterUrl(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
-                               ClusterRoleRecord newRecord) throws SQLException {
-            if (!Objects.equals(oldRecord.getUrl1(), newRecord.getUrl1()) &&
-                    !Objects.equals(oldRecord.getUrl1(), newRecord.getUrl2())) {
+        void transitClusterUrl(HighAvailabilityGroup haGroup, HAGroupStore oldHaGroupStore,
+                               HAGroupStore newHaGroupStore) throws SQLException {
+            if (!Objects.equals(oldHaGroupStore.getUrl1(), newHaGroupStore.getUrl1()) &&
+                    !Objects.equals(oldHaGroupStore.getUrl1(), newHaGroupStore.getUrl2())) {
                 LOG.info("Cluster {} is changed to {} in HA group {}, now closing all its connections",
-                        oldRecord.getUrl1(), newRecord.getUrl1(), haGroup);
-                closeConnections(haGroup, oldRecord.getUrl1(), oldRecord.getRegistryType());
+                        oldHaGroupStore.getUrl1(), newHaGroupStore.getUrl1(), haGroup);
+                closeConnections(haGroup, oldHaGroupStore.getUrl1(), oldHaGroupStore.getRegistryType());
             }
-            if (!Objects.equals(oldRecord.getUrl2(), newRecord.getUrl2()) &&
-                    !Objects.equals(oldRecord.getUrl2(), newRecord.getUrl1())) {
+            if (!Objects.equals(oldHaGroupStore.getUrl2(), newHaGroupStore.getUrl2()) &&
+                    !Objects.equals(oldHaGroupStore.getUrl2(), newHaGroupStore.getUrl1())) {
                 LOG.info("Cluster {} is changed to {} in HA group {}, now closing all its connections",
-                        oldRecord.getUrl2(), newRecord.getUrl2(), haGroup);
-                closeConnections(haGroup, oldRecord.getUrl2(), oldRecord.getRegistryType());
+                        oldHaGroupStore.getUrl2(), newHaGroupStore.getUrl2(), haGroup);
+                closeConnections(haGroup, oldHaGroupStore.getUrl2(), oldHaGroupStore.getRegistryType());
             }
 
         }
@@ -246,7 +246,7 @@ public enum HighAvailabilityPolicy {
      * @throws SQLException if fails to close the connections
      */
     private static void closeConnections(HighAvailabilityGroup haGroup, String url,
-                                         ClusterRoleRecord.RegistryType registryType) throws SQLException {
+                                         HAGroupStore.RegistryType registryType) throws SQLException {
         ConnectionQueryServices cqs = null;
         //Close connections for every HAURLInfo's (different principal) conn for a give HAGroup
         for (HAURLInfo haurlInfo : HighAvailabilityGroup.URLS.get(haGroup.getGroupInfo())) {
@@ -265,9 +265,9 @@ public enum HighAvailabilityPolicy {
                     // so that any new connection will get error instead of creating a new CQS,
                     // CQS entry will stay in map until the cache expires and repopulated in cases
                     // of URL and registryType changes
-                    LOG.info("Closing CQS after clusterRoleRecord change for '{}'", url);
+                    LOG.info("Closing CQS after HAGroupStore change for '{}'", url);
                     cqs.close();
-                    LOG.info("Successfully closed CQS after clusterRoleRecord change for '{}'", url);
+                    LOG.info("Successfully closed CQS after HAGroupStore change for '{}'", url);
                 }
             }
         }
@@ -286,61 +286,61 @@ public enum HighAvailabilityPolicy {
             throws SQLException;
 
     /**
-     * Call-back function when a cluster role record transition is detected in the high availability group.
+     * Call-back function when a HAGroupStore transition is detected in the high availability group.
      *
      * @param haGroup The high availability (HA) group
-     * @param oldRecord The older cluster role record cached in this client for the given HA group
-     * @param newRecord New cluster role record read from one ZooKeeper cluster znode
-     * @throws SQLException if fails to handle the cluster role record transition
+     * @param oldHaGroupStore The older HAGroupStore cached in this client for the given HA group
+     * @param newHaGroupStore New HAGroupStore read from one ZooKeeper cluster znode
+     * @throws SQLException if fails to handle the HAGroupStore transition
      */
-    public void transitClusterRoleRecord(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
-                                           ClusterRoleRecord newRecord) throws SQLException {
-        if (oldRecord.getRegistryType() != newRecord.getRegistryType()) {
-            transitRoleRecordRegistry(haGroup, oldRecord, newRecord);
-        } else if (!oldRecord.getUrl1().equals(newRecord.getUrl1()) ||
-                !oldRecord.getUrl2().equals(newRecord.getUrl2())) {
+    public void transitHAGroupStore(HighAvailabilityGroup haGroup, HAGroupStore oldHaGroupStore,
+                                    HAGroupStore newHaGroupStore) throws SQLException {
+        if (oldHaGroupStore.getRegistryType() != newHaGroupStore.getRegistryType()) {
+            transitHAGroupStoreRegistry(haGroup, oldHaGroupStore, newHaGroupStore);
+        } else if (!oldHaGroupStore.getUrl1().equals(newHaGroupStore.getUrl1()) ||
+                !oldHaGroupStore.getUrl2().equals(newHaGroupStore.getUrl2())) {
             //If registryType is not changing then we need to check if any of the url is changing
             //as change in registryType closes all the current connections
-            transitClusterUrl(haGroup, oldRecord, newRecord);
+            transitClusterUrl(haGroup, oldHaGroupStore, newHaGroupStore);
         } else {
             //If both registryType and url is not changing then we need to check if there is a
             //role transition.
-            transitClusterRole(haGroup, oldRecord, newRecord);
+            transitClusterRole(haGroup, oldHaGroupStore, newHaGroupStore);
         }
     }
 
     /**
-     * Call-back function when only role transition is detected in the high availability group or clusterRoleRecord.
+     * Call-back function when only role transition is detected in the high availability group or HAGroupStore.
      *
      * @param haGroup The high availability (HA) group
-     * @param oldRecord The older cluster role record cached in this client for the given HA group
-     * @param newRecord New cluster role record read from one ZooKeeper cluster znode
+     * @param oldHaGroupStore The older HAGroupStore cached in this client for the given HA group
+     * @param newHaGroupStore New HAGroupStore read from one ZooKeeper cluster znode
      * @throws SQLException if fails to handle the cluster role transition
      */
-    abstract void transitClusterRole(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
-            ClusterRoleRecord newRecord) throws SQLException;
+    abstract void transitClusterRole(HighAvailabilityGroup haGroup, HAGroupStore oldHaGroupStore,
+            HAGroupStore newHaGroupStore) throws SQLException;
 
 
     /**
-     * Call-back function when only registry transition is detected in the high availability group or clusterRoleRecord.
+     * Call-back function when only registry transition is detected in the high availability group or HAGroupStore.
      *
      * @param haGroup The high availability (HA) group
-     * @param oldRecord The older cluster role record cached in this client for the given HA group
-     * @param newRecord New cluster role record read from one ZooKeeper cluster znode
-     * @throws SQLException if fails to handle the cluster role record registry transition
+     * @param oldHaGroupStore The older HAGroupStore cached in this client for the given HA group
+     * @param newHaGroupStore New HAGroupStore read from one ZooKeeper cluster znode
+     * @throws SQLException if fails to handle the HAGroupStore registry transition
      */
-    abstract void transitRoleRecordRegistry(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
-                                     ClusterRoleRecord newRecord) throws SQLException;
+    abstract void transitHAGroupStoreRegistry(HighAvailabilityGroup haGroup, HAGroupStore oldHaGroupStore,
+                                              HAGroupStore newHaGroupStore) throws SQLException;
 
     /**
-     * Call-back function when only url transition is detected in the high availability group or clusterRoleRecord.
+     * Call-back function when only url transition is detected in the high availability group or HAGroupStore.
      *
      * @param haGroup The high availability (HA) group
-     * @param oldRecord The older cluster role record cached in this client for the given HA group
-     * @param newRecord New cluster role record read from one ZooKeeper cluster znode
+     * @param oldHaGroupStore The older HAGroupStore cached in this client for the given HA group
+     * @param newHaGroupStore New HAGroupStore read from one ZooKeeper cluster znode
      * @throws SQLException if fails to handle the cluster url transition
      */
-    abstract void transitClusterUrl(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
-                                            ClusterRoleRecord newRecord) throws SQLException;
+    abstract void transitClusterUrl(HighAvailabilityGroup haGroup, HAGroupStore oldHaGroupStore,
+                                            HAGroupStore newHaGroupStore) throws SQLException;
 
 }

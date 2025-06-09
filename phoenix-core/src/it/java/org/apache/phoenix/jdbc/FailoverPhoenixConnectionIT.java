@@ -47,8 +47,6 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -56,15 +54,13 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.FailoverSQLException;
-import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
+import org.apache.phoenix.jdbc.HAGroupStore.ClusterRole;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
@@ -78,8 +74,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.rules.TestName;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -103,7 +97,7 @@ public class FailoverPhoenixConnectionIT {
     private String tableName;
     /** HA Group name for this test. */
     private String haGroupName;
-    private final ClusterRoleRecord.RegistryType registryType = ClusterRoleRecord.RegistryType.ZK;
+    private final HAGroupStore.RegistryType registryType = HAGroupStore.RegistryType.ZK;
 
     @BeforeClass
     public static void setUpBeforeClass() throws Exception {
@@ -308,7 +302,7 @@ public class FailoverPhoenixConnectionIT {
         PhoenixConnection wrappedConn = ((FailoverPhoenixConnection) conn).getWrappedConnection();
         // Following we create a new HA group and create a connection against this HA group
         String haGroupName2 = haGroup.getGroupInfo().getName() + "2";
-        initClusterRoleRecord(haGroupName2);
+        initHAGroupStore(haGroupName2);
         Properties clientProperties2 = new Properties(clientProperties);
         clientProperties2.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName2);
         Connection conn2 = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(), clientProperties2);
@@ -634,7 +628,7 @@ public class FailoverPhoenixConnectionIT {
     }
 
     /**
-     * Test transit cluster role record which should affect all the principals for a given HAGroup
+     * Test transit HAGroupStore which should affect all the principals for a given HAGroup
      */
     @Test(timeout = 300000)
     public void testAllConnectionsOfHAIsAffected() throws Exception {
@@ -649,7 +643,7 @@ public class FailoverPhoenixConnectionIT {
 
         // Following we create a new HA group and create a connection against this HA group with default PRINCIPAL
         String haGroupName2 = haGroup.getGroupInfo().getName() + "2";
-        initClusterRoleRecord(haGroupName2);
+        initHAGroupStore(haGroupName2);
         Properties clientProperties2 = new Properties(clientProperties);
         clientProperties2.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName2);
         Connection conn3 = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(), clientProperties2);
@@ -681,7 +675,7 @@ public class FailoverPhoenixConnectionIT {
         ConnectionQueryServices cqsi = PhoenixDriver.INSTANCE.getConnectionQueryServices(CLUSTERS.getJdbcUrl1(haGroup), clientProperties);
 
         String haGroupName2 = testName.getMethodName() + RandomStringUtils.randomAlphabetic(3);;
-        initClusterRoleRecord(haGroupName2);
+        initHAGroupStore(haGroupName2);
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName2);
         HighAvailabilityGroup haGroup2 = getHighAvailibilityGroup(CLUSTERS.getJdbcHAUrl(), clientProperties);
         Connection conn2 = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(), clientProperties); //PRINCIPAL,haGroupName2
@@ -693,7 +687,7 @@ public class FailoverPhoenixConnectionIT {
         FailoverPhoenixConnection fconn3 = (FailoverPhoenixConnection) conn3;
         ConnectionQueryServices cqsi3 = PhoenixDriver.INSTANCE.getConnectionQueryServices(CLUSTERS.
                 getJdbcUrlWithoutPrincipal(haGroup2, CLUSTERS.getURL(1,
-                        haGroup2.getRoleRecord().getRegistryType())), clientProperties);
+                        haGroup2.getHaGroupStore().getRegistryType())), clientProperties);
 
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName);
         String principal4 = RandomStringUtils.randomAlphabetic(5);
@@ -705,7 +699,7 @@ public class FailoverPhoenixConnectionIT {
         Assert.assertEquals(CLUSTERS.getJdbcUrl1(haGroup), fconn.getWrappedConnection().getURL());
         Assert.assertEquals(CLUSTERS.getJdbcUrl1(haGroup2), fconn2.getWrappedConnection().getURL());
         Assert.assertEquals(CLUSTERS.getJdbcUrlWithoutPrincipal(haGroup2, CLUSTERS.getURL(1,
-                haGroup2.getRoleRecord().getRegistryType())), fconn3.getWrappedConnection().getURL());
+                haGroup2.getHaGroupStore().getRegistryType())), fconn3.getWrappedConnection().getURL());
         Assert.assertEquals(CLUSTERS.getJdbcUrl1(haGroup, principal4), fconn4.getWrappedConnection().getURL());
 
         //Check cqsi objects should be same with what we get from connections
@@ -829,7 +823,7 @@ public class FailoverPhoenixConnectionIT {
         DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(principal), clientProperties);
     }
 
-    private void initClusterRoleRecord(String haGroupName) throws Exception {
+    private void initHAGroupStore(String haGroupName) throws Exception {
             CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER);
     }
 }

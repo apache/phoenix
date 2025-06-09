@@ -26,10 +26,9 @@ import java.util.Properties;
 
 import javax.annotation.Nullable;
 
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.phoenix.jdbc.AbstractRPCConnectionInfo;
-import org.apache.phoenix.jdbc.ClusterRoleRecord;
+import org.apache.phoenix.jdbc.HAGroupStore;
 import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.jdbc.ZKConnectionInfo;
 import org.apache.phoenix.query.QueryServices;
@@ -225,7 +224,7 @@ public class JDBCUtil {
             connInfo = ConnectionInfo.create(jdbcUrl, null, null);
             StringBuilder sb = new StringBuilder();
             if (connInfo instanceof AbstractRPCConnectionInfo) {
-                //TODO: check if anything else is needed for RPCRegistry connections and do we need to store them in CRR
+                //TODO: check if anything else is needed for RPCRegistry connections and do we need to store them in HAGroupStore
                 AbstractRPCConnectionInfo rpcInfo = (AbstractRPCConnectionInfo) connInfo;
                 sb.append(rpcInfo.getBoostrapServers().replaceAll(":", "\\\\:"));
             } else {
@@ -246,13 +245,13 @@ public class JDBCUtil {
      * Get the formatted URL, in case of ZK URL it returns ZK quorum and root and node part of the URL and in case of
      * Master or RPC URL it returns bootstrap servers with ports
      * Use this method instead of {@link #formatUrl(String)} if you want to format url specific to a protocol or
-     * for urls coming from roleRecord as urls for fetching roleRecords those don't have protocol in the url and could
+     * for urls coming from HaGroupStore as urls for fetching HaGroupStores those don't have protocol in the url and could
      * be normalized differently based on configs.
      * @param url that needs to be formatted
      * @param registryType format based on the given registryType
      * @return formatted url without protocol
      */
-    public static String formatUrl(String url, ClusterRoleRecord.RegistryType registryType) {
+    public static String formatUrl(String url, HAGroupStore.RegistryType registryType) {
         if (!url.startsWith(PhoenixRuntime.JDBC_PROTOCOL)) {
             switch (registryType) {
                 case ZK:

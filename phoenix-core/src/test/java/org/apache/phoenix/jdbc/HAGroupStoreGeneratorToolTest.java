@@ -17,8 +17,8 @@
  */
 package org.apache.phoenix.jdbc;
 
-import static org.apache.phoenix.jdbc.ClusterRoleRecordGeneratorTool.PHOENIX_HA_GROUP_POLICY_ATTR_FORMAT;
-import static org.apache.phoenix.jdbc.ClusterRoleRecordGeneratorTool.PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT;
+import static org.apache.phoenix.jdbc.HAGroupStoreGeneratorTool.PHOENIX_HA_GROUP_POLICY_ATTR_FORMAT;
+import static org.apache.phoenix.jdbc.HAGroupStoreGeneratorTool.PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -32,7 +32,6 @@ import java.io.IOException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.replication.ReplicationAdmin;
 import org.apache.hadoop.hbase.replication.ReplicationPeerConfig;
 import org.junit.Before;
 import org.junit.Rule;
@@ -42,15 +41,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Unit test for {@link ClusterRoleRecordGeneratorTool}.
+ * Unit test for {@link HAGroupStoreGeneratorTool}.
  *
- * @see ClusterRoleRecordGeneratorToolIT
+ * @see HAGroupStoreGeneratorToolIT
  */
-public class ClusterRoleRecordGeneratorToolTest {
-    private static final Logger LOG = LoggerFactory.getLogger(ClusterRoleRecordGeneratorToolTest.class);
+public class HAGroupStoreGeneratorToolTest {
+    private static final Logger LOG = LoggerFactory.getLogger(HAGroupStoreGeneratorToolTest.class);
 
     private final Configuration conf = HBaseConfiguration.create();
-    private final ClusterRoleRecordGeneratorTool generator = new ClusterRoleRecordGeneratorTool();
+    private final HAGroupStoreGeneratorTool generator = new HAGroupStoreGeneratorTool();
 
     @Rule
     public final TestName testName = new TestName();
@@ -69,11 +68,11 @@ public class ClusterRoleRecordGeneratorToolTest {
 
         String id = PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT;
         when(admin.getReplicationPeerConfig(eq(id))).thenReturn(replicationConfig);
-        assertEquals(peerZk, ClusterRoleRecordGeneratorTool.getPeerClusterKey(admin, id));
+        assertEquals(peerZk, HAGroupStoreGeneratorTool.getPeerClusterKey(admin, id));
 
         id = "1984";
         when(admin.getReplicationPeerConfig(eq(id))).thenReturn(replicationConfig);
-        assertEquals(peerZk, ClusterRoleRecordGeneratorTool.getPeerClusterKey(admin, id));
+        assertEquals(peerZk, HAGroupStoreGeneratorTool.getPeerClusterKey(admin, id));
     }
 
     @Test

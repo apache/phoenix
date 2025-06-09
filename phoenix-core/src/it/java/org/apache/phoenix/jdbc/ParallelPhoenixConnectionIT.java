@@ -49,7 +49,6 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.junit.Assume.assumeTrue;
 
-import java.lang.reflect.Field;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -61,22 +60,17 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import org.apache.commons.lang3.RandomStringUtils;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
+import org.apache.phoenix.jdbc.HAGroupStore.ClusterRole;
 import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.monitoring.GlobalMetric;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.ConnectionQueryServices;
-import org.apache.phoenix.query.ConnectionQueryServicesImpl;
-import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -86,8 +80,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.rules.TestName;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -394,7 +386,7 @@ public class ParallelPhoenixConnectionIT {
 
                 CompletableFuture<PhoenixConnection> pConn = null;
                 int downClientPort = CLUSTERS.getHBaseCluster1().getZkCluster().getClientPort();
-                if(((ParallelPhoenixConnection) conn).getContext().getHaGroup().getRoleRecord().
+                if(((ParallelPhoenixConnection) conn).getContext().getHaGroup().getHaGroupStore().
                         getUrl1().contains(String.valueOf(downClientPort))) {
                     pConn = ((ParallelPhoenixConnection) conn).futureConnection2;
                 } else {
@@ -597,7 +589,7 @@ public class ParallelPhoenixConnectionIT {
 
     /**
      * This is to make sure all Phoenix connections are closed when registryType changes
-     * of a CRR , ZK --> MASTER
+     * of a HAGroupStore , ZK --> MASTER
      *
      * Test with many connections.
      */
@@ -608,8 +600,8 @@ public class ParallelPhoenixConnectionIT {
         for (short i = 0; i < numberOfConnections; i++) {
             connectionList.add(getParallelConnection());
         }
-        ClusterRoleRecord.RegistryType newRegistry = ClusterRoleRecord.RegistryType.MASTER;
-        CLUSTERS.transitClusterRoleRecordRegistry(haGroup, newRegistry);
+        HAGroupStore.RegistryType newRegistry = HAGroupStore.RegistryType.MASTER;
+        CLUSTERS.transitHAGroupStoreRegistry(haGroup, newRegistry);
 
         for (short i = 0; i < numberOfConnections; i++) {
             LOG.info("Asserting connection number {}", i);
@@ -622,7 +614,7 @@ public class ParallelPhoenixConnectionIT {
 
     /**
      * This is to make sure all Phoenix connections are closed when registryType changes
-     * of a CRR. ZK --> RPC
+     * of a HAGroupStore. ZK --> RPC
      *
      * Test with many connections.
      */
@@ -633,10 +625,10 @@ public class ParallelPhoenixConnectionIT {
         for (short i = 0; i < numberOfConnections; i++) {
             connectionList.add(getParallelConnection());
         }
-        ClusterRoleRecord.RegistryType newRegistry = ClusterRoleRecord.RegistryType.RPC;
+        HAGroupStore.RegistryType newRegistry = HAGroupStore.RegistryType.RPC;
         //RPC Registry is only there in hbase version greater than 2.5.0
         assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.5.0")>=0);
-        CLUSTERS.transitClusterRoleRecordRegistry(haGroup, newRegistry);
+        CLUSTERS.transitHAGroupStoreRegistry(haGroup, newRegistry);
 
         for (short i = 0; i < numberOfConnections; i++) {
             LOG.info("Asserting connection number {}", i);

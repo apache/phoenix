@@ -48,8 +48,8 @@ public class HAGroupStoreClient implements Closeable {
     private static volatile HAGroupStoreClient haGroupStoreClientInstance;
     private PhoenixHAAdmin phoenixHaAdmin;
     private static final Logger LOGGER = LoggerFactory.getLogger(HAGroupStoreClient.class);
-    // Map contains <ClusterRole, Map<HAGroupName(String), ClusterRoleRecord>>
-    private final ConcurrentHashMap<ClusterRoleRecord.ClusterRole, ConcurrentHashMap<String, ClusterRoleRecord>> clusterRoleToCRRMap
+    // Map contains <ClusterRole, Map<HAGroupName(String), HAGroupStore>>
+    private final ConcurrentHashMap<HAGroupStore.ClusterRole, ConcurrentHashMap<String, HAGroupStore>> clusterRoleToHAGroupStoreMap
             = new ConcurrentHashMap<>();
     private PathChildrenCache pathChildrenCache;
     private volatile boolean isHealthy;
@@ -89,23 +89,23 @@ public class HAGroupStoreClient implements Closeable {
                 pathChildrenCache.getListenable().addListener((client, event) -> {
                     LOGGER.info("HAGroupStoreClient PathChildrenCache Received event for type {}", event.getType());
                     final ChildData childData = event.getData();
-                    ClusterRoleRecord eventCRR = extractCRROrNull(childData);
+                    HAGroupStore eventHAGroupStore = extractHAGroupStoreOrNull(childData);
                     switch (event.getType()) {
                         case CHILD_ADDED:
                         case CHILD_UPDATED:
-                            if (eventCRR != null && eventCRR.getHaGroupName() != null) {
-                                updateClusterRoleRecordMap(eventCRR);
+                            if (eventHAGroupStore != null && eventHAGroupStore.getHaGroupName() != null) {
+                                updateHAGroupStoreMap(eventHAGroupStore);
                             }
                             break;
                         case CHILD_REMOVED:
                             // In case of CHILD_REMOVED, we get the old version of data that was just deleted in event.
-                            if (eventCRR != null && eventCRR.getHaGroupName() != null
-                                    && !eventCRR.getHaGroupName().isEmpty()
-                                    && eventCRR.getRole(phoenixHaAdmin.getZkUrl()) != null) {
-                                LOGGER.info("Received CHILD_REMOVED event, Removing CRR {} from existing CRR Map {}", eventCRR, clusterRoleToCRRMap);
-                                final ClusterRoleRecord.ClusterRole role = eventCRR.getRole(phoenixHaAdmin.getZkUrl());
-                                clusterRoleToCRRMap.putIfAbsent(role, new ConcurrentHashMap<>());
-                                clusterRoleToCRRMap.get(role).remove(eventCRR.getHaGroupName());
+                            if (eventHAGroupStore != null && eventHAGroupStore.getHaGroupName() != null
+                                    && !eventHAGroupStore.getHaGroupName().isEmpty()
+                                    && eventHAGroupStore.getRole(phoenixHaAdmin.getZkUrl()) != null) {
+                                LOGGER.info("Received CHILD_REMOVED event, Removing HAGroupStore {} from existing HAGroupStore Map {}", eventHAGroupStore, clusterRoleToHAGroupStoreMap);
+                                final HAGroupStore.ClusterRole role = eventHAGroupStore.getRole(phoenixHaAdmin.getZkUrl());
+                                clusterRoleToHAGroupStoreMap.putIfAbsent(role, new ConcurrentHashMap<>());
+                                clusterRoleToHAGroupStoreMap.get(role).remove(eventHAGroupStore.getHaGroupName());
                             }
                             break;
                         case INITIALIZED:
@@ -126,47 +126,47 @@ public class HAGroupStoreClient implements Closeable {
             pathChildrenCache.start(PathChildrenCache.StartMode.POST_INITIALIZED_EVENT);
             this.pathChildrenCache = pathChildrenCache;
             isHealthy = latch.await(HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-            buildClusterRoleToCRRMap();
+            buildClusterRoleToHAGroupStoreMap();
         } catch (Exception e) {
             isHealthy = false;
             LOGGER.error("Unexpected error occurred while initializing HAGroupStoreClient, marking cache as unhealthy", e);
         }
     }
 
-    private ClusterRoleRecord extractCRROrNull(final ChildData childData) {
+    private HAGroupStore extractHAGroupStoreOrNull(final ChildData childData) {
         if (childData != null) {
             byte[] data = childData.getData();
-            return ClusterRoleRecord.fromJson(data).orElse(null);
+            return HAGroupStore.fromJson(data).orElse(null);
         }
         return null;
     }
 
-    private void updateClusterRoleRecordMap(final ClusterRoleRecord crr) {
-        if (crr != null && crr.getHaGroupName() != null && crr.getRole(phoenixHaAdmin.getZkUrl()) != null) {
-            ClusterRoleRecord.ClusterRole role = crr.getRole(phoenixHaAdmin.getZkUrl());
-            LOGGER.info("Updating Existing CRR Map {} with new CRR {}", clusterRoleToCRRMap, crr);
-            clusterRoleToCRRMap.putIfAbsent(role, new ConcurrentHashMap<>());
-            clusterRoleToCRRMap.get(role).put(crr.getHaGroupName(), crr);
-            LOGGER.info("Added new CRR {} to CRR Map", crr);
+    private void updateHAGroupStoreMap(final HAGroupStore haGroupStore) {
+        if (haGroupStore != null && haGroupStore.getHaGroupName() != null && haGroupStore.getRole(phoenixHaAdmin.getZkUrl()) != null) {
+            HAGroupStore.ClusterRole role = haGroupStore.getRole(phoenixHaAdmin.getZkUrl());
+            LOGGER.info("Updating Existing HAGroupStore Map {} with new HAGroupStore {}", clusterRoleToHAGroupStoreMap, haGroupStore);
+            clusterRoleToHAGroupStoreMap.putIfAbsent(role, new ConcurrentHashMap<>());
+            clusterRoleToHAGroupStoreMap.get(role).put(haGroupStore.getHaGroupName(), haGroupStore);
+            LOGGER.info("Added new HAGroupStore {} to HAGroupStore Map", haGroupStore);
             // Remove any pre-existing mapping with any other role for this HAGroupName
-            for (ClusterRoleRecord.ClusterRole mapRole : clusterRoleToCRRMap.keySet()) {
+            for (HAGroupStore.ClusterRole mapRole : clusterRoleToHAGroupStoreMap.keySet()) {
                 if (mapRole != role) {
-                    ConcurrentHashMap<String, ClusterRoleRecord> roleWiseMap = clusterRoleToCRRMap.get(mapRole);
-                    if (roleWiseMap.containsKey(crr.getHaGroupName())) {
-                        LOGGER.info("Removing any pre-existing mapping with role {} for HAGroupName {}", mapRole, crr.getHaGroupName());
-                        roleWiseMap.remove(crr.getHaGroupName());
+                    ConcurrentHashMap<String, HAGroupStore> roleWiseMap = clusterRoleToHAGroupStoreMap.get(mapRole);
+                    if (roleWiseMap.containsKey(haGroupStore.getHaGroupName())) {
+                        LOGGER.info("Removing any pre-existing mapping with role {} for HAGroupName {}", mapRole, haGroupStore.getHaGroupName());
+                        roleWiseMap.remove(haGroupStore.getHaGroupName());
                     }
                 }
             }
-            LOGGER.info("Final Updated CRR Map {}", clusterRoleToCRRMap);
+            LOGGER.info("Final Updated HAGroupStore Map {}", clusterRoleToHAGroupStoreMap);
         }
     }
 
-    private void buildClusterRoleToCRRMap() {
-        List<ClusterRoleRecord> clusterRoleRecords = pathChildrenCache.getCurrentData().stream().map(this::extractCRROrNull)
+    private void buildClusterRoleToHAGroupStoreMap() {
+        List<HAGroupStore> haGroupStores = pathChildrenCache.getCurrentData().stream().map(this::extractHAGroupStoreOrNull)
                 .filter(Objects::nonNull).collect(Collectors.toList());
-        for (ClusterRoleRecord crr : clusterRoleRecords) {
-            updateClusterRoleRecordMap(crr);
+        for (HAGroupStore haGroupStore : haGroupStores) {
+            updateHAGroupStoreMap(haGroupStore);
         }
     }
 
@@ -179,7 +179,7 @@ public class HAGroupStoreClient implements Closeable {
         // Completely rebuild the internal cache by querying for all needed data
         // WITHOUT generating any events to send to listeners.
         pathChildrenCache.rebuild();
-        buildClusterRoleToCRRMap();
+        buildClusterRoleToHAGroupStoreMap();
         LOGGER.info("Rebuild Complete for HAGroupStoreClient");
     }
 
@@ -188,7 +188,7 @@ public class HAGroupStoreClient implements Closeable {
     public void close() {
         try {
             LOGGER.info("Closing HAGroupStoreClient");
-            clusterRoleToCRRMap.clear();
+            clusterRoleToHAGroupStoreMap.clear();
             if (pathChildrenCache != null) {
                 pathChildrenCache.close();
             }
@@ -198,10 +198,10 @@ public class HAGroupStoreClient implements Closeable {
         }
     }
 
-    public List<ClusterRoleRecord> getCRRsByClusterRole(ClusterRoleRecord.ClusterRole clusterRole) throws IOException {
+    public List<HAGroupStore> getGroupStoresByClusterRole(HAGroupStore.ClusterRole clusterRole) throws IOException {
         if (!isHealthy) {
             throw new IOException("HAGroupStoreClient is not healthy");
         }
-        return ImmutableList.copyOf(clusterRoleToCRRMap.getOrDefault(clusterRole, new ConcurrentHashMap<>()).values());
+        return ImmutableList.copyOf(clusterRoleToHAGroupStoreMap.getOrDefault(clusterRole, new ConcurrentHashMap<>()).values());
     }
 }

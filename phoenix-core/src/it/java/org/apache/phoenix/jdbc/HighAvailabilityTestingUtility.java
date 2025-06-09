@@ -31,7 +31,7 @@ import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.replication.ReplicationPeerConfig;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
-import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
+import org.apache.phoenix.jdbc.HAGroupStore.ClusterRole;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,7 +57,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_REPLICATION_KEY;
 import static org.apache.hadoop.test.GenericTestUtils.waitFor;
 import static org.apache.phoenix.hbase.index.write.AbstractParallelWriterIndexCommitter.NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY;
 import static org.apache.phoenix.hbase.index.write.IndexWriter.INDEX_COMMITTER_CONF_KEY;
-import static org.apache.phoenix.jdbc.ClusterRoleRecordGeneratorTool.PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT;
+import static org.apache.phoenix.jdbc.HAGroupStoreGeneratorTool.PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT;
 import static org.apache.phoenix.jdbc.FailoverPhoenixConnection.FAILOVER_TIMEOUT_MS_ATTR;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.*;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.HighAvailibilityCuratorProvider;
@@ -144,7 +144,7 @@ public class HighAvailabilityTestingUtility {
         /**
          * Get Specific url of specific cluster based on index and registryType
          */
-        public String getURL(int clusterIndex, ClusterRoleRecord.RegistryType registryType) {
+        public String getURL(int clusterIndex, HAGroupStore.RegistryType registryType) {
             if (registryType == null) {
                 return clusterIndex == 1 ? zkUrl1 : zkUrl2;
             }
@@ -164,29 +164,29 @@ public class HighAvailabilityTestingUtility {
         /** initialize two ZK clusters for cluster role znode. */
         public void initClusterRole(String haGroupName, HighAvailabilityPolicy policy)
                 throws Exception {
-            ClusterRoleRecord record = new ClusterRoleRecord(
+            HAGroupStore haGroupStore = new HAGroupStore(
                     haGroupName, policy,
                     getZkUrl1(), ClusterRole.ACTIVE,
                     getZkUrl2(), ClusterRole.STANDBY,
                     1);
-            addRoleRecordToClusters(record);
+            addHaGroupStoreToClusters(haGroupStore);
         }
 
         public void initClusterRole(String haGroupName, HighAvailabilityPolicy policy,
-                                    ClusterRoleRecord.RegistryType type) throws Exception {
-            ClusterRoleRecord record = new ClusterRoleRecord(
+                                    HAGroupStore.RegistryType type) throws Exception {
+            HAGroupStore haGroupStore = new HAGroupStore(
                     haGroupName, policy, type,
                     getURL(1, type), ClusterRole.ACTIVE,
                     getURL(2, type), ClusterRole.STANDBY,
                     1);
-            addRoleRecordToClusters(record);
+            addHaGroupStoreToClusters(haGroupStore);
         }
 
-        private void addRoleRecordToClusters(ClusterRoleRecord record) throws Exception {
+        private void addHaGroupStoreToClusters(HAGroupStore haGroupStore) throws Exception {
             int failures = 0;
             do {
                 try {
-                    haAdmin1.createOrUpdateDataOnZookeeper(record);
+                    haAdmin1.createOrUpdateDataOnZookeeper(haGroupStore);
                 } catch (Exception e) {
                     failures++;
                 }
@@ -194,7 +194,7 @@ public class HighAvailabilityTestingUtility {
             failures = 0;
             do {
                 try {
-                    haAdmin2.createOrUpdateDataOnZookeeper(record);
+                    haAdmin2.createOrUpdateDataOnZookeeper(haGroupStore);
                 } catch (Exception e) {
                     failures++;
                     Thread.sleep(200);
@@ -211,72 +211,72 @@ public class HighAvailabilityTestingUtility {
          */
         public void transitClusterRole(HighAvailabilityGroup haGroup, ClusterRole role1,
                 ClusterRole role2) throws Exception {
-            final ClusterRoleRecord newRoleRecord = new ClusterRoleRecord(
-                    haGroup.getGroupInfo().getName(), haGroup.getRoleRecord().getPolicy(),
-                    haGroup.getRoleRecord().getRegistryType(),
-                    getURL(1, haGroup.getRoleRecord().getRegistryType()), role1,
-                    getURL(2, haGroup.getRoleRecord().getRegistryType()), role2,
-                    haGroup.getRoleRecord().getVersion() + 1); // always use a newer version
-            applyNewRoleRecord(newRoleRecord, haGroup);
+            final HAGroupStore newHaGroupStore = new HAGroupStore(
+                    haGroup.getGroupInfo().getName(), haGroup.getHaGroupStore().getPolicy(),
+                    haGroup.getHaGroupStore().getRegistryType(),
+                    getURL(1, haGroup.getHaGroupStore().getRegistryType()), role1,
+                    getURL(2, haGroup.getHaGroupStore().getRegistryType()), role2,
+                    haGroup.getHaGroupStore().getVersion() + 1); // always use a newer version
+            applyNewHAGroupStore(newHaGroupStore, haGroup);
         }
 
         /**
-         * Set registryType for roleRecord and wait the cluster role transition to happen.
+         * Set registryType for haGroupStore and wait the cluster role transition to happen.
          *
          * @param haGroup the HA group name
-         * @param type RegistryType to change roleRecord to
+         * @param type RegistryType to change haGroupStore to
          */
-        public void transitClusterRoleRecordRegistry(HighAvailabilityGroup haGroup,
-                                                     ClusterRoleRecord.RegistryType type) throws Exception {
-            final ClusterRoleRecord newRoleRecord = new ClusterRoleRecord(
-                    haGroup.getGroupInfo().getName(), haGroup.getRoleRecord().getPolicy(),
+        public void transitHAGroupStoreRegistry(HighAvailabilityGroup haGroup,
+                                                HAGroupStore.RegistryType type) throws Exception {
+            final HAGroupStore newHaGroupStore = new HAGroupStore(
+                    haGroup.getGroupInfo().getName(), haGroup.getHaGroupStore().getPolicy(),
                     type,
                     getURL(1, type), ClusterRole.ACTIVE,
                     getURL(2, type), ClusterRole.STANDBY,
-                    haGroup.getRoleRecord().getVersion() + 1); // always use a newer version
-            applyNewRoleRecord(newRoleRecord, haGroup);
+                    haGroup.getHaGroupStore().getVersion() + 1); // always use a newer version
+            applyNewHAGroupStore(newHaGroupStore, haGroup);
         }
 
-        public void refreshClusterRoleRecordAfterClusterRestart(HighAvailabilityGroup haGroup,
-                                                ClusterRole role1, ClusterRole role2) throws Exception {
-            final ClusterRoleRecord newRoleRecord = new ClusterRoleRecord(
-                    haGroup.getGroupInfo().getName(), haGroup.getRoleRecord().getPolicy(),
-                    haGroup.getRoleRecord().getRegistryType(),
-                    getURL(1, haGroup.getRoleRecord().getRegistryType()), role1,
-                    getURL(2, haGroup.getRoleRecord().getRegistryType()), role2,
-                    haGroup.getRoleRecord().getVersion() + 1); // always use a newer version
-            applyNewRoleRecord(newRoleRecord, haGroup);
+        public void refreshHAGroupStoreAfterClusterRestart(HighAvailabilityGroup haGroup,
+                                                           ClusterRole role1, ClusterRole role2) throws Exception {
+            final HAGroupStore newHaGroupStore = new HAGroupStore(
+                    haGroup.getGroupInfo().getName(), haGroup.getHaGroupStore().getPolicy(),
+                    haGroup.getHaGroupStore().getRegistryType(),
+                    getURL(1, haGroup.getHaGroupStore().getRegistryType()), role1,
+                    getURL(2, haGroup.getHaGroupStore().getRegistryType()), role2,
+                    haGroup.getHaGroupStore().getVersion() + 1); // always use a newer version
+            applyNewHAGroupStore(newHaGroupStore, haGroup);
         }
 
-        private void applyNewRoleRecord(ClusterRoleRecord newRoleRecord,
-                                        HighAvailabilityGroup haGroup) throws Exception {
+        private void applyNewHAGroupStore(HAGroupStore newGroupStore,
+                                          HighAvailabilityGroup haGroup) throws Exception {
             LOG.info("Transiting cluster role for HA group {} V{}->V{}, existing: {}, new: {}",
-                    haGroup.getGroupInfo().getName(), haGroup.getRoleRecord().getVersion(),
-                    newRoleRecord.getVersion(), haGroup.getRoleRecord(), newRoleRecord);
+                    haGroup.getGroupInfo().getName(), haGroup.getHaGroupStore().getVersion(),
+                    newGroupStore.getVersion(), haGroup.getHaGroupStore(), newGroupStore);
             boolean successAtLeastOnce = false;
             try {
-                haAdmin1.createOrUpdateDataOnZookeeper(newRoleRecord);
+                haAdmin1.createOrUpdateDataOnZookeeper(newGroupStore);
                 successAtLeastOnce = true;
             } catch (IOException e) {
-                LOG.warn("Fail to update new record on {} because {}", getZkUrl1(), e.getMessage());
+                LOG.warn("Fail to update new haGroupStore on {} because {}", getZkUrl1(), e.getMessage());
             }
             try {
-                haAdmin2.createOrUpdateDataOnZookeeper(newRoleRecord);
+                haAdmin2.createOrUpdateDataOnZookeeper(newGroupStore);
                 successAtLeastOnce = true;
             } catch (IOException e) {
-                LOG.warn("Fail to update new record on {} because {}", getZkUrl2(), e.getMessage());
+                LOG.warn("Fail to update new haGroupStore on {} because {}", getZkUrl2(), e.getMessage());
             }
 
             if (!successAtLeastOnce) {
-                throw new IOException("Failed to update the new role record on either cluster");
+                throw new IOException("Failed to update the new role haGroupStore on either cluster");
             }
             // wait for the cluster roles are populated into client side from ZK nodes.
-            waitFor(() -> newRoleRecord.equals(haGroup.getRoleRecord()), 1000, 10_000);
+            waitFor(() -> newGroupStore.equals(haGroup.getHaGroupStore()), 1000, 10_000);
             // May have to wait for the transistion to be picked up client side, current test timeouts around 3seconds
             Thread.sleep(5000);
 
-            LOG.info("Now the HA group {} should have detected and updated V{} cluster role record",
-                    haGroup, newRoleRecord.getVersion());
+            LOG.info("Now the HA group {} should have detected and updated V{} HAGroupStore",
+                    haGroup, newGroupStore.getVersion());
         }
 
         /**
@@ -318,7 +318,7 @@ public class HighAvailabilityTestingUtility {
          */
         public Connection getClusterConnection(int clusterIndex, HighAvailabilityGroup haGroup) throws SQLException {
             Properties props = new Properties();
-            String url = getJdbcUrl(haGroup, getURL(clusterIndex, haGroup.getRoleRecord().getRegistryType()));
+            String url = getJdbcUrl(haGroup, getURL(clusterIndex, haGroup.getHaGroupStore().getRegistryType()));
             return DriverManager.getConnection(url, props);
         }
 
@@ -415,7 +415,7 @@ public class HighAvailabilityTestingUtility {
          * The JDBC connection url for the given clusters in particular format.
          * Note that HAUrl will contain ZK as host which is used to create HA Connection
          * from client, although wrapped connections can be using master url based on the
-         * registry Type set in roleRecord.
+         * registry Type set in haGroupStore.
          *
          * below methods will return urls based on registryType and HAUrl will be zk based
          */
@@ -433,19 +433,19 @@ public class HighAvailabilityTestingUtility {
 
 
         public String getJdbcUrl1(HighAvailabilityGroup haGroup) {
-            return getJdbcUrl(haGroup, getURL(1, haGroup.getRoleRecord().getRegistryType()));
+            return getJdbcUrl(haGroup, getURL(1, haGroup.getHaGroupStore().getRegistryType()));
         }
 
         public String getJdbcUrl1(HighAvailabilityGroup haGroup, String principal) {
-            return getJdbcUrl(haGroup, getURL(1, haGroup.getRoleRecord().getRegistryType()), principal);
+            return getJdbcUrl(haGroup, getURL(1, haGroup.getHaGroupStore().getRegistryType()), principal);
         }
 
         public String getJdbcUrl2(HighAvailabilityGroup haGroup) {
-            return getJdbcUrl(haGroup, getURL(2, haGroup.getRoleRecord().getRegistryType()));
+            return getJdbcUrl(haGroup, getURL(2, haGroup.getHaGroupStore().getRegistryType()));
         }
 
         public String getJdbcUrl2(HighAvailabilityGroup haGroup, String principal) {
-            return getJdbcUrl(haGroup, getURL(2, haGroup.getRoleRecord().getRegistryType()), principal);
+            return getJdbcUrl(haGroup, getURL(2, haGroup.getHaGroupStore().getRegistryType()), principal);
         }
 
         public String getJdbcUrl(HighAvailabilityGroup haGroup, String url) {
@@ -480,7 +480,7 @@ public class HighAvailabilityTestingUtility {
 
         private String getUrlWithoutPrincipal(HighAvailabilityGroup haGroup, String url) {
             StringBuilder sb = new StringBuilder();
-            switch (haGroup.getRoleRecord().getRegistryType()) {
+            switch (haGroup.getHaGroupStore().getRegistryType()) {
                 case MASTER:
                     return sb.append(JDBC_PROTOCOL_MASTER).append(":").append(url).append("::").toString();
                 case RPC:
@@ -534,8 +534,8 @@ public class HighAvailabilityTestingUtility {
          */
         public void createTableOnClusterPair(HighAvailabilityGroup haGroup, String tableName, boolean replicationScope)
                 throws SQLException {
-            for (String url : Arrays.asList(getURL(1, haGroup.getRoleRecord().getRegistryType()),
-                    getURL(2, haGroup.getRoleRecord().getRegistryType()))) {
+            for (String url : Arrays.asList(getURL(1, haGroup.getHaGroupStore().getRegistryType()),
+                    getURL(2, haGroup.getHaGroupStore().getRegistryType()))) {
                 String jdbcUrl = getJdbcUrl(haGroup, url);
                 try (Connection conn = DriverManager.getConnection(jdbcUrl, new Properties())) {
                     conn.createStatement().execute(String.format(
@@ -566,8 +566,8 @@ public class HighAvailabilityTestingUtility {
          * @throws SQLException if error happens
          */
         public void createTenantSpecificTable(HighAvailabilityGroup haGroup, String tableName) throws SQLException {
-            for (String url : Arrays.asList(getURL(1, haGroup.getRoleRecord().getRegistryType()),
-                    getURL(2, haGroup.getRoleRecord().getRegistryType()))) {
+            for (String url : Arrays.asList(getURL(1, haGroup.getHaGroupStore().getRegistryType()),
+                    getURL(2, haGroup.getHaGroupStore().getRegistryType()))) {
                 String jdbcUrl = getJdbcUrl(haGroup, url);
                 try (Connection conn = DriverManager.getConnection(jdbcUrl, new Properties())) {
                     conn.createStatement().execute(String.format(
