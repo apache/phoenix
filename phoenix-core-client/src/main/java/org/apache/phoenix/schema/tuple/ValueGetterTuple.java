@@ -110,4 +110,15 @@ public class ValueGetterTuple extends BaseTuple {
         return true;
     }
 
+    @Override
+    public long getKeyValueBytesSize() {
+        if (valueGetter == null) {
+            return 0;
+        }
+        // Since the values are retrieved on demand,
+        // we only count the rowKey size as that's what we have in memory.
+        byte[] rowKey = valueGetter.getRowKey();
+        return rowKey != null ? rowKey.length : 0;
+    }
+
 }

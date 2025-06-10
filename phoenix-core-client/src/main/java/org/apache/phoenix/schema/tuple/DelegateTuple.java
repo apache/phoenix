@@ -73,4 +73,9 @@ public class DelegateTuple implements Tuple {
     public void setKeyValues(List<Cell> values) {
         delegate.setKeyValues(values);
     }
+
+    @Override
+    public long getKeyValueBytesSize() {
+        return delegate.getKeyValueBytesSize();
+    }
 }

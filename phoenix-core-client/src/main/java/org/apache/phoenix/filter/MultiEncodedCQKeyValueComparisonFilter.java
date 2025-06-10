@@ -330,6 +330,21 @@ public class MultiEncodedCQKeyValueComparisonFilter extends BooleanExpressionFil
             isImmutable = false;
             keyPtr.set(UNITIALIZED_KEY_BUFFER);
         }
+
+        @Override
+        public long getKeyValueBytesSize() {
+            if (filteredKeyValues == null || filteredKeyValues.numKeyValues() == 0) {
+                return 0;
+            }
+            long totalSize = 0;
+            for (int i = 0; i < filteredKeyValues.numKeyValues(); i++) {
+                Cell cell = filteredKeyValues.getCellAtIndex(i);
+                if (cell != null) {
+                    totalSize += cell.getSerializedSize();
+                }
+            }
+            return totalSize;
+        }
     }
     
     @Override

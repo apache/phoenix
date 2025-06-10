@@ -118,4 +118,9 @@ public class SingleKeyValueTuple extends BaseTuple {
         ptr.set(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
         return true;
     }
+
+    @Override
+    public long getKeyValueBytesSize() {
+        return cell == null ? 0 : cell.getSerializedSize();
+    }
 }

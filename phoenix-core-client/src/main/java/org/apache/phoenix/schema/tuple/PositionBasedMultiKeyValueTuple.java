@@ -87,4 +87,16 @@ public class PositionBasedMultiKeyValueTuple extends BaseTuple {
         ptr.set(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
         return true;
     }
+
+    @Override
+    public long getKeyValueBytesSize() {
+        if (values == null || values.isEmpty()) {
+            return 0;
+        }
+        long totalSize = 0;
+        for (Cell cell : values) {
+            totalSize += cell.getSerializedSize();
+        }
+        return totalSize;
+    }
 }

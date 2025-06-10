@@ -122,4 +122,16 @@ public class PositionBasedResultTuple extends BaseTuple {
         }
         
     }
+
+    @Override
+    public long getKeyValueBytesSize() {
+        if (cells == null || cells.isEmpty()) {
+            return 0;
+        }
+        long totalSize = 0;
+        for (Cell cell : cells) {
+            totalSize += cell.getSerializedSize();
+        }
+        return totalSize;
+    }
 }
