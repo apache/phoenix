@@ -111,7 +111,7 @@ public class ValueGetterTuple extends BaseTuple {
     }
 
     @Override
-    public long getKeyValueBytesSize() {
+    public long getSerializedSize() {
         if (valueGetter == null) {
             return 0;
         }

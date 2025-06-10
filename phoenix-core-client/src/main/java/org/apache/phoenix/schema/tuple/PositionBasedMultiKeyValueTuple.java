@@ -89,7 +89,7 @@ public class PositionBasedMultiKeyValueTuple extends BaseTuple {
     }
 
     @Override
-    public long getKeyValueBytesSize() {
+    public long getSerializedSize() {
         if (values == null || values.isEmpty()) {
             return 0;
         }

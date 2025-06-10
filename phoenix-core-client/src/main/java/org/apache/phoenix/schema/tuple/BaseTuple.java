@@ -70,7 +70,7 @@ public abstract class BaseTuple implements Tuple {
     }
 
     @Override
-    public long getKeyValueBytesSize() {
+    public long getSerializedSize() {
         throw new UnsupportedOperationException();
     }
 }

@@ -88,7 +88,7 @@ public class MultiKeyValueTuple extends BaseTuple {
     }
 
     @Override
-    public long getKeyValueBytesSize() {
+    public long getSerializedSize() {
         if (values == null || values.isEmpty()) {
             return 0;
         }

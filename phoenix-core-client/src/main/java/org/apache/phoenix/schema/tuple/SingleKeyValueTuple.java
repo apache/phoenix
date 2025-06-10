@@ -120,7 +120,7 @@ public class SingleKeyValueTuple extends BaseTuple {
     }
 
     @Override
-    public long getKeyValueBytesSize() {
+    public long getSerializedSize() {
         return cell == null ? 0 : cell.getSerializedSize();
     }
 }

@@ -332,7 +332,7 @@ public class MultiEncodedCQKeyValueComparisonFilter extends BooleanExpressionFil
         }
 
         @Override
-        public long getKeyValueBytesSize() {
+        public long getSerializedSize() {
             if (filteredKeyValues == null || filteredKeyValues.numKeyValues() == 0) {
                 return 0;
             }

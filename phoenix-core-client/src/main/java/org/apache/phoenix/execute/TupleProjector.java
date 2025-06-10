@@ -323,7 +323,7 @@ public class TupleProjector {
         }
 
         @Override
-        public long getKeyValueBytesSize() {
+        public long getSerializedSize() {
             long size = keyPtr.getLength() + projectedValue.getLength();
             if (keyValue != null) {
                 size += keyValue.getFamilyLength() + keyValue.getQualifierLength();

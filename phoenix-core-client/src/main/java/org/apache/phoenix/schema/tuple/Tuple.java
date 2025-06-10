@@ -103,12 +103,12 @@ public interface Tuple {
     public void setKeyValues(List<Cell> values);
 
     /**
-     * Returns the total size in bytes of this tuple's data without
-     * copying the underlying bytes.
-     * This includes the size of all Cells or KeyValues contained in
+     * Returns the serialized size in bytes of this tuple's data without
+     * copying the underlying cell bytes.
+     * This includes the serialized size of all Cells or KeyValues contained in
      * the tuple.
      * This can be used for memory tracking and optimization purposes.
      * @return The total size in bytes of the tuple's data.
      */
-    public long getKeyValueBytesSize();
+    public long getSerializedSize();
 }

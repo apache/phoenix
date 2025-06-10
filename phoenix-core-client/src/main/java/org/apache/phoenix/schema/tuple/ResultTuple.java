@@ -103,7 +103,7 @@ public class ResultTuple extends BaseTuple {
     }
 
     @Override
-    public long getKeyValueBytesSize() {
+    public long getSerializedSize() {
         if (result == null || result.isEmpty()) {
             return 0;
         }

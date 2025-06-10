@@ -136,7 +136,7 @@ public class RowKeyComparisonFilter extends BooleanExpressionFilter {
         }
 
         @Override
-        public long getKeyValueBytesSize() {
+        public long getSerializedSize() {
             return buf == null ? 0 : length;
         }
     }

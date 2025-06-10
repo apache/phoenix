@@ -188,7 +188,7 @@ public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFil
         }
 
         @Override
-        public long getKeyValueBytesSize() {
+        public long getSerializedSize() {
             if (foundColumns.isEmpty()) {
                 return 0;
             }

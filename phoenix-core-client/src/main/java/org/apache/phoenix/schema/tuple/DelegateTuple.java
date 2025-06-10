@@ -75,7 +75,7 @@ public class DelegateTuple implements Tuple {
     }
 
     @Override
-    public long getKeyValueBytesSize() {
-        return delegate.getKeyValueBytesSize();
+    public long getSerializedSize() {
+        return delegate.getSerializedSize();
     }
 }

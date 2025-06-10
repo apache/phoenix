@@ -33,7 +33,7 @@ import java.util.UUID;
 import static org.junit.Assert.assertEquals;
 
 /**
- * Test class for verifying the {@link Tuple#getKeyValueBytesSize()} implementation across
+ * Test class for verifying the {@link Tuple#getSerializedSize()} implementation across
  * different tuple implementations.
  */
 public class TupleKeyValueBytesSizeTest {
@@ -45,7 +45,7 @@ public class TupleKeyValueBytesSizeTest {
     public void testEmptyTuple() {
         // Test empty tuple returns 0 bytes
         Tuple tuple = new SingleKeyValueTuple();
-        assertEquals(0, tuple.getKeyValueBytesSize());
+        assertEquals(0, tuple.getSerializedSize());
     }
 
     @Test
@@ -57,7 +57,7 @@ public class TupleKeyValueBytesSizeTest {
                 .setValue(Bytes.toBytes(UUID.randomUUID().toString())).build();
         SingleKeyValueTuple tuple = new SingleKeyValueTuple(kv);
         long expectedSize = ((KeyValue) kv).getLength();
-        assertEquals(expectedSize, tuple.getKeyValueBytesSize());
+        assertEquals(expectedSize, tuple.getSerializedSize());
     }
 
     @Test
@@ -82,7 +82,7 @@ public class TupleKeyValueBytesSizeTest {
 
         MultiKeyValueTuple tuple = new MultiKeyValueTuple(kvs);
         long expectedSize = ((KeyValue) kv1).getLength() + ((KeyValue) kv2).getLength();
-        assertEquals(expectedSize, tuple.getKeyValueBytesSize());
+        assertEquals(expectedSize, tuple.getSerializedSize());
     }
 
     @Test
@@ -97,7 +97,7 @@ public class TupleKeyValueBytesSizeTest {
                 .build();
         SingleKeyValueTuple delegate = new SingleKeyValueTuple(kv);
         DelegateTuple tuple = new DelegateTuple(delegate);
-        assertEquals(delegate.getKeyValueBytesSize(), tuple.getKeyValueBytesSize());
+        assertEquals(delegate.getSerializedSize(), tuple.getSerializedSize());
     }
 
     @Test
@@ -145,7 +145,7 @@ public class TupleKeyValueBytesSizeTest {
                 ((KeyValue) cell2).getLength() +
                 ((KeyValue) cell3).getLength();
 
-        assertEquals(expectedSize, tuple.getKeyValueBytesSize());
+        assertEquals(expectedSize, tuple.getSerializedSize());
     }
 
 }
