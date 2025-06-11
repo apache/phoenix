@@ -503,10 +503,5 @@
             <scope>test</scope>
         </dependency>
         <!-- logging end -->
-
-        <dependency>
-          <groupId>org.antlr</groupId>
-          <artifactId>antlr-runtime</artifactId>
-        </dependency>
     </dependencies>
 </project>
