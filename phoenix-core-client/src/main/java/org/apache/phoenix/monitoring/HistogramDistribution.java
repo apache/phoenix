@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.monitoring;
 
-import java.util.Collections;
 import java.util.Map;
 
 import org.apache.hbase.thirdparty.com.google.common.collect.ImmutableMap;
