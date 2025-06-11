@@ -49,10 +49,14 @@ import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -124,8 +128,23 @@ public class HighAvailabilityGroup {
     public static final long PHOENIX_HA_TRANSITION_TIMEOUT_MS_DEFAULT = 5 * 60 * 1000; // 5 mins
 
     static final Logger LOG = LoggerFactory.getLogger(HighAvailabilityGroup.class);
+
+    /**
+     * Two maps to store client provided info mapping to HighAvailabilityGroup.
+     * GROUPS which store HAGroupInfo (name and url of clusters where CRR resides)
+     * to HighAvailabilityGroup mapping, which is the information required to get roleRecord
+     * and URLS which store HAGroupInfo to HAURLInfo (name, principal) 1:n mapping
+     * which represents a given group of clients trying to connect to a HighAvailabilityGroup,
+     * this info is required to fetch the CQSI(s) linked to given HighAvailabilityGroup in case
+     * of failover or a change where CQSIs needs to be closed and invalidated
+     *
+     * HAURLInfo is stored in {@link ParallelPhoenixContext} and {@link FailoverPhoenixContext}
+     * for the current given connection
+     *
+     */
     @VisibleForTesting
     static final Map<HAGroupInfo, HighAvailabilityGroup> GROUPS = new ConcurrentHashMap<>();
+    static final Map<HAGroupInfo, Set<HAURLInfo>> URLS = new ConcurrentHashMap<>();
     @VisibleForTesting
     static final Cache<HAGroupInfo, Boolean> MISSING_CRR_GROUPS_CACHE = CacheBuilder.newBuilder()
             .expireAfterWrite(PHOENIX_HA_TRANSITION_TIMEOUT_MS_DEFAULT, TimeUnit.MILLISECONDS)
@@ -195,8 +214,98 @@ public class HighAvailabilityGroup {
         this.state = state;
     }
 
-    public static HAGroupInfo getHAGroupInfo(String url, Properties properties)
+    /**
+     * Get an instance of HAURLInfo given the HA connecting URL (with "|") and client properties.
+     * Here we do parsing of url and try to extract principal and other additional params
+     * @throws SQLException
+     */
+    public static HAURLInfo getUrlInfo(String url, Properties properties) throws SQLException {
+        url  = checkUrl(url);
+        String principal = null;
+        String additionalJDBCParams = null;
+        int idx = url.indexOf("]");
+        int extraIdx = url.indexOf(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR, idx + 1);
+        if (extraIdx != -1) {
+            //after zk quorums there should be a separator
+            if (extraIdx != idx + 1) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
+                        .setMessage(String.format("URL %s is not a valid HA connection string",
+                                url))
+                        .build()
+                        .buildException();
+            }
+            additionalJDBCParams  = url.substring(extraIdx + 1);
+            //Get the principal
+            extraIdx = additionalJDBCParams.indexOf(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+            if (extraIdx != -1) {
+                if (extraIdx != 0) {
+                    principal = additionalJDBCParams.substring(0, extraIdx);
+                }
+                //Storing terminator as part of additional Params
+                additionalJDBCParams = additionalJDBCParams.substring(extraIdx + 1);
+            } else {
+                extraIdx = additionalJDBCParams.indexOf(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR);
+                if (extraIdx != -1) {
+                    //Not storing terminator to make it consistent.
+                    principal = additionalJDBCParams.substring(0, extraIdx);
+                    additionalJDBCParams = String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR);
+                } else {
+                    principal = additionalJDBCParams;
+                    additionalJDBCParams = null;
+                }
+            }
+        } else {
+            extraIdx = url.indexOf(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR, idx + 1);
+            if (extraIdx != -1) {
+                //There is something in between zkquorum and terminator but no separator(s),
+                //So not sure what it is
+                if (extraIdx != idx + 1) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
+                            .setMessage(String.format("URL %s is not a valid HA connection string",
+                                    url))
+                            .build()
+                            .buildException();
+                } else {
+                    additionalJDBCParams = url.substring(extraIdx);
+                }
+            }
+        }
+
+        String name = properties.getProperty(PHOENIX_HA_GROUP_ATTR);
+        if (StringUtils.isEmpty(name)) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.HA_INVALID_PROPERTIES)
+                    .setMessage(String.format("HA group name can not be empty for HA URL %s", url))
+                    .build()
+                    .buildException();
+        }
+        HAURLInfo haurlInfo = new HAURLInfo(name, principal, additionalJDBCParams);
+        HAGroupInfo info = getHAGroupInfo(url, properties);
+        URLS.computeIfAbsent(info, haGroupInfo -> new HashSet<>()).add(haurlInfo);
+        return haurlInfo;
+    }
+
+    private static HAGroupInfo getHAGroupInfo(String url, Properties properties)
             throws SQLException {
+        url = checkUrl(url);
+        url = url.substring(url.indexOf("[") + 1, url.indexOf("]"));
+        String [] urls = url.split("\\|");
+        String name = properties.getProperty(PHOENIX_HA_GROUP_ATTR);
+        if (StringUtils.isEmpty(name)) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.HA_INVALID_PROPERTIES)
+                    .setMessage(String.format("HA group name can not be empty for HA URL %s", url))
+                    .build()
+                    .buildException();
+        }
+        return new HAGroupInfo(name, urls[0], urls[1]);
+    }
+
+    /**
+     * checks if the given url is appropriate for HA Connection
+     * @param url
+     * @return the url without protocol
+     * @throws SQLException
+     */
+    private static String checkUrl(String url) throws SQLException {
         if (url.startsWith(PhoenixRuntime.JDBC_PROTOCOL)) {
             url = url.substring(PhoenixRuntime.JDBC_PROTOCOL.length() + 1);
         }
@@ -206,25 +315,7 @@ public class HighAvailabilityGroup {
                     .build()
                     .buildException();
         }
-        String additionalJDBCParams = null;
-        int idx = url.indexOf("]");
-        int extraIdx = url.indexOf(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR, idx + 1);
-        if (extraIdx != -1) {
-            // skip the JDBC_PROTOCOL_SEPARATOR
-            additionalJDBCParams  = url.substring(extraIdx + 1);
-        }
-
-        url = url.substring(url.indexOf("[") + 1, url.indexOf("]"));
-        String[] urls = url.split("\\|");
-
-        String name = properties.getProperty(PHOENIX_HA_GROUP_ATTR);
-        if (StringUtils.isEmpty(name)) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.HA_INVALID_PROPERTIES)
-                    .setMessage(String.format("HA group name can not be empty for HA URL %s", url))
-                    .build()
-                    .buildException();
-        }
-        return new HAGroupInfo(name, urls[0], urls[1], additionalJDBCParams);
+        return url;
     }
 
     /**
@@ -488,7 +579,7 @@ public class HighAvailabilityGroup {
      * @return a JDBC connection implementation
      * @throws SQLException if fails to connect a JDBC connection
      */
-    public Connection connect(Properties properties) throws SQLException {
+    public Connection connect(Properties properties, HAURLInfo haurlInfo) throws SQLException {
         if (state != State.READY) {
             throw new SQLExceptionInfo
                     .Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION)
@@ -497,7 +588,7 @@ public class HighAvailabilityGroup {
                     .build()
                     .buildException();
         }
-        return roleRecord.getPolicy().provide(this, properties);
+        return roleRecord.getPolicy().provide(this, properties, haurlInfo);
     }
 
     /**
@@ -509,11 +600,12 @@ public class HighAvailabilityGroup {
      * @return a Phoenix connection to current active HBase cluster
      * @throws SQLException if fails to get a connection
      */
-    PhoenixConnection connectActive(final Properties properties) throws SQLException {
+    PhoenixConnection connectActive(final Properties properties, final HAURLInfo haurlInfo)
+            throws SQLException {
         try {
             Optional<String> url = roleRecord.getActiveUrl();
             if (state == State.READY && url.isPresent()) {
-                PhoenixConnection conn = connectToOneCluster(url.get(), properties);
+                PhoenixConnection conn = connectToOneCluster(url.get(), properties, haurlInfo);
                 // After connection is created, double check if the cluster is still ACTIVE
                 // This is to make sure the newly created connection will not be returned to client
                 // if the target cluster is not active any more. This can happen during failover.
@@ -575,9 +667,10 @@ public class HighAvailabilityGroup {
      * <p>
      * The URL should belong to one of the two ZK clusters in this HA group. It returns the Phoenix
      * connection to the given cluster without checking the context of the cluster's role. Please
-     * use {@link #connectActive(Properties)} to connect to the ACTIVE cluster.
+     * use {@link #connectActive(Properties, HAURLInfo)} to connect to the ACTIVE cluster.
      */
-    PhoenixConnection connectToOneCluster(String url, Properties properties) throws SQLException {
+    PhoenixConnection connectToOneCluster(String url, Properties properties, HAURLInfo haurlInfo)
+            throws SQLException {
         Preconditions.checkNotNull(url);
         if (url.startsWith(PhoenixRuntime.JDBC_PROTOCOL)) {
             Preconditions.checkArgument(url.length() > PhoenixRuntime.JDBC_PROTOCOL.length(),
@@ -587,7 +680,7 @@ public class HighAvailabilityGroup {
         Preconditions.checkArgument(url.equals(info.getUrl1()) || url.equals(info.getUrl2()),
                 "The URL '" + url + "' does not belong to this HA group " + info);
 
-        String jdbcString = info.getJDBCUrl(url);
+        String jdbcString = info.getJDBCUrl(url, haurlInfo);
 
         ClusterRole role = roleRecord.getRole(url);
         if (!role.canConnect()) {
@@ -742,7 +835,8 @@ public class HighAvailabilityGroup {
      * An HAGroupInfo contains information of an HA group.
      * <p>
      * It is constructed based on client input, including the JDBC connection string and properties.
-     * Objects of this class are used as the keys of HA group cache {@link #GROUPS}.
+     * Objects of this class are used as the keys of HA group cache {@link #GROUPS} and HA url info cache
+     * {@link #URLS}.
      * <p>
      * This class is immutable.
      */
@@ -750,9 +844,8 @@ public class HighAvailabilityGroup {
     static final class HAGroupInfo {
         private final String name;
         private final PairOfSameType<String> urls;
-        private final String additionalJDBCParams;
 
-        HAGroupInfo(String name, String url1, String url2, String additionalJDBCParams) {
+        HAGroupInfo(String name, String url1, String url2) {
             Preconditions.checkNotNull(name);
             Preconditions.checkNotNull(url1);
             Preconditions.checkNotNull(url2);
@@ -766,11 +859,6 @@ public class HighAvailabilityGroup {
             } else {
                 this.urls = new PairOfSameType<>(url1, url2);
             }
-            this.additionalJDBCParams = additionalJDBCParams;
-        }
-
-        HAGroupInfo(String name, String url1, String url2) {
-            this(name, url1, url2, null);
         }
 
         public String getName() {
@@ -785,26 +873,47 @@ public class HighAvailabilityGroup {
             return urls.getSecond();
         }
 
-        public String getJDBCUrl(String zkUrl) {
-            Preconditions.checkArgument(zkUrl.equals(getUrl1()) || zkUrl.equals(getUrl2()),
+
+        public String getJDBCUrl(String zkUrl, HAURLInfo haURLInfo) {
+            Preconditions.checkArgument(zkUrl.equals(getUrl1()) || zkUrl.equals(getUrl2())
+                            || zkUrl.equals("[" + getUrl1() + "|" + getUrl2() + "]")
+                            || zkUrl.equals("[" + getUrl2() + "|" + getUrl1() + "]"),
                     "The URL '" + zkUrl + "' does not belong to this HA group " + this);
             StringBuilder sb = new StringBuilder();
             sb.append(PhoenixRuntime.JDBC_PROTOCOL_ZK);
             sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
             sb.append(zkUrl);
-            if (!Strings.isNullOrEmpty(additionalJDBCParams)) {
-                sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
-                sb.append(additionalJDBCParams);
+            if (haURLInfo != null) {
+                if (!Strings.isNullOrEmpty(haURLInfo.getPrincipal())
+                        && !Strings.isNullOrEmpty(haURLInfo.getAdditionalJDBCParams())) {
+                    sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+                    sb.append(haURLInfo.getPrincipal());
+                    if (!haURLInfo.getAdditionalJDBCParams().
+                            equals(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR))) {
+                        sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+                    }
+                    sb.append(haURLInfo.getAdditionalJDBCParams());
+                } else if (!Strings.isNullOrEmpty(haURLInfo.getPrincipal())) {
+                    sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+                    sb.append(haURLInfo.getPrincipal());
+                } else if (!Strings.isNullOrEmpty(haURLInfo.getAdditionalJDBCParams())) {
+                    if (!haURLInfo.getAdditionalJDBCParams().
+                            equals(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR))) {
+                        sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+                        sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+                    }
+                    sb.append(haURLInfo.getAdditionalJDBCParams());
+                }
             }
             return sb.toString();
         }
 
-        public String getJDBCUrl1() {
-            return getJDBCUrl(getUrl1());
+        public String getJDBCUrl1(HAURLInfo haURLInfo) {
+            return getJDBCUrl(getUrl1(), haURLInfo);
         }
 
-        public String getJDBCUrl2() {
-            return getJDBCUrl(getUrl2());
+        public String getJDBCUrl2(HAURLInfo haURLInfo) {
+            return getJDBCUrl(getUrl2(), haURLInfo);
         }
 
         /**
