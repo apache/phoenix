@@ -186,6 +186,20 @@ public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFil
             ptr.set(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
             return true;
         }
+
+        @Override
+        public long getSerializedSize() {
+            if (foundColumns.isEmpty()) {
+                return 0;
+            }
+            long totalSize = 0;
+            for (CellRef ref : foundColumns.values()) {
+                if (ref != null && ref.cell != null) {
+                    totalSize += ref.cell.getSerializedSize();
+                }
+            }
+            return totalSize;
+        }
     }
     
     protected void init() {

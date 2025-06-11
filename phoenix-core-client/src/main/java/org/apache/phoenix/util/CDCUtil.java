@@ -41,8 +41,8 @@ import org.bson.RawBsonDocument;
 public class CDCUtil {
     public static final String CDC_INDEX_PREFIX = "PHOENIX_CDC_INDEX_";
 
-    // phoenix-cdc-stream-{tableName}-{cdc object name}-{cdc index timestamp}
-    public static String CDC_STREAM_NAME_FORMAT = "phoenix-cdc-stream-%s-%s-%d";
+    // phoenix/cdc/stream/{tableName}/{cdc object name}/{cdc index timestamp}
+    public static String CDC_STREAM_NAME_FORMAT = "phoenix/cdc/stream/%s/%s/%d";
 
     /**
      * Make a set of CDC change scope enums from the given string containing comma separated scope
