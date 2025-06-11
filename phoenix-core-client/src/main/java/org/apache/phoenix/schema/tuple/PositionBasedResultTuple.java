@@ -23,10 +23,8 @@ import java.util.Iterator;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.util.EncodedColumnsUtil;
 
 public class PositionBasedResultTuple extends BaseTuple {
     private final EncodedColumnQualiferCellsList cells;
@@ -121,5 +119,17 @@ public class PositionBasedResultTuple extends BaseTuple {
             delegate.remove();
         }
         
+    }
+
+    @Override
+    public long getSerializedSize() {
+        if (cells == null || cells.isEmpty()) {
+            return 0;
+        }
+        long totalSize = 0;
+        for (Cell cell : cells) {
+            totalSize += cell.getSerializedSize();
+        }
+        return totalSize;
     }
 }

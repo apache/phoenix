@@ -68,4 +68,9 @@ public abstract class BaseTuple implements Tuple {
     public void setKeyValues(List<Cell> values) {
         throw new UnsupportedOperationException();
     }
+
+    @Override
+    public long getSerializedSize() {
+        throw new UnsupportedOperationException();
+    }
 }

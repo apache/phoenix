@@ -323,6 +323,15 @@ public class TupleProjector {
         }
 
         @Override
+        public long getSerializedSize() {
+            long size = keyPtr.getLength() + projectedValue.getLength();
+            if (keyValue != null) {
+                size += keyValue.getFamilyLength() + keyValue.getQualifierLength();
+            }
+            return size;
+        }
+
+        @Override
         public Cell mergeWithDynColsListBytesAndGetValue(int index, byte[] dynColsList) {
             if (index != 0) {
                 throw new IndexOutOfBoundsException(Integer.toString(index));

@@ -134,6 +134,11 @@ public class RowKeyComparisonFilter extends BooleanExpressionFilter {
                 ImmutableBytesWritable ptr) {
             return false;
         }
+
+        @Override
+        public long getSerializedSize() {
+            return buf == null ? 0 : length;
+        }
     }
 
     @Override
