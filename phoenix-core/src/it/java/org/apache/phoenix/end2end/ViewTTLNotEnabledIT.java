@@ -18,9 +18,9 @@
 
 package org.apache.phoenix.end2end;
 
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.PhoenixTTLRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
@@ -72,7 +72,7 @@ public class ViewTTLNotEnabledIT extends ParallelStatsDisabledIT {
         // Test the coproc is not registered
         org.apache.hadoop.hbase.client.Connection hconn = getUtility().getConnection();
         Admin admin = hconn.getAdmin();
-        HTableDescriptor tableDescriptor = admin.getTableDescriptor(
+        TableDescriptor tableDescriptor = admin.getDescriptor(
                 TableName.valueOf(schemaBuilder.getEntityTableName()));
         Assert.assertFalse("Coprocessor " + PhoenixTTLRegionObserver.class.getName()
                         + " should not have been added: ",
