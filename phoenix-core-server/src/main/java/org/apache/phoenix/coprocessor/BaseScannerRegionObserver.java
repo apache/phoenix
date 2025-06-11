@@ -430,7 +430,8 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
 
         Configuration conf = c.getEnvironment().getConfiguration();
         if (isPhoenixCompactionEnabled(conf)) {
-            setScanOptionsForFlushesAndCompactions(options);
+            options.setKeepDeletedCells(KeepDeletedCells.TTL);
+            options.setTTL(Long.MAX_VALUE);
             return;
         }
         if (!storeFileScanDoesntNeedAlteration(options)) {
