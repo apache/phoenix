@@ -75,20 +75,20 @@ public enum HighAvailabilityPolicy {
                         "Doing nothing for Cluster Role Change");
                 return;
             }
-            if ((oldRecord.getRole1() == ACTIVE || oldRecord.getRole1() == ACTIVE_TO_STANDBY)
-                    && newRecord.getRole1() == STANDBY) {
-                transitStandby(haGroup, oldRecord.getUrl1(), oldRecord.getRegistryType());
+            if (oldRecord.getRole1() == ACTIVE &&
+                    (newRecord.getRole1() == STANDBY || newRecord.getRole1() == ACTIVE_TO_STANDBY)) {
+                transitStandby(haGroup, oldRecord.getUrl1(), oldRecord.getRegistryType(),
+                        newRecord.getRole1());
             }
-            if ((oldRecord.getRole2() == ACTIVE || oldRecord.getRole2() == ACTIVE_TO_STANDBY)
-                    && newRecord.getRole2() == STANDBY) {
-                transitStandby(haGroup, oldRecord.getUrl2(), oldRecord.getRegistryType());
+            if (oldRecord.getRole2() == ACTIVE &&
+                    (newRecord.getRole2() == STANDBY || newRecord.getRole2() == ACTIVE_TO_STANDBY)) {
+                transitStandby(haGroup, oldRecord.getUrl2(), oldRecord.getRegistryType(),
+                        newRecord.getRole2());
             }
-            if ((oldRecord.getRole1() != ACTIVE && oldRecord.getRole1() != ACTIVE_TO_STANDBY)
-                    && (newRecord.getRole1() == ACTIVE || newRecord.getRole1() == ACTIVE_TO_STANDBY)) {
+            if (oldRecord.getRole1() != ACTIVE && newRecord.getRole1() == ACTIVE) {
                 transitActive(haGroup, oldRecord.getUrl1(), oldRecord.getRegistryType());
             }
-            if ((oldRecord.getRole2() != ACTIVE && oldRecord.getRole2() != ACTIVE_TO_STANDBY)
-                    && (newRecord.getRole2() == ACTIVE || newRecord.getRole2() == ACTIVE_TO_STANDBY)) {
+            if (oldRecord.getRole2() != ACTIVE && newRecord.getRole2() == ACTIVE) {
                 transitActive(haGroup, oldRecord.getUrl2(), oldRecord.getRegistryType());
             }
         }
@@ -154,10 +154,11 @@ public enum HighAvailabilityPolicy {
         }
 
         private void transitStandby(HighAvailabilityGroup haGroup, String url,
-                                    ClusterRoleRecord.RegistryType registryType) throws SQLException {
+                                    ClusterRoleRecord.RegistryType registryType,
+                                    ClusterRoleRecord.ClusterRole newRole) throws SQLException {
             // Close connections when a previously ACTIVE HBase cluster becomes STANDBY.
-            LOG.info("Cluster {} becomes STANDBY in HA group {}, now close all its connections",
-                    url, haGroup.getGroupInfo());
+            LOG.info("Cluster {} becomes {} in HA group {}, now close all its connections",
+                    url, newRole, haGroup.getGroupInfo());
             closeConnections(haGroup, url, registryType);
         }
 

@@ -101,4 +101,16 @@ public class ResultTuple extends BaseTuple {
         ptr.set(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
         return true;
     }
+
+    @Override
+    public long getSerializedSize() {
+        if (result == null || result.isEmpty()) {
+            return 0;
+        }
+        long totalSize = 0;
+        for (Cell cell : result.rawCells()) {
+            totalSize += cell.getSerializedSize();
+        }
+        return totalSize;
+    }
 }
