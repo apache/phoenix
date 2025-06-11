@@ -75,7 +75,7 @@ public class PercentileHistogramDistribution extends HistogramDistributionImpl {
      * The returned map is immutable and safe for concurrent access.
      * @return an immutable map of metric names to their calculated values
      */
-    public Map<String, Long> getPercentileDistributionMap() {
+    public ImmutableMap<String, Long> getPercentileDistributionMap() {
         return percentileDistributionMap;
     }
 
@@ -94,7 +94,7 @@ public class PercentileHistogramDistribution extends HistogramDistributionImpl {
      * The returned map is immutable and safe for concurrent access.
      * @return an immutable map of tag key-value pairs, or an empty map if no tags were attached
      */
-    public Map<String, String> getTags() {
-        return tags == null ? Collections.emptyMap() : tags;
+    public ImmutableMap<String, String> getTags() {
+        return tags == null ? ImmutableMap.of() : tags;
     }
 }

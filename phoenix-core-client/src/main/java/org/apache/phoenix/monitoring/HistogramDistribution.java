@@ -20,6 +20,8 @@ package org.apache.phoenix.monitoring;
 import java.util.Collections;
 import java.util.Map;
 
+import org.apache.hbase.thirdparty.com.google.common.collect.ImmutableMap;
+
 public interface HistogramDistribution {
     public long getMin();
 
@@ -31,12 +33,12 @@ public interface HistogramDistribution {
 
     public Map<String, Long> getRangeDistributionMap();
 
-    default Map<String, Long> getPercentileDistributionMap() {
+    default ImmutableMap<String, Long> getPercentileDistributionMap() {
         throw new UnsupportedOperationException("Percentile Histogram Distribution is not "
                 + "supported!!");
     }
 
-    default Map<String, String> getTags() {
-        return Collections.emptyMap();
+    default ImmutableMap<String, String> getTags() {
+        return ImmutableMap.of();
     }
 }
