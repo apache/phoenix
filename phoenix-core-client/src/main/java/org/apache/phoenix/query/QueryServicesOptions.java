@@ -825,12 +825,12 @@ public class QueryServicesOptions {
                 .getBoolean(TABLE_LEVEL_METRICS_ENABLED, DEFAULT_IS_TABLE_LEVEL_METRICS_ENABLED);
     }
 
-    public boolean isHTableThreadPoolMetricsEnabled() {
+    public boolean isCQSIThreadPoolMetricsEnabled() {
         return config.getBoolean(CQSI_THREAD_POOL_METRICS_ENABLED,
                 DEFAULT_CQSI_THREAD_POOL_METRICS_ENABLED);
     }
 
-    public void setHTableThreadPoolMetricsEnabled(boolean enabled) {
+    public void setCQSIThreadPoolMetricsEnabled(boolean enabled) {
         config.setBoolean(CQSI_THREAD_POOL_METRICS_ENABLED, enabled);
     }
 

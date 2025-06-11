@@ -29,7 +29,11 @@ import org.slf4j.LoggerFactory;
  * Abstract base class for creating percentile-based histograms that capture and analyze the
  * distribution of recorded values. This histogram tracks values up to a specified maximum and
  * provides statistical analysis including percentile distributions, min/max values, and operation
- * counts. <br/>
+ * counts.
+ * <p>
+ * <b>Internal Use Only:</b> This class is for internal use only and should not be used directly by
+ * users of Phoenix.
+ * </p>
  * <br/>
  * Key features:
  * <ul>
@@ -48,9 +52,7 @@ import org.slf4j.LoggerFactory;
  * </ol>
  * <br/>
  * Concrete implementations must define {@link #generateDistributionMap(Histogram)} to specify which
- * percentiles and statistics to include in the distribution. <br/>
- * <br/>
- * This class is for internal use only and should not be used directly by users of Phoenix.
+ * percentiles and statistics to include in the distribution.
  */
 abstract class PercentileHistogram {
     private static final Logger LOGGER = LoggerFactory.getLogger(PercentileHistogram.class);
@@ -109,9 +111,7 @@ abstract class PercentileHistogram {
      * determine which specific percentiles and metrics to include. <br/>
      * <br/>
      * The returned {@link PercentileHistogramDistribution} is thread-safe and immutable, making it
-     * suitable for concurrent access by monitoring systems. <br/>
-     * <br/>
-     * This method is for internal use only and should not be called directly from outside Phoenix.
+     * suitable for concurrent access by monitoring systems.
      * @return an immutable {@link HistogramDistribution} containing percentile analysis and
      *         statistics
      */
@@ -138,9 +138,7 @@ abstract class PercentileHistogram {
      * <br/>
      * Tags are commonly used for dimensional monitoring, allowing metrics to be filtered and
      * grouped by tag names. Multiple tags can be added to the same histogram, and duplicate keys
-     * will overwrite previous values. <br/>
-     * <br/>
-     * This method is for internal use only and should not be called directly from outside Phoenix.
+     * will overwrite previous values.
      * @param key   the tag key
      * @param value the tag value
      */

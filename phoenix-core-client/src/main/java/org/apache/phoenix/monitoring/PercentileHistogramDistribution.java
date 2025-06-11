@@ -23,6 +23,8 @@ import java.util.Map;
 import org.apache.hbase.thirdparty.com.google.common.collect.ImmutableMap;
 
 /**
+ * <b>External User-Facing API</b>
+ * <p>
  * An immutable snapshot of percentile distribution data captured by a {@link PercentileHistogram}.
  * This class provides a consumer-friendly interface to access histogram statistics without exposing
  * the underlying {@link org.HdrHistogram.Histogram} instances. <br/>
@@ -34,8 +36,7 @@ import org.apache.hbase.thirdparty.com.google.common.collect.ImmutableMap;
  * <li>Optional tags for additional metadata</li>
  * </ul>
  * <br/>
- * This is an external-facing class intended for Phoenix users. Use
- * {@link PercentileHistogram#getPercentileHistogramDistribution()} to get the percentile
+ * Use {@link PercentileHistogram#getPercentileHistogramDistribution()} to get the percentile
  * distribution captured by the histogram. Use {@link #getTags()} to access any tags attached to the
  * histogram. <br/>
  * <br/>
@@ -45,13 +46,13 @@ public class PercentileHistogramDistribution extends HistogramDistributionImpl {
     private final ImmutableMap<String, Long> percentileDistributionMap;
     private ImmutableMap<String, String> tags = null;
 
-    public PercentileHistogramDistribution(String histoName, long min, long max, long count,
+    PercentileHistogramDistribution(String histoName, long min, long max, long count,
                                            Map<String, Long> percentileDistributionMap) {
         super(histoName, min, max, count, Collections.emptyMap());
         this.percentileDistributionMap = ImmutableMap.copyOf(percentileDistributionMap);
     }
 
-    public PercentileHistogramDistribution(String histoName, long min, long max, long count,
+    PercentileHistogramDistribution(String histoName, long min, long max, long count,
                                            Map<String, Long> percentileDistributionMap,
                                            Map<String, String> tags) {
         this(histoName, min, max, count, percentileDistributionMap);

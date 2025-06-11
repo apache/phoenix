@@ -1418,7 +1418,7 @@ public class PhoenixRuntime {
 
     /**
      * Retrieves comprehensive HTable thread pool utilization and contention metrics collected
-     * across all monitored thread pools in the Phoenix client.
+     * across all monitored HTable thread pools.
      * <p>
      * This method provides access to detailed performance histograms that track two critical thread
      * pool metrics:
@@ -1439,7 +1439,7 @@ public class PhoenixRuntime {
      * <b>Metric Sources:</b>
      * </p>
      * <ul>
-     * <li><b>CQSI Thread Pools</b> - Internal Phoenix connection-level thread pools (identified by
+     * <li><b>CQSI Thread Pools</b> - Internal Phoenix CQSI-level thread pools (identified by
      * connection URL)</li>
      * <li><b>External Thread Pools</b> - User-defined HTable thread pools created with
      * {@link HTableThreadPoolWithUtilizationStats}</li>

@@ -163,9 +163,9 @@ public class HTableThreadPoolHistograms {
      * distribution, min/max values, and count of values for the monitored metrics (active threads
      * count and queue size). <br/>
      * <br/>
-     * This is an external user-facing method that is called for publishing the metrics from
-     * PhoenixRuntime via the
-     * {@link org.apache.phoenix.util.PhoenixRuntime#getHTableThreadPoolHistograms()} method.
+     * This method is to be called from
+     * {@link HTableThreadPoolMetricsManager#getHistogramsForAllThreadPools()} only and should not
+     * be used from outside Phoenix.
      * @return list of HistogramDistribution instances representing comprehensive snapshots of the
      *         metrics
      */

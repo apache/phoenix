@@ -27,14 +27,18 @@ import org.HdrHistogram.Histogram;
  * utilization metrics. This histogram captures and provides a comprehensive set of statistical
  * metrics including percentile distributions, operation counts, and min/max values. <br/>
  * <br/>
+ * <p>
+ * <b>Internal Use Only:</b> This class is for internal use only and should not be used directly by
+ * users of Phoenix.
+ * </p>
+ * <p>
  * The histogram generates the following metrics:
+ * </p>
  * <ul>
  * <li>Number of operations (total count)</li>
  * <li>Minimum and maximum recorded values</li>
  * <li>25th, 50th (median), 75th, 90th, and 95th percentiles</li>
  * </ul>
- * <br/>
- * This class is for internal use only and should not be used directly by users of Phoenix.
  */
 class UtilizationHistogram extends PercentileHistogram {
 
