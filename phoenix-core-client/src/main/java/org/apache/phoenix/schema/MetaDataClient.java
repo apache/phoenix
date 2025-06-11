@@ -2022,11 +2022,14 @@ public class MetaDataClient {
         int pkOffset = dataTable.getBucketNum() != null ? 1 : 0;
         for (int i = pkOffset; i < pkColumns.size(); ++i) {
             PColumn pcol = pkColumns.get(i);
-            columnDefs.add(FACTORY.columnDef(FACTORY.columnName(pcol.getName().getString()),
-                    pcol.getDataType().getSqlTypeName(), false, null, false, pcol.getMaxLength(),
-                    pcol.getScale(), false, pcol.getSortOrder(), "", null, false));
+            columnDefs.add(
+                    FACTORY.columnDef(FACTORY.columnName("\"" + pcol.getName().getString() + "\""),
+                            pcol.getDataType().getSqlTypeName(), false, null, false,
+                            pcol.getMaxLength(), pcol.getScale(), false,
+                            pcol.getSortOrder(), "", null, false));
             pkColumnDefs.add(FACTORY.columnDefInPkConstraint(FACTORY.columnName(
-                    pcol.getName().getString()), pcol.getSortOrder(), pcol.isRowTimestamp()));
+                            "\"" + pcol.getName().getString() + "\""), pcol.getSortOrder(),
+                    pcol.isRowTimestamp()));
         }
         columnDefs.add(FACTORY.columnDef(FACTORY.columnName(QueryConstants.CDC_JSON_COL_NAME),
                 PVarchar.INSTANCE.getSqlTypeName(), false, null, true, null,

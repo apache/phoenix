@@ -32,6 +32,7 @@ import org.bson.BsonBinary;
 import org.bson.BsonBoolean;
 import org.bson.BsonDocument;
 import org.bson.BsonDouble;
+import org.bson.BsonInt32;
 import org.bson.BsonNull;
 import org.bson.BsonString;
 import org.bson.RawBsonDocument;
@@ -57,6 +58,7 @@ import java.util.Properties;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -1857,6 +1859,77 @@ public class Bson3IT extends ParallelStatsDisabledIT {
       assertEquals(bsonDocument3, document3);
 
       assertFalse(rs.next());
+    }
+  }
+
+  @Test
+  public void testCDCWithCaseSenstitiveTableAndPks() throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    String tableName = "XYZ.\"test.table\"";
+    String cdcName = "XYZ.\"CDC_test.table\"";
+    String cdcNameWithoutSchema = "\"CDC_test.table\"";
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      String ddl = "CREATE TABLE " + tableName +
+              " (\"hk\" VARCHAR NOT NULL, COL BSON CONSTRAINT pk PRIMARY KEY(\"hk\"))";
+      conn.createStatement().execute(ddl);
+
+      String cdcDdl = "CREATE CDC " + cdcNameWithoutSchema + " ON " + tableName;
+      conn.createStatement().execute(cdcDdl);
+
+      String alterDdl = "ALTER TABLE " + tableName
+              + " SET SCHEMA_VERSION = 'NEW_AND_OLD_IMAGES'";
+      conn.createStatement().execute(alterDdl);
+
+      Timestamp ts1 = new Timestamp(System.currentTimeMillis());
+      Thread.sleep(100);
+
+      BsonDocument bsonDocument = new BsonDocument()
+              .append("field1", new BsonString("value1"))
+              .append("field2", new BsonInt32(42))
+              .append("field3", new BsonBoolean(true));
+
+      PreparedStatement stmt = conn.prepareStatement(
+              "UPSERT INTO " + tableName + " VALUES (?,?)");
+      stmt.setString(1, "key1");
+      stmt.setObject(2, bsonDocument);
+      stmt.executeUpdate();
+      conn.commit();
+
+      Thread.sleep(100);
+      Timestamp ts2 = new Timestamp(System.currentTimeMillis());
+
+      ResultSet rs = conn.createStatement().executeQuery(
+              "SELECT DISTINCT PARTITION_ID() FROM " + cdcName);
+      assertTrue("Expected one partition", rs.next());
+      String partitionId = rs.getString(1);
+      assertFalse("Expected only one partition", rs.next());
+
+      String cdcQuery = "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcName
+              + " WHERE PARTITION_ID() = ? AND PHOENIX_ROW_TIMESTAMP() >= ? AND "
+              + "PHOENIX_ROW_TIMESTAMP() <= ?";
+      PreparedStatement ps = conn.prepareStatement(cdcQuery);
+      ps.setString(1, partitionId);
+      ps.setTimestamp(2, ts1);
+      ps.setTimestamp(3, ts2);
+
+      rs = ps.executeQuery();
+
+      assertTrue("Expected at least one CDC record", rs.next());
+
+      String cdcVal = rs.getString(3);
+      Map<String, Object> map = OBJECT_MAPPER.readValue(cdcVal, Map.class);
+
+      Map<String, Object> preImage = (Map<String, Object>) map.get(QueryConstants.CDC_PRE_IMAGE);
+      assertNull("Pre-image should be null for first insert", preImage.get("COL"));
+
+      Map<String, Object> postImage = (Map<String, Object>) map.get(QueryConstants.CDC_POST_IMAGE);
+      String encodedBytes = (String) postImage.get("COL");
+      byte[] bytes = Base64.getDecoder().decode(encodedBytes);
+      RawBsonDocument actualDoc = new RawBsonDocument(bytes, 0, bytes.length);
+      assertEquals("Post-image BSON document should match inserted document", bsonDocument,
+              actualDoc);
+
+      assertFalse("Should only have one CDC record", rs.next());
     }
   }
 
