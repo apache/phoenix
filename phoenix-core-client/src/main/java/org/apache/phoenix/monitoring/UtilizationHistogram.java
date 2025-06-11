@@ -22,9 +22,23 @@ import java.util.Map;
 
 import org.HdrHistogram.Histogram;
 
-public class UtilizationHistogram extends PercentileHistogram {
+/**
+ * A concrete implementation of {@link PercentileHistogram} specifically designed for tracking
+ * utilization metrics. This histogram captures and provides a comprehensive set of statistical
+ * metrics including percentile distributions, operation counts, and min/max values. <br/>
+ * <br/>
+ * The histogram generates the following metrics:
+ * <ul>
+ * <li>Number of operations (total count)</li>
+ * <li>Minimum and maximum recorded values</li>
+ * <li>25th, 50th (median), 75th, 90th, and 95th percentiles</li>
+ * </ul>
+ * <br/>
+ * This class is for internal use only and should not be used directly by users of Phoenix.
+ */
+class UtilizationHistogram extends PercentileHistogram {
 
-    public UtilizationHistogram(long maxUtil, String name) {
+    UtilizationHistogram(long maxUtil, String name) {
         super(maxUtil, name);
     }
 

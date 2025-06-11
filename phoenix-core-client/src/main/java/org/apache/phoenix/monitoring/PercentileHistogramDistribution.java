@@ -23,11 +23,23 @@ import java.util.Map;
 import org.apache.hbase.thirdparty.com.google.common.collect.ImmutableMap;
 
 /**
- * Exposes percentiles captured using {@link PercentileHistogram} to the consumers w/o exposing
- * underlying {@link org.HdrHistogram.Histogram} instances.
- * <br/><br/>
- * Call {@link #getPercentileDistributionMap()} to get percentile distribution from the histogram
- * . Call {@link #getTags()} to get the tags attached to the histogram.
+ * An immutable snapshot of percentile distribution data captured by a {@link PercentileHistogram}.
+ * This class provides a consumer-friendly interface to access histogram statistics without exposing
+ * the underlying {@link org.HdrHistogram.Histogram} instances. <br/>
+ * <br/>
+ * This class contains:
+ * <ul>
+ * <li>Percentile distribution map with percentile names as keys and their values</li>
+ * <li>Basic statistics (minimum, maximum, total count)</li>
+ * <li>Optional tags for additional metadata</li>
+ * </ul>
+ * <br/>
+ * This is an external-facing class intended for Phoenix users. Use
+ * {@link PercentileHistogram#getPercentileHistogramDistribution()} to get the percentile
+ * distribution captured by the histogram. Use {@link #getTags()} to access any tags attached to the
+ * histogram. <br/>
+ * <br/>
+ * All data in this class is immutable after construction, making it safe for concurrent access.
  */
 public class PercentileHistogramDistribution extends HistogramDistributionImpl {
     private final ImmutableMap<String, Long> percentileDistributionMap;
@@ -46,6 +58,23 @@ public class PercentileHistogramDistribution extends HistogramDistributionImpl {
         this.tags = ImmutableMap.copyOf(tags);
     }
 
+    /**
+     * Returns an immutable map containing the percentile distribution and statistical data captured
+     * by the histogram. The map contains metric names as keys and their corresponding values. <br/>
+     * <br/>
+     * The map includes:
+     * <ul>
+     * <li>Percentile values (e.g., "_90th_percentile", "_95th_percentile", "_median")</li>
+     * <li>Statistical metrics (e.g., "_min", "_max", "_num_ops")</li>
+     * </ul>
+     * <br/>
+     * This is the primary method for accessing percentile analysis results. The specific
+     * percentiles and statistics included depend on the concrete {@link PercentileHistogram}
+     * implementation that generated this distribution. <br/>
+     * <br/>
+     * The returned map is immutable and safe for concurrent access.
+     * @return an immutable map of metric names to their calculated values
+     */
     public Map<String, Long> getPercentileDistributionMap() {
         return percentileDistributionMap;
     }
@@ -54,6 +83,17 @@ public class PercentileHistogramDistribution extends HistogramDistributionImpl {
         throw new UnsupportedOperationException("Range Histogram Distribution is not supported!!");
     }
 
+    /**
+     * Returns the metadata tags associated with this histogram distribution. Tags provide
+     * additional context about the histogram data and are commonly used for dimensional monitoring,
+     * allowing metrics to be filtered and grouped by tag names. <br/>
+     * <br/>
+     * Tags are attached to the histogram using {@link PercentileHistogram#addTag(String, String)}
+     * before generating the distribution snapshot. <br/>
+     * <br/>
+     * The returned map is immutable and safe for concurrent access.
+     * @return an immutable map of tag key-value pairs, or an empty map if no tags were attached
+     */
     public Map<String, String> getTags() {
         return tags == null ? Collections.emptyMap() : tags;
     }

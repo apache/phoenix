@@ -28,8 +28,60 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Central place where we keep track of HTable thread pool utilization and contention
- * level metrics for all the HTable thread pools.
+ * Central registry and manager for HTable thread pool utilization and contention metrics.
+ * <p>
+ * <b>Internal Use Only:</b> This class is designed for internal use only and should not be used
+ * directly from outside Phoenix. External consumers should access thread pool metrics through
+ * {@link org.apache.phoenix.util.PhoenixRuntime#getHTableThreadPoolHistograms()}.
+ * </p>
+ * <p>
+ * This class serves as a singleton registry that maintains {@link HTableThreadPoolHistograms}
+ * instances across the entire application lifecycle. Each {@link HTableThreadPoolHistograms}
+ * instance contains utilization metrics (active thread count and queue size histograms) for a
+ * specific HTable thread pool identified by a unique histogram key.
+ * </p>
+ * <h3>Storage and Instance Management</h3>
+ * <p>
+ * The manager stores {@link HTableThreadPoolHistograms} instances in a thread-safe
+ * {@link ConcurrentHashMap} with the following characteristics:
+ * </p>
+ * <ul>
+ * <li><b>Key-based storage:</b> Each histogram instance is identified by a unique string key</li>
+ * <li><b>Lazy initialization:</b> Instances are created on-demand when first accessed</li>
+ * <li><b>Shared instances:</b> Multiple threads/components can share the same histogram instance
+ * using the same key</li>
+ * <li><b>Thread-safe operations:</b> All storage operations are atomic and thread-safe</li>
+ * </ul>
+ * <h3>Integration with HTable Thread Pool Utilization</h3>
+ * <p>
+ * This manager is exclusively used by
+ * {@link org.apache.phoenix.job.HTableThreadPoolWithUtilizationStats}, a specialized
+ * ThreadPoolExecutor that automatically captures HTable thread pool utilization statistics. The
+ * integration workflow is:
+ * </p>
+ * <ol>
+ * <li>The thread pool calls {@link #updateActiveThreads} and {@link #updateQueueSize} to record
+ * metrics</li>
+ * <li>Metrics are stored in {@link HTableThreadPoolHistograms} instances managed by this class</li>
+ * <li>External consumers access immutable metric snapshots through
+ * {@link org.apache.phoenix.util.PhoenixRuntime#getHTableThreadPoolHistograms()}, which internally
+ * calls {@link #getHistogramsForAllThreadPools()} to return {@link HistogramDistribution} instances
+ * containing percentile distributions, min/max values, and operation counts for both active thread
+ * count and queue size metrics</li>
+ * </ol>
+ * <h3>Usage Patterns</h3>
+ * <p>
+ * <b>CQSI Level:</b> For ConnectionQueryServicesImpl thread pools, the histogram key is always the
+ * connection URL, allowing multiple CQSI instances with the same connection info to share the same
+ * {@link HTableThreadPoolHistograms} instance.
+ * </p>
+ * <p>
+ * <b>External Thread Pools:</b> For user-defined thread pools, the histogram key can be the thread
+ * pool name or any unique identifier chosen by the application.
+ * </p>
+ * @see HTableThreadPoolHistograms
+ * @see org.apache.phoenix.job.HTableThreadPoolWithUtilizationStats
+ * @see org.apache.phoenix.util.PhoenixRuntime#getHTableThreadPoolHistograms()
  */
 public class HTableThreadPoolMetricsManager {
 
@@ -62,22 +114,10 @@ public class HTableThreadPoolMetricsManager {
     }
 
     /**
-     * Records the value of no. of active threads in HTable thread pool in
-     * {@link HTableThreadPoolHistograms}.
-     * <br/><br/>
-     * HistogramKey is used to uniquely identify {@link HTableThreadPoolHistograms} instance for
-     * recording metrics. This can be same as HTable thread pool name but not necessary. Ex- for
-     * CQSI level HTable thread pool, histogramKey is the URL returned by ConnectionInfo. By
-     * setting histogramKey same as Connection URL, even if multiple CQSI instances are there
-     * per connection info (one just evicted from cache vs other newly created) they will share
-     * same {@link HTableThreadPoolHistograms} instance.
-     * <br/>
-     * Ex- if one client connects to multiple HBase clusters such that for each HBase cluster a
-     * separate HTable thread pool is used (like HA scenario), then histogramKey can be same as
-     * thread pool name.
-     * @param histogramKey Key to uniquely identify {@link HTableThreadPoolHistograms} instance.
+     * Records the current number of active threads in the thread pool in the histogram.
+     * @param histogramKey  Key to uniquely identify {@link HTableThreadPoolHistograms} instance.
      * @param activeThreads Number of active threads in the thread pool.
-     * @param supplier An idempotent supplier of {@link HTableThreadPoolHistograms}.
+     * @param supplier      An idempotent supplier of {@link HTableThreadPoolHistograms}.
      */
     public static void updateActiveThreads(String histogramKey, int activeThreads,
         Supplier<HTableThreadPoolHistograms> supplier) {
@@ -91,22 +131,10 @@ public class HTableThreadPoolMetricsManager {
     }
 
     /**
-     * Records the value of no. of tasks in the HTable thread pool's queue in
-     * {@link HTableThreadPoolHistograms}.
-     * <br/><br/>
-     * HistogramKey is used to uniquely identify {@link HTableThreadPoolHistograms} instance for
-     * recording metrics. This can be same as HTable thread pool name but not necessary. Ex- for
-     * CQSI level HTable thread pool, histogramKey is the URL returned by ConnectionInfo. By
-     * setting histogramKey same as Connection URL, even if multiple CQSI instances are there
-     * per connection info (one just evicted from cache vs other newly created) they will share
-     * same {@link HTableThreadPoolHistograms} instance.
-     * <br/>
-     * Ex- if one client connects to multiple HBase clusters such that for each HBase cluster a
-     * separate HTable thread pool is used (like HA scenario), then histogramKey can be same as
-     * thread pool name.
+     * Records the current number of tasks in the thread pool's queue in the histogram.
      * @param histogramKey Key to uniquely identify {@link HTableThreadPoolHistograms} instance.
-     * @param queueSize Number of tasks in the HTable thread pool's queue.
-     * @param supplier An idempotent supplier of {@link HTableThreadPoolHistograms}.
+     * @param queueSize    Number of tasks in the HTable thread pool's queue.
+     * @param supplier     An idempotent supplier of {@link HTableThreadPoolHistograms}.
      */
     public static void updateQueueSize(String histogramKey, int queueSize,
         Supplier<HTableThreadPoolHistograms> supplier) {

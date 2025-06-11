@@ -1416,6 +1416,48 @@ public class PhoenixRuntime {
         return TableMetricsManager.getSizeHistogramsForAllTables();
     }
 
+    /**
+     * Retrieves comprehensive HTable thread pool utilization and contention metrics collected
+     * across all monitored thread pools in the Phoenix client.
+     * <p>
+     * This method provides access to detailed performance histograms that track two critical thread
+     * pool metrics:
+     * </p>
+     * <ul>
+     * <li><b>Active Threads Count</b> - Distribution of the number of threads actively executing
+     * tasks</li>
+     * <li><b>Queue Size</b> - Distribution of the number of tasks waiting in thread pool
+     * queues</li>
+     * </ul>
+     * <p>
+     * The metrics are automatically collected by {@link HTableThreadPoolWithUtilizationStats}, a
+     * specialized ThreadPoolExecutor that instruments HTable operations. These statistics help
+     * identify thread pool bottlenecks, optimize thread pool configurations, and monitor overall
+     * HTable performance characteristics.
+     * </p>
+     * <p>
+     * <b>Metric Sources:</b>
+     * </p>
+     * <ul>
+     * <li><b>CQSI Thread Pools</b> - Internal Phoenix connection-level thread pools (identified by
+     * connection URL)</li>
+     * <li><b>External Thread Pools</b> - User-defined HTable thread pools created with
+     * {@link HTableThreadPoolWithUtilizationStats}</li>
+     * </ul>
+     * <p>
+     * Each histogram includes percentile distributions (P50, P90, P95, P99, etc.), min/max values,
+     * and operation counts. The returned map is keyed by histogram identifier and contains
+     * dimensional tags for enhanced monitoring capabilities.
+     * </p>
+     * @return a map where keys are histogram identifiers (connection URLs for CQSI pools, or custom
+     *         names for external pools) and values are lists of {@link HistogramDistribution}
+     *         instances containing comprehensive utilization statistics. Returns an empty map if no
+     *         HTable thread pools have been monitored or if metrics collection is disabled.
+     * @see HTableThreadPoolWithUtilizationStats
+     * @see HTableThreadPoolMetricsManager
+     * @see HTableThreadPoolHistograms
+     * @see HistogramDistribution
+     */
     public static Map<String, List<HistogramDistribution>> getHTableThreadPoolHistograms() {
         return HTableThreadPoolMetricsManager.getHistogramsForAllThreadPools();
     }
