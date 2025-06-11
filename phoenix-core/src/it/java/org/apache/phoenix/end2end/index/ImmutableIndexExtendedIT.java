@@ -20,11 +20,11 @@ package org.apache.phoenix.end2end.index;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
@@ -225,7 +225,7 @@ public class ImmutableIndexExtendedIT extends ParallelStatsDisabledIT {
         byte[] emptyCQ = EncodedColumnsUtil.getEmptyKeyValueInfo(table).getFirst();
         ConnectionQueryServices queryServices =
                 conn.unwrap(PhoenixConnection.class).getQueryServices();
-        HTable htable = (HTable) queryServices.getTable(table.getPhysicalName().getBytes());
+        Table htable = queryServices.getTable(table.getPhysicalName().getBytes());
         Scan scan = new Scan();
         scan.addColumn(emptyCF, emptyCQ);
         ResultScanner resultScanner = htable.getScanner(scan);

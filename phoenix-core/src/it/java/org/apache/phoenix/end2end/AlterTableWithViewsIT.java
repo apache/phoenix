@@ -40,7 +40,6 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.commons.lang3.ArrayUtils;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -1013,7 +1012,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             
             PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null;
             PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
-            Table htable = phoenixConn.getQueryServices().getTable(Bytes.toBytes(baseTableName));
+            Table table = phoenixConn.getQueryServices().getTable(Bytes.toBytes(baseTableName));
             assertFalse(phoenixConn.getTable(new PTableKey(null, baseTableName)).isTransactional());
             assertFalse(viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable)).isTransactional());
         } 
@@ -1196,7 +1195,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             
             // scan the physical table and verify there is a single row for the second local index
             Scan scan = new Scan();
-            HTable table = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(viewIndexPhysicalTable);
+            Table table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(viewIndexPhysicalTable);
             ResultScanner results = table.getScanner(scan);
             Result result = results.next();
             assertNotNull(result);
