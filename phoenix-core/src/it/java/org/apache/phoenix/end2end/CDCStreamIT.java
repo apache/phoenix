@@ -39,6 +39,8 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixMasterSource;
+import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -64,8 +66,11 @@ import static org.junit.Assert.assertTrue;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class CDCStreamIT extends CDCBaseIT {
+
     private static RegionCoprocessorEnvironment TaskRegionEnvironment;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final MetricsPhoenixMasterSource METRICS_SOURCE =
+            MetricsPhoenixCoprocessorSourceFactory.getInstance().getPhoenixMasterSource();
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -528,6 +533,35 @@ public class CDCStreamIT extends CDCBaseIT {
             Assert.assertTrue(((Map<String, Object>)map.get(CDC_PRE_IMAGE)).isEmpty());
             Assert.assertEquals(CDC_UPSERT_EVENT_TYPE, map.get(CDC_EVENT_TYPE));
         }
+    }
+
+    @Test
+    public void testPartitionUpdateFailureMetrics() throws Exception {
+        Connection conn = newConnection();
+        String tableName = generateUniqueName();
+        createTableAndEnableCDC(conn, tableName);
+
+        assertEquals("Post split partition update failures should be 0 initially",
+            0, METRICS_SOURCE.getPostSplitPartitionUpdateFailureCount());
+        assertEquals("Post merge partition update failures should be 0 initially", 
+            0, METRICS_SOURCE.getPostMergePartitionUpdateFailureCount());
+
+        TestUtil.splitTable(conn, tableName, Bytes.toBytes("m"));
+
+        // Verify split metric is still 0 (successful split)
+        assertEquals("Post split partition update failures should be 0 after successful split",
+            0, METRICS_SOURCE.getPostSplitPartitionUpdateFailureCount());
+
+        List<HRegionLocation> regions = TestUtil.getAllTableRegions(conn, tableName);
+        
+        TestUtil.mergeTableRegions(conn, tableName, regions.stream()
+                .map(HRegionLocation::getRegion)
+                .map(RegionInfo::getEncodedName)
+                .collect(Collectors.toList()));
+
+        // Verify merge metric is still 0 (successful merge)
+        assertEquals("Post merge partition update failures should be 0 after successful merge", 
+            0, METRICS_SOURCE.getPostMergePartitionUpdateFailureCount());
     }
 
     private String getStreamName(Connection conn, String tableName, String cdcName) throws SQLException {
