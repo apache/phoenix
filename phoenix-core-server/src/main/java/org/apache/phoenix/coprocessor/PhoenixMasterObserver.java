@@ -24,6 +24,7 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -37,12 +38,17 @@ import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.ParentPartitionNotFound;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
+import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixMasterSource;
+import org.apache.hadoop.hbase.CoprocessorEnvironment;
+import java.io.IOException;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_STATUS_NAME;
@@ -51,7 +57,9 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_
  * Master Coprocessor for Phoenix.
  */
 public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor {
+
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixMasterObserver.class);
+    private MetricsPhoenixMasterSource metricSource;
 
     private static final String STREAM_STATUS_QUERY
             = "SELECT STREAM_NAME FROM " + SYSTEM_CDC_STREAM_STATUS_NAME
@@ -74,9 +82,19 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
             = "UPSERT INTO " + SYSTEM_CDC_STREAM_NAME + " (TABLE_NAME, STREAM_NAME, PARTITION_ID, "
             + "PARENT_PARTITION_ID, PARTITION_END_TIME) VALUES (?,?,?,?,?)";
 
+    public static final String PHOENIX_MASTER_MAX_RETRY_COUNT =
+            "phoenix.master.observer.max.retry.count";
+    public static final int DEFAULT_PHOENIX_MASTER_MAX_RETRY_COUNT = 20;
+
     @Override
     public Optional<MasterObserver> getMasterObserver() {
         return Optional.of(this);
+    }
+
+    @Override
+    public void start(CoprocessorEnvironment env) throws IOException {
+        metricSource =
+                MetricsPhoenixCoprocessorSourceFactory.getInstance().getPhoenixMasterSource();
     }
 
     /**
@@ -91,38 +109,66 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
     @Override
     public void postCompletedSplitRegionAction(final ObserverContext<MasterCoprocessorEnvironment> c,
                                                final RegionInfo regionInfoA,
-                                               final RegionInfo regionInfoB) {
+                                               final RegionInfo regionInfoB) throws IOException {
         Configuration conf = c.getEnvironment().getConfiguration();
-        try (Connection conn  = QueryUtil.getConnectionOnServer(conf)) {
-            // CDC will be enabled on Phoenix tables only
-            PTable phoenixTable = getPhoenixTable(conn, regionInfoA.getTable());
-            if (phoenixTable == null) {
-                LOGGER.info("{} is not a Phoenix Table, skipping partition metadata update.",
-                        regionInfoA.getTable());
+        int maxRetryCount =
+                conf.getInt(PHOENIX_MASTER_MAX_RETRY_COUNT, DEFAULT_PHOENIX_MASTER_MAX_RETRY_COUNT);
+        int tries = 0;
+        Exception caughtException;
+        do {
+            try (Connection conn = QueryUtil.getConnectionOnServer(conf)) {
+                // CDC will be enabled on Phoenix tables only
+                PTable phoenixTable = getPhoenixTable(conn, regionInfoA.getTable());
+                if (phoenixTable == null) {
+                    LOGGER.debug("{} is not a Phoenix Table, skipping partition metadata update.",
+                            regionInfoA.getTable());
+                    return;
+                }
+                String tableName = phoenixTable.getName().getString();
+                String streamName = getStreamName(conn, tableName);
+                if (streamName != null) {
+                    LOGGER.info(
+                            "Updating split partition metadata for table={}, stream={} "
+                                    + "daughters {} {}",
+                            tableName, streamName, regionInfoA.getEncodedName(),
+                            regionInfoB.getEncodedName());
+                    // ancestorIDs = [parentId, grandparentId1, grandparentId2...]
+                    List<String> ancestorIDs
+                            = getAncestorIdsForSplit(conn, tableName, streamName, regionInfoA,
+                            regionInfoB);
+
+                    upsertDaughterPartitions(conn, tableName, streamName, ancestorIDs.subList(0, 1),
+                            Arrays.asList(regionInfoA, regionInfoB));
+
+                    updateParentPartitionEndTime(conn, tableName, streamName, ancestorIDs,
+                            regionInfoA.getRegionId());
+                    return;
+                } else {
+                    LOGGER.debug("{} does not have a stream enabled, skipping partition metadata"
+                            + " update.", regionInfoA.getTable());
+                    return;
+                }
+            } catch (ParentPartitionNotFound e) {
+                LOGGER.debug("Parent partition not found, skipping remaining steps.", e);
                 return;
+            } catch (TableNotFoundException e) {
+                LOGGER.warn("System Table not found during region split completion. "
+                        + "This must happen before metadata upgrade only.", e);
+                return;
+            } catch (Exception e) {
+                LOGGER.error("Try: {}. Unable to update CDC Stream Partition metadata during"
+                                + " split with daughter regions: {} {}",
+                        tries, regionInfoA.getEncodedName(), regionInfoB.getEncodedName(), e);
+                metricSource.incrementPostSplitPartitionUpdateFailureCount();
+                caughtException = e;
             }
-            String tableName = phoenixTable.getName().getString();
-            String streamName = getStreamName(conn, tableName);
-            if (streamName != null) {
-                LOGGER.info("Updating split partition metadata for table={}, stream={} daughters {} {}",
-                        tableName, streamName, regionInfoA.getEncodedName(), regionInfoB.getEncodedName());
-                // ancestorIDs = [parentId, grandparentId1, grandparentId2...]
-                List<String> ancestorIDs
-                        = getAncestorIdsForSplit(conn, tableName, streamName, regionInfoA, regionInfoB);
-
-                upsertDaughterPartitions(conn, tableName, streamName, ancestorIDs.subList(0, 1),
-                        Arrays.asList(regionInfoA, regionInfoB));
-
-                updateParentPartitionEndTime(conn, tableName, streamName, ancestorIDs,
-                        regionInfoA.getRegionId());
-            } else {
-                LOGGER.info("{} does not have a stream enabled, skipping partition metadata update.",
-                        regionInfoA.getTable());
-            }
-        } catch (SQLException e) {
-            LOGGER.error("Unable to update CDC Stream Partition metadata during split with daughter regions: {} {}",
-                    regionInfoA.getEncodedName(), regionInfoB.getEncodedName(), e);
-        }
+        } while (tries++ < maxRetryCount);
+        // All retries were exhausted
+        throw new IOException(
+                "Failed to update CDC Stream Partition metadata after " + maxRetryCount +
+                        " retries during split. Daughter regions: " +
+                        regionInfoA.getEncodedName() + " " +
+                        regionInfoB.getEncodedName(), caughtException);
     }
 
     /**
@@ -136,41 +182,67 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
     @Override
     public void postCompletedMergeRegionsAction(final ObserverContext<MasterCoprocessorEnvironment> c,
                                                 final RegionInfo[] regionsToMerge,
-                                                final RegionInfo mergedRegion) {
+                                                final RegionInfo mergedRegion) throws IOException {
         Configuration conf = c.getEnvironment().getConfiguration();
-        try (Connection conn  = QueryUtil.getConnectionOnServer(conf)) {
-            // CDC will be enabled on Phoenix tables only
-            PTable phoenixTable = getPhoenixTable(conn, mergedRegion.getTable());
-            if (phoenixTable == null) {
-                LOGGER.info("{} is not a Phoenix Table, skipping partition metadata update.",
-                        mergedRegion.getTable());
-                return;
-            }
-            String tableName = phoenixTable.getName().getString();
-            String streamName = getStreamName(conn, tableName);
-            if (streamName != null) {
-                LOGGER.info("Updating merged partition metadata for table={}, stream={} daughter {}",
-                        tableName, streamName, mergedRegion.getEncodedName());
-                // upsert a row for daughter-parent for each merged region
-                upsertDaughterPartitions(conn, tableName, streamName,
-                        Arrays.stream(regionsToMerge).map(RegionInfo::getEncodedName).collect(Collectors.toList()),
-                        Arrays.asList(mergedRegion));
-
-                // lookup all ancestors of a merged region and update the endTime
-                for (RegionInfo ri : regionsToMerge) {
-                    List<String> ancestorIDs = getAncestorIdsForMerge(conn, tableName, streamName, ri);
-                    updateParentPartitionEndTime(conn, tableName, streamName, ancestorIDs,
-                            mergedRegion.getRegionId());
+        int maxRetryCount = conf.getInt(PHOENIX_MASTER_MAX_RETRY_COUNT, DEFAULT_PHOENIX_MASTER_MAX_RETRY_COUNT);
+        int tries = 0;
+        Exception caughtException;
+        do {
+            try (Connection conn = QueryUtil.getConnectionOnServer(conf)) {
+                // CDC will be enabled on Phoenix tables only
+                PTable phoenixTable = getPhoenixTable(conn, mergedRegion.getTable());
+                if (phoenixTable == null) {
+                    LOGGER.debug("{} is not a Phoenix Table, skipping partition metadata update.",
+                            mergedRegion.getTable());
+                    return;
                 }
-            } else {
-                LOGGER.info("{} does not have a stream enabled, skipping partition metadata update.",
-                        mergedRegion.getTable());
+                String tableName = phoenixTable.getName().getString();
+                String streamName = getStreamName(conn, tableName);
+                if (streamName != null) {
+                    LOGGER.info(
+                            "Updating merged partition metadata for table={}, stream={} "
+                                    + "daughter {}",
+                            tableName, streamName, mergedRegion.getEncodedName());
+                    // upsert a row for daughter-parent for each merged region
+                    upsertDaughterPartitions(conn, tableName, streamName,
+                            Arrays.stream(regionsToMerge).map(RegionInfo::getEncodedName)
+                                    .collect(Collectors.toList()),
+                            Collections.singletonList(mergedRegion));
+
+                    // lookup all ancestors of a merged region and update the endTime
+                    for (RegionInfo ri : regionsToMerge) {
+                        List<String> ancestorIDs =
+                                getAncestorIdsForMerge(conn, tableName, streamName, ri);
+                        updateParentPartitionEndTime(conn, tableName, streamName, ancestorIDs,
+                                mergedRegion.getRegionId());
+                    }
+                    return;
+                } else {
+                    LOGGER.debug("{} does not have a stream enabled, skipping partition metadata"
+                                    + " update.", mergedRegion.getTable());
+                    return;
+                }
+            } catch (ParentPartitionNotFound e) {
+                LOGGER.debug("Parent partition not found, skipping remaining steps.", e);
+                return;
+            } catch (TableNotFoundException e) {
+                LOGGER.warn("System Table not found during region merge completion. "
+                        + "This must happen before metadata upgrade only.", e);
+                return;
+            } catch (Exception e) {
+                LOGGER.error("Try: {}. Unable to update CDC Stream Partition metadata during"
+                                + " merge with parent regions: {} and daughter region {}",
+                        tries, regionsToMerge, mergedRegion.getEncodedName(), e);
+                metricSource.incrementPostMergePartitionUpdateFailureCount();
+                caughtException = e;
             }
-        } catch (SQLException e) {
-            LOGGER.error("Unable to update CDC Stream Partition metadata during merge with " +
-                            "parent regions: {} and daughter region {}",
-                    regionsToMerge, mergedRegion.getEncodedName(), e);
-        }
+        } while (tries++ < maxRetryCount);
+        // All retries exhausted
+        throw new IOException(
+                "Failed to update CDC Stream Partition metadata after " + maxRetryCount +
+                        " retries during merge with parent regions: " +
+                        Arrays.toString(regionsToMerge) +
+                        " and daughter region: " + mergedRegion.getEncodedName(), caughtException);
     }
 
     /**
@@ -180,8 +252,9 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
      * Return parent and all grandparent partition ids.
      *
      */
-    private List<String> getAncestorIdsForSplit(Connection conn, String tableName, String streamName,
-                                        RegionInfo regionInfoA, RegionInfo regionInfoB)
+    protected List<String> getAncestorIdsForSplit(Connection conn, String tableName,
+                                                  String streamName,
+                                                  RegionInfo regionInfoA, RegionInfo regionInfoB)
             throws SQLException {
         byte[] parentStartKey = regionInfoA.getStartKey();
         byte[] parentEndKey = regionInfoB.getEndKey();
@@ -212,8 +285,9 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
             ancestorIDs.add(rs.getString(1));
             ancestorIDs.add(rs.getString(2));
         } else {
-            throw new SQLException(String.format("Could not find parent of the provided daughters: "
-                            + "startKeyA=%s endKeyA=%s startKeyB=%s endKeyB=%s",
+            throw new ParentPartitionNotFound(
+                    String.format("Could not find parent of the provided daughters: "
+                                    + "startKeyA=%s endKeyA=%s startKeyB=%s endKeyB=%s",
                     Bytes.toStringBinary(regionInfoA.getStartKey()),
                     Bytes.toStringBinary(regionInfoA.getEndKey()),
                     Bytes.toStringBinary(regionInfoB.getStartKey()),
@@ -230,8 +304,9 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
      * Lookup the parent of a merged region.
      * If the merged region was an output of a merge in the past, it will have multiple parents.
      */
-    private List<String> getAncestorIdsForMerge(Connection conn, String tableName, String streamName,
-                                                RegionInfo parent) throws SQLException {
+    protected List<String> getAncestorIdsForMerge(Connection conn, String tableName,
+                                                  String streamName,
+                                                  RegionInfo parent) throws SQLException {
         List<String> ancestorIDs = new ArrayList<>();
         ancestorIDs.add(parent.getEncodedName());
         PreparedStatement pstmt = conn.prepareStatement(PARENT_PARTITION_QUERY_FOR_MERGE);
@@ -242,8 +317,9 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
         if (rs.next()) {
             ancestorIDs.add(rs.getString(1));
         } else {
-            throw new SQLException(String.format(
-                    "Could not find parent of the provided merged region: {}", parent.getEncodedName()));
+            throw new ParentPartitionNotFound(String.format(
+                    "Could not find parent of the provided merged region: %s",
+                    parent.getEncodedName()));
         }
         // if parent was a result of a merge, there will be multiple grandparents.
         while (rs.next()) {
