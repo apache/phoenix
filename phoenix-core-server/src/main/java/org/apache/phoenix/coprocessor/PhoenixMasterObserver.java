@@ -82,7 +82,8 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
             = "UPSERT INTO " + SYSTEM_CDC_STREAM_NAME + " (TABLE_NAME, STREAM_NAME, PARTITION_ID, "
             + "PARENT_PARTITION_ID, PARTITION_END_TIME) VALUES (?,?,?,?,?)";
 
-    private static final int MAX_RETRY_COUNT = 20;
+    public static final String PHOENIX_MASTER_MAX_RETRY_COUNT = "phoenix.master.max.retry.count";
+    public static final int DEFAULT_PHOENIX_MASTER_MAX_RETRY_COUNT = 20;
 
     @Override
     public Optional<MasterObserver> getMasterObserver() {
@@ -109,6 +110,8 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
                                                final RegionInfo regionInfoA,
                                                final RegionInfo regionInfoB) throws IOException {
         Configuration conf = c.getEnvironment().getConfiguration();
+        int maxRetryCount =
+                conf.getInt(PHOENIX_MASTER_MAX_RETRY_COUNT, DEFAULT_PHOENIX_MASTER_MAX_RETRY_COUNT);
         int tries = 0;
         Exception caughtException;
         do {
@@ -158,10 +161,10 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
                 metricSource.incrementPostSplitPartitionUpdateFailureCount();
                 caughtException = e;
             }
-        } while (tries++ < MAX_RETRY_COUNT);
+        } while (tries++ < maxRetryCount);
         // All retries were exhausted
         throw new IOException(
-                "Failed to update CDC Stream Partition metadata after " + MAX_RETRY_COUNT +
+                "Failed to update CDC Stream Partition metadata after " + maxRetryCount +
                         " retries during split. Daughter regions: " +
                         regionInfoA.getEncodedName() + " " +
                         regionInfoB.getEncodedName(), caughtException);
@@ -180,6 +183,7 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
                                                 final RegionInfo[] regionsToMerge,
                                                 final RegionInfo mergedRegion) throws IOException {
         Configuration conf = c.getEnvironment().getConfiguration();
+        int maxRetryCount = conf.getInt(PHOENIX_MASTER_MAX_RETRY_COUNT, DEFAULT_PHOENIX_MASTER_MAX_RETRY_COUNT);
         int tries = 0;
         Exception caughtException;
         do {
@@ -231,10 +235,10 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
                 metricSource.incrementPostMergePartitionUpdateFailureCount();
                 caughtException = e;
             }
-        } while (tries++ < MAX_RETRY_COUNT);
+        } while (tries++ < maxRetryCount);
         // All retries exhausted
         throw new IOException(
-                "Failed to update CDC Stream Partition metadata after " + MAX_RETRY_COUNT +
+                "Failed to update CDC Stream Partition metadata after " + maxRetryCount +
                         " retries during merge with parent regions: " +
                         Arrays.toString(regionsToMerge) +
                         " and daughter region: " + mergedRegion.getEncodedName(), caughtException);
