@@ -418,6 +418,30 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
     }
 
     /**
+     * Tests processing of log files that were not closed, ensuring it's successful.
+     */
+    @Test
+    public void testProcessLogFileForUnClosedFile() throws Exception {
+        final Path emptyFilePath = new Path(testFolder.newFile("testProcessLogFileEmpty").toURI());
+        LogFileWriter writer = initLogFileWriter(emptyFilePath);
+
+        // Add one mutation
+        Mutation put = LogFileTestUtil.newPut("row1", 3L, 4);
+        writer.append("table", 1, put);
+        writer.sync();
+
+        // Process the file without closing - should not throw any exceptions
+        ReplicationLogProcessor spyProcessor = Mockito.spy(new ReplicationLogProcessor(conf, executorService));
+        Mockito.doNothing().when(spyProcessor).processReplicationLogBatch(Mockito.any(Map.class));
+
+        spyProcessor.processLogFile(localFs, emptyFilePath);
+
+        // Verify processReplicationLogBatch was called the expected number of times
+        Mockito.verify(spyProcessor, Mockito.times(1))
+                .processReplicationLogBatch(Mockito.any(Map.class));
+    }
+
+    /**
      * Tests that configuration parameters are properly read and applied.
      */
     @Test
