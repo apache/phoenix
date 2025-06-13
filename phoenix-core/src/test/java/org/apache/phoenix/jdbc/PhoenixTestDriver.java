@@ -126,6 +126,19 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
         }
     }
 
+    public void cleanUpCQSICache() throws SQLException {
+        lockInterruptibly(LockMode.WRITE);
+        try {
+            for (ConnectionQueryServices service : connectionQueryServicesMap.values()) {
+                service.close();
+            }
+            connectionQueryServicesMap.clear();
+        }
+        finally {
+            unlock(LockMode.WRITE);
+        }
+    }
+
     @GuardedBy("closeLock")
     private void checkClosed() {
         if (closed) {
