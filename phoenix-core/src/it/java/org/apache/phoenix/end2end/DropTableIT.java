@@ -22,6 +22,7 @@ import static org.junit.Assert.assertFalse;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
+import java.sql.PreparedStatement;
 
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -37,8 +38,9 @@ public class DropTableIT extends ParallelStatsDisabledIT {
           final Statement stmt = conn.createStatement()) {
         assertFalse(stmt.execute(String.format("CREATE TABLE %s(pk varchar not null primary key)", tableName)));
         String dropTable = String.format("DROP TABLE IF EXISTS %s", tableName);
+        PreparedStatement pstmt = conn.prepareStatement(dropTable);
         for (int i = 0; i < 5; i++) {
-          assertFalse(stmt.execute(dropTable));
+          assertFalse(pstmt.execute());
         }
       }
     }
