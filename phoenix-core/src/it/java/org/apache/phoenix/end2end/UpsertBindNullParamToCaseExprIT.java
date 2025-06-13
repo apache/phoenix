@@ -24,6 +24,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -39,7 +40,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-public class TestUpsertBindNullParamToCaseExprIT extends BaseTest {
+@Category(ParallelStatsDisabledTest.class)
+public class UpsertBindNullParamToCaseExprIT extends BaseTest {
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {

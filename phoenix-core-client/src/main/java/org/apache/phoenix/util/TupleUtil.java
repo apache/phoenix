@@ -29,10 +29,12 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
@@ -242,6 +244,25 @@ public class TupleUtil {
                 resultSet.getStatement().getQueryPlan().getContext().getResolver().getTables()
                     .get(0).getTable();
             TupleProjector tupleProjector = new TupleProjector(pTable);
+            // NOTE - Tuple result projection does not work well with local index and causes
+            // this assertion to get get triggered: CellUtil.matchingRows(kvs[0], kvs[kvs.length-1])
+            // as the Tuple contains cells of the local index too, so filter out those cells.
+            Cell firstCell = null;
+            List<Cell> cells = new ArrayList<>(toProject.size());
+            for (int i = 0; i < toProject.size(); ++i) {
+                Cell cell = toProject.getValue(i);
+                if (firstCell == null) {
+                    firstCell = cell;
+                }
+                else {
+                    if (! CellUtil.matchingRows(firstCell, firstCell.getRowLength(), cell,
+                            cell.getRowLength())) {
+                        continue;
+                    }
+                }
+                cells.add(cell);
+            }
+            toProject = new ResultTuple(Result.create(cells));
             // Project results for ResultSet.
             Tuple tuple = tupleProjector.projectResults(toProject, true);
             // Use new CF:CQ that can be correctly used by ResultSet.

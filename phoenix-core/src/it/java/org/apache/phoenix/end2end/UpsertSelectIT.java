@@ -216,6 +216,10 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
                 upsertStmt.setString(1, A_VALUE);
                 int rowsInserted = upsertStmt.executeUpdate();
                 assertEquals(4, rowsInserted);
+                assertEquals(4, upsertStmt.getUpdateCount());
+                // When not using an UPSERT variant (e.g., ON DUPLICATE KEY) that is not capable of
+                // returning a row, we don't expect to get a result set.
+                assertNull(upsertStmt.getResultSet());
             }
             conn.commit();
         }

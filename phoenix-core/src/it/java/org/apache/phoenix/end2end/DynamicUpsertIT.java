@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -80,6 +81,10 @@ public class DynamicUpsertIT extends ParallelStatsDisabledIT {
             PreparedStatement statement = conn.prepareStatement(upsertquery);
             int rowsInserted = statement.executeUpdate();
             assertEquals(1, rowsInserted);
+            assertEquals(1, statement.getUpdateCount());
+            // When not using an UPSERT variant (e.g., ON DUPLICATE KEY) that is not capable of
+            // returning a row, we don't expect to get a result set.
+            assertNull(statement.getResultSet());
 
             // since the upsert does not alter the schema check with a dynamicolumn
             PreparedStatement selectStatement = conn.prepareStatement(selectquery);
