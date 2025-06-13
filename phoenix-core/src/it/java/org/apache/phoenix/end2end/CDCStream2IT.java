@@ -24,9 +24,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixMasterSource;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
@@ -43,8 +41,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_STATUS_NAME;
-import static org.apache.phoenix.util.CDCUtil.CDC_STREAM_NAME_FORMAT;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -68,7 +64,7 @@ public class CDCStream2IT extends CDCBaseIT {
     public void testPartitionMetadataWithRetries() throws Exception {
         Connection conn = newConnection();
         String tableName = generateUniqueName();
-        createTableAndEnableCDC(conn, tableName);
+        createTableAndEnableCDC(conn, tableName, false);
 
         assertEquals("Post split partition update failures should be 0 initially",
                 0, METRICS_SOURCE.getPostSplitPartitionUpdateFailureCount());
@@ -79,7 +75,7 @@ public class CDCStream2IT extends CDCBaseIT {
         TestUtil.splitTable(conn, tableName, Bytes.toBytes("m"));
 
         // Verify split metric is 24
-        assertEquals("Post split partition update failures should be 15 after retries",
+        assertEquals("Post split partition update failures should be 24 after retries",
                 24, METRICS_SOURCE.getPostSplitPartitionUpdateFailureCount());
 
         List<HRegionLocation> regions = TestUtil.getAllTableRegions(conn, tableName);
@@ -121,54 +117,4 @@ public class CDCStream2IT extends CDCBaseIT {
         }
     }
 
-    private void createTableAndEnableCDC(Connection conn, String tableName) throws Exception {
-        String cdcName = generateUniqueName();
-        String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
-        conn.createStatement().execute(
-                "CREATE TABLE  " + tableName + " ( k VARCHAR PRIMARY KEY," + " v1 INTEGER,"
-                        + " v2 VARCHAR)");
-        createCDC(conn, cdc_sql, null);
-        String streamName = getStreamName(conn, tableName, cdcName);
-        while (!CDCUtil.CdcStreamStatus.ENABLED.toString()
-                .equals(getStreamStatus(conn, tableName, streamName))) {
-            Thread.sleep(1000);
-        }
-    }
-
-    private String getStreamName(Connection conn, String tableName, String cdcName)
-            throws Exception {
-        return String.format(CDC_STREAM_NAME_FORMAT, tableName, cdcName,
-                CDCUtil.getCDCCreationTimestamp(
-                        conn.unwrap(PhoenixConnection.class).getTableNoCache(tableName)));
-    }
-
-    private String getStreamStatus(Connection conn, String tableName, String streamName)
-            throws Exception {
-        ResultSet rs = conn.createStatement().executeQuery("SELECT STREAM_STATUS FROM "
-                + SYSTEM_CDC_STREAM_STATUS_NAME + " WHERE TABLE_NAME='" + tableName +
-                "' AND STREAM_NAME='" + streamName + "'");
-        assertTrue(rs.next());
-        return rs.getString(1);
-    }
-
-    /**
-     * Partition Metadata class.
-     */
-    private class PartitionMetadata {
-        public String partitionId;
-        public String parentPartitionId;
-        public Long startTime;
-        public Long endTime;
-        public byte[] startKey;
-        public byte[] endKey;
-
-        public PartitionMetadata(ResultSet rs) throws Exception {
-            partitionId = rs.getString(3);
-            parentPartitionId = rs.getString(4);
-            startTime = rs.getLong(5);
-            endTime = rs.getLong(6);
-            startKey = rs.getBytes(7);
-            endKey = rs.getBytes(8);
-        }
-    }
 }

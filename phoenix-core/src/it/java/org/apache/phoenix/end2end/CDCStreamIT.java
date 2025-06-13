@@ -21,7 +21,6 @@ package org.apache.phoenix.end2end;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.RegionInfo;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.PhoenixMasterObserver;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
@@ -59,7 +58,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_
 import static org.apache.phoenix.query.QueryConstants.CDC_EVENT_TYPE;
 import static org.apache.phoenix.query.QueryConstants.CDC_PRE_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_UPSERT_EVENT_TYPE;
-import static org.apache.phoenix.util.CDCUtil.CDC_STREAM_NAME_FORMAT;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -67,7 +65,6 @@ import static org.junit.Assert.assertTrue;
 @Category(NeedsOwnMiniClusterTest.class)
 public class CDCStreamIT extends CDCBaseIT {
 
-    private static RegionCoprocessorEnvironment TaskRegionEnvironment;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final MetricsPhoenixMasterSource METRICS_SOURCE =
             MetricsPhoenixCoprocessorSourceFactory.getInstance().getPhoenixMasterSource();
@@ -83,7 +80,7 @@ public class CDCStreamIT extends CDCBaseIT {
                 Long.toString(Long.MAX_VALUE));
         props.put("hbase.coprocessor.master.classes", PhoenixMasterObserver.class.getName());
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-        TaskRegionEnvironment =
+        taskRegionEnvironment =
                 getUtility()
                         .getRSForFirstRegionInTable(
                                 PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
@@ -110,7 +107,7 @@ public class CDCStreamIT extends CDCBaseIT {
         // run task to populate partitions and enable stream
         TaskRegionObserver.SelfHealingTask task =
                 new TaskRegionObserver.SelfHealingTask(
-                        TaskRegionEnvironment, QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
+                        taskRegionEnvironment, QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
         task.run();
 
         // stream should be in ENABLED state and metadata is populated for every table region
@@ -145,7 +142,7 @@ public class CDCStreamIT extends CDCBaseIT {
         // run task to populate partitions and enable stream
         TaskRegionObserver.SelfHealingTask task =
                 new TaskRegionObserver.SelfHealingTask(
-                        TaskRegionEnvironment, QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
+                        taskRegionEnvironment, QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
         task.run();
 
         // stream exists in ENABLED status
@@ -178,7 +175,7 @@ public class CDCStreamIT extends CDCBaseIT {
         // create table, cdc and bootstrap stream metadata
         Connection conn = newConnection();
         String tableName = generateUniqueName();
-        createTableAndEnableCDC(conn, tableName);
+        createTableAndEnableCDC(conn, tableName, true);
 
         //split the only region somewhere in the middle
         TestUtil.splitTable(conn, tableName, Bytes.toBytes("m"));
@@ -215,7 +212,7 @@ public class CDCStreamIT extends CDCBaseIT {
         // create table, cdc and bootstrap stream metadata
         Connection conn = newConnection();
         String tableName = generateUniqueName();
-        createTableAndEnableCDC(conn, tableName);
+        createTableAndEnableCDC(conn, tableName, true);
 
         //split the only region [null, null]
         TestUtil.splitTable(conn, tableName, Bytes.toBytes("l"));
@@ -259,7 +256,7 @@ public class CDCStreamIT extends CDCBaseIT {
         // create table, cdc and bootstrap stream metadata
         Connection conn = newConnection();
         String tableName = generateUniqueName();
-        createTableAndEnableCDC(conn, tableName);
+        createTableAndEnableCDC(conn, tableName, true);
 
         //split the only region [null, null]
         TestUtil.splitTable(conn, tableName, Bytes.toBytes("l"));
@@ -303,7 +300,7 @@ public class CDCStreamIT extends CDCBaseIT {
         // create table, cdc and bootstrap stream metadata
         Connection conn = newConnection();
         String tableName = generateUniqueName();
-        createTableAndEnableCDC(conn, tableName);
+        createTableAndEnableCDC(conn, tableName, true);
 
         //split the only region [null, null]
         TestUtil.splitTable(conn, tableName, Bytes.toBytes("d"));
@@ -341,7 +338,7 @@ public class CDCStreamIT extends CDCBaseIT {
         // create table, cdc and bootstrap stream metadata
         Connection conn = newConnection();
         String tableName = generateUniqueName();
-        createTableAndEnableCDC(conn, tableName);
+        createTableAndEnableCDC(conn, tableName, true);
 
         //split the only region
         TestUtil.splitTable(conn, tableName, Bytes.toBytes("d"));
@@ -391,7 +388,7 @@ public class CDCStreamIT extends CDCBaseIT {
         // create table, cdc and bootstrap stream metadata
         Connection conn = newConnection();
         String tableName = generateUniqueName();
-        createTableAndEnableCDC(conn, tableName);
+        createTableAndEnableCDC(conn, tableName, true);
 
         //split the only region
         TestUtil.splitTable(conn, tableName, Bytes.toBytes("l"));
@@ -438,7 +435,7 @@ public class CDCStreamIT extends CDCBaseIT {
         // create table, cdc and bootstrap stream metadata
         Connection conn = newConnection();
         String tableName = generateUniqueName();
-        createTableAndEnableCDC(conn, tableName);
+        createTableAndEnableCDC(conn, tableName, true);
 
         // split the only region
         TestUtil.splitTable(conn, tableName, Bytes.toBytes("l"));
@@ -493,7 +490,7 @@ public class CDCStreamIT extends CDCBaseIT {
     public void testGetRecords() throws Exception {
         Connection conn = newConnection();
         String tableName = generateUniqueName();
-        createTableAndEnableCDC(conn, tableName);
+        createTableAndEnableCDC(conn, tableName, true);
 
         // upsert data
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('a', 1, 'foo')");
@@ -539,7 +536,7 @@ public class CDCStreamIT extends CDCBaseIT {
     public void testPartitionUpdateFailureMetrics() throws Exception {
         Connection conn = newConnection();
         String tableName = generateUniqueName();
-        createTableAndEnableCDC(conn, tableName);
+        createTableAndEnableCDC(conn, tableName, true);
 
         assertEquals("Post split partition update failures should be 0 initially",
             0, METRICS_SOURCE.getPostSplitPartitionUpdateFailureCount());
@@ -564,11 +561,6 @@ public class CDCStreamIT extends CDCBaseIT {
             0, METRICS_SOURCE.getPostMergePartitionUpdateFailureCount());
     }
 
-    private String getStreamName(Connection conn, String tableName, String cdcName) throws SQLException {
-        return String.format(CDC_STREAM_NAME_FORMAT, tableName, cdcName, CDCUtil.getCDCCreationTimestamp(
-                conn.unwrap(PhoenixConnection.class).getTableNoCache(tableName)));
-    }
-
     private void assertStreamStatus(Connection conn, String tableName, String streamName,
                                     CDCUtil.CdcStreamStatus status) throws SQLException {
         ResultSet rs = conn.createStatement().executeQuery("SELECT STREAM_STATUS FROM "
@@ -580,8 +572,7 @@ public class CDCStreamIT extends CDCBaseIT {
 
     private void assertPartitionMetadata(Connection conn, String tableName, String cdcName)
             throws SQLException {
-        String streamName = String.format(CDC_STREAM_NAME_FORMAT, tableName, cdcName,
-                CDCUtil.getCDCCreationTimestamp(conn.unwrap(PhoenixConnection.class).getTableNoCache(tableName)));
+        String streamName = getStreamName(conn, tableName, cdcName);
         List<HRegionLocation> tableRegions
                 = conn.unwrap(PhoenixConnection.class).getQueryServices().getAllTableRegions(tableName.getBytes());
         for (HRegionLocation tableRegion : tableRegions) {
@@ -596,39 +587,4 @@ public class CDCStreamIT extends CDCBaseIT {
         }
     }
 
-    private void createTableAndEnableCDC(Connection conn, String tableName) throws Exception {
-        String cdcName = generateUniqueName();
-        String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
-        conn.createStatement().execute(
-                "CREATE TABLE  " + tableName + " ( k VARCHAR PRIMARY KEY," + " v1 INTEGER,"
-                        + " v2 VARCHAR)");
-        createCDC(conn, cdc_sql, null);
-        String streamName = getStreamName(conn, tableName, cdcName);
-        TaskRegionObserver.SelfHealingTask task =
-                new TaskRegionObserver.SelfHealingTask(
-                        TaskRegionEnvironment, QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
-        task.run();
-        assertStreamStatus(conn, tableName, streamName, CDCUtil.CdcStreamStatus.ENABLED);
-    }
-
-    /**
-     * Inner class to represent partition metadata for a region i.e. single row from SYSTEM.CDC_STREAM
-     */
-    private class PartitionMetadata {
-        public String partitionId;
-        public String parentPartitionId;
-        public Long startTime;
-        public Long endTime;
-        public byte[] startKey;
-        public byte[] endKey;
-
-        public PartitionMetadata(ResultSet rs) throws SQLException {
-            partitionId = rs.getString(3);
-            parentPartitionId = rs.getString(4);
-            startTime = rs.getLong(5);
-            endTime = rs.getLong(6);
-            startKey = rs.getBytes(7);
-            endKey = rs.getBytes(8);
-        }
-    }
 }
