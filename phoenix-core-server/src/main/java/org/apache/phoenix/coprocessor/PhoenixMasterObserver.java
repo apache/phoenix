@@ -247,8 +247,9 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
      * Return parent and all grandparent partition ids.
      *
      */
-    private List<String> getAncestorIdsForSplit(Connection conn, String tableName, String streamName,
-                                        RegionInfo regionInfoA, RegionInfo regionInfoB)
+    protected List<String> getAncestorIdsForSplit(Connection conn, String tableName,
+                                                  String streamName,
+                                                  RegionInfo regionInfoA, RegionInfo regionInfoB)
             throws SQLException {
         byte[] parentStartKey = regionInfoA.getStartKey();
         byte[] parentEndKey = regionInfoB.getEndKey();
@@ -298,8 +299,9 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
      * Lookup the parent of a merged region.
      * If the merged region was an output of a merge in the past, it will have multiple parents.
      */
-    private List<String> getAncestorIdsForMerge(Connection conn, String tableName, String streamName,
-                                                RegionInfo parent) throws SQLException {
+    protected List<String> getAncestorIdsForMerge(Connection conn, String tableName,
+                                                  String streamName,
+                                                  RegionInfo parent) throws SQLException {
         List<String> ancestorIDs = new ArrayList<>();
         ancestorIDs.add(parent.getEncodedName());
         PreparedStatement pstmt = conn.prepareStatement(PARENT_PARTITION_QUERY_FOR_MERGE);
