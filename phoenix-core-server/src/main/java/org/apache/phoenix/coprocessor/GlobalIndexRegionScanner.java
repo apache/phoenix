@@ -170,6 +170,8 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     protected byte[] logicalTableName;
     protected byte[] tableType;
     protected byte[] lastDdlTimestamp;
+    protected byte[] emptyCF;
+    protected byte[] emptyCQ;
     private final CompiledTTLExpression ttlExpression;
 
     // This relies on Hadoop Configuration to handle warning about deprecated configs and
@@ -213,6 +215,8 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         }
         tenantId = scan.getAttribute(MutationState.MutationMetadataType.TENANT_ID.toString());
         schemaName = scan.getAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString());
+        emptyCF = scan.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME);
+        emptyCQ = scan.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME);
         logicalTableName = scan.getAttribute(
                 MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString());
         tableType = scan.getAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString());
