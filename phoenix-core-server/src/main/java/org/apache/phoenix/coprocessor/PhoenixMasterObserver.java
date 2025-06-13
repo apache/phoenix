@@ -82,7 +82,8 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
             = "UPSERT INTO " + SYSTEM_CDC_STREAM_NAME + " (TABLE_NAME, STREAM_NAME, PARTITION_ID, "
             + "PARENT_PARTITION_ID, PARTITION_END_TIME) VALUES (?,?,?,?,?)";
 
-    public static final String PHOENIX_MASTER_MAX_RETRY_COUNT = "phoenix.master.max.retry.count";
+    public static final String PHOENIX_MASTER_MAX_RETRY_COUNT =
+            "phoenix.master.observer.max.retry.count";
     public static final int DEFAULT_PHOENIX_MASTER_MAX_RETRY_COUNT = 20;
 
     @Override
