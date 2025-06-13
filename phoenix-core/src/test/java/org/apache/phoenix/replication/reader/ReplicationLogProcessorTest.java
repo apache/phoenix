@@ -418,11 +418,11 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
     }
 
     /**
-     * Tests processing of log files that were not closed, ensuring it's successful.
+     * Tests processing of log files that were not closed, ensuring it's successf.
      */
     @Test
     public void testProcessLogFileForUnClosedFile() throws Exception {
-        final Path emptyFilePath = new Path(testFolder.newFile("testProcessLogFileEmpty").toURI());
+        final Path emptyFilePath = new Path(testFolder.newFile("testProcessLogFileForUnClosedFile").toURI());
         LogFileWriter writer = initLogFileWriter(emptyFilePath);
 
         // Add one mutation
