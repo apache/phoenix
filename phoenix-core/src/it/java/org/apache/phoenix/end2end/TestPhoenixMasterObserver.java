@@ -36,8 +36,8 @@ public class TestPhoenixMasterObserver extends PhoenixMasterObserver {
     private int splitFailureCount;
     private int mergeFailureCount;
 
-    private static final int SPLIT_FAILURE_THRESHOLD = 15;
-    private static final int MERGE_FAILURE_THRESHOLD = 18;
+    private static final int SPLIT_FAILURE_THRESHOLD = 24;
+    private static final int MERGE_FAILURE_THRESHOLD = 15;
 
     @Override
     public void start(CoprocessorEnvironment env) throws IOException {

@@ -75,24 +75,24 @@ public class CDCStream2IT extends CDCBaseIT {
         assertEquals("Post merge partition update failures should be 0 initially",
                 0, METRICS_SOURCE.getPostMergePartitionUpdateFailureCount());
 
-        // Perform a split operation - this will fail 15 times before succeeding
+        // Perform a split operation - this will fail 24 times before succeeding
         TestUtil.splitTable(conn, tableName, Bytes.toBytes("m"));
 
-        // Verify split metric is 15
+        // Verify split metric is 24
         assertEquals("Post split partition update failures should be 15 after retries",
-                15, METRICS_SOURCE.getPostSplitPartitionUpdateFailureCount());
+                24, METRICS_SOURCE.getPostSplitPartitionUpdateFailureCount());
 
         List<HRegionLocation> regions = TestUtil.getAllTableRegions(conn, tableName);
 
-        // Perform a merge operation - this will fail 18 times before succeeding
+        // Perform a merge operation - this will fail 15 times before succeeding
         TestUtil.mergeTableRegions(conn, tableName, regions.stream()
                 .map(HRegionLocation::getRegion)
                 .map(RegionInfo::getEncodedName)
                 .collect(Collectors.toList()));
 
-        // Verify merge metric is 18
+        // Verify merge metric is 15
         assertEquals("Post merge partition update failures should be 15 after retries",
-                18, METRICS_SOURCE.getPostMergePartitionUpdateFailureCount());
+                15, METRICS_SOURCE.getPostMergePartitionUpdateFailureCount());
 
         ResultSet rs = conn.createStatement().executeQuery(
                 "SELECT * FROM SYSTEM.CDC_STREAM WHERE TABLE_NAME='" + tableName + "'");
