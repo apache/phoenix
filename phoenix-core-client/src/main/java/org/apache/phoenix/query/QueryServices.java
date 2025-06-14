@@ -553,6 +553,8 @@ public interface QueryServices extends SQLCloseable {
 
     String PHOENIX_STREAMS_GET_TABLE_REGIONS_TIMEOUT = "phoenix.streams.get.table.regions.timeout";
 
+    public static final String SYNCHRONOUS_REPLICATION_ENABLED = "phoenix.synchronous.replication.enabled";
+
     /**
      * Get executor service used for parallel scans
      */
