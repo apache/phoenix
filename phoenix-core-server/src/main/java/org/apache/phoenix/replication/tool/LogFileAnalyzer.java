@@ -230,7 +230,8 @@ public class LogFileAnalyzer extends Configured implements Tool {
             Record record;
             while ((record = reader.next()) != null) {
                 String tableName = record.getHBaseTableName();
-                List<Mutation> mutations = mutationsByTable.getOrDefault(tableName, Lists.newArrayList());
+                List<Mutation> mutations = mutationsByTable.getOrDefault(tableName,
+                        Lists.newArrayList());
                 mutations.add(record.getMutation());
                 mutationsByTable.put(tableName, mutations);
             }

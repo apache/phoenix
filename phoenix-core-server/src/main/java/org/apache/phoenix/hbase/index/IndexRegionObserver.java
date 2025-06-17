@@ -173,7 +173,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     public static final boolean DEFAULT_PHOENIX_APPEND_METADATA_TO_WAL = false;
     // Mutation attribute to ignore the mutation for replication
     public static final String IGNORE_REPLICATION_ATTRIB = "_IGNORE_REPLICATION";
-    public static final byte[] IGNORE_REPLICATION_ATTRIB_VAL = new byte[]{0};
+    private static final byte[] IGNORE_REPLICATION_ATTRIB_VAL = new byte[]{0};
 
     /**
      * Class to represent pending data table rows
@@ -383,13 +383,14 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
      * you only want to ignore this for testing or for custom versions of HBase.
      */
     public static final String CHECK_VERSION_CONF_KEY = "com.saleforce.hbase.index.checkversion";
-
-    public static final String INDEX_LAZY_POST_BATCH_WRITE = "org.apache.hadoop.hbase.index.lazy.post_batch.write";
+    public static final String INDEX_LAZY_POST_BATCH_WRITE =
+            "org.apache.hadoop.hbase.index.lazy.post_batch.write";
     private static final boolean INDEX_LAZY_POST_BATCH_WRITE_DEFAULT = false;
-
-    private static final String INDEXER_INDEX_WRITE_SLOW_THRESHOLD_KEY = "phoenix.indexer.slow.post.batch.mutate.threshold";
+    private static final String INDEXER_INDEX_WRITE_SLOW_THRESHOLD_KEY =
+            "phoenix.indexer.slow.post.batch.mutate.threshold";
     private static final long INDEXER_INDEX_WRITE_SLOW_THRESHOLD_DEFAULT = 3_000;
-    private static final String INDEXER_PRE_INCREMENT_SLOW_THRESHOLD_KEY = "phoenix.indexer.slow.pre.increment";
+    private static final String INDEXER_PRE_INCREMENT_SLOW_THRESHOLD_KEY =
+            "phoenix.indexer.slow.pre.increment";
     private static final long INDEXER_PRE_INCREMENT_SLOW_THRESHOLD_DEFAULT = 3_000;
 
     // Index writers get invoked before and after data table updates
@@ -423,15 +424,16 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     private ReplicationLog replicationLog;
 
     // Don't replicate the mutation if this attribute is set
-    private static final Predicate<Mutation> IGNORE_REPLICATION = (mutation) ->
+    private static final Predicate<Mutation> IGNORE_REPLICATION = mutation ->
         mutation.getAttribute(IGNORE_REPLICATION_ATTRIB) != null;
 
-    // Don't replicate the mutation for syscat/child link if the tenantid is not leading in the row key
-    private static final Predicate<Mutation> NOT_TENANT_ID_ROW_KEY_PREFIX = (mutation) ->
-        !SystemCatalogWALEntryFilter.isTenantIdLeadingInKey(mutation.getRow(),0);
+    // Don't replicate the mutation for syscat/child link if the tenantid is not
+    // leading in the row key
+    private static final Predicate<Mutation> NOT_TENANT_ID_ROW_KEY_PREFIX = mutation ->
+        !SystemCatalogWALEntryFilter.isTenantIdLeadingInKey(mutation.getRow(), 0);
 
     // Don't replicate the mutation for child link if child is not a tenant view
-    private static final Predicate<Mutation> NOT_CHILD_LINK_TENANT_VIEW = (mutation) -> {
+    private static final Predicate<Mutation> NOT_CHILD_LINK_TENANT_VIEW = mutation -> {
         boolean isChildLinkToTenantView = false;
         for (List<Cell> cells : mutation.getFamilyCellMap().values()) {
             for (Cell cell : cells) {
@@ -1730,22 +1732,24 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         }
 
         if (context.preIndexUpdates != null) {
-            for (Map.Entry<HTableInterfaceReference, Mutation> entry :
-                    context.preIndexUpdates.entries()) {
+            for (Map.Entry<HTableInterfaceReference, Mutation> entry
+                    : context.preIndexUpdates.entries()) {
                 if (this.ignoreReplicationFilter.test(entry.getValue())) {
                     continue;
                 }
-                edit.add(IndexedKeyValue.newIndexedKeyValue(entry.getKey().get(), entry.getValue()));
+                edit.add(IndexedKeyValue.newIndexedKeyValue(
+                        entry.getKey().get(), entry.getValue()));
             }
         }
 
         if (context.postIndexUpdates != null) {
-            for (Map.Entry<HTableInterfaceReference, Mutation> entry :
-                    context.postIndexUpdates.entries()) {
+            for (Map.Entry<HTableInterfaceReference, Mutation> entry
+                    : context.postIndexUpdates.entries()) {
                 if (this.ignoreReplicationFilter.test(entry.getValue())) {
                     continue;
                 }
-                edit.add(IndexedKeyValue.newIndexedKeyValue(entry.getKey().get(), entry.getValue()));
+                edit.add(IndexedKeyValue.newIndexedKeyValue(
+                        entry.getKey().get(), entry.getValue()));
             }
         }
     }
@@ -2437,8 +2441,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             }
         }
         if (context.preIndexUpdates != null) {
-            for (Map.Entry<HTableInterfaceReference, Mutation> entry :
-                    context.preIndexUpdates.entries()) {
+            for (Map.Entry<HTableInterfaceReference, Mutation> entry
+                    : context.preIndexUpdates.entries()) {
                 if (this.ignoreReplicationFilter.test(entry.getValue())) {
                     continue;
                 }
@@ -2446,8 +2450,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             }
         }
         if (context.postIndexUpdates != null) {
-            for (Map.Entry<HTableInterfaceReference, Mutation> entry :
-                    context.postIndexUpdates.entries()) {
+            for (Map.Entry<HTableInterfaceReference, Mutation> entry
+                    : context.postIndexUpdates.entries()) {
                 if (this.ignoreReplicationFilter.test(entry.getValue())) {
                     continue;
                 }

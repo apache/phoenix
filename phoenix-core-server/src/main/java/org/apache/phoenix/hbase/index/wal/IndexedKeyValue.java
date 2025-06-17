@@ -88,7 +88,7 @@ public class IndexedKeyValue extends KeyValue {
     //used for deserialization
     public IndexedKeyValue() {}
 
-    private IndexedKeyValue(Cell c, ImmutableBytesPtr bs, Mutation mutation){
+    private IndexedKeyValue(Cell c, ImmutableBytesPtr bs, Mutation mutation) {
         super(c);
         this.indexTableName = bs;
         this.mutation = mutation;

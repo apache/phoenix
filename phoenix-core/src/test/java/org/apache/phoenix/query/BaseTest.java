@@ -1985,7 +1985,7 @@ public abstract class BaseTest {
     }
 
     /**
-     * Returns true if the region contains atleast one of the metadata rows we are interested in
+     * Returns true if the region contains at least one of the metadata rows we are interested in
      */
     protected static boolean regionContainsMetadataRows(RegionInfo regionInfo,
             List<byte[]> metadataRowKeys) {
