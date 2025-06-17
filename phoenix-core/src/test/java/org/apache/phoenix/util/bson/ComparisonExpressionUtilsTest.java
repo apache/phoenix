@@ -66,6 +66,11 @@ public class ComparisonExpressionUtilsTest {
             "NestedMap1.Id = $Id AND (NestedMap1.InPublication = InPublication)", rawBsonDocument,
             compareValues));
 
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "((attribute_exists(0) AND attribute_exists(1)) AND attribute_not_exists(#3)) AND ((" +
+                    "(attribute_not_exists(0) AND attribute_not_exists(1)) OR attribute_exists(#0)" +
+                    ") OR (#_ = :0))", rawBsonDocument, compareValues));
+
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
             "((NestedMap1.Id = $Id) AND ((NestedMap1.InPublication[0] = InPublication) OR "
                     + "((ISBN[0] = :ISBN) AND (Title = #Title))) OR "
@@ -1570,6 +1575,7 @@ public class ComparisonExpressionUtilsTest {
             "  \"#NestedList1_10\" : \"1234abce\",\n" +
             "  \"$Id1\" : 120,\n" +
             "  \"$Id10\" : 101,\n" +
+            "  \":>\" : 100,\n " +
             "  \"$Ids1\" : \"12\",\n" +
             "  \":ISBN\" : \"111-1111111111\",\n" +
             "  \"#NestedList1_xyz0123\" : \"xyz0123\",\n" +
@@ -1651,6 +1657,7 @@ public class ComparisonExpressionUtilsTest {
             "  },\n" +
             "  \"Id2\" : 101.01,\n" +
             "  \"IdS\" : \"101.01\",\n" +
+            "  \">\" : 12,\n " +
             "  \"Title\" : \"Book 101 Title\",\n" +
             "  \"Id\" : 101.01\n" +
             "}";
