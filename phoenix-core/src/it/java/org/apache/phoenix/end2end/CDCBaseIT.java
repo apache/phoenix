@@ -1019,9 +1019,10 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
      */
     public String getStreamName(Connection conn, String tableName, String cdcName)
             throws SQLException {
-        return String.format(CDC_STREAM_NAME_FORMAT, tableName, cdcName,
-                CDCUtil.getCDCCreationTimestamp(
-                        conn.unwrap(PhoenixConnection.class).getTableNoCache(tableName)));
+        long creationTS = CDCUtil.getCDCCreationTimestamp(
+                conn.unwrap(PhoenixConnection.class).getTableNoCache(tableName));
+        return String.format(CDC_STREAM_NAME_FORMAT, tableName, cdcName, creationTS,
+                CDCUtil.getCDCCreationUTCDateTime(creationTS));
     }
 
     /**
