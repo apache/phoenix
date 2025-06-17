@@ -6,6 +6,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
+import java.net.URI;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -13,6 +14,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.ServerName;
@@ -34,6 +38,7 @@ import org.apache.phoenix.replication.tool.LogFileAnalyzer;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
@@ -50,9 +55,6 @@ public class ReplicationLogIT extends ParallelStatsDisabledIT {
     @Rule
     public TestName name = new TestName();
 
-    private int syscatLogCountBeforeTest;
-    private int childLinkLogCountBeforeTest;
-
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
@@ -63,13 +65,27 @@ public class ReplicationLogIT extends ParallelStatsDisabledIT {
     @Before
     public void beforeTest() throws Exception {
         LOG.info("Starting test {}", name.getMethodName());
-        //getReplicationLog().rotateLog(RotationReason.TIME);
-        Map<String, List<Mutation>> logsByTable = groupLogsByTable();
-        dumpTableLogCount(logsByTable);
-        syscatLogCountBeforeTest = getCountForTable(logsByTable, SYSTEM_CATALOG_NAME);
-        childLinkLogCountBeforeTest = getCountForTable(logsByTable, SYSTEM_CHILD_LINK_NAME);
-        LOG.info("Before Test {} syscat={} child_links={}", name.getMethodName(),
-                syscatLogCountBeforeTest, childLinkLogCountBeforeTest);
+    }
+
+    @After
+    public void afterTest() throws Exception {
+        cleanupLogsFolder(standbyUri);
+    }
+
+    /**
+     * Delete all the shards under the top level replication log directory
+     * @throws IOException
+     */
+    private void cleanupLogsFolder(URI source) throws IOException {
+        FileSystem fs = FileSystem.get(config);
+        Path dir = new Path(source.getPath());
+        FileStatus[] statuses = fs.listStatus(dir);
+        for (FileStatus status : statuses) {
+            Path shard = status.getPath();
+            if (status.isDirectory()) {
+                fs.delete(shard, true);
+            }
+        }
     }
 
     private ReplicationLog getReplicationLog() throws IOException {
@@ -222,8 +238,8 @@ public class ReplicationLogIT extends ParallelStatsDisabledIT {
             // for index2 unverified + verified  since the null column is part of row key
             expected.put(indexName2, rowCount * 2);
             // we didn't create any tenant views so no change in the syscat entries
-            expected.put(SYSTEM_CATALOG_NAME, syscatLogCountBeforeTest);
-            expected.put(SYSTEM_CHILD_LINK_NAME, childLinkLogCountBeforeTest);
+            expected.put(SYSTEM_CATALOG_NAME, 0);
+            expected.put(SYSTEM_CHILD_LINK_NAME, 0);
             verifyReplication(conn, expected);
         }
     }
@@ -282,9 +298,9 @@ public class ReplicationLogIT extends ParallelStatsDisabledIT {
             // unverified + verified + delete (Delete column)
             expected.put(indexName, rowCount * 3);
             // 1 tenant view was created
-            expected.put(SYSTEM_CHILD_LINK_NAME, childLinkLogCountBeforeTest + 1);
+            expected.put(SYSTEM_CHILD_LINK_NAME, 1);
             // atleast 1 log entry for syscat
-            expected.put(SYSTEM_CATALOG_NAME, syscatLogCountBeforeTest + 1);
+            expected.put(SYSTEM_CATALOG_NAME, 1);
             verifyReplication(conn, expected);
         }
     }
@@ -298,9 +314,7 @@ public class ReplicationLogIT extends ParallelStatsDisabledIT {
                 .filter(entry -> entry.getKey().startsWith(QueryConstants.SYSTEM_SCHEMA_NAME))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
         assertEquals(2, systemTables.size());
-        assertEquals(childLinkLogCountBeforeTest + 1,
-                getCountForTable(systemTables, SYSTEM_CHILD_LINK_NAME));
-        assertTrue(getCountForTable(systemTables, SYSTEM_CATALOG_NAME) >
-                syscatLogCountBeforeTest);
+        assertEquals(1, getCountForTable(systemTables, SYSTEM_CHILD_LINK_NAME));
+        assertTrue(getCountForTable(systemTables, SYSTEM_CATALOG_NAME) > 0);
     }
 }
