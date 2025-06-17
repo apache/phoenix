@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.PhoenixMasterObserver;
 
 import java.io.IOException;
@@ -47,9 +48,9 @@ public class TestPhoenixMasterObserver extends PhoenixMasterObserver {
     }
 
     @Override
-    protected List<String> getAncestorIdsForSplit(Connection conn, String tableName,
-                                                  String streamName, RegionInfo regionInfoA,
-                                                  RegionInfo regionInfoB) throws SQLException {
+    protected Pair<List<String>, List<Long>> getAncestorIdsForSplit(Connection conn, String tableName,
+                                                                    String streamName, RegionInfo regionInfoA,
+                                                                    RegionInfo regionInfoB) throws SQLException {
         if (splitFailureCount < SPLIT_FAILURE_THRESHOLD) {
             splitFailureCount++;
             throw new SQLException(

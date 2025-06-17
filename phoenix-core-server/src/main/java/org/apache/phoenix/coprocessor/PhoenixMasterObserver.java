@@ -37,6 +37,7 @@ import org.apache.hadoop.hbase.coprocessor.MasterObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.ParentPartitionNotFound;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -68,10 +69,10 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
 
     // tableName, streamName, partitionId, parentId, startTime, endTime, startKey, endKey
     private static final String PARTITION_UPSERT_SQL
-            = "UPSERT INTO " + SYSTEM_CDC_STREAM_NAME + " VALUES (?,?,?,?,?,?,?,?)";
+            = "UPSERT INTO " + SYSTEM_CDC_STREAM_NAME + " VALUES (?,?,?,?,?,?,?,?,?)";
 
     private static final String PARENT_PARTITION_QUERY_FOR_SPLIT
-            = "SELECT PARTITION_ID, PARENT_PARTITION_ID FROM " + SYSTEM_CDC_STREAM_NAME
+            = "SELECT PARTITION_ID, PARENT_PARTITION_ID, PARTITION_START_TIME FROM " + SYSTEM_CDC_STREAM_NAME
             + " WHERE TABLE_NAME = ? AND STREAM_NAME = ? AND PARTITION_END_TIME IS NULL ";
 
     private static final String PARENT_PARTITION_QUERY_FOR_MERGE
@@ -132,13 +133,15 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
                                     + "daughters {} {}",
                             tableName, streamName, regionInfoA.getEncodedName(),
                             regionInfoB.getEncodedName());
+                    // ancestorInfo = (ancestorIDs, parentPartitionStartTimes)
+                    Pair<List<String>, List<Long>> ancestorInfo
+                            = getAncestorIdsForSplit(conn, tableName, streamName, regionInfoA, regionInfoB);
                     // ancestorIDs = [parentId, grandparentId1, grandparentId2...]
                     List<String> ancestorIDs
-                            = getAncestorIdsForSplit(conn, tableName, streamName, regionInfoA,
-                            regionInfoB);
+                            = ancestorInfo.getFirst();
 
                     upsertDaughterPartitions(conn, tableName, streamName, ancestorIDs.subList(0, 1),
-                            Arrays.asList(regionInfoA, regionInfoB));
+                            Arrays.asList(regionInfoA, regionInfoB), ancestorInfo.getSecond());
 
                     updateParentPartitionEndTime(conn, tableName, streamName, ancestorIDs,
                             regionInfoA.getRegionId());
@@ -207,7 +210,9 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
                     upsertDaughterPartitions(conn, tableName, streamName,
                             Arrays.stream(regionsToMerge).map(RegionInfo::getEncodedName)
                                     .collect(Collectors.toList()),
-                            Collections.singletonList(mergedRegion));
+                            Collections.singletonList(mergedRegion),
+                            Arrays.stream(regionsToMerge).map(RegionInfo::getRegionId)
+                                    .collect(Collectors.toList()));
 
                     // lookup all ancestors of a merged region and update the endTime
                     for (RegionInfo ri : regionsToMerge) {
@@ -252,7 +257,7 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
      * Return parent and all grandparent partition ids.
      *
      */
-    protected List<String> getAncestorIdsForSplit(Connection conn, String tableName,
+    protected Pair<List<String>, List<Long>> getAncestorIdsForSplit(Connection conn, String tableName,
                                                   String streamName,
                                                   RegionInfo regionInfoA, RegionInfo regionInfoB)
             throws SQLException {
@@ -281,9 +286,11 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
 
         List<String> ancestorIDs = new ArrayList<>();
         ResultSet rs = pstmt.executeQuery();
+        List<Long> parentPartitionStartTimes = new ArrayList<>();
         if (rs.next()) {
             ancestorIDs.add(rs.getString(1));
             ancestorIDs.add(rs.getString(2));
+            parentPartitionStartTimes.add(rs.getLong(3));
         } else {
             throw new ParentPartitionNotFound(
                     String.format("Could not find parent of the provided daughters: "
@@ -297,7 +304,7 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
         while (rs.next()) {
             ancestorIDs.add(rs.getString(2));
         }
-        return ancestorIDs;
+        return new Pair<>(ancestorIDs, parentPartitionStartTimes);
     }
 
     /**
@@ -335,12 +342,13 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
      */
     private void upsertDaughterPartitions(Connection conn, String tableName,
                                          String streamName, List<String> parentPartitionIDs,
-                                         List<RegionInfo> daughters)
+                                         List<RegionInfo> daughters,
+                                         List<Long> parentPartitionStartTimes)
             throws SQLException {
         conn.setAutoCommit(false);
         PreparedStatement pstmt = conn.prepareStatement(PARTITION_UPSERT_SQL);
         for (RegionInfo daughter : daughters) {
-            for (String parentPartitionID : parentPartitionIDs) {
+            for (int i=0; i<parentPartitionIDs.size(); i++) {
                 String partitionId = daughter.getEncodedName();
                 long startTime = daughter.getRegionId();
                 byte[] startKey = daughter.getStartKey();
@@ -348,12 +356,13 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
                 pstmt.setString(1, tableName);
                 pstmt.setString(2, streamName);
                 pstmt.setString(3, partitionId);
-                pstmt.setString(4, parentPartitionID);
+                pstmt.setString(4, parentPartitionIDs.get(i));
                 pstmt.setLong(5, startTime);
                 // endTime in not set when inserting a new partition
                 pstmt.setNull(6, Types.BIGINT);
                 pstmt.setBytes(7, startKey.length == 0 ? null : startKey);
                 pstmt.setBytes(8, endKey.length == 0 ? null : endKey);
+                pstmt.setLong(9, parentPartitionStartTimes.get(i));
                 pstmt.executeUpdate();
             }
         }

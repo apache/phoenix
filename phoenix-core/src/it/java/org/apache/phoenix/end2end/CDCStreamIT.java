@@ -60,6 +60,7 @@ import static org.apache.phoenix.query.QueryConstants.CDC_PRE_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_UPSERT_EVENT_TYPE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 @Category(NeedsOwnMiniClusterTest.class)
@@ -202,6 +203,8 @@ public class CDCStreamIT extends CDCBaseIT {
         assertEquals(parent.partitionId, daughters.get(1).parentPartitionId);
         assertTrue(daughters.stream().anyMatch(d -> d.startKey == null && d.endKey != null && d.endKey[0] == 'm'));
         assertTrue(daughters.stream().anyMatch(d -> d.endKey == null && d.startKey != null && d.startKey[0] == 'm'));
+        assertEquals(parent.startTime, daughters.get(0).parentStartTime);
+        assertEquals(parent.startTime, daughters.get(1).parentStartTime);
     }
 
     /**
@@ -246,6 +249,8 @@ public class CDCStreamIT extends CDCBaseIT {
         assertEquals(splitParent.partitionId, daughters.get(1).parentPartitionId);
         assertTrue(daughters.stream().anyMatch(d -> d.startKey == null && d.endKey != null && d.endKey[0] == 'd'));
         assertTrue(daughters.stream().anyMatch(d -> d.startKey != null && d.startKey[0] == 'd' && d.endKey[0] == 'l'));
+        assertEquals(splitParent.startTime, daughters.get(0).parentStartTime);
+        assertEquals(splitParent.startTime, daughters.get(1).parentStartTime);
     }
 
     /**
@@ -290,6 +295,8 @@ public class CDCStreamIT extends CDCBaseIT {
         assertEquals(splitParent.partitionId, daughters.get(1).parentPartitionId);
         assertTrue(daughters.stream().anyMatch(d -> d.startKey[0] == 'l' && d.endKey[0] == 'q'));
         assertTrue(daughters.stream().anyMatch(d -> d.endKey == null && d.startKey != null && d.startKey[0] == 'q'));
+        assertEquals(splitParent.startTime, daughters.get(0).parentStartTime);
+        assertEquals(splitParent.startTime, daughters.get(1).parentStartTime);
     }
 
     /**
@@ -328,6 +335,8 @@ public class CDCStreamIT extends CDCBaseIT {
         assertEquals(parent.partitionId, daughters.get(1).parentPartitionId);
         assertTrue(daughters.stream().anyMatch(d -> d.startKey[0] == 'd' && d.endKey[0] == 'j'));
         assertTrue(daughters.stream().anyMatch(d -> d.startKey[0] == 'j' && d.endKey[0] == 'q'));
+        assertEquals(parent.startTime, daughters.get(0).parentStartTime);
+        assertEquals(parent.startTime, daughters.get(1).parentStartTime);
     }
 
     /**
@@ -371,11 +380,14 @@ public class CDCStreamIT extends CDCBaseIT {
         assertEquals(2, mergedParent.size());
         assertEquals(2, splitDaughters.size());
         assertEquals(mergedParent.get(0).partitionId, mergedParent.get(1).partitionId);
+        assertEquals(mergedParent.get(0).startTime, mergedParent.get(1).startTime);
         assertEquals(mergedParent.get(0).partitionId, splitDaughters.get(0).parentPartitionId);
         assertEquals(mergedParent.get(0).partitionId, splitDaughters.get(1).parentPartitionId);
         assertEquals(splitDaughters.get(0).startTime, splitDaughters.get(1).startTime);
         assertEquals(splitDaughters.get(0).startTime, mergedParent.get(0).endTime);
         assertEquals(splitDaughters.get(0).startTime, mergedParent.get(1).endTime);
+        assertEquals(mergedParent.get(0).startTime, splitDaughters.get(0).parentStartTime);
+        assertEquals(mergedParent.get(0).startTime, splitDaughters.get(1).parentStartTime);
     }
 
 
@@ -425,6 +437,10 @@ public class CDCStreamIT extends CDCBaseIT {
         for (PartitionMetadata splitDaughter : splitParents) {
             Assert.assertEquals(mergedDaughter.get(0).startTime, splitDaughter.endTime);
         }
+        List<Long> parentStartTimes = new ArrayList<>();
+        splitParents.forEach(p -> parentStartTimes.add(p.startTime));
+        assertTrue(parentStartTimes.contains(mergedDaughter.get(0).parentStartTime));
+        assertTrue(parentStartTimes.contains(mergedDaughter.get(1).parentStartTime));
     }
 
     /**
@@ -481,9 +497,13 @@ public class CDCStreamIT extends CDCBaseIT {
         assertEquals(9, mergedParents.size());
         assertEquals(mergedDaughter.get(0).startTime, mergedDaughter.get(1).startTime);
         Collections.sort(mergedParents, Comparator.comparing(o -> o.endTime));
+        List<Long> parentStartTimes = new ArrayList<>();
         for (PartitionMetadata mergedParent : mergedParents.subList(mergedParents.size()-4, mergedParents.size())) {
             assertEquals(mergedDaughter.get(0).startTime, mergedParent.endTime);
+            parentStartTimes.add(mergedParent.startTime);
         }
+        assertTrue(parentStartTimes.contains(mergedDaughter.get(0).parentStartTime));
+        assertTrue(parentStartTimes.contains(mergedDaughter.get(1).parentStartTime));
     }
 
     @Test
