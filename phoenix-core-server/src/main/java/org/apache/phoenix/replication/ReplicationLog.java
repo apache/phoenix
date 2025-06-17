@@ -775,6 +775,17 @@ public class ReplicationLog {
         }
     }
 
+    /** Close the currentWriter. */
+    protected void closeCurrentWriter() {
+        lock.lock();
+        try {
+            closeWriter(currentWriter);
+            currentWriter = null;
+        } finally {
+            lock.unlock();
+        }
+    }
+
     /**
      * Force closes the log upon an unrecoverable internal error. This is a fail-stop behavior:
      * once called, the log is marked as closed, the Disruptor is halted, and all subsequent

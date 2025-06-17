@@ -39,6 +39,7 @@ public class MetricsIndexerSourceImpl extends BaseSourceImpl implements MetricsI
     private final MutableFastCounter slowPostOpenCalls;
     private final MetricHistogram duplicateKeyTimeHisto;
     private final MutableFastCounter slowDuplicateKeyCalls;
+    private final MetricHistogram replicationSyncTimeHisto;
 
     private final MetricHistogram preIndexUpdateTimeHisto;
     private final MetricHistogram postIndexUpdateTimeHisto;
@@ -69,7 +70,8 @@ public class MetricsIndexerSourceImpl extends BaseSourceImpl implements MetricsI
         slowPostOpenCalls = getMetricsRegistry().newCounter(SLOW_POST_OPEN, SLOW_POST_OPEN_DESC, 0L);
         duplicateKeyTimeHisto = getMetricsRegistry().newHistogram(DUPLICATE_KEY_TIME, DUPLICATE_KEY_TIME_DESC);
         slowDuplicateKeyCalls = getMetricsRegistry().newCounter(SLOW_DUPLICATE_KEY, SLOW_DUPLICATE_KEY_DESC, 0L);
-
+        replicationSyncTimeHisto = getMetricsRegistry().newHistogram(
+                REPLICATION_SYNC_TIME, REPLICATION_SYNC_TIME_DESC);
         postIndexUpdateTimeHisto = getMetricsRegistry().newHistogram(
                 POST_INDEX_UPDATE_TIME, POST_INDEX_UPDATE_TIME_DESC);
         preIndexUpdateTimeHisto = getMetricsRegistry().newHistogram(
@@ -218,5 +220,11 @@ public class MetricsIndexerSourceImpl extends BaseSourceImpl implements MetricsI
 
     private String getCounterName(String baseCounterName, String tableName) {
         return baseCounterName + "." + tableName;
+    }
+
+    @Override
+    public void updateReplicationSyncTime(String dataTableName, long t) {
+        incrementTableSpecificHistogram(REPLICATION_SYNC_TIME, dataTableName, t);
+        replicationSyncTimeHisto.add(t);
     }
 }
