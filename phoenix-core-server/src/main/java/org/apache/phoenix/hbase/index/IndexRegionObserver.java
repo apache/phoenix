@@ -1719,6 +1719,14 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         }
     }
 
+    /**
+     * We need to add the index mutations to the data table's WAL to handle cases where the RS
+     * crashes before the postBatchMutateIndispensably hook is called where the mutations are
+     * synchronously replicated. This is needed because during WAL restore we don't have the
+     * IndexMaintainer object to generate the corresponding index mutations.
+     * @param miniBatchOp
+     * @param context
+     */
     private void addGlobalIndexMutationsToWAL(MiniBatchOperationInProgress<Mutation> miniBatchOp,
                                               BatchMutateContext context) {
         if (!this.shouldReplicate) {
@@ -1737,6 +1745,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                 if (this.ignoreReplicationFilter.test(entry.getValue())) {
                     continue;
                 }
+                // This creates cells of family type WALEdit.METAFAMILY which are not applied
+                // on restore
                 edit.add(IndexedKeyValue.newIndexedKeyValue(
                         entry.getKey().get(), entry.getValue()));
             }
@@ -1748,6 +1758,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                 if (this.ignoreReplicationFilter.test(entry.getValue())) {
                     continue;
                 }
+                // This creates cells of family type WALEdit.METAFAMILY which are not applied
+                // on restore
                 edit.add(IndexedKeyValue.newIndexedKeyValue(
                         entry.getKey().get(), entry.getValue()));
             }
