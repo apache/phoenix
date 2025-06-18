@@ -294,11 +294,9 @@ public class ReplicationLogGroup {
             if (closed) {
                 throw new IOException("Closed");
             }
-
-            LOG.info("Switching writer for HA Group {} from {} to {}",
-                haGroupId, writer.getClass().getSimpleName(), writer.getClass().getSimpleName());
-
             ReplicationLogGroupWriter oldWriter = this.writer;
+            LOG.info("Switching writer for HA Group {} from {} to {}", haGroupId,
+                oldWriter.getClass().getSimpleName(), writer.getClass().getSimpleName());
             try {
                 // Initialize the new writer first
                 writer.init();
