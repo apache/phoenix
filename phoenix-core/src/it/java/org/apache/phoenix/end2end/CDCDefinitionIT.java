@@ -129,7 +129,7 @@ public class CDCDefinitionIT extends CDCBaseIT {
     }
 
     @Test
-    public void testCreateCaseSensitiveTable() throws Exception {
+    public void testCreateDropCaseSensitiveTable() throws Exception {
         Connection conn = newConnection();
         String tableName = "\"" + generateUniqueName().toLowerCase() + "\"";
         conn.createStatement().execute(
@@ -145,10 +145,21 @@ public class CDCDefinitionIT extends CDCBaseIT {
         String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
         conn.createStatement().execute(cdc_sql);
         conn.createStatement().executeQuery("SELECT * FROM " + cdcName);
+
+        String drop_sql = forView ? "DROP VIEW " + tableName : "DROP TABLE " + tableName;
+        conn.createStatement().execute(drop_sql);
+        String drop_cdc_sql = "DROP CDC " + cdcName + " ON " + tableName;
+        try {
+            conn.createStatement().execute(drop_cdc_sql);
+            fail("Expected to fail as cdc table doesn't exist");
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.TABLE_UNDEFINED.getErrorCode(), e.getErrorCode());
+            assertTrue(e.getMessage().endsWith(SchemaUtil.getUnEscapedFullName(cdcName)));
+        }
     }
 
     @Test
-    public void testCreateCaseSensitiveSchemaAndTable() throws Exception {
+    public void testCreateDropCaseSensitiveSchemaAndTable() throws Exception {
         Connection conn = newConnection();
         String schemaName = "\"" + generateUniqueName().toLowerCase() + "\"";
         String tableName = SchemaUtil.getTableName(schemaName, "\"" + generateUniqueName().toLowerCase() + "\"");
@@ -166,6 +177,17 @@ public class CDCDefinitionIT extends CDCBaseIT {
         conn.createStatement().execute(cdc_sql);
         String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
         conn.createStatement().executeQuery("SELECT * FROM " + cdcFullName);
+
+        String drop_sql = forView ? "DROP VIEW " + tableName : "DROP TABLE " + tableName;
+        conn.createStatement().execute(drop_sql);
+        String drop_cdc_sql = "DROP CDC " + cdcName + " ON " + tableName;
+        try {
+            conn.createStatement().execute(drop_cdc_sql);
+            fail("Expected to fail as cdc table doesn't exist");
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.TABLE_UNDEFINED.getErrorCode(), e.getErrorCode());
+            assertTrue(e.getMessage().endsWith(SchemaUtil.getUnEscapedFullName(cdcName)));
+        }
     }
 
     @Test
@@ -307,7 +329,7 @@ public class CDCDefinitionIT extends CDCBaseIT {
     }
 
     @Test
-    public void testDropTable () throws SQLException {
+    public void testDropTable() throws SQLException {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
