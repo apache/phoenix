@@ -19,12 +19,12 @@ package org.apache.phoenix.replication.metrics;
 
 import org.apache.hadoop.hbase.metrics.BaseSource;
 
-/** Interface for metrics related to ReplicationLog operations. */
-public interface MetricsReplicationLogSource extends BaseSource {
+/** Interface for metrics related to ReplicationLogGroup operations. */
+public interface MetricsReplicationLogGroupSource extends BaseSource {
 
-    String METRICS_NAME = "ReplicationLog";
+    String METRICS_NAME = "ReplicationLogGroup";
     String METRICS_CONTEXT = "phoenix";
-    String METRICS_DESCRIPTION = "Metrics about Phoenix Replication Log Operations";
+    String METRICS_DESCRIPTION = "Metrics about Replication Log Operations for an HA Group";
     String METRICS_JMX_CONTEXT = "RegionServer,sub=" + METRICS_NAME;
 
     String TIME_BASED_ROTATION_COUNT = "timeBasedRotationCount";
@@ -109,7 +109,11 @@ public interface MetricsReplicationLogSource extends BaseSource {
      */
     void incrementRotationFailureCount();
 
+    /**
+     * Unregister this metrics source.
+     */
+    void close();
+
     // Get current values for testing
     ReplicationLogMetricValues getCurrentMetricValues();
-
 }
