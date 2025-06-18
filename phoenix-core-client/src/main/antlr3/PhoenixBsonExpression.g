@@ -211,10 +211,8 @@ and_expression returns [ParseNode ret]
 not_expression returns [ParseNode ret]
     :   (NOT? boolean_expression ) => n=NOT? e=boolean_expression { $ret = n == null ? e : factory.not(e); }
     |   n=NOT? LPAREN e=expression RPAREN { $ret = n == null ? e : factory.not(e); }
-    |   (ATTR | FIELD) ( LPAREN t=DOCUMENT_FIELD RPAREN {$ret = factory.documentFieldExists(
-    factory.literal(t.getText()), true); } )
-    |   (ATTR_NOT | FIELD_NOT) ( LPAREN t=DOCUMENT_FIELD RPAREN {$ret = factory.documentFieldExists(
-    factory.literal(t.getText()), false); } )
+    |   (ATTR | FIELD) ( LPAREN t=literal RPAREN {$ret = factory.documentFieldExists(t, true); } )
+    |   (ATTR_NOT | FIELD_NOT) ( LPAREN t=literal RPAREN {$ret = factory.documentFieldExists(t, false); } )
     ;
 
 comparison_op returns [CompareOperator ret]
@@ -279,6 +277,9 @@ literal returns [LiteralParseNode ret]
         }
     |   i=DOCUMENT_FIELD {
             ret = factory.literal(i.getText());
+        }
+    |   j=HASH_DOCUMENT_FIELD {
+            ret = factory.literal(j.getText());
         }
     |   s=STRING_LITERAL {
             ret = factory.literal(s.getText());
@@ -410,10 +411,36 @@ DIVIDE
     :   '/'
     ;
 
+DOT
+    :   '.'
+    ;
+
+PERCENT
+    :   '%'
+    ;
+
+UNDERSCORE
+    :   '_'
+    ;
+
+HASH
+    :   '#'
+    ;
+
+
 BIND_VALUE
 @init{ StringBuilder sb = new StringBuilder(); }
-    :   ( COLON { sb.append(":"); } | '$' { sb.append("$"); } | '#' { sb.append("#"); } )
+    :   ( COLON { sb.append(":"); } | '$' { sb.append("$"); } )
     ( t=BIND_VALUE_CHARS { sb.append(t.getText()); } )+
+    { setText(sb.toString()); }
+    ;
+
+HASH_DOCUMENT_FIELD
+@init{ StringBuilder sb = new StringBuilder(); }
+    :   ( a=HASH { sb.append(a.getText()); } )
+        ( h=HASH { sb.append(h.getText()); }
+        | t=DOCUMENT_FIELD { sb.append(t.getText()); }
+        )+
     { setText(sb.toString()); }
     ;
 
@@ -421,11 +448,11 @@ DOCUMENT_FIELD
 @init{ StringBuilder sb = new StringBuilder(); }
     :   (v1=LETTER { sb.append(v1.getText()); }
         | v2=DIGIT { sb.append(v2.getText()); }
-        | '_' { sb.append("_"); }
-        | '-' { sb.append("-"); }
-        | LSQUARE { sb.append("["); }
-        | RSQUARE { sb.append("]"); }
-        | '.' { sb.append("."); }
+        | v3=UNDERSCORE { sb.append(v3.getText()); }
+        | v4=LSQUARE { sb.append(v4.getText()); }
+        | v5=RSQUARE { sb.append(v5.getText()); }
+        | v6=DOT { sb.append(v6.getText()); }
+        | v8=MINUS { sb.append(v8.getText()); }
         )+
         { setText(sb.toString()); }
     ;

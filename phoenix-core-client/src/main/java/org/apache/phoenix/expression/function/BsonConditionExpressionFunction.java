@@ -102,13 +102,15 @@ public class BsonConditionExpressionFunction extends ScalarFunction {
 
         BsonValue conditionExp = conditionExpressionBsonDoc.get("$EXPR");
         BsonValue exprValues = conditionExpressionBsonDoc.get("$VAL");
+        BsonValue keyAlias = conditionExpressionBsonDoc.get("$KEYS");
         if (conditionExp != null && exprValues != null) {
             if (conditionExp.isString() && exprValues.isDocument()) {
                 boolean result = SQLComparisonExpressionUtils
                         .evaluateConditionExpression(
                                 ((BsonString) conditionExp).getValue(),
                                 rawBsonDocument,
-                                (BsonDocument) exprValues);
+                                (BsonDocument) exprValues,
+                                keyAlias == null ? null : (BsonDocument) keyAlias);
                 ptr.set(PBoolean.INSTANCE.toBytes(result));
                 return true;
             }
