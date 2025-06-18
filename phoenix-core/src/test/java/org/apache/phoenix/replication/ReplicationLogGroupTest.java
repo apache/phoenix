@@ -44,25 +44,16 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.ServerName;
-import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
-import org.apache.phoenix.replication.ReplicationLog.RotationReason;
-import org.apache.phoenix.replication.log.LogFile;
-import org.apache.phoenix.replication.log.LogFileReader;
-import org.apache.phoenix.replication.log.LogFileReaderContext;
-import org.apache.phoenix.replication.log.LogFileTestUtil;
 import org.apache.phoenix.replication.log.LogFileWriter;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogSource;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogSourceImpl;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogGroupSource;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogGroupSourceImpl;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.junit.After;
 import org.junit.Before;
@@ -75,10 +66,16 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.phoenix.replication.ReplicationLogGroupWriter.RotationReason;
+import org.apache.phoenix.replication.log.LogFile;
+import org.apache.phoenix.replication.log.LogFileReader;
+import org.apache.phoenix.replication.log.LogFileReaderContext;
+import org.apache.phoenix.replication.log.LogFileTestUtil;
 
-public class ReplicationLogTest {
+public class ReplicationLogGroupTest {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogTest.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogGroupTest.class);
 
     @ClassRule
     public static TemporaryFolder testFolder = new TemporaryFolder();
@@ -87,7 +84,7 @@ public class ReplicationLogTest {
     private ServerName serverName;
     private FileSystem localFs;
     private URI standbyUri;
-    private ReplicationLog logWriter;
+    private StandbyLogGroupWriter logWriter;
 
     static final int TEST_RINGBUFFER_SIZE = 32;
     static final int TEST_SYNC_TIMEOUT = 1000;
@@ -100,18 +97,18 @@ public class ReplicationLogTest {
         localFs = FileSystem.getLocal(conf);
         standbyUri = new Path(testFolder.toString()).toUri();
         serverName = ServerName.valueOf("test", 60010, EnvironmentEdgeManager.currentTimeMillis());
-        conf.set(ReplicationLog.REPLICATION_STANDBY_HDFS_URL_KEY, standbyUri.toString());
+        conf.set(ReplicationLogGroup.REPLICATION_STANDBY_HDFS_URL_KEY, standbyUri.toString());
         // Small ring buffer size for testing
-        conf.setInt(ReplicationLog.REPLICATION_LOG_RINGBUFFER_SIZE_KEY, TEST_RINGBUFFER_SIZE);
+        conf.setInt(ReplicationLogGroup.REPLICATION_LOG_RINGBUFFER_SIZE_KEY, TEST_RINGBUFFER_SIZE);
         // Set a short sync timeout for testing
-        conf.setLong(ReplicationLog.REPLICATION_LOG_SYNC_TIMEOUT_KEY, TEST_SYNC_TIMEOUT);
+        conf.setLong(ReplicationLogGroup.REPLICATION_LOG_SYNC_TIMEOUT_KEY, TEST_SYNC_TIMEOUT);
         // Set rotation time to 10 seconds
-        conf.setLong(ReplicationLog.REPLICATION_LOG_ROTATION_TIME_MS_KEY, TEST_ROTATION_TIME);
+        conf.setLong(ReplicationLogGroup.REPLICATION_LOG_ROTATION_TIME_MS_KEY, TEST_ROTATION_TIME);
         // Small size threshold for testing
-        conf.setLong(ReplicationLog.REPLICATION_LOG_ROTATION_SIZE_BYTES_KEY,
+        conf.setLong(ReplicationLogGroup.REPLICATION_LOG_ROTATION_SIZE_BYTES_KEY,
             TEST_ROTATION_SIZE_BYTES);
 
-        logWriter = spy(new TestableReplicationLog(conf, serverName));
+        logWriter = spy(new TestableStandbyLogGroupWriter(conf, serverName, "testHAGroup"));
         logWriter.init();
     }
 
@@ -120,10 +117,6 @@ public class ReplicationLogTest {
         if (logWriter != null) {
             logWriter.close();
         }
-        // Deregister the metrics source that the replication log registers during initialization
-        // so the next unit will be able to register it again and successfully initialize.
-        DefaultMetricsSystem.instance()
-            .unregisterSource(MetricsReplicationLogSource.METRICS_JMX_CONTEXT);
     }
 
     /**
@@ -166,41 +159,6 @@ public class ReplicationLogTest {
         inOrder.verify(writer, times(1)).append(eq(tableName), eq(commitId4), eq(put4));
         inOrder.verify(writer, times(1)).append(eq(tableName), eq(commitId5), eq(put5));
         inOrder.verify(writer, times(1)).sync();
-    }
-
-    /**
-     * Tests the behavior when an append operation fails. Verifies that the system properly handles
-     * append failures by rolling to a new writer and retrying the operation.
-     */
-    @Test
-    public void testAppendFailureAndRetry() throws Exception {
-        final String tableName = "TBLAFR";
-        final long commitId = 1L;
-        final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
-
-        // Get the inner writer
-        LogFileWriter writerBeforeRoll = logWriter.getWriter();
-        assertNotNull("Initial writer should not be null", writerBeforeRoll);
-
-        // Configure writerBeforeRoll to fail on the first append call
-        doThrow(new IOException("Simulated append failure"))
-            .when(writerBeforeRoll).append(anyString(), anyLong(), any(Mutation.class));
-
-        // Append data
-        logWriter.append(tableName, commitId, put);
-        logWriter.sync();
-
-        // Get the inner writer we rolled to.
-        LogFileWriter writerAfterRoll = logWriter.getWriter();
-        assertNotNull("Rolled writer should not be null", writerAfterRoll);
-
-        // Verify the sequence: append (fail), rotate, append (succeed), sync
-        InOrder inOrder = Mockito.inOrder(writerBeforeRoll, writerAfterRoll);
-        inOrder.verify(writerBeforeRoll, times(1)).append(eq(tableName), eq(commitId), eq(put));
-        inOrder.verify(writerBeforeRoll, times(0)).sync(); // We failed append, did not try
-        inOrder.verify(writerAfterRoll, times(1))
-            .append(eq(tableName), eq(commitId), eq(put)); // Retry
-        inOrder.verify(writerAfterRoll, times(1)).sync();
     }
 
     /**
@@ -296,6 +254,41 @@ public class ReplicationLogTest {
 
         // Verify the append eventually happens on the writer.
         verify(innerWriter, timeout(10000).times(1)).append(eq(tableName), eq(myCommitId), any());
+    }
+
+    /**
+     * Tests the behavior when an append operation fails. Verifies that the system properly handles
+     * append failures by rolling to a new writer and retrying the operation.
+     */
+    @Test
+    public void testAppendFailureAndRetry() throws Exception {
+        final String tableName = "TBLAFR";
+        final long commitId = 1L;
+        final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
+
+        // Get the inner writer
+        LogFileWriter writerBeforeRoll = logWriter.getWriter();
+        assertNotNull("Initial writer should not be null", writerBeforeRoll);
+
+        // Configure writerBeforeRoll to fail on the first append call
+        doThrow(new IOException("Simulated append failure"))
+            .when(writerBeforeRoll).append(anyString(), anyLong(), any(Mutation.class));
+
+        // Append data
+        logWriter.append(tableName, commitId, put);
+        logWriter.sync();
+
+        // Get the inner writer we rolled to.
+        LogFileWriter writerAfterRoll = logWriter.getWriter();
+        assertNotNull("Rolled writer should not be null", writerAfterRoll);
+
+        // Verify the sequence: append (fail), rotate, append (succeed), sync
+        InOrder inOrder = Mockito.inOrder(writerBeforeRoll, writerAfterRoll);
+        inOrder.verify(writerBeforeRoll, times(1)).append(eq(tableName), eq(commitId), eq(put));
+        inOrder.verify(writerBeforeRoll, times(0)).sync(); // We failed append, did not try
+        inOrder.verify(writerAfterRoll, times(1))
+            .append(eq(tableName), eq(commitId), eq(put)); // Retry
+        inOrder.verify(writerAfterRoll, times(1)).sync();
     }
 
     /**
@@ -401,7 +394,6 @@ public class ReplicationLogTest {
             final long commitId = i;
             verify(innerWriter, times(1)).append(eq(tableName), eq(commitId), any());
         }
-
     }
 
     /**
@@ -593,7 +585,7 @@ public class ReplicationLogTest {
                 throw new IOException("Simulated failure to create new writer");
             }
             return invocation.callRealMethod();
-        }).when(logWriter).createNewWriter(any(FileSystem.class), any(URI.class));
+        }).when(logWriter).createNewWriter();
 
         // Append some data
         logWriter.append(tableName, commitId, put);
@@ -643,18 +635,18 @@ public class ReplicationLogTest {
 
         // Configure the log writer to always fail when creating new writers
         doThrow(new IOException("Simulated failure to create new writer"))
-            .when(logWriter).createNewWriter(any(FileSystem.class), any(URI.class));
+            .when(logWriter).createNewWriter();
 
         // Append some data
         logWriter.append(tableName, commitId, put);
         logWriter.sync();
 
         // Try to rotate the log multiple times until we exceed the retry limit
-        for (int i = 0; i <= ReplicationLog.DEFAULT_REPLICATION_LOG_ROTATION_RETRIES; i++) {
+        for (int i = 0; i <= ReplicationLogGroup.DEFAULT_REPLICATION_LOG_ROTATION_RETRIES; i++) {
             try {
                 logWriter.rotateLog(RotationReason.TIME);
             } catch (IOException e) {
-                if (i < ReplicationLog.DEFAULT_REPLICATION_LOG_ROTATION_RETRIES) {
+                if (i < ReplicationLogGroup.DEFAULT_REPLICATION_LOG_ROTATION_RETRIES) {
                     // Not the last attempt yet, continue
                     continue;
                 }
@@ -736,8 +728,7 @@ public class ReplicationLogTest {
             .when(initialWriter).sync();
 
         // createNewWriter should keep returning the bad writer
-        doAnswer(invocation -> initialWriter).when(logWriter)
-            .createNewWriter(any(FileSystem.class), any(URI.class));
+        doAnswer(invocation -> initialWriter).when(logWriter).createNewWriter();
 
         // Append data
         logWriter.append(tableName, commitId, put);
@@ -751,7 +742,7 @@ public class ReplicationLogTest {
         }
 
         // Each retry creates a new writer, so that is at least 1 create + 5 retries.
-        verify(logWriter, atLeast(6)).createNewWriter(any(FileSystem.class), any(URI.class));
+        verify(logWriter, atLeast(6)).createNewWriter();
     }
 
     /**
@@ -828,7 +819,7 @@ public class ReplicationLogTest {
         logWriter.sync(); // Sync to commit the appends to the current writer.
 
         // Force a rotation to close the current writer.
-        logWriter.rotateLog(ReplicationLog.RotationReason.SIZE);
+        logWriter.rotateLog(RotationReason.SIZE);
 
         assertTrue("Log file should exist", localFs.exists(logPath));
 
@@ -886,7 +877,7 @@ public class ReplicationLogTest {
             }
             logWriter.sync(); // Sync to commit the appends to the current writer.
             // Force a rotation to close the current writer.
-            logWriter.rotateLog(ReplicationLog.RotationReason.SIZE);
+            logWriter.rotateLog(RotationReason.SIZE);
         }
 
         // Verify all log files exist
@@ -958,7 +949,7 @@ public class ReplicationLogTest {
                 logWriter.sync(); // Sync to commit the appends to the current writer.
             }
             // Force a rotation to close the current writer.
-            logWriter.rotateLog(ReplicationLog.RotationReason.SIZE);
+            logWriter.rotateLog(RotationReason.SIZE);
         }
 
         // Verify all log files exist
@@ -1115,176 +1106,6 @@ public class ReplicationLogTest {
     }
 
     /**
-     * Tests race condition between LogRotationTask and LogEventHandler when both try to rotate
-     * the writer simultaneously. Verifies that despite concurrent rotation attempts, the log is
-     * only rotated once. Uses latches to ensure true concurrency and verify the sequence of
-     * operations.
-     */
-    @Test
-    public void testConcurrentRotationAttempts() throws Exception {
-        final String tableName = "TBLCR";
-        final long commitId = 1L;
-        final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
-
-        // Get the initial writer
-        LogFileWriter initialWriter = logWriter.getWriter();
-        assertNotNull("Initial writer should not be null", initialWriter);
-
-        // Create latches to control timing and track rotation attempts
-        final CountDownLatch rotationTaskStarted = new CountDownLatch(1);
-        final CountDownLatch rotationTaskCanProceed = new CountDownLatch(1);
-        final CountDownLatch eventHandlerStarted = new CountDownLatch(1);
-        final CountDownLatch eventHandlerCanProceed = new CountDownLatch(1);
-        final AtomicInteger rotationCount = new AtomicInteger(0);
-        final CountDownLatch bothAttemptsStarted = new CountDownLatch(2);
-
-        // Configure the rotation task to pause at specific points and track attempts
-        doAnswer(invocation -> {
-            rotationTaskStarted.countDown(); // Signal that rotation task has started
-            bothAttemptsStarted.countDown(); // Signal that this attempt has started
-            rotationTaskCanProceed.await();  // Wait for permission to proceed
-            rotationCount.incrementAndGet(); // Track this rotation attempt
-            return invocation.callRealMethod();
-        }).when(logWriter).rotateLog(ReplicationLog.RotationReason.TIME);
-
-        // Configure the event handler to pause at specific points
-        doAnswer(invocation -> {
-            eventHandlerStarted.countDown(); // Signal that event handler has started
-            bothAttemptsStarted.countDown(); // Signal that this attempt has started
-            eventHandlerCanProceed.await();  // Wait for permission to proceed
-            return invocation.callRealMethod();
-        }).when(logWriter).getWriter();
-
-        // Start a thread that will trigger rotation via the background task
-        Thread rotationThread = new Thread(() -> {
-            try {
-                // Force rotation by waiting for rotation time
-                Thread.sleep((long)(TEST_ROTATION_TIME * 1.25));
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
-        rotationThread.start();
-
-        // Start append operation in main thread
-        logWriter.append(tableName, commitId, put);
-
-        // Wait for both attempts to start - this ensures true concurrency
-        assertTrue("Both rotation attempts should start",
-            bothAttemptsStarted.await(5, TimeUnit.SECONDS));
-
-        // Verify both attempts have started before proceeding
-        assertEquals("Both attempts should have started", 0, bothAttemptsStarted.getCount());
-
-        // Allow both operations to proceed simultaneously
-        eventHandlerCanProceed.countDown();
-        rotationTaskCanProceed.countDown();
-
-        // Wait for both operations to complete
-        rotationThread.join();
-
-        // Verify the final state
-        LogFileWriter finalWriter = logWriter.getWriter();
-        assertNotNull("Final writer should not be null", finalWriter);
-        assertTrue("Writer should have been rotated", finalWriter != initialWriter);
-
-        // Verify only one rotation actually occurred
-        assertEquals("Should have only one actual rotation", 1, rotationCount.get());
-
-        // Verify all operations completed successfully
-        logWriter.sync();
-
-        // Verify the sequence of operations through the latches
-        assertTrue("Rotation task should have started", rotationTaskStarted.getCount() == 0);
-        assertTrue("Event handler should have started", eventHandlerStarted.getCount() == 0);
-    }
-
-    /**
-     * Tests race condition between LogEventHandler retry loop and LogRotationTask when both
-     * try to rotate the writer simultaneously. Verifies that despite concurrent rotation attempts
-     * during a retry scenario, the log is only rotated once. Uses latches to ensure true
-     * concurrency and verify the sequence of operations.
-     */
-    @Test
-    public void testConcurrentRotationDuringRetry() throws Exception {
-        final String tableName = "TBLCRR";
-        final long commitId = 1L;
-        final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
-
-        // Get the initial writer
-        LogFileWriter initialWriter = logWriter.getWriter();
-        assertNotNull("Initial writer should not be null", initialWriter);
-
-        // Create latches to control timing and track rotation attempts
-        final CountDownLatch retryStarted = new CountDownLatch(1);
-        final CountDownLatch retryCanProceed = new CountDownLatch(1);
-        final CountDownLatch rotationTaskStarted = new CountDownLatch(1);
-        final CountDownLatch rotationTaskCanProceed = new CountDownLatch(1);
-        final AtomicInteger rotationCount = new AtomicInteger(0);
-        final CountDownLatch bothAttemptsStarted = new CountDownLatch(2);
-
-        // Configure the writer to fail on first append, succeed on retry
-        doAnswer(invocation -> {
-            retryStarted.countDown(); // Signal that retry has started
-            bothAttemptsStarted.countDown(); // Signal that this attempt has started
-            retryCanProceed.await(); // Wait for permission to proceed
-            return invocation.callRealMethod();
-        }).when(initialWriter).append(anyString(), anyLong(), any(Mutation.class));
-
-        // Configure the rotation task to pause at specific points and track attempts
-        doAnswer(invocation -> {
-            rotationTaskStarted.countDown(); // Signal that rotation task has started
-            bothAttemptsStarted.countDown(); // Signal that this attempt has started
-            rotationTaskCanProceed.await(); // Wait for permission to proceed
-            rotationCount.incrementAndGet(); // Track this rotation attempt
-            return invocation.callRealMethod();
-        }).when(logWriter).rotateLog(ReplicationLog.RotationReason.TIME);
-
-        // Start a thread that will trigger rotation via the background task
-        Thread rotationThread = new Thread(() -> {
-            try {
-                // Force rotation by waiting for rotation time
-                Thread.sleep((long)(TEST_ROTATION_TIME * 1.25));
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
-        rotationThread.start();
-
-        // Start append operation in main thread
-        logWriter.append(tableName, commitId, put);
-
-        // Wait for both attempts to start - this ensures true concurrency
-        assertTrue("Both rotation attempts should start",
-            bothAttemptsStarted.await(5, TimeUnit.SECONDS));
-
-        // Verify both attempts have started before proceeding
-        assertEquals("Both attempts should have started", 0, bothAttemptsStarted.getCount());
-
-        // Allow both operations to proceed simultaneously
-        retryCanProceed.countDown();
-        rotationTaskCanProceed.countDown();
-
-        // Wait for both operations to complete
-        rotationThread.join();
-
-        // Verify the final state
-        LogFileWriter finalWriter = logWriter.getWriter();
-        assertNotNull("Final writer should not be null", finalWriter);
-        assertTrue("Writer should have been rotated", finalWriter != initialWriter);
-
-        // Verify only one rotation actually occurred
-        assertEquals("Should have only one actual rotation", 1, rotationCount.get());
-
-        // Verify all operations completed successfully
-        logWriter.sync();
-
-        // Verify the sequence of operations through the latches
-        assertTrue("Retry should have started", retryStarted.getCount() == 0);
-        assertTrue("Rotation task should have started", rotationTaskStarted.getCount() == 0);
-    }
-
-    /**
      * Tests that multiple sync requests are consolidated into a single sync operation on the inner
      * writer when they occur in quick succession. Verifies that the Disruptor batching and
      * LogEventHandler processing correctly consolidates multiple sync requests into a single sync
@@ -1331,22 +1152,92 @@ public class ReplicationLogTest {
         inOrder.verify(innerWriter, times(1)).sync(); // Only one sync should be called
     }
 
-    static class TestableReplicationLog extends ReplicationLog {
+    /**
+     * Tests that ReplicationLogGroup.get() returns the same instance for the same haGroupId.
+     * Verifies that multiple calls with the same parameters return the cached instance.
+     */
+    @Test
+    public void testReplicationLogGroupCaching() throws Exception {
+        final String haGroupId1 = "testHAGroup1";
+        final String haGroupId2 = "testHAGroup2";
 
-        protected TestableReplicationLog(Configuration conf, ServerName serverName) {
-            super(conf, serverName);
-        }
+        // Get instances for the first HA group
+        ReplicationLogGroup g1_1 = ReplicationLogGroup.get(conf, serverName, haGroupId1);
+        ReplicationLogGroup g1_2 = ReplicationLogGroup.get(conf, serverName, haGroupId1);
 
-        @Override
-        protected LogFileWriter createNewWriter(FileSystem fs,
-                URI url) throws IOException {
-            return spy(super.createNewWriter(fs, url));
-        }
+        // Verify same instance is returned for same haGroupId
+        assertNotNull("ReplicationLogGroup should not be null", g1_1);
+        assertNotNull("ReplicationLogGroup should not be null", g1_2);
+        assertTrue("Same instance should be returned for same haGroupId", g1_2 == g1_1);
+        assertEquals("HA Group ID should match", haGroupId1, g1_1.getHaGroupId());
 
-        @Override
-        protected MetricsReplicationLogSource createMetricsSource() {
-            return new MetricsReplicationLogSourceImpl();
-        }
+        // Get instance for a different HA group
+        ReplicationLogGroup g2_1 = ReplicationLogGroup.get(conf, serverName, haGroupId2);
+        assertNotNull("ReplicationLogGroup should not be null", g2_1);
+        assertTrue("Different instance should be returned for different haGroupId", g2_1 != g1_1);
+        assertEquals("HA Group ID should match", haGroupId2, g2_1.getHaGroupId());
+
+        // Verify multiple calls still return cached instances
+        ReplicationLogGroup g1_3 = ReplicationLogGroup.get(conf, serverName, haGroupId1);
+        ReplicationLogGroup g2_2 = ReplicationLogGroup.get(conf, serverName, haGroupId2);
+        assertTrue("Cached instance should be returned", g1_3 == g1_1);
+        assertTrue("Cached instance should be returned", g2_2 == g2_1);
+
+        // Clean up
+        g1_1.close();
+        g2_1.close();
     }
 
+    /**
+     * Tests that close() removes the instance from the cache.
+     * Verifies that after closing, a new call to get() creates a new instance.
+     */
+    @Test
+    public void testReplicationLogGroupCacheRemovalOnClose() throws Exception {
+        final String haGroupId = "testHAGroupCacheRemoval";
+
+        // Get initial instance
+        ReplicationLogGroup g1_1 = ReplicationLogGroup.get(conf, serverName, haGroupId);
+        assertNotNull("ReplicationLogGroup should not be null", g1_1);
+        assertFalse("Group should not be closed initially", g1_1.isClosed());
+
+        // Verify cached instance is returned
+        ReplicationLogGroup g1_2 = ReplicationLogGroup.get(conf, serverName, haGroupId);
+        assertTrue("Same instance should be returned before close", g1_2 == g1_1);
+
+        // Close the group
+        g1_1.close();
+        assertTrue("Group should be closed", g1_1.isClosed());
+
+        // Get instance after close - should be a new instance
+        ReplicationLogGroup g1_3 = ReplicationLogGroup.get(conf, serverName, haGroupId);
+        assertNotNull("ReplicationLogGroup should not be null after close", g1_3);
+        assertFalse("New group should not be closed", g1_3.isClosed());
+        assertTrue("New instance should be created after close", g1_1 != g1_3);
+        assertEquals("HA Group ID should match", haGroupId, g1_3.getHaGroupId());
+
+        // Clean up
+        g1_3.close();
+    }
+
+    /**
+     * Testable version of StandbyLogGroupWriter that allows spying on writers.
+     */
+    static class TestableStandbyLogGroupWriter extends StandbyLogGroupWriter {
+
+        protected TestableStandbyLogGroupWriter(Configuration conf, ServerName serverName, String haGroupId) {
+            super(conf, serverName, haGroupId);
+        }
+
+        @Override
+        protected LogFileWriter createNewWriter() throws IOException {
+            LogFileWriter writer = super.createNewWriter();
+            return spy(writer);
+        }
+
+        @Override
+        protected MetricsReplicationLogGroupSource createMetricsSource() {
+            return spy(new MetricsReplicationLogGroupSourceImpl(haGroupId));
+        }
+    }
 }

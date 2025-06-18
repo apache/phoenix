@@ -18,13 +18,15 @@
 package org.apache.phoenix.replication.metrics;
 
 import org.apache.hadoop.hbase.metrics.BaseSourceImpl;
+import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MutableFastCounter;
 import org.apache.hadoop.metrics2.lib.MutableHistogram;
 
 /** Implementation of metrics source for ReplicationLog operations. */
-public class MetricsReplicationLogSourceImpl extends BaseSourceImpl
-        implements MetricsReplicationLogSource {
+public class MetricsReplicationLogGroupSourceImpl extends BaseSourceImpl
+        implements MetricsReplicationLogGroupSource {
 
+    private String groupMetricsContext;
     private final MutableFastCounter timeBasedRotationCount;
     private final MutableFastCounter sizeBasedRotationCount;
     private final MutableFastCounter errorBasedRotationCount;
@@ -35,11 +37,13 @@ public class MetricsReplicationLogSourceImpl extends BaseSourceImpl
     private final MutableHistogram rotationTime;
     private final MutableHistogram ringBufferTime;
 
-    public MetricsReplicationLogSourceImpl() {
-        this(METRICS_NAME, METRICS_DESCRIPTION, METRICS_CONTEXT, METRICS_JMX_CONTEXT);
+    public MetricsReplicationLogGroupSourceImpl(String haGroupId) {
+        this(METRICS_NAME, METRICS_DESCRIPTION, METRICS_CONTEXT,
+            METRICS_JMX_CONTEXT + ",haGroup=" + haGroupId);
+        this.groupMetricsContext = METRICS_JMX_CONTEXT + ",haGroup=" + haGroupId;
     }
 
-    public MetricsReplicationLogSourceImpl(String metricsName, String metricsDescription,
+    public MetricsReplicationLogGroupSourceImpl(String metricsName, String metricsDescription,
         String metricsContext, String metricsJmxContext) {
         super(metricsName, metricsDescription, metricsContext, metricsJmxContext);
         timeBasedRotationCount = getMetricsRegistry().newCounter(TIME_BASED_ROTATION_COUNT,
@@ -56,6 +60,11 @@ public class MetricsReplicationLogSourceImpl extends BaseSourceImpl
         rotationTime = getMetricsRegistry().newHistogram(ROTATION_TIME, ROTATION_TIME_DESC);
         ringBufferTime = getMetricsRegistry().newHistogram(RING_BUFFER_TIME,
             RING_BUFFER_TIME_DESC);
+    }
+
+    @Override
+    public void close() {
+        DefaultMetricsSystem.instance().unregisterSource(groupMetricsContext);
     }
 
     @Override
@@ -135,7 +144,6 @@ public class MetricsReplicationLogSourceImpl extends BaseSourceImpl
 
     @Override
     public String getMetricsJmxContext() {
-        return METRICS_JMX_CONTEXT;
+        return groupMetricsContext;
     }
-
 }
