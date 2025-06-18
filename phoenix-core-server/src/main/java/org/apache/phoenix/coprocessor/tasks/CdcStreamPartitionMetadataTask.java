@@ -57,7 +57,7 @@ public class CdcStreamPartitionMetadataTask extends BaseTask  {
             = "UPSERT INTO " + SYSTEM_CDC_STREAM_STATUS_NAME + " VALUES (?, ?, ?)";
 
     private static final String CDC_STREAM_PARTITION_UPSERT_SQL
-            = "UPSERT INTO " + SYSTEM_CDC_STREAM_NAME + " VALUES (?,?,?,?,?,?,?,?)";
+            = "UPSERT INTO " + SYSTEM_CDC_STREAM_NAME + " VALUES (?,?,?,?,?,?,?,?,?)";
 
     @Override
     public TaskRegionObserver.TaskResult run(Task.TaskRecord taskRecord) {
@@ -136,7 +136,7 @@ public class CdcStreamPartitionMetadataTask extends BaseTask  {
             throws SQLException {
         try (PreparedStatement ps = pconn.prepareStatement(CDC_STREAM_PARTITION_UPSERT_SQL)) {
             for (HRegionLocation tableRegion : tableRegions) {
-                // set parent_partition_id, partition_end_time to null
+                // set parent_partition_id, partition_end_time, parent_partition_start_time to null
                 RegionInfo ri = tableRegion.getRegion();
                 ps.setString(1, tableName);
                 ps.setString(2, streamName);
@@ -146,6 +146,7 @@ public class CdcStreamPartitionMetadataTask extends BaseTask  {
                 ps.setNull(6, Types.BIGINT);
                 ps.setBytes(7, ri.getStartKey());
                 ps.setBytes(8, ri.getEndKey());
+                ps.setNull(9, Types.BIGINT);
                 ps.executeUpdate();
             }
             pconn.commit();

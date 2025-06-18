@@ -1086,6 +1086,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         public Long endTime;
         public byte[] startKey;
         public byte[] endKey;
+        public Long parentStartTime;
 
         public PartitionMetadata(ResultSet rs) throws Exception {
             partitionId = rs.getString(3);
@@ -1094,6 +1095,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
             endTime = rs.getLong(6);
             startKey = rs.getBytes(7);
             endKey = rs.getBytes(8);
+            parentStartTime = rs.getLong(9);
         }
     }
 
