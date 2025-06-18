@@ -94,7 +94,7 @@ public class StandbyLogGroupWriter extends ReplicationLogGroupWriter {
         // serverName. However we expect some regionservers will have significantly more load than
         // others so we instead distribute the logs over all of the shards randomly for a more even
         // overall distribution by also hashing the timestamp.
-        int shard = (serverName.hashCode() ^ Long.hashCode(timestamp)) % numShards;
+        int shard = Math.floorMod(serverName.hashCode() ^ Long.hashCode(timestamp), numShards);
         Path shardPath = new Path(haGroupPath,
             String.format(ReplicationLogGroup.SHARD_DIR_FORMAT, shard));
         // Ensure the shard directory exists. We track which shard directories we have probed or
