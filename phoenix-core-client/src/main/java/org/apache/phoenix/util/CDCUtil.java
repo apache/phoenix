@@ -99,6 +99,19 @@ public class CDCUtil {
         return indexName.startsWith(CDC_INDEX_PREFIX);
     }
 
+    public static boolean isCDCIndex(byte[] indexNameBytes) {
+        String indexName = Bytes.toString(indexNameBytes);
+        return indexName.startsWith(CDC_INDEX_PREFIX);
+    }
+
+    public static byte[] getCdcObjectName(byte[] cdcIndexName) {
+        byte[] result = new byte[cdcIndexName.length - CDC_INDEX_PREFIX.length()];
+        for (int i = 0; i < cdcIndexName.length - CDC_INDEX_PREFIX.length(); i++) {
+            result[i] = cdcIndexName[i + CDC_INDEX_PREFIX.length()];
+        }
+        return result;
+    }
+
     public static boolean isCDCIndex(PTable indexTable) {
         return isCDCIndex(indexTable.getTableName().getString());
     }

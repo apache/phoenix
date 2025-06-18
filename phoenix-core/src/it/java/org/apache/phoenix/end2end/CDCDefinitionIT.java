@@ -250,6 +250,7 @@ public class CDCDefinitionIT extends CDCBaseIT {
         assertEquals(indexTable.getEncodingScheme(), NON_ENCODED_QUALIFIERS);
     }
 
+    @Test
     public void testDropCDC () throws SQLException {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -258,6 +259,8 @@ public class CDCDefinitionIT extends CDCBaseIT {
                 "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER,"
                         + " v2 DATE)");
         String cdcName = generateUniqueName();
+        String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
+        conn.createStatement().execute(cdc_sql);
 
         String drop_cdc_sql = "DROP CDC " + cdcName + " ON " + tableName;
         conn.createStatement().execute(drop_cdc_sql);
@@ -300,6 +303,44 @@ public class CDCDefinitionIT extends CDCBaseIT {
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.CANNOT_DROP_CDC_INDEX.getErrorCode(), e.getErrorCode());
             assertTrue(e.getMessage().endsWith(CDCUtil.getCDCIndexName(cdcName)));
+        }
+    }
+
+    @Test
+    public void testDropTable () throws SQLException {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        conn.createStatement().execute(
+                "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER,"
+                        + " v2 DATE)");
+        String cdcName = generateUniqueName();
+        String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
+        conn.createStatement().execute(cdc_sql);
+
+        String drop_table_sql = "DROP TABLE " + tableName;
+        conn.createStatement().execute(drop_table_sql);
+
+        // index should have been dropped
+        try (ResultSet rs = conn.createStatement().executeQuery("SELECT index_type FROM " +
+                "system.catalog WHERE table_name = '" + CDCUtil.getCDCIndexName(cdcName) +
+                "' AND column_name IS NULL and column_family IS NULL")) {
+            assertEquals(false, rs.next());
+        }
+        //cdc object should have been dropped
+        try (ResultSet rs = conn.createStatement().executeQuery("SELECT cdc_include FROM " +
+                "system.catalog WHERE table_name = '" + cdcName +
+                "' AND column_name IS NULL and column_family IS NULL")) {
+            assertEquals(false, rs.next());
+        }
+
+        String drop_cdc_sql = "DROP CDC " + cdcName + " ON " + tableName;
+        try {
+            conn.createStatement().execute(drop_cdc_sql);
+            fail("Expected to fail as cdc table doesn't exist");
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.TABLE_UNDEFINED.getErrorCode(), e.getErrorCode());
+            assertTrue(e.getMessage().endsWith(cdcName));
         }
     }
 
