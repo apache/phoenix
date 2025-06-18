@@ -79,6 +79,7 @@ import org.apache.phoenix.monitoring.HTableThreadPoolMetricsManager;
 import org.apache.phoenix.monitoring.HistogramDistribution;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
