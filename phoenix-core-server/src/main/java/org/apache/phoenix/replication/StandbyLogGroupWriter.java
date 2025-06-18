@@ -110,6 +110,7 @@ public class StandbyLogGroupWriter extends ReplicationLogGroupWriter {
                 }
             } catch (IOException e) {
                 exception[0] = e;
+                return null; // Don't cache the path if we can't create it.
             }
             return p;
         });
