@@ -55,7 +55,8 @@ public class ParallelPhoenixNullComparingResultSetTest {
                         Mockito.mock(Properties.class),
                         Mockito.mock(ClusterRoleRecord.class),
                         HighAvailabilityGroup.State.READY),
-                HighAvailabilityTestingUtility.getListOfSingleThreadExecutorServices(), null);
+                HighAvailabilityTestingUtility.getListOfSingleThreadExecutorServices(), null,
+                Mockito.mock(HAURLInfo.class));
         rs1 = Mockito.mock(ResultSet.class);
         rs2 = Mockito.mock(ResultSet.class);
         completableRs1 = CompletableFuture.completedFuture(rs1);
