@@ -213,20 +213,36 @@ public abstract class LoggingConnectionLimiterIT extends BaseTest {
                 }
                 boolean queryPlanFound = false;
                 String queryPlan = pconn.getActivityLogger().getExplainPlanInfo();
-                if (queryPlan != null && queryPlan.contains("FULL SCAN"))
+                if (queryPlan != null && queryPlan.contains("FULL SCAN") && 
+                    queryPlan.contains("regions=") && queryPlan.contains("hostnames=")) {
                     queryPlanFound = true;
-                assertTrue(queryPlanFound);
+                    
+                    // Extract regions and hostnames efficiently
+                    String regions = extractBetweenBraces(queryPlan, "regions={");
+                    String hostnames = extractBetweenBraces(queryPlan, "hostnames={");
+                    
+                    assertFalse("Regions should not be empty", regions.trim().isEmpty());
+                    assertFalse("Hostnames should not be empty", hostnames.trim().isEmpty());
+                    
+                }
+                assertTrue("Query plan should contain FULL SCAN, regions, and hostnames", queryPlanFound);
             }
             try (PhoenixConnection pconn = getConnection().unwrap(PhoenixConnection.class);) {
                 loadData(pconn, "PhoenixTest", "1", 10, 2);
                 String queryPlan = pconn.getActivityLogger().getExplainPlanInfo();
-                assertTrue(queryPlan.isEmpty());
+                assertTrue("Query plan should be empty for non-query operations", queryPlan.isEmpty());
             }
         } else {
             // for HA case, ignoring as parallelPhoenixConnection object doesn't have activity Logger object defined.
             assertTrue(getConnection() instanceof ParallelPhoenixConnection);
         }
 
+    }
+   
+    private String extractBetweenBraces(String text, String marker) {
+        int start = text.indexOf(marker) + marker.length();
+        int end = text.indexOf("}", start);
+        return text.substring(start, end);
     }
 
     protected abstract ConnectionLimiter getConnectionLimiter() throws Exception ;
