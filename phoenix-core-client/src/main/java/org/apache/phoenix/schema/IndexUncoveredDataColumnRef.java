@@ -66,7 +66,7 @@ public class IndexUncoveredDataColumnRef extends ColumnRef {
     }
 
     @Override
-    public ColumnExpression newColumnExpression(boolean schemaNameCaseSensitive, boolean colNameCaseSensitive) {
+    public ColumnExpression newColumnExpression(boolean schemaNameCaseSensitive, boolean colNameCaseSensitive) throws ColumnNotFoundException {
         String displayName = this.getTableRef().getColumnDisplayName(this, schemaNameCaseSensitive, colNameCaseSensitive);
         return new ProjectedColumnExpression(this.getColumn(), columns, position, displayName);
     }
