@@ -19,7 +19,10 @@ package org.apache.phoenix.exception;
 
 import java.io.IOException;
 
-
+/**
+ * Exception thrown when CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is set
+ * and the current cluster role is ACTIVE_TO_STANDBY.
+ */
 public class MutationBlockedIOException extends IOException {
     private static final long serialVersionUID = 1L;
 
