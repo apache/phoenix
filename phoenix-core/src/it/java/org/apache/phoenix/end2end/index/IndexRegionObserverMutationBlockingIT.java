@@ -121,7 +121,7 @@ public class IndexRegionObserverMutationBlockingIT extends BaseTest {
 
             // Verify that mutations are now blocked
             assertTrue("Mutations should be blocked", haGroupStoreManager.isMutationBlocked());
-            
+
             // Test that UPSERT throws MutationBlockedIOException
             try {
                 conn.createStatement().execute("UPSERT INTO " + dataTableName + 
@@ -263,13 +263,13 @@ public class IndexRegionObserverMutationBlockingIT extends BaseTest {
                     containsMutationBlockedException(e));
             }
             
-            // Transition back to STANDBY (non-blocking state)
+            // Transition back to ACTIVE (non-blocking state) and peer cluster is in ATS state
             crr = new ClusterRoleRecord("transition_test",
                     HighAvailabilityPolicy.FAILOVER, 
                     haAdmin.getZkUrl(), 
-                    ClusterRoleRecord.ClusterRole.STANDBY,
+                    ClusterRoleRecord.ClusterRole.ACTIVE,
                     "standby-zk-url", 
-                    ClusterRoleRecord.ClusterRole.ACTIVE, 
+                    ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
                     3L);
             haAdmin.createOrUpdateDataOnZookeeper(crr);
             Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);

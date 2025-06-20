@@ -36,6 +36,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_PARALL
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_PARALLEL_POOL2_TASK_REJECTED_COUNTER;
 import static org.apache.phoenix.query.BaseTest.extractThreadPoolExecutorFromCQSI;
 import static org.apache.phoenix.query.QueryServices.AUTO_COMMIT_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT;
 import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_CORE_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ENABLED;
@@ -58,14 +59,18 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.exception.MutationBlockedIOException;
+import org.apache.phoenix.execute.CommitException;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
@@ -114,6 +119,8 @@ public class ParallelPhoenixConnectionIT {
 
     @BeforeClass
     public static void setUpBeforeClass() throws Exception {
+        CLUSTERS.getHBaseCluster1().getConfiguration().setBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, true);
+        CLUSTERS.getHBaseCluster2().getConfiguration().setBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, true);
         CLUSTERS.start();
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
         DriverManager.registerDriver(new PhoenixTestDriver());
@@ -248,6 +255,48 @@ public class ParallelPhoenixConnectionIT {
         try (Connection conn = getParallelConnection()) {
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
         }
+    }
+
+    /**
+     * Test Phoenix connection creation and basic operations with HBase both cluster is ACTIVE_TO_STANDBY role.
+     */
+    @Test
+    public void bothClusterATSRole() throws Exception {
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.ACTIVE_TO_STANDBY);
+        try (Connection conn = getParallelConnection()) {
+            doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
+        } catch (SQLException e) {
+            assertTrue(containsMutationBlockedException(e));
+        }
+    }
+
+    /**
+     * Test Phoenix connection creation and basic operations with HBase one cluster is ACTIVE_TO_STANDBY role.
+     */
+    @Test
+    public void oneClusterATSRole() throws Exception {
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.ACTIVE);
+        int countExceptions = 0;
+        try (Connection conn = getParallelConnection()) {
+            doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
+        } catch (SQLException e) {
+            assertTrue(containsMutationBlockedException(e));
+            countExceptions++;
+        }
+        assert(countExceptions == 1);
+    }
+
+    private boolean containsMutationBlockedException(SQLException e) {
+        Throwable cause = e.getCause();
+        // Recursively check for MutationBlockedIOException buried in exception stack.
+        while (cause != null) {
+            if (cause instanceof RetriesExhaustedWithDetailsException) {
+                RetriesExhaustedWithDetailsException re = (RetriesExhaustedWithDetailsException) cause;
+                return re.getCause(0) instanceof MutationBlockedIOException;
+            }
+            cause = cause.getCause();
+        }
+        return false;
     }
 
     /**
