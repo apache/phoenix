@@ -206,6 +206,7 @@ public class ServerUtil {
         
         public static void shutdown() {
             synchronized (ConnectionFactory.class) {
+                LOGGER.info("Closing ServerUtil.ConnectionFactory connections");
                 for (Connection connection : connections.values()) {
                     try {
                         connection.close();
