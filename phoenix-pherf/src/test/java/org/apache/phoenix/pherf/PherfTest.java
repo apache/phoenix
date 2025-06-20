@@ -31,6 +31,7 @@ public class PherfTest {
     @Rule
     public final ExpectedSystemExit exit = ExpectedSystemExit.none();
 
+
     @Test
     public void testListArgument() {
         String[] args = {"-listFiles"};
