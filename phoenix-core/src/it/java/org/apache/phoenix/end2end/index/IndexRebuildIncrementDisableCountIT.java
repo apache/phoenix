@@ -24,6 +24,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.PreparedStatement;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -171,11 +172,14 @@ public class IndexRebuildIncrementDisableCountIT extends BaseTest {
     private static void mutateRandomly(Connection conn, String tableName, int maxOrgId) {
         try {
 
-            Statement stmt = conn.createStatement();
+            String sqlStr = "UPSERT INTO " + tableName + " VALUES(?, ?, ?, ?)"; 
+            PreparedStatement stmt = conn.prepareStatement(sqlStr);
             for (int i = 0; i < 10000; i++) {
-                stmt.executeUpdate(
-                    "UPSERT INTO " + tableName + " VALUES('" + getRandomOrgId(maxOrgId) + "'," + i
-                            + "," + (i + 1) + "," + (i + 2) + ")");
+                stmt.setString(1, getRandomOrgId(maxOrgId));
+                stmt.setInt(2, i);
+                stmt.setInt(3, i + 1);
+                stmt.setInt(4, i + 2);
+                stmt.executeUpdate();
             }
             conn.commit();
         } catch (Exception e) {
