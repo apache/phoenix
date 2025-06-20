@@ -44,8 +44,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 import org.apache.phoenix.util.TupleUtil;
-import org.iq80.snappy.Snappy;
-
+import org.xerial.snappy.Snappy;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
