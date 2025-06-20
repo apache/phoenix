@@ -3333,6 +3333,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
         // Recursively delete indexes
         for (byte[] indexName : indexNames) {
+            if (CDCUtil.isCDCIndex(indexName)) {
+                byte[] cdcKey = SchemaUtil.getTableKey(tenantId, schemaName, CDCUtil.getCdcObjectName(indexName));
+                Delete deleteCdc = new Delete(cdcKey, clientTimeStamp);
+                catalogMutations.add(deleteCdc);
+            }
             byte[] indexKey = SchemaUtil.getTableKey(tenantId, schemaName, indexName);
             // FIXME: Remove when unintentionally deprecated method is fixed (HBASE-7870).
             // FIXME: the version of the Delete constructor without the lock args was introduced
