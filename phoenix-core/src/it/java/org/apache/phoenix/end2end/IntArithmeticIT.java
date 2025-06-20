@@ -45,7 +45,7 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 @RunWith(Parameterized.class)
 public class IntArithmeticIT extends BaseQueryIT {
 

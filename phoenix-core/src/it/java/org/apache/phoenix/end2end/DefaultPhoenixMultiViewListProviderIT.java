@@ -40,7 +40,7 @@ import static org.junit.Assert.assertEquals;
  * TODO:- To enable this test after re-enabling TTL for view for more info check :- PHOENIX-6978
  */
 @Ignore
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class})
 public class DefaultPhoenixMultiViewListProviderIT extends ParallelStatsDisabledIT {
     private final String BASE_TABLE_DDL = "CREATE TABLE %s (TENANT_ID CHAR(10) NOT NULL, " +
             "ID CHAR(10) NOT NULL, NUM BIGINT CONSTRAINT " +

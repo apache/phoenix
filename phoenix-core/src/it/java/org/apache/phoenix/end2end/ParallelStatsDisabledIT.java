@@ -58,6 +58,7 @@ public abstract class ParallelStatsDisabledIT extends BaseTest {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
         props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
+        props.put(QueryServices.STATS_COLLECTION_ENABLED, Boolean.toString(true));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
