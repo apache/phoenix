@@ -41,6 +41,7 @@ public final class PhoenixIndexBuilderHelper {
 
     public static final String RETURN_RESULT = "_RETURN_RESULT";
     public static final byte[] RETURN_RESULT_ROW = new byte[]{0};
+    public static final byte[] RETURN_RESULT_OLD_ROW = new byte[]{1};
 
     public static byte[] serializeOnDupKeyIgnore() {
         return ON_DUP_KEY_IGNORE_BYTES;

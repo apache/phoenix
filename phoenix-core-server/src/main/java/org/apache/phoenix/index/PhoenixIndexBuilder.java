@@ -22,6 +22,7 @@ import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -278,7 +279,10 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
 
     @Override
     public boolean returnResult(Mutation m) {
-        return m.getAttribute(PhoenixIndexBuilderHelper.RETURN_RESULT) != null;
+        byte[] returnResult = m.getAttribute(PhoenixIndexBuilderHelper.RETURN_RESULT);
+        return returnResult != null && (Arrays.equals(returnResult,
+                PhoenixIndexBuilderHelper.RETURN_RESULT_ROW) || Arrays.equals(returnResult,
+                PhoenixIndexBuilderHelper.RETURN_RESULT_OLD_ROW));
     }
 
     @Override

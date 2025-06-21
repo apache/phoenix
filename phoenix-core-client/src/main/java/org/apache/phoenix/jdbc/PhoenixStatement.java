@@ -626,7 +626,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 isUpsert = stmt instanceof ExecutableUpsertStatement;
                                 isDelete = stmt instanceof ExecutableDeleteStatement;
                                 if (isDelete && connection.getAutoCommit() &&
-                                        returnResult == ReturnResult.ROW) {
+                                        (returnResult == ReturnResult.ROW ||
+                                                returnResult == ReturnResult.OLD_ROW)) {
                                     // used only if single row deletion needs to atomically
                                     // return row that is deleted.
                                     plan = ((ExecutableDeleteStatement) stmt).compilePlan(
@@ -2497,6 +2498,32 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         CompilableStatement stmt = preExecuteUpdate(sql);
         Pair<Integer, ResultSet> result =
                 executeMutation(stmt, createAuditQueryLogger(stmt, sql), ReturnResult.ROW);
+        flushIfNecessary();
+        return result;
+    }
+
+    /**
+     * Executes the given SQL statement similar to JDBC API executeUpdate() but also returns the
+     * old row (before update) as Result object back to the client. This must be used with
+     * auto-commit Connection. This makes the operation atomic.
+     * If the row is successfully updated, return the old row (state before update), otherwise
+     * if the row cannot be updated, return non-updated (old) row.
+     *
+     * @param sql The SQL DML statement, UPSERT or DELETE for Phoenix.
+     * @return The pair of int and ResultSet, where int represents value 1 for successful row
+     * update and 0 for non-successful row update, and ResultSet represents the old state of the
+     * row.
+     * @throws SQLException If the statement cannot be executed.
+     */
+    public Pair<Integer, ResultSet> executeAtomicUpdateReturnOldRow(String sql)
+            throws SQLException {
+        if (!connection.getAutoCommit()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.AUTO_COMMIT_NOT_ENABLED).build()
+                    .buildException();
+        }
+        CompilableStatement stmt = preExecuteUpdate(sql);
+        Pair<Integer, ResultSet> result =
+                executeMutation(stmt, createAuditQueryLogger(stmt, sql), ReturnResult.OLD_ROW);
         flushIfNecessary();
         return result;
     }

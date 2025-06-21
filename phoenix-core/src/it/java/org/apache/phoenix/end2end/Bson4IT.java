@@ -34,6 +34,7 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.schema.types.PDouble;
 import org.bson.BsonArray;
 import org.bson.BsonBinary;
@@ -51,7 +52,6 @@ import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.PropertiesUtil;
 
@@ -59,6 +59,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -675,6 +676,185 @@ public class Bson4IT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  public void testConditionalUpsertReturnOldRow() throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    String tableName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.setAutoCommit(true);
+      String ddl = "CREATE TABLE " + tableName
+              + " (PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON"
+              + " CONSTRAINT pk PRIMARY KEY(PK1))";
+      conn.createStatement().execute(ddl);
+
+      String sample1 = getJsonString("json/sample_01.json");
+      String sample2 = getJsonString("json/sample_02.json");
+      String sample3 = getJsonString("json/sample_03.json");
+      BsonDocument bsonDocument1 = RawBsonDocument.parse(sample1);
+      BsonDocument bsonDocument2 = RawBsonDocument.parse(sample2);
+      BsonDocument bsonDocument3 = RawBsonDocument.parse(sample3);
+
+      upsertRows(conn, tableName, bsonDocument1, bsonDocument2, bsonDocument3);
+      PreparedStatement stmt;
+
+      String conditionExpression =
+              "press = :press AND track[0].shot[2][0].city.standard[50] = :softly";
+
+      BsonDocument conditionDoc = new BsonDocument();
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", new BsonDocument()
+              .append(":press", new BsonString("beat"))
+              .append(":softly", new BsonString("softly")));
+
+      String query = "SELECT * FROM " + tableName +
+              " WHERE PK1 = 'pk0001' AND C1 = '0002' AND NOT BSON_CONDITION_EXPRESSION(COL, '"
+              + conditionDoc.toJson() + "')";
+      ResultSet rs = conn.createStatement().executeQuery(query);
+
+      assertTrue(rs.next());
+      assertEquals("pk0001", rs.getString(1));
+      assertEquals("0002", rs.getString(2));
+      BsonDocument document1 = (BsonDocument) rs.getObject(3);
+      assertEquals(bsonDocument1, document1);
+
+      assertFalse(rs.next());
+
+      conditionExpression =
+              "press = :press AND track[0].shot[2][0].city.standard[5] = :softly";
+
+      conditionDoc = new BsonDocument();
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", new BsonDocument()
+              .append(":press", new BsonString("beat"))
+              .append(":softly", new BsonString("softly")));
+
+      query = "SELECT * FROM " + tableName +
+              " WHERE PK1 = 'pk0001' AND C1 = '0002' AND BSON_CONDITION_EXPRESSION(COL, '"
+              + conditionDoc.toJson() + "')";
+      rs = conn.createStatement().executeQuery(query);
+
+      assertTrue(rs.next());
+      assertEquals("pk0001", rs.getString(1));
+      assertEquals("0002", rs.getString(2));
+      document1 = (BsonDocument) rs.getObject(3);
+      assertEquals(bsonDocument1, document1);
+
+      assertFalse(rs.next());
+
+      BsonDocument updateExp = new BsonDocument()
+              .append("$SET", new BsonDocument()
+                      .append("browserling",
+                              new BsonBinary(PDouble.INSTANCE.toBytes(-505169340.54880095)))
+                      .append("track[0].shot[2][0].city.standard[5]", new BsonString("soft"))
+                      .append("track[0].shot[2][0].city.problem[2]",
+                              new BsonString("track[0].shot[2][0].city.problem[2] + 529.435")))
+              .append("$UNSET", new BsonDocument()
+                      .append("track[0].shot[2][0].city.flame", new BsonNull()));
+
+      stmt = conn.prepareStatement("UPSERT INTO " + tableName
+              + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
+              + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
+              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END,"
+              + " C1 = ?");
+      stmt.setString(1, "pk0001");
+      stmt.setString(2, "0003");
+
+      assertReturnedOldRowResult(stmt, conn, tableName, "json/sample_01.json", true);
+
+      updateExp = new BsonDocument()
+              .append("$ADD", new BsonDocument()
+                      .append("new_samples",
+                              new BsonDocument().append("$set",
+                                      new BsonArray(Arrays.asList(
+                                              new BsonBinary(Bytes.toBytes("Sample10")),
+                                              new BsonBinary(Bytes.toBytes("Sample12")),
+                                              new BsonBinary(Bytes.toBytes("Sample13")),
+                                              new BsonBinary(Bytes.toBytes("Sample14"))
+                                      )))))
+              .append("$DELETE_FROM_SET", new BsonDocument()
+                      .append("new_samples",
+                              new BsonDocument().append("$set",
+                                      new BsonArray(Arrays.asList(
+                                              new BsonBinary(Bytes.toBytes("Sample02")),
+                                              new BsonBinary(Bytes.toBytes("Sample03"))
+                                      )))))
+              .append("$SET", new BsonDocument()
+                      .append("newrecord", ((BsonArray) (document1.get("track"))).get(0)))
+              .append("$UNSET", new BsonDocument()
+                      .append("rather[3].outline.halfway.so[2][2]", new BsonNull()));
+
+      conditionExpression =
+              "field_not_exists(newrecord) AND field_exists(rather[3].outline.halfway.so[2][2])";
+
+      conditionDoc = new BsonDocument();
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", new BsonDocument());
+
+      stmt = conn.prepareStatement("UPSERT INTO " + tableName
+              + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
+              + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
+              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END");
+
+      stmt.setString(1, "pk1010");
+
+      assertReturnedOldRowResult(stmt, conn, tableName, "json/sample_02.json", true);
+
+      updateExp = new BsonDocument()
+              .append("$SET", new BsonDocument()
+                      .append("result[1].location.state", new BsonString("AK")))
+              .append("$UNSET", new BsonDocument()
+                      .append("result[4].emails[1]", new BsonNull()));
+
+      conditionExpression =
+              "result[2].location.coordinates.latitude > :latitude OR "
+                      + "(field_exists(result[1].location) AND result[1].location.state != :state" +
+                      " AND field_exists(result[4].emails[1]))";
+
+      conditionDoc = new BsonDocument();
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", new BsonDocument()
+              .append(":latitude", new BsonDouble(0))
+              .append(":state", new BsonString("AK")));
+
+      stmt = conn.prepareStatement("UPSERT INTO " + tableName
+              + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
+              + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
+              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END");
+
+      stmt.setString(1, "pk1011");
+
+      assertReturnedOldRowResult(stmt, conn, tableName, "json/sample_03.json", true);
+
+      conditionExpression =
+              "press = :press AND track[0].shot[2][0].city.standard[5] = :softly";
+
+      conditionDoc = new BsonDocument();
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", new BsonDocument()
+              .append(":press", new BsonString("incorrect_value"))
+              .append(":softly", new BsonString("incorrect_value")));
+
+      updateExp = new BsonDocument()
+              .append("$SET", new BsonDocument()
+                      .append("new_field1",
+                              new BsonBinary(PDouble.INSTANCE.toBytes(-505169340.54880095)))
+                      .append("track[0].shot[2][0].city.standard[5]", new BsonString(
+                              "soft_new_val"))
+                      .append("track[0].shot[2][0].city.problem[2]",
+                              new BsonString("track[0].shot[2][0].city.problem[2] + 123")));
+
+      stmt = conn.prepareStatement("UPSERT INTO " + tableName
+              + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
+              + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
+              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END");
+      stmt.setString(1, "pk0001");
+
+      assertReturnedOldRowResult(stmt, conn, tableName, "json/sample_updated_01.json", false);
+
+      verifyRows(tableName, conn);
+    }
+  }
+
+  @Test
   public void testBsonPk() throws Exception {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     String tableName = generateUniqueName();
@@ -859,6 +1039,24 @@ public class Bson4IT extends ParallelStatsDisabledIT {
     assertEquals(success ? 1 : 0, stmt.getUpdateCount());
     ResultSet resultSet = stmt.getResultSet();
     assertEquals(RawBsonDocument.parse(getJsonString(jsonPath)), resultSet.getObject(3));
+  }
+
+  private static void assertReturnedOldRowResult(PreparedStatement stmt,
+                                                 Connection conn,
+                                                 String tableName,
+                                                 String jsonPath,
+                                                 boolean success)
+          throws SQLException, IOException {
+    Pair<Integer, ResultSet> resultPair =
+            stmt.unwrap(PhoenixPreparedStatement.class).executeAtomicUpdateReturnOldRow();
+    assertEquals(success ? 1 : 0, (int) resultPair.getFirst());
+    ResultSet resultSet = resultPair.getSecond();
+    if (success) {
+      assertEquals(RawBsonDocument.parse(getJsonString(jsonPath)), resultSet.getObject(3));
+      assertFalse(resultSet.next());
+    } else {
+      assertEquals(RawBsonDocument.parse(getJsonString(jsonPath)), resultSet.getObject(3));
+    }
   }
 
   private static void validateExplainPlan(PreparedStatement ps, String tableName, String scanType)
