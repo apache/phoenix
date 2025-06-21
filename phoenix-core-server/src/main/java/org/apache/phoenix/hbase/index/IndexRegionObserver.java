@@ -1321,8 +1321,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             if (this.builder.returnResult(m) && miniBatchOp.size() == 1) {
                 context.returnResult = true;
                 byte[] returnResult = m.getAttribute(PhoenixIndexBuilderHelper.RETURN_RESULT);
-                if (returnResult != null && 
-                    Arrays.equals(returnResult, PhoenixIndexBuilderHelper.RETURN_RESULT_OLD_ROW)) {
+                if (returnResult != null && Arrays.equals(returnResult,
+                        PhoenixIndexBuilderHelper.RETURN_RESULT_OLD_ROW)) {
                     context.returnOldRow = true;
                 }
             }
