@@ -27,7 +27,6 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -36,6 +35,7 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import org.apache.hadoop.conf.Configuration;
@@ -45,6 +45,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellBuilderFactory;
 import org.apache.hadoop.hbase.CellBuilderType;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
@@ -71,15 +72,15 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.*;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
+import org.junit.ClassRule;
+import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
-
-    private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogProcessorTest.class);
 
     private static final String CREATE_TABLE_SQL_STATEMENT = "CREATE TABLE %s (ID VARCHAR PRIMARY KEY, " +
             "COL_1 VARCHAR, COL_2 VARCHAR, COL_3 BIGINT)";
@@ -146,21 +147,24 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
 
         // Clean up
         reader.close();
+        replicationLogProcessor.close();
     }
 
     /**
      * Tests error handling when attempting to create LogFileReader with a non-existent file.
      */
     @Test
-    public void testCreateLogFileReaderWithNonExistentFile() {
+    public void testCreateLogFileReaderWithNonExistentFile() throws IOException {
         Path nonExistentPath = new Path(testFolder.toString(), "non_existent_file");
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, executorService);
         try {
-            ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, executorService);
             replicationLogProcessor.createLogFileReader(localFs, nonExistentPath);
             fail("Should throw IOException for non-existent file");
         } catch (IOException e) {
             assertTrue("Error message should mention file does not exist and file path name",
                     e.getMessage().contains("Log file does not exist: " + nonExistentPath));
+        } finally {
+            replicationLogProcessor.close();
         }
     }
 
@@ -171,8 +175,8 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
     public void testCreateLogFileReaderWithInvalidLogFile() throws IOException {
         Path invalidFilePath = new Path(testFolder.newFile("invalid_file").toURI());
         localFs.create(invalidFilePath).close(); // Create empty file
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, executorService);
         try {
-            ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, executorService);
             replicationLogProcessor.createLogFileReader(localFs, invalidFilePath);
             fail("Should throw IOException for invalid file");
         } catch (IOException e) {
@@ -181,6 +185,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         } finally {
             // Delete the invalid file
             localFs.delete(invalidFilePath);
+            replicationLogProcessor.close();
         }
     }
 
@@ -211,79 +216,135 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
                 .setFilePath(filePath));
 
         replicationLogProcessor.closeReader(reader);
+        replicationLogProcessor.close();
 
         // Ensure reader's close method is called only once
         Mockito.verify(reader, Mockito.times(1)).close();
     }
 
     /**
-     * Tests processing an empty mutation map - should complete without errors.
+     * Tests the calculateRetryDelay method with different configurations.
      */
     @Test
-    public void testProcessReplicationLogBatchWithEmptyMap() {
-        Map<String, List<Mutation>> emptyMap = new HashMap<>();
-
+    public void testCalculateRetryDelay() throws IOException {
+        // Test with default configuration
         ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, executorService);
-        // Process empty batch - should not throw any exceptions and should return immediately
-        try {
-            replicationLogProcessor.processReplicationLogBatch(emptyMap);
-            // If we reach here, the empty map was processed successfully
-            assertTrue("Processing empty map should complete without errors", true);
-        } catch (Exception e) {
-            fail("Processing empty map should not throw exception: " + e.getMessage());
-        }
+
+        // Test exponential backoff pattern with default max delay (10 seconds)
+        assertEquals("First retry should have 1 second delay", 1000L, replicationLogProcessor.calculateRetryDelay(0));
+        assertEquals("Second retry should have 2 second delay", 2000L, replicationLogProcessor.calculateRetryDelay(1));
+        assertEquals("Third retry should have 4 second delay", 4000L, replicationLogProcessor.calculateRetryDelay(2));
+        assertEquals("Fourth retry should have 8 second delay", 8000L, replicationLogProcessor.calculateRetryDelay(3));
+        assertEquals("Fifth retry should be capped at 10 seconds", 10000L, replicationLogProcessor.calculateRetryDelay(4));
+        assertEquals("Sixth retry should be capped at 10 seconds", 10000L, replicationLogProcessor.calculateRetryDelay(5));
+
+        // Clean up
+        replicationLogProcessor.close();
+
+        // Test with custom max delay configuration
+        Configuration customConf = new Configuration(conf);
+        long customMaxDelay = 5000L; // 5 seconds
+        customConf.setLong(ReplicationLogProcessor.REPLICATION_STANDBY_BATCH_RETRY_MAX_DELAY_MS, customMaxDelay);
+
+        ReplicationLogProcessor customProcessor = new ReplicationLogProcessor(customConf, executorService);
+
+        // Test exponential backoff pattern with custom max delay
+        assertEquals("First retry should have 1 second delay", 1000L, customProcessor.calculateRetryDelay(0));
+        assertEquals("Second retry should have 2 second delay", 2000L, customProcessor.calculateRetryDelay(1));
+        assertEquals("Third retry should have 4 second delay", 4000L, customProcessor.calculateRetryDelay(2));
+        assertEquals("Fourth retry should be capped at 5 seconds", 5000L, customProcessor.calculateRetryDelay(3));
+        assertEquals("Fifth retry should be capped at 5 seconds", 5000L, customProcessor.calculateRetryDelay(4));
+
+        // Clean up
+        customProcessor.close();
+
+        // Test with very small max delay
+        Configuration smallDelayConf = new Configuration(conf);
+        long smallMaxDelay = 1500L; // 1.5 seconds
+        smallDelayConf.setLong(ReplicationLogProcessor.REPLICATION_STANDBY_BATCH_RETRY_MAX_DELAY_MS, smallMaxDelay);
+
+        ReplicationLogProcessor smallDelayProcessor = new ReplicationLogProcessor(smallDelayConf, executorService);
+
+        assertEquals("First retry should have 1 second delay", 1000L, smallDelayProcessor.calculateRetryDelay(0));
+        assertEquals("Second retry should be capped at 1.5 seconds", 1500L, smallDelayProcessor.calculateRetryDelay(1));
+        assertEquals("Third retry should be capped at 1.5 seconds", 1500L, smallDelayProcessor.calculateRetryDelay(2));
+
+        // Clean up
+        smallDelayProcessor.close();
     }
 
     /**
-     * Tests exception handling when attempting to process mutations for non-existent tables.
+     * Tests that configuration parameters are properly read and applied.
      */
     @Test
-    public void testProcessReplicationLogBatchExceptionsMessageIsCorrect() {
-        Map<String, List<Mutation>> tableMutationsMap = new HashMap<>();
-        Mutation mutation = LogFileTestUtil.newPut("abc", 6L, 5);
-        tableMutationsMap.put("NON_EXISTENT_TABLE", Collections.singletonList(mutation));
+    public void testReplicationLogProcessorConfiguration() throws IOException {
+        // Test that all default configurations are used when no custom configuration is provided
         ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, executorService);
-        try {
-            replicationLogProcessor.processReplicationLogBatch(tableMutationsMap);
-            fail("Should throw TableNotFoundException for non-existent table");
-        } catch (IOException exception) {
-            assertTrue("Error message should mention file does not exist and file path name",
-                    exception.getMessage().contains("TableNotFoundException"));
-        }
-    }
 
-    /**
-     * Tests behavior when HBase operations fail (simulated by disabling table).
-     */
-    @Test
-    public void testProcessReplicationLogBatchWithHBaseFailure() throws Exception {
-        final String tableName = "T_" + generateUniqueName();
-        Map<String, List<Mutation>> tableMutationsMap = new HashMap<>();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            // Create table first
-            conn.createStatement().execute(String.format(CREATE_TABLE_SQL_STATEMENT, tableName));
-            PhoenixConnection phoenixConnection = conn.unwrap(PhoenixConnection.class);
-            // Generate some mutations for the table
-            List<Mutation> mutations = generateHBaseMutations(phoenixConnection, 2, tableName, 10L);
-            tableMutationsMap.put(tableName, mutations);
-            TableName hbaseTableName = TableName.valueOf(tableName);
-            try (Admin admin = phoenixConnection.getQueryServices().getAdmin()) {
-                // Disable the table to simulate HBase failure
-                admin.disableTable(hbaseTableName);
-                LOG.info("Disabled table {} to simulate HBase failure", tableName);
+        // Validate default batch size
+        assertEquals("Default batch size should be used",
+                ReplicationLogProcessor.DEFAULT_REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE,
+                replicationLogProcessor.getBatchSize());
 
-                ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, executorService);
-                // Attempt to process mutations on disabled table - should fail
-                try {
-                    replicationLogProcessor.processReplicationLogBatch(tableMutationsMap);
-                    fail("Should throw IOException when trying to apply mutations to disabled table");
-                } catch (IOException e) {
-                    // Expected behavior - disabled table should cause IOException
-                    assertTrue("Should throw IOException for disabled table", true);
-                    LOG.info("Expected IOException caught when processing mutations on disabled table: " + e.getMessage());
-                }
-            }
-        }
+        // Validate default HBase client retries count
+        assertEquals("Default HBase client retries count should be used",
+                ReplicationLogProcessor.DEFAULT_REPLICATION_STANDBY_HBASE_CLIENT_RETRIES_COUNT,
+                replicationLogProcessor.getHBaseClientRetriesCount());
+
+        // Validate default HBase client operation timeout
+        assertEquals("Default HBase client operation timeout should be used",
+                ReplicationLogProcessor.DEFAULT_REPLICATION_STANDBY_HBASE_CLIENT_OPERATION_TIMEOUT_MS,
+                replicationLogProcessor.getHBaseClientOperationTimeout());
+
+        // Validate default batch retry count
+        assertEquals("Default batch retry count should be used",
+                ReplicationLogProcessor.DEFAULT_REPLICATION_STANDBY_BATCH_RETRY_COUNT,
+                replicationLogProcessor.getBatchRetryCount());
+
+        // Validate default max retry delay
+        assertEquals("Default max retry delay should be used",
+                ReplicationLogProcessor.DEFAULT_REPLICATION_STANDBY_BATCH_RETRY_MAX_DELAY_MS,
+                replicationLogProcessor.getMaxRetryDelayMs());
+
+        // Clean up
+        replicationLogProcessor.close();
+
+        // Test that all custom configurations are honored
+        Configuration customConf = new Configuration(conf);
+
+        // Set custom values for all configuration parameters
+        int customBatchSize = 1000;
+        int customRetriesCount = 6;
+        long customOperationTimeout = 15000L;
+        int customBatchRetryCount = 5;
+        long customMaxRetryDelay = 20000L;
+
+        customConf.setInt(ReplicationLogProcessor.REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE, customBatchSize);
+        customConf.setInt(ReplicationLogProcessor.REPLICATION_STANDBY_HBASE_CLIENT_RETRIES_COUNT, customRetriesCount);
+        customConf.setLong(ReplicationLogProcessor.REPLICATION_STANDBY_HBASE_CLIENT_OPERATION_TIMEOUT_MS, customOperationTimeout);
+        customConf.setInt(ReplicationLogProcessor.REPLICATION_STANDBY_BATCH_RETRY_COUNT, customBatchRetryCount);
+        customConf.setLong(ReplicationLogProcessor.REPLICATION_STANDBY_BATCH_RETRY_MAX_DELAY_MS, customMaxRetryDelay);
+
+        ReplicationLogProcessor customProcessor = new ReplicationLogProcessor(customConf, executorService);
+
+        // Validate all custom configurations are honored
+        assertEquals("Custom batch size should be honored",
+                customBatchSize, customProcessor.getBatchSize());
+
+        assertEquals("Custom HBase client retries count should be honored",
+                customRetriesCount, customProcessor.getHBaseClientRetriesCount());
+
+        assertEquals("Custom HBase client operation timeout should be honored",
+                customOperationTimeout, customProcessor.getHBaseClientOperationTimeout());
+
+        assertEquals("Custom batch retry count should be honored",
+                customBatchRetryCount, customProcessor.getBatchRetryCount());
+
+        assertEquals("Custom max retry delay should be honored",
+                customMaxRetryDelay, customProcessor.getMaxRetryDelayMs());
+
+        // Clean up
+        customProcessor.close();
     }
 
     /**
@@ -295,13 +356,14 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         final String table2Name = "T_" + generateUniqueName();
         final Path filePath = new Path(testFolder.newFile("testProcessLogFileEnd2End").toURI());
         LogFileWriter writer = initLogFileWriter(filePath);
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, executorService);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute(String.format(CREATE_TABLE_SQL_STATEMENT, table1Name));
             conn.createStatement().execute(String.format(CREATE_TABLE_SQL_STATEMENT, table2Name));
             PhoenixConnection phoenixConnection = conn.unwrap(PhoenixConnection.class);
 
-            List<Mutation> table1Mutations = generateHBaseMutations(phoenixConnection, 2, table1Name, 100L);
-            List<Mutation> table2Mutations = generateHBaseMutations(phoenixConnection, 5, table2Name, 101L);
+            List<Mutation> table1Mutations = generateHBaseMutations(phoenixConnection, 2, table1Name, 100L, "a");
+            List<Mutation> table2Mutations = generateHBaseMutations(phoenixConnection, 5, table2Name, 101L, "b");
             table1Mutations.forEach(mutation -> {
                 try {
                     writer.append(table1Name, mutation.hashCode(), mutation);
@@ -319,11 +381,12 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
             writer.sync();
             writer.close();
 
-            ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, executorService);
             replicationLogProcessor.processLogFile(localFs, filePath);
 
             validate(table1Name, table1Mutations);
             validate(table2Name, table2Mutations);
+        } finally {
+            replicationLogProcessor.close();
         }
     }
 
@@ -345,50 +408,9 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         } catch (IOException e) {
             // Expected behavior - non-existent file should cause IOException
             assertTrue("Should throw IOException for non-existent file", true);
+        } finally {
+            replicationLogProcessor.close();
         }
-    }
-
-    /**
-     * Tests batching logic when processing log files with mutations for multiple tables.
-     */
-    @Test
-    public void testProcessLogFileBatchingWithMultipleTables() throws Exception {
-        final Path multiTableBatchFilePath = new Path(testFolder.newFile("testMultiTableBatch").toURI());
-        final String table1Name = "T1_" + generateUniqueName();
-        final String table2Name = "T2_" + generateUniqueName();
-        final int batchSize = 4;
-        final int recordsPerTable = 3;
-        final int totalRecords = recordsPerTable * 2; // 6 total records
-        final int expectedBatchCalls = (totalRecords + batchSize - 1) / batchSize; // 2 calls
-        // Create log file with mutations for multiple tables
-        LogFileWriter writer = initLogFileWriter(multiTableBatchFilePath);
-        // Add mutations alternating between tables using LogFileTestUtil
-        for (int i = 0; i < recordsPerTable; i++) {
-            // Add mutation for table1
-            Mutation put1 = LogFileTestUtil.newPut("row1_" + i, (i * 2) + 1, (i * 2) + 1);
-            writer.append(table1Name, (i * 2) + 1, put1);
-            writer.sync();
-            // Add mutation for table2
-            Mutation put2 = LogFileTestUtil.newPut("row2_" + i, (i * 2) + 2, (i * 2) + 2);
-            writer.append(table2Name, (i * 2) + 2, put2);
-            writer.sync();
-        }
-        writer.close();
-        // Create processor with custom batch size and spy on it
-        Configuration testConf = new Configuration(conf);
-        testConf.setInt(ReplicationLogProcessor.REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE, batchSize);
-
-        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(testConf, executorService);
-        // Validate that the batch size is correctly set
-        assertEquals("Batch size should be set correctly", batchSize, replicationLogProcessor.getBatchSize());
-        ReplicationLogProcessor spyProcessor = Mockito.spy(replicationLogProcessor);
-        // Mock the processReplicationLogBatch method
-        Mockito.doNothing().when(spyProcessor).processReplicationLogBatch(Mockito.any(Map.class));
-        // Process the log file
-        spyProcessor.processLogFile(localFs, multiTableBatchFilePath);
-        // Verify processReplicationLogBatch was called the expected number of times
-        Mockito.verify(spyProcessor, Mockito.times(expectedBatchCalls))
-            .processReplicationLogBatch(Mockito.any(Map.class));
     }
 
     /**
@@ -414,79 +436,61 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
             assertTrue("Processing empty log file should complete without errors", true);
         } catch (Exception e) {
             fail("Processing empty log file should not throw exception: " + e.getMessage());
+        } finally {
+            replicationLogProcessor.close();
         }
     }
 
     /**
-     * Tests processing of log files that were not closed, ensuring it's successf.
+     * Tests processing of log files that were not closed, ensuring it's successful.
      */
     @Test
     public void testProcessLogFileForUnClosedFile() throws Exception {
+        final String tableNameString = "T1_" + generateUniqueName();
         final Path emptyFilePath = new Path(testFolder.newFile("testProcessLogFileForUnClosedFile").toURI());
         LogFileWriter writer = initLogFileWriter(emptyFilePath);
 
         // Add one mutation
         Mutation put = LogFileTestUtil.newPut("row1", 3L, 4);
-        writer.append("table", 1, put);
+        writer.append(tableNameString, 1, put);
         writer.sync();
 
-        // Process the file without closing - should not throw any exceptions
         ReplicationLogProcessor spyProcessor = Mockito.spy(new ReplicationLogProcessor(conf, executorService));
-        Mockito.doNothing().when(spyProcessor).processReplicationLogBatch(Mockito.any(Map.class));
+        
+        // Create argument captor to capture the actual parameters passed to processReplicationLogBatch
+        ArgumentCaptor<Map<TableName, List<Mutation>>> mapCaptor = 
+                ArgumentCaptor.forClass(Map.class);
+        
+        Mockito.doNothing().when(spyProcessor).processReplicationLogBatch(mapCaptor.capture());
 
+        // Process the file without closing - should not throw any exceptions
         spyProcessor.processLogFile(localFs, emptyFilePath);
 
         // Verify processReplicationLogBatch was called the expected number of times
         Mockito.verify(spyProcessor, Mockito.times(1))
                 .processReplicationLogBatch(Mockito.any(Map.class));
-    }
+        
+        // Validate the captured parameters
+        Map<TableName, List<Mutation>> capturedMap = mapCaptor.getValue();
+        assertNotNull("Captured map should not be null", capturedMap);
+        assertEquals("Should have exactly one table", 1, capturedMap.size());
+        
+        // Verify the table name
+        TableName expectedTableName = TableName.valueOf(tableNameString);
+        assertTrue("Map should contain the expected table", capturedMap.containsKey(expectedTableName));
+        
+        // Verify the mutations list
+        List<Mutation> mutations = capturedMap.get(expectedTableName);
+        assertNotNull("Mutations list should not be null", mutations);
+        assertEquals("Should have exactly one mutation", 1, mutations.size());
+        
+        // Verify the mutation details
+        Mutation capturedMutation = mutations.get(0);
+        assertTrue("Mutation should be a Put", capturedMutation instanceof Put);
+        LogFileTestUtil.assertMutationEquals("Invalid put", put, capturedMutation);
 
-    /**
-     * Tests that configuration parameters are properly read and applied.
-     */
-    @Test
-    public void testReplicationLogProcessorConfiguration() {
-        // Test that all default configurations are used when no custom configuration is provided
-        ReplicationLogProcessor defaultProcessor = new ReplicationLogProcessor(conf, executorService);
-
-        // Validate default batch size
-        assertEquals("Default batch size should be used",
-                ReplicationLogProcessor.DEFAULT_REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE,
-                defaultProcessor.getBatchSize());
-
-        // Validate default HBase client retries count
-        assertEquals("Default HBase client retries count should be used",
-                ReplicationLogProcessor.DEFAULT_REPLICATION_STANDBY_HBASE_CLIENT_RETRIES_COUNT,
-                defaultProcessor.getHBaseClientRetriesCount());
-
-        // Validate default HBase client operation timeout
-        assertEquals("Default HBase client operation timeout should be used",
-                ReplicationLogProcessor.DEFAULT_REPLICATION_STANDBY_HBASE_CLIENT_OPERATION_TIMEOUT_MS,
-                defaultProcessor.getHBaseClientOperationTimeout());
-
-        // Test that all custom configurations are honored
-        Configuration customConf = new Configuration(conf);
-
-        // Set custom values for all configuration parameters
-        int customBatchSize = 1000;
-        int customRetriesCount = 6;
-        int customOperationTimeout = 15000;
-
-        customConf.setInt(ReplicationLogProcessor.REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE, customBatchSize);
-        customConf.setInt(ReplicationLogProcessor.REPLICATION_STANDBY_HBASE_CLIENT_RETRIES_COUNT, customRetriesCount);
-        customConf.setInt(ReplicationLogProcessor.REPLICATION_STANDBY_HBASE_CLIENT_OPERATION_TIMEOUT_MS, customOperationTimeout);
-
-        ReplicationLogProcessor customProcessor = new ReplicationLogProcessor(customConf, executorService);
-
-        // Validate all custom configurations are honored
-        assertEquals("Custom batch size should be honored",
-                customBatchSize, customProcessor.getBatchSize());
-
-        assertEquals("Custom HBase client retries count should be honored",
-                customRetriesCount, customProcessor.getHBaseClientRetriesCount());
-
-        assertEquals("Custom HBase client operation timeout should be honored",
-                customOperationTimeout, customProcessor.getHBaseClientOperationTimeout());
+        // Clean up
+        spyProcessor.close();
     }
 
     /**
@@ -510,6 +514,650 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
     }
 
     /**
+     * Tests batching logic when processing log files with mutations for multiple tables.
+     */
+    @Test
+    public void testProcessLogFileWithMultipleTables() throws Exception {
+        final Path multiTableBatchFilePath = new Path(testFolder.newFile("testProcessLogFileWithMultipleTables").toURI());
+        final String table1Name = "T1_" + generateUniqueName();
+        final String table2Name = "T2_" + generateUniqueName();
+        final int batchSize = 4;
+        final int recordsPerTable = 3;
+        final int totalRecords = recordsPerTable * 2; // 6 total records
+        final int expectedBatchCalls = (totalRecords + batchSize - 1) / batchSize; // 2 calls
+        
+        // Store mutations for validation
+        List<Mutation> table1Mutations = new ArrayList<>();
+        List<Mutation> table2Mutations = new ArrayList<>();
+        
+        // Create log file with mutations for multiple tables
+        LogFileWriter writer = initLogFileWriter(multiTableBatchFilePath);
+        
+        // Add mutations alternating between tables using LogFileTestUtil
+        for (int i = 0; i < recordsPerTable; i++) {
+            // Add mutation for table1
+            Mutation put1 = LogFileTestUtil.newPut("row1_" + i, (i * 2) + 1, (i * 2) + 1);
+            table1Mutations.add(put1);
+            writer.append(table1Name, (i * 2) + 1, put1);
+            writer.sync();
+            
+            // Add mutation for table2
+            Mutation put2 = LogFileTestUtil.newPut("row2_" + i, (i * 2) + 2, (i * 2) + 2);
+            table2Mutations.add(put2);
+            writer.append(table2Name, (i * 2) + 2, put2);
+            writer.sync();
+        }
+        writer.close();
+        
+        // Create processor with custom batch size and spy on it
+        Configuration testConf = new Configuration(conf);
+        testConf.setInt(ReplicationLogProcessor.REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE, batchSize);
+
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(testConf, executorService);
+        
+        // Validate that the batch size is correctly set
+        assertEquals("Batch size should be set correctly", batchSize, replicationLogProcessor.getBatchSize());
+        
+        ReplicationLogProcessor spyProcessor = Mockito.spy(replicationLogProcessor);
+        
+        // Store captured arguments manually to avoid reference issues
+        List<Map<TableName, List<Mutation>>> capturedArguments = new ArrayList<>();
+        
+        // Mock processReplicationLogBatch to capture deep copies
+        Mockito.doAnswer(invocation -> {
+            // Capture deep copy of mutations
+            Map<TableName, List<Mutation>> originalMap = invocation.getArgument(0);
+            Map<TableName, List<Mutation>> deepCopy = new HashMap<>(originalMap);
+            capturedArguments.add(deepCopy);
+            return null;
+        }).when(spyProcessor).processReplicationLogBatch(Mockito.any(Map.class));
+
+        // Process the log file
+        spyProcessor.processLogFile(localFs, multiTableBatchFilePath);
+
+        // Verify processReplicationLogBatch was called the expected number of times
+        Mockito.verify(spyProcessor, Mockito.times(expectedBatchCalls))
+                .processReplicationLogBatch(Mockito.any(Map.class));
+        
+        // Validate the captured parameters using our manually captured arguments
+        assertEquals("Should have captured " + expectedBatchCalls + " batch calls", 
+                expectedBatchCalls, capturedArguments.size());
+        
+        // Validate each batch call individually
+        TableName expectedTable1Name = TableName.valueOf(table1Name);
+        TableName expectedTable2Name = TableName.valueOf(table2Name);
+        
+        // First batch should contain 4 mutations (batch size = 4)
+        // Based on alternating pattern: table1[0], table2[0], table1[1], table2[1]
+        Map<TableName, List<Mutation>> firstBatch = capturedArguments.get(0);
+        assertNotNull("First batch should not be null", firstBatch);
+
+        // Validate first batch contains both tables
+        assertTrue("First batch should contain table1", firstBatch.containsKey(expectedTable1Name));
+        assertTrue("First batch should contain table2", firstBatch.containsKey(expectedTable2Name));
+
+        List<Mutation> firstBatchTable1 = firstBatch.get(expectedTable1Name);
+        List<Mutation> firstBatchTable2 = firstBatch.get(expectedTable2Name);
+
+        assertNotNull("First batch table1 mutations should not be null", firstBatchTable1);
+        assertNotNull("First batch table2 mutations should not be null", firstBatchTable2);
+
+        // Validate first batch mutation counts
+        assertEquals("First batch should have 2 mutations for table1", 2, firstBatchTable1.size());
+        assertEquals("First batch should have 2 mutations for table2", 2, firstBatchTable2.size());
+
+        // Validate first batch mutation content
+        LogFileTestUtil.assertMutationEquals("First batch table1 mutation 0 mismatch",
+                table1Mutations.get(0), firstBatchTable1.get(0));
+        LogFileTestUtil.assertMutationEquals("First batch table1 mutation 1 mismatch",
+                table1Mutations.get(1), firstBatchTable1.get(1));
+        LogFileTestUtil.assertMutationEquals("First batch table2 mutation 0 mismatch",
+                table2Mutations.get(0), firstBatchTable2.get(0));
+        LogFileTestUtil.assertMutationEquals("First batch table2 mutation 1 mismatch",
+                table2Mutations.get(1), firstBatchTable2.get(1));
+        
+        // Second batch should contain 2 mutations (remaining records)
+        // Based on alternating pattern: table1[2], table2[2]
+        Map<TableName, List<Mutation>> secondBatch = capturedArguments.get(1);
+        assertNotNull("Second batch should not be null", secondBatch);
+        
+        // Validate second batch contains both tables
+        assertTrue("Second batch should contain table1", secondBatch.containsKey(expectedTable1Name));
+        assertTrue("Second batch should contain table2", secondBatch.containsKey(expectedTable2Name));
+        
+        List<Mutation> secondBatchTable1 = secondBatch.get(expectedTable1Name);
+        List<Mutation> secondBatchTable2 = secondBatch.get(expectedTable2Name);
+        
+        assertNotNull("Second batch table1 mutations should not be null", secondBatchTable1);
+        assertNotNull("Second batch table2 mutations should not be null", secondBatchTable2);
+        
+        // Validate second batch mutation counts
+        assertEquals("Second batch should have 1 mutation for table1", 1, secondBatchTable1.size());
+        assertEquals("Second batch should have 1 mutation for table2", 1, secondBatchTable2.size());
+        
+        // Validate second batch mutation content
+        LogFileTestUtil.assertMutationEquals("Second batch table1 mutation 0 mismatch", 
+                table1Mutations.get(2), secondBatchTable1.get(0));
+        LogFileTestUtil.assertMutationEquals("Second batch table2 mutation 0 mismatch", 
+                table2Mutations.get(2), secondBatchTable2.get(0));
+
+        // Clean up
+        spyProcessor.close();
+    }
+
+    /**
+     * Tests processing an empty mutation map - should complete without errors.
+     */
+    @Test
+    public void testApplyMutationsWithEmptyMap() throws IOException {
+        // Test with empty map - should not throw any exception
+        Map<TableName, List<Mutation>> emptyMap = new HashMap<>();
+
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, executorService);
+        try {
+            Map<TableName, List<Mutation>> failedMutations = replicationLogProcessor.applyMutations(emptyMap);
+            assertNotNull("Failed mutations must not be null", failedMutations);
+            assertTrue("Failed mutations must be empty", failedMutations.isEmpty());
+            // Should not throw any exception
+        } catch (Exception e) {
+            fail("Should not throw exception for empty map: " + e.getMessage());
+        } finally {
+            replicationLogProcessor.close();
+        }
+    }
+
+    /**
+     * Tests applyMutations method with three tables where two succeed and one fails.
+     * This test verifies that the method properly handles partial failure scenarios
+     * and returns only the failed mutations in the result map.
+     */
+    @Test
+    public void testApplyMutationsWithPartialFailures() throws Exception {
+        final String table1 = "T_" + generateUniqueName();
+        final String table2 = "T_" + generateUniqueName();
+        final String table3 = "T_" + generateUniqueName();
+        final TableName tableName1 = TableName.valueOf(table1);
+        final TableName tableName2 = TableName.valueOf(table2);
+        final TableName tableName3 = TableName.valueOf(table3);
+        Map<TableName, List<Mutation>> tableMutationsMap = new HashMap<>();
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, executorService);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            // Create first table (will succeed)
+            conn.createStatement().execute(String.format(CREATE_TABLE_SQL_STATEMENT, table1));
+            // Create second table (will succeed)
+            conn.createStatement().execute(String.format(CREATE_TABLE_SQL_STATEMENT, table2));
+            // Create third table (will be disabled to simulate failure)
+            conn.createStatement().execute(String.format(CREATE_TABLE_SQL_STATEMENT, table3));
+            
+            PhoenixConnection phoenixConnection = conn.unwrap(PhoenixConnection.class);
+            
+            // Generate mutations for the first table (will succeed)
+            List<Mutation> mutations1 = generateHBaseMutations(phoenixConnection, 2, table1, 10L, "a");
+            tableMutationsMap.put(tableName1, mutations1);
+            
+            // Generate mutations for the second table (will succeed)
+            List<Mutation> mutations2 = generateHBaseMutations(phoenixConnection, 2, table2, 20L, "b");
+            tableMutationsMap.put(tableName2, mutations2);
+            
+            // Generate mutations for the third table (will fail)
+            List<Mutation> mutations3 = generateHBaseMutations(phoenixConnection, 2, table3, 30L, "c");
+            tableMutationsMap.put(tableName3, mutations3);
+            
+            // Disable the third table to simulate failure
+            Admin admin = phoenixConnection.getQueryServices().getAdmin();
+            admin.disableTable(tableName3);
+            
+            // Apply mutations - should have partial failures
+            Map<TableName, List<Mutation>> failedMutations = replicationLogProcessor.applyMutations(tableMutationsMap);
+            
+            // Verify failed mutations map is not null and contains the failed table
+            assertNotNull("Failed mutations map should not be null", failedMutations);
+            assertFalse("Some mutations should have failed", failedMutations.isEmpty());
+            
+            // Verify that table3 mutations failed
+            assertTrue("Table3 mutations should be in failed mutations", 
+                    failedMutations.containsKey(tableName3));
+            assertEquals("Table3 should have all its mutations failed", 
+                    mutations3.size(), failedMutations.get(tableName3).size());
+            for(int i = 0; i < mutations3.size(); i++) {
+                LogFileTestUtil.assertMutationEquals("Mutations modified by applyMutations method",
+                        mutations3.get(i), failedMutations.get(TableName.valueOf(table3)).get(i));
+            }
+
+            // Verify that table1 and table2 mutations succeeded (not in failed mutations)
+            assertFalse("Table1 mutations should not be in failed mutations", 
+                    failedMutations.containsKey(tableName1));
+            assertFalse("Table2 mutations should not be in failed mutations", 
+                    failedMutations.containsKey(tableName2));
+
+            // Verify mutations were actually applied to the successful tables
+            validate(table1, mutations1);
+            validate(table2, mutations2);
+        } finally {
+            replicationLogProcessor.close();
+        }
+    }
+
+    /**
+     * Tests applyMutations method with two tables that both succeed in one go.
+     * This test verifies that the method can handle multiple tables successfully
+     * and returns an empty failed mutations map.
+     */
+    @Test
+    public void testApplyMutationsSuccess() throws Exception {
+        final String table1 = "T_" + generateUniqueName();
+        final String table2 = "T_" + generateUniqueName();
+        Map<TableName, List<Mutation>> tableMutationsMap = new HashMap<>();
+        // Create processor and apply mutations
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, executorService);
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            // Create first table
+            conn.createStatement().execute(String.format(CREATE_TABLE_SQL_STATEMENT, table1));
+            // Create second table
+            conn.createStatement().execute(String.format(CREATE_TABLE_SQL_STATEMENT, table2));
+            
+            PhoenixConnection phoenixConnection = conn.unwrap(PhoenixConnection.class);
+            
+            // Generate mutations for the first table
+            List<Mutation> mutations1 = generateHBaseMutations(phoenixConnection, 3, table1, 10L, "a");
+            tableMutationsMap.put(TableName.valueOf(table1), mutations1);
+            
+            // Generate mutations for the second table
+            List<Mutation> mutations2 = generateHBaseMutations(phoenixConnection, 2, table2, 20L, "b");
+            tableMutationsMap.put(TableName.valueOf(table2), mutations2);
+            
+            // Apply mutations - should succeed for both tables
+            Map<TableName, List<Mutation>> failedMutations = replicationLogProcessor.applyMutations(tableMutationsMap);
+            
+            // Verify no mutations failed
+            assertNotNull("Failed mutations map should not be null", failedMutations);
+            assertTrue("No mutations should have failed", failedMutations.isEmpty());
+            
+            // Verify that table1 mutations were applied successfully
+            validate(table1, mutations1);
+            
+            // Verify that table2 mutations were applied successfully
+            validate(table2, mutations2);
+        } finally {
+            replicationLogProcessor.close();
+        }
+    }
+
+    /**
+     * Tests applyMutations method with two tables that both fail.
+     * This test verifies that the method properly handles complete failure scenarios
+     * and returns all mutations in the failed mutations map.
+     */
+    @Test
+    public void testApplyMutationsFailure() throws Exception {
+        final String table1 = "T_" + generateUniqueName();
+        final String table2 = "T_" + generateUniqueName();
+        Map<TableName, List<Mutation>> tableMutationsMap = new HashMap<>();
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, executorService);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            // Create first table
+            conn.createStatement().execute(String.format(CREATE_TABLE_SQL_STATEMENT, table1));
+            // Create second table
+            conn.createStatement().execute(String.format(CREATE_TABLE_SQL_STATEMENT, table2));
+            
+            PhoenixConnection phoenixConnection = conn.unwrap(PhoenixConnection.class);
+            
+            // Generate mutations for the first table
+            List<Mutation> table1Mutations = generateHBaseMutations(phoenixConnection, 2, table1, 10L, "a");
+            tableMutationsMap.put(TableName.valueOf(table1), table1Mutations);
+            
+            // Generate mutations for the second table
+            List<Mutation> table2Mutations = generateHBaseMutations(phoenixConnection, 3, table2, 20L, "b");
+            tableMutationsMap.put(TableName.valueOf(table2), table2Mutations);
+            
+            // Disable regions for both tables to simulate complete failure
+            Admin admin = phoenixConnection.getQueryServices().getAdmin();
+            
+            // Disable region for table1
+            List<HRegionInfo> regions1 = admin.getTableRegions(TableName.valueOf(table1));
+            if (!regions1.isEmpty()) {
+                admin.unassign(regions1.get(0).getRegionName(), true);
+            }
+            
+            // Disable region for table2
+            List<HRegionInfo> regions2 = admin.getTableRegions(TableName.valueOf(table2));
+            if (!regions2.isEmpty()) {
+                admin.unassign(regions2.get(0).getRegionName(), true);
+            }
+            
+            // Apply mutations - should fail for both tables
+            Map<TableName, List<Mutation>> failedMutations = replicationLogProcessor.applyMutations(tableMutationsMap);
+            
+            // Verify failed mutations map contains both tables
+            assertNotNull("Failed mutations map should not be null", failedMutations);
+            assertFalse("Some mutations should have failed", failedMutations.isEmpty());
+            assertEquals("Should have 2 failed tables", 2, failedMutations.size());
+            
+            // Verify that table1 mutations failed
+            assertTrue("Table1 mutations should be in failed mutations", 
+                    failedMutations.containsKey(TableName.valueOf(table1)));
+            assertEquals("Table1 should have all its mutations failed", 
+                    table1Mutations.size(), failedMutations.get(TableName.valueOf(table1)).size());
+            for(int i = 0; i < table1Mutations.size(); i++) {
+                LogFileTestUtil.assertMutationEquals("Table1 mutation mismatch",
+                        table1Mutations.get(i), failedMutations.get(TableName.valueOf(table1)).get(i));
+            }
+            
+            // Verify that table2 mutations failed
+            assertTrue("Table2 mutations should be in failed mutations", 
+                    failedMutations.containsKey(TableName.valueOf(table2)));
+            assertEquals("Table2 should have all its mutations failed", 
+                    table2Mutations.size(), failedMutations.get(TableName.valueOf(table2)).size());
+            for(int i = 0; i < table2Mutations.size(); i++) {
+                LogFileTestUtil.assertMutationEquals("Table2 mutation mismatch",
+                        table2Mutations.get(i), failedMutations.get(TableName.valueOf(table2)).get(i));
+            }
+        } finally {
+            replicationLogProcessor.close();
+        }
+    }
+
+    /**
+     * Tests processReplicationLogBatch method with multiple tables where all mutations succeed in one go.
+     */
+    @Test
+    public void testProcessReplicationLogBatchWithMultipleTablesSuccess() throws Exception {
+        final String table1 = "T_" + generateUniqueName();
+        final String table2 = "T_" + generateUniqueName();
+        Map<TableName, List<Mutation>> tableMutationsMap = new HashMap<>();
+        
+        // Create test mutations for multiple tables
+        List<Mutation> mutations1 = new ArrayList<>();
+        mutations1.add(LogFileTestUtil.newPut("row1_table1", 1L, 1));
+        mutations1.add(LogFileTestUtil.newPut("row2_table1", 2L, 2));
+        tableMutationsMap.put(TableName.valueOf(table1), mutations1);
+        
+        List<Mutation> mutations2 = new ArrayList<>();
+        mutations2.add(LogFileTestUtil.newPut("row1_table2", 3L, 3));
+        mutations2.add(LogFileTestUtil.newDelete("row2_table2", 4L, 4));
+        tableMutationsMap.put(TableName.valueOf(table2), mutations2);
+        
+        // Create processor and spy on it
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, executorService);
+        ReplicationLogProcessor spyProcessor = Mockito.spy(replicationLogProcessor);
+        
+        // Mock applyMutations to return empty failed mutations map (all succeed)
+        Map<TableName, List<Mutation>> emptyFailedMutations = new HashMap<>();
+        Mockito.doReturn(emptyFailedMutations).when(spyProcessor).applyMutations(Mockito.anyMap());
+        
+        // Call processReplicationLogBatch - should succeed without retries
+        spyProcessor.processReplicationLogBatch(tableMutationsMap);
+        
+        // Verify applyMutations was called exactly once with the correct parameters
+        Mockito.verify(spyProcessor, Mockito.times(1)).applyMutations(Mockito.anyMap());
+        
+        // Capture the argument passed to applyMutations
+        ArgumentCaptor<Map<TableName, List<Mutation>>> argumentCaptor = ArgumentCaptor.forClass(Map.class);
+        Mockito.verify(spyProcessor).applyMutations(argumentCaptor.capture());
+        
+        // Verify the captured argument contains both tables with correct mutations
+        Map<TableName, List<Mutation>> capturedMap = argumentCaptor.getValue();
+        assertNotNull("Captured map should not be null", capturedMap);
+        assertEquals("Should have 2 tables", 2, capturedMap.size());
+        
+        // Verify table1 mutations
+        assertTrue("Should contain table1", capturedMap.containsKey(TableName.valueOf(table1)));
+        List<Mutation> capturedMutations1 = capturedMap.get(TableName.valueOf(table1));
+        assertEquals("Table1 should have 2 mutations", 2, capturedMutations1.size());
+        LogFileTestUtil.assertMutationEquals("Table1 mutation 1 mismatch", mutations1.get(0), capturedMutations1.get(0));
+        LogFileTestUtil.assertMutationEquals("Table1 mutation 2 mismatch", mutations1.get(1), capturedMutations1.get(1));
+        
+        // Verify table2 mutations
+        assertTrue("Should contain table2", capturedMap.containsKey(TableName.valueOf(table2)));
+        List<Mutation> capturedMutations2 = capturedMap.get(TableName.valueOf(table2));
+        assertEquals("Table2 should have 2 mutations", 2, capturedMutations2.size());
+        LogFileTestUtil.assertMutationEquals("Table2 mutation 1 mismatch", mutations2.get(0), capturedMutations2.get(0));
+        LogFileTestUtil.assertMutationEquals("Table2 mutation 2 mismatch", mutations2.get(1), capturedMutations2.get(1));
+
+        // Clean up
+        spyProcessor.close();
+    }
+
+    /**
+     * Tests processReplicationLogBatch method with persistent failure for one table.
+     * One table's region is brought down to simulate persistent failure while another table succeeds.
+     * This tests the retry logic and failure handling behavior.
+     */
+    @Test
+    public void testProcessReplicationLogBatchWithPersistentFailure() throws Exception {
+        final String table1 = "T_" + generateUniqueName();
+        final String table2 = "T_" + generateUniqueName();
+        Map<TableName, List<Mutation>> tableMutationsMap = new HashMap<>();
+
+        // Create processor and spy on it
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, executorService);
+        ReplicationLogProcessor spyProcessor = Mockito.spy(replicationLogProcessor);
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            // Create first table (will succeed)
+            conn.createStatement().execute(String.format(CREATE_TABLE_SQL_STATEMENT, table1));
+            // Create second table (will have region down to simulate failure)
+            conn.createStatement().execute(String.format(CREATE_TABLE_SQL_STATEMENT, table2));
+            
+            PhoenixConnection phoenixConnection = conn.unwrap(PhoenixConnection.class);
+            
+            // Generate mutations for the first table (will succeed)
+            List<Mutation> table1Mutations = generateHBaseMutations(phoenixConnection, 2, table1, 10L, "a");
+            tableMutationsMap.put(TableName.valueOf(table1), table1Mutations);
+            
+            // Generate mutations for the second table (will fail due to region down)
+            List<Mutation> table2Mutations = generateHBaseMutations(phoenixConnection, 2, table2, 20L, "b");
+            tableMutationsMap.put(TableName.valueOf(table2), table2Mutations);
+            
+            // Bring down a region for the second table to simulate persistent failure
+            Admin admin = phoenixConnection.getQueryServices().getAdmin();
+            TableName table2TableName = TableName.valueOf(table2);
+            
+            // Get regions for the table and disable one of them
+            List<HRegionInfo> regions = admin.getTableRegions(table2TableName);
+            if (!regions.isEmpty()) {
+                // Disable the first region to simulate failure
+                admin.unassign(regions.get(0).getRegionName(), true);
+            }
+            
+            // Capture all calls to applyMutations
+            List<Map<TableName, List<Mutation>>> capturedCalls = new ArrayList<>();
+            Mockito.doAnswer(invocation -> {
+                Map<TableName, List<Mutation>> originalMap = invocation.getArgument(0);
+                Map<TableName, List<Mutation>> deepCopy = new HashMap<>(originalMap);
+                capturedCalls.add(deepCopy);
+                return invocation.callRealMethod();
+            }).when(spyProcessor).applyMutations(Mockito.anyMap());
+
+            try {
+                spyProcessor.processReplicationLogBatch(tableMutationsMap);
+                fail("Should throw IOException for non-existent file");
+            } catch (IOException e) {
+                assertTrue("IOException must be thrown due to persistent failures", true);
+            }
+
+            
+            // Get the expected number of retries from configuration
+            int maxRetries = conf.getInt(ReplicationLogProcessor.REPLICATION_STANDBY_BATCH_RETRY_COUNT,
+                    ReplicationLogProcessor.DEFAULT_REPLICATION_STANDBY_BATCH_RETRY_COUNT);
+            int expectedCalls = maxRetries + 1; // Initial call + retries
+            
+            // Verify the exact number of retries
+            Mockito.verify(spyProcessor, Mockito.times(expectedCalls)).applyMutations(Mockito.anyMap());
+            assertEquals("Should have made " + expectedCalls + " calls to applyMutations", expectedCalls, capturedCalls.size());
+
+            // First call should contain both tables
+            Map<TableName, List<Mutation>> call = capturedCalls.get(0);
+            assertEquals("First call should have 2 tables", 2, call.size());
+
+            // Verify table1 mutations are present and correct
+            assertTrue("First call should contain table1", call.containsKey(TableName.valueOf(table1)));
+            List<Mutation> callMutations1 = call.get(TableName.valueOf(table1));
+            assertEquals("Mismatch in number of mutations for table1", table1Mutations.size(), callMutations1.size());
+            for(int i = 0; i<table1Mutations.size(); i++) {
+                LogFileTestUtil.assertMutationEquals("Mutation mismatch for table1", table1Mutations.get(i), callMutations1.get(i));
+            }
+
+            // Verify table2 mutations are present and correct
+            assertTrue("First call should contain table2", call.containsKey(TableName.valueOf(table2)));
+            List<Mutation> callMutations2 = call.get(TableName.valueOf(table2));
+            assertEquals("Mismatch in number of mutations for table2", table2Mutations.size(), callMutations2.size());
+            for(int mutationIndex = 0; mutationIndex<table1Mutations.size(); mutationIndex++) {
+                LogFileTestUtil.assertMutationEquals("Mutation mismatch for table2", table2Mutations.get(mutationIndex), callMutations2.get(mutationIndex));
+            }
+
+            // Verify that retry calls should contain only table2 (the failed table)
+            for (int callIndex = 1; callIndex < capturedCalls.size(); callIndex++) {
+                call = capturedCalls.get(callIndex);
+                assertNotNull("Call " + callIndex + " should not be null", call);
+                assertEquals("Retry call " + callIndex + " should have 1 table", 1, call.size());
+
+                // Verify table1 is NOT present in retry calls
+                assertFalse("Retry call " + callIndex + " should not contain table1",
+                        call.containsKey(TableName.valueOf(table1)));
+
+                // Verify table2 mutations are present and correct
+                assertTrue("First call should contain table2", call.containsKey(TableName.valueOf(table2)));
+                callMutations2 = call.get(TableName.valueOf(table2));
+                assertEquals("Mismatch in number of mutations for table2", table2Mutations.size(), callMutations2.size());
+                for(int mutationIndex = 0; mutationIndex<table1Mutations.size(); mutationIndex++) {
+                    LogFileTestUtil.assertMutationEquals("Mutation mismatch for table2", table2Mutations.get(mutationIndex), callMutations2.get(mutationIndex));
+                }
+            }
+        } finally {
+            spyProcessor.close();
+        }
+    }
+
+    /**
+     * Tests processReplicationLogBatch method with intermittent failure where a region comes back up during retries.
+     * This test verifies that the retry logic works correctly when failures are temporary and eventually resolve.
+     */
+    @Test
+    public void testProcessReplicationLogBatchWithIntermittentFailure() throws Exception {
+        final String table1 = "T_" + generateUniqueName();
+        final String table2 = "T_" + generateUniqueName();
+        Map<TableName, List<Mutation>> tableMutationsMap = new HashMap<>();
+
+        // Create processor and spy on it
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, executorService);
+        ReplicationLogProcessor spyProcessor = Mockito.spy(replicationLogProcessor);
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            // Create first table (will succeed)
+            conn.createStatement().execute(String.format(CREATE_TABLE_SQL_STATEMENT, table1));
+            // Create second table (will have intermittent failure)
+            conn.createStatement().execute(String.format(CREATE_TABLE_SQL_STATEMENT, table2));
+            
+            PhoenixConnection phoenixConnection = conn.unwrap(PhoenixConnection.class);
+            
+            // Generate mutations for the first table (will succeed)
+            List<Mutation> mutations1 = generateHBaseMutations(phoenixConnection, 2, table1, 10L, "a");
+            tableMutationsMap.put(TableName.valueOf(table1), mutations1);
+            
+            // Generate mutations for the second table (will have intermittent failure)
+            List<Mutation> mutations2 = generateHBaseMutations(phoenixConnection, 2, table2, 20L, "b");
+            tableMutationsMap.put(TableName.valueOf(table2), mutations2);
+            
+            // Verify table2 has exactly 1 region
+            Admin admin = phoenixConnection.getQueryServices().getAdmin();
+            TableName tableName2TableName = TableName.valueOf(table2);
+            List<HRegionInfo> regions = admin.getTableRegions(tableName2TableName);
+            assertEquals("Table2 should have exactly 1 region", 1, regions.size());
+            
+            // Bring down the region to simulate intermittent failure
+            HRegionInfo regionToDisable = regions.get(0);
+            admin.unassign(regionToDisable.getRegionName(), true);
+            
+            // Capture all calls to applyMutations
+            List<Map<TableName, List<Mutation>>> capturedCalls = new ArrayList<>();
+            AtomicInteger callCount = new AtomicInteger(0);
+            
+            Mockito.doAnswer(invocation -> {
+                Map<TableName, List<Mutation>> originalMap = invocation.getArgument(0);
+                Map<TableName, List<Mutation>> deepCopy = new HashMap<>(originalMap);
+                capturedCalls.add(deepCopy);
+                
+                int currentCall = callCount.incrementAndGet();
+                
+                // After 2 retries, bring the region back up
+                if (currentCall == 3 && regionToDisable != null) {
+                    try {
+                        admin.assign(regionToDisable.getRegionName());
+                    } catch (Exception e) {
+                        // Ignore if region is already assigned
+                    }
+                }
+                
+                // Call the real applyMutations method
+                return invocation.callRealMethod();
+            }).when(spyProcessor).applyMutations(Mockito.anyMap());
+            
+            try {
+                spyProcessor.processReplicationLogBatch(tableMutationsMap);
+                // Should succeed after retries
+            } catch (IOException e) {
+                fail("Should not throw IOException as mutations should eventually succeed");
+            }
+            
+            // Expected calls: 1 initial + 2 retries (since table2 succeeds on 3rd attempt)
+            int expectedCalls = 3;
+            
+            // Verify the exact number of calls
+            Mockito.verify(spyProcessor, Mockito.times(expectedCalls)).applyMutations(Mockito.anyMap());
+            assertEquals("Should have made " + expectedCalls + " calls to applyMutations", expectedCalls, capturedCalls.size());
+            
+            // First call should contain both tables
+            Map<TableName, List<Mutation>> firstCall = capturedCalls.get(0);
+            assertEquals("First call should have 2 tables", 2, firstCall.size());
+            
+            // Verify table1 mutations are present and correct in first call
+            assertTrue("First call should contain table1", firstCall.containsKey(TableName.valueOf(table1)));
+            List<Mutation> firstCallMutations1 = firstCall.get(TableName.valueOf(table1));
+            assertEquals("Mismatch in number of mutations for table1", mutations1.size(), firstCallMutations1.size());
+            for(int i = 0; i < mutations1.size(); i++) {
+                LogFileTestUtil.assertMutationEquals("Mutation mismatch for table1", mutations1.get(i), firstCallMutations1.get(i));
+            }
+            
+            // Verify table2 mutations are present and correct in first call
+            assertTrue("First call should contain table2", firstCall.containsKey(TableName.valueOf(table2)));
+            List<Mutation> firstCallMutations2 = firstCall.get(TableName.valueOf(table2));
+            assertEquals("Mismatch in number of mutations for table2", mutations2.size(), firstCallMutations2.size());
+            for(int i = 0; i < mutations2.size(); i++) {
+                LogFileTestUtil.assertMutationEquals("Mutation mismatch for table2", mutations2.get(i), firstCallMutations2.get(i));
+            }
+            
+            // Verify that retry calls (1 and 2) should contain only table2 (the failed table)
+            for (int callIndex = 1; callIndex < 3; callIndex++) {
+                Map<TableName, List<Mutation>> retryCall = capturedCalls.get(callIndex);
+                assertNotNull("Call " + callIndex + " should not be null", retryCall);
+                assertEquals("Retry call " + callIndex + " should have 1 table", 1, retryCall.size());
+                
+                // Verify table1 is NOT present in retry calls
+                assertFalse("Retry call " + callIndex + " should not contain table1",
+                        retryCall.containsKey(TableName.valueOf(table1)));
+                
+                // Verify table2 mutations are present and correct
+                assertTrue("Retry call " + callIndex + " should contain table2", retryCall.containsKey(TableName.valueOf(table2)));
+                List<Mutation> retryCallMutations2 = retryCall.get(TableName.valueOf(table2));
+                assertEquals("Mismatch in number of mutations for table2", mutations2.size(), retryCallMutations2.size());
+                for(int i = 0; i < mutations2.size(); i++) {
+                    LogFileTestUtil.assertMutationEquals("Mutation mismatch for table2", mutations2.get(i), retryCallMutations2.get(i));
+                }
+            }
+            
+            // Verify that table1 mutations were applied successfully
+            validate(table1, mutations1);
+            
+            // Verify that table2 mutations were eventually applied successfully
+            validate(table2, mutations2);
+        } finally {
+            spyProcessor.close();
+        }
+    }
+
+    /**
      * Helper method to test batching scenarios with different record counts and batch sizes
      */
     private void testProcessLogFileBatching(int totalRecords, int batchSize) throws Exception {
@@ -519,10 +1167,12 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
 
         // Create log file with specific number of records
         LogFileWriter writer = initLogFileWriter(batchTestFilePath);
+        List<Mutation> originalMutations = new ArrayList<>();
 
         // Add exactly totalRecords mutations to the log file using LogFileTestUtil
         for (int i = 0; i < totalRecords; i++) {
             Mutation put = LogFileTestUtil.newPut("row" + i, i + 1, i + 1);
+            originalMutations.add(put);
             writer.append(tableName, i + 1, put);
             writer.sync();
         }
@@ -533,15 +1183,23 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         testConf.setInt(ReplicationLogProcessor.REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE, batchSize);
 
         // Create processor with custom batch size and spy on it
-        ReplicationLogProcessor testProcessor = new ReplicationLogProcessor(testConf, executorService);
+        ReplicationLogProcessor spyProcessor = Mockito.spy(new ReplicationLogProcessor(testConf, executorService));
 
         // Validate that the batch size is correctly set
-        assertEquals("Batch size incorrectly set", batchSize, testProcessor.getBatchSize());
+        assertEquals("Batch size incorrectly set", batchSize, spyProcessor.getBatchSize());
 
-        ReplicationLogProcessor spyProcessor = Mockito.spy(testProcessor);
+        // Store captured arguments manually to avoid reference issues
+        List<Map<TableName, List<Mutation>>> capturedArguments = new ArrayList<>();
+        AtomicInteger processReplicationLogBatchCount = new AtomicInteger(0);
 
-        // Mock the processReplicationLogBatch method to do nothing but track calls
-        Mockito.doNothing().when(spyProcessor).processReplicationLogBatch(Mockito.any(Map.class));
+        // Mock applyMutations to capture arguments
+        Mockito.doAnswer(invocation -> {
+            // Capture deep copy of arguments
+            Map<TableName, List<Mutation>> originalMap = invocation.getArgument(0);
+            Map<TableName, List<Mutation>> deepCopy = new HashMap<>(originalMap);
+            capturedArguments.add(deepCopy);
+            return null;
+        }).when(spyProcessor).processReplicationLogBatch(Mockito.anyMap());
 
         // Process the log file
         spyProcessor.processLogFile(localFs, batchTestFilePath);
@@ -549,6 +1207,44 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         // Verify processReplicationLogBatch was called the expected number of times
         Mockito.verify(spyProcessor, Mockito.times(expectedBatchCalls))
                 .processReplicationLogBatch(Mockito.any(Map.class));
+
+        // Validate the captured parameters using our manually captured arguments
+        assertEquals("Should have captured " + expectedBatchCalls + " batch calls", 
+                expectedBatchCalls, capturedArguments.size());
+
+        // Validate each batch call individually
+        TableName expectedTableName = TableName.valueOf(tableName);
+        int mutationIndex = 0;
+
+        for (int batchIndex = 0; batchIndex < expectedBatchCalls; batchIndex++) {
+            Map<TableName, List<Mutation>> batch = capturedArguments.get(batchIndex);
+            assertNotNull("Batch " + batchIndex + " should not be null", batch);
+
+            // Validate batch contains the expected table
+            assertTrue("Batch " + batchIndex + " should contain table " + tableName, 
+                    batch.containsKey(expectedTableName));
+
+            List<Mutation> batchMutations = batch.get(expectedTableName);
+            assertNotNull("Batch " + batchIndex + " mutations should not be null", batchMutations);
+
+            // Calculate expected mutations in this batch
+            int expectedMutationsInBatch = Math.min(batchSize, totalRecords - mutationIndex);
+            assertEquals("Batch " + batchIndex + " should have " + expectedMutationsInBatch + " mutations", 
+                    expectedMutationsInBatch, batchMutations.size());
+
+            // Validate each mutation in the batch
+            for (int i = 0; i < expectedMutationsInBatch; i++) {
+                LogFileTestUtil.assertMutationEquals("Batch " + batchIndex + " mutation " + i + " mismatch",
+                        originalMutations.get(mutationIndex), batchMutations.get(i));
+                mutationIndex++;
+            }
+        }
+
+        // Ensure all mutations were processed
+        assertEquals("All mutations should have been processed", totalRecords, mutationIndex);
+
+        // Clean up
+        spyProcessor.close();
     }
 
     private LogFileWriter initLogFileWriter(Path filePath) throws IOException {
@@ -563,17 +1259,36 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         return getConnection(PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES));
     }
 
-    private List<Mutation> generateHBaseMutations(final PhoenixConnection phoenixConnection, final int rows, final String tableName, final long timestamp) throws Exception {
+    private List<Mutation> generateHBaseMutations(final PhoenixConnection phoenixConnection, final int rows, final String tableName, final long timestamp, final String rowKeyPrefix) throws Exception {
         List<Mutation> mutations = new ArrayList<>();
         int randomNumber = new Random().nextInt(1000000);
         for(int i = 0; i<rows; i++) {
-            final String dml = String.format(UPSERT_SQL_STATEMENT, tableName, "a"+randomNumber+i, "b"+randomNumber+i, "c"+randomNumber+i, i+1);
+            final String dml = String.format(UPSERT_SQL_STATEMENT, tableName, rowKeyPrefix+randomNumber+i, "b"+randomNumber+i, "c"+randomNumber+i, i+1);
             phoenixConnection.createStatement().execute(dml);
             Iterator<Pair<byte[], List<Mutation>>> iterator = phoenixConnection.getMutationState().toMutations();
             while (iterator.hasNext()) {
                 Pair<byte[], List<Mutation>> mutationPair = iterator.next();
-                mutationPair.getSecond().forEach(mutation -> mutation.setTimestamp(timestamp));
-                mutations.addAll(mutationPair.getSecond());
+                for(Mutation mutation : mutationPair.getSecond()) {
+                    if (mutation instanceof Put) {
+                        Put put = (Put) mutation;
+                        Put newPut = new Put(put.getRow());
+                        newPut.setTimestamp(timestamp);
+                        // Copy cells with mutation timestamp
+                        for (Cell cell : put.getFamilyCellMap().values().stream().flatMap(List::stream).collect(Collectors.toList())) {
+                            newPut.add(cloneCellWithCustomTimestamp(cell, timestamp));
+                        }
+                        mutations.add(newPut);
+                    } else if (mutation instanceof Delete) {
+                        Delete delete = (Delete) mutation;
+                        Delete newDelete = new Delete(delete.getRow());
+                        newDelete.setTimestamp(delete.getTimestamp());
+                        // Copy cells with mutation timestamp
+                        for (Cell cell : delete.getFamilyCellMap().values().stream().flatMap(List::stream).collect(Collectors.toList())) {
+                            newDelete.add(cloneCellWithCustomTimestamp(cell, timestamp));
+                        }
+                        mutations.add(newDelete);
+                    }
+                }
             }
         }
         return mutations;
@@ -612,32 +1327,8 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
             // Apply mutations to temporary table
             Table tempTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tempTableName));
 
-            // Create new mutations with cell timestamps set to mutation timestamp
-            List<Mutation> newMutations = new ArrayList<>();
-            for (Mutation mutation : mutations) {
-                if (mutation instanceof Put) {
-                    Put put = (Put) mutation;
-                    Put newPut = new Put(put.getRow());
-                    newPut.setTimestamp(put.getTimestamp());
-                    // Copy cells with mutation timestamp
-                    for (Cell cell : put.getFamilyCellMap().values().stream().flatMap(List::stream).collect(Collectors.toList())) {
-                        newPut.add(cloneCellWithCustomTimestamp(cell, mutation.getTimestamp()));
-                    }
-                    newMutations.add(newPut);
-                } else if (mutation instanceof Delete) {
-                    Delete delete = (Delete) mutation;
-                    Delete newDelete = new Delete(delete.getRow());
-                    newDelete.setTimestamp(delete.getTimestamp());
-                    // Copy cells with mutation timestamp
-                    for (Cell cell : delete.getFamilyCellMap().values().stream().flatMap(List::stream).collect(Collectors.toList())) {
-                        newDelete.add(cloneCellWithCustomTimestamp(cell, mutation.getTimestamp()));
-                    }
-                    newMutations.add(newDelete);
-                }
-            }
-
             // Apply all mutations in a batch
-            tempTable.batch(newMutations, null);
+            tempTable.batch(mutations, null);
 
             // Compare data between original and temporary tables
             Scan scan = new Scan();
@@ -653,12 +1344,14 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
             for (Result result : originalScanner) {
                 String rowKey = Bytes.toString(result.getRow());
                 originalResults.put(rowKey, result);
+                System.out.println("RowKey in original: " + rowKey);
             }
 
             // Collect results from temporary table
             for (Result result : tempScanner) {
                 String rowKey = Bytes.toString(result.getRow());
                 tempResults.put(rowKey, result);
+                System.out.println("RowKey in tempResult: " + rowKey);
             }
 
             // Compare results

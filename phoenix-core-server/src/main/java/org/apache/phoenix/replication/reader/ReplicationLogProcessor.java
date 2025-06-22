@@ -17,8 +17,10 @@
  */
 package org.apache.phoenix.replication.reader;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,7 +37,6 @@ import org.apache.hadoop.hbase.client.AsyncConnection;
 import org.apache.hadoop.hbase.client.AsyncTable;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.RetriesExhaustedException;
 import org.apache.hadoop.hbase.util.FutureUtils;
 import org.apache.phoenix.replication.log.LogFile;
 import org.apache.phoenix.replication.log.LogFileReader;
@@ -43,7 +44,7 @@ import org.apache.phoenix.replication.log.LogFileReaderContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class ReplicationLogProcessor {
+public class ReplicationLogProcessor implements Closeable {
 
     private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogProcessor.class);
 
@@ -80,7 +81,29 @@ public class ReplicationLogProcessor {
     /**
      * The default timeout for HBase client operations while applying the mutations.
      */
-    public static final int DEFAULT_REPLICATION_STANDBY_HBASE_CLIENT_OPERATION_TIMEOUT_MS = 10000;
+    public static final long DEFAULT_REPLICATION_STANDBY_HBASE_CLIENT_OPERATION_TIMEOUT_MS = 8000;
+
+    /**
+     * The maximum number of retry attempts for failed batch operations.
+     */
+    public static final String REPLICATION_STANDBY_BATCH_RETRY_COUNT =
+            "phoenix.replication.standby.batch.retry.count";
+
+    /**
+     * The default number of retry attempts for failed batch operations.
+     */
+    public static final int DEFAULT_REPLICATION_STANDBY_BATCH_RETRY_COUNT = 2;
+
+    /**
+     * The maximum delay for retry attempts in milliseconds.
+     */
+    public static final String REPLICATION_STANDBY_BATCH_RETRY_MAX_DELAY_MS =
+            "phoenix.replication.standby.batch.retry.max.delay.ms";
+
+    /**
+     * The default maximum delay for retry attempts in milliseconds.
+     */
+    public static final long DEFAULT_REPLICATION_STANDBY_BATCH_RETRY_MAX_DELAY_MS = 10000;
 
     private final Configuration conf;
 
@@ -91,15 +114,16 @@ public class ReplicationLogProcessor {
      */
     private volatile AsyncConnection asyncConnection;
 
-    private final Object asyncConnectionLock = new Object();
-
     private final int batchSize;
+
+    private final int batchRetryCount;
+
+    private final long maxRetryDelayMs;
 
     /**
      * Creates a new ReplicationLogProcessor with the given configuration and executor service.
      * @param conf The configuration to use
      * @param executorService The executor service for processing mutations
-     * @throws IOException if initialization fails
      */
     public ReplicationLogProcessor(final Configuration conf,
             final ExecutorService executorService) {
@@ -109,6 +133,10 @@ public class ReplicationLogProcessor {
         this.executorService = executorService;
         this.batchSize = this.conf.getInt(REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE,
                 DEFAULT_REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE);
+        this.batchRetryCount = this.conf.getInt(REPLICATION_STANDBY_BATCH_RETRY_COUNT,
+                DEFAULT_REPLICATION_STANDBY_BATCH_RETRY_COUNT);
+        this.maxRetryDelayMs = this.conf.getLong(REPLICATION_STANDBY_BATCH_RETRY_MAX_DELAY_MS,
+                DEFAULT_REPLICATION_STANDBY_BATCH_RETRY_MAX_DELAY_MS);
         decorateConf();
     }
 
@@ -120,15 +148,15 @@ public class ReplicationLogProcessor {
         this.conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
                 this.conf.getInt(REPLICATION_STANDBY_HBASE_CLIENT_RETRIES_COUNT,
                         DEFAULT_REPLICATION_STANDBY_HBASE_CLIENT_RETRIES_COUNT));
-        this.conf.setInt(HConstants.HBASE_CLIENT_OPERATION_TIMEOUT,
-                this.conf.getInt(REPLICATION_STANDBY_HBASE_CLIENT_OPERATION_TIMEOUT_MS,
+        this.conf.setLong(HConstants.HBASE_CLIENT_OPERATION_TIMEOUT,
+                this.conf.getLong(REPLICATION_STANDBY_HBASE_CLIENT_OPERATION_TIMEOUT_MS,
                         DEFAULT_REPLICATION_STANDBY_HBASE_CLIENT_OPERATION_TIMEOUT_MS));
     }
 
     public void processLogFile(FileSystem fs, Path filePath) throws IOException {
 
         // Map from Table Name to List of Mutations
-        Map<String, List<Mutation>> tableToMutationsMap = new HashMap<>();
+        Map<TableName, List<Mutation>> tableToMutationsMap = new HashMap<>();
 
         // Track the total number of processed records from input log file
         long totalProcessed = 0;
@@ -144,8 +172,7 @@ public class ReplicationLogProcessor {
             logFileReader = createLogFileReader(fs, filePath);
 
             for (LogFile.Record record : logFileReader) {
-
-                final String tableName = record.getHBaseTableName();
+                final TableName tableName = TableName.valueOf(record.getHBaseTableName());
                 final Mutation mutation = record.getMutation();
 
                 tableToMutationsMap.computeIfAbsent(tableName, k -> new ArrayList<>())
@@ -179,6 +206,14 @@ public class ReplicationLogProcessor {
         }
     }
 
+    /**
+     * Creates a LogFileReader for the specified file path.
+     * Validates that the file exists and initializes the reader with the given file system and path.
+     * @param fs The file system to use for reading
+     * @param filePath The path to the log file
+     * @return A configured LogFileReader instance
+     * @throws IOException if the file doesn't exist or initialization fails
+     */
     protected LogFileReader createLogFileReader(FileSystem fs, Path filePath) throws IOException {
         // Ensure that file exists. If we face exception while checking the path itself,
         // method would throw same exception back to the caller
@@ -214,39 +249,148 @@ public class ReplicationLogProcessor {
     }
 
     protected void processReplicationLogBatch(
-            Map<String, List<Mutation>> tableMutationMap) throws IOException {
+            Map<TableName, List<Mutation>> tableMutationMap) throws IOException {
 
         if (tableMutationMap == null || tableMutationMap.isEmpty()) {
             return;
         }
 
-        List<Future<?>> futures = new ArrayList<>();
-        for (Map.Entry<String, List<Mutation>> entry : tableMutationMap.entrySet()) {
-            String tableName = entry.getKey();
-            List<Mutation> mutations = entry.getValue();
-            AsyncTable<?> table = getAsyncConnection()
-                    .getTable(TableName.valueOf(tableName), executorService);
-            futures.add(table.batchAll(mutations));
-        }
+        // Track failed operations for retry
+        Map<TableName, List<Mutation>> currentOperations = tableMutationMap;
+        IOException lastError = null;
 
-        IOException error = null;
+        int attempt = 0;
+        while(attempt <= batchRetryCount && !currentOperations.isEmpty()) {
+            if (attempt > 0) {
+                LOG.warn("Retrying failed batch operations, attempt {} of {}",
+                        attempt, batchRetryCount);
+            }
 
-        for (Future<?> future : futures) {
             try {
-                FutureUtils.get(future);
-            } catch (RetriesExhaustedException e) {
-                IOException ioe = e;
-                if (error == null) {
-                    error = ioe;
-                } else {
-                    error.addSuppressed(ioe);
+                // Apply mutations and get any failed operations
+                Map<TableName, List<Mutation>> failedOperations = applyMutations(currentOperations);
+                
+                // If no failures, we're done
+                if (failedOperations.isEmpty()) {
+                    return;
+                }
+                
+                // Update current operations for next retry
+                currentOperations = failedOperations;
+                lastError = new IOException("Failed to apply the mutations");
+            } catch (IOException e) {
+                lastError = e;
+            }
+            attempt++;
+            // Add delay between retries (exponential backoff)
+            if (attempt <= batchRetryCount && !currentOperations.isEmpty()) {
+                try {
+                    long delayMs = calculateRetryDelay(attempt);
+                    Thread.sleep(delayMs);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Interrupted during retry delay", e);
                 }
             }
         }
 
-        if (error != null) {
-            throw error;
+        // If we still have failed operations after all retries, throw the last error
+        if (!currentOperations.isEmpty() && lastError != null) {
+            LOG.error("Failed to process batch operations after {} retries. Failed tables: {}", 
+                    batchRetryCount, currentOperations.keySet());
+            throw lastError;
         }
+    }
+
+    /**
+     * Calculates the delay time for retry attempts using exponential backoff.
+     * @param attempt The current retry attempt number (0-based)
+     * @return The delay time in milliseconds
+     */
+    protected long calculateRetryDelay(int attempt) {
+        return Math.min(1000L * (1L << attempt), maxRetryDelayMs);
+    }
+
+    /**
+     * Applies mutations to HBase tables and returns any failed operations.
+     * @param tableMutationMap Map of table names to their mutations
+     * @return Map of table names to their failed mutations, empty if all succeeded
+     * @throws IOException if there's an error applying mutations
+     */
+    protected Map<TableName, List<Mutation>> applyMutations(
+            Map<TableName, List<Mutation>> tableMutationMap) throws IOException {
+
+        if(tableMutationMap == null || tableMutationMap.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        Map<TableName, List<Mutation>> failedOperations = new HashMap<>();
+        Map<TableName, Future<?>> futures = new HashMap<>();
+
+        // Submit batch operations
+        for (Map.Entry<TableName, List<Mutation>> entry : tableMutationMap.entrySet()) {
+            TableName tableName = entry.getKey();
+            List<Mutation> mutations = entry.getValue();
+            AsyncTable<?> table = getAsyncConnection()
+                    .getTable(tableName, executorService);
+            futures.put(tableName, table.batchAll(mutations));
+        }
+
+        // Check results and track failures
+        for (Map.Entry<TableName, Future<?>> entry : futures.entrySet()) {
+            TableName tableName = entry.getKey();
+            Future<?> future = entry.getValue();
+            try {
+                FutureUtils.get(future);
+            } catch (IOException e) {
+                // Add failed mutations to retry list
+                failedOperations.put(tableName, tableMutationMap.get(tableName));
+                LOG.warn("Failed to apply mutations for table {}: {}", tableName, e.getMessage());
+            }
+        }
+
+        return failedOperations;
+    }
+
+    /**
+     * Return the {@link AsyncConnection} which is used for applying mutations.
+     * It ensures to create a new connection ONLY when it's not previously initialized
+     * or was closed
+     */
+    private AsyncConnection getAsyncConnection() throws IOException {
+        AsyncConnection existingAsyncConnection = asyncConnection;
+        if (existingAsyncConnection == null || existingAsyncConnection.isClosed()) {
+            synchronized (this) {
+                existingAsyncConnection = asyncConnection;
+                if (existingAsyncConnection == null || existingAsyncConnection.isClosed()) {
+                    /**
+                     * Get the AsyncConnection immediately.
+                     */
+                    existingAsyncConnection = FutureUtils.get(
+                            ConnectionFactory.createAsyncConnection(conf));
+                    asyncConnection = existingAsyncConnection;
+                }
+            }
+        }
+        return existingAsyncConnection;
+    }
+
+    /**
+     * Closes the {@link AsyncConnection} and releases all associated resources.
+     * @throws IOException if there's an error closing the AsyncConnection
+     */
+    @Override
+    public void close() throws IOException {
+        AsyncConnection existingAsyncConnection = asyncConnection;
+        if(existingAsyncConnection != null && !existingAsyncConnection.isClosed()) {
+            synchronized (this) {
+                existingAsyncConnection = asyncConnection;
+                if(existingAsyncConnection != null && !existingAsyncConnection.isClosed()) {
+                    existingAsyncConnection.close();
+                }
+            }
+        }
+        asyncConnection = null;
     }
 
     public int getBatchSize() {
@@ -258,31 +402,16 @@ public class ReplicationLogProcessor {
                 DEFAULT_REPLICATION_STANDBY_HBASE_CLIENT_RETRIES_COUNT);
     }
 
-    public int getHBaseClientOperationTimeout() {
-        return this.conf.getInt(HConstants.HBASE_CLIENT_OPERATION_TIMEOUT,
+    public long getHBaseClientOperationTimeout() {
+        return this.conf.getLong(HConstants.HBASE_CLIENT_OPERATION_TIMEOUT,
                 DEFAULT_REPLICATION_STANDBY_HBASE_CLIENT_OPERATION_TIMEOUT_MS);
     }
 
-    /**
-     * Return the {@link AsyncConnection} which is used for applying mutations.
-     * It ensures to create a new connection ONLY when it's not previously initialized
-     * or was closed
-     */
-    private AsyncConnection getAsyncConnection() throws IOException {
-        AsyncConnection asyncConnection = this.asyncConnection;
-        if (asyncConnection == null || asyncConnection.isClosed()) {
-            synchronized (asyncConnectionLock) {
-                asyncConnection = this.asyncConnection;
-                if (asyncConnection == null || asyncConnection.isClosed()) {
-                    /**
-                     * Get the AsyncConnection immediately.
-                     */
-                    asyncConnection = FutureUtils.get(
-                            ConnectionFactory.createAsyncConnection(conf));
-                    this.asyncConnection = asyncConnection;
-                }
-            }
-        }
-        return asyncConnection;
+    public int getBatchRetryCount() {
+        return this.batchRetryCount;
+    }
+
+    public long getMaxRetryDelayMs() {
+        return this.maxRetryDelayMs;
     }
 }
