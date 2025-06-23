@@ -92,7 +92,7 @@ public class ReplicationLogGroup {
     public static final String FILE_NAME_FORMAT = "%d-%s.plog";
 
     /** Cache of ReplicationLogGroup instances by HA Group ID */
-    private static final ConcurrentHashMap<String, ReplicationLogGroup> instances =
+    private static final ConcurrentHashMap<String, ReplicationLogGroup> INSTANCES =
         new ConcurrentHashMap<>();
 
     private final Configuration conf;
@@ -159,7 +159,7 @@ public class ReplicationLogGroup {
      */
     public static ReplicationLogGroup get(Configuration conf, ServerName serverName,
             String haGroupId) {
-        return instances.computeIfAbsent(haGroupId, k -> {
+        return INSTANCES.computeIfAbsent(haGroupId, k -> {
             try {
                 ReplicationLogGroup group = new ReplicationLogGroup(conf, serverName, haGroupId);
                 group.init();
@@ -244,7 +244,6 @@ public class ReplicationLogGroup {
         writer.sync();
     }
 
-
     /**
      * Check if this ReplicationLogGroup is closed.
      *
@@ -266,7 +265,7 @@ public class ReplicationLogGroup {
             closed = true;
             closeWriter(writer);
             // Remove from instances cache
-            instances.remove(haGroupId);
+            INSTANCES.remove(haGroupId);
             LOG.info("Closed ReplicationLogGroup for HA Group: {}", haGroupId);
         }
     }

@@ -84,8 +84,7 @@ public class StandbyLogGroupWriter extends ReplicationLogGroupWriter {
      * timestamp. The resulting path structure is
      * <pre>
      * [url]/[haGroupId]/[shard]/[timestamp]-[servername].plog
-     * <pre>
-     * 
+     * </pre>
      */
     protected Path makeWriterPath(FileSystem fs, URI url) throws IOException {
         Path haGroupPath = new Path(url.getPath(), haGroupId);
@@ -103,10 +102,10 @@ public class StandbyLogGroupWriter extends ReplicationLogGroupWriter {
         shardMap.computeIfAbsent(shardPath, p -> {
             try {
                 if (!fs.exists(p)) {
-                  fs.mkdirs(haGroupPath); // This probably exists, but just in case.
-                  if (!fs.mkdirs(shardPath)) {
-                      throw new IOException("Could not create path: " + p);
-                  }
+                    fs.mkdirs(haGroupPath); // This probably exists, but just in case.
+                    if (!fs.mkdirs(shardPath)) {
+                        throw new IOException("Could not create path: " + p);
+                    }
                 }
             } catch (IOException e) {
                 exception[0] = e;
