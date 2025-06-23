@@ -2490,6 +2490,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
      * update and 0 for non-successful row update, and ResultSet represents the state of the row.
      * @throws SQLException If the statement cannot be executed.
      */
+    // Note: Do Not remove this, it is expected to be used by downstream applications
     public Pair<Integer, ResultSet> executeAtomicUpdateReturnRow(String sql) throws SQLException {
         if (!connection.getAutoCommit()) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.AUTO_COMMIT_NOT_ENABLED).build()
@@ -2515,6 +2516,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
      * row.
      * @throws SQLException If the statement cannot be executed.
      */
+    // Note: Do Not remove this, it is expected to be used by downstream applications
     public Pair<Integer, ResultSet> executeAtomicUpdateReturnOldRow(String sql)
             throws SQLException {
         if (!connection.getAutoCommit()) {
