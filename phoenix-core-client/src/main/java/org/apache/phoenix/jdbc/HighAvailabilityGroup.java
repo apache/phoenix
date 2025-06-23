@@ -438,10 +438,21 @@ public class HighAvailabilityGroup {
         try {
             return CURATOR_CACHE.get(jdbcUrl, () -> {
                 CuratorFramework curator = createCurator(jdbcUrl, properties);
-                if (!curator.blockUntilConnected(PHOENIX_HA_ZK_CONNECTION_TIMEOUT_MS_DEFAULT,
-                        TimeUnit.MILLISECONDS))
-                    throw new RuntimeException("Failed to connect to the CuratorFramework in "
-                            + "timeout " + PHOENIX_HA_ZK_CONNECTION_TIMEOUT_MS_DEFAULT + " ms");
+                try {
+                    if (!curator.blockUntilConnected(PHOENIX_HA_ZK_CONNECTION_TIMEOUT_MS_DEFAULT,
+                            TimeUnit.MILLISECONDS)) {
+                        throw new RuntimeException("Failed to connect to the CuratorFramework in "
+                                + "timeout " + PHOENIX_HA_ZK_CONNECTION_TIMEOUT_MS_DEFAULT + " ms");
+                    }
+                } catch (Exception e) {
+                    LOG.warn("HA cluster role manager getCurator thread for '{}' is interrupted/exception, closing CuratorFramework",
+                            jdbcUrl, e);
+                    curator.close();
+                    if (e instanceof InterruptedException) {
+                        Thread.currentThread().interrupt();
+                    }
+                    throw e;
+                }
                 return curator;
             });
         } catch (Exception e) {
