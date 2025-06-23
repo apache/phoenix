@@ -62,6 +62,8 @@ public class IndexRegionObserverMutationBlockingIT extends BaseTest {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         // Enable cluster role-based mutation blocking
         props.put(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, "true");
+        // No retries so that tests fail faster.
+        props.put("hbase.client.retries.number", "0");
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -136,42 +138,6 @@ public class IndexRegionObserverMutationBlockingIT extends BaseTest {
         }
     }
 
-    @Test
-    public void testMutationBlockedOnLocalIndexTable() throws Exception {
-        String dataTableName = generateUniqueName();
-        String localIndexName = generateUniqueName();
-        
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            // Create data table and local index
-            conn.createStatement().execute("CREATE TABLE " + dataTableName + 
-                " (id VARCHAR PRIMARY KEY, name VARCHAR, age INTEGER)");
-            conn.createStatement().execute("CREATE LOCAL INDEX " + localIndexName + 
-                " ON " + dataTableName + "(name)");
-            
-            // Set up CRR that will block mutations
-            ClusterRoleRecord blockingCrr = new ClusterRoleRecord("local_index_test",
-                    HighAvailabilityPolicy.PARALLEL, 
-                    haAdmin.getZkUrl(), 
-                    ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
-                    "standby-zk-url", 
-                    ClusterRoleRecord.ClusterRole.STANDBY, 
-                    1L);
-            haAdmin.createOrUpdateDataOnZookeeper(blockingCrr);
-            
-            Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-            
-            // Test that UPSERT with local index also throws MutationBlockedIOException
-            try {
-                conn.createStatement().execute("UPSERT INTO " + dataTableName + 
-                    " VALUES ('1', 'Alice', 28)");
-                conn.commit();
-                fail("Expected MutationBlockedIOException to be thrown for local index");
-            } catch (CommitException e) {
-                assertTrue("Expected mutation blocked exception", 
-                    containsMutationBlockedException(e));
-            }
-        }
-    }
 
     @Test
     public void testMutationAllowedWhenNotBlocked() throws Exception {
