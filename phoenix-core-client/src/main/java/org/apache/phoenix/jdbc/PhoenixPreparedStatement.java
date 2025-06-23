@@ -219,8 +219,8 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
      * Executes the given SQL statement similar to JDBC API executeUpdate() but also returns the
      * old row (before update) as Result object back to the client. This must be used with
      * auto-commit Connection. This makes the operation atomic.
-     * If the row is successfully updated, return the old row (state before update), otherwise if
-     * the row cannot be updated, return non-updated (old) row.
+     * Return the old row (state before update) regardless of whether the update is
+     * successful or not.
      *
      * @return The pair of int and ResultSet, where int represents value 1 for successful row update
      * and 0 for non-successful row update, and ResultSet represents the old state of the row.

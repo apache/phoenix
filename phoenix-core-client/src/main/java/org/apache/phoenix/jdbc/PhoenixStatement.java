@@ -2507,8 +2507,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
      * Executes the given SQL statement similar to JDBC API executeUpdate() but also returns the
      * old row (before update) as Result object back to the client. This must be used with
      * auto-commit Connection. This makes the operation atomic.
-     * If the row is successfully updated, return the old row (state before update), otherwise
-     * if the row cannot be updated, return non-updated (old) row.
+     * Return the old row (state before update) regardless of whether the update is
+     * successful or not.
      *
      * @param sql The SQL DML statement, UPSERT or DELETE for Phoenix.
      * @return The pair of int and ResultSet, where int represents value 1 for successful row
