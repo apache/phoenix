@@ -28,9 +28,9 @@ import org.apache.hbase.thirdparty.com.google.common.collect.ImmutableList;
  * <br/>
  * <b>External User-Facing Class:</b><br/>
  * This is an external user-facing class that should only be used in conjunction with
- * {@link HTableThreadPoolUtilizationStats}. When creating an instance of
- * {@link HTableThreadPoolUtilizationStats}, a {@link java.util.function.Supplier} of this class
- * must be provided. <br/>
+ * {@link org.apache.phoenix.job.HTableThreadPoolWithUtilizationStats}. When creating an instance of
+ * {@link org.apache.phoenix.job.HTableThreadPoolWithUtilizationStats}, a
+ * {@link java.util.function.Supplier} of this class must be provided. <br/>
  * <br/>
  * <b>Monitored Metrics:</b><br/>
  * <ul>

@@ -1430,10 +1430,11 @@ public class PhoenixRuntime {
      * queues</li>
      * </ul>
      * <p>
-     * The metrics are automatically collected by {@link HTableThreadPoolWithUtilizationStats}, a
-     * specialized ThreadPoolExecutor that instruments HTable operations. These statistics help
-     * identify thread pool bottlenecks, optimize thread pool configurations, and monitor overall
-     * HTable performance characteristics.
+     * The metrics are automatically collected by
+     * {@link org.apache.phoenix.job.HTableThreadPoolWithUtilizationStats}, a specialized
+     * ThreadPoolExecutor that instruments HTable operations. These statistics help identify thread
+     * pool bottlenecks, optimize thread pool configurations, and monitor overall HTable performance
+     * characteristics.
      * </p>
      * <p>
      * <b>Metric Sources:</b>
@@ -1442,7 +1443,7 @@ public class PhoenixRuntime {
      * <li><b>CQSI Thread Pools</b> - Internal Phoenix CQSI-level thread pools (identified by
      * connection URL)</li>
      * <li><b>External Thread Pools</b> - User-defined HTable thread pools created with
-     * {@link HTableThreadPoolWithUtilizationStats}</li>
+     * {@link org.apache.phoenix.job.HTableThreadPoolWithUtilizationStats}</li>
      * </ul>
      * <p>
      * Each histogram includes percentile distributions (P50, P90, P95, P99, etc.), min/max values,
@@ -1453,9 +1454,9 @@ public class PhoenixRuntime {
      *         names for external pools) and values are lists of {@link HistogramDistribution}
      *         instances containing comprehensive utilization statistics. Returns an empty map if no
      *         HTable thread pools have been monitored or if metrics collection is disabled.
-     * @see HTableThreadPoolWithUtilizationStats
+     * @see org.apache.phoenix.job.HTableThreadPoolWithUtilizationStats
      * @see HTableThreadPoolMetricsManager
-     * @see HTableThreadPoolHistograms
+     * @see org.apache.phoenix.monitoring.HTableThreadPoolHistograms
      * @see HistogramDistribution
      */
     public static Map<String, List<HistogramDistribution>> getHTableThreadPoolHistograms() {
