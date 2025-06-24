@@ -572,11 +572,18 @@ public class UpdateExpressionUtils {
   }
 
   /**
-   * Retrieve the value to be updated for the given current value. If the current value does not
-   * contain any arithmetic operators, the current value is returned without any modifications.
+   * Retrieve the value to be updated for the given current value.
+   *
+   * If the current value does not contain any arithmetic operators,
+   * the current value is returned without any modifications.
+   *
    * If the current value contains arithmetic expressions like "a + b" or "a - b", the values of
    * operands are retrieved from the given document and if the values are numeric, the given
    * arithmetic operation is performed.
+   *
+   * If the current value is a bson document with an entry from $IF_NOT_EXISTS to a document
+   * with a key and a fallback value, we lookup if the key is already present in the document.
+   * If it is, we return its value. Otherwise, we return the provided fallback value.
    *
    * @param curValue The current value.
    * @param bsonDocument The document with all field key-value pairs.
@@ -628,6 +635,16 @@ public class UpdateExpressionUtils {
         }
       }
       return getBsonNumberFromNumber(newNum);
+    } else if (curValue instanceof BsonDocument
+            && ((BsonDocument) curValue).get("$IF_NOT_EXISTS") != null) {
+        BsonValue ifNotExistsDoc = ((BsonDocument) curValue).get("$IF_NOT_EXISTS");
+        Map.Entry<String, BsonValue> ifNotExistEntry
+                = ((BsonDocument) ifNotExistsDoc).entrySet().iterator().next();
+        String ifNotExistsKey = ifNotExistEntry.getKey();
+        BsonValue ifNotExistsVal = ifNotExistEntry.getValue();
+        BsonValue val = CommonComparisonExpressionUtils
+                .getFieldFromDocument(ifNotExistsKey, bsonDocument);
+        return (val != null) ? val : ifNotExistsVal;
     }
     return curValue;
   }

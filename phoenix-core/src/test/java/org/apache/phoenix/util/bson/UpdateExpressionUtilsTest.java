@@ -285,6 +285,50 @@ public class UpdateExpressionUtilsTest {
 
     //{
     //  "$SET": {
+    //    "attr_2": {
+    //      "$IF_NOT_EXISTS": {
+    //        "attr_1": 10.01
+    //      }
+    //    },
+    //    "attr_20": {
+    //      "$IF_NOT_EXISTS": {
+    //        "attrNotExists": "foo"
+    //      }
+    //    },
+    //    "key9": {
+    //      "$IF_NOT_EXISTS": {
+    //        "Id": "val9"
+    //      }
+    //    },
+    //    "key90": {
+    //      "$IF_NOT_EXISTS": {
+    //        "ids": {
+    //        "$set" : [ 123.0948, -485.45582904, 1234, 0.111 ]
+    //        }
+    //      }
+    //    },
+    //    "attr_6.n_attr_10": {
+    //      "$IF_NOT_EXISTS": {
+    //        "attr_6.n_attr_10": true
+    //      }
+    //    },
+    //    "attr_6.n_attr_20": {
+    //      "$IF_NOT_EXISTS": {
+    //        "attr_6.n_attr_0": "str_val_1"
+    //      }
+    //    },
+    //    "NestedList1[2][1].ISBN2": {
+    //      "$IF_NOT_EXISTS": {
+    //        "NestedList1[2][1].ISBN2": {
+    //          "ISBN": "111-1111111122"
+    //        }
+    //      }
+    //    },
+    //    "NestedList1[2][1].ISBNCOPY": {
+    //      "$IF_NOT_EXISTS": {
+    //        "NestedList1[2][1].ISBN": "isbn"
+    //      }
+    //    },
     //    "NestedList1[0]": "NestedList1[0] + 12.22",
     //    "NestedList1[3]": null,
     //    "NestedList1[4]": true,
@@ -305,6 +349,50 @@ public class UpdateExpressionUtilsTest {
 
     updateExpression = "{\n" +
             "  \"$SET\": {\n" +
+            "   \"attr_2\": {\n" +
+            "      \"$IF_NOT_EXISTS\": {\n" +
+            "        \"attr_1\": 10.01\n" +
+            "      }\n" +
+            "    },\n" +
+            "    \"attr_20\": {\n" +
+            "      \"$IF_NOT_EXISTS\": {\n" +
+            "        \"attrNotExists\": \"foo\"\n" +
+            "      }\n" +
+            "    },\n" +
+            "    \"key9\": {\n" +
+            "      \"$IF_NOT_EXISTS\": {\n" +
+            "        \"Id\": \"val9\"\n" +
+            "      }\n" +
+            "    },\n" +
+            "    \"key90\": {\n" +
+            "        \"$IF_NOT_EXISTS\": {\n" +
+            "          \"ids\": {\n" +
+            "            \"$set\" : [ 123.0948, -485.45582904, 1234, 0.111 ]\n" +
+            "          }\n" +
+            "        }\n" +
+            "      },\n" +
+            "    \"attr_6.n_attr_10\": {\n" +
+            "      \"$IF_NOT_EXISTS\": {\n" +
+            "        \"attr_6.n_attr_10\": true\n" +
+            "      }\n" +
+            "    },\n" +
+            "    \"attr_6.n_attr_20\": {\n" +
+            "      \"$IF_NOT_EXISTS\": {\n" +
+            "        \"attr_6.n_attr_0\": \"str_val_1\"\n" +
+            "      }\n" +
+            "    },\n" +
+            "    \"NestedList1[2][1].ISBN2\": {\n" +
+            "      \"$IF_NOT_EXISTS\": {\n" +
+            "        \"NestedList1[2][1].ISBN2\": {\n" +
+            "          \"ISBN\": \"111-1111111122\"\n" +
+            "        }\n" +
+            "      }\n" +
+            "    },\n" +
+            "    \"NestedList1[2][1].ISBNCOPY\": {\n" +
+            "      \"$IF_NOT_EXISTS\": {\n" +
+            "        \"NestedList1[2][1].ISBN\": \"isbn\"\n" +
+            "      }\n" +
+            "    },\n" +
             "    \"NestedList1[0]\": \"NestedList1[0] + 12.22\",\n" +
             "    \"NestedList1[3]\": null,\n" +
             "    \"NestedList1[4]\": true,\n" +
@@ -1178,8 +1266,12 @@ public class UpdateExpressionUtilsTest {
             "    \"Id\" : 101.01,\n" +
             "    \"TitleSet2\" : {\n" +
             "      \"$set\" : [ \"Book 1201 Title\", \"Book 1111 Title\", \"Book 1200 Title\" ]\n" +
-            "    }\n" +
-            "  } ], null, true ],\n" +
+            "    },\n" +
+            "    \"ISBN2\" : {\n" +
+            "          \"ISBN\" : \"111-1111111122\"\n" +
+            "     },\n" +
+            "    \"ISBNCOPY\" : \"111-1111111122\"\n" +
+            " } ], null, true ],\n" +
             "  \"NestedMap1\" : {\n" +
             "    \"InPublication\" : false,\n" +
             "    \"ISBN\" : \"111-1111111111\",\n" +
@@ -1215,7 +1307,9 @@ public class UpdateExpressionUtilsTest {
             "      }\n" +
             "    },\n" +
             "    \"n_attr_3\" : true,\n" +
-            "    \"n_attr_4\" : null\n" +
+            "    \"n_attr_4\" : null,\n" +
+            "    \"n_attr_10\" : true,\n" +
+            "    \"n_attr_20\" : \"str_val_0\"\n" +
             "  },\n" +
             "  \"attr_5\" : [ 1224, \"str001\", {\n" +
             "    \"$binary\" : {\n" +
@@ -1255,7 +1349,13 @@ public class UpdateExpressionUtilsTest {
             "    \"$set\" : [ 123.0948, -485.45582904, 1234, 0.111 ]\n" +
             "  },\n" +
             "  \"Id1\" : \"12345\",\n" +
-            "  \"AddedId\" : 10\n" +
+            "  \"AddedId\" : 10,\n" +
+            "  \"attr_2\" : 1295.03,\n" +
+            "  \"attr_20\" : \"foo\",\n" +
+            "  \"key9\" : \"12345\",\n" +
+            "  \"key90\" : {\n" +
+            "    \"$set\" : [ 123.0948, -485.45582904, 1234, 0.111 ]\n" +
+            "   }\n" +
             "}";
     //{
     //  "Pictures" : {
@@ -1321,7 +1421,11 @@ public class UpdateExpressionUtilsTest {
     //    "Id" : 101.01,
     //    "TitleSet2" : {
     //      "$set" : [ "Book 1201 Title", "Book 1111 Title", "Book 1200 Title" ]
+    //    },
+    //    "ISBN2" : {
+    //      "ISBN" : "111-1111111122"
     //    }
+    //    "ISBNCOPY" : "111-1111111122"
     //  } ], null, true ],
     //  "NestedMap1" : {
     //    "InPublication" : false,
@@ -1358,7 +1462,9 @@ public class UpdateExpressionUtilsTest {
     //      }
     //    },
     //    "n_attr_3" : true,
-    //    "n_attr_4" : null
+    //    "n_attr_4" : null,
+    //    "n_attr_10" : true,
+    //    "n_attr_20" : "str_val_0"
     //  },
     //  "attr_5" : [ 1224, "str001", {
     //    "$binary" : {
@@ -1398,7 +1504,13 @@ public class UpdateExpressionUtilsTest {
     //    "$set" : [ 123.0948, -485.45582904, 1234, 0.111 ]
     //  },
     //  "Id1" : "12345",
-    //  "AddedId" : 10
+    //  "AddedId" : 10,
+    //  "attr_2" : 1295.03,
+    //  "attr_20" : "foo",
+    //  "key9" : 12345,
+    //  "key90" : {
+    //    "$set" : [ 123.0948, -485.45582904, 1234, 0.111 ]
+    //  }
     //}
     return RawBsonDocument.parse(json);
   }
