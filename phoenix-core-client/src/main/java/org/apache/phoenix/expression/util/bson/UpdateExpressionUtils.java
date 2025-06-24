@@ -638,10 +638,10 @@ public class UpdateExpressionUtils {
     } else if (curValue instanceof BsonDocument
             && ((BsonDocument) curValue).get("$IF_NOT_EXISTS") != null) {
         BsonValue ifNotExistsDoc = ((BsonDocument) curValue).get("$IF_NOT_EXISTS");
-        Map.Entry<String, BsonValue> ifNotExistEntry
+        Map.Entry<String, BsonValue> ifNotExistsEntry
                 = ((BsonDocument) ifNotExistsDoc).entrySet().iterator().next();
-        String ifNotExistsKey = ifNotExistEntry.getKey();
-        BsonValue ifNotExistsVal = ifNotExistEntry.getValue();
+        String ifNotExistsKey = ifNotExistsEntry.getKey();
+        BsonValue ifNotExistsVal = ifNotExistsEntry.getValue();
         BsonValue val = CommonComparisonExpressionUtils
                 .getFieldFromDocument(ifNotExistsKey, bsonDocument);
         return (val != null) ? val : ifNotExistsVal;
