@@ -445,8 +445,8 @@ public class HighAvailabilityGroup {
                                 + "timeout " + PHOENIX_HA_ZK_CONNECTION_TIMEOUT_MS_DEFAULT + " ms");
                     }
                 } catch (Exception e) {
-                    LOG.warn("HA cluster role manager getCurator thread for '{}' is interrupted/exception, closing CuratorFramework",
-                            jdbcUrl, e);
+                    LOG.warn("HA cluster role manager getCurator thread for '{}' is interrupted"
+                        + ", closing CuratorFramework", jdbcUrl, e);
                     curator.close();
                     if (e instanceof InterruptedException) {
                         Thread.currentThread().interrupt();
