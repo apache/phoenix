@@ -36,7 +36,6 @@ import java.sql.RowId;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.SQLXML;
-import java.sql.Statement;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.time.ZoneOffset;
@@ -234,7 +233,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
         }
         preExecuteUpdate();
         return executeMutation(statement, createAuditQueryLogger(statement, query),
-                MutationState.ReturnResult.OLD_ROW);
+                MutationState.ReturnResult.OLD_ROW_ALWAYS);
     }
 
     /**
@@ -256,7 +255,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
         }
         preExecuteUpdate();
         return executeMutation(statement, createAuditQueryLogger(statement, query),
-                MutationState.ReturnResult.ROW);
+                MutationState.ReturnResult.NEW_ROW_ON_SUCCESS);
     }
 
     public QueryPlan optimizeQuery() throws SQLException {

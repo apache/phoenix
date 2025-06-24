@@ -775,12 +775,12 @@ public class MutationState implements SQLCloseable {
                     }
                 }
                 if (this.returnResult != null) {
-                    if (this.returnResult == ReturnResult.ROW) {
+                    if (this.returnResult == ReturnResult.NEW_ROW_ON_SUCCESS) {
                         for (Mutation mutation : rowMutations) {
                             mutation.setAttribute(PhoenixIndexBuilderHelper.RETURN_RESULT,
                                     PhoenixIndexBuilderHelper.RETURN_RESULT_ROW);
                         }
-                    } else if (this.returnResult == ReturnResult.OLD_ROW) {
+                    } else if (this.returnResult == ReturnResult.OLD_ROW_ALWAYS) {
                         for (Mutation mutation : rowMutations) {
                             mutation.setAttribute(PhoenixIndexBuilderHelper.RETURN_RESULT,
                                     PhoenixIndexBuilderHelper.RETURN_RESULT_OLD_ROW);
@@ -807,10 +807,10 @@ public class MutationState implements SQLCloseable {
                         mutation.setAttribute(PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB, onDupKeyBytes);
                     }
                     if (this.returnResult != null) {
-                        if (this.returnResult == ReturnResult.ROW) {
+                        if (this.returnResult == ReturnResult.NEW_ROW_ON_SUCCESS) {
                             mutation.setAttribute(PhoenixIndexBuilderHelper.RETURN_RESULT,
                                     PhoenixIndexBuilderHelper.RETURN_RESULT_ROW);
-                        } else if (this.returnResult == ReturnResult.OLD_ROW) {
+                        } else if (this.returnResult == ReturnResult.OLD_ROW_ALWAYS) {
                             mutation.setAttribute(PhoenixIndexBuilderHelper.RETURN_RESULT,
                                     PhoenixIndexBuilderHelper.RETURN_RESULT_OLD_ROW);
                         }
@@ -1527,8 +1527,8 @@ public class MutationState implements SQLCloseable {
                                         .decodeInt(cell.getValueArray(), cell.getValueOffset(),
                                                 SortOrder.getDefault());
                                 if (this.returnResult != null) {
-                                    if (this.returnResult == ReturnResult.ROW ||
-                                            this.returnResult == ReturnResult.OLD_ROW) {
+                                    if (this.returnResult == ReturnResult.NEW_ROW_ON_SUCCESS ||
+                                            this.returnResult == ReturnResult.OLD_ROW_ALWAYS) {
                                         this.result = result;
                                     }
                                 }
@@ -2402,8 +2402,8 @@ public class MutationState implements SQLCloseable {
     }
 
     public enum ReturnResult {
-        ROW,
-        OLD_ROW
+        NEW_ROW_ON_SUCCESS,
+        OLD_ROW_ALWAYS
     }
 
 }

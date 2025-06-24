@@ -583,7 +583,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     protected int executeMutation(final CompilableStatement stmt,
                                   final AuditQueryLogger queryLogger) throws SQLException {
         return executeMutation(stmt, true, queryLogger,
-                isResultSetExpected(stmt) ? ReturnResult.ROW : null).getFirst();
+                isResultSetExpected(stmt) ? ReturnResult.NEW_ROW_ON_SUCCESS : null).getFirst();
     }
 
     Pair<Integer, ResultSet> executeMutation(final CompilableStatement stmt,
@@ -626,8 +626,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 isUpsert = stmt instanceof ExecutableUpsertStatement;
                                 isDelete = stmt instanceof ExecutableDeleteStatement;
                                 if (isDelete && connection.getAutoCommit() &&
-                                        (returnResult == ReturnResult.ROW ||
-                                                returnResult == ReturnResult.OLD_ROW)) {
+                                        (returnResult == ReturnResult.NEW_ROW_ON_SUCCESS ||
+                                                returnResult == ReturnResult.OLD_ROW_ALWAYS)) {
                                     // used only if single row deletion needs to atomically
                                     // return row that is deleted.
                                     plan = ((ExecutableDeleteStatement) stmt).compilePlan(
@@ -2498,7 +2498,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         }
         CompilableStatement stmt = preExecuteUpdate(sql);
         Pair<Integer, ResultSet> result =
-                executeMutation(stmt, createAuditQueryLogger(stmt, sql), ReturnResult.ROW);
+                executeMutation(stmt, createAuditQueryLogger(stmt, sql),
+                        ReturnResult.NEW_ROW_ON_SUCCESS);
         flushIfNecessary();
         return result;
     }
@@ -2525,7 +2526,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         }
         CompilableStatement stmt = preExecuteUpdate(sql);
         Pair<Integer, ResultSet> result =
-                executeMutation(stmt, createAuditQueryLogger(stmt, sql), ReturnResult.OLD_ROW);
+                executeMutation(stmt, createAuditQueryLogger(stmt, sql),
+                        ReturnResult.OLD_ROW_ALWAYS);
         flushIfNecessary();
         return result;
     }
