@@ -37,6 +37,7 @@ import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,6 +56,12 @@ public class PhoenixRegionServerEndpoint
         this.conf = env.getConfiguration();
         this.metricsSource = MetricsPhoenixCoprocessorSourceFactory
                                 .getInstance().getMetadataCachingSource();
+    }
+
+    @Override
+    public void stop(CoprocessorEnvironment env) throws IOException {
+        RegionServerCoprocessor.super.stop(env);
+        ServerUtil.ConnectionFactory.shutdown();
     }
 
     @Override
