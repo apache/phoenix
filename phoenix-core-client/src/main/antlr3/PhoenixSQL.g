@@ -115,6 +115,7 @@ tokens
     CYCLE='cycle';
     CASCADE='cascade';
     UPDATE='update';
+    UPDATE_ONLY='update_only';
     STATISTICS='statistics';
     COLUMNS='columns';
     TRACE='trace';
@@ -865,13 +866,20 @@ finally{ contextStack.pop(); }
 upsert_node returns [UpsertStatement ret]
     :   UPSERT (hint=hintClause)? INTO t=from_table_name
         (LPAREN p=upsert_column_refs RPAREN)?
-        ((VALUES LPAREN v=one_or_more_expressions RPAREN ( ON DUPLICATE KEY ( ig=IGNORE | ( UPDATE pairs=update_column_pairs ) ) )? ) | s=select_node)
+        ((VALUES LPAREN v=one_or_more_expressions RPAREN ( ON DUPLICATE KEY ( ig=IGNORE |
+         ( upd=UPDATE pairs=update_column_pairs ) | ( updo=UPDATE_ONLY upopairs=update_column_pairs ) ) )? )
+          | s=select_node)
         {ret = factory.upsert(
             factory.namedTable(null,t,p == null ? null : p.getFirst()), 
             hint, p == null ? null : p.getSecond(), 
             v, s, getBindCount(), 
             new HashMap<String, UDFParseNode>(udfParseNodes),
-            ig != null ? Collections.<Pair<ColumnName,ParseNode>>emptyList() : pairs != null ? pairs : null); }
+            ig != null ? Collections.<Pair<ColumnName,ParseNode>>emptyList() : pairs != null ? pairs
+             : upopairs != null ? upopairs : null,
+            ig != null ? UpsertStatement.OnDuplicateKeyType.IGNORE : 
+            upd != null ? UpsertStatement.OnDuplicateKeyType.UPDATE :
+            updo != null ? UpsertStatement.OnDuplicateKeyType.UPDATE_ONLY
+             : UpsertStatement.OnDuplicateKeyType.NONE); }
     ;
   
 update_column_pairs returns [ List<Pair<ColumnName,ParseNode>> ret]

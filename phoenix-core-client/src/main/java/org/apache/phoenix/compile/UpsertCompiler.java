@@ -122,9 +122,11 @@ import static org.apache.phoenix.thirdparty.com.google.common.collect.Lists.newA
 public class UpsertCompiler {
 
     private static void setValues(byte[][] values, int[] pkSlotIndex, int[] columnIndexes,
-            PTable table, MultiRowMutationState mutation, PhoenixStatement statement, boolean useServerTimestamp,
-            IndexMaintainer maintainer, byte[][] viewConstants, byte[] onDupKeyBytes, int numSplColumns,
-            int maxHBaseClientKeyValueSize) throws SQLException {
+                                  PTable table, MultiRowMutationState mutation,
+                                  PhoenixStatement statement, boolean useServerTimestamp,
+                                  IndexMaintainer maintainer, byte[][] viewConstants,
+                                  byte[] onDupKeyBytes, boolean isUpdateOnly, int numSplColumns,
+                                  int maxHBaseClientKeyValueSize) throws SQLException {
         long columnValueSize = 0;
         Map<PColumn,byte[]> columnValues = Maps.newHashMapWithExpectedSize(columnIndexes.length);
         byte[][] pkValues = new byte[table.getPKColumns().size()][];
@@ -182,8 +184,10 @@ public class UpsertCompiler {
                 ptr.set(ScanRanges.prefixKey(ptr.get(), 0, ptr.getLength(), regionPrefix,
                     regionPrefix.length));
             }
-        } 
-        mutation.put(ptr, new RowMutationState(columnValues, columnValueSize, statement.getConnection().getStatementExecutionCounter(), rowTsColInfo, onDupKeyBytes));
+        }
+        mutation.put(ptr, new RowMutationState(columnValues, columnValueSize,
+                statement.getConnection().getStatementExecutionCounter(), rowTsColInfo,
+                onDupKeyBytes, isUpdateOnly));
     }
 
     public static String getExceedMaxHBaseClientKeyValueAllowanceColumnInfo(PTable table, String columnName) {
@@ -268,7 +272,7 @@ public class UpsertCompiler {
                     values[j] = ByteUtil.copyKeyBytesIfNecessary(ptr);
                 }
                 setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement,
-                        useServerTimestamp, indexMaintainer, viewConstants, null,
+                        useServerTimestamp, indexMaintainer, viewConstants, null, false,
                         numSplColumns, maxHBaseClientKeyValueSize);
                 rowCount++;
                 // Commit a batch if auto commit is true and we're at our batch size
@@ -850,6 +854,8 @@ public class UpsertCompiler {
         }
         byte[] onDupKeyBytesToBe = null;
         List<Pair<ColumnName, ParseNode>> onDupKeyPairs = upsert.getOnDupKeyPairs();
+        UpsertStatement.OnDuplicateKeyType onDupKeyType = upsert.getOnDupKeyType();
+
         if (onDupKeyPairs != null) {
             if (table.isImmutableRows()) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_USE_ON_DUP_KEY_FOR_IMMUTABLE)
@@ -869,19 +875,30 @@ public class UpsertCompiler {
                 .setTableName(table.getTableName().getString())
                 .build().buildException();
             }
-            if (onDupKeyPairs.isEmpty()) { // ON DUPLICATE KEY IGNORE
-                onDupKeyBytesToBe = PhoenixIndexBuilderHelper.serializeOnDupKeyIgnore();
-            } else {                       // ON DUPLICATE KEY UPDATE;
-                onDupKeyBytesToBe = getOnDuplicateKeyBytes(table, context, onDupKeyPairs, resolver);
+
+            switch (onDupKeyType) {
+                case IGNORE: {
+                    onDupKeyBytesToBe = PhoenixIndexBuilderHelper.serializeOnDupKeyIgnore();
+                    break;
+                }
+                case UPDATE:
+                case UPDATE_ONLY: {
+                    onDupKeyBytesToBe =
+                            getOnDuplicateKeyBytes(table, context, onDupKeyPairs, resolver);
+                    break;
+                }
+                default:
+                    break;
             }
         } else if (!jsonExpressions.isEmpty()) {
             onDupKeyBytesToBe = getOnDuplicateKeyBytes(table, context, jsonExpressions, resolver);
         }
         final byte[] onDupKeyBytes = onDupKeyBytesToBe;
-        
+
         return new UpsertValuesMutationPlan(context, tableRef, nodeIndexOffset, constantExpressions,
                 allColumns, columnIndexes, overlapViewColumns, values, addViewColumns,
-                connection, pkSlotIndexes, useServerTimestamp, onDupKeyBytes, maxSize, maxSizeBytes);
+                connection, pkSlotIndexes, useServerTimestamp, onDupKeyBytes, onDupKeyType, maxSize,
+                maxSizeBytes);
     }
 
     private static byte[] getOnDuplicateKeyBytes(PTable table, StatementContext context,
@@ -1199,14 +1216,20 @@ public class UpsertCompiler {
         private final int[] pkSlotIndexes;
         private final boolean useServerTimestamp;
         private final byte[] onDupKeyBytes;
+        private final UpsertStatement.OnDuplicateKeyType onDupKeyType;
         private final int maxSize;
         private final long maxSizeBytes;
 
-        public UpsertValuesMutationPlan(StatementContext context, TableRef tableRef, int nodeIndexOffset,
-                                        List<Expression> constantExpressions, List<PColumn> allColumns,
-                                        int[] columnIndexes, Set<PColumn> overlapViewColumns, byte[][] values,
+        public UpsertValuesMutationPlan(StatementContext context, TableRef tableRef,
+                                        int nodeIndexOffset,
+                                        List<Expression> constantExpressions,
+                                        List<PColumn> allColumns,
+                                        int[] columnIndexes, Set<PColumn> overlapViewColumns,
+                                        byte[][] values,
                                         Set<PColumn> addViewColumns, PhoenixConnection connection,
-                                        int[] pkSlotIndexes, boolean useServerTimestamp, byte[] onDupKeyBytes,
+                                        int[] pkSlotIndexes, boolean useServerTimestamp,
+                                        byte[] onDupKeyBytes,
+                                        UpsertStatement.OnDuplicateKeyType onDupKeyType,
                                         int maxSize, long maxSizeBytes) {
             this.context = context;
             this.tableRef = tableRef;
@@ -1221,6 +1244,7 @@ public class UpsertCompiler {
             this.pkSlotIndexes = pkSlotIndexes;
             this.useServerTimestamp = useServerTimestamp;
             this.onDupKeyBytes = onDupKeyBytes;
+            this.onDupKeyType = onDupKeyType;
             this.maxSize = maxSize;
             this.maxSizeBytes = maxSizeBytes;
         }
@@ -1325,8 +1349,11 @@ public class UpsertCompiler {
             int maxHBaseClientKeyValueSize = statement.getConnection().getQueryServices().getProps().
                     getInt(QueryServices.HBASE_CLIENT_KEYVALUE_MAXSIZE,
                             QueryServicesOptions.DEFAULT_HBASE_CLIENT_KEYVALUE_MAXSIZE);
-            setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement, useServerTimestamp,
-                    indexMaintainer, viewConstants, onDupKeyBytes, 0, maxHBaseClientKeyValueSize);
+            setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement,
+                    useServerTimestamp,
+                    indexMaintainer, viewConstants, onDupKeyBytes,
+                    onDupKeyType == UpsertStatement.OnDuplicateKeyType.UPDATE_ONLY, 0,
+                    maxHBaseClientKeyValueSize);
             return new MutationState(tableRef, mutation, 0, maxSize, maxSizeBytes, connection);
         }
 

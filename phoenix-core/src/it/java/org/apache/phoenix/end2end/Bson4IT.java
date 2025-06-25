@@ -59,7 +59,6 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -568,7 +567,7 @@ public class Bson4IT extends ParallelStatsDisabledIT {
                       .append("track[0].shot[2][0].city.flame", new BsonNull()));
 
       stmt = conn.prepareStatement("UPSERT INTO " + tableName
-              + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
+              + " VALUES (?) ON DUPLICATE KEY UPDATE_ONLY COL = CASE WHEN"
               + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
               + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END,"
               + " C1 = ?");
@@ -576,7 +575,7 @@ public class Bson4IT extends ParallelStatsDisabledIT {
       stmt.setString(2, "0003");
 
       // Conditional Upsert successful
-      assertReturnedRowResult(stmt, conn, tableName, "json/sample_updated_01.json", true);
+      assertReturnedRowResult(stmt, "json/sample_updated_01.json", true);
 
       updateExp = new BsonDocument()
               .append("$ADD", new BsonDocument()
@@ -615,7 +614,7 @@ public class Bson4IT extends ParallelStatsDisabledIT {
       stmt.setString(1, "pk1010");
 
       // Conditional Upsert successful
-      assertReturnedRowResult(stmt, conn, tableName, "json/sample_updated_02.json", true);
+      assertReturnedRowResult(stmt, "json/sample_updated_02.json", true);
 
       updateExp = new BsonDocument()
               .append("$SET", new BsonDocument()
@@ -642,7 +641,7 @@ public class Bson4IT extends ParallelStatsDisabledIT {
       stmt.setString(1, "pk1011");
 
       // Conditional Upsert successful
-      assertReturnedRowResult(stmt, conn, tableName, "json/sample_updated_03.json", true);
+      assertReturnedRowResult(stmt, "json/sample_updated_03.json", true);
 
       conditionExpression =
               "press = :press AND track[0].shot[2][0].city.standard[5] = :softly";
@@ -669,7 +668,17 @@ public class Bson4IT extends ParallelStatsDisabledIT {
       stmt.setString(1, "pk0001");
 
       // Conditional Upsert not successful
-      assertReturnedRowResult(stmt, conn, tableName, "json/sample_updated_01.json", false);
+      assertReturnedRowResult(stmt, "json/sample_updated_01.json", false);
+
+      stmt = conn.prepareStatement("UPSERT INTO " + tableName
+              + " VALUES (?) ON DUPLICATE KEY UPDATE_ONLY COL = CASE WHEN"
+              + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
+              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END");
+      // the row does not exist already
+      stmt.setString(1, "pk000111");
+
+      // Conditional Upsert not successful, no row upserted
+      assertReturnedRowResult(stmt, null, false);
 
       verifyRows(tableName, conn);
     }
@@ -758,7 +767,7 @@ public class Bson4IT extends ParallelStatsDisabledIT {
       stmt.setString(1, "pk0001");
       stmt.setString(2, "0003");
 
-      assertReturnedOldRowResult(stmt, conn, tableName, "json/sample_01.json", true);
+      assertReturnedOldRowResult(stmt, "json/sample_01.json", true);
 
       updateExp = new BsonDocument()
               .append("$ADD", new BsonDocument()
@@ -796,7 +805,7 @@ public class Bson4IT extends ParallelStatsDisabledIT {
 
       stmt.setString(1, "pk1010");
 
-      assertReturnedOldRowResult(stmt, conn, tableName, "json/sample_02.json", true);
+      assertReturnedOldRowResult(stmt, "json/sample_02.json", true);
 
       updateExp = new BsonDocument()
               .append("$SET", new BsonDocument()
@@ -816,13 +825,13 @@ public class Bson4IT extends ParallelStatsDisabledIT {
               .append(":state", new BsonString("AK")));
 
       stmt = conn.prepareStatement("UPSERT INTO " + tableName
-              + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
+              + " VALUES (?) ON DUPLICATE KEY UPDATE_ONLY COL = CASE WHEN"
               + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
               + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END");
 
       stmt.setString(1, "pk1011");
 
-      assertReturnedOldRowResult(stmt, conn, tableName, "json/sample_03.json", true);
+      assertReturnedOldRowResult(stmt, "json/sample_03.json", true);
 
       conditionExpression =
               "press = :press AND track[0].shot[2][0].city.standard[5] = :softly";
@@ -843,12 +852,21 @@ public class Bson4IT extends ParallelStatsDisabledIT {
                               new BsonString("track[0].shot[2][0].city.problem[2] + 123")));
 
       stmt = conn.prepareStatement("UPSERT INTO " + tableName
-              + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
+              + " VALUES (?) ON DUPLICATE KEY UPDATE_ONLY COL = CASE WHEN"
               + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
               + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END");
       stmt.setString(1, "pk0001");
 
-      assertReturnedOldRowResult(stmt, conn, tableName, "json/sample_updated_01.json", false);
+      assertReturnedOldRowResult(stmt, "json/sample_updated_01.json", false);
+
+      stmt = conn.prepareStatement("UPSERT INTO " + tableName
+              + " VALUES (?) ON DUPLICATE KEY UPDATE_ONLY COL = CASE WHEN"
+              + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
+              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END");
+      // row does not exist
+      stmt.setString(1, "pk00012345");
+
+      assertReturnedOldRowResult(stmt, null, false);
 
       verifyRows(tableName, conn);
     }
@@ -1030,20 +1048,17 @@ public class Bson4IT extends ParallelStatsDisabledIT {
   }
 
   private static void assertReturnedRowResult(PreparedStatement stmt,
-                                              Connection conn,
-                                              String tableName,
                                               String jsonPath,
                                               boolean success)
           throws SQLException, IOException {
     stmt.execute();
     assertEquals(success ? 1 : 0, stmt.getUpdateCount());
     ResultSet resultSet = stmt.getResultSet();
-    assertEquals(RawBsonDocument.parse(getJsonString(jsonPath)), resultSet.getObject(3));
+    assertEquals(jsonPath == null ? null : RawBsonDocument.parse(getJsonString(jsonPath)),
+            resultSet.getObject(3));
   }
 
   private static void assertReturnedOldRowResult(PreparedStatement stmt,
-                                                 Connection conn,
-                                                 String tableName,
                                                  String jsonPath,
                                                  boolean success)
           throws SQLException, IOException {
@@ -1052,10 +1067,12 @@ public class Bson4IT extends ParallelStatsDisabledIT {
     assertEquals(success ? 1 : 0, (int) resultPair.getFirst());
     ResultSet resultSet = resultPair.getSecond();
     if (success) {
-      assertEquals(RawBsonDocument.parse(getJsonString(jsonPath)), resultSet.getObject(3));
+      assertEquals(jsonPath == null ? null : RawBsonDocument.parse(getJsonString(jsonPath)),
+              resultSet.getObject(3));
       assertFalse(resultSet.next());
     } else {
-      assertEquals(RawBsonDocument.parse(getJsonString(jsonPath)), resultSet.getObject(3));
+      assertEquals(jsonPath == null ? null : RawBsonDocument.parse(getJsonString(jsonPath)),
+              resultSet.getObject(3));
     }
   }
 

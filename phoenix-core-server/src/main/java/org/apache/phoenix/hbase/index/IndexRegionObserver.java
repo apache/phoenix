@@ -1944,6 +1944,16 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           return mutations;
       }
 
+        boolean isUpdateOnly = atomicPut.getAttribute(
+                PhoenixIndexBuilderHelper.ATOMIC_OP_UPDATE_ONLY_ATTRIB) != null;
+        if (isUpdateOnly && currentDataRowState == null) {
+            // UPDATE_ONLY: If row doesn't exist, do nothing
+            if (context.returnResult) {
+                context.currColumnCellExprMap = currColumnCellExprMap;
+            }
+            return Collections.emptyList();
+        }
+
       ByteArrayInputStream stream = new ByteArrayInputStream(opBytes);
       DataInputStream input = new DataInputStream(stream);
       boolean skipFirstOp = input.readBoolean();
