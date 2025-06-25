@@ -22,6 +22,7 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Date;
 import java.util.HashSet;
@@ -39,7 +40,6 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarchar;
 import org.bson.RawBsonDocument;
 
 public class CDCUtil {
@@ -97,6 +97,15 @@ public class CDCUtil {
 
     public static boolean isCDCIndex(String indexName) {
         return indexName.startsWith(CDC_INDEX_PREFIX);
+    }
+
+    public static boolean isCDCIndex(byte[] indexNameBytes) {
+        String indexName = Bytes.toString(indexNameBytes);
+        return isCDCIndex(indexName);
+    }
+
+    public static byte[] getCdcObjectName(byte[] cdcIndexName) {
+        return Arrays.copyOfRange(cdcIndexName, CDC_INDEX_PREFIX.length(), cdcIndexName.length);
     }
 
     public static boolean isCDCIndex(PTable indexTable) {

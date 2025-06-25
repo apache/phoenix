@@ -621,8 +621,9 @@ public class DeleteCompiler {
             final StatementContext context = dataPlan.getContext();
             Scan scan = context.getScan();
             scan.setAttribute(BaseScannerRegionObserverConstants.DELETE_AGG, QueryConstants.TRUE);
-            if (context.getScanRanges().getPointLookupCount() == 1 &&
-                    returnResult == MutationState.ReturnResult.ROW) {
+            if (context.getScanRanges().getPointLookupCount() == 1
+                    && (returnResult == MutationState.ReturnResult.NEW_ROW_ON_SUCCESS
+                    || returnResult == MutationState.ReturnResult.OLD_ROW_ALWAYS)) {
                 scan.setAttribute(BaseScannerRegionObserverConstants.SINGLE_ROW_DELETE,
                         QueryConstants.TRUE);
             }

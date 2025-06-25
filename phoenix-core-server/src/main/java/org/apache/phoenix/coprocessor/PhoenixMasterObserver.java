@@ -276,33 +276,34 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
             qb.append(" AND PARTITION_END_KEY = ? ");
         }
 
-        PreparedStatement pstmt = conn.prepareStatement(qb.toString());
-        int index = 1;
-        pstmt.setString(index++, tableName);
-        pstmt.setString(index++, streamName);
-        if (parentStartKey.length > 0) pstmt.setBytes(index++, parentStartKey);
-        if (parentEndKey.length > 0) pstmt.setBytes(index++, parentEndKey);
-        LOGGER.info("Query to get parent partition id: " + pstmt);
-
         List<String> ancestorIDs = new ArrayList<>();
-        ResultSet rs = pstmt.executeQuery();
         List<Long> parentPartitionStartTimes = new ArrayList<>();
-        if (rs.next()) {
-            ancestorIDs.add(rs.getString(1));
-            ancestorIDs.add(rs.getString(2));
-            parentPartitionStartTimes.add(rs.getLong(3));
-        } else {
-            throw new ParentPartitionNotFound(
-                    String.format("Could not find parent of the provided daughters: "
-                                    + "startKeyA=%s endKeyA=%s startKeyB=%s endKeyB=%s",
-                    Bytes.toStringBinary(regionInfoA.getStartKey()),
-                    Bytes.toStringBinary(regionInfoA.getEndKey()),
-                    Bytes.toStringBinary(regionInfoB.getStartKey()),
-                    Bytes.toStringBinary(regionInfoB.getEndKey())));
-        }
-        // if parent was a result of a merge, there will be multiple grandparents.
-        while (rs.next()) {
-            ancestorIDs.add(rs.getString(2));
+        try (PreparedStatement pstmt = conn.prepareStatement(qb.toString())) {
+            int index = 1;
+            pstmt.setString(index++, tableName);
+            pstmt.setString(index++, streamName);
+            if (parentStartKey.length > 0) pstmt.setBytes(index++, parentStartKey);
+            if (parentEndKey.length > 0) pstmt.setBytes(index++, parentEndKey);
+            LOGGER.info("Query to get parent partition id: " + pstmt);
+
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) {
+                ancestorIDs.add(rs.getString(1));
+                ancestorIDs.add(rs.getString(2));
+                parentPartitionStartTimes.add(rs.getLong(3));
+            } else {
+                throw new ParentPartitionNotFound(
+                        String.format("Could not find parent of the provided daughters: "
+                                        + "startKeyA=%s endKeyA=%s startKeyB=%s endKeyB=%s",
+                                Bytes.toStringBinary(regionInfoA.getStartKey()),
+                                Bytes.toStringBinary(regionInfoA.getEndKey()),
+                                Bytes.toStringBinary(regionInfoB.getStartKey()),
+                                Bytes.toStringBinary(regionInfoB.getEndKey())));
+            }
+            // if parent was a result of a merge, there will be multiple grandparents.
+            while (rs.next()) {
+                ancestorIDs.add(rs.getString(2));
+            }
         }
         return new Pair<>(ancestorIDs, parentPartitionStartTimes);
     }
@@ -316,21 +317,22 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
                                                   RegionInfo parent) throws SQLException {
         List<String> ancestorIDs = new ArrayList<>();
         ancestorIDs.add(parent.getEncodedName());
-        PreparedStatement pstmt = conn.prepareStatement(PARENT_PARTITION_QUERY_FOR_MERGE);
-        pstmt.setString(1, tableName);
-        pstmt.setString(2, streamName);
-        pstmt.setString(3, parent.getEncodedName());
-        ResultSet rs = pstmt.executeQuery();
-        if (rs.next()) {
-            ancestorIDs.add(rs.getString(1));
-        } else {
-            throw new ParentPartitionNotFound(String.format(
-                    "Could not find parent of the provided merged region: %s",
-                    parent.getEncodedName()));
-        }
-        // if parent was a result of a merge, there will be multiple grandparents.
-        while (rs.next()) {
-            ancestorIDs.add(rs.getString(1));
+        try (PreparedStatement pstmt = conn.prepareStatement(PARENT_PARTITION_QUERY_FOR_MERGE)) {
+            pstmt.setString(1, tableName);
+            pstmt.setString(2, streamName);
+            pstmt.setString(3, parent.getEncodedName());
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) {
+                ancestorIDs.add(rs.getString(1));
+            } else {
+                throw new ParentPartitionNotFound(String.format(
+                        "Could not find parent of the provided merged region: %s",
+                        parent.getEncodedName()));
+            }
+            // if parent was a result of a merge, there will be multiple grandparents.
+            while (rs.next()) {
+                ancestorIDs.add(rs.getString(1));
+            }
         }
         return ancestorIDs;
     }
@@ -346,27 +348,28 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
                                          List<Long> parentPartitionStartTimes)
             throws SQLException {
         conn.setAutoCommit(false);
-        PreparedStatement pstmt = conn.prepareStatement(PARTITION_UPSERT_SQL);
-        for (RegionInfo daughter : daughters) {
-            for (int i=0; i<parentPartitionIDs.size(); i++) {
-                String partitionId = daughter.getEncodedName();
-                long startTime = daughter.getRegionId();
-                byte[] startKey = daughter.getStartKey();
-                byte[] endKey = daughter.getEndKey();
-                pstmt.setString(1, tableName);
-                pstmt.setString(2, streamName);
-                pstmt.setString(3, partitionId);
-                pstmt.setString(4, parentPartitionIDs.get(i));
-                pstmt.setLong(5, startTime);
-                // endTime in not set when inserting a new partition
-                pstmt.setNull(6, Types.BIGINT);
-                pstmt.setBytes(7, startKey.length == 0 ? null : startKey);
-                pstmt.setBytes(8, endKey.length == 0 ? null : endKey);
-                pstmt.setLong(9, parentPartitionStartTimes.get(i));
-                pstmt.executeUpdate();
+        try (PreparedStatement pstmt = conn.prepareStatement(PARTITION_UPSERT_SQL)) {
+            for (RegionInfo daughter : daughters) {
+                for (int i=0; i<parentPartitionIDs.size(); i++) {
+                    String partitionId = daughter.getEncodedName();
+                    long startTime = daughter.getRegionId();
+                    byte[] startKey = daughter.getStartKey();
+                    byte[] endKey = daughter.getEndKey();
+                    pstmt.setString(1, tableName);
+                    pstmt.setString(2, streamName);
+                    pstmt.setString(3, partitionId);
+                    pstmt.setString(4, parentPartitionIDs.get(i));
+                    pstmt.setLong(5, startTime);
+                    // endTime in not set when inserting a new partition
+                    pstmt.setNull(6, Types.BIGINT);
+                    pstmt.setBytes(7, startKey.length == 0 ? null : startKey);
+                    pstmt.setBytes(8, endKey.length == 0 ? null : endKey);
+                    pstmt.setLong(9, parentPartitionStartTimes.get(i));
+                    pstmt.executeUpdate();
+                }
             }
+            conn.commit();
         }
-        conn.commit();
     }
 
     /**
@@ -380,29 +383,31 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
                                               long daughterStartTime) throws SQLException {
         conn.setAutoCommit(false);
         // ancestorIDs = [parentID, grandparentID1, grandparentID2...]
-        PreparedStatement pstmt = conn.prepareStatement(PARENT_PARTITION_UPDATE_END_TIME_SQL);
-        for (int i=1; i<ancestorIDs.size(); i++) {
-            pstmt.setString(1, tableName);
-            pstmt.setString(2, streamName);
-            pstmt.setString(3, ancestorIDs.get(0));
-            pstmt.setString(4, ancestorIDs.get(i));
-            pstmt.setLong(5, daughterStartTime);
-            pstmt.executeUpdate();
+        try (PreparedStatement pstmt = conn.prepareStatement(PARENT_PARTITION_UPDATE_END_TIME_SQL)) {
+            for (int i=1; i<ancestorIDs.size(); i++) {
+                pstmt.setString(1, tableName);
+                pstmt.setString(2, streamName);
+                pstmt.setString(3, ancestorIDs.get(0));
+                pstmt.setString(4, ancestorIDs.get(i));
+                pstmt.setLong(5, daughterStartTime);
+                pstmt.executeUpdate();
+            }
+            conn.commit();
         }
-        conn.commit();
     }
 
     /**
      * Get the stream name on the given table if one exists in ENABLED state.
      */
     private String getStreamName(Connection conn, String tableName) throws SQLException {
-        PreparedStatement pstmt = conn.prepareStatement(STREAM_STATUS_QUERY);
-        pstmt.setString(1, tableName);
-        ResultSet rs = pstmt.executeQuery();
-        if (rs.next()) {
-            return rs.getString(1);
-        } else {
-            return null;
+        try (PreparedStatement pstmt = conn.prepareStatement(STREAM_STATUS_QUERY)) {
+            pstmt.setString(1, tableName);
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) {
+                return rs.getString(1);
+            } else {
+                return null;
+            }
         }
     }
 

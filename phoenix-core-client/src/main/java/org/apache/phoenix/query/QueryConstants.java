@@ -663,7 +663,8 @@ public interface QueryConstants {
             TABLE_NAME + "," + STREAM_NAME + "))\n" +
             HConstants.VERSIONS + "=%s,\n" +
             ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" +
-            TRANSACTIONAL + "=" + Boolean.FALSE;
+            TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" +
+            UPDATE_CACHE_FREQUENCY + "=" + "7200000";
 
     String CREATE_CDC_STREAM_METADATA = "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" +
             SYSTEM_CDC_STREAM_TABLE + "\"(\n" +
@@ -682,5 +683,6 @@ public interface QueryConstants {
             TABLE_NAME + "," + STREAM_NAME + "," + PARTITION_ID + "," + PARENT_PARTITION_ID + "))\n" +
             HConstants.VERSIONS + "=%s,\n" +
             ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" +
-            TRANSACTIONAL + "=" + Boolean.FALSE;
+            TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" +
+            UPDATE_CACHE_FREQUENCY + "=" + "7200000";
 }
