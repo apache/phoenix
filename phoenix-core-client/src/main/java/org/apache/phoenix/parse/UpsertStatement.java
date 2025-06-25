@@ -24,14 +24,14 @@ import java.util.Map;
 import org.apache.hadoop.hbase.util.Pair;
 
 public class UpsertStatement extends DMLStatement {
-    
+
     public enum OnDuplicateKeyType {
         NONE,
         IGNORE,
         UPDATE,
         UPDATE_ONLY
     }
-    
+
     private final List<ColumnName> columns;
     private final List<ParseNode> values;
     private final SelectStatement select;
@@ -58,9 +58,10 @@ public class UpsertStatement extends DMLStatement {
     }
 
     public UpsertStatement(NamedTableNode table, HintNode hint, List<ColumnName> columns,
-            List<ParseNode> values, SelectStatement select, int bindCount,
-            Map<String, UDFParseNode> udfParseNodes, List<Pair<ColumnName,ParseNode>> onDupKeyPairs,
-            OnDuplicateKeyType onDupKeyType) {
+                           List<ParseNode> values, SelectStatement select, int bindCount,
+                           Map<String, UDFParseNode> udfParseNodes,
+                           List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
+                           OnDuplicateKeyType onDupKeyType) {
         super(table, bindCount, udfParseNodes);
         this.columns = columns == null ? Collections.emptyList() : columns;
         this.values = values;
@@ -89,7 +90,7 @@ public class UpsertStatement extends DMLStatement {
     public List<Pair<ColumnName,ParseNode>> getOnDupKeyPairs() {
         return onDupKeyPairs;
     }
-    
+
     public OnDuplicateKeyType getOnDupKeyType() {
         return onDupKeyType;
     }

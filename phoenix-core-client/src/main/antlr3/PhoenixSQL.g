@@ -876,7 +876,7 @@ upsert_node returns [UpsertStatement ret]
             new HashMap<String, UDFParseNode>(udfParseNodes),
             ig != null ? Collections.<Pair<ColumnName,ParseNode>>emptyList() : pairs != null ? pairs
              : upopairs != null ? upopairs : null,
-            ig != null ? UpsertStatement.OnDuplicateKeyType.IGNORE : 
+            ig != null ? UpsertStatement.OnDuplicateKeyType.IGNORE :
             upd != null ? UpsertStatement.OnDuplicateKeyType.UPDATE :
             updo != null ? UpsertStatement.OnDuplicateKeyType.UPDATE_ONLY
              : UpsertStatement.OnDuplicateKeyType.NONE); }
