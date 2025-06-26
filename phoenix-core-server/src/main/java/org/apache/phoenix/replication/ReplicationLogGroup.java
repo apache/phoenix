@@ -243,6 +243,9 @@ public class ReplicationLogGroup {
         case STORE_AND_FORWARD:
             // In store and forward mode, we write to the local writer.
             localWriter.append(tableName, commitId, mutation);
+            // TODO: Probe the state of the remoteWriter. Can we switch back?
+            // TODO: This suggests the ReplicationLogGroupWriter interface should have a status
+            // probe API.
             break;
         default:
             throw new IllegalStateException("Invalid replication mode: " + mode);
@@ -286,6 +289,9 @@ public class ReplicationLogGroup {
         case STORE_AND_FORWARD:
             // In store and forward mode, we sync the local writer.
             localWriter.sync();
+            // TODO: Probe the state of the remoteWriter. Can we switch back?
+            // TODO: This suggests the ReplicationLogGroupWriter interface should have a status
+            // probe API.
             break;
         default:
             throw new IllegalStateException("Invalid replication mode: " + mode);
