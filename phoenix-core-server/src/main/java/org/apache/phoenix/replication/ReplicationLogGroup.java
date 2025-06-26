@@ -23,7 +23,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogGroupSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -98,15 +97,10 @@ public class ReplicationLogGroup {
     private final Configuration conf;
     private final ServerName serverName;
     private final String haGroupId;
-    private volatile ReplicationLogGroupWriter writer;
+    protected ReplicationLogGroupWriter remoteWriter;
+    protected ReplicationLogGroupWriter localWriter;
+    protected ReplicationMode mode;
     private volatile boolean closed = false;
-
-    /**
-     * The current replication mode. Always SYNC for now.
-     * <p>TODO: Implement mode transitions to STORE_AND_FORWARD when standby becomes unavailable.
-     * <p>TODO: Implement mode transitions to SYNC_AND_FORWARD when draining queue.
-     */
-    protected volatile ReplicationMode currentMode = ReplicationMode.SYNC;
 
     /**
      * Tracks the current replication mode of the ReplicationLog.
@@ -190,20 +184,14 @@ public class ReplicationLogGroup {
      * @throws IOException if initialization fails
      */
     protected void init() throws IOException {
-        // Start with synchronous replication (StandbyLogGroupWriter). Later we can add logic to
-        // determine the appropriate writer based on configuration or HA Group state.
-        writer = new StandbyLogGroupWriter(conf, serverName, haGroupId);
-        writer.init();
-        LOG.info("Initialized ReplicationLogGroup for HA Group: {}", haGroupId);
-    }
-
-    /**
-     * Get the current metrics source for monitoring operations.
-     *
-     * @return MetricsReplicationLogSource instance
-     */
-    public MetricsReplicationLogGroupSource getMetrics() {
-        return writer != null ? writer.getMetrics() : null;
+        // For now, we initialize only the remote writer and set the mode to SYNC.
+        remoteWriter = new StandbyLogGroupWriter(conf, serverName, haGroupId);
+        remoteWriter.init();
+        mode = ReplicationMode.SYNC;
+        // TODO: Initialize the local writer (StoreAndForwardLogGroupWriter).
+        // TODO: Switch the initial mode to STORE_AND_FORWARD if the remote writer fails to
+        // initialize.
+        LOG.info("Started ReplicationLogGroup for HA Group: {}", haGroupId);
     }
 
     /**
@@ -228,7 +216,37 @@ public class ReplicationLogGroup {
         if (closed) {
             throw new IOException("Closed");
         }
-        writer.append(tableName, commitId, mutation);
+        switch (mode) {
+        case SYNC:
+            // In sync mode, we only write to the remote writer.
+            try {
+                remoteWriter.append(tableName, commitId, mutation);
+            } catch (IOException e) {
+                // If the remote writer fails, we must switch to store and forward.
+                switchMode(ReplicationMode.STORE_AND_FORWARD, e); // Will throw if it fails.
+                // Use the local writer to append the mutation instead.
+                localWriter.append(tableName, commitId, mutation);
+            }
+            break;
+        case SYNC_AND_FORWARD:
+            // In sync and forward mode, we write to only the remote writer, while in the
+            // background we are draining the local queue.
+            try {
+                remoteWriter.append(tableName, commitId, mutation);
+            } catch (IOException e) {
+                // If the remote writer fails again, we must switch back to store and forward.
+                switchMode(ReplicationMode.STORE_AND_FORWARD, e); // Will throw if it fails.
+                // Now we can use the local writer to append the mutation.
+                localWriter.append(tableName, commitId, mutation);
+            }
+            break;
+        case STORE_AND_FORWARD:
+            // In store and forward mode, we write to the local writer.
+            localWriter.append(tableName, commitId, mutation);
+            break;
+        default:
+            throw new IllegalStateException("Invalid replication mode: " + mode);
+        }
     }
 
     /**
@@ -241,7 +259,37 @@ public class ReplicationLogGroup {
         if (closed) {
             throw new IOException("Closed");
         }
-        writer.sync();
+        switch (mode) {
+        case SYNC:
+            // In sync mode, we only write to the remote writer.
+            try {
+                remoteWriter.sync();
+            } catch (IOException e) {
+                // If the remote writer fails, we must switch to store and forward.
+                switchMode(ReplicationMode.STORE_AND_FORWARD, e); // Will throw if it fails.
+                // Mode switch handled drain from remote writer to local writer and sync, so there
+                // is nothing left to do here.
+            }
+            break;
+        case SYNC_AND_FORWARD:
+            // In sync and forward mode, we write to only the remote writer, while in the
+            // background we are draining the local queue.
+            try {
+                remoteWriter.sync();
+            } catch (IOException e) {
+                // If the remote writer fails again, we must switch back to store and forward.
+                switchMode(ReplicationMode.STORE_AND_FORWARD, e); // Will throw if it fails.
+                // Mode switch handled drain from remote writer to local writer and sync, so there
+                // is nothing left to do here.
+            }
+            break;
+        case STORE_AND_FORWARD:
+            // In store and forward mode, we sync the local writer.
+            localWriter.sync();
+            break;
+        default:
+            throw new IllegalStateException("Invalid replication mode: " + mode);
+        }
     }
 
     /**
@@ -254,8 +302,8 @@ public class ReplicationLogGroup {
     }
 
     /**
-     * Close the ReplicationLogGroup and all associated resources.
-     * This method is thread-safe and can be called multiple times.
+     * Close the ReplicationLogGroup and all associated resources. This method is thread-safe and
+     * can be called multiple times.
      */
     public void close() {
         synchronized (this) {
@@ -263,50 +311,35 @@ public class ReplicationLogGroup {
                 return;
             }
             closed = true;
-            closeWriter(writer);
             // Remove from instances cache
             INSTANCES.remove(haGroupId);
+            closeWriter(remoteWriter);
+            closeWriter(localWriter);
             LOG.info("Closed ReplicationLogGroup for HA Group: {}", haGroupId);
         }
     }
 
     /**
-     * Close the given writer.
+     * Switch the replication mode.
      *
-     * @param writer The writer to close
+     * @param mode The new replication mode
+     * @param reason The reason for the mode switch
+     * @throws IOException If the mode switch fails
      */
+    public void switchMode(ReplicationMode mode, Throwable reason) throws IOException {
+        // TODO: Implement mode switching guardrails and transition logic.
+        // TODO: We will be interacting with the HA Group Store to switch modes.
+
+        // TODO: Drain the disruptor ring from the remote writer to the local writer when making
+        // transitions from SYNC or SYNC_AND_FORWARD to STORE_AND_FORWARD.
+
+        throw new UnsupportedOperationException("Mode switching is not implemented");
+    }
+
+    /** Close the given writer. */
     protected void closeWriter(ReplicationLogGroupWriter writer) {
         if (writer != null) {
             writer.close();
-        }
-    }
-
-    /**
-     * Switch the writer implementation (e.g., from synchronous to store-and-forward). This method
-     * is thread-safe and ensures proper cleanup of the old writer.
-     *
-     * @param writer The new writer implementation
-     * @throws IOException if the switch fails
-     */
-    protected void switchWriter(ReplicationLogGroupWriter writer) throws IOException {
-        synchronized (this) {
-            if (closed) {
-                throw new IOException("Closed");
-            }
-            ReplicationLogGroupWriter oldWriter = this.writer;
-            LOG.info("Switching writer for HA Group {} from {} to {}", haGroupId,
-                oldWriter.getClass().getSimpleName(), writer.getClass().getSimpleName());
-            try {
-                // Initialize the new writer first
-                writer.init();
-                // Switch to the new writer
-                this.writer = writer;
-                closeWriter(oldWriter);
-            } catch (IOException e) {
-                // If switching failed, ensure we clean up the new writer
-                closeWriter(writer);
-                throw e;
-            }
         }
     }
 }
