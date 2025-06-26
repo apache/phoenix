@@ -59,6 +59,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -680,7 +681,18 @@ public class Bson4IT extends ParallelStatsDisabledIT {
       // Conditional Upsert not successful, no row upserted
       assertReturnedRowResult(stmt, null, false);
 
-      verifyRows(tableName, conn);
+      verifyRows(tableName, conn, false);
+
+      stmt = conn.prepareStatement("UPSERT INTO " + tableName
+              + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
+              + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
+              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END");
+      // the row does not exist already
+      stmt.setString(1, "pk000123456");
+
+      // Conditional Upsert successful, row upserted
+      assertReturnedRowResult(stmt, null, true);
+      verifyRows(tableName, conn, true);
     }
   }
 
@@ -868,7 +880,17 @@ public class Bson4IT extends ParallelStatsDisabledIT {
 
       assertReturnedOldRowResult(stmt, null, false);
 
-      verifyRows(tableName, conn);
+      verifyRows(tableName, conn, false);
+
+      stmt = conn.prepareStatement("UPSERT INTO " + tableName
+              + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
+              + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
+              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END");
+      // row does not exist
+      stmt.setString(1, "pk000123456");
+
+      assertReturnedOldRowResult(stmt, null, true);
+      verifyRows(tableName, conn, true);
     }
   }
 
@@ -1012,7 +1034,7 @@ public class Bson4IT extends ParallelStatsDisabledIT {
     stmt.executeUpdate();
   }
 
-  private static void verifyRows(String tableName, Connection conn)
+  private static void verifyRows(String tableName, Connection conn, boolean isNewRowAdded)
           throws SQLException, IOException {
     String query;
     ResultSet rs;
@@ -1027,6 +1049,13 @@ public class Bson4IT extends ParallelStatsDisabledIT {
 
     String updatedJson = getJsonString("json/sample_updated_01.json");
     assertEquals(RawBsonDocument.parse(updatedJson), document1);
+
+    if (isNewRowAdded) {
+      assertTrue(rs.next());
+      assertEquals("pk000123456", rs.getString(1));
+      assertNull(rs.getString(2));
+      assertNull(rs.getObject(3));
+    }
 
     assertTrue(rs.next());
     assertEquals("pk1010", rs.getString(1));
