@@ -152,21 +152,6 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
                         : Collections.<Mutation>emptyList();
             }
         }
-
-        boolean isUpdateOnly =
-                inc.getAttribute(PhoenixIndexBuilderHelper.ATOMIC_OP_UPDATE_ONLY_ATTRIB) != null;
-        if (isUpdateOnly) {
-            get.setFilter(new FirstKeyOnlyFilter());
-            try (RegionScanner scanner = this.env.getRegion().getScanner(new Scan(get))) {
-                List<Cell> cells = new ArrayList<>();
-                scanner.next(cells);
-                if (cells.isEmpty()) {
-                    // UPDATE_ONLY: If row doesn't exist, do nothing
-                    return Collections.emptyList();
-                }
-                // If row exists, continue
-            }
-        }
         ByteArrayInputStream stream = new ByteArrayInputStream(opBytes);
         DataInputStream input = new DataInputStream(stream);
         boolean skipFirstOp = input.readBoolean();
