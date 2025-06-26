@@ -30,7 +30,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -56,7 +55,7 @@ public class HAGroupStoreClient implements Closeable {
             = new ConcurrentHashMap<>();
     private PathChildrenCache pathChildrenCache;
     private volatile boolean isHealthy;
-    private static volatile Map<String, HAGroupStoreClient> INSTANCES = new ConcurrentHashMap<>();
+    private static final Map<String, HAGroupStoreClient> instances = new ConcurrentHashMap<>();
 
     /**
      * Creates/gets an instance of HAGroupStoreClient.
@@ -67,17 +66,17 @@ public class HAGroupStoreClient implements Closeable {
      */
     public static HAGroupStoreClient getInstance(Configuration conf) {
         final String zkUrl = getLocalZkUrl(conf);
-        HAGroupStoreClient result = INSTANCES.get(zkUrl);
+        HAGroupStoreClient result = instances.get(zkUrl);
         if (result == null || !result.isHealthy) {
             synchronized (HAGroupStoreClient.class) {
-                result = INSTANCES.get(zkUrl);
+                result = instances.get(zkUrl);
                 if (result == null || !result.isHealthy) {
                     result = new HAGroupStoreClient(conf, null);
                     if (!result.isHealthy) {
                         result.close();
                         result = null;
                     }
-                    INSTANCES.put(zkUrl, result);
+                    instances.put(zkUrl, result);
                 }
             }
         }
