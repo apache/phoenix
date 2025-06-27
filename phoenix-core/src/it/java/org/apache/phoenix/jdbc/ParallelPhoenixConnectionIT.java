@@ -126,8 +126,6 @@ public class ParallelPhoenixConnectionIT {
     public static void setUpBeforeClass() throws Exception {
         CLUSTERS.getHBaseCluster1().getConfiguration().setBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, true);
         CLUSTERS.getHBaseCluster2().getConfiguration().setBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, true);
-        CLUSTERS.getHBaseCluster1().getConfiguration().setInt("hbase.client.retries.number", 0);
-        CLUSTERS.getHBaseCluster2().getConfiguration().setInt("hbase.client.retries.number", 0);
         CLUSTERS.start();
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
         DriverManager.registerDriver(new PhoenixTestDriver());
