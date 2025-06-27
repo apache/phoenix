@@ -91,6 +91,7 @@ import org.apache.phoenix.monitoring.MutationMetricQueue.MutationMetric;
 import org.apache.phoenix.monitoring.MutationMetricQueue.NoOpMutationMetricsQueue;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.monitoring.TableMetricsManager;
+import org.apache.phoenix.parse.UpsertStatement.OnDuplicateKeyType;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -804,7 +805,13 @@ public class MutationState implements SQLCloseable {
                 // TODO: use our ServerCache
                 for (Mutation mutation : rowMutations) {
                     if (onDupKeyBytes != null) {
-                        mutation.setAttribute(PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB, onDupKeyBytes);
+                        mutation.setAttribute(PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB,
+                                onDupKeyBytes);
+                        if (rowEntry.getValue().isUpdateOnly()) {
+                            mutation.setAttribute(
+                                    PhoenixIndexBuilderHelper.ATOMIC_OP_UPDATE_ONLY_ATTRIB,
+                                    PhoenixIndexBuilderHelper.ATOMIC_OP_UPDATE_ONLY_ATTRIB_VALUE);
+                        }
                     }
                     if (this.returnResult != null) {
                         if (this.returnResult == ReturnResult.NEW_ROW_ON_SUCCESS) {
@@ -2300,16 +2307,26 @@ public class MutationState implements SQLCloseable {
         @Nonnull
         private final RowTimestampColInfo rowTsColInfo;
         private byte[] onDupKeyBytes;
+        private OnDuplicateKeyType onDupKeyType;
         private long colValuesSize;
 
         public RowMutationState(@Nonnull Map<PColumn, byte[]> columnValues, long colValuesSize, int statementIndex,
                 @Nonnull RowTimestampColInfo rowTsColInfo, byte[] onDupKeyBytes) {
+            this(columnValues, colValuesSize, statementIndex, rowTsColInfo, onDupKeyBytes,
+                    OnDuplicateKeyType.NONE);
+        }
+
+        public RowMutationState(@Nonnull Map<PColumn, byte[]> columnValues, long colValuesSize,
+                                int statementIndex, @Nonnull RowTimestampColInfo rowTsColInfo,
+                                byte[] onDupKeyBytes,
+                                OnDuplicateKeyType onDupKeyType) {
             checkNotNull(columnValues);
             checkNotNull(rowTsColInfo);
             this.columnValues = columnValues;
             this.statementIndexes = new int[] { statementIndex };
             this.rowTsColInfo = rowTsColInfo;
             this.onDupKeyBytes = onDupKeyBytes;
+            this.onDupKeyType = onDupKeyType;
             this.colValuesSize = colValuesSize;
         }
 
@@ -2320,6 +2337,10 @@ public class MutationState implements SQLCloseable {
 
         byte[] getOnDupKeyBytes() {
             return onDupKeyBytes;
+        }
+
+        boolean isUpdateOnly() {
+            return onDupKeyType == OnDuplicateKeyType.UPDATE_ONLY;
         }
 
         public Map<PColumn, byte[]> getColumnValues() {
@@ -2357,6 +2378,9 @@ public class MutationState implements SQLCloseable {
             // Concatenate ON DUPLICATE KEY bytes to allow multiple
             // increments of the same row in the same commit batch.
             this.onDupKeyBytes = PhoenixIndexBuilderHelper.combineOnDupKey(this.onDupKeyBytes, newRow.onDupKeyBytes);
+            if (newRow.onDupKeyType == OnDuplicateKeyType.UPDATE_ONLY) {
+                this.onDupKeyType = OnDuplicateKeyType.UPDATE_ONLY;
+            }
             statementIndexes = joinSortedIntArrays(statementIndexes, newRow.getStatementIndexes());
             return true;
         }
