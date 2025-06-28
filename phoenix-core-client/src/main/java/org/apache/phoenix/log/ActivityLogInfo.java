@@ -34,7 +34,8 @@ public enum ActivityLogInfo {
     REQUEST_ID("r", LogLevel.INFO,PVarchar.INSTANCE),
     TABLE_NAME("n", LogLevel.INFO,PVarchar.INSTANCE),
     OP_NAME("o", LogLevel.INFO,PVarchar.INSTANCE),
-    OP_STMTS("#", LogLevel.INFO, PInteger.INSTANCE);
+    OP_STMTS("#", LogLevel.INFO, PInteger.INSTANCE),
+    EXPLAIN_PLAN("ep", LogLevel.INFO, PVarchar.INSTANCE);
 
     public final String shortName;
     public final LogLevel logLevel;
