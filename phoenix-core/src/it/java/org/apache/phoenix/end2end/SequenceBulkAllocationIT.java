@@ -56,6 +56,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
  * All tests are run with both a generic connection and a multi-tenant connection.
  * 
  */
+//Passing with HA Connection - No changes needed
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {

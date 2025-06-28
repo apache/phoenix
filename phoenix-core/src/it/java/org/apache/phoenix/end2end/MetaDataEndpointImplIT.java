@@ -1,5 +1,6 @@
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
@@ -17,6 +18,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -46,6 +48,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+//Failing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
     private final TableName catalogTable = TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
@@ -68,7 +71,7 @@ public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
         String leftChild = generateUniqueName();
         String rightChild = generateUniqueName();
         String leftGrandChild = generateUniqueName();
-        PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
+        PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String ddlFormat =
             "CREATE TABLE IF NOT EXISTS " + baseTable + "  (" + " PK2 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR "
                 + " CONSTRAINT NAME_PK PRIMARY KEY (PK2)" + " )";
@@ -105,8 +108,7 @@ public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
         String baseTable = generateUniqueName();
         String view = generateUniqueName();
         String childView = generateUniqueName();
-    
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String baseTableDDL = "CREATE TABLE IF NOT EXISTS " + baseTable + 
                     " (TENANT_ID VARCHAR NOT NULL, KEY_PREFIX CHAR(3) NOT NULL, "
                     + "V1 VARCHAR CONSTRAINT PK PRIMARY KEY(TENANT_ID, KEY_PREFIX)) "
@@ -137,8 +139,7 @@ public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
         String view = generateUniqueName();
         String childView = generateUniqueName();
         String tenantId = "TENANT";
-    
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String baseTableDDL = "CREATE TABLE IF NOT EXISTS " + baseTable + 
                     " (TENANT_ID VARCHAR NOT NULL, KEY_PREFIX CHAR(3) NOT NULL, "
                     + "V1 VARCHAR CONSTRAINT PK PRIMARY KEY(TENANT_ID, KEY_PREFIX)) "
@@ -151,7 +152,7 @@ public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(view1DDL);
     
             // Create a child view with primary key constraint owned by tenant
-            Properties tenantProps = new Properties();
+            Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
             try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
                 String childViewDDL = "CREATE VIEW IF NOT EXISTS " + childView 
@@ -171,7 +172,7 @@ public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
     public void testGettingOneChild() throws Exception {
         String baseTable = generateUniqueName();
         String leftChild = generateUniqueName();
-        PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
+        PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String ddlFormat =
             "CREATE TABLE IF NOT EXISTS " + baseTable + "  (" + " PK2 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR "
                 + " CONSTRAINT NAME_PK PRIMARY KEY (PK2)" + " )";
@@ -187,7 +188,7 @@ public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
     public void testDroppingADerivedColumn() throws Exception {
         String baseTable = generateUniqueName();
         String childView = generateUniqueName();
-        PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
+        PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String ddlFormat = "CREATE TABLE " + baseTable + " (A VARCHAR PRIMARY KEY, B VARCHAR, C VARCHAR)";
         conn.createStatement().execute(ddlFormat);
         conn.createStatement().execute("CREATE VIEW " + childView + " (D VARCHAR) AS SELECT * FROM " + baseTable);
@@ -202,7 +203,7 @@ public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
     @Test
     public void testUpdateCacheWithAlteringColumns() throws Exception {
         String tableName = generateUniqueName();
-        try (PhoenixConnection conn = DriverManager.getConnection(getUrl()).unwrap(
+        try (PhoenixConnection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(
                 PhoenixConnection.class)) {
             String ddlFormat =
                     "CREATE TABLE IF NOT EXISTS " + tableName + "  (" + " PK2 INTEGER NOT NULL, "
@@ -212,18 +213,18 @@ public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
                 conn.createStatement().execute("ALTER TABLE " + tableName + " ADD V3 integer");
                 PTable table = conn.getTable(tableName.toUpperCase());
                 assertColumnNamesEqual(table, "PK2", "V1", "V2", "V3");
-                
+
                 // Set the SCN to the timestamp when V3 column is added
                 Properties props = PropertiesUtil.deepCopy(conn.getClientInfo());
                 props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(table.getTimeStamp()));
-                
-                try (PhoenixConnection metaConnection = new PhoenixConnection(conn, 
+
+                try (PhoenixConnection metaConnection = new PhoenixConnection(conn,
                         conn.getQueryServices(), props)) {
                     // Force update the cache and check if V3 is present in the returned table result
                     table = metaConnection.getTableNoCache(tableName.toUpperCase());
                     assertColumnNamesEqual(table, "PK2", "V1", "V2", "V3");
-                }                              
-        }      
+                }
+        }
     }
 
 
@@ -231,7 +232,7 @@ public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
     public void testDroppingAColumn() throws Exception {
         String baseTable = generateUniqueName();
         String childView = generateUniqueName();
-        PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
+        PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String ddlFormat = "CREATE TABLE " + baseTable + " (A VARCHAR PRIMARY KEY, B VARCHAR, C VARCHAR)";
         conn.createStatement().execute(ddlFormat);
         conn.createStatement().execute("CREATE VIEW " + childView + " (D VARCHAR) AS SELECT * FROM " + baseTable);
@@ -246,7 +247,7 @@ public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
     public void testAlteringBaseColumns() throws Exception {
         String baseTable = generateUniqueName();
         String leftChild = generateUniqueName();
-        PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
+        PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String ddlFormat =
             "CREATE TABLE IF NOT EXISTS " + baseTable + "  (" + " PK2 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR "
                 + " CONSTRAINT NAME_PK PRIMARY KEY (PK2)" + " )";
@@ -273,7 +274,7 @@ public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
     public void testAddingAColumnWithADifferentDefinition() throws Exception {
         String baseTable = generateUniqueName();
         String view = generateUniqueName();
-        PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
+        PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String ddlFormat =
             "CREATE TABLE IF NOT EXISTS " + baseTable + "  (" + " PK2 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR "
                 + " CONSTRAINT NAME_PK PRIMARY KEY (PK2)" + " )";
@@ -319,7 +320,7 @@ public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
         String baseTable = generateUniqueName();
         String child = generateUniqueName();
         String grandChild = generateUniqueName();
-        PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
+        PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String ddlFormat =
             "CREATE TABLE IF NOT EXISTS " + baseTable + "  (" + " PK2 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR "
                 + " CONSTRAINT NAME_PK PRIMARY KEY (PK2)" + " )";
@@ -355,7 +356,7 @@ public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testWhereClause() throws Exception {
-        PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
+        PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String baseTableName = generateUniqueName();
         String childViewName = generateUniqueName();
         String grandChildViewName = generateUniqueName();

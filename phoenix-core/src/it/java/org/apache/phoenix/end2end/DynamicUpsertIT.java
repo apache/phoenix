@@ -46,7 +46,7 @@ import org.junit.experimental.categories.Category;
  * @since 1.3
  */
 
-
+//Passing with HA Connection - No changes needed
 @Category(ParallelStatsDisabledTest.class)
 public class DynamicUpsertIT extends ParallelStatsDisabledIT {
     private String tableName;

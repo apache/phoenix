@@ -28,6 +28,7 @@ import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.util.csv.CsvUpsertExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,7 +60,7 @@ public class CSVCommonsLoader {
                         .put('9', '\u0009')
                         .build();
 
-    private final PhoenixConnection conn;
+    private final PhoenixMonitoredConnection conn;
     private final String tableName;
     private final List<String> columns;
     private final boolean isStrict;
@@ -78,12 +79,12 @@ public class CSVCommonsLoader {
         SUPPLIED_BY_USER
     }
 
-    public CSVCommonsLoader(PhoenixConnection conn, String tableName,
-            List<String> columns, boolean isStrict) {
+    public CSVCommonsLoader(PhoenixMonitoredConnection conn, String tableName,
+                            List<String> columns, boolean isStrict) {
         this(conn, tableName, columns, isStrict, ',', '"', null, DEFAULT_ARRAY_ELEMENT_SEPARATOR);
     }
 
-    public CSVCommonsLoader(PhoenixConnection conn, String tableName,
+    public CSVCommonsLoader(PhoenixMonitoredConnection conn, String tableName,
             List<String> columns, boolean isStrict, char fieldDelimiter, char quoteCharacter,
             Character escapeCharacter, String arrayElementSeparator) {
         this.conn = conn;
@@ -255,12 +256,12 @@ public class CSVCommonsLoader {
 
     static class CsvUpsertListener implements UpsertExecutor.UpsertListener<CSVRecord> {
 
-        private final PhoenixConnection conn;
+        private final PhoenixMonitoredConnection conn;
         private final int upsertBatchSize;
         private long totalUpserts = 0L;
         private final boolean strict;
 
-        CsvUpsertListener(PhoenixConnection conn, int upsertBatchSize, boolean strict) {
+        CsvUpsertListener(PhoenixMonitoredConnection conn, int upsertBatchSize, boolean strict) {
             this.conn = conn;
             this.upsertBatchSize = upsertBatchSize;
             this.strict = strict;

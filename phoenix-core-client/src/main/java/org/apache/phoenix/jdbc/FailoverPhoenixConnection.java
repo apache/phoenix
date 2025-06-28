@@ -17,16 +17,28 @@
  */
 package org.apache.phoenix.jdbc;
 
+import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.phoenix.exception.FailoverSQLException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.monitoring.MetricType;
+import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.schema.PMetaData;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.io.Reader;
 import java.sql.Array;
 import java.sql.Blob;
 import java.sql.CallableStatement;
@@ -41,7 +53,9 @@ import java.sql.SQLXML;
 import java.sql.Savepoint;
 import java.sql.Statement;
 import java.sql.Struct;
+import java.text.Format;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Executor;
@@ -621,6 +635,88 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
     @Override
     public int getNetworkTimeout() throws SQLException {
         return wrapActionDuringFailover(() -> connection.getNetworkTimeout());
+    }
+
+    @Override
+    public ConnectionQueryServices getQueryServices() throws SQLException {
+        return wrapActionDuringFailover(() -> connection.getQueryServices());
+    }
+
+    @Override
+    public PTable getTable(PTableKey key) throws SQLException {
+        return wrapActionDuringFailover(() -> connection.getTable(key));
+    }
+
+    @Override
+    public PTable getTable(String name) throws SQLException {
+        return wrapActionDuringFailover(() -> connection.getTable(name));
+    }
+
+    @Override
+    public PTable getTableNoCache(String name) throws SQLException {
+        return wrapActionDuringFailover(() -> connection.getTableNoCache(name));
+    }
+
+    @Override
+    public Consistency getConsistency() throws SQLException {
+        return wrapActionDuringFailover(() -> connection.getConsistency());
+    }
+
+    @Override
+    @Nullable
+    public PName getTenantId() throws SQLException {
+        return wrapActionDuringFailover(() -> connection.getTenantId());
+    }
+
+    @Override
+    public MutationState getMutationState() throws SQLException {
+        return wrapActionDuringFailover(() -> connection.getMutationState());
+    }
+
+    @Override
+    public PMetaData getMetaDataCache() throws SQLException {
+        return wrapActionDuringFailover(() -> connection.getMetaDataCache());
+    }
+
+    @Override
+    public int getMutateBatchSize() throws SQLException {
+        return wrapActionDuringFailover(() -> connection.getMutateBatchSize());
+    }
+
+    @Override
+    public int executeStatements(Reader reader, List<Object> binds, PrintStream out) throws IOException, SQLException {
+        return wrapActionDuringFailover(() -> {
+            try {
+                return connection.executeStatements(reader,binds,out);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    @Override
+    public Format getFormatter(PDataType type) throws SQLException {
+        return wrapActionDuringFailover(() -> connection.getFormatter(type));
+    }
+
+    @Override
+    public void setRunningUpgrade(boolean isRunningUpgrade) throws SQLException {
+        wrapActionDuringFailover(() -> connection.setRunningUpgrade(isRunningUpgrade));
+    }
+
+    @Override
+    public PTable getTable(String tenantId, String fullTableName) throws SQLException {
+        return wrapActionDuringFailover(() -> connection.getTable(tenantId, fullTableName));
+    }
+
+    @Override
+    public PTable getTableNoCache(PName tenantId, String name) throws SQLException {
+        return wrapActionDuringFailover(() -> connection.getTableNoCache(tenantId, name));
+    }
+
+    @Override
+    public void setIsClosing(boolean imitateIsClosing) throws SQLException {
+        wrapActionDuringFailover(() -> connection.setIsClosing(imitateIsClosing));
     }
 
     /**

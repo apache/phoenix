@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
@@ -51,7 +52,7 @@ import java.util.UUID;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class IndexToolForDeleteBeforeRebuildIT extends ParallelStatsDisabledIT {
     private Connection conn;
@@ -85,8 +86,14 @@ public class IndexToolForDeleteBeforeRebuildIT extends ParallelStatsDisabledIT {
         clientProps.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(5));
         clientProps.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         clientProps.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.TRUE.toString());
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
-            new ReadOnlyProps(clientProps.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()),
+                    new ReadOnlyProps(clientProps.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
+                    new ReadOnlyProps(clientProps.entrySet().iterator()));
+        }
+
     }
 
     @Before
@@ -152,8 +159,8 @@ public class IndexToolForDeleteBeforeRebuildIT extends ParallelStatsDisabledIT {
         upsertRow(stmt, "tenantID1",11, "name11", 99911);
         conn.commit();
 
-        ConnectionQueryServices queryServices = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        PTable physicalTable = conn.unwrap(PhoenixConnection.class).getTable(globalIndexFullName);
+        ConnectionQueryServices queryServices = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
+        PTable physicalTable = conn.unwrap(PhoenixMonitoredConnection.class).getTable(globalIndexFullName);
         Table hIndexTable= queryServices.getTable(physicalTable.getPhysicalName().getBytes());
         int count = getUtility().countRows(hIndexTable);
         // Confirm index has rows.

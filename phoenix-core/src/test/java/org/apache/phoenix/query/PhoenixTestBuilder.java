@@ -19,6 +19,7 @@
 package org.apache.phoenix.query;
 
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Table;
@@ -49,6 +50,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHANGE_DETECTION_E
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
 /**
  * PhoenixTestBuilder is a utility class using a Builder pattern.
@@ -1118,7 +1120,7 @@ public class PhoenixTestBuilder {
                             tableKey =
                             new PTableKey(null, SchemaUtil.normalizeFullTableName(entityTableName));
                     setBaseTable(
-                            globalConnection.unwrap(PhoenixConnection.class).getTable(tableKey));
+                            globalConnection.unwrap(PhoenixMonitoredConnection.class).getTable(tableKey));
                 }
                 // Index on Table
                 if (tableIndexEnabled && !tableIndexCreated) {
@@ -1404,7 +1406,7 @@ public class PhoenixTestBuilder {
 
         // Connect options.
         public static class ConnectOptions {
-            Properties connectProps = new Properties();
+            Properties connectProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             boolean useGlobalConnectionOnly = false;
             boolean useTenantConnectionForGlobalView = false;
 

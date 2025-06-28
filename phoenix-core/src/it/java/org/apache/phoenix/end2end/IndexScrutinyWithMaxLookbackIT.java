@@ -54,7 +54,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-
+//Failing with HA Connection
 public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
 
     private static PreparedStatement upsertDataStmt;
@@ -82,7 +82,11 @@ public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
         props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
             Integer.toString(MAX_LOOKBACK));
         props.put("hbase.procedure.remote.dispatcher.delay.msec", "0");
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     @Before

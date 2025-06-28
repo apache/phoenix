@@ -27,8 +27,8 @@ import org.apache.phoenix.coprocessor.PhoenixMasterObserver;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -61,7 +61,7 @@ import static org.apache.phoenix.util.CDCUtil.CDC_STREAM_NAME_FORMAT;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-
+//Failing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class CDCStreamIT extends CDCBaseIT {
     private static RegionCoprocessorEnvironment TaskRegionEnvironment;
@@ -77,7 +77,11 @@ public class CDCStreamIT extends CDCBaseIT {
         props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
                 Long.toString(Long.MAX_VALUE));
         props.put("hbase.coprocessor.master.classes", PhoenixMasterObserver.class.getName());
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
         TaskRegionEnvironment =
                 getUtility()
                         .getRSForFirstRegionInTable(
@@ -532,7 +536,7 @@ public class CDCStreamIT extends CDCBaseIT {
 
     private String getStreamName(Connection conn, String tableName, String cdcName) throws SQLException {
         return String.format(CDC_STREAM_NAME_FORMAT, tableName, cdcName, CDCUtil.getCDCCreationTimestamp(
-                conn.unwrap(PhoenixConnection.class).getTableNoCache(tableName)));
+                conn.unwrap(PhoenixMonitoredConnection.class).getTableNoCache(tableName)));
     }
 
     private void assertStreamStatus(Connection conn, String tableName, String streamName,
@@ -547,9 +551,9 @@ public class CDCStreamIT extends CDCBaseIT {
     private void assertPartitionMetadata(Connection conn, String tableName, String cdcName)
             throws SQLException {
         String streamName = String.format(CDC_STREAM_NAME_FORMAT, tableName, cdcName,
-                CDCUtil.getCDCCreationTimestamp(conn.unwrap(PhoenixConnection.class).getTableNoCache(tableName)));
+                CDCUtil.getCDCCreationTimestamp(conn.unwrap(PhoenixMonitoredConnection.class).getTableNoCache(tableName)));
         List<HRegionLocation> tableRegions
-                = conn.unwrap(PhoenixConnection.class).getQueryServices().getAllTableRegions(tableName.getBytes());
+                = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAllTableRegions(tableName.getBytes());
         for (HRegionLocation tableRegion : tableRegions) {
             RegionInfo ri = tableRegion.getRegionInfo();
             PreparedStatement ps = conn.prepareStatement("SELECT * FROM " + SYSTEM_CDC_STREAM_NAME +

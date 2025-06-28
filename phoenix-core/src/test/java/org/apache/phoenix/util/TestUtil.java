@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.query.BaseTest.generateUniqueName;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
@@ -131,7 +132,9 @@ import org.apache.phoenix.filter.MultiKeyValueComparisonFilter;
 import org.apache.phoenix.filter.RowKeyComparisonFilter;
 import org.apache.phoenix.filter.SingleCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.SingleKeyValueComparisonFilter;
+import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
@@ -309,11 +312,20 @@ public class TestUtil {
     public static final String JOIN_SUPPLIER_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_SUPPLIER_TABLE;
     public static final String JOIN_COITEM_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_COITEM_TABLE;
     public static final String BINARY_NAME = "BinaryTable";
-
+    private static Properties props_for_HA;
+    static {
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            props_for_HA = HighAvailabilityTestingUtility.getHATestProperties();
+            props_for_HA.setProperty(PHOENIX_HA_GROUP_ATTR, "HA_GROUP_"+generateUniqueName());
+        }
+        else{
+            props_for_HA = new Properties();
+        }
+    };
     /**
      * Read-only properties used by all tests
      */
-    public static final Properties TEST_PROPERTIES = new Properties() {
+    public static final Properties TEST_PROPERTIES = new Properties(props_for_HA) {
         @Override
         public String put(Object key, Object value) {
             throw new UnsupportedOperationException();
@@ -880,9 +892,9 @@ public class TestUtil {
 
         // We simply write a marker row, request a major compaction, and then wait until the marker
         // row is gone
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PhoenixMonitoredConnection pconn = conn.unwrap(PhoenixMonitoredConnection.class);
         PTable table = pconn.getTable(new PTableKey(pconn.getTenantId(), tableName));
-        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        ConnectionQueryServices services = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
         MutationState mutationState = pconn.getMutationState();
         if (table.isTransactional()) {
             mutationState.startTransaction(table.getTransactionProvider());
@@ -950,7 +962,7 @@ public class TestUtil {
 
     public static void dumpTable(Connection conn, TableName tableName)
         throws SQLException, IOException {
-        ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        ConnectionQueryServices cqs = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
         Table table = cqs.getTable(tableName.getName());
         dumpTable(table);
     }
@@ -1262,7 +1274,7 @@ public class TestUtil {
 
     public static void addCoprocessor(Connection conn, String tableName, Class coprocessorClass) throws Exception {
         int priority = QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY + 100;
-        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        ConnectionQueryServices services = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
         TableDescriptor descriptor = services.getTableDescriptor(Bytes.toBytes(tableName));
         TableDescriptorBuilder descriptorBuilder = null;
 		if (!descriptor.getCoprocessorDescriptors().stream().map(CoprocessorDescriptor::getClassName)
@@ -1481,21 +1493,21 @@ public class TestUtil {
 
     public static ColumnFamilyDescriptor getColumnDescriptor(Connection conn, TableName tableName)
         throws SQLException, IOException {
-        Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+        Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin();
         TableDescriptor td = admin.getDescriptor(tableName);
         return td.getColumnFamilies()[0];
     }
 
     public static void assertRawRowCount(Connection conn, TableName table, int expectedRowCount)
         throws SQLException, IOException {
-        ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        ConnectionQueryServices cqs = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
         int count = TestUtil.getRawRowCount(cqs.getTable(table.getName()));
         assertEquals(expectedRowCount, count);
     }
 
     public static int getRawRowCount(Connection conn, TableName table)
             throws SQLException, IOException {
-        ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        ConnectionQueryServices cqs = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
         return TestUtil.getRawRowCount(cqs.getTable(table.getName()));
     }
 

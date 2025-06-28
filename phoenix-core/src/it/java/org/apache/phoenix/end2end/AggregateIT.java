@@ -38,7 +38,7 @@ import org.apache.phoenix.util.QueryBuilder;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class AggregateIT extends BaseAggregateIT {
 
@@ -82,7 +82,7 @@ public class AggregateIT extends BaseAggregateIT {
 
     @Test
     public void testGroupByCoerceExpressionBug3453() throws Exception {
-        final Connection conn = DriverManager.getConnection(getUrl());
+        final Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             //Type is INT
             String intTableName=generateUniqueName();
@@ -144,7 +144,7 @@ public class AggregateIT extends BaseAggregateIT {
     public void testNestedGroupedAggregationWithBigInt() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tableName = generateUniqueName();
-        try(Connection conn = DriverManager.getConnection(getUrl(), props);) {
+        try(Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String createQuery="CREATE TABLE "+tableName+" (a BIGINT NOT NULL,c BIGINT NOT NULL CONSTRAINT PK PRIMARY KEY (a, c))";
             String updateQuery="UPSERT INTO "+tableName+"(a,c) VALUES(4444444444444444444, 5555555555555555555)";
             String query="SELECT a FROM (SELECT a, c FROM "+tableName+" GROUP BY a, c) GROUP BY a, c";
@@ -195,7 +195,7 @@ public class AggregateIT extends BaseAggregateIT {
 
     @Override
     protected void testCountNullInNonEmptyKeyValueCF(int columnEncodedBytes) throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             //Type is INT
             String intTableName=generateUniqueName();
             String sql="create table " + intTableName + " (mykey integer not null primary key, A.COLA integer, B.COLB integer) "

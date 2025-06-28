@@ -33,12 +33,13 @@ import java.util.List;
 
 import static org.apache.phoenix.mapreduce.PhoenixTTLTool.DELETE_ALL_VIEWS;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MAPREDUCE_MULTI_INPUT_QUERY_BATCH_SIZE;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
-
 /**
  * Disabling this test as this works on TTL being set on View which is removed and will be added in future.
  * TODO:- To enable this test after re-enabling TTL for view for more info check :- PHOENIX-6978
  */
+//Failing with HA Connection
 @Ignore
 @Category(NeedsOwnMiniClusterTest.class)
 public class DefaultPhoenixMultiViewListProviderIT extends ParallelStatsDisabledIT {
@@ -93,7 +94,7 @@ public class DefaultPhoenixMultiViewListProviderIT extends ParallelStatsDisabled
                 Index1                 Index2
                 TenantView1,   TenantView2
         */
-        try (Connection globalConn = DriverManager.getConnection(url);
+        try (Connection globalConn = DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenant1Connection =
                      PhoenixMultiInputUtil.buildTenantConnection(url, tenant1);
              Connection tenant2Connection =
@@ -126,7 +127,7 @@ public class DefaultPhoenixMultiViewListProviderIT extends ParallelStatsDisabled
         Index1                 Index2            Index3                    Index4
             TenantView1,   TenantView2
         */
-        try (Connection globalConn = DriverManager.getConnection(url)) {
+        try (Connection globalConn = DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));) {
             globalConn.createStatement().execute(String.format(VIEW_DDL,
                     globalViewName2, baseTableFullName));
             globalConn.createStatement().execute(

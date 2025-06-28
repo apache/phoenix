@@ -31,7 +31,7 @@ import java.util.Properties;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.*;
-
+//Passing with HA Connection - No changes needed
 @Category(ParallelStatsDisabledTest.class)
 public class CountDistinctApproximateHyperLogLogIT extends ParallelStatsDisabledIT {
 	private String tableName;

@@ -17,12 +17,14 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.*;
 
 import java.sql.*;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.expression.function.MathPIFunction;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -30,12 +32,13 @@ import org.junit.experimental.categories.Category;
 /**
  * End to end tests for {@link MathPIFunction}
  */
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class MathPIFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testGetMathPIValue() throws Exception {
-        Connection conn  = DriverManager.getConnection(getUrl());
+        Connection conn  = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         ResultSet rs = conn.createStatement().executeQuery("SELECT PI()");
         assertTrue(rs.next());
         assertTrue(twoDoubleEquals(rs.getDouble(1), Math.PI));
@@ -44,7 +47,7 @@ public class MathPIFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testMathPIRoundTwoDecimal() throws Exception {
-        Connection conn  = DriverManager.getConnection(getUrl());
+        Connection conn  = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         ResultSet rs = conn.createStatement().executeQuery("SELECT ROUND(PI(), 2)");
         assertTrue(rs.next());
         assertTrue(twoDoubleEquals(rs.getDouble(1), 3.14));
@@ -53,7 +56,7 @@ public class MathPIFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testMathPIFunctionWithIncorrectFormat() throws Exception {
-        Connection conn  = DriverManager.getConnection(getUrl());
+        Connection conn  = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             conn.createStatement().executeQuery("SELECT PI(1)");
         } catch (SQLException e) {

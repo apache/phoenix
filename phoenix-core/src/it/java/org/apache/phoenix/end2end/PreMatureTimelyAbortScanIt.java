@@ -21,8 +21,10 @@ import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.iterate.ScanningResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -35,8 +37,11 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Map;
+import java.util.Properties;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.*;
+//Failing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class PreMatureTimelyAbortScanIt extends ParallelStatsDisabledIT {
     private static final Logger LOG = LoggerFactory.getLogger(PreMatureTimelyAbortScanIt.class);
@@ -47,7 +52,11 @@ public class PreMatureTimelyAbortScanIt extends ParallelStatsDisabledIT {
         props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
         props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
         props.put(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Integer.toString(0));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     private String getUniqueUrl() {
@@ -56,11 +65,11 @@ public class PreMatureTimelyAbortScanIt extends ParallelStatsDisabledIT {
 
     @Test
     public void testPreMatureScannerAbortForCount() throws Exception {
-
-        try (Connection conn = DriverManager.getConnection(getUniqueUrl())) {
+        System.out.println("get url pls check all" + url);
+        try (Connection conn = DriverManager.getConnection(getUniqueUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute("CREATE TABLE LONG_BUG (ID INTEGER PRIMARY KEY, AMOUNT DECIMAL) SALT_BUCKETS = 16 ");
         }
-        try (Connection conn = DriverManager.getConnection(getUniqueUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUniqueUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             for (int i = 0; i<100 ; i++) {
                 int amount = -50000 + i;
                 String s = "UPSERT INTO LONG_BUG (ID, AMOUNT) VALUES( " + i + ", " + amount + ")";
@@ -70,7 +79,7 @@ public class PreMatureTimelyAbortScanIt extends ParallelStatsDisabledIT {
         }
 
         try {
-            PhoenixConnection conn = DriverManager.getConnection(getUniqueUrl()).unwrap(PhoenixConnection.class);
+            PhoenixMonitoredConnection conn = DriverManager.getConnection(getUniqueUrl()).unwrap(PhoenixMonitoredConnection.class);
             ScanningResultIterator.setIsScannerClosedForcefully(true);
             ResultSet resultSet = conn.createStatement().executeQuery(
                     "SELECT COUNT(*) FROM LONG_BUG WHERE ID % 2 = 0");

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -28,10 +29,11 @@ import java.sql.ResultSet;
 
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.types.PhoenixArray;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
@@ -40,7 +42,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
     @Before
     public void initTables() throws Exception {
         tableName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String ddl = "CREATE TABLE " + tableName
                 + " (region_name VARCHAR PRIMARY KEY, string1 VARCHAR, string2 CHAR(50), delimiter1 VARCHAR, delimiter2 CHAR(20), nullstring1 VARCHAR, nullstring2 CHAR(20))";
             conn.createStatement().execute(ddl);
@@ -62,7 +64,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testStringToArrayFunction1() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
@@ -78,7 +80,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testStringToArrayFunction2() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
@@ -94,7 +96,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testStringToArrayFunction3() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
@@ -110,7 +112,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testStringToArrayFunction4() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
@@ -126,7 +128,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testStringToArrayFunction5() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
@@ -142,7 +144,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testStringToArrayFunction6() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
@@ -158,7 +160,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testStringToArrayFunction7() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
@@ -174,7 +176,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testStringToArrayFunction8() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
@@ -190,7 +192,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testStringToArrayFunction9() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
@@ -206,7 +208,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testStringToArrayFunction10() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
@@ -222,7 +224,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testStringToArrayFunction11() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
@@ -238,7 +240,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testStringToArrayFunction12() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
@@ -254,7 +256,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testStringToArrayFunctionWithNestedFunctions1() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
@@ -268,7 +270,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testStringToArrayFunctionWithNestedFunctions2() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
@@ -284,7 +286,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testStringToArrayFunctionWithNestedFunctions3() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
@@ -300,7 +302,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testStringToArrayFunctionWithUpsert1() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String tableName = generateUniqueName();
         String ddl =
@@ -325,7 +327,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testStringToArrayFunctionWithUpsert2() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String tableName = generateUniqueName();
         String ddl =
@@ -350,7 +352,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testStringToArrayFunctionWithUpsertSelect1() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String table1 = generateUniqueName();
         String ddl =
@@ -393,7 +395,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testStringToArrayFunctionWithUpsertSelect2() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String sourceTable = generateUniqueName();
 
@@ -439,7 +441,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testStringToArrayFunctionInWhere1() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery("SELECT region_name FROM " + tableName
@@ -452,7 +454,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testStringToArrayFunctionInWhere2() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery("SELECT region_name FROM " + tableName
@@ -465,7 +467,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testStringToArrayFunctionInWhere3() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery("SELECT region_name FROM " + tableName

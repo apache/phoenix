@@ -31,6 +31,7 @@ import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -46,11 +47,12 @@ import java.sql.Statement;
 import java.util.Collection;
 import java.util.List;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-
+//Failing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
@@ -129,7 +131,7 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
 
     private String createTestData(long rowTimestamp, int numRows) throws Exception {
         String tableName =  generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             // Create a test table.
             try (Statement stmt = conn.createStatement()) {
                 String ddl = "CREATE TABLE IF NOT EXISTS " + tableName +
@@ -161,7 +163,7 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
     public void testRowTimestampDefault() throws Exception {
         if (encoded || optimized) return;
         String tableName =  generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String ddl = "CREATE TABLE IF NOT EXISTS " + tableName
                     + " (PK INTEGER NOT NULL PRIMARY KEY, KV1 VARCHAR, KV2 VARCHAR)"
                     + this.tableDDLOptions;
@@ -217,7 +219,7 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testRowTimestampColumn() throws Exception {
         String tableName =  generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String ddl = "CREATE TABLE IF NOT EXISTS " + tableName
                     + " (PK1 INTEGER NOT NULL, PK2 DATE NOT NULL, KV1 VARCHAR, KV2 VARCHAR"
                     + " CONSTRAINT PK PRIMARY KEY(PK1, PK2 ROW_TIMESTAMP))" + this.tableDDLOptions;
@@ -258,7 +260,7 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
         long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis() + TS_OFFSET;
         String tableName = createTestData(rowTimestamp, NUM_ROWS);
         // With phoenix_row_timestamp function only in projection
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String sql = "SELECT PHOENIX_ROW_TIMESTAMP() FROM " + tableName +
                     " WHERE PHOENIX_ROW_TIMESTAMP() = PK2 ";
             try (Statement stmt = conn.createStatement()) {
@@ -269,7 +271,7 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
         }
 
         // With phoenix_row_timestamp function and additional columns in projection
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String sql = "SELECT PHOENIX_ROW_TIMESTAMP(), KV1 FROM " + tableName +
                     " WHERE PHOENIX_ROW_TIMESTAMP() = PK2 ";
             try (Statement stmt = conn.createStatement()) {
@@ -287,7 +289,7 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
     public void testRowTimestampFunctionOnlyWithLessThanPredicate() throws Exception {
         long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis() + TS_OFFSET;
         String tableName = createTestData(rowTimestamp, NUM_ROWS);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String sql = "SELECT PHOENIX_ROW_TIMESTAMP() FROM " + tableName +
                     " WHERE PHOENIX_ROW_TIMESTAMP() < PK2 ";
             try (Statement stmt = conn.createStatement()) {
@@ -310,7 +312,7 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
     public void testRowTimestampFunctionAndAdditionalColsWithLessThanPredicate() throws Exception {
         long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis() + TS_OFFSET;
         String tableName = createTestData(rowTimestamp, NUM_ROWS);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String sql = "SELECT PHOENIX_ROW_TIMESTAMP(), KV2 FROM " + tableName +
                     " WHERE PHOENIX_ROW_TIMESTAMP() < PK2 ";
             try (Statement stmt = conn.createStatement()) {
@@ -335,7 +337,7 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
     public void testRowTimestampFunctionOnlyWithGreaterThanPredicate() throws Exception {
         long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis() - TS_OFFSET;
         String tableName = createTestData(rowTimestamp, NUM_ROWS);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String sql = "SELECT PHOENIX_ROW_TIMESTAMP() FROM " + tableName +
                     " WHERE PHOENIX_ROW_TIMESTAMP() > PK2 ";
             try (Statement stmt = conn.createStatement()) {
@@ -358,7 +360,7 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
     public void testRowTimestampFunctionAndColsWithGreaterThanPredicate() throws Exception {
         long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis() - TS_OFFSET;
         String tableName = createTestData(rowTimestamp, NUM_ROWS);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String sql = "SELECT PHOENIX_ROW_TIMESTAMP(), KV1 FROM " + tableName +
                     " WHERE PHOENIX_ROW_TIMESTAMP() > PK2 ";
             try (Statement stmt = conn.createStatement()) {
@@ -383,7 +385,7 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
     public void testSimpleSelectColsWithPhoenixRowTimestampPredicate() throws Exception {
         long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis() - TS_OFFSET;
         String tableName = createTestData(rowTimestamp, NUM_ROWS);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String sql = "SELECT KV1 FROM " + tableName +
                     " WHERE PHOENIX_ROW_TIMESTAMP() > PK2 ";
             try (Statement stmt = conn.createStatement()) {
@@ -407,7 +409,7 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
     public void testSelectCountWithPhoenixRowTimestampPredicate() throws Exception {
         long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis() - TS_OFFSET;
         String tableName = createTestData(rowTimestamp, NUM_ROWS);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String sql = "SELECT COUNT(*) FROM " + tableName +
                     " WHERE PHOENIX_ROW_TIMESTAMP() > PK2 ";
             try (Statement stmt = conn.createStatement()) {
@@ -427,7 +429,7 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
     public void testSelectWithMultiplePredicates() throws Exception {
         long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis() - TS_OFFSET;
         String tableName = createTestData(rowTimestamp, NUM_ROWS);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String sql = "SELECT COUNT(*) FROM " + tableName +
                     " WHERE PHOENIX_ROW_TIMESTAMP() > PK2 AND KV1 = 'KV1_1'";
             try (Statement stmt = conn.createStatement()) {
@@ -448,7 +450,7 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
     public void testTimestampComparePredicate() throws Exception {
         long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis() - TS_OFFSET;
         String tableName = createTestData(rowTimestamp, NUM_ROWS);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             try (Statement stmt = conn.createStatement()) {
                 String sql = "SELECT COUNT(*) FROM " + tableName +
                         " WHERE ((PHOENIX_ROW_TIMESTAMP() > PK2) AND " +
@@ -486,7 +488,7 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
         }
         long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis() - TS_OFFSET;
         String tableName = createTestData(rowTimestamp, NUM_ROWS);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             try (Statement stmt = conn.createStatement()) {
                 String sql = "SELECT PHOENIX_ROW_TIMESTAMP(), PK1, COUNT(*) FROM " + tableName +
                         " WHERE ((PHOENIX_ROW_TIMESTAMP() > PK2) AND " +
@@ -504,7 +506,7 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testPhoenixRowTimestampWithWildcard() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String dataTableName = generateUniqueName();
             conn.createStatement().execute("create table " + dataTableName +
                     " (pk1 integer not null primary key, x.v1 float, y.v2 float, z.v3 float)" + this.tableDDLOptions);

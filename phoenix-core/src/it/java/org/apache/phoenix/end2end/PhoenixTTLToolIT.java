@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import org.apache.hadoop.conf.Configuration;
@@ -34,9 +35,7 @@ import org.apache.phoenix.mapreduce.PhoenixTTLTool;
 import org.apache.phoenix.mapreduce.util.PhoenixMultiInputUtil;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TestUtil;
+import org.apache.phoenix.util.*;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -63,7 +62,6 @@ import org.apache.phoenix.mapreduce.util.PhoenixMultiInputUtil;
 import org.apache.phoenix.query.ConfigurationFactory;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-import org.apache.phoenix.util.InstanceResolver;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -75,6 +73,7 @@ import org.junit.experimental.categories.Category;
  * Disabling this test as this works on TTL being set on View which is removed and will be added in future.
  * TODO:- To enable this test after re-enabling TTL for view for more info check :- PHOENIX-6978
  */
+//Failing with HA Connection
 @Ignore
 @Category(NeedsOwnMiniClusterTest.class)
 public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
@@ -85,8 +84,11 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
         props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
         props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
         props.put(QueryServices.PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED, Boolean.toString(true));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
         InstanceResolver.clearSingletons();
         // Make sure the ConnectionInfo in the tool doesn't try to pull a default Configuration
         InstanceResolver.getSingleton(ConfigurationFactory.class, new ConfigurationFactory() {
@@ -123,7 +125,7 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
 
     private void verifyNumberOfRowsFromHBaseLevel(String tableName, String regrex, int expectedRows)
             throws Exception {
-        try (Table table = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES)
+        try (Table table = driver.getConnectionQueryServices(getActiveUrl(), TEST_PROPERTIES)
                 .getTable(SchemaUtil.getTableNameAsBytes(
                         SchemaUtil.getSchemaNameFromFullName(tableName),
                         SchemaUtil.getTableNameFromFullName(tableName)))) {
@@ -190,7 +192,7 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
         String tenantView2 = schema + "." + generateUniqueName();
         String indexTable = "_IDX_" + baseTableFullName;
 
-        try (Connection globalConn = DriverManager.getConnection(getUrl());
+        try (Connection globalConn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenant1Connection =
                      PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
              Connection tenant2Connection =

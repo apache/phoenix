@@ -55,7 +55,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.DeleteCompiler;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.end2end.index.IndexTestUtil;
-import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.DeleteStatement;
 import org.apache.phoenix.parse.SQLParser;
@@ -68,7 +68,7 @@ import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class DeleteIT extends ParallelStatsDisabledIT {
@@ -115,7 +115,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
     }
     
     private void testDeleteFilter(boolean autoCommit) throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS,
             allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -145,7 +145,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
     }
 
     private void testDeleteByFilterAndRow(boolean autoCommit) throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS,
             allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -213,7 +213,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
     }
 
     private void testDeleteRange(boolean autoCommit, boolean createIndex, boolean local) throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS,
             allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -347,7 +347,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
     private void testDeleteAllFromTableWithIndex(boolean autoCommit, boolean isSalted, boolean localIndex) throws Exception {
         Connection con = null;
         try {
-            Properties props = new Properties();
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS,
                 allowServerSideMutations);
             con = DriverManager.getConnection(getUrl(), props);
@@ -442,7 +442,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
         Connection con = null;
         try {
             boolean autoCommit = false;
-            Properties props = new Properties();
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS,
                 allowServerSideMutations);
             con = DriverManager.getConnection(getUrl(), props);
@@ -520,7 +520,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
         Connection con = null;
         try {
             boolean autoCommit = false;
-            Properties props = new Properties();
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS,
                 allowServerSideMutations);
             con = DriverManager.getConnection(getUrl(), props);
@@ -646,7 +646,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
     private void testDeleteAllFromTable(boolean autoCommit) throws SQLException {
         Connection con = null;
         try {
-            Properties props = new Properties();
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS,
                 allowServerSideMutations);
             con = DriverManager.getConnection(getUrl(), props);
@@ -710,7 +710,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
     }
     
     private void testDeleteForTableWithRowTimestampCol(boolean autoCommit, String tableName) throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS,
             allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -797,7 +797,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
                 + "CREATE INDEX IF NOT EXISTS index_column_varchar_id ON " + tableName + "(varchar_id);"
                 + "CREATE INDEX IF NOT EXISTS index_column_double_id ON " + tableName + "(double_id);" + "UPSERT INTO "
                 + tableName + " VALUES (9000000,0.5,'Sample text extra');" ;
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS, allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(true);
@@ -821,7 +821,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
 
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " (pk1 DECIMAL NOT NULL, v1 VARCHAR CONSTRAINT PK PRIMARY KEY (pk1))";
         int numRecords = 1010;
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS,
             allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -857,7 +857,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
                         + " (pk1 DECIMAL NOT NULL, v1 VARCHAR, v2 VARCHAR CONSTRAINT PK PRIMARY KEY (pk1))";
         String idx1 = "CREATE INDEX " + indexName1 + " ON " + tableName + "(v1)";
         String idx2 = "CREATE INDEX " + indexName2 + " ON " + tableName + "(v1, v2)";
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS,
             allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -1072,7 +1072,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
                     statement.execute(indexDdl1);
                 }
                 if (useOldCoproc) {
-                    Admin admin = ((PhoenixConnection) conn).getQueryServices().getAdmin();
+                    Admin admin = ((PhoenixMonitoredConnection) conn).getQueryServices().getAdmin();
                     IndexTestUtil.downgradeCoprocs(tableName, indexName, admin);
                 }
 

@@ -27,6 +27,7 @@ import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.RowKeyOrderedAggregateResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.schema.PIndexState;
@@ -84,6 +85,7 @@ import static org.junit.Assert.assertTrue;
 //                 <table>.getTableName().getString().equals("__CDC__N000002")) {
 //          "".isEmpty();
 //      }
+//Passing with HA Connection
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
 public class CDCQueryIT extends CDCBaseIT {
@@ -131,7 +133,11 @@ public class CDCQueryIT extends CDCBaseIT {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
                 Integer.toString(MAX_LOOKBACK_AGE));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
     @Before
     public void beforeTest(){
@@ -820,7 +826,7 @@ public class CDCQueryIT extends CDCBaseIT {
             // Check CDC index is active but empty
             String indexTableFullName = SchemaUtil.getTableName(schemaName,
                     CDCUtil.getCDCIndexName(cdcName));
-            PTable indexTable = ((PhoenixConnection) conn).getTableNoCache(indexTableFullName);
+            PTable indexTable = ((PhoenixMonitoredConnection) conn).getTableNoCache(indexTableFullName);
             assertEquals(indexTable.getIndexState(), PIndexState.ACTIVE);
             TestUtil.assertRawRowCount(conn,
                     TableName.valueOf(indexTable.getPhysicalName().getString()),0);
@@ -897,7 +903,7 @@ public class CDCQueryIT extends CDCBaseIT {
                     tableFullName, COMMIT_SUCCESS, null, 0);
             String indexTableFullName = SchemaUtil.getTableName(schemaName,
                     CDCUtil.getCDCIndexName(cdcName));
-            PTable indexTable = ((PhoenixConnection) conn).getTableNoCache(indexTableFullName);
+            PTable indexTable = ((PhoenixMonitoredConnection) conn).getTableNoCache(indexTableFullName);
             String indexTablePhysicalName = indexTable.getPhysicalName().toString();
             int expectedRawRowCount = TestUtil.getRawRowCount(conn,
                     TableName.valueOf(indexTablePhysicalName));

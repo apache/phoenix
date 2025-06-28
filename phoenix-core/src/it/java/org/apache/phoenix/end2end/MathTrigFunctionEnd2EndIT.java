@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.closeStmtAndConn;
 import static org.junit.Assert.assertTrue;
 
@@ -28,6 +29,7 @@ import java.sql.ResultSet;
 import org.apache.phoenix.expression.function.CosFunction;
 import org.apache.phoenix.expression.function.SinFunction;
 import org.apache.phoenix.expression.function.TanFunction;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -38,7 +40,7 @@ import org.junit.experimental.categories.Category;
  * {@link org.apache.phoenix.expression.function.SinFunction}
  * {@link org.apache.phoenix.expression.function.TanFunction}
  */
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class MathTrigFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
@@ -52,7 +54,7 @@ public class MathTrigFunctionEnd2EndIT extends ParallelStatsDisabledIT {
         tableName = generateUniqueName();
 
         try {
-            conn = DriverManager.getConnection(getUrl());
+            conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
             String ddl;
             ddl =
                     "CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY, doub DOUBLE)";
@@ -88,7 +90,7 @@ public class MathTrigFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     @Test
     public void test() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES));
         for (double d : new double[] { 0.0, 1.0, -1.0, 123.1234, -123.1234 }) {
             testNumberSpec(conn, d, tableName);
         }

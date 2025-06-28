@@ -37,7 +37,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 
-
+//Passing with HA Connection - No changes needed
 @Category(ParallelStatsDisabledTest.class)
 public class CustomEntityDataIT extends ParallelStatsDisabledIT {
     

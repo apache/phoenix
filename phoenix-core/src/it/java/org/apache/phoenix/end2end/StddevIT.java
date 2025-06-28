@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -28,9 +29,10 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class StddevIT extends ParallelStatsDisabledIT {
 
@@ -40,8 +42,7 @@ public class StddevIT extends ParallelStatsDisabledIT {
         String tableName = initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
 
         String query = "SELECT STDDEV_POP(A_INTEGER) FROM " + tableName;
-
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -61,8 +62,7 @@ public class StddevIT extends ParallelStatsDisabledIT {
         String tableName = initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
 
         String query = "SELECT STDDEV_SAMP(x_decimal) FROM " + tableName;
-
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -82,8 +82,7 @@ public class StddevIT extends ParallelStatsDisabledIT {
         String tableName = initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
 
         String query = "SELECT STDDEV_POP(x_decimal) FROM " + tableName;
-
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -103,8 +102,7 @@ public class StddevIT extends ParallelStatsDisabledIT {
         String tableName = initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
 
         String query = "SELECT STDDEV_SAMP(x_decimal) FROM " + tableName;
-
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();

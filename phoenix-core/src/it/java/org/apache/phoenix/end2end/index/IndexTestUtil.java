@@ -62,6 +62,7 @@ import org.apache.phoenix.index.GlobalIndexChecker;
 import org.apache.phoenix.index.PhoenixIndexBuilder;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -294,8 +295,8 @@ public class IndexTestUtil {
 
     public static void assertRowsForEmptyColValue(Connection conn, String tableName,
             byte[] emptyValue) throws SQLException, IOException {
-        ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        PTable pTable = conn.unwrap(PhoenixConnection.class).getTable(tableName);
+        ConnectionQueryServices cqs = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
+        PTable pTable = conn.unwrap(PhoenixMonitoredConnection.class).getTable(tableName);
         Table hTable = cqs.getTable(pTable.getPhysicalName().getBytes());
 
         byte[] emptyKeyValueCF = SchemaUtil.getEmptyColumnFamily(pTable);

@@ -30,6 +30,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
@@ -38,6 +39,7 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.apache.phoenix.util.UpgradeUtil;
@@ -67,9 +69,10 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TIMEOUT_DURING_UPGRADE_MS;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
-
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class MoveTTLDuringUpgradeIT extends ParallelStatsDisabledIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(MoveTTLDuringUpgradeIT.class);
@@ -79,7 +82,7 @@ public class MoveTTLDuringUpgradeIT extends ParallelStatsDisabledIT {
         String schema = "S_" + generateUniqueName();
         Admin admin = getUtility().getAdmin();
         Map<String, Integer> tableTTLMap = createMultiHBaseTablesAndEquivalentInSYSCAT(schema, admin);
-        try (PhoenixConnection conn = getConnection(false, null).unwrap(PhoenixConnection.class);
+        try (PhoenixMonitoredConnection conn = getConnection(false, null).unwrap(PhoenixMonitoredConnection.class);
              Connection metaConn = getConnection(false, null, false, false)){
             PhoenixConnection phxMetaConn = metaConn.unwrap(PhoenixConnection.class);
             phxMetaConn.setRunningUpgrade(true);
@@ -116,7 +119,7 @@ public class MoveTTLDuringUpgradeIT extends ParallelStatsDisabledIT {
                 if (ttlInSyscat == TTL_DEFINED_IN_TABLE_DESCRIPTOR) {
                     assertEquals(ttl, columnFamilies[0].getTimeToLive());
                     assertEquals(new LiteralTTLExpression(TTL_DEFINED_IN_TABLE_DESCRIPTOR),
-                            phxMetaConn.unwrap(PhoenixConnection.class).getTableNoCache(
+                            phxMetaConn.unwrap(PhoenixMonitoredConnection.class).getTableNoCache(
                                     null,
                                             SchemaUtil.getTableName(Bytes.toBytes(schema),
                                                     Bytes.toBytes(table))).getTTLExpression());
@@ -190,7 +193,7 @@ public class MoveTTLDuringUpgradeIT extends ParallelStatsDisabledIT {
             checkNotNull(tenantId);
             return createTenantConnection(tenantId);
         }
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         if (isNamespaceMappingEnabled){
             props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
         }
@@ -204,7 +207,7 @@ public class MoveTTLDuringUpgradeIT extends ParallelStatsDisabledIT {
     }
 
     private Connection createTenantConnection(String tenantId) throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         return DriverManager.getConnection(getUrl(), props);
     }

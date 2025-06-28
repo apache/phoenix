@@ -720,7 +720,7 @@ public class HighAvailabilityGroup {
         return info;
     }
 
-    Properties getProperties() {
+    public Properties getProperties() {
         return properties;
     }
 
@@ -737,7 +737,7 @@ public class HighAvailabilityGroup {
      * The lifecycle management is confined to this class because an HA group is a shared resource.
      * Someone calling close on this would make it unusable, since the state would become closed.
      */
-    void close() {
+    public void close() {
         roleManagerExecutor.shutdownNow();
         try {
             // TODO: Parameterize and set in future work item for pluggable

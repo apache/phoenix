@@ -415,7 +415,7 @@ public class PhoenixRuntime {
      * @throws SQLException
      */
     public static int executeStatements(Connection conn, Reader reader, List<Object> binds) throws IOException,SQLException {
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PhoenixMonitoredConnection pconn = conn.unwrap(PhoenixMonitoredConnection.class);
         // Turn auto commit to true when running scripts in case there's DML
         pconn.setAutoCommit(true);
         return pconn.executeStatements(reader, binds, System.out);
@@ -489,7 +489,7 @@ public class PhoenixRuntime {
     }
 
     public static PTable getTableNoCache(Connection conn, String name) throws SQLException {
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PhoenixMonitoredConnection pconn = conn.unwrap(PhoenixMonitoredConnection.class);
         return pconn.getTableNoCache(name);
     }
     
@@ -507,7 +507,7 @@ public class PhoenixRuntime {
      * @throws SQLException
      */
     public static PTable getTable(Connection conn, String name) throws SQLException {
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PhoenixMonitoredConnection pconn = conn.unwrap(PhoenixMonitoredConnection.class);
         return pconn.getTable(name);
     }
 

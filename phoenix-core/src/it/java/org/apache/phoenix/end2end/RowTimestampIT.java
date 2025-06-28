@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -45,12 +46,13 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class RowTimestampIT extends ParallelStatsDisabledIT {
@@ -89,13 +91,13 @@ public class RowTimestampIT extends ParallelStatsDisabledIT {
     private void upsertingRowTimestampColSpecified(String type) throws Exception {
         String tableName = generateUniqueName();
         String indexName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement()
                     .execute("CREATE TABLE IF NOT EXISTS " + tableName
                             + " (PK1 VARCHAR NOT NULL, PK2 " + type + " NOT NULL, KV1 VARCHAR, KV2 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 "
                             + sortOrder + " ROW_TIMESTAMP)) " + tableDDLOptions);
         }
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute("CREATE INDEX IF NOT EXISTS " + indexName + " ON  "
                     + tableName + "  (PK2, KV1) INCLUDE (KV2)");
             if (mutable) {
@@ -113,9 +115,9 @@ public class RowTimestampIT extends ParallelStatsDisabledIT {
         Thread.sleep(1000);
         long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis();
         Date rowTimestampDate = new Date(rowTimestamp);
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         long scn = rowTimestamp-500;
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             // The timestamp of the put will be the value of the row_timestamp column.
             PreparedStatement stmt =
                     conn.prepareStatement(
@@ -219,13 +221,13 @@ public class RowTimestampIT extends ParallelStatsDisabledIT {
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
         String tableName = generateUniqueName();
         String indexName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement()
                     .execute("CREATE TABLE IF NOT EXISTS " + tableName
                             + " (PK1 VARCHAR NOT NULL, PK2 " + type + " NOT NULL, KV1 VARCHAR, KV2 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 "
                             + sortOrder + " ROW_TIMESTAMP)) " + tableDDLOptions);
         }
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute("CREATE INDEX IF NOT EXISTS " + indexName + " ON  "
                     + tableName + "  (PK2, KV1) INCLUDE (KV2)");
             if (mutable) {
@@ -240,7 +242,7 @@ public class RowTimestampIT extends ParallelStatsDisabledIT {
                 throw e;
             }
         }
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             // Upsert values where row_timestamp column PK2 is not set and the column names are
             // specified
             // This should upsert data with the value for PK2 as the s
@@ -254,7 +256,7 @@ public class RowTimestampIT extends ParallelStatsDisabledIT {
             conn.commit();
         }
         long endTime = EnvironmentEdgeManager.currentTimeMillis();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             // Now query for data that was upserted above. If the row key was generated correctly
             // then we should be able to see
             // the data in this query.
@@ -312,13 +314,13 @@ public class RowTimestampIT extends ParallelStatsDisabledIT {
     @Test
     public void testComparisonOperatorsOnRowTimestampCol() throws Exception {
         String tableName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement()
                     .execute("CREATE TABLE IF NOT EXISTS " + tableName
                             + " (PK1 VARCHAR NOT NULL, PK2 DATE NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 "
                             + sortOrder + " ROW_TIMESTAMP)) " + tableDDLOptions);
         }
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String upsert = "UPSERT INTO " + tableName + " VALUES (?, ?, ?)";
             PreparedStatement stmt = conn.prepareStatement(upsert);
             stmt.setString(1, "a");
@@ -339,7 +341,7 @@ public class RowTimestampIT extends ParallelStatsDisabledIT {
             stmt.executeUpdate();
             conn.commit();
         }
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             assertNumRecords(3, "SELECT count(*) from " + tableName + " WHERE PK2 > ?", conn,
                 new Date(10));
             assertNumRecords(1, "SELECT count(*) from " + tableName + " WHERE PK2 < ? AND PK2 > ?",
@@ -372,12 +374,12 @@ public class RowTimestampIT extends ParallelStatsDisabledIT {
     @Test
     public void testDisallowNegativeValuesForRowTsColumn() throws Exception {
         String tableName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement()
                     .execute("CREATE TABLE " + tableName + " (PK1 DATE NOT NULL PRIMARY KEY "
                             + sortOrder + " ROW_TIMESTAMP, KV1 VARCHAR) " + tableDDLOptions);
         }
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             Date d = new Date(-100);
             PreparedStatement stmt =
                     conn.prepareStatement(

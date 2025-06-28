@@ -45,7 +45,7 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
 
@@ -74,7 +74,7 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void coalesceWithSumExplicitLong() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + "("
                 + "    ID BIGINT NOT NULL, "
@@ -98,7 +98,7 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void coalesceWithSumImplicitLong() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + "("
                 + "    ID BIGINT NOT NULL, "
@@ -122,7 +122,7 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void coalesceWithSecondParamAsExpression() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + "("
                 + "    ID BIGINT NOT NULL, "
@@ -146,7 +146,7 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void nonTypedSecondParameterLong() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE " + tableName + "("
@@ -171,7 +171,7 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void nonTypedSecondParameterUnsignedDataTypes() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + "("
                 + "    ID BIGINT NOT NULL, "
@@ -196,7 +196,7 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testWithNthValueAggregationFunction() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE " + tableName + "("
@@ -228,7 +228,7 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void wrongDataTypeOfSecondParameter() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE " + tableName + "("
@@ -255,7 +255,7 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testImplicitSecondArgCastingException() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE " + tableName + "("
@@ -284,7 +284,7 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testImplicitSecondArgCasting() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE " + tableName + "("

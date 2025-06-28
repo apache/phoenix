@@ -22,7 +22,7 @@ import java.util.Collection;
 
 import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
-
+//Passing with HA Connection - No changes needed
 @Category(NeedsOwnMiniClusterTest.class)
 public class SetPropertyOnEncodedTableIT extends SetPropertyIT {
     public SetPropertyOnEncodedTableIT(boolean columnEncoded) {

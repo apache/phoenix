@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -32,15 +33,16 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
+//Failing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class RowKeyBytesStringFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void getRowKeyBytesAndVerify() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             int[] values = {3,7,9,158,5};
             String tableName = generateUniqueName();
             String ddl =

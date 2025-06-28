@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.replication.ReplicationPeerConfig;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,6 +45,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.Executors;
@@ -96,10 +98,14 @@ public class HighAvailabilityTestingUtility {
         static final String PRINCIPAL = "USER_FOO";
 
         public HBaseTestingUtilityPair() {
+            this(new ReadOnlyProps());
+        }
+
+        public HBaseTestingUtilityPair(ReadOnlyProps overrideProps) {
             Configuration conf1 = hbaseCluster1.getConfiguration();
             Configuration conf2 = hbaseCluster2.getConfiguration();
-            setUpDefaultHBaseConfig(conf1);
-            setUpDefaultHBaseConfig(conf2);
+            setUpDefaultHBaseConfig(conf1, overrideProps);
+            setUpDefaultHBaseConfig(conf2, overrideProps);
         }
 
         /**
@@ -653,7 +659,7 @@ public class HighAvailabilityTestingUtility {
         }
 
         /** Sets up the default HBase configuration for Phoenix HA testing. */
-        private static void setUpDefaultHBaseConfig(Configuration conf) {
+        private static void setUpDefaultHBaseConfig(Configuration conf, ReadOnlyProps overrideProps) {
             // Set Phoenix HA timeout for ZK client to be a smaller number
             conf.setInt(PHOENIX_HA_ZK_CONNECTION_TIMEOUT_MS_KEY, 1000);
             conf.setInt(PHOENIX_HA_ZK_SESSION_TIMEOUT_MS_KEY, 1000);
@@ -707,6 +713,10 @@ public class HighAvailabilityTestingUtility {
             conf.set(INDEX_COMMITTER_CONF_KEY,
                     TestTrackingParallelWriterIndexCommitter.class.getName());
 
+            // override any defaults based on overrideProps
+            for (Map.Entry<String,String> entry : overrideProps) {
+                conf.set(entry.getKey(), entry.getValue());
+            }
         }
     }
 

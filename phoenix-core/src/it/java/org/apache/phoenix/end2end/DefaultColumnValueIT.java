@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -37,11 +38,12 @@ import java.text.DecimalFormatSymbols;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
     private String sharedTable1;
@@ -64,7 +66,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
                 "test1 INTEGER, " +
                 "CONSTRAINT NAME_PK PRIMARY KEY (pk1, pk2, pk3))";
 
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
         conn.createStatement().execute("ALTER TABLE " + sharedTable1 + 
                 " ADD test2 INTEGER DEFAULT 5, est3 INTEGER");
@@ -115,7 +117,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
                 "test3 INTEGER, " +
                 "CONSTRAINT NAME_PK PRIMARY KEY (pk1, pk2, pk3))";
 
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
         conn.createStatement().execute("CREATE VIEW " + sharedTable2 + 
                 "(pk4 INTEGER NOT NULL DEFAULT 20 PRIMARY KEY, test4 VARCHAR DEFAULT 'foo') " +
@@ -148,7 +150,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
                 "test3 INTEGER, " +
                 "CONSTRAINT NAME_PK PRIMARY KEY (pk1, pk2, pk3))";
 
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
 
         String dml = "UPSERT INTO " + sharedTable1 + " VALUES (1, 2)";
@@ -225,7 +227,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
                 "test4 INTEGER, " +
                 "CONSTRAINT NAME_PK PRIMARY KEY (pk1, pk2, pk3))";
 
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
 
         String dml = "UPSERT INTO " + table + " VALUES (1)";
@@ -276,7 +278,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
                 "CONSTRAINT NAME_PK PRIMARY KEY (pk1, pk2, pk3))"
                 + "IMMUTABLE_ROWS=true";
 
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
 
         String dml = "UPSERT INTO " + table + " VALUES (1)";
@@ -321,7 +323,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
                 "mid INTEGER, " +
                 "def INTEGER DEFAULT 10)";
 
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
 
         String dml = "UPSERT INTO " + table + " VALUES (1, 10, null)";
@@ -349,7 +351,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
                 "test3 INTEGER, " +
                 "CONSTRAINT NAME_PK PRIMARY KEY (pk1, pk2, pk3))";
 
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
 
         String dml = "UPSERT INTO " + sharedTable1 + " VALUES (1, 2)";
@@ -366,7 +368,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
         assertFalse(rs.next());
 
         conn.close();
-        Connection conn2 = DriverManager.getConnection(getUrl());
+        Connection conn2 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         rs = conn2.createStatement()
                 .executeQuery("SELECT pk3, test2 FROM " + sharedTable1 + " WHERE pk1 = 1");
@@ -386,7 +388,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
                 "test1 INTEGER, " +
                 "CONSTRAINT NAME_PK PRIMARY KEY (pk1, pk2, pk3))";
 
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
 
         String dml = "UPSERT INTO " + table + " VALUES (1)";
@@ -444,7 +446,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
                 + "c2 INTEGER DEFAULT 50,"
                 + "c3 INTEGER)";
 
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
 
         String dml = "UPSERT INTO " + table + " VALUES (1)";
@@ -545,7 +547,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
     }
 
     private void testDefaultAllDataTypes(String table, String ddl) throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
 
         String dml = "UPSERT INTO " + table + " VALUES (1)";
@@ -617,7 +619,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
     }
 
     private void verifyDefaultExpression(String table, String ddl) throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
 
         String dml = "UPSERT INTO " + table + " VALUES (1)";
@@ -639,7 +641,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDefaultUpsertSelectPrimaryKey() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String selectTable = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + selectTable + " ("
                 + "pk INTEGER PRIMARY KEY)";
@@ -778,7 +780,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
     }
 
     private void verifyArrays(String table, String ddl) throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO " + table + " VALUES (1)";
         conn.createStatement().execute(dml);
@@ -863,7 +865,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
                 + "c3 VARCHAR[5] DEFAULT ARRAY['ABCD', 'XY', NULL]"
                 + ")";
 
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO " + table + " VALUES (1)";
         conn.createStatement().execute(dml);
@@ -889,7 +891,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
                 + "c3 INTEGER[5] DEFAULT ARRAY[1, 2, NULL]"
                 + ")";
 
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO " + table + " VALUES (1)";
         conn.createStatement().execute(dml);
@@ -912,7 +914,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
                 "pk INTEGER PRIMARY KEY, " +
                 "def INTEGER DEFAULT NULL)";
 
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
 
         String dml = "UPSERT INTO " + table + " VALUES (1)";
@@ -936,7 +938,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
                 + "c1 INTEGER,"
                 + "c2 INTEGER DEFAULT 100)";
 
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
         conn.commit();
 
@@ -964,7 +966,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
                 + "c1 INTEGER,"
                 + "c2 INTEGER DEFAULT 100)";
 
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
         conn.commit();
 
@@ -995,7 +997,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
                 + "c1 INTEGER,"
                 + "c2 INTEGER DEFAULT 100)";
 
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
         conn.commit();
 
@@ -1026,7 +1028,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
                 + "c1 INTEGER,"
                 + "c2 INTEGER DEFAULT 100)";
 
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
         conn.commit();
 
@@ -1058,7 +1060,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
                 + "c6 INTEGER DEFAULT \"MONTH\"(TO_TIMESTAMP('2015-6-05'))"
                 + ")";
 
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
 
         String dml = "UPSERT INTO " + sharedTable2 + " VALUES (1)";

@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.end2end.ExplainPlanWithStatsEnabledIT.getByteRowEstimates;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -45,6 +46,7 @@ import org.apache.phoenix.util.QueryUtil;
  * This class has tests for asserting the bytes and rows information exposed in the explain plan
  * when statistics are disabled.
  */
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
 
@@ -73,7 +75,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
         String sql = "SELECT * FROM " + tableA + " where k >= ?";
         List<Object> binds = Lists.newArrayList();
         binds.add(99);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             initData(conn, tableA);
             assertEstimatesAreNull(sql, binds, conn);
         }
@@ -84,7 +86,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
         String tableA = generateUniqueName();
         String tableB = generateUniqueName();
         String sql = "SELECT * FROM " + tableA + " UNION ALL SELECT * FROM " + tableB;
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             initData(conn, tableA);
             initData(conn, tableB);
             assertEstimatesAreNull(sql, Lists.newArrayList(), conn);
@@ -98,7 +100,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
         String sql =
                 "SELECT ta.c1.a, ta.c2.b FROM " + tableA + " ta JOIN " + tableB
                         + " tb ON ta.k = tb.k";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             initData(conn, tableA);
             initData(conn, tableB);
             assertEstimatesAreNull(sql, Lists.newArrayList(), conn);
@@ -112,7 +114,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
         String sql =
                 "SELECT /*+ USE_SORT_MERGE_JOIN */ ta.c1.a, ta.c2.b FROM " + tableA + " ta JOIN "
                         + tableB + " tb ON ta.k = tb.k";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             initData(conn, tableA);
             initData(conn, tableB);
             assertEstimatesAreNull(sql, Lists.newArrayList(), conn);
@@ -125,7 +127,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
         String sql = "SELECT count(*) FROM " + tableA + " where k >= ?";
         List<Object> binds = Lists.newArrayList();
         binds.add(99);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             initData(conn, tableA);
             assertEstimatesAreNull(sql, binds, conn);
         }
@@ -136,7 +138,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
         String tableA = generateUniqueName();
         String sql = "UPSERT INTO " + tableA + " SELECT * FROM " + tableA;
         List<Object> binds = Lists.newArrayList();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             initData(conn, tableA);
             conn.setAutoCommit(true);
             assertEstimatesAreNull(sql, binds, conn);
@@ -148,7 +150,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
         String tableA = generateUniqueName();
         String sql = "UPSERT INTO " + tableA + " SELECT * FROM " + tableA;
         List<Object> binds = Lists.newArrayList();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             initData(conn, tableA);
             conn.setAutoCommit(false);
             assertEstimatesAreNull(sql, binds, conn);
@@ -163,7 +165,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
         binds.add(99);
         binds.add(99);
         binds.add(99);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             initData(conn, tableA);
             assertEstimatesAreZero(sql, binds, conn);
         }
@@ -175,7 +177,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
         String sql = "DELETE FROM " + tableA + " where k >= ?";
         List<Object> binds = Lists.newArrayList();
         binds.add(99);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             initData(conn, tableA);
             conn.setAutoCommit(true);
             assertEstimatesAreNull(sql, binds, conn);
@@ -188,7 +190,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
         String sql = "DELETE FROM " + tableA + " where k >= ? LIMIT 2";
         List<Object> binds = Lists.newArrayList();
         binds.add(99);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             initData(conn, tableA);
             conn.setAutoCommit(false);
             Estimate info = getByteRowEstimates(conn, sql, binds);
@@ -204,7 +206,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
         String sql = "DELETE FROM " + tableA + " where k = ?";
         List<Object> binds = Lists.newArrayList();
         binds.add(100);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             initData(conn, tableA);
             conn.setAutoCommit(false);
             assertEstimatesAreZero(sql, binds, conn);
@@ -216,7 +218,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
         String tableA = generateUniqueName();
         String sql = "SELECT * FROM " + tableA + " LIMIT 2";
         List<Object> binds = Lists.newArrayList();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             initData(conn, tableA);
             conn.setAutoCommit(false);
             Estimate info = getByteRowEstimates(conn, sql, binds);
@@ -230,7 +232,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
     public void testEstimatesForUnionWithTablesWithNullAndLargeGpWidth() throws Exception {
         String tableA = generateUniqueName();
         String tableWithLargeGPWidth = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             initData(conn, tableA);
             // create a table with 1 MB guidepost width
             long guidePostWidth = 1000000;
@@ -245,7 +247,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
             conn.commit();
             conn.createStatement().execute("UPDATE STATISTICS " + tableWithLargeGPWidth);
         }
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String sql =
                     "SELECT * FROM " + tableA + " UNION ALL SELECT * FROM " + tableWithLargeGPWidth;
             assertEstimatesAreNull(sql, Lists.newArrayList(), conn);
@@ -254,7 +256,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDescTimestampAtBoundary() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(new Properties());
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(
                 "CREATE TABLE FOO(\n" + "                a VARCHAR NOT NULL,\n"
@@ -273,7 +275,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testUseOfRoundRobinIteratorSurfaced() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(new Properties());
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String tableName = "testUseOfRoundRobinIteratorSurfaced".toUpperCase();
@@ -295,7 +297,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
     @Test
     public void testRangeScanWithMetadataLookup() throws Exception {
         final String tableName = generateUniqueName();
-        Properties props = PropertiesUtil.deepCopy(new Properties());
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(
                 "CREATE TABLE " + tableName + "(PK1 VARCHAR NOT NULL, "
@@ -430,7 +432,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
         final String view02 = generateUniqueName();
         final String view03 = generateUniqueName();
         final String view04 = generateUniqueName();
-        Properties props = PropertiesUtil.deepCopy(new Properties());
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(
                 "CREATE TABLE " + tableName + "(TENANT_ID VARCHAR NOT NULL, "
@@ -577,7 +579,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
     }
 
     private Connection getTenantConnection(final String tenantId) throws Exception {
-        Properties tenantProps = new Properties();
+        Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         return DriverManager.getConnection(getUrl(), tenantProps);
     }

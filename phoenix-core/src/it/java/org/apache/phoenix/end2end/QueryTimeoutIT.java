@@ -38,6 +38,7 @@ import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -54,7 +55,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
-
+//Failing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class QueryTimeoutIT extends BaseTest {
     private String tableName;
@@ -72,14 +73,17 @@ public class QueryTimeoutIT extends BaseTest {
         props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(10000));
         props.put(QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB, Boolean.TRUE.toString());
         props.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }    }
     
     @After
     public void assertNoUnfreedMemory() throws Exception {
         boolean refCountLeaked = isAnyStoreRefCountLeaked();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            long unfreedBytes = conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+        try (Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+            long unfreedBytes = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().clearCache();
             assertEquals(0, unfreedBytes);
         }
         assertFalse("refCount leaked", refCountLeaked);
@@ -92,21 +96,21 @@ public class QueryTimeoutIT extends BaseTest {
         overriddenProps.setProperty("hbase.rpc.timeout", Long.toString(100));
         String url = QueryUtil.getConnectionUrl(overriddenProps, config, "longRunning");
         Connection conn1 = DriverManager.getConnection(url, overriddenProps);
-        ConnectionQueryServices s1 = conn1.unwrap(PhoenixConnection.class).getQueryServices();
+        ConnectionQueryServices s1 = conn1.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
         ReadOnlyProps configProps = s1.getProps();
         assertEquals("100", configProps.get("hbase.rpc.timeout"));
         
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         Connection conn2 = DriverManager.getConnection(getUrl(), props);
-        ConnectionQueryServices s2 = conn2.unwrap(PhoenixConnection.class).getQueryServices();
+        ConnectionQueryServices s2 = conn2.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
         assertFalse(s1 == s2);
         Connection conn3 = DriverManager.getConnection(getUrl(), props);
-        ConnectionQueryServices s3 = conn3.unwrap(PhoenixConnection.class).getQueryServices();
+        ConnectionQueryServices s3 = conn3.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
         assertTrue(s2 == s3);
         
         Connection conn4 = DriverManager.getConnection(url, overriddenProps);
-        ConnectionQueryServices s4 = conn4.unwrap(PhoenixConnection.class).getQueryServices();
+        ConnectionQueryServices s4 = conn4.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
         assertTrue(s1 == s4);
     }
     

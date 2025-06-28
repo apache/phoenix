@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -43,7 +44,7 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class SkipScanAfterManualSplitIT extends ParallelStatsDisabledIT {
 
@@ -89,7 +90,7 @@ public class SkipScanAfterManualSplitIT extends ParallelStatsDisabledIT {
             }
         }
         conn.commit();
-        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        ConnectionQueryServices services = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
         Admin admin = services.getAdmin();
         try {
             admin.flush(TableName.valueOf(tableName));
@@ -105,7 +106,7 @@ public class SkipScanAfterManualSplitIT extends ParallelStatsDisabledIT {
         byte[] tableNameBytes = Bytes.toBytes(tableName);
         initTable(tableName);
         Connection conn = getConnection();
-        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        ConnectionQueryServices services = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
         int queryTimeout = services.getProps()
                 .getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB,
                         QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);

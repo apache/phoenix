@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.createGroupByTestTable;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -29,11 +30,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class RegexpReplaceFunctionIT extends ParallelStatsDisabledIT {
 
@@ -43,7 +45,7 @@ public class RegexpReplaceFunctionIT extends ParallelStatsDisabledIT {
     @Before
     public void doBeforeTestSetup() throws Exception {
         this.tableName = generateUniqueName();
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         createGroupByTestTable(conn, tableName);
         insertRow(conn, "Report11", 10);
         insertRow(conn, "Report11", 10);
@@ -65,7 +67,7 @@ public class RegexpReplaceFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testGroupByScanWithRegexpReplace() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         Statement stmt = conn.createStatement();
         ResultSet rs = stmt.executeQuery("select REGEXP_REPLACE(uri, '[1-3]+', '*') suburi, sum(appcpu) sumcpu from " + this.tableName + " group by suburi");
         assertTrue(rs.next());
@@ -85,7 +87,7 @@ public class RegexpReplaceFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testFilterWithRegexReplace() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         ResultSet rs = conn.createStatement().executeQuery("select id from " + this.tableName + " where REGEXP_REPLACE(uri, '[2-3]+', '*') = 'Report*'");
         assertTrue(rs.next());
         assertEquals("id2", rs.getString(1));

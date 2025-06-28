@@ -103,6 +103,7 @@ import org.junit.experimental.categories.Category;
 /**
  * Test suite related to view metadata
  */
+//Failing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class ViewMetadataIT extends SplitSystemCatalogIT {
 

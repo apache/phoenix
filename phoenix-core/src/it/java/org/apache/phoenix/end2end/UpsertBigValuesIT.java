@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -32,10 +33,11 @@ import java.util.Properties;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PSmallint;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class UpsertBigValuesIT extends ParallelStatsDisabledIT {
 
@@ -48,7 +50,7 @@ public class UpsertBigValuesIT extends ParallelStatsDisabledIT {
                 -2, -1, 0, 1, 2, Integer.MAX_VALUE - 1, Integer.MAX_VALUE};
         String tableName = generateUniqueName();
         ensureTableCreated(getUrl(), tableName,"PKIntValueTest");
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String upsert = "UPSERT INTO " + tableName + " VALUES(?)";
         PreparedStatement stmt = conn.prepareStatement(upsert);
@@ -135,7 +137,7 @@ public class UpsertBigValuesIT extends ParallelStatsDisabledIT {
         long[] testNumbers = {Long.MIN_VALUE+1 , Long.MIN_VALUE+2 , 
                 -2L, -1L, 0L, 1L, 2L, Long.MAX_VALUE-1, Long.MAX_VALUE};
         ensureTableCreated(getUrl(), tableName, "PKBigIntValueTest" );
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String upsert = "UPSERT INTO " + tableName + " VALUES(?)";
         PreparedStatement stmt = conn.prepareStatement(upsert);
@@ -219,7 +221,7 @@ public class UpsertBigValuesIT extends ParallelStatsDisabledIT {
         int[] testNumbers = {Integer.MIN_VALUE, Integer.MIN_VALUE + 1, 
                 -2, -1, 0, 1, 2, Integer.MAX_VALUE - 1, Integer.MAX_VALUE};
         ensureTableCreated(getUrl(), tableName, "KVIntValueTest" );
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String upsert = "UPSERT INTO " + tableName + " VALUES(?, ?)";
         PreparedStatement stmt = conn.prepareStatement(upsert);
@@ -303,7 +305,7 @@ public class UpsertBigValuesIT extends ParallelStatsDisabledIT {
         long[] testNumbers = {Long.MIN_VALUE+1, Long.MIN_VALUE+2, 
                 -2L, -1L, 0L, 1L, 2L, Long.MAX_VALUE-1, Long.MAX_VALUE};
         ensureTableCreated(getUrl(), tableName, "KVBigIntValueTest" );
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String upsert = "UPSERT INTO " + tableName + " VALUES(?,?)";
         PreparedStatement stmt = conn.prepareStatement(upsert);
@@ -405,7 +407,7 @@ public class UpsertBigValuesIT extends ParallelStatsDisabledIT {
         String ddl =
                 String.format("CREATE %s TABLE %s (K INTEGER PRIMARY KEY, V1 %s)",
                     immutable ? "IMMUTABLE" : "", tableName, dataType.getSqlTypeName());
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(ddl);
             String upsert = "UPSERT INTO " + tableName + " VALUES(?, ?)";
             PreparedStatement stmt = conn.prepareStatement(upsert);

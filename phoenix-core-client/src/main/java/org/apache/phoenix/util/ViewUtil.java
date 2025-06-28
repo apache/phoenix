@@ -19,6 +19,7 @@ import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.phoenix.coprocessorclient.MetaDataEndpointImplConstants;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
@@ -1013,7 +1014,7 @@ public class ViewUtil {
      * @throws IOException
      * @throws SQLException
      */
-    public static List<String> getViewIndexIds(final PhoenixConnection connection, final String tableName, final boolean includeTenantViewIndexes)
+    public static List<String> getViewIndexIds(final PhoenixMonitoredConnection connection, final String tableName, final boolean includeTenantViewIndexes)
             throws IOException, SQLException {
         Preconditions.checkArgument(MetaDataUtil.isViewIndex(tableName));
         final List<String> viewIndexIdsString = new ArrayList<>();

@@ -21,14 +21,17 @@ package org.apache.phoenix.end2end;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.export.SchemaRegistryRepository;
 import org.apache.phoenix.schema.export.SchemaWriter;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -41,7 +44,7 @@ import java.sql.SQLException;
 import java.util.Map;
 
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY;
-
+//Failing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class SchemaRegistryFailureIT extends ParallelStatsDisabledIT{
 
@@ -51,7 +54,11 @@ public class SchemaRegistryFailureIT extends ParallelStatsDisabledIT{
         props.put(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
         props.put(SchemaRegistryRepository.SCHEMA_REGISTRY_IMPL_KEY,
             ExplodingSchemaRegistryRepository.class.getName());
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     @Test
@@ -59,7 +66,7 @@ public class SchemaRegistryFailureIT extends ParallelStatsDisabledIT{
         String schemaName = "S_" + generateUniqueName();
         String tableName = "T_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String ddl = "CREATE TABLE " + fullTableName + " (id char(1) NOT NULL," +
                 " col1 integer NOT NULL," + " col2 bigint NOT NULL,"
                 + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) "
@@ -86,7 +93,7 @@ public class SchemaRegistryFailureIT extends ParallelStatsDisabledIT{
         String schemaName = "S_" + generateUniqueName();
         String tableName = "T_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String ddl = "CREATE TABLE " + fullTableName + " (id char(1) NOT NULL,"
                 + " col1 integer NOT NULL," + " col2 bigint NOT NULL,"
                 + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) " + "MULTI_TENANT=true";

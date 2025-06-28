@@ -48,7 +48,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class SortOrderWithRegionMovesIT extends SortOrderIT {
 
@@ -128,8 +128,11 @@ public class SortOrderWithRegionMovesIT extends SortOrderIT {
                 TestScanningResultPostDummyResultCaller.class.getName());
         props.put(QueryServices.PHOENIX_POST_VALID_PROCESS,
                 TestScanningResultPostValidResultCaller.class.getName());
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }    }
 
     @AfterClass
     public static synchronized void freeResources() throws Exception {

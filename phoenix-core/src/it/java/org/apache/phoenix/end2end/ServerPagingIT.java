@@ -52,7 +52,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class ServerPagingIT extends ParallelStatsDisabledIT {
 
@@ -61,8 +61,11 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
         props.put(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Long.toString(0));
         props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }    }
 
     private void assertServerPagingMetric(String tableName, ResultSet rs, boolean isPaged) throws SQLException {
         Map<String, Map<MetricType, Long>> metrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
@@ -374,7 +377,7 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
     public void testUncoveredQuery() throws Exception {
         String dataTableName = generateUniqueName();
         populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE UNCOVERED INDEX "
                     + indexTableName + " on " + dataTableName + " (val1) ");
@@ -431,7 +434,7 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
     @Test
     public void testNumberOfRPCsWithPaging() throws SQLException {
         // insert 200 rows
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
         stmt.execute("CREATE TABLE " + tableName
@@ -457,7 +460,7 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
     }
 
     private void populateTable(String tableName) throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("create table " + tableName +
                 " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10)," +
                 " val3 varchar(10))");

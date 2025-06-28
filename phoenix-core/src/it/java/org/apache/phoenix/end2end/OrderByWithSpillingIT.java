@@ -25,7 +25,7 @@ import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class OrderByWithSpillingIT extends BaseOrderByIT {
     @BeforeClass
@@ -34,6 +34,10 @@ public class OrderByWithSpillingIT extends BaseOrderByIT {
         // do lot's of spooling!
         props.put(QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB, Integer.toString(1));
         props.put(QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB, Integer.toString(1));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 }

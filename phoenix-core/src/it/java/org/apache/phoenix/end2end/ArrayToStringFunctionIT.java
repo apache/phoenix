@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -26,10 +27,11 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class ArrayToStringFunctionIT extends ParallelStatsDisabledIT {
     private String tableName;
@@ -37,7 +39,7 @@ public class ArrayToStringFunctionIT extends ParallelStatsDisabledIT {
 
     @Before
     public void initTables() throws Exception {
-        conn = DriverManager.getConnection(getUrl());
+        conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName
             + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[],integers INTEGER[],doubles DOUBLE[],bigints BIGINT[],chars CHAR(15)[],double1 DOUBLE,varchar1 VARCHAR,nullcheck INTEGER,chars2 CHAR(15)[])";

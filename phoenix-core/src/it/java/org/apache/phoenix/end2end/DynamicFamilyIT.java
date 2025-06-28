@@ -62,7 +62,7 @@ import org.junit.experimental.categories.Category;
 @edu.umd.cs.findbugs.annotations.SuppressWarnings(
         value="RV_RETURN_VALUE_IGNORED", 
         justification="Designed to ignore.")
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class DynamicFamilyIT extends ParallelStatsDisabledIT {
     private static final String WEB_STATS = generateUniqueName();
@@ -110,7 +110,7 @@ public class DynamicFamilyIT extends ParallelStatsDisabledIT {
 
     @SuppressWarnings("deprecation")
     private static void initTableValues() throws Exception {
-        ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        ConnectionQueryServices services = driver.getConnectionQueryServices(getActiveUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         Table hTable = services.getTable(SchemaUtil.getTableNameAsBytes(WEB_STATS_SCHEMA_NAME,WEB_STATS));
         try {
             // Insert rows using standard HBase mechanism with standard HBase "types"
@@ -331,6 +331,15 @@ public class DynamicFamilyIT extends ParallelStatsDisabledIT {
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.executeQuery();
+        } catch (Exception e) {
+          if (e instanceof SQLException) {
+              if (e.getCause() instanceof PhoenixParserException) {
+                  //Expected in case of HA ENabled
+                  throw (PhoenixParserException) e.getCause();
+              } else {
+                  throw e;
+              }
+          }
         } finally {
             conn.close();
         }
@@ -339,7 +348,7 @@ public class DynamicFamilyIT extends ParallelStatsDisabledIT {
     @Test
     public void testSelectEntireColumnFamily() throws Exception {
         ResultSet rs;
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.setAutoCommit(true);
         String tableName = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE " + tableName

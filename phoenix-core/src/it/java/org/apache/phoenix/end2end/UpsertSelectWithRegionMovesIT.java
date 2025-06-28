@@ -74,7 +74,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegionMovesIT {
@@ -98,7 +98,11 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
         props.put(HConstants.HBASE_CLIENT_SCANNER_MAX_RESULT_SIZE_KEY, String.valueOf(1));
         props.put(QueryServices.PHOENIX_POST_DUMMY_PROCESS,
                 TestScanningResultPostDummyResultCaller.class.getName());
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     public UpsertSelectWithRegionMovesIT(String allowServerSideMutations) {
@@ -322,7 +326,7 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
         String ptsdbTable = generateUniqueName();
         TABLE_NAMES.add(ptsdbTable);
         ensureTableCreated(getUrl(), ptsdbTable, PTSDB_NAME);
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
                 allowServerSideMutations);
         String upsert;
@@ -520,7 +524,7 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
         TABLE_NAMES.add(aTable);
         TABLE_NAMES.add(ptsdbTable);
         ensureTableCreated(getUrl(), ptsdbTable, PTSDB_NAME);
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
                 allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -601,7 +605,7 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
         String tableName = generateUniqueName();
         TABLE_NAMES.add(tableName);
         ensureTableCreated(getUrl(), tableName, "IntKeyTest", splits, null);
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
                 allowServerSideMutations);
         String upsert = "UPSERT INTO " + tableName + " VALUES(1)";
@@ -645,7 +649,7 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
         TABLE_NAMES.add(tableName);
         createTestTable(getUrl(), "create table " + tableName +
                 " (i integer not null primary key desc, j integer)", splits, null);
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
                 allowServerSideMutations);
         ResultSet rs;
@@ -718,7 +722,7 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
         TABLE_NAMES.add(tableName);
         createTestTable(getUrl(), "create table " + tableName +
                 " (i integer not null primary key desc, j integer)", splits, null);
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
                 allowServerSideMutations);
         ResultSet rs;
@@ -765,7 +769,7 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
         String tableName = generateUniqueName();
         TABLE_NAMES.add(tableName);
         ensureTableCreated(getUrl(), tableName, "IntKeyTest", splits, null, null);
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
                 allowServerSideMutations);
         int rowsInserted;
@@ -811,7 +815,7 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
 
     @Test
     public void testUpsertSelectWithLimit() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
                 allowServerSideMutations);
         String tableName = generateUniqueName();
@@ -892,7 +896,7 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
 
     @Test
     public void testUpsertSelectWithSequence() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
                 allowServerSideMutations);
         String t1 = generateUniqueName();
@@ -1027,7 +1031,7 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
         TABLE_NAMES.add(t1);
         TABLE_NAMES.add(t2);
         TABLE_NAMES.add(t3);
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + t1 +
                     " (PK1 VARCHAR NOT NULL, PK2 DATE NOT NULL, KV1 VARCHAR CONSTRAINT PK " +
@@ -1043,7 +1047,7 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
         // The timestamp of the put will be the value of the row_timestamp column.
         long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis();
         Date rowTimestampDate = new Date(rowTimestamp);
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
                 allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -1058,7 +1062,7 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
 
         // Upsert select data into table T2. The connection needs to be at a timestamp beyond the
         // row timestamp. Otherwise it won't see the data from table T1.
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Statement stmt = conn.createStatement()) {
             stmt.executeUpdate("UPSERT INTO " + t2 + " SELECT * FROM " + t1);
             conn.commit();
@@ -1092,7 +1096,7 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
 
         // Upsert select data into table T3. The connection needs to be at a timestamp beyond the
         // row timestamp. Otherwise it won't see the data from table T1.
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Statement stmt = conn.createStatement()) {
             stmt.executeUpdate("UPSERT INTO " + t3 + " SELECT * FROM " + t1);
             conn.commit();
@@ -1127,7 +1131,7 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
     public void testUpsertSelectSameTableWithRowTimestampColumn() throws Exception {
         String tableName = generateUniqueName();
         TABLE_NAMES.add(tableName);
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
                 allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -1183,7 +1187,7 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
         TABLE_NAMES.add(table1);
         TABLE_NAMES.add(table2);
         TABLE_NAMES.add(table3);
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + table1 +
                     " (T1PK1 VARCHAR NOT NULL, T1PK2 DATE NOT NULL, T1KV1 VARCHAR, T1KV2 VARCHAR " +
@@ -1196,7 +1200,7 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
                     " CONSTRAINT PK PRIMARY KEY(T3PK1, T3PK2 DESC ROW_TIMESTAMP)) ");
         }
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
                 allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -1292,7 +1296,7 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
         String tableName2 = generateUniqueName();
         TABLE_NAMES.add(tableName1);
         TABLE_NAMES.add(tableName2);
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
                 allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -1390,7 +1394,7 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
         TABLE_NAMES.add(baseTableIdx);
         TABLE_NAMES.add("_IDX_" + baseTable);
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
                 allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -1665,7 +1669,7 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
         String tableName2 = generateUniqueName();
         TABLE_NAMES.add(tableName);
         TABLE_NAMES.add(tableName2);
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
                 allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -1696,7 +1700,7 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
 
     @Test
     public void testUpsertSelectWithFixedWidthNullByteSizeArray() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
                 allowServerSideMutations);
         String t1 = generateUniqueName();
@@ -1772,7 +1776,7 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
     }
 
     private void testUpsertSelectWithMultiByteChars(boolean autoCommit) throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
                 allowServerSideMutations);
         String t1 = generateUniqueName();
@@ -1877,7 +1881,7 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
         String indexName = generateUniqueName();
         TABLE_NAMES.add(tableName);
         TABLE_NAMES.add(indexName);
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
                 allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -1959,7 +1963,7 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
         String tableName2 = generateUniqueName();
         TABLE_NAMES.add(tableName1);
         TABLE_NAMES.add(tableName2);
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
                 allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props);

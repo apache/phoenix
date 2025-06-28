@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -27,10 +28,11 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class UpperLowerFunctionIT extends ParallelStatsDisabledIT {
     private static String tableName = generateUniqueName();
@@ -39,7 +41,7 @@ public class UpperLowerFunctionIT extends ParallelStatsDisabledIT {
 
     @BeforeClass
     public static synchronized void init() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String ddl = "CREATE TABLE " + tableName + " ("
                 + "id INTEGER PRIMARY KEY,"
                 + "first_name VARCHAR,"
@@ -57,7 +59,7 @@ public class UpperLowerFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testWhereLower() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(String.format(
@@ -73,7 +75,7 @@ public class UpperLowerFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSelectLower() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(String.format(
@@ -89,7 +91,7 @@ public class UpperLowerFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testWhereUpper() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(String.format(
@@ -105,7 +107,7 @@ public class UpperLowerFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSelectUpper() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(String.format(

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -46,6 +47,7 @@ import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
@@ -75,6 +77,7 @@ import org.junit.runners.Parameterized.Parameters;
  * functionality allows having row-level versioning (similar to how KEEP_DELETED_CELLS works), but
  * also allows permanently deleting a row.
  */
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class StoreNullsIT extends ParallelStatsDisabledIT {
@@ -92,8 +95,11 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(0));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }    }
     
     public StoreNullsIT(boolean mutable, boolean columnEncoded, boolean storeNulls) {
         this.mutable = mutable;
@@ -133,7 +139,7 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testStoringNullsForImmutableTables() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                 Statement stmt = conn.createStatement()) {
             conn.setAutoCommit(true);
             stmt.execute(String.format(ddlFormat, dataTableName));
@@ -159,7 +165,7 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
         ResultScanner scanner = htable.getScanner(s);
         // first row has a value for name
         Result rs = scanner.next();
-        PTable table = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, dataTableName));
+        PTable table = conn.unwrap(PhoenixMonitoredConnection.class).getTable(new PTableKey(null, dataTableName));
         PColumn nameColumn = table.getColumnForColumnName("NAME");
         byte[] qualifier = table.getImmutableStorageScheme()== ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS ? QueryConstants.SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES : nameColumn.getColumnQualifierBytes();
         assertTrue(rs.containsColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, qualifier));
@@ -195,7 +201,7 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testQueryingHistory() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                 Statement stmt = conn.createStatement()) {
             conn.setAutoCommit(true);
             stmt.execute(String.format(ddlFormat, dataTableName));
@@ -209,7 +215,7 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
             
             TestUtil.doMajorCompaction(conn, dataTableName);
             
-            Properties historicalProps = new Properties();
+            Properties historicalProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             historicalProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                 Long.toString(afterFirstInsert));
             Connection historicalConn = DriverManager.getConnection(getUrl(), historicalProps);
@@ -238,7 +244,7 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
     // Row deletes should work in the same way regardless of what STORE_NULLS is set to
     @Test
     public void testDeletes() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                 Statement stmt = conn.createStatement()) {
             conn.setAutoCommit(true);
             stmt.execute(String.format(ddlFormat, dataTableName));
@@ -251,7 +257,7 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
             stmt.executeUpdate("DELETE FROM " + dataTableName + " WHERE id = 1");
             Thread.sleep(10L);
             TestUtil.doMajorCompaction(conn, dataTableName);
-            Properties historicalProps = new Properties();
+            Properties historicalProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             historicalProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                     Long.toString(afterFirstInsert));
             Connection historicalConn = DriverManager.getConnection(getUrl(), historicalProps);
@@ -288,7 +294,7 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
         
         String tableName = generateUniqueName();
         String indexName = generateUniqueName();
-        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);     
         conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 CHAR(2) NOT NULL, k2 CHAR(2) NOT NULL, ts TIMESTAMP, V VARCHAR, V2 VARCHAR, "
                 + "CONSTRAINT pk PRIMARY KEY (k1,k2)) STORE_NULLS=" + storeNulls + (columnEncoded ? "" : ",COLUMN_ENCODED_BYTES=0"));
@@ -311,8 +317,8 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
         stmt.executeUpdate();
         conn.commit();
 
-        TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName)));
-        TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName)));
+        TestUtil.dumpTable(conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName)));
+        TestUtil.dumpTable(conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName)));
 
         long count1 = getRowCount(conn, tableName);
         long count2 = getRowCount(conn, indexName);

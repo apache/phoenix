@@ -119,7 +119,11 @@ public abstract class ParallelStatsDisabledWithRegionMovesIT extends BaseTest {
         props.put(HConstants.HBASE_CLIENT_SCANNER_MAX_RESULT_SIZE_KEY, String.valueOf(1));
         props.put(QueryServices.PHOENIX_POST_DUMMY_PROCESS,
                 TestScanningResultPostDummyResultCaller.class.getName());
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     @AfterClass

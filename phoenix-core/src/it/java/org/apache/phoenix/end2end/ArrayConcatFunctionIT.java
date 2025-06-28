@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -29,9 +30,10 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 
 import org.apache.phoenix.schema.TypeMismatchException;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
@@ -58,7 +60,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionVarchar() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
 
         ResultSet rs;
@@ -75,7 +77,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testNullArrayConcat() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
 
         ResultSet rs;
@@ -97,7 +99,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionInteger() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
 
         ResultSet rs;
@@ -114,7 +116,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionDouble() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
 
         ResultSet rs;
@@ -131,7 +133,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionDouble2() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
 
         ResultSet rs;
@@ -148,7 +150,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionBigint() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
         ResultSet rs;
         rs = conn.createStatement().executeQuery("SELECT ARRAY_CAT(bigints,bigints) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
@@ -164,7 +166,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionChar() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
         ResultSet rs;
         rs = conn.createStatement().executeQuery("SELECT ARRAY_CAT(chars,chars) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
@@ -180,7 +182,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionChar3() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
         ResultSet rs;
         rs = conn.createStatement().executeQuery("SELECT ARRAY_CAT(chars,chars2) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
@@ -196,7 +198,8 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test(expected = TypeMismatchException.class)
     public void testArrayConcatFunctionIntToCharArray() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
 
         ResultSet rs;
@@ -205,7 +208,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test(expected = TypeMismatchException.class)
     public void testArrayConcatFunctionVarcharToIntegerArray() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
 
         ResultSet rs;
@@ -215,7 +218,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test(expected = SQLException.class)
     public void testArrayConcatFunctionChar2() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
         ResultSet rs;
         rs = conn.createStatement().executeQuery("SELECT ARRAY_CAT(chars,ARRAY['facfacfacfacfacfacfac','facfacfacfacfacfacfac']) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
@@ -225,7 +228,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionIntegerArrayToDoubleArray() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
 
         ResultSet rs;
@@ -242,7 +245,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionWithNestedFunctions1() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
 
         ResultSet rs;
@@ -259,7 +262,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionWithNestedFunctions2() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
 
         ResultSet rs;
@@ -276,7 +279,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionWithNestedFunctions3() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
 
         ResultSet rs;
@@ -293,7 +296,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionWithUpsert1() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[])";
@@ -317,7 +320,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionWithUpsert2() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,integers INTEGER[])";
@@ -341,7 +344,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionWithUpsert3() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,doubles DOUBLE[])";
@@ -365,7 +368,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionWithUpsertSelect1() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String sourceTableName = generateUniqueName();
         String targetTableName = generateUniqueName();
@@ -405,7 +408,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionWithUpsertSelect2() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String sourceTableName = generateUniqueName();
         String targetTableName = generateUniqueName();
         String ddl = "CREATE TABLE " + sourceTableName + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[])";
@@ -444,7 +447,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionInWhere1() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
 
         ResultSet rs;
@@ -457,7 +460,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionInWhere2() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
 
         ResultSet rs;
@@ -470,7 +473,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionInWhere3() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
 
         ResultSet rs;
@@ -483,7 +486,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionInWhere4() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
 
         ResultSet rs;
@@ -496,7 +499,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionInWhere5() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
 
         ResultSet rs;
@@ -509,7 +512,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionInWhere6() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
 
         ResultSet rs;
@@ -522,7 +525,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionInWhere7() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
 
         ResultSet rs;
@@ -535,7 +538,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionWithNulls1() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
 
         ResultSet rs;
@@ -555,7 +558,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionWithNulls2() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
 
         ResultSet rs;
@@ -575,7 +578,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionWithNulls3() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
 
         ResultSet rs;
@@ -595,7 +598,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayConcatFunctionWithNulls4() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initTables(conn);
 
         ResultSet rs;

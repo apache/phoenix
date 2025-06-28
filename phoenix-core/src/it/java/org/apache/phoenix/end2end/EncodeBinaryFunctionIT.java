@@ -16,6 +16,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -29,11 +30,12 @@ import java.sql.SQLException;
 import java.util.Arrays;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class EncodeBinaryFunctionIT extends ParallelStatsDisabledIT {
 
@@ -45,7 +47,7 @@ public class EncodeBinaryFunctionIT extends ParallelStatsDisabledIT {
 
     @BeforeClass
     public static void setUpBeforeClass() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         testTable = generateUniqueName();
         String ddl = "CREATE TABLE " + testTable + " (id INTEGER PRIMARY KEY, data VARBINARY)";
         conn.createStatement().execute(ddl);
@@ -63,7 +65,7 @@ public class EncodeBinaryFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testEncodeHex() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs = conn.createStatement()
                 .executeQuery("SELECT ENCODE_BINARY(data, 'HEX') FROM " + testTable + " WHERE ID=2");
@@ -75,7 +77,7 @@ public class EncodeBinaryFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testMixedCaseHexDecoding() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs = conn.createStatement()
                 .executeQuery("SELECT ENCODE_BINARY(data, 'HEX') FROM " + testTable + " WHERE ID=2");
@@ -87,7 +89,7 @@ public class EncodeBinaryFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testEncodeBase64() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs = conn.createStatement()
                 .executeQuery("SELECT ENCODE_BINARY(data, 'BASE64') FROM " + testTable + " WHERE ID=1");
@@ -99,7 +101,7 @@ public class EncodeBinaryFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testLongBase64Decoding() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         StringBuilder base64String = new StringBuilder();
         for (int i = 0; i < 20; i++) {
@@ -127,7 +129,7 @@ public class EncodeBinaryFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testEncodeHBase() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs = conn.createStatement()
                 .executeQuery("SELECT ENCODE_BINARY(data, 'HBASE') FROM " + testTable + " WHERE ID=1");
@@ -139,7 +141,7 @@ public class EncodeBinaryFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testInvalidDecodingFormat() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         try {
             conn.createStatement().executeQuery("SELECT ENCODE_BINARY(data, 'INVALIDFORMAT') FROM " + testTable);
@@ -151,7 +153,7 @@ public class EncodeBinaryFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testNullAndEmptyStringDecoding() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs = conn.createStatement()
                 .executeQuery("SELECT ENCODE_BINARY(data, 'HEX') FROM " + testTable + " WHERE ID=-10");
@@ -172,7 +174,7 @@ public class EncodeBinaryFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testEncodeDecodeRoundHex() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs = conn.createStatement().executeQuery(
                 "SELECT DECODE_BINARY(ENCODE_BINARY(data, 'HEX'), 'HEX') FROM " + testTable + " WHERE ID=1");
@@ -184,7 +186,7 @@ public class EncodeBinaryFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testEncodeDecodeRoundBase64() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs = conn.createStatement().executeQuery(
                 "SELECT DECODE_BINARY(ENCODE_BINARY(data, 'BASE64'), 'BASE64') FROM " + testTable + " WHERE ID=1");
@@ -195,7 +197,7 @@ public class EncodeBinaryFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testEncodeDecodeRoundHbase() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs = conn.createStatement().executeQuery(
                 "SELECT DECODE_BINARY(ENCODE_BINARY(data, 'HBASE'), 'HBASE') FROM " + testTable + " WHERE ID=1");

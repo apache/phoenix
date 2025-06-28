@@ -34,7 +34,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
+//Passing with HA Connection - No changes needed
 @Category(ParallelStatsDisabledTest.class)
 public class SpooledTmpFileDeleteIT extends ParallelStatsDisabledIT {
     private static final String PRINCIPAL = "noRenewLease";

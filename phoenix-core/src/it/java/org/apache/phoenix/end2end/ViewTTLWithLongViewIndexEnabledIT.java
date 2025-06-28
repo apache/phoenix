@@ -30,7 +30,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class ViewTTLWithLongViewIndexEnabledIT extends BaseViewTTLIT {
 
@@ -51,8 +51,14 @@ public class ViewTTLWithLongViewIndexEnabledIT extends BaseViewTTLIT {
             put(QueryServices.PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT, String.valueOf(1));
         }};
 
-        setUpTestDriver(new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS,
-                DEFAULT_PROPERTIES.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS,
+                    DEFAULT_PROPERTIES.entrySet().iterator()), new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS,
+                    DEFAULT_PROPERTIES.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS,
+                    DEFAULT_PROPERTIES.entrySet().iterator()));
+        }
     }
 
     @Test

@@ -41,7 +41,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-
+//Failing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class BaseAggregateWithRegionMoves4IT extends BaseAggregateWithRegionMoves2IT {
 
@@ -94,7 +94,11 @@ public class BaseAggregateWithRegionMoves4IT extends BaseAggregateWithRegionMove
         props.put(HConstants.HBASE_CLIENT_SCANNER_MAX_RESULT_SIZE_KEY, String.valueOf(1));
         props.put(QueryServices.PHOENIX_POST_VALID_PROCESS,
                 TestScanningResultPostValidResultCaller.class.getName());
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     @AfterClass

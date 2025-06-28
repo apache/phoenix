@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.closeStmtAndConn;
 import static org.junit.Assert.assertEquals;
 
@@ -27,6 +28,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.text.Collator;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -35,6 +37,7 @@ import org.junit.experimental.categories.Category;
  * End2End test that tests the COLLATION_KEY in an ORDER BY clause
  * 
  */
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class CollationKeyFunctionIT extends ParallelStatsDisabledIT {
 
@@ -54,7 +57,7 @@ public class CollationKeyFunctionIT extends ParallelStatsDisabledIT {
 		PreparedStatement stmt = null;
 		tableName = generateUniqueName();
 		try {
-			conn = DriverManager.getConnection(getUrl());
+			conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 			String ddl = "CREATE TABLE " + tableName + " (id INTEGER PRIMARY KEY, data VARCHAR)";
 			conn.createStatement().execute(ddl);
 
@@ -184,7 +187,7 @@ public class CollationKeyFunctionIT extends ParallelStatsDisabledIT {
 	}
 
 	private void queryWithExpectedOrder(String query, Integer[] expectedIndexOrder) throws Exception {
-		Connection conn = DriverManager.getConnection(getUrl());
+		Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 		PreparedStatement ps = conn.prepareStatement(query);
 		ResultSet rs = ps.executeQuery();
 		int i = 0;

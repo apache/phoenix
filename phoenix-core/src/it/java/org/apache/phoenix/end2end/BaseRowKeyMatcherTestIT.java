@@ -43,6 +43,7 @@ import org.apache.phoenix.coprocessorclient.TableInfo;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
@@ -103,10 +104,11 @@ import static org.apache.phoenix.exception.SQLExceptionCode.VIEW_CANNOT_EXTEND_P
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_LINK_HBASE_TABLE_NAME;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-
+//Failing with HA Connection
 public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BaseRowKeyMatcherTestIT.class);
@@ -247,7 +249,7 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
             throws SQLException {
         String baseTableName = String.format(BASE_TABLE_NAME_FMT, tableName);
 
-        try (Connection globalConnection = DriverManager.getConnection(getUrl())) {
+        try (Connection globalConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             try (Statement cstmt = globalConnection.createStatement()) {
                 String
                         CO_BASE_TBL_TEMPLATE =
@@ -276,8 +278,8 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
         String baseTableName = String.format(BASE_TABLE_NAME_FMT, tableName);
         String partitionName = String.format(PARTITION_FMT, partition);
         String globalViewName = String.format(GLOBAL_VIEW_NAME_FMT, partitionName);
-        try (PhoenixConnection globalConnection = DriverManager.getConnection(getUrl())
-                .unwrap(PhoenixConnection.class)) {
+        try (PhoenixMonitoredConnection globalConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))
+                .unwrap(PhoenixMonitoredConnection.class)) {
             try (Statement cstmt = globalConnection.createStatement()) {
                 String
                         VIEW_TEMPLATE =
@@ -331,7 +333,7 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
                 String.format(TENANT_URL_FMT, getUrl(), TENANT_ID_ATTRIB, tenantId);
         String tenantViewName = String.format(TENANT_VIEW_NAME_FMT, partitionName, tenantViewNum);
         String tenantViewOptions = "";
-        try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl)) {
+        try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             tenantConnection.setAutoCommit(true);
             try (Statement cstmt = tenantConnection.createStatement()) {
                 String
@@ -384,8 +386,8 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
                 tenantConnectionUrl =
                 String.format(TENANT_URL_FMT, getUrl(), TENANT_ID_ATTRIB, tenantId);
         String tenantViewName = String.format(TENANT_VIEW_NAME_FMT, partitionName, tenantViewNum);
-        try (PhoenixConnection tenantConnection = DriverManager.getConnection(tenantConnectionUrl)
-                .unwrap(PhoenixConnection.class)) {
+        try (PhoenixMonitoredConnection tenantConnection = DriverManager.getConnection(tenantConnectionUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))
+                .unwrap(PhoenixMonitoredConnection.class)) {
             tenantConnection.setAutoCommit(true);
             String
                     TENANT_VIEW_WITH_PK =
@@ -489,7 +491,7 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
     }
 
     // Helper to get rowKeyMatcher from Metadata.
-    private Pair<String, byte[]> getRowKeyMatchersFromView(PhoenixConnection connection,
+    private Pair<String, byte[]> getRowKeyMatchersFromView(PhoenixMonitoredConnection connection,
             String viewName) throws SQLException {
 
         PName tenantId = connection.getTenantId();
@@ -508,7 +510,7 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
                 "SELECT ROW_KEY_MATCHER FROM SYSTEM.CATALOG " + "WHERE %s AND TABLE_SCHEM <> 'SYSTEM' AND TABLE_NAME = '%s' AND  ROW_KEY_MATCHER IS NOT NULL";
         final String  SYS_CATALOG_IDX_ROW_KEY_MATCHER_HEADER_SQL = "SELECT \"0:ROW_KEY_MATCHER\" FROM SYSTEM.SYS_ROW_KEY_MATCHER_IDX " + "WHERE %s AND \":TABLE_SCHEM\" = '%s' AND \":TABLE_NAME\" = '%s'";
 
-        try (Connection connection = DriverManager.getConnection(getUrl())) {
+        try (Connection connection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             Statement stmt = connection.createStatement();
             String
                     tenantClause = useIndexTable ?
@@ -536,7 +538,7 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
     }
 
         // Helper to get rowKeyMatcher from Metadata.
-    private Pair<String, byte[]> getRowKeyMatchersFromView(PhoenixConnection connection,
+    private Pair<String, byte[]> getRowKeyMatchersFromView(PhoenixMonitoredConnection connection,
             PTable view) throws SQLException {
         return getRowKeyMatchersFromView(connection, view.getName().getString());
     }
@@ -620,11 +622,11 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
     private Map<String, byte[]> assertRowKeyMatchersForTable(String url, String parentSchemaName,
             String parentTableName) {
         Map<String, byte[]> viewToRowKeyMap = Maps.newHashMap();
-        Properties tenantProps = PropertiesUtil.deepCopy(new Properties());
-        try (Connection globalConnection = DriverManager.getConnection(url)) {
+        Properties tenantProps = PropertiesUtil.deepCopy(PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        try (Connection globalConnection = DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             ConnectionQueryServices
                     cqs =
-                    globalConnection.unwrap(PhoenixConnection.class).getQueryServices();
+                    globalConnection.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
             try (Table childLinkTable = cqs.getTable(
                     SchemaUtil.getPhysicalName(SYSTEM_LINK_HBASE_TABLE_NAME.toBytes(),
                             cqs.getProps()).getName())) {
@@ -649,7 +651,7 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
                     Pair<String, byte[]>
                             rowKeyInfo =
                             getRowKeyMatchersFromView(
-                                    stmtConnection.unwrap(PhoenixConnection.class), view);
+                                    stmtConnection.unwrap(PhoenixMonitoredConnection.class), view);
                     assertRowKeyMatcherForView(stmtConnection.unwrap(PhoenixConnection.class), view,
                             rowKeyInfo);
                     viewToRowKeyMap.put(rowKeyInfo.getFirst(), rowKeyInfo.getSecond());
@@ -727,7 +729,7 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
     }
 
     // Asserts that the row matched by the rowId and tenantId matches the prefix
-    private void assertHBaseRowKeyMatchesPrefix(PhoenixConnection connection, byte[] hbaseTableName,
+    private void assertHBaseRowKeyMatchesPrefix(PhoenixMonitoredConnection connection, byte[] hbaseTableName,
             int rowId, byte[] prefix) throws IOException, SQLException {
 
         byte[] rowkey = ByteUtil.EMPTY_BYTE_ARRAY;
@@ -759,7 +761,7 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
     }
 
     // Asserts that the row matching the tenantId and rowId matches with the viewIndexId
-    private void assertIndexTableRowKeyMatchesPrefix(PhoenixConnection connection, PTable viewIndex,
+    private void assertIndexTableRowKeyMatchesPrefix(PhoenixMonitoredConnection connection, PTable viewIndex,
             byte[] hbaseIndexTableName, int rowId) throws IOException, SQLException {
 
         byte[] rowkey = ByteUtil.EMPTY_BYTE_ARRAY;
@@ -1118,8 +1120,8 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
                             String.format(TENANT_URL_FMT, getUrl(), TENANT_ID_ATTRIB, tenantId);
                     String tenantViewName = String.format(TENANT_VIEW_NAME_FMT, partitionName, 1);
                     String tenantViewKey = String.format("%s.%s", tenantId, tenantViewName);
-                    try (PhoenixConnection tenantConnection = DriverManager.getConnection(
-                            tenantConnectionUrl).unwrap(PhoenixConnection.class)) {
+                    try (PhoenixMonitoredConnection tenantConnection = DriverManager.getConnection(
+                            tenantConnectionUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixMonitoredConnection.class)) {
                         assertHBaseRowKeyMatchesPrefix(tenantConnection,
                                 baseTableName.getBytes(StandardCharsets.UTF_8), rowId,
                                 actualViewToRowKeyMap.get(tenantViewKey));

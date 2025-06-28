@@ -66,6 +66,7 @@ import static org.junit.Assert.assertTrue;
 /**
  * ServerPagingIT tests that include some region moves while performing rs#next.
  */
+//Failing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
 
@@ -130,7 +131,11 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
                 TestScanningResultPostDummyResultCaller.class.getName());
         props.put(QueryServices.PHOENIX_POST_VALID_PROCESS,
                 TestScanningResultPostValidResultCaller.class.getName());
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     @After

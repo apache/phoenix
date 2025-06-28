@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -26,9 +27,10 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class InstrFunctionIT extends ParallelStatsDisabledIT {
     private void initTable(Connection conn, String tableName, String sortOrder, String s, String subStr) throws Exception {
@@ -62,7 +64,7 @@ public class InstrFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSingleByteInstrAscending() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         initTable(conn, tableName, "ASC", "abcdefghijkl","fgh");
         String queryToExecute = "SELECT INSTR(name, 'fgh') FROM " + tableName;
@@ -71,7 +73,7 @@ public class InstrFunctionIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testSingleByteInstrDescending() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         initTable(conn, tableName, "DESC", "abcdefghijkl","fgh");
         String queryToExecute = "SELECT INSTR(name, 'fgh') FROM " + tableName;
@@ -80,7 +82,7 @@ public class InstrFunctionIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testSingleByteInstrAscendingNoString() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         initTable(conn, tableName, "ASC", "abcde fghijkl","lmn");
         String queryToExecute = "SELECT INSTR(name, 'lmn') FROM " + tableName;
@@ -89,7 +91,7 @@ public class InstrFunctionIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testSingleByteInstrDescendingNoString() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         initTable(conn, tableName, "DESC", "abcde fghijkl","lmn");
         String queryToExecute = "SELECT INSTR(name, 'lmn') FROM " + tableName;
@@ -98,7 +100,7 @@ public class InstrFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testMultiByteInstrAscending() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         initTable(conn, tableName, "ASC", "AɚɦFGH","ɚɦ");
         String queryToExecute = "SELECT INSTR(name, 'ɚɦ') FROM " + tableName;
@@ -107,7 +109,7 @@ public class InstrFunctionIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testMultiByteInstrDecending() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         initTable(conn, tableName, "DESC", "AɚɦFGH","ɚɦ");
         String queryToExecute = "SELECT INSTR(name, 'ɚɦ') FROM " + tableName;
@@ -116,7 +118,7 @@ public class InstrFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testByteInstrAscendingFilter() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         initTable(conn, tableName, "ASC", "abcdefghijkl","fgh");
         String queryToExecute = "select NAME from " + tableName + " where instr(name, 'fgh') > 0";
@@ -126,7 +128,7 @@ public class InstrFunctionIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testByteInstrDecendingFilter() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         initTable(conn, tableName, "DESC", "abcdefghijkl","fgh");
         String queryToExecute = "select NAME from " + tableName + " where instr(name, 'fgh') > 0";
@@ -135,7 +137,7 @@ public class InstrFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testNonLiteralExpression() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         initTable(conn, tableName, "ASC", "asdf", "sdf");
         // Should be able to use INSTR with a non-literal expression as the 2nd argument
@@ -145,7 +147,7 @@ public class InstrFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testNonLiteralSourceExpression() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         initTable(conn, tableName, "ASC", "asdf", "sdf");
         // Using the function inside the SELECT will test client-side.

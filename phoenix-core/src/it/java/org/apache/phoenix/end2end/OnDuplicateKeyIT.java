@@ -57,7 +57,7 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-
+//Failing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
@@ -917,7 +917,7 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
     }
 
     private long getEmptyKVLatestCellTimestamp(String tableName) throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         PTable pTable = PhoenixRuntime.getTable(conn, tableName);
         byte[] emptyCQ = EncodedColumnsUtil.getEmptyKeyValueInfo(pTable).getFirst();
         return getColumnLatestCellTimestamp(tableName, emptyCQ);

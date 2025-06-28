@@ -40,6 +40,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.util.ByteUtil;
@@ -51,7 +52,7 @@ import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Ordering;
 
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class ProductMetricsIT extends ParallelStatsDisabledIT {
     private static final String PRODUCT_METRICS_NAME = "PRODUCT_METRICS";
@@ -1527,7 +1528,7 @@ public class ProductMetricsIT extends ParallelStatsDisabledIT {
         Admin admin = null;
         try {
             initTableValues(tablename, tenantId, getSplits(tenantId));
-            admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+            admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin();
             admin.flush(TableName.valueOf(SchemaUtil.getTableNameAsBytes(PRODUCT_METRICS_SCHEMA_NAME,tablename)));
             String query = "SELECT SUM(TRANSACTIONS) FROM " + tablename + " WHERE FEATURE=?";
             PreparedStatement statement = conn.prepareStatement(query);

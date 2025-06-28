@@ -17,15 +17,27 @@
  */
 package org.apache.phoenix.jdbc;
 
+import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.util.PairOfSameType;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.ParallelPhoenixUtil.FutureResult;
 import org.apache.phoenix.monitoring.MetricType;
+import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.schema.PMetaData;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.io.Reader;
 import java.sql.Array;
 import java.sql.Blob;
 import java.sql.CallableStatement;
@@ -41,6 +53,7 @@ import java.sql.SQLXML;
 import java.sql.Savepoint;
 import java.sql.Statement;
 import java.sql.Struct;
+import java.text.Format;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -678,5 +691,81 @@ public class ParallelPhoenixConnection implements PhoenixMonitoredConnection {
             LOG.error("Unexpected exception while clearning metrics.", exception);
         }
         context.resetMetrics();
+    }
+
+    @Override
+    public ConnectionQueryServices getQueryServices() throws SQLException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public PTable getTable(PTableKey key) throws SQLException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public PTable getTable(String name) throws SQLException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public PTable getTableNoCache(String name) throws SQLException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Consistency getConsistency() throws SQLException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    @Nullable
+    public PName getTenantId() throws SQLException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public MutationState getMutationState() throws SQLException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public PMetaData getMetaDataCache() throws SQLException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public int getMutateBatchSize() throws SQLException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public int executeStatements(Reader reader, List<Object> binds, PrintStream out) throws IOException, SQLException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Format getFormatter(PDataType type) throws SQLException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void setRunningUpgrade(boolean isRunningUpgrade) throws SQLException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public PTable getTable(String tenantId, String fullTableName) throws SQLException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public PTable getTableNoCache(PName tenantId, String name) throws SQLException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void setIsClosing(boolean imitateIsClosing) throws SQLException {
+        throw new UnsupportedOperationException();
     }
 }
