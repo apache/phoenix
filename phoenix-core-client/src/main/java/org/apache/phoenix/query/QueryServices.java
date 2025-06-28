@@ -468,6 +468,8 @@ public interface QueryServices extends SQLCloseable {
      */
     String TESTS_MINI_CLUSTER_NUM_REGION_SERVERS = "phoenix.tests.minicluster.numregionservers";
 
+    String TESTS_MINI_CLUSTER_NUM_MASTERS = "phoenix.tests.minicluster.nummasters";
+
 
     /**
      * Config to inject any processing after the client retrieves dummy result from the server.
@@ -508,6 +510,8 @@ public interface QueryServices extends SQLCloseable {
         "phoenix.metadata.update.rowlock.timeout";
 
     long DEFAULT_PHOENIX_METADATA_CACHE_UPDATE_ROWLOCK_TIMEOUT = 60000;
+
+    String CQSI_THREAD_POOL_METRICS_ENABLED = "phoenix.cqsi.thread.pool.metrics.enabled";
 
     /**
      * Get executor service used for parallel scans

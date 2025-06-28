@@ -107,7 +107,14 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
         connectionQueryServicesMap.put(connInfo, connectionQueryServices);
         return connectionQueryServices;
     }
-    
+
+    public synchronized void cleanUpCQSICache() throws SQLException {
+        for (ConnectionQueryServices service : connectionQueryServicesMap.values()) {
+            service.close();
+        }
+        connectionQueryServicesMap.clear();
+    }
+
     private synchronized void checkClosed() {
         if (closed) {
             throw new IllegalStateException("The Phoenix jdbc test driver has been closed.");

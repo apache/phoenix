@@ -42,11 +42,13 @@ import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ENABLED;
 import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS;
 import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_MAX_QUEUE;
 import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_MAX_THREADS;
+import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_METRICS_ENABLED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.Mockito.doAnswer;
 
 import java.lang.reflect.Field;
 import java.sql.Connection;
@@ -55,12 +57,15 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ThreadPoolExecutor;
 
-
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
@@ -68,10 +73,15 @@ import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilit
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.monitoring.GlobalMetric;
+import org.apache.phoenix.monitoring.HTableThreadPoolHistograms;
+import org.apache.phoenix.monitoring.HTableThreadPoolMetricsManager;
+import org.apache.phoenix.monitoring.HistogramDistribution;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
@@ -80,6 +90,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.rules.TestName;
+import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -116,8 +127,9 @@ public class ParallelPhoenixConnectionIT {
         GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_CORE_POOL_SIZE, String.valueOf(17));
         GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_MAX_THREADS, String.valueOf(19));
         GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_MAX_QUEUE, String.valueOf(23));
-        GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT, String.valueOf(true));
-
+        GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT,
+            String.valueOf(true));
+        GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_METRICS_ENABLED, String.valueOf(true));
     }
 
     @AfterClass
@@ -212,6 +224,107 @@ public class ParallelPhoenixConnectionIT {
 
             // Check that both threadPools for parallel connections are different.
             assertNotSame(threadPoolExecutor1, threadPoolExecutor2);
+        }
+    }
+
+    @Test
+    public void testCqsiThreadPoolMetricsForParallelConnection() throws Exception {
+        try (Connection conn = getParallelConnection()) {
+            ParallelPhoenixConnection pr = conn.unwrap(ParallelPhoenixConnection.class);
+
+            // Get details of connection#1
+            PhoenixConnection pConn1 = pr.getFutureConnection1().get();
+            Configuration config1 = pConn1.getQueryServices().getConfiguration();
+            String zkQuorum1 = config1.get(HConstants.ZOOKEEPER_QUORUM);
+            String principal1 = config1.get(QueryServices.QUERY_SERVICES_NAME);
+
+            // Get details of connection#2
+            PhoenixConnection pConn2 = pr.getFutureConnection2().get();
+            Configuration config2 = pConn2.getQueryServices().getConfiguration();
+            String zkQuorum2 = config2.get(HConstants.ZOOKEEPER_QUORUM);
+            String principal2 = config2.get(QueryServices.QUERY_SERVICES_NAME);
+
+            // Slow down connection#1
+            CountDownLatch latch = new CountDownLatch(1);
+            slowDownConnection(pr, pr.getFutureConnection1(), "futureConnection1", latch);
+
+            try (Statement stmt = conn.createStatement()) {
+                HTableThreadPoolMetricsManager.getHistogramsForAllThreadPools();
+                try (ResultSet rs =
+                    stmt.executeQuery(String.format("SELECT COUNT(*) FROM %s", tableName))) {
+                    assertTrue(rs.next());
+                    assertEquals(0, rs.getInt(1));
+                    assertFalse(rs.next());
+                }
+
+                Map<String, List<HistogramDistribution>> htableHistograms =
+                    HTableThreadPoolMetricsManager.getHistogramsForAllThreadPools();
+
+                // Assert connection#1 CQSI thread pool metrics
+                String conn1HistogramKey = getHistogramKey(config1);
+                assertHTableThreadPoolHistograms(htableHistograms.get(conn1HistogramKey),
+                    conn1HistogramKey, false, zkQuorum1, principal1);
+
+                // Assert connection#2 CQSI thread pool metrics
+                String conn2HistogramKey = getHistogramKey(config2);
+                assertHTableThreadPoolHistograms(htableHistograms.get(conn2HistogramKey),
+                    conn2HistogramKey, true, zkQuorum2, principal2);
+
+                // Assert that the CQSI thread pool metrics for both connections are different
+                Assert.assertNotEquals(conn1HistogramKey, conn2HistogramKey);
+            } finally {
+                latch.countDown();
+            }
+        }
+    }
+
+    private void slowDownConnection(ParallelPhoenixConnection pr,
+        CompletableFuture<PhoenixConnection> pConn, String futureConnectionField,
+        CountDownLatch latch) throws Exception {
+        Assert.assertTrue(futureConnectionField.equals("futureConnection1")
+            || futureConnectionField.equals("futureConnection2"));
+
+        PhoenixConnection spy = Mockito.spy(pConn.get());
+        doAnswer((invocation) -> {
+            // Block the statement creation until the latch is counted down
+            latch.await();
+            return invocation.callRealMethod();
+        }).when(spy).createStatement();
+
+        // Replace the existing CompletableFuture with the spied CompletableFuture
+        Field futureField = ParallelPhoenixConnection.class.getDeclaredField(futureConnectionField);
+        futureField.setAccessible(true);
+        CompletableFuture<PhoenixConnection> spiedFuture = CompletableFuture.completedFuture(spy);
+        futureField.set(pr, spiedFuture);
+
+        // Verify that the spied CompletableFuture has been setup correctly
+        if (futureConnectionField.equals("futureConnection1")) {
+            Assert.assertSame(spy, pr.getFutureConnection1().get());
+        } else {
+            Assert.assertSame(spy, pr.getFutureConnection2().get());
+        }
+    }
+
+    private String getHistogramKey(Configuration config) throws SQLException {
+        String url =
+            QueryUtil.getConnectionUrl(clientProperties, config, HBaseTestingUtilityPair.PRINCIPAL);
+        return ConnectionInfo.createNoLogin(url, null, null).toUrl();
+    }
+
+    private void assertHTableThreadPoolHistograms(List<HistogramDistribution> histograms,
+        String histogramKey, boolean isUsed, String zkQuorum, String principal) {
+        Assert.assertNotNull(histograms);
+        assertEquals(2, histograms.size());
+        for (HistogramDistribution histogram : histograms) {
+            if (isUsed) {
+                assertTrue(histogram.getCount() > 0);
+            } else {
+                assertEquals(0, histogram.getCount());
+            }
+            assertEquals(zkQuorum,
+                histogram.getTags().get(HTableThreadPoolHistograms.Tag.servers.name()));
+            assertEquals(principal,
+                histogram.getTags().get(HTableThreadPoolHistograms.Tag.cqsiName.name()));
         }
     }
 
