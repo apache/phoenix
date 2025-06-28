@@ -24,9 +24,12 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -41,6 +44,8 @@ import org.apache.hadoop.hbase.util.FutureUtils;
 import org.apache.phoenix.replication.log.LogFile;
 import org.apache.phoenix.replication.log.LogFileReader;
 import org.apache.phoenix.replication.log.LogFileReaderContext;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogProcessor;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogProcessorImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,6 +65,17 @@ public class ReplicationLogProcessor implements Closeable {
      * in-memory records to be processed
      */
     public static final int DEFAULT_REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE = 6400;
+
+    /**
+     * The number of threads to apply mutations via async hbase client
+     */
+    public static final String REPLICATION_STANDBY_LOG_REPLAY_THREAD_POOL_SIZE =
+            "phoenix.replication.log.standby.replay.thread.pool.size";
+
+    /**
+     * The default number of threads for applying mutations via async hbase client
+     */
+    public static final int DEFAULT_REPLICATION_STANDBY_LOG_REPLAY_THREAD_POOL_SIZE = 5;
 
     /**
      * The maximum number of retries for HBase client operations while applying the mutations
@@ -105,6 +121,8 @@ public class ReplicationLogProcessor implements Closeable {
      */
     public static final long DEFAULT_REPLICATION_STANDBY_BATCH_RETRY_MAX_DELAY_MS = 10000;
 
+    private final String haGroupId;
+
     private final Configuration conf;
 
     private final ExecutorService executorService;
@@ -120,24 +138,44 @@ public class ReplicationLogProcessor implements Closeable {
 
     private final long maxRetryDelayMs;
 
+    private final MetricsReplicationLogProcessor metrics;
+
+    /** Cache of ReplicationLogGroup instances by HA Group ID */
+    private static final ConcurrentHashMap<String, ReplicationLogProcessor> INSTANCES =
+            new ConcurrentHashMap<>();
+
+    /**
+     * Get or create a ReplicationLogProcessor instance for the given HA Group.
+     *
+     * @param conf Configuration object
+     * @param haGroupId The HA Group identifier
+     * @return ReplicationLogProcessor instance
+     */
+    public static ReplicationLogProcessor get(Configuration conf, String haGroupId) {
+        return INSTANCES.computeIfAbsent(haGroupId, k -> new ReplicationLogProcessor(conf, haGroupId));
+    }
+
     /**
      * Creates a new ReplicationLogProcessor with the given configuration and executor service.
      * @param conf The configuration to use
-     * @param executorService The executor service for processing mutations
+     * @param haGroupId The HA group id
      */
-    public ReplicationLogProcessor(final Configuration conf,
-            final ExecutorService executorService) {
+    protected ReplicationLogProcessor(final Configuration conf, final String haGroupId) {
         // Create a copy of configuration as some of the properties would be
         // overridden
         this.conf = HBaseConfiguration.create(conf);
-        this.executorService = executorService;
+        this.haGroupId = haGroupId;
         this.batchSize = this.conf.getInt(REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE,
                 DEFAULT_REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE);
         this.batchRetryCount = this.conf.getInt(REPLICATION_STANDBY_BATCH_RETRY_COUNT,
                 DEFAULT_REPLICATION_STANDBY_BATCH_RETRY_COUNT);
         this.maxRetryDelayMs = this.conf.getLong(REPLICATION_STANDBY_BATCH_RETRY_MAX_DELAY_MS,
                 DEFAULT_REPLICATION_STANDBY_BATCH_RETRY_MAX_DELAY_MS);
+        final int threadPoolSize = this.conf.getInt(REPLICATION_STANDBY_LOG_REPLAY_THREAD_POOL_SIZE,
+                DEFAULT_REPLICATION_STANDBY_LOG_REPLAY_THREAD_POOL_SIZE);
         decorateConf();
+        this.metrics = createMetricsSource();
+        this.executorService = Executors.newFixedThreadPool(threadPoolSize, new ThreadFactoryBuilder().setNameFormat("Phoenix-Replication-Log-Processor-" + haGroupId + "-%d").build());
     }
 
     /**
@@ -166,6 +204,8 @@ public class ReplicationLogProcessor implements Closeable {
         long currentBatchSize = 0;
 
         LogFileReader logFileReader = null;
+
+        long startTime = System.currentTimeMillis();
 
         try {
             // Create the LogFileReader for given path
@@ -197,12 +237,16 @@ public class ReplicationLogProcessor implements Closeable {
 
             LOG.info("Completed processing log file {}. Total mutations processed: {}",
                     logFileReader.getContext().getFilePath(), totalProcessed);
-
+            getMetrics().incrementLogFileReplaySuccessCount();
         } catch (Exception e) {
             LOG.error("Error while processing replication log file", e);
+            getMetrics().incrementLogFileReplayFailureCount();
             throw new IOException("Failed to process log file " + filePath, e);
         } finally {
             closeReader(logFileReader);
+            // Update log file replay time metric
+            long endTime = System.currentTimeMillis();
+            getMetrics().updateLogFileReplayTime(endTime - startTime);
         }
     }
 
@@ -260,6 +304,9 @@ public class ReplicationLogProcessor implements Closeable {
         IOException lastError = null;
 
         int attempt = 0;
+
+        long startTime = System.currentTimeMillis();
+
         while(attempt <= batchRetryCount && !currentOperations.isEmpty()) {
             if (attempt > 0) {
                 LOG.warn("Retrying failed batch operations, attempt {} of {}",
@@ -268,20 +315,21 @@ public class ReplicationLogProcessor implements Closeable {
 
             try {
                 // Apply mutations and get any failed operations
-                Map<TableName, List<Mutation>> failedOperations = applyMutations(currentOperations);
+                ApplyMutationBatchResult result = applyMutations(currentOperations);
                 
                 // If no failures, we're done
-                if (failedOperations.isEmpty()) {
+                if (!result.hasFailures()) {
                     return;
                 }
                 
                 // Update current operations for next retry
-                currentOperations = failedOperations;
-                lastError = new IOException("Failed to apply the mutations");
+                currentOperations = result.getFailedMutations();
+                lastError = new IOException("Failed to apply the mutations", result.getException());
             } catch (IOException e) {
                 lastError = e;
             }
             attempt++;
+            getMetrics().incrementFailedBatchCount();
             // Add delay between retries (exponential backoff)
             if (attempt <= batchRetryCount && !currentOperations.isEmpty()) {
                 try {
@@ -293,6 +341,9 @@ public class ReplicationLogProcessor implements Closeable {
                 }
             }
         }
+        // Update batch replay time metrics
+        long endTime = System.currentTimeMillis();
+        getMetrics().updateBatchReplayTime(endTime - startTime);
 
         // If we still have failed operations after all retries, throw the last error
         if (!currentOperations.isEmpty() && lastError != null) {
@@ -314,18 +365,19 @@ public class ReplicationLogProcessor implements Closeable {
     /**
      * Applies mutations to HBase tables and returns any failed operations.
      * @param tableMutationMap Map of table names to their mutations
-     * @return Map of table names to their failed mutations, empty if all succeeded
+     * @return ApplyMutationBatchResult containing failed mutations and any exceptions
      * @throws IOException if there's an error applying mutations
      */
-    protected Map<TableName, List<Mutation>> applyMutations(
+    protected ApplyMutationBatchResult applyMutations(
             Map<TableName, List<Mutation>> tableMutationMap) throws IOException {
 
         if(tableMutationMap == null || tableMutationMap.isEmpty()) {
-            return Collections.emptyMap();
+            return new ApplyMutationBatchResult(Collections.emptyMap(), null);
         }
 
         Map<TableName, List<Mutation>> failedOperations = new HashMap<>();
         Map<TableName, Future<?>> futures = new HashMap<>();
+        Exception lastException = null;
 
         // Submit batch operations
         for (Map.Entry<TableName, List<Mutation>> entry : tableMutationMap.entrySet()) {
@@ -345,11 +397,13 @@ public class ReplicationLogProcessor implements Closeable {
             } catch (IOException e) {
                 // Add failed mutations to retry list
                 failedOperations.put(tableName, tableMutationMap.get(tableName));
-                LOG.warn("Failed to apply mutations for table {}: {}", tableName, e.getMessage());
+                getMetrics().incrementFailedMutationsCount(tableMutationMap.get(tableName).size());
+                LOG.debug("Failed to apply mutations for table {}: {}", tableName, e.getMessage());
+                lastException = e;
             }
         }
 
-        return failedOperations;
+        return new ApplyMutationBatchResult(failedOperations, lastException);
     }
 
     /**
@@ -381,16 +435,29 @@ public class ReplicationLogProcessor implements Closeable {
      */
     @Override
     public void close() throws IOException {
-        AsyncConnection existingAsyncConnection = asyncConnection;
-        if(existingAsyncConnection != null && !existingAsyncConnection.isClosed()) {
-            synchronized (this) {
-                existingAsyncConnection = asyncConnection;
-                if(existingAsyncConnection != null && !existingAsyncConnection.isClosed()) {
-                    existingAsyncConnection.close();
-                }
+        synchronized (this) {
+            // Close the async connection
+            if(asyncConnection != null && !asyncConnection.isClosed()) {
+                asyncConnection.close();
             }
+            asyncConnection = null;
+            // Shutdown the executor service
+            if(executorService != null && !executorService.isShutdown()) {
+                executorService.shutdownNow();
+            }
+            // Remove the instance from cache
+            INSTANCES.remove(haGroupId);
         }
-        asyncConnection = null;
+    }
+
+    /** Creates a new metrics source for monitoring operations. */
+    protected MetricsReplicationLogProcessor createMetricsSource() {
+        return new MetricsReplicationLogProcessorImpl(haGroupId);
+    }
+
+    /** Returns the metrics source for monitoring replication log operations. */
+    public MetricsReplicationLogProcessor getMetrics() {
+        return metrics;
     }
 
     public int getBatchSize() {
@@ -413,5 +480,38 @@ public class ReplicationLogProcessor implements Closeable {
 
     public long getMaxRetryDelayMs() {
         return this.maxRetryDelayMs;
+    }
+
+    public String getHaGroupId() {
+        return this.haGroupId;
+    }
+
+    protected ExecutorService getExecutorService() {
+        return this.executorService;
+    }
+
+    /**
+     * Result class for batch mutation operations containing failed mutations and any exceptions.
+     */
+    protected static class ApplyMutationBatchResult {
+        private final Map<TableName, List<Mutation>> failedMutations;
+        private final Exception exception;
+
+        public ApplyMutationBatchResult(Map<TableName, List<Mutation>> failedMutations, Exception exception) {
+            this.failedMutations = failedMutations != null ? failedMutations : Collections.emptyMap();
+            this.exception = exception;
+        }
+
+        public Map<TableName, List<Mutation>> getFailedMutations() {
+            return failedMutations;
+        }
+
+        public Exception getException() {
+            return exception;
+        }
+
+        public boolean hasFailures() {
+            return !failedMutations.isEmpty();
+        }
     }
 }
