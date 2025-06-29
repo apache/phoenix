@@ -22,6 +22,7 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Threads;
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.ZKConnectionInfo;
 import org.apache.phoenix.job.HTableThreadPoolWithUtilizationStats;
@@ -43,6 +44,7 @@ import org.junit.runners.Parameterized;
 
 import java.io.IOException;
 import java.sql.Connection;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
@@ -210,9 +212,15 @@ public class ExternalHTableThreadPoolMetricsIT extends BaseHTableThreadPoolMetri
 
     @Parameterized.Parameters(name = "ExternalHTableThreadPoolMetricsIT_registryClassName={0}")
     public synchronized static Collection<String> data() {
-        return Arrays.asList(ZKConnectionInfo.ZK_REGISTRY_NAME,
-                "org.apache.hadoop.hbase.client.RpcConnectionRegistry",
-                "org.apache.hadoop.hbase.client.MasterRegistry");
+        List<String> list = new ArrayList<>();
+        list.add(ZKConnectionInfo.ZK_REGISTRY_NAME);
+        if (VersionInfo.compareVersion(VersionInfo.getVersion(), "2.3.0") >= 0) {
+            list.add("org.apache.hadoop.hbase.client.MasterRegistry");
+        }
+        if (VersionInfo.compareVersion(VersionInfo.getVersion(), "2.5.0") >= 0) {
+            list.add("org.apache.hadoop.hbase.client.RpcConnectionRegistry");
+        }
+        return list;
     }
 
     @Test
