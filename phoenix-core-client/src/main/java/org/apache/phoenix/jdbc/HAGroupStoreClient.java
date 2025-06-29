@@ -31,11 +31,14 @@ import org.slf4j.LoggerFactory;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
+import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 
 
 /**
@@ -45,7 +48,6 @@ import java.util.stream.Collectors;
 public class HAGroupStoreClient implements Closeable {
 
     private static final long HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS = 30000L;
-    private static volatile HAGroupStoreClient haGroupStoreClientInstance;
     private PhoenixHAAdmin phoenixHaAdmin;
     private static final Logger LOGGER = LoggerFactory.getLogger(HAGroupStoreClient.class);
     // Map contains <ClusterRole, Map<HAGroupName(String), ClusterRoleRecord>>
@@ -53,6 +55,7 @@ public class HAGroupStoreClient implements Closeable {
             = new ConcurrentHashMap<>();
     private PathChildrenCache pathChildrenCache;
     private volatile boolean isHealthy;
+    private static final Map<String, HAGroupStoreClient> instances = new ConcurrentHashMap<>();
 
     /**
      * Creates/gets an instance of HAGroupStoreClient.
@@ -62,18 +65,22 @@ public class HAGroupStoreClient implements Closeable {
      * @return HAGroupStoreClient instance
      */
     public static HAGroupStoreClient getInstance(Configuration conf) {
-        if (haGroupStoreClientInstance == null || !haGroupStoreClientInstance.isHealthy) {
+        final String zkUrl = getLocalZkUrl(conf);
+        HAGroupStoreClient result = instances.get(zkUrl);
+        if (result == null || !result.isHealthy) {
             synchronized (HAGroupStoreClient.class) {
-                if (haGroupStoreClientInstance == null || !haGroupStoreClientInstance.isHealthy) {
-                    haGroupStoreClientInstance = new HAGroupStoreClient(conf, null);
-                    if (!haGroupStoreClientInstance.isHealthy) {
-                        haGroupStoreClientInstance.close();
-                        haGroupStoreClientInstance = null;
+                result = instances.get(zkUrl);
+                if (result == null || !result.isHealthy) {
+                    result = new HAGroupStoreClient(conf, null);
+                    if (!result.isHealthy) {
+                        result.close();
+                        result = null;
                     }
+                    instances.put(zkUrl, result);
                 }
             }
         }
-        return haGroupStoreClientInstance;
+        return result;
     }
 
     @VisibleForTesting

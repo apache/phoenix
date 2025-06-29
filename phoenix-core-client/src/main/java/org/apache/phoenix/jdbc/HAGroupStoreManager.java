@@ -19,29 +19,38 @@ package org.apache.phoenix.jdbc;
 
 import org.apache.hadoop.conf.Configuration;
 import java.io.IOException;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 
 public class HAGroupStoreManager {
-    private static volatile HAGroupStoreManager haGroupStoreManagerInstance;
     private final boolean mutationBlockEnabled;
     private final Configuration conf;
+    private static volatile Map<String, HAGroupStoreManager> INSTANCES = new ConcurrentHashMap<>();
 
     /**
      * Creates/gets an instance of HAGroupStoreManager.
+     * Provides unique instance for each ZK URL
      *
      * @param conf configuration
      * @return HAGroupStoreManager instance
      */
     public static HAGroupStoreManager getInstance(Configuration conf) {
-        if (haGroupStoreManagerInstance == null) {
+        final String zkUrl = getLocalZkUrl(conf);
+        HAGroupStoreManager result = INSTANCES.get(zkUrl);
+        if (result == null) {
             synchronized (HAGroupStoreManager.class) {
-                if (haGroupStoreManagerInstance == null) {
-                    haGroupStoreManagerInstance = new HAGroupStoreManager(conf);
+                result = INSTANCES.get(zkUrl);
+                if (result == null) {
+                    result = new HAGroupStoreManager(conf);
+                    INSTANCES.put(zkUrl, result);
                 }
             }
         }
-        return haGroupStoreManagerInstance;
+        return result;
     }
 
     private HAGroupStoreManager(final Configuration conf) {
