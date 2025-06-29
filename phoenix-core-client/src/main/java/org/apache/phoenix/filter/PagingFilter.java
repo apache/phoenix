@@ -29,9 +29,9 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.exceptions.DeserializationException;
 import org.apache.hadoop.hbase.filter.Filter;
-import org.apache.hadoop.hbase.filter.FilterBase;
 import org.apache.hadoop.hbase.util.Writables;
 import org.apache.hadoop.io.Writable;
+import org.apache.phoenix.compat.hbase.CompatPagingFilter;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 
 /**
@@ -71,19 +71,19 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
  * filterRowKey(). In this method, PagingFilter records the last row that is scanned.
  *
  */
-public class PagingFilter extends FilterBase implements Writable {
+public class PagingFilter extends CompatPagingFilter implements Writable {
     private long pageSizeMs;
     private long startTime;
     // tracks the row we last visited
     private Cell currentCell;
     private boolean isStopped;
-    private Filter delegate = null;
 
     public PagingFilter() {
+        super(null);
     }
 
     public PagingFilter(Filter delegate, long pageSizeMs) {
-        this.delegate = delegate;
+        super(delegate);
         this.pageSizeMs = pageSizeMs;
     }
 
@@ -206,14 +206,6 @@ public class PagingFilter extends FilterBase implements Writable {
             return delegate.isFamilyEssential(name);
         }
         return super.isFamilyEssential(name);
-    }
-
-    @Override
-    public ReturnCode filterKeyValue(Cell v) throws IOException {
-        if (delegate != null) {
-            return delegate.filterKeyValue(v);
-        }
-        return super.filterKeyValue(v);
     }
 
     @Override

@@ -215,7 +215,7 @@ public class MultiEncodedCQKeyValueComparisonFilter extends BooleanExpressionFil
         return qualifier >= whereExpressionMinQualifier ? whereExpressionQualifiers.get(qualifier - whereExpressionMinQualifier) : false;
     }
 
-    @Override
+    // No @Override for HBase 3 compatibility
     public ReturnCode filterKeyValue(Cell cell) {
         return filterCell(cell);
     }
