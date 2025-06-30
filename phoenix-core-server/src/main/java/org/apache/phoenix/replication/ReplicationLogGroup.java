@@ -90,7 +90,7 @@ public class ReplicationLogGroup {
     public static final long DEFAULT_REPLICATION_LOG_RETRY_DELAY_MS = 100L;
 
     public static final String SHARD_DIR_FORMAT = "%05d";
-    public static final String FILE_NAME_FORMAT = "%d-%s.plog";
+    public static final String FILE_NAME_FORMAT = "%d_%s.plog";
 
     /** Cache of ReplicationLogGroup instances by HA Group ID */
     protected static final ConcurrentHashMap<String, ReplicationLogGroup> INSTANCES =
