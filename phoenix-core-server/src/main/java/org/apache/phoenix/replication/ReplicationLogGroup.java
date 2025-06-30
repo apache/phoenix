@@ -192,6 +192,7 @@ public class ReplicationLogGroup {
         // TODO: Switch the initial mode to STORE_AND_FORWARD if the remote writer fails to
         // initialize.
         localWriter = new StoreAndForwardLogGroupWriter(conf, serverName, haGroupName);
+        localWriter.init();
         LOG.info("Started ReplicationLogGroup for HA Group: {}", haGroupName);
     }
 

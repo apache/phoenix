@@ -56,14 +56,23 @@ public class StoreAndForwardLogGroupWriter extends ReplicationLogGroupWriter {
     }
 
     @Override
+    public void init() throws IOException {
+        // TODO
+    }
+
+    @Override
+    public void close() {
+        // TODO
+    }
+
+    @Override
     protected void initializeFileSystems() throws IOException {
-        throw new UnsupportedOperationException(
-            "Store-and-forward functionality not yet implemented.");
+        // TODO
     }
 
     @Override
     protected LogFileWriter createNewWriter() throws IOException {
-        throw new UnsupportedOperationException(
-            "Store-and-forward functionality not yet implemented.");
+        // TODO
+        return null;
     }
 }
