@@ -30,10 +30,12 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.io.IOException;
 import java.net.URI;
@@ -84,6 +86,7 @@ public class ReplicationLogGroupTest {
     private ServerName serverName;
     private FileSystem localFs;
     private URI standbyUri;
+    private MetricsReplicationLogGroupSource metrics;
     private StandbyLogGroupWriter logWriter;
 
     static final int TEST_RINGBUFFER_SIZE = 32;
@@ -93,6 +96,7 @@ public class ReplicationLogGroupTest {
 
     @Before
     public void setUp() throws IOException {
+        final String haGroupName = "testHAGroup";
         conf = HBaseConfiguration.create();
         localFs = FileSystem.getLocal(conf);
         standbyUri = new Path(testFolder.toString()).toUri();
@@ -108,7 +112,15 @@ public class ReplicationLogGroupTest {
         conf.setLong(ReplicationLogGroup.REPLICATION_LOG_ROTATION_SIZE_BYTES_KEY,
             TEST_ROTATION_SIZE_BYTES);
 
-        logWriter = spy(new TestableStandbyLogGroupWriter(conf, serverName, "testHAGroup"));
+        metrics = new MetricsReplicationLogGroupSourceImpl(haGroupName);
+
+        ReplicationLogGroup mockLogGroup = mock(ReplicationLogGroup.class);
+        when(mockLogGroup.getConfiguration()).thenReturn(conf);
+        when(mockLogGroup.getServerName()).thenReturn(serverName);
+        when(mockLogGroup.getHaGroupName()).thenReturn(haGroupName);
+        when(mockLogGroup.getMetrics()).thenReturn(metrics);
+
+        logWriter = spy(new TestableStandbyLogGroupWriter(mockLogGroup));
         logWriter.init();
     }
 
@@ -116,6 +128,9 @@ public class ReplicationLogGroupTest {
     public void tearDown() throws Exception {
         if (logWriter != null) {
             logWriter.close();
+        }
+        if (metrics != null) {
+            metrics.close();
         }
     }
 
@@ -1225,19 +1240,14 @@ public class ReplicationLogGroupTest {
      */
     static class TestableStandbyLogGroupWriter extends StandbyLogGroupWriter {
 
-        protected TestableStandbyLogGroupWriter(Configuration conf, ServerName serverName, String haGroupId) {
-            super(conf, serverName, haGroupId);
+        protected TestableStandbyLogGroupWriter(ReplicationLogGroup logGroup) {
+            super(logGroup);
         }
 
         @Override
         protected LogFileWriter createNewWriter() throws IOException {
             LogFileWriter writer = super.createNewWriter();
             return spy(writer);
-        }
-
-        @Override
-        protected MetricsReplicationLogGroupSource createMetricsSource() {
-            return spy(new MetricsReplicationLogGroupSourceImpl(haGroupId));
         }
     }
 }

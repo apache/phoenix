@@ -25,7 +25,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.ServerName;
 import org.apache.phoenix.replication.log.LogFileWriter;
 import org.apache.phoenix.replication.log.LogFileWriterContext;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -51,11 +50,12 @@ public class StandbyLogGroupWriter extends ReplicationLogGroupWriter {
     /**
      * Constructor for StandbyLogGroupWriter.
      */
-    public StandbyLogGroupWriter(Configuration conf, ServerName serverName, String haGroupId) {
-        super(conf, serverName, haGroupId);
+    public StandbyLogGroupWriter(ReplicationLogGroup logGroup) {
+        super(logGroup);
+        Configuration conf = logGroup.getConfiguration();
         this.numShards = conf.getInt(ReplicationLogGroup.REPLICATION_NUM_SHARDS_KEY,
             ReplicationLogGroup.DEFAULT_REPLICATION_NUM_SHARDS);
-        LOG.debug("Created StandbyLogGroupWriter for HA Group: {}", haGroupId);
+        LOG.debug("Created StandbyLogGroupWriter for HA Group: {}", logGroup.getHaGroupName());
     }
 
     @Override
@@ -65,6 +65,7 @@ public class StandbyLogGroupWriter extends ReplicationLogGroupWriter {
                 + " is " + numShards + ", but the limit is "
                 + ReplicationLogGroup.MAX_REPLICATION_NUM_SHARDS);
         }
+        Configuration conf = logGroup.getConfiguration();
         String standbyUrlString = conf.get(ReplicationLogGroup.REPLICATION_STANDBY_HDFS_URL_KEY);
         if (standbyUrlString == null || standbyUrlString.trim().isEmpty()) {
             throw new IOException("Standby HDFS URL not configured: "
@@ -87,13 +88,14 @@ public class StandbyLogGroupWriter extends ReplicationLogGroupWriter {
      * </pre>
      */
     protected Path makeWriterPath(FileSystem fs, URI url) throws IOException {
-        Path haGroupPath = new Path(url.getPath(), haGroupId);
+        Path haGroupPath = new Path(url.getPath(), logGroup.getHaGroupName());
         long timestamp = EnvironmentEdgeManager.currentTimeMillis();
         // To have all logs for a given regionserver appear in the same shard, hash only the
         // serverName. However we expect some regionservers will have significantly more load than
         // others so we instead distribute the logs over all of the shards randomly for a more even
         // overall distribution by also hashing the timestamp.
-        int shard = Math.floorMod(serverName.hashCode() ^ Long.hashCode(timestamp), numShards);
+        int shard = Math.floorMod(logGroup.getServerName().hashCode() ^ Long.hashCode(timestamp),
+            numShards);
         Path shardPath = new Path(haGroupPath,
             String.format(ReplicationLogGroup.SHARD_DIR_FORMAT, shard));
         // Ensure the shard directory exists. We track which shard directories we have probed or
@@ -117,15 +119,15 @@ public class StandbyLogGroupWriter extends ReplicationLogGroupWriter {
         if (exception[0] != null) {
             throw exception[0];
         }
-        Path filePath = new Path(shardPath,
-            String.format(ReplicationLogGroup.FILE_NAME_FORMAT, timestamp, serverName));
+        Path filePath = new Path(shardPath, String.format(ReplicationLogGroup.FILE_NAME_FORMAT,
+            timestamp, logGroup.getServerName()));
         return filePath;
     }
 
     /** Creates and initializes a new LogFileWriter. */
     protected LogFileWriter createNewWriter() throws IOException {
         Path filePath = makeWriterPath(standbyFs, standbyUrl);
-        LogFileWriterContext writerContext = new LogFileWriterContext(conf)
+        LogFileWriterContext writerContext = new LogFileWriterContext(logGroup.getConfiguration())
             .setFileSystem(standbyFs)
             .setFilePath(filePath).setCompression(compression);
         LogFileWriter newWriter = new LogFileWriter();

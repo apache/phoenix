@@ -19,8 +19,6 @@ package org.apache.phoenix.replication;
 
 import java.io.IOException;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.ServerName;
 import org.apache.phoenix.replication.log.LogFileWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,10 +47,9 @@ public class StoreAndForwardLogGroupWriter extends ReplicationLogGroupWriter {
     /**
      * Constructor for StoreAndForwardLogGroupWriter.
      */
-    public StoreAndForwardLogGroupWriter(Configuration conf, ServerName serverName,
-            String haGroupId) {
-        super(conf, serverName, haGroupId);
-        LOG.debug("Created StoreAndForwardLogGroupWriter for HA Group: {}", haGroupId);
+    public StoreAndForwardLogGroupWriter(ReplicationLogGroup logGroup) {
+        super(logGroup);
+        LOG.debug("Created StoreAndForwardLogGroupWriter for HA Group: {}", logGroup.getHaGroupName());
     }
 
     @Override

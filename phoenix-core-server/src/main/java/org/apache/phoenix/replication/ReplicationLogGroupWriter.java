@@ -33,12 +33,9 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.compress.Compression;
 import org.apache.phoenix.replication.log.LogFileWriter;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogGroupSource;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogGroupSourceImpl;
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
@@ -112,10 +109,7 @@ public abstract class ReplicationLogGroupWriter {
 
     private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogGroupWriter.class);
 
-    protected final Configuration conf;
-    protected final ServerName serverName;
-    protected final String haGroupId;
-    protected final MetricsReplicationLogGroupSource metrics;
+    protected final ReplicationLogGroup logGroup;
     protected final long rotationTimeMs;
     protected final long rotationSizeBytes;
     protected final int maxRotationRetries;
@@ -145,11 +139,9 @@ public abstract class ReplicationLogGroupWriter {
     protected static final byte EVENT_TYPE_DATA = 0;
     protected static final byte EVENT_TYPE_SYNC = 1;
 
-    protected ReplicationLogGroupWriter(Configuration conf, ServerName serverName,
-            String haGroupId) {
-        this.conf = conf;
-        this.serverName = serverName;
-        this.haGroupId = haGroupId;
+    protected ReplicationLogGroupWriter(ReplicationLogGroup logGroup) {
+        this.logGroup = logGroup;
+        Configuration conf = logGroup.getConfiguration();
         this.rotationTimeMs =
             conf.getLong(ReplicationLogGroup.REPLICATION_LOG_ROTATION_TIME_MS_KEY,
                 ReplicationLogGroup.DEFAULT_REPLICATION_LOG_ROTATION_TIME_MS);
@@ -180,7 +172,6 @@ public abstract class ReplicationLogGroupWriter {
             ReplicationLogGroup.DEFAULT_REPLICATION_LOG_RINGBUFFER_SIZE);
         this.syncTimeoutMs = conf.getLong(ReplicationLogGroup.REPLICATION_LOG_SYNC_TIMEOUT_KEY,
             ReplicationLogGroup.DEFAULT_REPLICATION_LOG_SYNC_TIMEOUT);
-        this.metrics = createMetricsSource();
     }
 
     /** Initialize the writer. */
@@ -192,7 +183,6 @@ public abstract class ReplicationLogGroupWriter {
         // Create the initial writer. Do this before we initialize the Disruptor.
         currentWriter = createNewWriter();
         initializeDisruptor();
-        LOG.info("ReplicationLogWriter started with ring buffer size {}", ringBufferSize);
     }
 
     /**
@@ -218,7 +208,6 @@ public abstract class ReplicationLogGroupWriter {
         if (closed) {
             throw new IOException("Closed");
         }
-        long startTime = System.nanoTime();
         // ringBuffer.next() claims the next sequence number. Because we initialize the Disruptor
         // with ProducerType.MULTI and the blocking YieldingWaitStrategy this call WILL BLOCK if
         // the ring buffer is full, thus providing backpressure to the callers.
@@ -226,7 +215,6 @@ public abstract class ReplicationLogGroupWriter {
         try {
             LogEvent event = ringBuffer.get(sequence);
             event.setValues(EVENT_TYPE_DATA, new Record(tableName, commitId, mutation), null);
-            metrics.updateAppendTime(System.nanoTime() - startTime);
         } finally {
             // Update ring buffer events metric
             ringBuffer.publish(sequence);
@@ -266,22 +254,12 @@ public abstract class ReplicationLogGroupWriter {
      */
     protected abstract LogFileWriter createNewWriter() throws IOException;
 
-    /** Get the current metrics source for monitoring operations. */
-    public MetricsReplicationLogGroupSource getMetrics() {
-        return metrics;
-    }
-
-    /** Create a new metrics source for monitoring operations. */
-    protected MetricsReplicationLogGroupSource createMetricsSource() {
-        return new MetricsReplicationLogGroupSourceImpl(haGroupId);
-    }
-
     /** Initialize the Disruptor. */
     @SuppressWarnings("unchecked")
     protected void initializeDisruptor() throws IOException {
         disruptor = new Disruptor<>(LogEvent.EVENT_FACTORY, ringBufferSize,
             new ThreadFactoryBuilder()
-                .setNameFormat("ReplicationLogGroupWriter-" + haGroupId + "-%d")
+                .setNameFormat("ReplicationLogGroupWriter-" + logGroup.getHaGroupName() + "-%d")
                 .setDaemon(true).build(),
             ProducerType.MULTI, new YieldingWaitStrategy());
         LogEventHandler eventHandler = new LogEventHandler();
@@ -290,7 +268,6 @@ public abstract class ReplicationLogGroupWriter {
         LogExceptionHandler exceptionHandler = new LogExceptionHandler();
         disruptor.setDefaultExceptionHandler(exceptionHandler);
         ringBuffer = disruptor.start();
-        LOG.info("ReplicationLogGroupWriter started with ring buffer size {}", ringBufferSize);
     }
 
     /**
@@ -298,7 +275,6 @@ public abstract class ReplicationLogGroupWriter {
      * for completion.
      */
     protected void syncInternal() throws IOException {
-        long startTime = System.nanoTime();
         CompletableFuture<Void> syncFuture = new CompletableFuture<>();
         long sequence = ringBuffer.next();
         try {
@@ -311,7 +287,6 @@ public abstract class ReplicationLogGroupWriter {
         try {
             // Wait for the event handler to process up to and including this sync event
             syncFuture.get(syncTimeoutMs, TimeUnit.MILLISECONDS);
-            metrics.updateSyncTime(System.nanoTime() - startTime);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new InterruptedIOException("Interrupted while waiting for sync");
@@ -333,7 +308,7 @@ public abstract class ReplicationLogGroupWriter {
         long rotationCheckInterval = getRotationCheckInterval(rotationTimeMs);
         rotationExecutor = Executors.newSingleThreadScheduledExecutor(
             new ThreadFactoryBuilder()
-                .setNameFormat("ReplicationLogRotation-" + haGroupId + "-%d")
+                .setNameFormat("ReplicationLogRotation-" + logGroup.getHaGroupName() + "-%d")
                 .setDaemon(true).build());
         rotationExecutor.scheduleAtFixedRate(new LogRotationTask(), rotationCheckInterval,
             rotationCheckInterval, TimeUnit.MILLISECONDS);
@@ -442,23 +417,23 @@ public abstract class ReplicationLogGroupWriter {
             currentWriter = newWriter;
             lastRotationTime.set(EnvironmentEdgeManager.currentTimeMillis());
             rotationFailures.set(0);
-            metrics.incrementRotationCount();
+            logGroup.getMetrics().incrementRotationCount();
             switch (reason) {
             case TIME:
-                metrics.incrementTimeBasedRotationCount();
+                logGroup.getMetrics().incrementTimeBasedRotationCount();
                 break;
             case SIZE:
-                metrics.incrementSizeBasedRotationCount();
+                logGroup.getMetrics().incrementSizeBasedRotationCount();
                 break;
             case ERROR:
-                metrics.incrementErrorBasedRotationCount();
+                logGroup.getMetrics().incrementErrorBasedRotationCount();
                 break;
             }
         } catch (IOException e) {
             // If we fail to rotate the log, we increment the failure counter. If we have exceeded
             // the maximum number of retries, we close the log and throw the exception. Otherwise
             // we log a warning and continue.
-            metrics.incrementRotationFailureCount();
+            logGroup.getMetrics().incrementRotationFailureCount();
             long numFailures = rotationFailures.getAndIncrement();
             if (numFailures >= maxRotationRetries) {
                 LOG.warn("Failed to rotate log (attempt {}/{}), closing log", numFailures,
@@ -519,10 +494,6 @@ public abstract class ReplicationLogGroupWriter {
         // Directly halt the disruptor. shutdown() would wait for events to drain. We are expecting
         // that will not work.
         disruptor.halt();
-
-        metrics.close();
-
-        LOG.info("Failed close ReplicationLogGroupWriter for HA Group: {}", haGroupId);
     }
 
     /** Closes the log. */
@@ -548,14 +519,10 @@ public abstract class ReplicationLogGroupWriter {
         }
         // We must for the disruptor before closing the current writer.
         closeWriter(currentWriter);
-
-        metrics.close();
-
-        LOG.info("Closed ReplicationLogGroupWriter for HA Group: {}", haGroupId);
     }
 
     protected FileSystem getFileSystem(URI uri) throws IOException {
-        return FileSystem.get(uri, conf);
+        return FileSystem.get(uri, logGroup.getConfiguration());
     }
 
     /** Implements time based rotation independent of in-line checking. */
@@ -642,6 +609,7 @@ public abstract class ReplicationLogGroupWriter {
         protected long generation;
 
         protected LogEventHandler() {
+            Configuration conf = logGroup.getConfiguration();
             this.maxRetries = conf.getInt(ReplicationLogGroup.REPLICATION_LOG_SYNC_RETRIES_KEY,
                 ReplicationLogGroup.DEFAULT_REPLICATION_LOG_SYNC_RETRIES);
             this.retryDelayMs =
@@ -741,7 +709,7 @@ public abstract class ReplicationLogGroupWriter {
             // Calculate time spent in ring buffer
             long currentTimeNs = System.nanoTime();
             long ringBufferTimeNs = currentTimeNs - event.timestampNs;
-            metrics.updateRingBufferTime(ringBufferTimeNs);
+            logGroup.getMetrics().updateRingBufferTime(ringBufferTimeNs);
             writer = getWriter();
             int attempt = 0;
             while (attempt < maxRetries) {
