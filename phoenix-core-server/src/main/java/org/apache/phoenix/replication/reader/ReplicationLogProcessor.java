@@ -29,7 +29,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -46,6 +45,7 @@ import org.apache.phoenix.replication.log.LogFileReader;
 import org.apache.phoenix.replication.log.LogFileReaderContext;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogProcessor;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogProcessorImpl;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -152,7 +152,8 @@ public class ReplicationLogProcessor implements Closeable {
      * @return ReplicationLogProcessor instance
      */
     public static ReplicationLogProcessor get(Configuration conf, String haGroupId) {
-        return INSTANCES.computeIfAbsent(haGroupId, k -> new ReplicationLogProcessor(conf, haGroupId));
+        return INSTANCES.computeIfAbsent(haGroupId, 
+            k -> new ReplicationLogProcessor(conf, haGroupId));
     }
 
     /**
@@ -175,7 +176,10 @@ public class ReplicationLogProcessor implements Closeable {
                 DEFAULT_REPLICATION_STANDBY_LOG_REPLAY_THREAD_POOL_SIZE);
         decorateConf();
         this.metrics = createMetricsSource();
-        this.executorService = Executors.newFixedThreadPool(threadPoolSize, new ThreadFactoryBuilder().setNameFormat("Phoenix-Replication-Log-Processor-" + haGroupId + "-%d").build());
+        this.executorService = Executors.newFixedThreadPool(threadPoolSize, 
+            new ThreadFactoryBuilder()
+                .setNameFormat("Phoenix-Replication-Log-Processor-" + haGroupId + "-%d")
+                .build());
     }
 
     /**
@@ -252,7 +256,8 @@ public class ReplicationLogProcessor implements Closeable {
 
     /**
      * Creates a LogFileReader for the specified file path.
-     * Validates that the file exists and initializes the reader with the given file system and path.
+     * Validates that the file exists and initializes the reader with the given 
+     * file system and path.
      * @param fs The file system to use for reading
      * @param filePath The path to the log file
      * @return A configured LogFileReader instance
@@ -307,7 +312,7 @@ public class ReplicationLogProcessor implements Closeable {
 
         long startTime = System.currentTimeMillis();
 
-        while(attempt <= batchRetryCount && !currentOperations.isEmpty()) {
+        while (attempt <= batchRetryCount && !currentOperations.isEmpty()) {
             if (attempt > 0) {
                 LOG.warn("Retrying failed batch operations, attempt {} of {}",
                         attempt, batchRetryCount);
@@ -371,7 +376,7 @@ public class ReplicationLogProcessor implements Closeable {
     protected ApplyMutationBatchResult applyMutations(
             Map<TableName, List<Mutation>> tableMutationMap) throws IOException {
 
-        if(tableMutationMap == null || tableMutationMap.isEmpty()) {
+        if (tableMutationMap == null || tableMutationMap.isEmpty()) {
             return new ApplyMutationBatchResult(Collections.emptyMap(), null);
         }
 
@@ -437,12 +442,12 @@ public class ReplicationLogProcessor implements Closeable {
     public void close() throws IOException {
         synchronized (this) {
             // Close the async connection
-            if(asyncConnection != null && !asyncConnection.isClosed()) {
+            if (asyncConnection != null && !asyncConnection.isClosed()) {
                 asyncConnection.close();
             }
             asyncConnection = null;
             // Shutdown the executor service
-            if(executorService != null && !executorService.isShutdown()) {
+            if (executorService != null && !executorService.isShutdown()) {
                 executorService.shutdownNow();
             }
             // Remove the instance from cache
@@ -497,8 +502,10 @@ public class ReplicationLogProcessor implements Closeable {
         private final Map<TableName, List<Mutation>> failedMutations;
         private final Exception exception;
 
-        public ApplyMutationBatchResult(Map<TableName, List<Mutation>> failedMutations, Exception exception) {
-            this.failedMutations = failedMutations != null ? failedMutations : Collections.emptyMap();
+        public ApplyMutationBatchResult(Map<TableName, List<Mutation>> failedMutations, 
+                Exception exception) {
+            this.failedMutations = failedMutations != null ? 
+                failedMutations : Collections.emptyMap();
             this.exception = exception;
         }
 

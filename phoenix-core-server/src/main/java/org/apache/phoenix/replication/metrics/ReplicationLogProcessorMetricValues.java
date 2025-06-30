@@ -26,7 +26,9 @@ public class ReplicationLogProcessorMetricValues {
     private final long logFileReplayTime;
     private final long logFileBatchReplayTime;
 
-    public ReplicationLogProcessorMetricValues(long failedMutationsCount, long logFileReplayFailureCount, long logFileReplaySuccessCount, long logFileReplayTime, long logFileBatchReplayTime) {
+    public ReplicationLogProcessorMetricValues(long failedMutationsCount, 
+            long logFileReplayFailureCount, long logFileReplaySuccessCount, 
+            long logFileReplayTime, long logFileBatchReplayTime) {
         this.failedMutationsCount = failedMutationsCount;
         this.logFileReplayFailureCount = logFileReplayFailureCount;
         this.logFileReplaySuccessCount = logFileReplaySuccessCount;
