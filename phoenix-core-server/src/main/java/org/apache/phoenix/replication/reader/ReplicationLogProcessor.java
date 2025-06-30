@@ -316,12 +316,12 @@ public class ReplicationLogProcessor implements Closeable {
             try {
                 // Apply mutations and get any failed operations
                 ApplyMutationBatchResult result = applyMutations(currentOperations);
-                
+
                 // If no failures, we're done
                 if (!result.hasFailures()) {
                     return;
                 }
-                
+
                 // Update current operations for next retry
                 currentOperations = result.getFailedMutations();
                 lastError = new IOException("Failed to apply the mutations", result.getException());
@@ -347,7 +347,7 @@ public class ReplicationLogProcessor implements Closeable {
 
         // If we still have failed operations after all retries, throw the last error
         if (!currentOperations.isEmpty() && lastError != null) {
-            LOG.error("Failed to process batch operations after {} retries. Failed tables: {}", 
+            LOG.error("Failed to process batch operations after {} retries. Failed tables: {}",
                     batchRetryCount, currentOperations.keySet());
             throw lastError;
         }
