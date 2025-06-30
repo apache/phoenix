@@ -188,15 +188,14 @@ public class ReplicationLogGroup {
      * @throws IOException if initialization fails
      */
     protected void init() throws IOException {
-        // For now, we initialize only the remote writer and set the mode to SYNC.
-        remoteWriter = new StandbyLogGroupWriter(this);
-        remoteWriter.init();
+        // We need the local writer created first if we intend to fall back to it should the init
+        // of the remote writer fail.
+        localWriter = createLocalWriter();
+        // Initialize the remote writer and set the mode to SYNC. TODO: switch instead of set
         mode = ReplicationMode.SYNC;
-        // TODO: Initialize the local writer (StoreAndForwardLogGroupWriter).
+        remoteWriter = createRemoteWriter();
         // TODO: Switch the initial mode to STORE_AND_FORWARD if the remote writer fails to
         // initialize.
-        localWriter = new StoreAndForwardLogGroupWriter(this);
-        localWriter.init();
         LOG.info("Started ReplicationLogGroup for HA Group: {}", haGroupName);
     }
 
@@ -238,10 +237,9 @@ public class ReplicationLogGroup {
                 try {
                     remoteWriter.append(tableName, commitId, mutation);
                 } catch (IOException e) {
-                    // If the remote writer fails, we must switch to store and forward.
-                    switchMode(ReplicationMode.STORE_AND_FORWARD, e); // Will throw if it fails.
-                    // Use the local writer to append the mutation instead.
-                    localWriter.append(tableName, commitId, mutation);
+                    // TODO: If the remote writer fails, we must switch to store and forward.
+                    LOG.warn("Mode switching not implemented");
+                    throw e;
                 }
                 break;
             case SYNC_AND_FORWARD:
@@ -250,14 +248,15 @@ public class ReplicationLogGroup {
                 try {
                     remoteWriter.append(tableName, commitId, mutation);
                 } catch (IOException e) {
-                    // If the remote writer fails again, we must switch back to store and forward.
-                    switchMode(ReplicationMode.STORE_AND_FORWARD, e); // Will throw if it fails.
-                    // Now we can use the local writer to append the mutation.
-                    localWriter.append(tableName, commitId, mutation);
+                    // TODO: If the remote writer fails again, we must switch back to store and
+                    // forward.
+                    LOG.warn("Mode switching not implemented");
+                    throw e;
                 }
                 break;
             case STORE_AND_FORWARD:
-                // In store and forward mode, we write to the local writer.
+                // In store and forward mode, we append to the local writer. If we fail it's a
+                // critical failure.
                 localWriter.append(tableName, commitId, mutation);
                 // TODO: Probe the state of the remoteWriter. Can we switch back?
                 // TODO: This suggests the ReplicationLogGroupWriter interface should have a status
@@ -289,10 +288,9 @@ public class ReplicationLogGroup {
                 try {
                     remoteWriter.sync();
                 } catch (IOException e) {
-                    // If the remote writer fails, we must switch to store and forward.
-                    switchMode(ReplicationMode.STORE_AND_FORWARD, e); // Will throw if it fails.
-                    // Mode switch handled drain from remote writer to local writer and sync, so
-                    // there is nothing left to do here.
+                    // TODO: If the remote writer fails, we must switch to store and forward.
+                    LOG.warn("Mode switching not implemented");
+                    throw e;
                 }
                 break;
             case SYNC_AND_FORWARD:
@@ -301,14 +299,15 @@ public class ReplicationLogGroup {
                 try {
                     remoteWriter.sync();
                 } catch (IOException e) {
-                    // If the remote writer fails again, we must switch back to store and forward.
-                    switchMode(ReplicationMode.STORE_AND_FORWARD, e); // Will throw if it fails.
-                    // Mode switch handled drain from remote writer to local writer and sync, so
-                    // there is nothing left to do here.
+                    // TODO: If the remote writer fails again, we must switch back to store and
+                    // forward.
+                    LOG.warn("Mode switching not implemented");
+                    throw e;
                 }
                 break;
             case STORE_AND_FORWARD:
-                // In store and forward mode, we sync the local writer.
+                // In store and forward mode, we sync the local writer. If we fail it's a critical
+                // failure.
                 localWriter.sync();
                 // TODO: Probe the state of the remoteWriter. Can we switch back?
                 // TODO: This suggests the ReplicationLogGroupWriter interface should have a
@@ -384,6 +383,34 @@ public class ReplicationLogGroup {
     protected void closeWriter(ReplicationLogGroupWriter writer) {
         if (writer != null) {
             writer.close();
+        }
+    }
+
+    /** Create the remote (synchronous) writer. Mainly for mocking. */
+    protected ReplicationLogGroupWriter createRemoteWriter() throws IOException {
+        ReplicationLogGroupWriter writer = new StandbyLogGroupWriter(this);
+        writer.init();
+        return writer;
+    }
+
+    /** Create the local (store and forward) writer. Mainly for mocking. */
+    protected ReplicationLogGroupWriter createLocalWriter() throws IOException {
+        ReplicationLogGroupWriter writer = new StoreAndForwardLogGroupWriter(this);
+        writer.init();
+        return writer;
+    }
+
+    /** Returns the currently active writer. Mainly for tests. */
+    protected ReplicationLogGroupWriter getActiveWriter() {
+        switch (mode) {
+        case SYNC:
+            return remoteWriter;
+        case SYNC_AND_FORWARD:
+            return remoteWriter;
+        case STORE_AND_FORWARD:
+            return localWriter;
+        default:
+            throw new IllegalStateException("Invalid replication mode: " + mode);              
         }
     }
 }
