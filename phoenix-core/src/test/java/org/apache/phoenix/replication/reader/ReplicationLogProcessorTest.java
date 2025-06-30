@@ -94,7 +94,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
 
     private static final String PRINCIPAL = "replicationLogProcessor";
 
-    private final String testHAGroupId = "testHAGroupId";
+    private final String testHAGroupName = "testHAGroupName";
 
     @ClassRule
     public static TemporaryFolder testFolder = new TemporaryFolder();
@@ -131,7 +131,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         assertTrue("Valid log file should have content", localFs.getFileStatus(validFilePath).getLen() > 0);
 
         // Test createLogFileReader with valid file - should succeed
-        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupId);
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupName);
         LogFileReader reader = replicationLogProcessor.createLogFileReader(localFs, validFilePath);
 
         // Verify reader is created successfully
@@ -154,7 +154,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
     @Test
     public void testCreateLogFileReaderWithNonExistentFile() throws IOException {
         Path nonExistentPath = new Path(testFolder.toString(), "non_existent_file");
-        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupId);
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupName);
         try {
             replicationLogProcessor.createLogFileReader(localFs, nonExistentPath);
             fail("Should throw IOException for non-existent file");
@@ -173,7 +173,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
     public void testCreateLogFileReaderWithInvalidLogFile() throws IOException {
         Path invalidFilePath = new Path(testFolder.newFile("invalid_file").toURI());
         localFs.create(invalidFilePath).close(); // Create empty file
-        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupId);
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupName);
         try {
             replicationLogProcessor.createLogFileReader(localFs, invalidFilePath);
             fail("Should throw IOException for invalid file");
@@ -192,7 +192,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
      */
     @Test
     public void testCloseReader() throws IOException {
-        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupId);
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupName);
         replicationLogProcessor.closeReader(null);
         Path filePath = new Path(testFolder.newFile("testCloseReader").toURI());
         String tableName = "T_" + generateUniqueName();
@@ -226,7 +226,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
     @Test
     public void testCalculateRetryDelay() throws IOException {
         // Test with default configuration
-        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupId);
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupName);
 
         // Test exponential backoff pattern with default max delay (10 seconds)
         assertEquals("First retry should have 1 second delay", 1000L, replicationLogProcessor.calculateRetryDelay(0));
@@ -244,7 +244,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         long customMaxDelay = 5000L; // 5 seconds
         customConf.setLong(ReplicationLogProcessor.REPLICATION_STANDBY_BATCH_RETRY_MAX_DELAY_MS, customMaxDelay);
 
-        ReplicationLogProcessor customProcessor = new ReplicationLogProcessor(customConf, testHAGroupId);
+        ReplicationLogProcessor customProcessor = new ReplicationLogProcessor(customConf, testHAGroupName);
 
         // Test exponential backoff pattern with custom max delay
         assertEquals("First retry should have 1 second delay", 1000L, customProcessor.calculateRetryDelay(0));
@@ -261,7 +261,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         long smallMaxDelay = 1500L; // 1.5 seconds
         smallDelayConf.setLong(ReplicationLogProcessor.REPLICATION_STANDBY_BATCH_RETRY_MAX_DELAY_MS, smallMaxDelay);
 
-        ReplicationLogProcessor smallDelayProcessor = new ReplicationLogProcessor(smallDelayConf, testHAGroupId);
+        ReplicationLogProcessor smallDelayProcessor = new ReplicationLogProcessor(smallDelayConf, testHAGroupName);
 
         assertEquals("First retry should have 1 second delay", 1000L, smallDelayProcessor.calculateRetryDelay(0));
         assertEquals("Second retry should be capped at 1.5 seconds", 1500L, smallDelayProcessor.calculateRetryDelay(1));
@@ -277,7 +277,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
     @Test
     public void testReplicationLogProcessorConfiguration() throws IOException {
         // Test that all default configurations are used when no custom configuration is provided
-        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupId);
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupName);
 
         // Validate default batch size
         assertEquals("Default batch size should be used",
@@ -332,7 +332,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         customConf.setLong(ReplicationLogProcessor.REPLICATION_STANDBY_BATCH_RETRY_MAX_DELAY_MS, customMaxRetryDelay);
         customConf.setInt(ReplicationLogProcessor.REPLICATION_STANDBY_LOG_REPLAY_THREAD_POOL_SIZE, customThreadPoolSize);
 
-        ReplicationLogProcessor customProcessor = new ReplicationLogProcessor(customConf, testHAGroupId);
+        ReplicationLogProcessor customProcessor = new ReplicationLogProcessor(customConf, testHAGroupName);
 
         // Validate all custom configurations are honored
         assertEquals("Custom batch size should be honored",
@@ -369,7 +369,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         final String table2Name = "T_" + generateUniqueName();
         final Path filePath = new Path(testFolder.newFile("testProcessLogFileEnd2End").toURI());
         LogFileWriter writer = initLogFileWriter(filePath);
-        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupId);
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupName);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute(String.format(CREATE_TABLE_SQL_STATEMENT, table1Name));
             conn.createStatement().execute(String.format(CREATE_TABLE_SQL_STATEMENT, table2Name));
@@ -420,7 +420,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         // Verify the file doesn't exist
         assertFalse("Non-existent file should not exist", localFs.exists(nonExistentFilePath));
 
-        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupId);
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupName);
         // Attempt to process non-existent file - should throw IOException
         try {
             replicationLogProcessor.processLogFile(localFs, nonExistentFilePath);
@@ -453,7 +453,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         assertTrue("Empty log file should have header/trailer content", localFs.getFileStatus(emptyFilePath).getLen() > 0);
 
         // Process the empty log file - should not throw any exceptions
-        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupId);
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupName);
         try {
             replicationLogProcessor.processLogFile(localFs, emptyFilePath);
             // If we reach here, the empty file was processed successfully
@@ -484,7 +484,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         writer.append(tableNameString, 1, put);
         writer.sync();
 
-        ReplicationLogProcessor spyProcessor = Mockito.spy(new ReplicationLogProcessor(conf, testHAGroupId));
+        ReplicationLogProcessor spyProcessor = Mockito.spy(new ReplicationLogProcessor(conf, testHAGroupName));
 
         // Create argument captor to capture the actual parameters passed to processReplicationLogBatch
         ArgumentCaptor<Map<TableName, List<Mutation>>> mapCaptor =
@@ -582,7 +582,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         Configuration testConf = new Configuration(conf);
         testConf.setInt(ReplicationLogProcessor.REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE, batchSize);
 
-        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(testConf, testHAGroupId);
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(testConf, testHAGroupName);
 
         // Validate that the batch size is correctly set
         assertEquals("Batch size should be set correctly", batchSize, replicationLogProcessor.getBatchSize());
@@ -688,7 +688,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         // Test with empty map - should not throw any exception
         Map<TableName, List<Mutation>> emptyMap = new HashMap<>();
 
-        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupId);
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupName);
         try {
             ReplicationLogProcessor.ApplyMutationBatchResult applyMutationBatchResult = replicationLogProcessor.applyMutations(emptyMap);
             assertNotNull("Apply mutations result must not be null", applyMutationBatchResult);
@@ -718,7 +718,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         final TableName tableName2 = TableName.valueOf(table2);
         final TableName tableName3 = TableName.valueOf(table3);
         Map<TableName, List<Mutation>> tableMutationsMap = new HashMap<>();
-        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupId);
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupName);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             // Create first table (will succeed)
             conn.createStatement().execute(String.format(CREATE_TABLE_SQL_STATEMENT, table1));
@@ -795,7 +795,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         final String table2 = "T_" + generateUniqueName();
         Map<TableName, List<Mutation>> tableMutationsMap = new HashMap<>();
         // Create processor and apply mutations
-        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupId);
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupName);
 
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             // Create first table
@@ -847,7 +847,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         final String table1 = "T_" + generateUniqueName();
         final String table2 = "T_" + generateUniqueName();
         Map<TableName, List<Mutation>> tableMutationsMap = new HashMap<>();
-        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupId);
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupName);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             // Create first table
             conn.createStatement().execute(String.format(CREATE_TABLE_SQL_STATEMENT, table1));
@@ -940,7 +940,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         tableMutationsMap.put(TableName.valueOf(table2), mutations2);
 
         // Create processor and spy on it
-        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupId);
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupName);
         ReplicationLogProcessor spyProcessor = Mockito.spy(replicationLogProcessor);
 
         // Mock applyMutations to return empty failed mutations map (all succeed)
@@ -992,7 +992,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         Map<TableName, List<Mutation>> tableMutationsMap = new HashMap<>();
 
         // Create processor and spy on it
-        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupId);
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupName);
         ReplicationLogProcessor spyProcessor = Mockito.spy(replicationLogProcessor);
 
         try (Connection conn = DriverManager.getConnection(getUrl())) {
@@ -1106,7 +1106,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         Map<TableName, List<Mutation>> tableMutationsMap = new HashMap<>();
 
         // Create processor and spy on it
-        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupId);
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupName);
         ReplicationLogProcessor spyProcessor = Mockito.spy(replicationLogProcessor);
 
         try (Connection conn = DriverManager.getConnection(getUrl())) {
@@ -1252,7 +1252,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         testConf.setInt(ReplicationLogProcessor.REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE, batchSize);
 
         // Create processor with custom batch size and spy on it
-        ReplicationLogProcessor spyProcessor = Mockito.spy(new ReplicationLogProcessor(testConf, testHAGroupId));
+        ReplicationLogProcessor spyProcessor = Mockito.spy(new ReplicationLogProcessor(testConf, testHAGroupName));
 
         // Validate that the batch size is correctly set
         assertEquals("Batch size incorrectly set", batchSize, spyProcessor.getBatchSize());
@@ -1317,33 +1317,33 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
     }
 
     /**
-     * Tests that ReplicationLogProcessor.get() returns the same instance for the same haGroupId.
+     * Tests that ReplicationLogProcessor.get() returns the same instance for the same haGroup.
      * Verifies that multiple calls with the same parameters return the cached instance.
      */
     @Test
     public void testReplicationLogProcessorInstanceCaching() throws Exception {
-        final String haGroupId1 = "testHAGroup_1";
-        final String haGroupId2 = "testHAGroup_2";
+        final String haGroupName1 = "testHAGroup_1";
+        final String haGroupName2 = "testHAGroup_2";
 
         // Get instances for the first HA group
-        ReplicationLogProcessor group1Instance1 = ReplicationLogProcessor.get(conf, haGroupId1);
-        ReplicationLogProcessor group1Instance2 = ReplicationLogProcessor.get(conf, haGroupId1);
+        ReplicationLogProcessor group1Instance1 = ReplicationLogProcessor.get(conf, haGroupName1);
+        ReplicationLogProcessor group1Instance2 = ReplicationLogProcessor.get(conf, haGroupName1);
 
-        // Verify same instance is returned for same haGroupId
+        // Verify same instance is returned for same haGroupName
         assertNotNull("ReplicationLogProcessor should not be null", group1Instance1);
         assertNotNull("ReplicationLogProcessor should not be null", group1Instance2);
-        assertSame("Same instance should be returned for same haGroupId", group1Instance1, group1Instance2);
-        assertEquals("HA Group ID should match", haGroupId1, group1Instance1.getHaGroupId());
+        assertSame("Same instance should be returned for same haGroup", group1Instance1, group1Instance2);
+        assertEquals("HA Group ID should match", haGroupName1, group1Instance1.getHaGroupName());
 
         // Get instance for a different HA group
-        ReplicationLogProcessor group2Instance1 = ReplicationLogProcessor.get(conf, haGroupId2);
+        ReplicationLogProcessor group2Instance1 = ReplicationLogProcessor.get(conf, haGroupName2);
         assertNotNull("ReplicationLogProcessor should not be null", group2Instance1);
-        assertNotSame("Different instance should be returned for different haGroupId", group2Instance1, group1Instance1);
-        assertEquals("HA Group ID should match", haGroupId2, group2Instance1.getHaGroupId());
+        assertNotSame("Different instance should be returned for different haGroup", group2Instance1, group1Instance1);
+        assertEquals("HA Group ID should match", haGroupName2, group2Instance1.getHaGroupName());
 
         // Verify multiple calls still return cached instances
-        ReplicationLogProcessor group1Instance3 = ReplicationLogProcessor.get(conf, haGroupId1);
-        ReplicationLogProcessor group2Instance2 = ReplicationLogProcessor.get(conf, haGroupId2);
+        ReplicationLogProcessor group1Instance3 = ReplicationLogProcessor.get(conf, haGroupName1);
+        ReplicationLogProcessor group2Instance2 = ReplicationLogProcessor.get(conf, haGroupName2);
         assertSame("Cached instance should be returned", group1Instance3, group1Instance1);
         assertSame("Cached instance should be returned", group2Instance2, group2Instance1);
 
@@ -1358,15 +1358,15 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
      */
     @Test
     public void testReplicationLogProcessorCacheRemovalOnClose() throws Exception {
-        final String haGroupId = "testHAGroup";
+        final String haGroupName = "testHAGroup";
 
         // Get initial instance
-        ReplicationLogProcessor group1Instance1 = ReplicationLogProcessor.get(conf, haGroupId);
+        ReplicationLogProcessor group1Instance1 = ReplicationLogProcessor.get(conf, haGroupName);
         assertNotNull("ReplicationLogProcessor should not be null", group1Instance1);
         assertFalse("Executor service must not be shut down", group1Instance1.getExecutorService().isShutdown());
 
         // Verify cached instance is returned
-        ReplicationLogProcessor group1Instance2 = ReplicationLogProcessor.get(conf, haGroupId);
+        ReplicationLogProcessor group1Instance2 = ReplicationLogProcessor.get(conf, haGroupName);
         assertSame("Same instance should be returned before close", group1Instance2, group1Instance1);
 
         // Close the group
@@ -1374,11 +1374,11 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         assertTrue("Executor service must be shut down", group1Instance1.getExecutorService().isShutdown());
 
         // Get instance after close - should be a new instance
-        ReplicationLogProcessor group1Instance3 = ReplicationLogProcessor.get(conf, haGroupId);
+        ReplicationLogProcessor group1Instance3 = ReplicationLogProcessor.get(conf, haGroupName);
         assertNotNull("ReplicationLogProcessor should not be null after close", group1Instance3);
         assertFalse("Executor service must not be shut down", group1Instance3.getExecutorService().isShutdown());
         assertNotSame("New instance should be created after close", group1Instance1, group1Instance3);
-        assertEquals("HA Group ID should match", haGroupId, group1Instance3.getHaGroupId());
+        assertEquals("HA Group ID should match", haGroupName, group1Instance3.getHaGroupName());
 
         // Clean up
         group1Instance3.close();

@@ -121,7 +121,7 @@ public class ReplicationLogProcessor implements Closeable {
      */
     public static final long DEFAULT_REPLICATION_STANDBY_BATCH_RETRY_MAX_DELAY_MS = 10000;
 
-    private final String haGroupId;
+    private final String haGroupName;
 
     private final Configuration conf;
 
@@ -148,24 +148,24 @@ public class ReplicationLogProcessor implements Closeable {
      * Get or create a ReplicationLogProcessor instance for the given HA Group.
      *
      * @param conf Configuration object
-     * @param haGroupId The HA Group identifier
+     * @param haGroupName The HA Group name
      * @return ReplicationLogProcessor instance
      */
-    public static ReplicationLogProcessor get(Configuration conf, String haGroupId) {
-        return INSTANCES.computeIfAbsent(haGroupId, 
-            k -> new ReplicationLogProcessor(conf, haGroupId));
+    public static ReplicationLogProcessor get(Configuration conf, String haGroupName) {
+        return INSTANCES.computeIfAbsent(haGroupName,
+            k -> new ReplicationLogProcessor(conf, haGroupName));
     }
 
     /**
      * Creates a new ReplicationLogProcessor with the given configuration and executor service.
      * @param conf The configuration to use
-     * @param haGroupId The HA group id
+     * @param haGroupName The HA group id
      */
-    protected ReplicationLogProcessor(final Configuration conf, final String haGroupId) {
+    protected ReplicationLogProcessor(final Configuration conf, final String haGroupName) {
         // Create a copy of configuration as some of the properties would be
         // overridden
         this.conf = HBaseConfiguration.create(conf);
-        this.haGroupId = haGroupId;
+        this.haGroupName = haGroupName;
         this.batchSize = this.conf.getInt(REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE,
                 DEFAULT_REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE);
         this.batchRetryCount = this.conf.getInt(REPLICATION_STANDBY_BATCH_RETRY_COUNT,
@@ -178,7 +178,7 @@ public class ReplicationLogProcessor implements Closeable {
         this.metrics = createMetricsSource();
         this.executorService = Executors.newFixedThreadPool(threadPoolSize, 
             new ThreadFactoryBuilder()
-                .setNameFormat("Phoenix-Replication-Log-Processor-" + haGroupId + "-%d")
+                .setNameFormat("Phoenix-Replication-Log-Processor-" + haGroupName + "-%d")
                 .build());
     }
 
@@ -451,13 +451,13 @@ public class ReplicationLogProcessor implements Closeable {
                 executorService.shutdownNow();
             }
             // Remove the instance from cache
-            INSTANCES.remove(haGroupId);
+            INSTANCES.remove(haGroupName);
         }
     }
 
     /** Creates a new metrics source for monitoring operations. */
     protected MetricsReplicationLogProcessor createMetricsSource() {
-        return new MetricsReplicationLogProcessorImpl(haGroupId);
+        return new MetricsReplicationLogProcessorImpl(haGroupName);
     }
 
     /** Returns the metrics source for monitoring replication log operations. */
@@ -487,8 +487,8 @@ public class ReplicationLogProcessor implements Closeable {
         return this.maxRetryDelayMs;
     }
 
-    public String getHaGroupId() {
-        return this.haGroupId;
+    public String getHaGroupName() {
+        return this.haGroupName;
     }
 
     protected ExecutorService getExecutorService() {

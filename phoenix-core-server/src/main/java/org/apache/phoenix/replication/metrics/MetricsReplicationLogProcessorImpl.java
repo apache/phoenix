@@ -34,10 +34,10 @@ public class MetricsReplicationLogProcessorImpl extends BaseSourceImpl
     private final MutableHistogram batchReplayTime;
     private final MutableHistogram logFileReplayTime;
 
-    public MetricsReplicationLogProcessorImpl(final String haGroupId) {
+    public MetricsReplicationLogProcessorImpl(final String haGroupName) {
         this(METRICS_NAME, METRICS_DESCRIPTION, METRICS_CONTEXT, 
-            METRICS_JMX_CONTEXT + ",haGroup=" + haGroupId);
-        groupMetricsContext = METRICS_JMX_CONTEXT + ",haGroup=" + haGroupId;
+            METRICS_JMX_CONTEXT + ",haGroup=" + haGroupName);
+        groupMetricsContext = METRICS_JMX_CONTEXT + ",haGroup=" + haGroupName;
     }
 
     public MetricsReplicationLogProcessorImpl(String metricsName, String metricsDescription, 
