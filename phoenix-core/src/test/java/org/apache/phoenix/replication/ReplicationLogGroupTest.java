@@ -1169,13 +1169,13 @@ public class ReplicationLogGroupTest {
         assertNotNull("ReplicationLogGroup should not be null", g1_1);
         assertNotNull("ReplicationLogGroup should not be null", g1_2);
         assertTrue("Same instance should be returned for same haGroupId", g1_2 == g1_1);
-        assertEquals("HA Group ID should match", haGroupId1, g1_1.getHaGroupId());
+        assertEquals("HA Group name should match", haGroupId1, g1_1.getHaGroupName());
 
         // Get instance for a different HA group
         ReplicationLogGroup g2_1 = ReplicationLogGroup.get(conf, serverName, haGroupId2);
         assertNotNull("ReplicationLogGroup should not be null", g2_1);
         assertTrue("Different instance should be returned for different haGroupId", g2_1 != g1_1);
-        assertEquals("HA Group ID should match", haGroupId2, g2_1.getHaGroupId());
+        assertEquals("HA Group name should match", haGroupId2, g2_1.getHaGroupName());
 
         // Verify multiple calls still return cached instances
         ReplicationLogGroup g1_3 = ReplicationLogGroup.get(conf, serverName, haGroupId1);
@@ -1214,7 +1214,7 @@ public class ReplicationLogGroupTest {
         assertNotNull("ReplicationLogGroup should not be null after close", g1_3);
         assertFalse("New group should not be closed", g1_3.isClosed());
         assertTrue("New instance should be created after close", g1_1 != g1_3);
-        assertEquals("HA Group ID should match", haGroupId, g1_3.getHaGroupId());
+        assertEquals("HA Group name should match", haGroupId, g1_3.getHaGroupName());
 
         // Clean up
         g1_3.close();

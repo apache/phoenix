@@ -96,7 +96,7 @@ public class ReplicationLogGroup {
 
     private final Configuration conf;
     private final ServerName serverName;
-    private final String haGroupId;
+    private final String haGroupName;
     protected ReplicationLogGroupWriter remoteWriter;
     protected ReplicationLogGroupWriter localWriter;
     protected ReplicationMode mode;
@@ -136,7 +136,7 @@ public class ReplicationLogGroup {
         /**
          * Transitional mode where new mutations are written directly to the standby cluster
          * while concurrently draining the local queue of previously stored mutations. This mode
-         * is entered when connectivity to the standby cluster is restored while there are still
+         * is entered when connectivity to the standby cluster is restored and there are still
          * mutations in the local queue.
          */
         SYNC_AND_FORWARD;
@@ -147,19 +147,19 @@ public class ReplicationLogGroup {
      *
      * @param conf Configuration object
      * @param serverName The server name
-     * @param haGroupId The HA Group identifier
+     * @param haGroupName The HA Group name
      * @return ReplicationLogGroup instance
      * @throws RuntimeException if initialization fails
      */
     public static ReplicationLogGroup get(Configuration conf, ServerName serverName,
-            String haGroupId) {
-        return INSTANCES.computeIfAbsent(haGroupId, k -> {
+            String haGroupName) {
+        return INSTANCES.computeIfAbsent(haGroupName, k -> {
             try {
-                ReplicationLogGroup group = new ReplicationLogGroup(conf, serverName, haGroupId);
+                ReplicationLogGroup group = new ReplicationLogGroup(conf, serverName, haGroupName);
                 group.init();
                 return group;
             } catch (IOException e) {
-                LOG.error("Failed to create ReplicationLogGroup for HA Group: {}", haGroupId, e);
+                LOG.error("Failed to create ReplicationLogGroup for HA Group: {}", haGroupName, e);
                 throw new RuntimeException(e);
             }
         });
@@ -170,12 +170,12 @@ public class ReplicationLogGroup {
      *
      * @param conf Configuration object
      * @param serverName The server name
-     * @param haGroupId The HA Group identifier
+     * @param haGroupName The HA Group name
      */
-    protected ReplicationLogGroup(Configuration conf, ServerName serverName, String haGroupId) {
+    protected ReplicationLogGroup(Configuration conf, ServerName serverName, String haGroupName) {
         this.conf = conf;
         this.serverName = serverName;
-        this.haGroupId = haGroupId;
+        this.haGroupName = haGroupName;
     }
 
     /**
@@ -185,23 +185,23 @@ public class ReplicationLogGroup {
      */
     protected void init() throws IOException {
         // For now, we initialize only the remote writer and set the mode to SYNC.
-        remoteWriter = new StandbyLogGroupWriter(conf, serverName, haGroupId);
+        remoteWriter = new StandbyLogGroupWriter(conf, serverName, haGroupName);
         remoteWriter.init();
         mode = ReplicationMode.SYNC;
         // TODO: Initialize the local writer (StoreAndForwardLogGroupWriter).
         // TODO: Switch the initial mode to STORE_AND_FORWARD if the remote writer fails to
         // initialize.
-        localWriter = null;
-        LOG.info("Started ReplicationLogGroup for HA Group: {}", haGroupId);
+        localWriter = new StoreAndForwardLogGroupWriter(conf, serverName, haGroupName);
+        LOG.info("Started ReplicationLogGroup for HA Group: {}", haGroupName);
     }
 
     /**
-     * Get the HA Group ID managed by this instance.
+     * Get the name for this HA Group.
      *
-     * @return HA Group ID
+     * @return The name for this HA Group
      */
-    public String getHaGroupId() {
-        return haGroupId;
+    public String getHaGroupName() {
+        return haGroupName;
     }
 
     /**
@@ -319,10 +319,13 @@ public class ReplicationLogGroup {
             }
             closed = true;
             // Remove from instances cache
-            INSTANCES.remove(haGroupId);
+            INSTANCES.remove(haGroupName);
+            // Close the writers, remote first. If there are any problems closing the remote writer
+            // the pending writes will be sent to the local writer instead, during the appropriate
+            // mode switch.
             closeWriter(remoteWriter);
             closeWriter(localWriter);
-            LOG.info("Closed ReplicationLogGroup for HA Group: {}", haGroupId);
+            LOG.info("Closed ReplicationLogGroup for HA Group: {}", haGroupName);
         }
     }
 
