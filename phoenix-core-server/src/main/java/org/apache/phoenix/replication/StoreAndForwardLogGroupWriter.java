@@ -69,6 +69,11 @@ public class StoreAndForwardLogGroupWriter extends ReplicationLogGroupWriter {
     }
 
     @Override
+    protected void initializeReplicationShardDirectoryManager() {
+        // TODO
+    }
+
+    @Override
     protected LogFileWriter createNewWriter() throws IOException {
         // TODO
         return null;
