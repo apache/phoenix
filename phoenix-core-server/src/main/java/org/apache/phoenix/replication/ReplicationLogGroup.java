@@ -386,14 +386,14 @@ public class ReplicationLogGroup {
         }
     }
 
-    /** Create the remote (synchronous) writer. Mainly for mocking. */
+    /** Create the remote (synchronous) writer. Mainly for tests. */
     protected ReplicationLogGroupWriter createRemoteWriter() throws IOException {
         ReplicationLogGroupWriter writer = new StandbyLogGroupWriter(this);
         writer.init();
         return writer;
     }
 
-    /** Create the local (store and forward) writer. Mainly for mocking. */
+    /** Create the local (store and forward) writer. Mainly for tests. */
     protected ReplicationLogGroupWriter createLocalWriter() throws IOException {
         ReplicationLogGroupWriter writer = new StoreAndForwardLogGroupWriter(this);
         writer.init();
@@ -410,7 +410,7 @@ public class ReplicationLogGroup {
         case STORE_AND_FORWARD:
             return localWriter;
         default:
-            throw new IllegalStateException("Invalid replication mode: " + mode);              
+            throw new IllegalStateException("Invalid replication mode: " + mode);
         }
     }
 }
