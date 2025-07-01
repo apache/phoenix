@@ -20,11 +20,9 @@ package org.apache.phoenix.replication;
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -35,15 +33,9 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.compress.Compression;
 import org.apache.phoenix.replication.log.LogFileWriter;
-import org.apache.phoenix.replication.log.LogFileWriterContext;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogSource;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogSourceImpl;
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
@@ -58,42 +50,17 @@ import com.lmax.disruptor.dsl.Disruptor;
 import com.lmax.disruptor.dsl.ProducerType;
 
 /**
- * The ReplicationLog implements a high-performance logging system for mutations that need to be
- * replicated to another cluster.
+ * Base class for replication log group writers.
  * <p>
- * Key features:
- * <ul>
- *   <li>Asynchronous append operations with batching for high throughput</li>
- *   <li>Controlled blocking sync operations with timeout and retry logic</li>
- *   <li>Automatic log rotation based on time and size thresholds</li>
- *   <li>Sharded directory structure for better HDFS performance</li>
- *   <li>Metrics for monitoring</li>
- *   <li>Fail-stop behavior on critical errors</li>
- * </ul>
- * <p>
- * The class supports three replication modes (though currently only SYNC is implemented):
- * <ul>
- *   <li>SYNC: Direct writes to standby cluster (default)</li>
- *   <li>STORE_AND_FORWARD: Local storage when standby is unavailable</li>
- *   <li>SYNC_AND_FORWARD: Concurrent direct writes and queue draining</li>
- * </ul>
- * <p>
- * Key configuration properties:
- * <ul>
- *   <li>{@link #REPLICATION_STANDBY_HDFS_URL_KEY}: URL for standby cluster HDFS</li>
- *   <li>{@link #REPLICATION_FALLBACK_HDFS_URL_KEY}: URL for local fallback storage</li>
- *   <li>{@link #REPLICATION_NUM_SHARDS_KEY}: Number of shard directories</li>
- *   <li>{@link #REPLICATION_LOG_ROTATION_TIME_MS_KEY}: Time-based rotation interval</li>
- *   <li>{@link #REPLICATION_LOG_ROTATION_SIZE_BYTES_KEY}: Size-based rotation threshold</li>
- *   <li>{@link #REPLICATION_LOG_COMPRESSION_ALGORITHM_KEY}: Compression algorithm</li>
- * </ul>
- * <p>
- * This class is intended to be thread-safe.
+ * This abstract class contains most of the common functionality for managing replication logs
+ * including the disruptor ring buffer, log rotation, file system management, and metrics.
+ * Concrete implementations provide specific replication behavior (synchronous vs store-and-
+ * forward).
  * <p>
  * Architecture Overview:
  * <pre>
  * ┌──────────────────────────────────────────────────────────────────────┐
- * │                           ReplicationLog                             │
+ * │                       ReplicationLogGroup                            │
  * │                                                                      │
  * │  ┌─────────────┐     ┌────────────────────────────────────────────┐  │
  * │  │             │     │                                            │  │
@@ -138,132 +105,26 @@ import com.lmax.disruptor.dsl.ProducerType;
  */
 @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = { "EI_EXPOSE_REP", "EI_EXPOSE_REP2",
     "MS_EXPOSE_REP" }, justification = "Intentional")
-public class ReplicationLog {
+public abstract class ReplicationLogGroupWriter {
 
-    /** The path on the standby HDFS where log files should be written. (The "IN" directory.) */
-    public static final String REPLICATION_STANDBY_HDFS_URL_KEY =
-        "phoenix.replication.log.standby.hdfs.url";
-    /**
-     * The path on the active HDFS where log files should be written when we have fallen back to
-     * store and forward mode. (The "OUT" directory.)
-     */
-    public static final String REPLICATION_FALLBACK_HDFS_URL_KEY =
-        "phoenix.replication.log.fallback.hdfs.url";
-    /**
-     * The number of shards (subfolders) to maintain in the "IN" directory.
-     * <p>
-     * Shard directories have the format shard-NNNNN, e.g. shard-00001. The maximum value is
-     * 100000.
-     */
-    public static final String REPLICATION_NUM_SHARDS_KEY = "phoenix.replication.log.shards";
-    public static final int DEFAULT_REPLICATION_NUM_SHARDS = 1000;
-    public static final int MAX_REPLICATION_NUM_SHARDS = 100000;
-    /** Replication log rotation time trigger, default is 1 minute */
-    public static final String REPLICATION_LOG_ROTATION_TIME_MS_KEY =
-        "phoenix.replication.log.rotation.time.ms";
-    public static final long DEFAULT_REPLICATION_LOG_ROTATION_TIME_MS = 60 * 1000L;
-    /** Replication log rotation size trigger, default is 256 MB */
-    public static final String REPLICATION_LOG_ROTATION_SIZE_BYTES_KEY =
-        "phoenix.replication.log.rotation.size.bytes";
-    public static final long DEFAULT_REPLICATION_LOG_ROTATION_SIZE_BYTES = 256 * 1024 * 1024L;
-    /** Replication log rotation size trigger percentage, default is 0.95 */
-    public static final String REPLICATION_LOG_ROTATION_SIZE_PERCENTAGE_KEY =
-        "phoenix.replication.log.rotation.size.percentage";
-    public static final double DEFAULT_REPLICATION_LOG_ROTATION_SIZE_PERCENTAGE = 0.95;
-    /** Replication log compression, default is "NONE" */
-    public static final String REPLICATION_LOG_COMPRESSION_ALGORITHM_KEY =
-        "phoenix.replication.log.compression";
-    public static final String DEFAULT_REPLICATION_LOG_COMPRESSION_ALGORITHM = "NONE";
-    public static final String REPLICATION_LOG_RINGBUFFER_SIZE_KEY =
-        "phoenix.replication.log.ringbuffer.size";
-    public static final int DEFAULT_REPLICATION_LOG_RINGBUFFER_SIZE = 1024 * 32;  // Too big?
-    public static final String REPLICATION_LOG_SYNC_TIMEOUT_KEY =
-        "phoenix.replication.log.sync.timeout.ms";
-    public static final long DEFAULT_REPLICATION_LOG_SYNC_TIMEOUT = 1000 * 30;
-    public static final String REPLICATION_LOG_SYNC_RETRIES_KEY =
-        "phoenix.replication.log.sync.retries";
-    public static final int DEFAULT_REPLICATION_LOG_SYNC_RETRIES = 5;
-    public static final String REPLICATION_LOG_ROTATION_RETRIES_KEY =
-        "phoenix.replication.log.rotation.retries";
-    public static final int DEFAULT_REPLICATION_LOG_ROTATION_RETRIES = 5;
-    public static final String REPLICATION_LOG_RETRY_DELAY_MS_KEY =
-        "phoenix.replication.log.retry.delay.ms";
-    public static final long DEFAULT_REPLICATION_LOG_RETRY_DELAY_MS = 100L;
+    private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogGroupWriter.class);
 
-    public static final String SHARD_DIR_FORMAT = "shard%05d";
-    public static final String FILE_NAME_FORMAT = "%d-%s.plog";
-
-    static final byte EVENT_TYPE_DATA = 0;
-    static final byte EVENT_TYPE_SYNC = 1;
-
-    static final Logger LOG = LoggerFactory.getLogger(ReplicationLog.class);
-
-    protected static volatile ReplicationLog instance;
-
-    protected final Configuration conf;
-    protected final ServerName serverName;
-    protected FileSystem standbyFs;
-    protected FileSystem fallbackFs; // For store-and-forward (future use)
-    protected int numShards;
-    protected URI standbyUrl;
-    protected URI fallbackUrl; // For store-and-forward (future use)
+    protected final ReplicationLogGroup logGroup;
     protected final long rotationTimeMs;
     protected final long rotationSizeBytes;
     protected final int maxRotationRetries;
     protected final Compression.Algorithm compression;
+    protected final int ringBufferSize;
+    protected final long syncTimeoutMs;
     protected final ReentrantLock lock = new ReentrantLock();
-    protected volatile LogFileWriter currentWriter; // Current writer
+    protected volatile LogFileWriter currentWriter;
     protected final AtomicLong lastRotationTime = new AtomicLong();
     protected final AtomicLong writerGeneration = new AtomicLong();
     protected final AtomicLong rotationFailures = new AtomicLong(0);
     protected ScheduledExecutorService rotationExecutor;
-    protected final int ringBufferSize;
-    protected final long syncTimeoutMs;
     protected Disruptor<LogEvent> disruptor;
     protected RingBuffer<LogEvent> ringBuffer;
-    protected final ConcurrentHashMap<Path, Object> shardMap = new ConcurrentHashMap<>();
-    protected final MetricsReplicationLogSource metrics;
-    protected volatile boolean isClosed = false;
-
-    /**
-     * Tracks the current replication mode of the ReplicationLog.
-     * <p>
-     * The replication mode determines how mutations are handled:
-     * <ul>
-     *   <li>SYNC: Normal operation where mutations are written directly to the standby cluster's
-     *   HDFS.
-     *   This is the default and primary mode of operation.</li>
-     *   <li>STORE_AND_FORWARD: Fallback mode when the standby cluster's HDFS is unavailable.
-     *   Mutations are stored locally and will be forwarded when connectivity is restored.</li>
-     *   <li>SYNC_AND_FORWARD: Transitional mode where new mutations are written directly to the
-     *   standby cluster while concurrently draining the local queue of previously stored
-     *   mutations.</li>
-     * </ul>
-     * <p>
-     * Mode transitions occur automatically based on the availability of the standby cluster's HDFS
-     * and the state of the local mutation queue.
-     */
-    protected enum ReplicationMode {
-        /**
-         * Normal operation where mutations are written directly to the standby cluster's HDFS.
-         * This is the default and primary mode of operation.
-         */
-        SYNC,
-
-        /**
-         * Fallback mode when the standby cluster's HDFS is unavailable. Mutations are stored
-         * locally and will be forwarded when connectivity is restored.
-         */
-        STORE_AND_FORWARD,
-
-        /**
-         * Transitional mode where new mutations are written directly to the standby cluster
-         * while concurrently draining the local queue of previously stored mutations. This mode
-         * is entered when connectivity to the standby cluster is restored while there are still
-         * mutations in the local queue.
-         */
-        SYNC_AND_FORWARD;
-    }
+    protected volatile boolean closed = false;
 
     /** The reason for requesting a log rotation. */
     protected enum RotationReason {
@@ -275,88 +136,31 @@ public class ReplicationLog {
         ERROR;
     }
 
-    /**
-     * The current replication mode. Always SYNC for now.
-     * <p>TODO: Implement mode transitions to STORE_AND_FORWARD when standby becomes unavailable.
-     * <p>TODO: Implement mode transitions to SYNC_AND_FORWARD when draining queue.
-     */
-    protected volatile ReplicationMode currentMode = ReplicationMode.SYNC;
+    protected static final byte EVENT_TYPE_DATA = 0;
+    protected static final byte EVENT_TYPE_SYNC = 1;
 
-    // TODO: Add configuration keys for store-and-forward behavior
-    // - Maximum retry attempts before switching to store-and-forward
-    // - Retry delay between attempts
-    // - Queue drain batch size
-    // - Queue drain interval
-
-    // TODO: Add state tracking fields
-    // - Queue of pending changes when in store-and-forward mode
-    // - Timestamp of last successful standby write
-    // - Error count for tracking consecutive failures
-
-    // TODO: Add methods for state transitions
-    // - switchToStoreAndForward() - Called when standby becomes unavailable
-    // - switchToSync() - Called when standby becomes available again
-    // - drainQueue() - Background task to process queued changes
-
-    // TODO: Enhance error handling in LogEventHandler
-    // - Track consecutive failures
-    // - Switch to store-and-forward after max retries
-
-    // TODO: Implement queue management for store-and-forward mode
-    // - Implement queue persistence to handle RegionServer restarts
-    // - Implement queue draining when in SYNC_AND_FORWARD state
-    // - Implement automatic recovery from temporary network issues
-    // - Add configurable thresholds for switching to store-and-forward based on write latency
-    // - Add circuit breaker pattern to prevent overwhelming the standby cluster
-    // - Add queue size limits and backpressure mechanisms
-    // - Add queue metrics for monitoring (queue size, oldest entry age, etc.)
-
-    // TODO: Enhance metrics for replication health monitoring
-    // - Add metrics for replication lag between active and standby
-    // - Track time spent in each replication mode (SYNC, STORE_AND_FORWARD, SYNC_AND_FORWARD)
-    // - Monitor queue drain rate and backlog size
-    // - Track consecutive failures and mode transition events
-
-    /**
-     * Gets the singleton instance of the ReplicationLogManager using the lazy initializer pattern.
-     * Initializes the instance if it hasn't been created yet.
-     * @param conf Configuration object.
-     * @param serverName The server name.
-     * @return The singleton ReplicationLogManager instance.
-     * @throws IOException If initialization fails.
-     */
-    public static ReplicationLog get(Configuration conf, ServerName serverName)
-          throws IOException {
-        if (instance == null) {
-            synchronized (ReplicationLog.class) {
-                if (instance == null) {
-                    // Complete initialization before assignment
-                    ReplicationLog logManager = new ReplicationLog(conf, serverName);
-                    logManager.init();
-                    instance = logManager;
-                }
-            }
-        }
-        return instance;
-    }
-
-    protected ReplicationLog(Configuration conf, ServerName serverName) {
-        this.conf = conf;
-        this.serverName = serverName;
-        this.rotationTimeMs = conf.getLong(REPLICATION_LOG_ROTATION_TIME_MS_KEY,
-            DEFAULT_REPLICATION_LOG_ROTATION_TIME_MS);
-        long rotationSize = conf.getLong(REPLICATION_LOG_ROTATION_SIZE_BYTES_KEY,
-            DEFAULT_REPLICATION_LOG_ROTATION_SIZE_BYTES);
-        double rotationSizePercent = conf.getDouble(REPLICATION_LOG_ROTATION_SIZE_PERCENTAGE_KEY,
-            DEFAULT_REPLICATION_LOG_ROTATION_SIZE_PERCENTAGE);
+    protected ReplicationLogGroupWriter(ReplicationLogGroup logGroup) {
+        this.logGroup = logGroup;
+        Configuration conf = logGroup.getConfiguration();
+        this.rotationTimeMs =
+            conf.getLong(ReplicationLogGroup.REPLICATION_LOG_ROTATION_TIME_MS_KEY,
+                ReplicationLogGroup.DEFAULT_REPLICATION_LOG_ROTATION_TIME_MS);
+        long rotationSize =
+            conf.getLong(ReplicationLogGroup.REPLICATION_LOG_ROTATION_SIZE_BYTES_KEY,
+                ReplicationLogGroup.DEFAULT_REPLICATION_LOG_ROTATION_SIZE_BYTES);
+        double rotationSizePercent =
+            conf.getDouble(ReplicationLogGroup.REPLICATION_LOG_ROTATION_SIZE_PERCENTAGE_KEY,
+                ReplicationLogGroup.DEFAULT_REPLICATION_LOG_ROTATION_SIZE_PERCENTAGE);
         this.rotationSizeBytes = (long) (rotationSize * rotationSizePercent);
-        this.maxRotationRetries = conf.getInt(REPLICATION_LOG_ROTATION_RETRIES_KEY,
-            DEFAULT_REPLICATION_LOG_ROTATION_RETRIES);
-        this.numShards = conf.getInt(REPLICATION_NUM_SHARDS_KEY, DEFAULT_REPLICATION_NUM_SHARDS);
-        String compressionName = conf.get(REPLICATION_LOG_COMPRESSION_ALGORITHM_KEY,
-            DEFAULT_REPLICATION_LOG_COMPRESSION_ALGORITHM);
+        this.maxRotationRetries =
+            conf.getInt(ReplicationLogGroup.REPLICATION_LOG_ROTATION_RETRIES_KEY,
+                ReplicationLogGroup.DEFAULT_REPLICATION_LOG_ROTATION_RETRIES);
+        String compressionName =
+            conf.get(ReplicationLogGroup.REPLICATION_LOG_COMPRESSION_ALGORITHM_KEY,
+                ReplicationLogGroup.DEFAULT_REPLICATION_LOG_COMPRESSION_ALGORITHM);
         Compression.Algorithm compression = Compression.Algorithm.NONE;
-        if (!DEFAULT_REPLICATION_LOG_COMPRESSION_ALGORITHM.equalsIgnoreCase(compressionName)) {
+        if (!compressionName.equals(
+                ReplicationLogGroup.DEFAULT_REPLICATION_LOG_COMPRESSION_ALGORITHM)) {
             try {
                 compression = Compression.getCompressionAlgorithmByName(compressionName);
             } catch (IllegalArgumentException e) {
@@ -364,51 +168,21 @@ public class ReplicationLog {
             }
         }
         this.compression = compression;
-        this.ringBufferSize = conf.getInt(REPLICATION_LOG_RINGBUFFER_SIZE_KEY,
-            DEFAULT_REPLICATION_LOG_RINGBUFFER_SIZE);
-        this.syncTimeoutMs = conf.getLong(REPLICATION_LOG_SYNC_TIMEOUT_KEY,
-            DEFAULT_REPLICATION_LOG_SYNC_TIMEOUT);
-        this.metrics = createMetricsSource();
+        this.ringBufferSize = conf.getInt(ReplicationLogGroup.REPLICATION_LOG_RINGBUFFER_SIZE_KEY,
+            ReplicationLogGroup.DEFAULT_REPLICATION_LOG_RINGBUFFER_SIZE);
+        this.syncTimeoutMs = conf.getLong(ReplicationLogGroup.REPLICATION_LOG_SYNC_TIMEOUT_KEY,
+            ReplicationLogGroup.DEFAULT_REPLICATION_LOG_SYNC_TIMEOUT);
     }
 
-    /** Creates a new metrics source for monitoring replication log operations. */
-    protected MetricsReplicationLogSource createMetricsSource() {
-        return new MetricsReplicationLogSourceImpl();
-    }
-
-    /** Returns the metrics source for monitoring replication log operations. */
-    public MetricsReplicationLogSource getMetrics() {
-        return metrics;
-    }
-
-    @SuppressWarnings("unchecked")
+    /** Initialize the writer. */
     public void init() throws IOException {
-        if (numShards > MAX_REPLICATION_NUM_SHARDS) {
-            throw new IllegalArgumentException(REPLICATION_NUM_SHARDS_KEY + " is " + numShards
-                + ", but the limit is " + MAX_REPLICATION_NUM_SHARDS);
-        }
         initializeFileSystems();
         // Start time based rotation.
         lastRotationTime.set(EnvironmentEdgeManager.currentTimeMillis());
         startRotationExecutor();
-        // Create the initial writer. Do this before we call LogEventHandler.init().
-        currentWriter = createNewWriter(standbyFs, standbyUrl);
-        // Initialize the Disruptor. We use ProducerType.MULTI because multiple handlers might
-        // call append concurrently. We use YieldingWaitStrategy for low latency. When the ring
-        // buffer is full (controlled by REPLICATION_WRITER_RINGBUFFER_SIZE_KEY), producers
-        // calling ringBuffer.next() will effectively block (by yielding/spinning), creating
-        // backpressure on the callers. This ensures appends don't proceed until there is space.
-        disruptor = new Disruptor<>(LogEvent.EVENT_FACTORY, ringBufferSize,
-            new ThreadFactoryBuilder().setNameFormat("ReplicationLogEventHandler-%d")
-                .setDaemon(true).build(),
-            ProducerType.MULTI, new YieldingWaitStrategy());
-        LogEventHandler eventHandler = new LogEventHandler();
-        eventHandler.init();
-        disruptor.handleEventsWith(eventHandler);
-        LogExceptionHandler exceptionHandler = new LogExceptionHandler();
-        disruptor.setDefaultExceptionHandler(exceptionHandler);
-        ringBuffer = disruptor.start();
-        LOG.info("ReplicationLogWriter started with ring buffer size {}", ringBufferSize);
+        // Create the initial writer. Do this before we initialize the Disruptor.
+        currentWriter = createNewWriter();
+        initializeDisruptor();
     }
 
     /**
@@ -431,10 +205,9 @@ public class ReplicationLog {
         if (LOG.isTraceEnabled()) {
             LOG.trace("Append: table={}, commitId={}, mutation={}", tableName, commitId, mutation);
         }
-        if (isClosed) {
+        if (closed) {
             throw new IOException("Closed");
         }
-        long startTime = System.nanoTime();
         // ringBuffer.next() claims the next sequence number. Because we initialize the Disruptor
         // with ProducerType.MULTI and the blocking YieldingWaitStrategy this call WILL BLOCK if
         // the ring buffer is full, thus providing backpressure to the callers.
@@ -442,7 +215,6 @@ public class ReplicationLog {
         try {
             LogEvent event = ringBuffer.get(sequence);
             event.setValues(EVENT_TYPE_DATA, new Record(tableName, commitId, mutation), null);
-            metrics.updateAppendTime(System.nanoTime() - startTime);
         } finally {
             // Update ring buffer events metric
             ringBuffer.publish(sequence);
@@ -465,10 +237,37 @@ public class ReplicationLog {
      * @throws IOException If the sync operation fails after retries, or if interrupted.
      */
     public void sync() throws IOException {
-        if (isClosed) {
+        if (LOG.isTraceEnabled()) {
+            LOG.trace("Sync");
+        }
+        if (closed) {
             throw new IOException("Closed");
         }
         syncInternal();
+    }
+
+    /** Initialize file systems needed by this writer implementation. */
+    protected abstract void initializeFileSystems() throws IOException;
+
+    /**
+     * Create a new log writer for rotation.
+     */
+    protected abstract LogFileWriter createNewWriter() throws IOException;
+
+    /** Initialize the Disruptor. */
+    @SuppressWarnings("unchecked")
+    protected void initializeDisruptor() throws IOException {
+        disruptor = new Disruptor<>(LogEvent.EVENT_FACTORY, ringBufferSize,
+            new ThreadFactoryBuilder()
+                .setNameFormat("ReplicationLogGroupWriter-" + logGroup.getHaGroupName() + "-%d")
+                .setDaemon(true).build(),
+            ProducerType.MULTI, new YieldingWaitStrategy());
+        LogEventHandler eventHandler = new LogEventHandler();
+        eventHandler.init();
+        disruptor.handleEventsWith(eventHandler);
+        LogExceptionHandler exceptionHandler = new LogExceptionHandler();
+        disruptor.setDefaultExceptionHandler(exceptionHandler);
+        ringBuffer = disruptor.start();
     }
 
     /**
@@ -476,7 +275,6 @@ public class ReplicationLog {
      * for completion.
      */
     protected void syncInternal() throws IOException {
-        long startTime = System.nanoTime();
         CompletableFuture<Void> syncFuture = new CompletableFuture<>();
         long sequence = ringBuffer.next();
         try {
@@ -489,10 +287,7 @@ public class ReplicationLog {
         try {
             // Wait for the event handler to process up to and including this sync event
             syncFuture.get(syncTimeoutMs, TimeUnit.MILLISECONDS);
-            metrics.updateSyncTime(System.nanoTime() - startTime);
         } catch (InterruptedException e) {
-            // Almost certainly the regionserver is shutting down or aborting.
-            // TODO: Do we need to do more here?
             Thread.currentThread().interrupt();
             throw new InterruptedIOException("Interrupted while waiting for sync");
         } catch (ExecutionException e) {
@@ -509,90 +304,33 @@ public class ReplicationLog {
         }
     }
 
-    /** Initializes the standby and fallback filesystems and creates their log directories. */
-    protected void initializeFileSystems() throws IOException {
-        String standbyUrlString = conf.get(REPLICATION_STANDBY_HDFS_URL_KEY);
-        if (standbyUrlString == null) {
-            throw new IOException(REPLICATION_STANDBY_HDFS_URL_KEY + " is not configured");
-        }
-        // Only validate that the URI is well formed. We should not assume the scheme must be
-        // "hdfs" because perhaps the operator will substitute another FileSystem implementation
-        // for DistributedFileSystem.
-        try {
-            this.standbyUrl = new URI(standbyUrlString);
-        } catch (URISyntaxException e) {
-            throw new IOException(REPLICATION_STANDBY_HDFS_URL_KEY + " is not valid", e);
-        }
-        String fallbackUrlString = conf.get(REPLICATION_FALLBACK_HDFS_URL_KEY);
-        if (fallbackUrlString != null) {
-            // Only validate that the URI is well formed, as above.
-            try {
-                this.fallbackUrl = new URI(fallbackUrlString);
-            } catch (URISyntaxException e) {
-                throw new IOException(REPLICATION_FALLBACK_HDFS_URL_KEY + " is not valid", e);
-            }
-            this.fallbackFs = getFileSystem(fallbackUrl);
-            Path fallbackLogDir = new Path(fallbackUrl.getPath());
-            if (!fallbackFs.exists(fallbackLogDir)) {
-                LOG.info("Creating directory {}", fallbackUrlString);
-                if (!this.fallbackFs.mkdirs(fallbackLogDir)) {
-                    throw new IOException("Failed to create directory: " + fallbackUrlString);
-                }
-            }
-        } else {
-            // We support a synchronous replication only option if store-and-forward configuration
-            // keys are missing. This is outside the scope of the design spec but potentially
-            // useful for testing and also allows an operator to prefer failover consistency and
-            // simplicity over availability, even if that is not recommended. Log it at WARN level
-            // to focus appropriate attention. (Should it be ERROR?)
-            LOG.warn("Fallback not configured ({}), store-and-forward DISABLED.",
-                REPLICATION_FALLBACK_HDFS_URL_KEY);
-            this.fallbackFs = null;
-        }
-        // Configuration is sorted, and possibly store-and-forward directories have been created,
-        // now create the standby side directories as needed.
-        this.standbyFs = getFileSystem(standbyUrl);
-        Path standbyLogDir = new Path(standbyUrl.getPath());
-        if (!standbyFs.exists(standbyLogDir)) {
-            LOG.info("Creating directory {}", standbyUrlString);
-            if (!standbyFs.mkdirs(standbyLogDir)) {
-                throw new IOException("Failed to create directory: " + standbyUrlString);
-            }
-        }
+    protected void startRotationExecutor() {
+        long rotationCheckInterval = getRotationCheckInterval(rotationTimeMs);
+        rotationExecutor = Executors.newSingleThreadScheduledExecutor(
+            new ThreadFactoryBuilder()
+                .setNameFormat("ReplicationLogRotation-" + logGroup.getHaGroupName() + "-%d")
+                .setDaemon(true).build());
+        rotationExecutor.scheduleAtFixedRate(new LogRotationTask(), rotationCheckInterval,
+            rotationCheckInterval, TimeUnit.MILLISECONDS);
+        LOG.debug("Started rotation executor with interval {}ms", rotationCheckInterval);
     }
 
-    /** Gets a FileSystem instance for the given URI using the current configuration. */
-    protected FileSystem getFileSystem(URI uri) throws IOException {
-        return FileSystem.get(uri, conf);
-    }
-
-    /** Calculates the interval for checking log rotation based on the configured rotation time. */
     protected long getRotationCheckInterval(long rotationTimeMs) {
-        long interval;
-        if (rotationTimeMs > 0) {
-            interval = rotationTimeMs / 4;
-        } else {
-            // If rotation time is not configured or invalid, use a sensible default like 10 seconds
-            interval = 10000L;
-        }
+        long interval = Math.max(10 * 1000L, Math.min(60 * 1000L, rotationTimeMs / 10));
         return interval;
     }
 
-    /** Starts the background task for time-based log rotation. */
-    protected void startRotationExecutor() {
-        Preconditions.checkState(rotationExecutor == null, "Rotation executor already started");
-        rotationExecutor = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
-            .setNameFormat("ReplicationLogRotator-%d").setDaemon(true).build());
-        long interval = getRotationCheckInterval(rotationTimeMs);
-        rotationExecutor.scheduleWithFixedDelay(new LogRotationTask(), interval, interval,
-            TimeUnit.MILLISECONDS);
-    }
-
-    /** Stops the background task for time-based log rotation. */
     protected void stopRotationExecutor() {
         if (rotationExecutor != null) {
-            rotationExecutor.shutdownNow();
-            rotationExecutor = null;
+            rotationExecutor.shutdown();
+            try {
+                if (!rotationExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    rotationExecutor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                rotationExecutor.shutdownNow();
+            }
         }
     }
 
@@ -669,7 +407,7 @@ public class ReplicationLog {
         try {
             // Try to get the new writer first. If it fails we continue using the current writer.
             // Increment the writer generation
-            LogFileWriter newWriter = createNewWriter(standbyFs, standbyUrl);
+            LogFileWriter newWriter = createNewWriter();
             LOG.debug("Created new writer: {}", newWriter);
             // Close the current writer
             if (currentWriter != null) {
@@ -679,23 +417,23 @@ public class ReplicationLog {
             currentWriter = newWriter;
             lastRotationTime.set(EnvironmentEdgeManager.currentTimeMillis());
             rotationFailures.set(0);
-            metrics.incrementRotationCount();
+            logGroup.getMetrics().incrementRotationCount();
             switch (reason) {
             case TIME:
-                metrics.incrementTimeBasedRotationCount();
+                logGroup.getMetrics().incrementTimeBasedRotationCount();
                 break;
             case SIZE:
-                metrics.incrementSizeBasedRotationCount();
+                logGroup.getMetrics().incrementSizeBasedRotationCount();
                 break;
             case ERROR:
-                metrics.incrementErrorBasedRotationCount();
+                logGroup.getMetrics().incrementErrorBasedRotationCount();
                 break;
             }
         } catch (IOException e) {
             // If we fail to rotate the log, we increment the failure counter. If we have exceeded
             // the maximum number of retries, we close the log and throw the exception. Otherwise
             // we log a warning and continue.
-            metrics.incrementRotationFailureCount();
+            logGroup.getMetrics().incrementRotationFailureCount();
             long numFailures = rotationFailures.getAndIncrement();
             if (numFailures >= maxRotationRetries) {
                 LOG.warn("Failed to rotate log (attempt {}/{}), closing log", numFailures,
@@ -709,57 +447,6 @@ public class ReplicationLog {
             lock.unlock();
         }
         return currentWriter;
-    }
-
-    /**
-     * Creates a new log file path in a sharded directory structure based on server name and
-     * timestamp.
-     */
-    protected Path makeWriterPath(FileSystem fs, URI url) throws IOException {
-        long timestamp = EnvironmentEdgeManager.currentTimeMillis();
-        // To have all logs for a given regionserver appear in the same shard, hash only the
-        // serverName. However we expect some regionservers will have significantly more load than
-        // others so we instead distribute the logs over all of the shards randomly for a more even
-        // overall distribution by also hashing the timestamp.
-        int shard = (serverName.hashCode() ^ Long.hashCode(timestamp)) % numShards;
-        Path shardPath = new Path(url.getPath(), String.format(SHARD_DIR_FORMAT, shard));
-        // Ensure the shard directory exists. We track which shard directories we have probed or
-        // created to avoid a round trip to the namenode for repeats.
-        IOException[] exception = new IOException[1];
-        shardMap.computeIfAbsent(shardPath, p -> {
-            try {
-                if (!fs.exists(p)) {
-                    if (!fs.mkdirs(p)) {
-                        throw new IOException("Could not create path: " + p);
-                    }
-                }
-            } catch (IOException e) {
-                exception[0] = e;
-            }
-            return p;
-        });
-        // If we faced an exception in computeIfAbsent, throw it
-        if (exception[0] != null) {
-            throw exception[0];
-        }
-        Path filePath = new Path(shardPath, String.format(FILE_NAME_FORMAT, timestamp, serverName));
-        return filePath;
-    }
-
-    /** Creates and initializes a new LogFileWriter for the given filesystem and URL. */
-    protected LogFileWriter createNewWriter(FileSystem fs, URI url) throws IOException {
-        Path filePath = makeWriterPath(fs, url);
-        LogFileWriterContext writerContext = new LogFileWriterContext(conf).setFileSystem(fs)
-            .setFilePath(filePath).setCompression(compression);
-        LogFileWriter newWriter = new LogFileWriter();
-        try {
-            newWriter.init(writerContext);
-            newWriter.setGeneration(writerGeneration.incrementAndGet());
-        } catch (IOException e) {
-            LOG.error("Failed to initialize new LogFileWriter for path {}", filePath, e);
-            throw e;
-        }
-        return newWriter;
     }
 
     /** Closes the given writer, logging any errors that occur during close. */
@@ -776,6 +463,15 @@ public class ReplicationLog {
     }
 
     /**
+     * Check if this ReplicationLogGroup is closed.
+     *
+     * @return true if closed, false otherwise
+     */
+    public boolean isClosed() {
+        return closed;
+    }
+
+    /**
      * Force closes the log upon an unrecoverable internal error. This is a fail-stop behavior:
      * once called, the log is marked as closed, the Disruptor is halted, and all subsequent
      * append() and sync() calls will throw an IOException("Closed"). This ensures that no
@@ -784,10 +480,10 @@ public class ReplicationLog {
     protected void closeOnError() {
         lock.lock();
         try {
-            if (isClosed) {
+            if (closed) {
                 return;
             }
-            isClosed = true;
+            closed = true;
         } finally {
             lock.unlock();
         }
@@ -804,10 +500,10 @@ public class ReplicationLog {
     public void close() {
         lock.lock();
         try {
-            if (isClosed) {
+            if (closed) {
                 return;
             }
-            isClosed = true;
+            closed = true;
         } finally {
             lock.unlock();
         }
@@ -825,11 +521,15 @@ public class ReplicationLog {
         closeWriter(currentWriter);
     }
 
+    protected FileSystem getFileSystem(URI uri) throws IOException {
+        return FileSystem.get(uri, logGroup.getConfiguration());
+    }
+
     /** Implements time based rotation independent of in-line checking. */
     protected class LogRotationTask implements Runnable {
         @Override
         public void run() {
-            if (isClosed) {
+            if (closed) {
                 return;
             }
             // Use tryLock with a timeout to avoid blocking indefinitely if another thread holds
@@ -842,7 +542,7 @@ public class ReplicationLog {
                     // Check only the time condition here, size is handled by getWriter
                     long now = EnvironmentEdgeManager.currentTimeMillis();
                     long last = lastRotationTime.get();
-                    if (!isClosed && now - last >= rotationTimeMs) {
+                    if (!closed && now - last >= rotationTimeMs) {
                         LOG.debug("Time based rotation needed ({} ms elapsed, threshold {} ms).",
                               now - last, rotationTimeMs);
                         try {
@@ -901,7 +601,7 @@ public class ReplicationLog {
      * Handles events from the Disruptor, managing batching, writer rotation, and error handling.
      */
     protected class LogEventHandler implements EventHandler<LogEvent> {
-        protected final int maxRetries; // Configurable max retries for sync
+        protected final int maxRetries;    // Configurable max retries for sync
         protected final long retryDelayMs; // Configurable delay between retries
         protected final List<Record> currentBatch = new ArrayList<>();
         protected final List<CompletableFuture<Void>> pendingSyncFutures = new ArrayList<>();
@@ -909,10 +609,12 @@ public class ReplicationLog {
         protected long generation;
 
         protected LogEventHandler() {
-            this.maxRetries = conf.getInt(REPLICATION_LOG_SYNC_RETRIES_KEY,
-                DEFAULT_REPLICATION_LOG_SYNC_RETRIES);
-            this.retryDelayMs = conf.getLong(REPLICATION_LOG_RETRY_DELAY_MS_KEY,
-                DEFAULT_REPLICATION_LOG_RETRY_DELAY_MS);
+            Configuration conf = logGroup.getConfiguration();
+            this.maxRetries = conf.getInt(ReplicationLogGroup.REPLICATION_LOG_SYNC_RETRIES_KEY,
+                ReplicationLogGroup.DEFAULT_REPLICATION_LOG_SYNC_RETRIES);
+            this.retryDelayMs =
+                conf.getLong(ReplicationLogGroup.REPLICATION_LOG_RETRY_DELAY_MS_KEY,
+                    ReplicationLogGroup.DEFAULT_REPLICATION_LOG_RETRY_DELAY_MS);
         }
 
         protected void init() throws IOException {
@@ -1007,7 +709,7 @@ public class ReplicationLog {
             // Calculate time spent in ring buffer
             long currentTimeNs = System.nanoTime();
             long ringBufferTimeNs = currentTimeNs - event.timestampNs;
-            metrics.updateRingBufferTime(ringBufferTimeNs);
+            logGroup.getMetrics().updateRingBufferTime(ringBufferTimeNs);
             writer = getWriter();
             int attempt = 0;
             while (attempt < maxRetries) {
@@ -1093,5 +795,4 @@ public class ReplicationLog {
             closeOnError();
         }
     }
-
 }
