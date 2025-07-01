@@ -504,8 +504,8 @@ public class ReplicationLogProcessor implements Closeable {
 
         public ApplyMutationBatchResult(Map<TableName, List<Mutation>> failedMutations,
                 Exception exception) {
-            this.failedMutations = failedMutations != null ?
-                failedMutations : Collections.emptyMap();
+            this.failedMutations = failedMutations != null
+                    ? failedMutations : Collections.emptyMap();
             this.exception = exception;
         }
 
