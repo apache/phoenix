@@ -49,7 +49,8 @@ public class StoreAndForwardLogGroupWriter extends ReplicationLogGroupWriter {
      */
     public StoreAndForwardLogGroupWriter(ReplicationLogGroup logGroup) {
         super(logGroup);
-        LOG.debug("Created StoreAndForwardLogGroupWriter for HA Group: {}", logGroup.getHaGroupName());
+        LOG.debug("Created StoreAndForwardLogGroupWriter for HA Group: {}",
+            logGroup.getHaGroupName());
     }
 
     @Override
