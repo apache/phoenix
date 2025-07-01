@@ -176,7 +176,7 @@ public class ReplicationLogProcessor implements Closeable {
                 DEFAULT_REPLICATION_STANDBY_LOG_REPLAY_THREAD_POOL_SIZE);
         decorateConf();
         this.metrics = createMetricsSource();
-        this.executorService = Executors.newFixedThreadPool(threadPoolSize, 
+        this.executorService = Executors.newFixedThreadPool(threadPoolSize,
             new ThreadFactoryBuilder()
                 .setNameFormat("Phoenix-Replication-Log-Processor-" + haGroupName + "-%d")
                 .build());
@@ -256,7 +256,7 @@ public class ReplicationLogProcessor implements Closeable {
 
     /**
      * Creates a LogFileReader for the specified file path.
-     * Validates that the file exists and initializes the reader with the given 
+     * Validates that the file exists and initializes the reader with the given
      * file system and path.
      * @param fs The file system to use for reading
      * @param filePath The path to the log file
@@ -502,9 +502,9 @@ public class ReplicationLogProcessor implements Closeable {
         private final Map<TableName, List<Mutation>> failedMutations;
         private final Exception exception;
 
-        public ApplyMutationBatchResult(Map<TableName, List<Mutation>> failedMutations, 
+        public ApplyMutationBatchResult(Map<TableName, List<Mutation>> failedMutations,
                 Exception exception) {
-            this.failedMutations = failedMutations != null ? 
+            this.failedMutations = failedMutations != null ?
                 failedMutations : Collections.emptyMap();
             this.exception = exception;
         }

@@ -36,9 +36,11 @@ public interface MetricsReplicationLogProcessor extends BaseSource {
     String LOG_FILE_REPLAY_SUCCESS_COUNT = "logFileReplaySuccessCount";
     String LOG_FILE_REPLAY_SUCCESS_COUNT_DESC = "Number of files successfully to replayed";
     String BATCH_REPLAY_TIME = "batchReplayTimeMs";
-    String BATCH_REPLAY_TIME_DESC = "Histogram of time taken for replaying a batch of log file in milliseconds";
+    String BATCH_REPLAY_TIME_DESC = 
+        "Histogram of time taken for replaying a batch of log file in milliseconds";
     String LOG_FILE_REPLAY_TIME = "logFileReplayTimeMs";
-    String LOG_FILE_REPLAY_TIME_DESC = "Histogram of time taken for replaying a log file in milliseconds";
+    String LOG_FILE_REPLAY_TIME_DESC = 
+        "Histogram of time taken for replaying a log file in milliseconds";
 
     /**
      * Increments the counter for failed mutations.

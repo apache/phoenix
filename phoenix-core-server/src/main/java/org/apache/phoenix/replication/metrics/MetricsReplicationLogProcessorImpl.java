@@ -23,7 +23,7 @@ import org.apache.hadoop.metrics2.lib.MutableFastCounter;
 import org.apache.hadoop.metrics2.lib.MutableHistogram;
 
 /** Implementation of metrics source for ReplicationLogProcessor operations. */
-public class MetricsReplicationLogProcessorImpl extends BaseSourceImpl 
+public class MetricsReplicationLogProcessorImpl extends BaseSourceImpl
         implements MetricsReplicationLogProcessor {
 
     private String groupMetricsContext;
@@ -35,12 +35,12 @@ public class MetricsReplicationLogProcessorImpl extends BaseSourceImpl
     private final MutableHistogram logFileReplayTime;
 
     public MetricsReplicationLogProcessorImpl(final String haGroupName) {
-        this(METRICS_NAME, METRICS_DESCRIPTION, METRICS_CONTEXT, 
+        this(METRICS_NAME, METRICS_DESCRIPTION, METRICS_CONTEXT,
             METRICS_JMX_CONTEXT + ",haGroup=" + haGroupName);
         groupMetricsContext = METRICS_JMX_CONTEXT + ",haGroup=" + haGroupName;
     }
 
-    public MetricsReplicationLogProcessorImpl(String metricsName, String metricsDescription, 
+    public MetricsReplicationLogProcessorImpl(String metricsName, String metricsDescription,
             String metricsContext, String metricsJmxContext) {
         super(metricsName, metricsDescription, metricsContext, metricsJmxContext);
         failedMutationsCount = getMetricsRegistry().newCounter(FAILED_MUTATIONS_COUNT,
@@ -51,9 +51,9 @@ public class MetricsReplicationLogProcessorImpl extends BaseSourceImpl
             LOG_FILE_REPLAY_FAILURE_COUNT_DESC, 0L);
         logFileReplaySuccessCount = getMetricsRegistry().newCounter(LOG_FILE_REPLAY_SUCCESS_COUNT,
             LOG_FILE_REPLAY_SUCCESS_COUNT_DESC, 0L);
-        batchReplayTime = getMetricsRegistry().newHistogram(BATCH_REPLAY_TIME, 
+        batchReplayTime = getMetricsRegistry().newHistogram(BATCH_REPLAY_TIME,
             BATCH_REPLAY_TIME_DESC);
-        logFileReplayTime = getMetricsRegistry().newHistogram(LOG_FILE_REPLAY_TIME, 
+        logFileReplayTime = getMetricsRegistry().newHistogram(LOG_FILE_REPLAY_TIME,
             LOG_FILE_REPLAY_TIME_DESC);
     }
 
