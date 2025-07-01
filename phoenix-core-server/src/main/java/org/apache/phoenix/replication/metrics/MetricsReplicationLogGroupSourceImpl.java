@@ -26,7 +26,6 @@ import org.apache.hadoop.metrics2.lib.MutableHistogram;
 public class MetricsReplicationLogGroupSourceImpl extends BaseSourceImpl
         implements MetricsReplicationLogGroupSource {
 
-    private String groupMetricsContext;
     private final MutableFastCounter timeBasedRotationCount;
     private final MutableFastCounter sizeBasedRotationCount;
     private final MutableFastCounter errorBasedRotationCount;
@@ -37,15 +36,14 @@ public class MetricsReplicationLogGroupSourceImpl extends BaseSourceImpl
     private final MutableHistogram rotationTime;
     private final MutableHistogram ringBufferTime;
 
-    public MetricsReplicationLogGroupSourceImpl(String haGroupId) {
-        this(METRICS_NAME, METRICS_DESCRIPTION, METRICS_CONTEXT,
-            METRICS_JMX_CONTEXT + ",haGroup=" + haGroupId);
-        this.groupMetricsContext = METRICS_JMX_CONTEXT + ",haGroup=" + haGroupId;
+    public MetricsReplicationLogGroupSourceImpl(String haGroupName) {
+        this(METRICS_NAME, METRICS_DESCRIPTION, METRICS_CONTEXT, METRICS_JMX_CONTEXT, haGroupName);
     }
 
     public MetricsReplicationLogGroupSourceImpl(String metricsName, String metricsDescription,
-        String metricsContext, String metricsJmxContext) {
-        super(metricsName, metricsDescription, metricsContext, metricsJmxContext);
+        String metricsContext, String metricsJmxContext, String haGroupName) {
+        super(metricsName, metricsDescription, metricsContext, metricsJmxContext + ",haGroup="
+            + haGroupName);
         timeBasedRotationCount = getMetricsRegistry().newCounter(TIME_BASED_ROTATION_COUNT,
             TIME_BASED_ROTATION_COUNT_DESC, 0L);
         sizeBasedRotationCount = getMetricsRegistry().newCounter(SIZE_BASED_ROTATION_COUNT,
@@ -64,7 +62,7 @@ public class MetricsReplicationLogGroupSourceImpl extends BaseSourceImpl
 
     @Override
     public void close() {
-        DefaultMetricsSystem.instance().unregisterSource(groupMetricsContext);
+        DefaultMetricsSystem.instance().unregisterSource(metricsJmxContext);
     }
 
     @Override
@@ -140,10 +138,5 @@ public class MetricsReplicationLogGroupSourceImpl extends BaseSourceImpl
     @Override
     public String getMetricsContext() {
         return METRICS_CONTEXT;
-    }
-
-    @Override
-    public String getMetricsJmxContext() {
-        return groupMetricsContext;
     }
 }

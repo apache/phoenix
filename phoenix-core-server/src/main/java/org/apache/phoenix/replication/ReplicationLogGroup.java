@@ -335,6 +335,9 @@ public class ReplicationLogGroup {
      * can be called multiple times.
      */
     public void close() {
+        if (closed) {
+            return;
+        }
         synchronized (this) {
             if (closed) {
                 return;

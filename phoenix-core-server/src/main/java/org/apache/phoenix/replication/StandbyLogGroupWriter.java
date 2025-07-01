@@ -131,13 +131,8 @@ public class StandbyLogGroupWriter extends ReplicationLogGroupWriter {
             .setFileSystem(standbyFs)
             .setFilePath(filePath).setCompression(compression);
         LogFileWriter newWriter = new LogFileWriter();
-        try {
-            newWriter.init(writerContext);
-            newWriter.setGeneration(writerGeneration.incrementAndGet());
-        } catch (IOException e) {
-            LOG.error("Failed to initialize new LogFileWriter for path {}", filePath, e);
-            throw e;
-        }
+        newWriter.init(writerContext);
+        newWriter.setGeneration(writerGeneration.incrementAndGet());
         return newWriter;
     }
 }
