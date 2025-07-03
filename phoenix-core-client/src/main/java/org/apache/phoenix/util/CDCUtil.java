@@ -38,6 +38,7 @@ import org.apache.hadoop.util.StringUtils;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PDataType;
 import org.bson.RawBsonDocument;
@@ -112,17 +113,22 @@ public class CDCUtil {
         return isCDCIndex(indexTable.getTableName().getString());
     }
 
+    public static boolean isCDCIndexActive(PTable indexTable) {
+        return isCDCIndex(indexTable.getTableName().getString()) &&
+                indexTable.getIndexState() == PIndexState.ACTIVE;
+    }
+
     /**
-     * Check if the given table has any CDC indexes.
-     * 
+     * Check if the given table has an active CDC indexe.
+     *
      * @param table The PTable object.
      * @return true if the table has an CDC index, false otherwise.
      */
-    public static boolean hasCDCIndex(PTable table) {
+    public static boolean hasActiveCDCIndex(PTable table) {
         if (table == null || table.getIndexes() == null) {
             return false;
         }
-        return table.getIndexes().stream().anyMatch(CDCUtil::isCDCIndex);
+        return table.getIndexes().stream().anyMatch(CDCUtil::isCDCIndexActive);
     }
 
     public static Scan setupScanForCDC(Scan scan) {

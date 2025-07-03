@@ -473,6 +473,8 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
                         QueryConstants.CDC_UPSERT_EVENT_TYPE,
                         map.get(QueryConstants.CDC_EVENT_TYPE));
             }
+            assertEquals("Post image list size should be 5 but it is " + postImageList.size(), 5,
+                    postImageList.size());
 
             // TTL Expiration - Advance time to trigger TTL expiration
             injectEdge.incrementValue(ttl);
@@ -508,6 +510,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
                         postImageList.get(i), preImage);
                 i++;
             }
+            assertEquals("Num of TTL_DELETE events verified should be 5 but it is " + i, 5, i);
 
             // Update an expired row to bring it back
             injectEdge.incrementValue(1);
@@ -565,10 +568,17 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
                         postImage.isEmpty());
                 postImageList.add(postImage);
             }
+            assertEquals("Post image list size should be 5 but it is " + postImageList.size(), 1,
+                    postImageList.size());
 
             // Trigger TTL expiration again
             injectEdge.incrementValue(ttl);
             doMajorCompaction(tableName);
+
+            // Verify all rows are expired from data table
+            actual = TestUtil.getRowCount(conn, tableName, true);
+            assertEquals("All rows should be expired after TTL", 0, actual);
+
             expectedCellCount = new CellCount();
             validateTable(conn, tableName, expectedCellCount, dataRowPosToKey.values());
 
@@ -598,6 +608,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
                         postImageList.get(i), preImage);
                 i++;
             }
+            assertEquals("Num of TTL_DELETE events verified should be 5 but it is " + i, 1, i);
         }
     }
 

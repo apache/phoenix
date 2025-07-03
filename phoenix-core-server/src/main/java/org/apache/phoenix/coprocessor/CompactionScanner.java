@@ -215,8 +215,8 @@ public class CompactionScanner implements InternalScanner {
         this.table = table;
         isCDCIndex = CDCUtil.isCDCIndex(table);
         isCdcTtlEnabled =
-                CDCUtil.hasCDCIndex(table) && major && !table.isMultiTenant() &&
-                        table.getType() == PTableType.TABLE;
+                CDCUtil.hasActiveCDCIndex(table) && major && !table.isMultiTenant()
+                        && table.getType() == PTableType.TABLE;
         cdcTtlMutationMaxRetries = env.getConfiguration().getInt(
                 QueryServices.CDC_TTL_MUTATION_MAX_RETRIES,
                 QueryServicesOptions.DEFAULT_CDC_TTL_MUTATION_MAX_RETRIES);
