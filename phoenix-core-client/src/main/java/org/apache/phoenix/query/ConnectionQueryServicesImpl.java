@@ -32,6 +32,7 @@ import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.PHOENIX_MINO
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.PHOENIX_PATCH_NUMBER;
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.getVersion;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CDC_STREAM_CONDITIONAL_TTL_EXPRESSION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_DEF;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
@@ -3872,7 +3873,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     protected String getCDCStreamDDL() {
-        return setSystemDDLProperties(QueryConstants.CREATE_CDC_STREAM_METADATA);
+        long partitionExpiryMinAge = getProps().getLong(
+                QueryServices.PHOENIX_CDC_STREAM_PARTITION_EXPIRY_MIN_AGE_MS,
+                QueryServicesOptions.DEFAULT_PHOENIX_CDC_STREAM_PARTITION_EXPIRY_MIN_AGE_MS);
+        String ttlExpression = String.format(CDC_STREAM_CONDITIONAL_TTL_EXPRESSION, partitionExpiryMinAge);
+        String ddl = setSystemDDLProperties(QueryConstants.CREATE_CDC_STREAM_METADATA);
+        return ddl + ",TTL='" + ttlExpression + "'";
     }
 
     private String setSystemDDLProperties(String ddl) {
