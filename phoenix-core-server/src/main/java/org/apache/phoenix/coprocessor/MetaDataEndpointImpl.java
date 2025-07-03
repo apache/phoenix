@@ -3337,6 +3337,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 byte[] cdcKey = SchemaUtil.getTableKey(tenantId, schemaName, CDCUtil.getCdcObjectName(indexName));
                 Delete deleteCdc = new Delete(cdcKey, clientTimeStamp);
                 catalogMutations.add(deleteCdc);
+                // invalidate from cache
+                Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache = GlobalCache.getInstance(env).getMetaDataCache();
+                metaDataCache.invalidate(new ImmutableBytesPtr(cdcKey));
             }
             byte[] indexKey = SchemaUtil.getTableKey(tenantId, schemaName, indexName);
             // FIXME: Remove when unintentionally deprecated method is fixed (HBASE-7870).
