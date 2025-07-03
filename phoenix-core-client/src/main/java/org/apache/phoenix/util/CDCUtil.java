@@ -119,16 +119,29 @@ public class CDCUtil {
     }
 
     /**
-     * Check if the given table has an active CDC indexe.
+     * Check if the given table has an active CDC index.
      *
      * @param table The PTable object.
-     * @return true if the table has an CDC index, false otherwise.
+     * @return true if the table has an active CDC index, false otherwise.
      */
     public static boolean hasActiveCDCIndex(PTable table) {
         if (table == null || table.getIndexes() == null) {
             return false;
         }
         return table.getIndexes().stream().anyMatch(CDCUtil::isCDCIndexActive);
+    }
+
+    /**
+     * Check if the given table has any CDC indexes.
+     *
+     * @param table The PTable object.
+     * @return true if the table has an CDC index, false otherwise.
+     */
+    public static boolean hasCDCIndex(PTable table) {
+        if (table == null || table.getIndexes() == null) {
+            return false;
+        }
+        return table.getIndexes().stream().anyMatch(CDCUtil::isCDCIndex);
     }
 
     public static Scan setupScanForCDC(Scan scan) {
