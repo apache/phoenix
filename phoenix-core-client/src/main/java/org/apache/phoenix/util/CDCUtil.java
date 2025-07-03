@@ -132,6 +132,19 @@ public class CDCUtil {
     }
 
     /**
+     * Return PTable of the active CDC index for the given data table.
+     *
+     * @param dataTable The data table.
+     * @return active CDC index.
+     */
+    public static PTable getActiveCDCIndex(PTable dataTable) {
+        return dataTable.getIndexes().stream()
+                .filter(CDCUtil::isCDCIndexActive)
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
      * Check if the given table has any CDC indexes.
      *
      * @param table The PTable object.

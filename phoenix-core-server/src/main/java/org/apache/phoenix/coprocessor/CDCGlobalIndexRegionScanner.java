@@ -133,8 +133,11 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
             List<Cell> indexRow = indexRowIterator.next();
             Cell indexCell = indexRow.get(0);
             byte[] indexRowKey = ImmutableBytesPtr.cloneCellRowIfNecessary(indexCell);
-            if (hasPreImageData(indexRow)) {
-                return handlePreImageCDCEvent(indexRow, indexRowKey, indexCell, result);
+            if (indexRow.size() > 1) {
+                boolean success = handlePreImageCDCEvent(indexRow, indexRowKey, indexCell, result);
+                if (success) {
+                    return true;
+                }
             }
             ImmutableBytesPtr dataRowKey = new ImmutableBytesPtr(
                     indexToDataRowKeyMap.get(indexRowKey));
@@ -309,33 +312,6 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
     }
 
     /**
-     * Checks if the CDC index row already contains pre-image data.
-     * This is true for TTL delete events that embed complete row data.
-     * Checks for the new CDC_IMAGE_CQ column that contains pre-computed CDC event data.
-     *
-     * @param indexRow The CDC index row cells
-     * @return true if pre-image data is available, false if data table scan is needed
-     */
-    private boolean hasPreImageData(List<Cell> indexRow) {
-        try {
-            if (indexRow.size() == 1) {
-                return false;
-            }
-            for (Cell cell : indexRow) {
-                if (Bytes.equals(cell.getQualifierArray(), cell.getQualifierOffset(),
-                        cell.getQualifierLength(),
-                        QueryConstants.CDC_IMAGE_CQ_BYTES, 0,
-                        QueryConstants.CDC_IMAGE_CQ_BYTES.length)) {
-                    return true;
-                }
-            }
-        } catch (Exception e) {
-            LOGGER.error("Error checking for pre-image data in CDC index row", e);
-        }
-        return false;
-    }
-
-    /**
      * Handles CDC events that already contain pre-image data, avoiding data table scan.
      * Supports both the new CDC_IMAGE_CQ column and traditional CDC JSON column.
      *
@@ -358,7 +334,7 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
             }
         }
         if (cdcDataCell == null) {
-            throw new IllegalStateException("No pre-embedded CDC data found in CDC index row");
+            return false;
         }
         byte[] cdcEventBytes = CellUtil.cloneValue(cdcDataCell);
         Result cdcRow = createCDCResult(indexRowKey, indexCell, cdcDataCell.getTimestamp(),

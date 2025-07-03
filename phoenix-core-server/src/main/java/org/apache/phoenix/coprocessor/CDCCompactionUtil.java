@@ -47,7 +47,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -218,7 +217,7 @@ public class CDCCompactionUtil {
                         dataTable, env, region, compactionTimeBytes);
 
         Exception lastException = null;
-        for (int retryCount = 0; retryCount <= cdcTtlMutationMaxRetries; retryCount++) {
+        for (int retryCount = 0; retryCount < cdcTtlMutationMaxRetries; retryCount++) {
             try (Table cdcIndexTable = env.getConnection().getTable(TableName.valueOf(
                     cdcIndex.getPhysicalName().getBytes()))) {
                 CheckAndMutate checkAndMutate =
@@ -272,21 +271,24 @@ public class CDCCompactionUtil {
                         } else {
                             LOGGER.warn("Rare event: Skipping CDC TTL mutation because other type"
                                     + " of CDC event is recorded at time {}", eventTimestamp);
+                            break;
                         }
+                    } else {
+                        LOGGER.warn("Rare event.. Skipping CDC TTL mutation because other type"
+                                + " of CDC event is recorded at time {}", eventTimestamp);
+                        break;
                     }
                 }
             } catch (Exception e) {
                 lastException = e;
-                if (retryCount < cdcTtlMutationMaxRetries) {
-                    long backoffMs = 100;
-                    LOGGER.warn("CDC mutation attempt {}/{} failed, retrying in {}ms",
-                            retryCount + 1, cdcTtlMutationMaxRetries + 1, backoffMs, e);
-                    try {
-                        Thread.sleep(backoffMs);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        throw new IOException("Interrupted during CDC mutation retry", ie);
-                    }
+                long backoffMs = 100;
+                LOGGER.warn("CDC mutation attempt {}/{} failed, retrying in {}ms",
+                        retryCount + 1, cdcTtlMutationMaxRetries + 1, backoffMs, e);
+                try {
+                    Thread.sleep(backoffMs);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Interrupted during CDC mutation retry", ie);
                 }
             }
         }
@@ -318,18 +320,10 @@ public class CDCCompactionUtil {
                                           RegionCoprocessorEnvironment env, Region region,
                                           byte[] compactionTimeBytes,
                                           int cdcTtlMutationMaxRetries) {
-        if (expiredRow.isEmpty()) {
-            return;
-        }
         try {
-            List<PTable> cdcIndexes = new ArrayList<>();
-            for (PTable index : dataTable.getIndexes()) {
-                if (CDCUtil.isCDCIndex(index)) {
-                    cdcIndexes.add(index);
-                }
-            }
-            if (cdcIndexes.isEmpty()) {
-                LOGGER.debug("No CDC indexes found for table {}", tableName);
+            PTable cdcIndex = CDCUtil.getActiveCDCIndex(dataTable);
+            if (cdcIndex == null) {
+                LOGGER.warn("No active CDC index found for table {}", tableName);
                 return;
             }
             Cell firstCell = expiredRow.get(0);
@@ -340,14 +334,12 @@ public class CDCCompactionUtil {
                 expiredRowPut.add(cell);
             }
 
-            for (PTable cdcIndex : cdcIndexes) {
-                try {
-                    generateCDCIndexMutation(cdcIndex, dataTable, expiredRowPut, compactionTime,
-                            tableName, env, region, compactionTimeBytes, cdcTtlMutationMaxRetries);
-                } catch (Exception e) {
-                    LOGGER.error("Failed to generate CDC mutation for index {}: {}",
-                            cdcIndex.getName().getString(), e.getMessage(), e);
-                }
+            try {
+                generateCDCIndexMutation(cdcIndex, dataTable, expiredRowPut, compactionTime,
+                        tableName, env, region, compactionTimeBytes, cdcTtlMutationMaxRetries);
+            } catch (Exception e) {
+                LOGGER.error("Failed to generate CDC mutation for index {}: {}",
+                        cdcIndex.getName().getString(), e.getMessage(), e);
             }
         } catch (Exception e) {
             LOGGER.error("Error generating CDC TTL delete event for table {}",
@@ -376,10 +368,6 @@ public class CDCCompactionUtil {
                                        RegionCoprocessorEnvironment env, Region region,
                                        byte[] compactionTimeBytes,
                                        int cdcTtlMutationMaxRetries) {
-        if (expiredRow.isEmpty()) {
-            return;
-        }
-
         try {
             Cell firstCell = expiredRow.get(0);
             byte[] rowKey = CellUtil.cloneRow(firstCell);
