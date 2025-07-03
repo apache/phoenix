@@ -112,6 +112,19 @@ public class CDCUtil {
         return isCDCIndex(indexTable.getTableName().getString());
     }
 
+    /**
+     * Check if the given table has any CDC indexes.
+     * 
+     * @param table The PTable object.
+     * @return true if the table has an CDC index, false otherwise.
+     */
+    public static boolean hasCDCIndex(PTable table) {
+        if (table == null || table.getIndexes() == null) {
+            return false;
+        }
+        return table.getIndexes().stream().anyMatch(CDCUtil::isCDCIndex);
+    }
+
     public static Scan setupScanForCDC(Scan scan) {
         scan.setRaw(true);
         scan.readAllVersions();
@@ -139,7 +152,7 @@ public class CDCUtil {
     public static Object getColumnEncodedValue(Object value, PDataType dataType) {
         if (value != null) {
             if (dataType.getSqlType() == PDataType.BSON_TYPE) {
-                value = Bytes.toBytes(((RawBsonDocument) value).getByteBuffer().asNIO());
+                value = ByteUtil.toBytes(((RawBsonDocument) value).getByteBuffer().asNIO());
             } else if (isBinaryType(dataType)) {
                 // Unfortunately, Base64.Encoder has no option to specify offset and length so can't
                 // avoid copying bytes.

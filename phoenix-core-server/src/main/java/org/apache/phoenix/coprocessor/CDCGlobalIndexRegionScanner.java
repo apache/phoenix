@@ -22,9 +22,11 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellBuilder;
 import org.apache.hadoop.hbase.CellBuilderFactory;
 import org.apache.hadoop.hbase.CellBuilderType;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
@@ -35,10 +37,9 @@ import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.CDCTableInfo;
 import org.apache.phoenix.index.IndexMaintainer;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.CDCChangeBuilder;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
@@ -50,12 +51,43 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.CDC_DATA_TABLE_DEF;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
+/**
+ * CDC (Change Data Capture) enabled region scanner for global indexes that processes
+ * uncovered CDC index queries by reconstructing CDC events from index and data table rows.
+ *
+ * <h3>Purpose</h3>
+ * This scanner extends {@link UncoveredGlobalIndexRegionScanner} to handle CDC index queries
+ * where the CDC index doesn't contain all the columns needed to satisfy the query. It bridges
+ * the gap between CDC index rows and the original data table to reconstruct complete CDC events.
+ *
+ * <h3>CDC Event Processing</h3>
+ * The scanner processes two types of CDC events:
+ * <ul>
+ *   <li><b>Regular CDC Events:</b> Requires data table scan to build CDC event JSON from
+ *       current/historical row state</li>
+ *   <li><b>Pre-Image CDC Events:</b> Contains embedded CDC data (e.g., TTL delete events)
+ *       that can be returned directly without data table scan</li>
+ * </ul>
+ *
+ * <h3>CDC Event Structure</h3>
+ * The scanner produces CDC events in JSON format containing:
+ * <ul>
+ *   <li><b>event_type:</b> "upsert", "delete", or "ttl_delete"</li>
+ *   <li><b>pre_image:</b> Row state before the change (for updates/deletes)</li>
+ *   <li><b>post_image:</b> Row state after the change (for inserts/updates)</li>
+ * </ul>
+ *
+ * @see UncoveredGlobalIndexRegionScanner
+ * @see CDCChangeBuilder
+ * @see CDCTableInfo
+ */
 public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScanner {
     private static final Logger LOGGER =
             LoggerFactory.getLogger(CDCGlobalIndexRegionScanner.class);
@@ -101,6 +133,9 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
             List<Cell> indexRow = indexRowIterator.next();
             Cell indexCell = indexRow.get(0);
             byte[] indexRowKey = ImmutableBytesPtr.cloneCellRowIfNecessary(indexCell);
+            if (hasPreImageData(indexRow)) {
+                return handlePreImageCDCEvent(indexRow, indexRowKey, indexCell, result);
+            }
             ImmutableBytesPtr dataRowKey = new ImmutableBytesPtr(
                     indexToDataRowKeyMap.get(indexRowKey));
             Result dataRow = dataRows.get(dataRowKey);
@@ -233,16 +268,29 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
     private Result getCDCImage(byte[] indexRowKey, Cell firstCell) throws JsonProcessingException {
         byte[] value = JacksonUtil.getObjectWriter(HashMap.class).writeValueAsBytes(
                 changeBuilder.buildCDCEvent());
+        return createCDCResult(indexRowKey, firstCell, changeBuilder.getChangeTimestamp(), value);
+    }
+
+    /**
+     * Generates the Result object for the CDC event.
+     *
+     * @param indexRowKey The CDC index row key
+     * @param firstCell   The first cell
+     * @param timestamp   The timestamp for the CDC event
+     * @param value       The CDC event JSON bytes
+     * @return Result containing the CDC data
+     */
+    private Result createCDCResult(byte[] indexRowKey, Cell firstCell, long timestamp,
+                                   byte[] value) {
         CellBuilder builder = CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY);
-        Result cdcRow = Result.create(Arrays.asList(builder
+        return Result.create(Collections.singletonList(builder
                 .setRow(indexRowKey)
                 .setFamily(ImmutableBytesPtr.cloneCellFamilyIfNecessary(firstCell))
                 .setQualifier(cdcDataTableInfo.getCdcJsonColQualBytes())
-                .setTimestamp(changeBuilder.getChangeTimestamp())
+                .setTimestamp(timestamp)
                 .setValue(value)
                 .setType(Cell.Type.Put)
                 .build()));
-        return cdcRow;
     }
 
     private Object getColumnValue(Cell cell, PDataType dataType) {
@@ -258,5 +306,72 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
             value = dataType.toObject(cellValue, offset, length);
         }
         return CDCUtil.getColumnEncodedValue(value, dataType);
+    }
+
+    /**
+     * Checks if the CDC index row already contains pre-image data.
+     * This is true for TTL delete events that embed complete row data.
+     * Checks for the new CDC_IMAGE_CQ column that contains pre-computed CDC event data.
+     *
+     * @param indexRow The CDC index row cells
+     * @return true if pre-image data is available, false if data table scan is needed
+     */
+    private boolean hasPreImageData(List<Cell> indexRow) {
+        try {
+            if (indexRow.size() == 1) {
+                return false;
+            }
+            for (Cell cell : indexRow) {
+                if (Bytes.equals(cell.getQualifierArray(), cell.getQualifierOffset(),
+                        cell.getQualifierLength(),
+                        QueryConstants.CDC_IMAGE_CQ_BYTES, 0,
+                        QueryConstants.CDC_IMAGE_CQ_BYTES.length)) {
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.error("Error checking for pre-image data in CDC index row", e);
+        }
+        return false;
+    }
+
+    /**
+     * Handles CDC events that already contain pre-image data, avoiding data table scan.
+     * Supports both the new CDC_IMAGE_CQ column and traditional CDC JSON column.
+     *
+     * @param indexRow    The CDC index row cells
+     * @param indexRowKey The CDC index row key
+     * @param indexCell   The primary index cell
+     * @param result      The result list to populate
+     * @return true if event was processed successfully
+     */
+    private boolean handlePreImageCDCEvent(List<Cell> indexRow, byte[] indexRowKey,
+                                           Cell indexCell, List<Cell> result) {
+        Cell cdcDataCell = null;
+        for (Cell cell : indexRow) {
+            if (Bytes.equals(cell.getQualifierArray(), cell.getQualifierOffset(),
+                    cell.getQualifierLength(),
+                    QueryConstants.CDC_IMAGE_CQ_BYTES, 0,
+                    QueryConstants.CDC_IMAGE_CQ_BYTES.length)) {
+                cdcDataCell = cell;
+                break;
+            }
+        }
+        if (cdcDataCell == null) {
+            throw new IllegalStateException("No pre-embedded CDC data found in CDC index row");
+        }
+        byte[] cdcEventBytes = CellUtil.cloneValue(cdcDataCell);
+        Result cdcRow = createCDCResult(indexRowKey, indexCell, cdcDataCell.getTimestamp(),
+                cdcEventBytes);
+
+        if (tupleProjector != null) {
+            result.add(indexCell);
+            IndexUtil.addTupleAsOneCell(result, new ResultTuple(cdcRow), tupleProjector, ptr);
+        } else {
+            result.clear();
+        }
+        LOGGER.debug("Processed CDC event with embedded data, skipped data table scan for"
+                + " row key: {}", Bytes.toStringBinary(indexRowKey));
+        return true;
     }
 }
