@@ -114,8 +114,8 @@ public class CDCUtil {
     }
 
     public static boolean isCDCIndexActive(PTable indexTable) {
-        return isCDCIndex(indexTable.getTableName().getString()) &&
-                indexTable.getIndexState() == PIndexState.ACTIVE;
+        return isCDCIndex(indexTable.getTableName().getString())
+                && indexTable.getIndexState() == PIndexState.ACTIVE;
     }
 
     /**

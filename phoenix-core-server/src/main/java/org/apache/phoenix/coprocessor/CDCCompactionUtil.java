@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -60,9 +60,13 @@ import static org.apache.phoenix.query.QueryConstants.NAME_SEPARATOR;
  * This class contains utilities for handling TTL row expiration events and generating
  * CDC events with pre-image data that are written directly to CDC index tables.
  */
-public class CDCCompactionUtil {
+public final class CDCCompactionUtil {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(CDCCompactionUtil.class);
+
+    private CDCCompactionUtil() {
+        // empty
+    }
 
     /**
      * Finds the column name for a given cell in the data table.
@@ -75,13 +79,13 @@ public class CDCCompactionUtil {
         try {
             byte[] family = CellUtil.cloneFamily(cell);
             byte[] qualifier = CellUtil.cloneQualifier(cell);
-            byte[] defaultCf = dataTable.getDefaultFamilyName() != null ?
-                    dataTable.getDefaultFamilyName().getBytes() :
-                    QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
+            byte[] defaultCf = dataTable.getDefaultFamilyName() != null
+                    ? dataTable.getDefaultFamilyName().getBytes()
+                    : QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
             for (PColumn column : dataTable.getColumns()) {
-                if (column.getFamilyName() != null &&
-                        Bytes.equals(family, column.getFamilyName().getBytes()) &&
-                        Bytes.equals(qualifier, column.getColumnQualifierBytes())) {
+                if (column.getFamilyName() != null
+                        && Bytes.equals(family, column.getFamilyName().getBytes())
+                        && Bytes.equals(qualifier, column.getColumnQualifierBytes())) {
                     if (Bytes.equals(defaultCf, column.getFamilyName().getBytes())) {
                         return column.getName().getString();
                     } else {
@@ -293,8 +297,8 @@ public class CDCCompactionUtil {
             }
         }
         if (lastException != null) {
-            LOGGER.error("Failed to generate CDC mutation after {} attempts for table {}, index " +
-                            "{}. The event update is missed.",
+            LOGGER.error("Failed to generate CDC mutation after {} attempts for table {}, index "
+                            + "{}. The event update is missed.",
                     cdcTtlMutationMaxRetries + 1,
                     tableName,
                     cdcIndex.getPhysicalName().getString(),
