@@ -28,6 +28,9 @@ import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.*;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.schema.PTable;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -46,10 +49,16 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 
+import static org.apache.phoenix.query.QueryConstants.CDC_EVENT_TYPE;
+import static org.apache.phoenix.query.QueryConstants.CDC_POST_IMAGE;
+import static org.apache.phoenix.query.QueryConstants.CDC_PRE_IMAGE;
+import static org.apache.phoenix.query.QueryConstants.CDC_TTL_DELETE_EVENT_TYPE;
+import static org.apache.phoenix.query.QueryConstants.CDC_UPSERT_EVENT_TYPE;
 import static org.junit.Assert.*;
 
 @Category(NeedsOwnMiniClusterTest.class)
@@ -315,6 +324,102 @@ public class TableTTLIT extends BaseTest {
     }
 
     @Test
+    public void testRowSpansMultipleTTLWindowsWithCdc() throws Exception {
+        final int maxLookbackAge = tableLevelMaxLookback != null
+                ? tableLevelMaxLookback : MAX_LOOKBACK_AGE;
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String schemaName = generateUniqueName();
+            String tableName = schemaName + "." + generateUniqueName();
+            String noCompactTableName = generateUniqueName();
+            createTable(tableName);
+            createTable(noCompactTableName);
+            conn.createStatement().execute("ALTER TABLE " + tableName
+                    + " SET \"phoenix.max.lookback.age.seconds\" = " + maxLookbackAge);
+
+            // Create CDC index for TTL verification
+            String cdcName = generateUniqueName();
+            String cdcSql = "CREATE CDC " + cdcName + " ON " + tableName +
+                    " INCLUDE (PRE, POST)";
+            conn.createStatement().execute(cdcSql);
+            conn.commit();
+
+            String cdcFullName = SchemaUtil.getTableName(null, schemaName + "." + cdcName);
+
+            ObjectMapper mapper = new ObjectMapper();
+            long startTime = System.currentTimeMillis() + 1000;
+            startTime = (startTime / 1000) * 1000;
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            injectEdge.setValue(startTime);
+
+            // Track the last post-image from normal CDC events
+            Map<String, Object> lastPostImage = null;
+
+            for (int columnIndex = 1; columnIndex <= MAX_COLUMN_INDEX; columnIndex++) {
+                String value = Integer.toString(RAND.nextInt(1000));
+                updateColumn(conn, tableName, "a", columnIndex, value);
+                updateColumn(conn, noCompactTableName, "a", columnIndex, value);
+                conn.commit();
+
+                // Capture the last post-image from CDC events
+                String cdcQuery =
+                        "SELECT PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" FROM " + cdcFullName +
+                                " ORDER BY PHOENIX_ROW_TIMESTAMP() DESC LIMIT 1";
+                try (ResultSet rs = conn.createStatement().executeQuery(cdcQuery)) {
+                    if (rs.next()) {
+                        Map<String, Object> cdcEvent =
+                                mapper.readValue(rs.getString(2), HashMap.class);
+                        if (cdcEvent.containsKey(CDC_POST_IMAGE)) {
+                            lastPostImage = (Map<String, Object>) cdcEvent.get(CDC_POST_IMAGE);
+                        }
+                    }
+                }
+
+                injectEdge.incrementValue(ttl * 1000 - 1000);
+            }
+            assertNotNull("Last post-image should not be null", lastPostImage);
+
+            // Advance time past TTL to expire the row
+            injectEdge.incrementValue((ttl + maxLookbackAge + 1) * 1000);
+
+            flush(TableName.valueOf(tableName));
+            majorCompact(TableName.valueOf(tableName));
+
+            // Verify row is expired from data table
+            String dataQuery = "SELECT * FROM " + tableName + " WHERE id = 'a'";
+            try (ResultSet rs = conn.createStatement().executeQuery(dataQuery)) {
+                assertFalse("Row should be expired from data table", rs.next());
+            }
+
+            // Verify TTL_DELETE CDC event was generated and compare pre-image
+            String cdcQuery = "SELECT \"CDC JSON\" FROM " + cdcFullName +
+                    " ORDER BY PHOENIX_ROW_TIMESTAMP() DESC LIMIT 1";
+            try (ResultSet rs = conn.createStatement().executeQuery(cdcQuery)) {
+                assertTrue("Should find TTL delete event", rs.next());
+                Map<String, Object> ttlDeleteEvent =
+                        mapper.readValue(rs.getString(1), HashMap.class);
+                LOG.info("TTL delete event: {}", ttlDeleteEvent);
+
+                assertEquals("Should be ttl_delete event", CDC_TTL_DELETE_EVENT_TYPE,
+                        ttlDeleteEvent.get(CDC_EVENT_TYPE));
+
+                Map<String, Object> ttlPreImage =
+                        (Map<String, Object>) ttlDeleteEvent.get(CDC_PRE_IMAGE);
+                assertNotNull("TTL pre-image should not be null", ttlPreImage);
+
+                assertEquals(
+                        "TTL delete pre-image should match last post-image from normal CDC events",
+                        lastPostImage, ttlPreImage);
+
+                assertFalse("No more event should be found", rs.next());
+            }
+
+            compareRow(conn, tableName, noCompactTableName, "a", MAX_COLUMN_INDEX);
+            injectEdge.incrementValue(1000);
+        }
+    }
+
+    @Test
     public void testMultipleRowsWithUpdatesMoreThanTTLApart() throws Exception {
         // for the purpose of this test only considering cases when maxlookback is 0
         if (tableLevelMaxLookback == null || tableLevelMaxLookback != 0) {
@@ -544,6 +649,156 @@ public class TableTTLIT extends BaseTest {
         }
     }
 
+    /**
+     * Test CDC events for TTL expired rows. This test creates a table with TTL and CDC index,
+     * verifies insert/update CDC events with pre/post images, then triggers major compaction
+     * to expire rows and verifies TTL_DELETE events with pre-image data.
+     */
+    @Test
+    public void testCDCTTLExpiredRows() throws Exception {
+        final int maxLookbackAge = tableLevelMaxLookback != null
+                ? tableLevelMaxLookback : MAX_LOOKBACK_AGE;
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String schemaName = generateUniqueName();
+            String tableName = schemaName + "." + generateUniqueName();
+            String cdcName = generateUniqueName();
+            ObjectMapper mapper = new ObjectMapper();
+
+            createTable(tableName);
+            conn.createStatement().execute("ALTER TABLE " + tableName
+                    + " SET \"phoenix.max.lookback.age.seconds\" = " + maxLookbackAge);
+
+            String cdcSql = "CREATE CDC " + cdcName + " ON " + tableName +
+                    " INCLUDE (PRE, POST)";
+            conn.createStatement().execute(cdcSql);
+            conn.commit();
+
+            String cdcIndexName =
+                    schemaName + "." + CDCUtil.getCDCIndexName(schemaName + "." + cdcName);
+            String cdcFullName = SchemaUtil.getTableName(null, schemaName + "." + cdcName);
+
+            PTable cdcIndex = ((PhoenixConnection) conn).getTableNoCache(cdcIndexName);
+            assertNotNull("CDC index should be created", cdcIndex);
+            assertTrue("CDC index should be CDC type", CDCUtil.isCDCIndex(cdcIndex));
+
+            // Setup time injection
+            long startTime = System.currentTimeMillis() + 1000;
+            startTime = (startTime / 1000) * 1000;
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            injectEdge.setValue(startTime);
+
+            // Insert initial row
+            updateRow(conn, tableName, "row1");
+            long insertTime = injectEdge.currentTime();
+            injectEdge.incrementValue(1000);
+
+            // Update the row
+            updateColumn(conn, tableName, "row1", 1, "updated_val1");
+            updateColumn(conn, tableName, "row1", 2, "updated_val2");
+            conn.commit();
+            long updateTime = injectEdge.currentTime();
+            injectEdge.incrementValue(1000);
+
+            // Verify CDC events for insert and update
+            String cdcQuery = "SELECT PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" FROM " + cdcFullName;
+            Map<String, Object> postImage;
+            try (ResultSet rs = conn.createStatement().executeQuery(cdcQuery)) {
+                // First event - insert
+                assertTrue("Should have insert CDC event", rs.next());
+                long eventTimestamp = rs.getTimestamp(1).getTime();
+                assertTrue("Insert event timestamp should be close to insert time",
+                        Math.abs(eventTimestamp - insertTime) < 2000);
+
+                Map<String, Object> cdcEvent = mapper.readValue(rs.getString(2), HashMap.class);
+                assertEquals("Should be upsert event", CDC_UPSERT_EVENT_TYPE,
+                        cdcEvent.get(CDC_EVENT_TYPE));
+                assertTrue("Should have post-image", cdcEvent.containsKey(CDC_POST_IMAGE));
+
+                postImage = (Map<String, Object>) cdcEvent.get(CDC_POST_IMAGE);
+                assertFalse("post image must contain something", postImage.isEmpty());
+
+                // Second event - update
+                assertTrue("Should have update CDC event", rs.next());
+                eventTimestamp = rs.getTimestamp(1).getTime();
+                assertTrue("Update event timestamp should be close to update time",
+                        Math.abs(eventTimestamp - updateTime) < 2000);
+
+                cdcEvent = mapper.readValue(rs.getString(2), HashMap.class);
+                assertEquals("Should be upsert event", CDC_UPSERT_EVENT_TYPE,
+                        cdcEvent.get(CDC_EVENT_TYPE));
+                assertTrue("Should have pre-image", cdcEvent.containsKey(CDC_PRE_IMAGE));
+                assertTrue("Should have post-image", cdcEvent.containsKey(CDC_POST_IMAGE));
+
+                Map<String, Object> preImage = (Map<String, Object>) cdcEvent.get(CDC_PRE_IMAGE);
+                assertEquals("Comparison of last post-image with new pre-image", postImage,
+                        preImage);
+                postImage = (Map<String, Object>) cdcEvent.get(CDC_POST_IMAGE);
+                LOG.info("Post-image {}", postImage);
+            }
+
+            // Advance time past TTL to expire the row
+            injectEdge.incrementValue((ttl + maxLookbackAge + 1) * 1000);
+
+            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
+            TestUtil.dumpTable(conn, TableName.valueOf(cdcIndexName));
+            flush(TableName.valueOf(tableName));
+            majorCompact(TableName.valueOf(tableName));
+            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
+            TestUtil.dumpTable(conn, TableName.valueOf(cdcIndexName));
+
+            // Verify row is expired from data table
+            String dataQuery = "SELECT * FROM " + tableName + " WHERE id = 'row1'";
+            try (ResultSet rs = conn.createStatement().executeQuery(dataQuery)) {
+                assertFalse("Row should be expired from data table", rs.next());
+            }
+
+            // Verify TTL_DELETE CDC event was generated
+            try (ResultSet rs = conn.createStatement().executeQuery(cdcQuery)) {
+                int eventCount = 0;
+                Map<String, Object> ttlDeleteEvent = null;
+
+                while (rs.next()) {
+                    eventCount++;
+                    Map<String, Object> cdcEvent = mapper.readValue(rs.getString(2), HashMap.class);
+                    String eventType = (String) cdcEvent.get(CDC_EVENT_TYPE);
+                    assertEquals("Event type must be " + CDC_TTL_DELETE_EVENT_TYPE + " but found " +
+                                    eventType,
+                            CDC_TTL_DELETE_EVENT_TYPE, eventType);
+                    if (CDC_TTL_DELETE_EVENT_TYPE.equals(eventType)) {
+                        ttlDeleteEvent = cdcEvent;
+                    }
+                }
+
+                assertEquals("Should have only 1 event for TTL_DELETE because other events are " +
+                        "expired due to major compaction", 1, eventCount);
+                assertNotNull("Should have TTL delete event", ttlDeleteEvent);
+
+                // Verify TTL delete event structure
+                assertEquals("Should be ttl_delete event", CDC_TTL_DELETE_EVENT_TYPE,
+                        ttlDeleteEvent.get(CDC_EVENT_TYPE));
+                assertTrue("TTL delete should have pre-image",
+                        ttlDeleteEvent.containsKey(CDC_PRE_IMAGE));
+
+                Map<String, Object> preImage =
+                        (Map<String, Object>) ttlDeleteEvent.get(CDC_PRE_IMAGE);
+                assertEquals("Comparison of last post-image with new pre-image", postImage,
+                        preImage);
+                LOG.info("TTL delete event verified: {}", ttlDeleteEvent);
+            }
+
+            String cdcScanQuery = "SELECT \"CDC JSON\" FROM " + cdcFullName +
+                    " WHERE \"CDC JSON\" LIKE '%ttl_delete%'";
+            try (ResultSet rs = conn.createStatement().executeQuery(cdcScanQuery)) {
+                assertTrue("Should find TTL delete event via scan", rs.next());
+                Map<String, Object> cdcEvent = mapper.readValue(rs.getString(1), HashMap.class);
+                assertEquals("Should be ttl_delete event", CDC_TTL_DELETE_EVENT_TYPE,
+                        cdcEvent.get(CDC_EVENT_TYPE));
+            }
+
+            LOG.info("CDC TTL test completed successfully for table: {}", tableName);
+        }
+    }
 
     private void flush(TableName table) throws IOException {
         Admin admin = getUtility().getAdmin();

@@ -21,12 +21,17 @@ package org.apache.phoenix.end2end;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.io.FileUtils;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.CDCUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.bson.BsonArray;
 import org.bson.BsonBinary;
 import org.bson.BsonBoolean;
@@ -39,6 +44,8 @@ import org.bson.RawBsonDocument;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import java.io.File;
 import java.io.IOException;
@@ -52,12 +59,19 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 
+import static org.apache.phoenix.query.QueryConstants.CDC_EVENT_TYPE;
+import static org.apache.phoenix.query.QueryConstants.CDC_POST_IMAGE;
+import static org.apache.phoenix.query.QueryConstants.CDC_PRE_IMAGE;
+import static org.apache.phoenix.query.QueryConstants.CDC_TTL_DELETE_EVENT_TYPE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -65,7 +79,24 @@ import static org.junit.Assert.assertTrue;
  * Tests for BSON.
  */
 @Category(ParallelStatsDisabledTest.class)
+@RunWith(Parameterized.class)
 public class Bson3IT extends ParallelStatsDisabledIT {
+
+    private final boolean columnEncoded;
+
+    public Bson3IT(boolean columnEncoded) {
+        this.columnEncoded = columnEncoded;
+    }
+
+    @Parameterized.Parameters(name =
+            "Bson3IT_columnEncoded={0}")
+    public static synchronized Collection<Object[]> data() {
+        return Arrays.asList(
+                new Object[][]{
+                        {false},
+                        {true}
+                });
+    }
 
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
@@ -86,7 +117,8 @@ public class Bson3IT extends ParallelStatsDisabledIT {
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       String ddl = "CREATE TABLE " + tableName
           + " (PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON"
-          + " CONSTRAINT pk PRIMARY KEY(PK1))";
+          + " CONSTRAINT pk PRIMARY KEY(PK1)) "
+          + (this.columnEncoded ? "" : "COLUMN_ENCODED_BYTES=0");
       String cdcDdl = "CREATE CDC " + cdcName + " ON " + tableName;
       conn.createStatement().execute(ddl);
       conn.createStatement().execute(cdcDdl);
@@ -627,7 +659,8 @@ public class Bson3IT extends ParallelStatsDisabledIT {
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       String ddl = "CREATE TABLE " + tableName
               + " (PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON"
-              + " CONSTRAINT pk PRIMARY KEY(PK1))";
+              + " CONSTRAINT pk PRIMARY KEY(PK1)) "
+              + (this.columnEncoded ? "" : "COLUMN_ENCODED_BYTES=0");
       String cdcDdl = "CREATE CDC " + cdcName + " ON " + tableName;
       conn.createStatement().execute(ddl);
       conn.createStatement().execute(cdcDdl);
@@ -1073,7 +1106,8 @@ public class Bson3IT extends ParallelStatsDisabledIT {
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       String ddl = "CREATE TABLE " + tableName
               + " (PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON"
-              + " CONSTRAINT pk PRIMARY KEY(PK1))";
+              + " CONSTRAINT pk PRIMARY KEY(PK1)) "
+              + (this.columnEncoded ? "" : "COLUMN_ENCODED_BYTES=0");
       String cdcDdl = "CREATE CDC " + cdcName + " ON " + tableName;
       conn.createStatement().execute(ddl);
       conn.createStatement().execute(cdcDdl);
@@ -1443,7 +1477,8 @@ public class Bson3IT extends ParallelStatsDisabledIT {
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       String ddl = "CREATE TABLE " + tableName
               + " (PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON"
-              + " CONSTRAINT pk PRIMARY KEY(PK1))";
+              + " CONSTRAINT pk PRIMARY KEY(PK1)) "
+              + (this.columnEncoded ? "" : "COLUMN_ENCODED_BYTES=0");
       String cdcDdl = "CREATE CDC " + cdcName + " ON " + tableName;
       conn.createStatement().execute(ddl);
       conn.createStatement().execute(cdcDdl);
@@ -1865,12 +1900,14 @@ public class Bson3IT extends ParallelStatsDisabledIT {
   @Test
   public void testCDCWithCaseSenstitiveTableAndPks() throws Exception {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-    String tableName = "XYZ.\"test.table\"";
-    String cdcName = "XYZ.\"CDC_test.table\"";
-    String cdcNameWithoutSchema = "\"CDC_test.table\"";
+    String nameQuotes = "test.tableTESt-_123" + generateUniqueName();
+    String tableName = "XYZ.\"" + nameQuotes + "\"";
+    String cdcName = "XYZ.\"CDC_" + nameQuotes + "\"";
+    String cdcNameWithoutSchema = "\"CDC_" + nameQuotes + "\"";
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       String ddl = "CREATE TABLE " + tableName +
-              " (\"hk\" VARCHAR NOT NULL, COL BSON CONSTRAINT pk PRIMARY KEY(\"hk\"))";
+              " (\"hk\" VARCHAR NOT NULL, COL BSON CONSTRAINT pk PRIMARY KEY(\"hk\")) "
+              + (this.columnEncoded ? "" : "COLUMN_ENCODED_BYTES=0");
       conn.createStatement().execute(ddl);
 
       String cdcDdl = "CREATE CDC " + cdcNameWithoutSchema + " ON " + tableName;
@@ -1930,6 +1967,244 @@ public class Bson3IT extends ParallelStatsDisabledIT {
               actualDoc);
 
       assertFalse("Should only have one CDC record", rs.next());
+
+      conn.createStatement().execute("DROP TABLE " + tableName + " CASCADE");
+    }
+  }
+
+  /**
+   * Test BSON operations with SQL conditions and TTL functionality.
+   */
+  @Test
+  public void testBsonOpsWithSqlConditionsUpdateSuccessWithTTL() throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    String tableName = generateUniqueName();
+    String cdcName = generateUniqueName();
+    final int ttlSeconds = 10;
+    final int maxLookbackAge = 5;
+
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      String ddl = "CREATE TABLE " + tableName
+              + " (PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON"
+              + " CONSTRAINT pk PRIMARY KEY(PK1)) TTL="
+              + ttlSeconds + ", \"phoenix.max.lookback.age.seconds\" = " + maxLookbackAge
+              + (this.columnEncoded ? "" : ", COLUMN_ENCODED_BYTES=0");
+      String cdcDdl = "CREATE CDC " + cdcName + " ON " + tableName;
+      conn.createStatement().execute(ddl);
+      conn.createStatement().execute(cdcDdl);
+
+      ManualEnvironmentEdge injectEdge = new ManualEnvironmentEdge();
+      long startTime = System.currentTimeMillis() + 1000;
+      startTime = (startTime / 1000) * 1000;
+      EnvironmentEdgeManager.injectEdge(injectEdge);
+      injectEdge.setValue(startTime);
+
+      String sample1 = getJsonString("json/sample_01.json");
+      String sample2 = getJsonString("json/sample_02.json");
+      String sample3 = getJsonString("json/sample_03.json");
+      BsonDocument bsonDocument1 = RawBsonDocument.parse(sample1);
+      BsonDocument bsonDocument2 = RawBsonDocument.parse(sample2);
+      BsonDocument bsonDocument3 = RawBsonDocument.parse(sample3);
+
+      PreparedStatement stmt =
+              conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
+      stmt.setString(1, "pk0001");
+      stmt.setString(2, "0002");
+      stmt.setObject(3, bsonDocument1);
+      stmt.executeUpdate();
+
+      stmt.setString(1, "pk1010");
+      stmt.setString(2, "1010");
+      stmt.setObject(3, bsonDocument2);
+      stmt.executeUpdate();
+
+      stmt.setString(1, "pk1011");
+      stmt.setString(2, "1011");
+      stmt.setObject(3, bsonDocument3);
+      stmt.executeUpdate();
+
+      conn.commit();
+      injectEdge.incrementValue(1000);
+
+      String conditionExpression =
+              "press = $press AND track[0].shot[2][0].city.standard[5] = $softly";
+
+      BsonDocument conditionDoc = new BsonDocument();
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", new BsonDocument()
+              .append("$press", new BsonString("beat"))
+              .append("$softly", new BsonString("softly")));
+
+      BsonDocument updateExp = new BsonDocument()
+              .append("$SET", new BsonDocument()
+                      .append("browserling",
+                              new BsonBinary(PDouble.INSTANCE.toBytes(-505169340.54880095)))
+                      .append("track[0].shot[2][0].city.standard[5]", new BsonString("soft"))
+                      .append("track[0].shot[2][0].city.problem[2]",
+                              new BsonString("track[0].shot[2][0].city.problem[2] + 529.435")))
+              .append("$UNSET", new BsonDocument()
+                      .append("track[0].shot[2][0].city.flame", new BsonNull()));
+
+      stmt = conn.prepareStatement("UPSERT INTO " + tableName
+              + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
+              + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
+              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END,"
+              + " C1 = ?");
+      stmt.setString(1, "pk0001");
+      stmt.setString(2, "0003");
+      stmt.executeUpdate();
+
+      String query = "SELECT * FROM " + tableName + " WHERE PK1 = 'pk0001'";
+      ResultSet rs = conn.createStatement().executeQuery(query);
+      assertTrue(rs.next());
+      BsonDocument document1 = (BsonDocument) rs.getObject(3);
+
+      updateExp = new BsonDocument()
+              .append("$ADD", new BsonDocument()
+                      .append("new_samples",
+                              new BsonDocument().append("$set",
+                                      new BsonArray(Arrays.asList(
+                                              new BsonBinary(Bytes.toBytes("Sample10")),
+                                              new BsonBinary(Bytes.toBytes("Sample12")),
+                                              new BsonBinary(Bytes.toBytes("Sample13")),
+                                              new BsonBinary(Bytes.toBytes("Sample14"))
+                                      )))))
+              .append("$DELETE_FROM_SET", new BsonDocument()
+                      .append("new_samples",
+                              new BsonDocument().append("$set",
+                                      new BsonArray(Arrays.asList(
+                                              new BsonBinary(Bytes.toBytes("Sample02")),
+                                              new BsonBinary(Bytes.toBytes("Sample03"))
+                                      )))))
+              .append("$SET", new BsonDocument()
+                      .append("newrecord", ((BsonArray) (document1.get("track"))).get(0)))
+              .append("$UNSET", new BsonDocument()
+                      .append("rather[3].outline.halfway.so[2][2]", new BsonNull()));
+
+      conditionExpression =
+              "field_not_exists(newrecord) AND field_exists(rather[3].outline.halfway.so[2][2])";
+
+      conditionDoc = new BsonDocument();
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", new BsonDocument());
+
+      stmt = conn.prepareStatement("UPSERT INTO " + tableName
+              + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
+              + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
+              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END");
+
+      stmt.setString(1, "pk1010");
+      stmt.executeUpdate();
+
+      updateExp = new BsonDocument()
+              .append("$SET", new BsonDocument()
+                      .append("result[1].location.state", new BsonString("AK")))
+              .append("$UNSET", new BsonDocument()
+                      .append("result[4].emails[1]", new BsonNull()));
+
+      conditionExpression =
+              "result[2].location.coordinates.latitude > $latitude OR "
+                      + "(field_exists(result[1].location) AND result[1].location.state != $state" +
+                      " AND field_exists(result[4].emails[1]))";
+
+      conditionDoc = new BsonDocument();
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", new BsonDocument()
+              .append("$latitude", new BsonDouble(0))
+              .append("$state", new BsonString("AK")));
+
+      stmt = conn.prepareStatement("UPSERT INTO " + tableName
+              + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
+              + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
+              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END");
+
+      stmt.setString(1, "pk1011");
+      stmt.executeUpdate();
+
+      conn.commit();
+      injectEdge.incrementValue(1000);
+
+      // Capture timestamp before TTL expiration
+      Timestamp beforeTTLTimestamp = new Timestamp(injectEdge.currentTime());
+
+      // Capture last post-images for each row before TTL expiration
+      Map<String, Map<String, Object>> lastPostImages = new HashMap<>();
+
+      String cdcQuery = "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcName +
+              " WHERE PHOENIX_ROW_TIMESTAMP() <= ? ORDER BY PHOENIX_ROW_TIMESTAMP() DESC";
+      try (PreparedStatement pst = conn.prepareStatement(cdcQuery)) {
+        pst.setTimestamp(1, beforeTTLTimestamp);
+        try (ResultSet cdcRs = pst.executeQuery()) {
+          while (cdcRs.next()) {
+            String pk = cdcRs.getString(2);
+            if (!lastPostImages.containsKey(pk)) {
+              String cdcVal = cdcRs.getString(3);
+              Map<String, Object> cdcEvent = OBJECT_MAPPER.readValue(cdcVal, HashMap.class);
+              if (cdcEvent.containsKey(CDC_POST_IMAGE)) {
+                lastPostImages.put(pk, (Map<String, Object>) cdcEvent.get(CDC_POST_IMAGE));
+              }
+            }
+          }
+        }
+      }
+
+      // Verify all rows have post-images captured
+      assertEquals("Should have post-images for all 3 rows", 3, lastPostImages.size());
+      assertNotNull("Should have post-image for pk0001", lastPostImages.get("pk0001"));
+      assertNotNull("Should have post-image for pk1010", lastPostImages.get("pk1010"));
+      assertNotNull("Should have post-image for pk1011", lastPostImages.get("pk1011"));
+
+      // Advance time past TTL to expire rows
+      injectEdge.incrementValue((ttlSeconds + maxLookbackAge + 1) * 1000);
+
+      // Flush and major compact to trigger TTL expiration
+      Admin admin = getUtility().getAdmin();
+      admin.flush(TableName.valueOf(tableName));
+
+      TestUtil.majorCompact(getUtility(), TableName.valueOf(tableName));
+
+      // Verify all rows are expired from data table
+      String dataQuery = "SELECT * FROM " + tableName;
+      try (ResultSet dataRs = conn.createStatement().executeQuery(dataQuery)) {
+        assertFalse("All rows should be expired from data table", dataRs.next());
+      }
+
+      // Verify TTL_DELETE CDC events were generated for all rows
+      String ttlDeleteQuery = "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcName +
+              " WHERE PHOENIX_ROW_TIMESTAMP() > ?";
+      Map<String, Map<String, Object>> ttlDeleteEvents = new HashMap<>();
+
+      try (PreparedStatement pst = conn.prepareStatement(ttlDeleteQuery)) {
+        pst.setTimestamp(1, beforeTTLTimestamp);
+        try (ResultSet ttlRs = pst.executeQuery()) {
+          while (ttlRs.next()) {
+            String pk = ttlRs.getString(2);
+            String cdcVal = ttlRs.getString(3);
+            Map<String, Object> cdcEvent = OBJECT_MAPPER.readValue(cdcVal, HashMap.class);
+
+            // Only process TTL delete events
+            if (CDC_TTL_DELETE_EVENT_TYPE.equals(cdcEvent.get(CDC_EVENT_TYPE))) {
+              ttlDeleteEvents.put(pk, (Map<String, Object>) cdcEvent.get(CDC_PRE_IMAGE));
+            }
+          }
+        }
+      }
+
+      // Verify TTL delete events for all rows
+      assertEquals("Should have TTL delete events for all 3 rows", 3, ttlDeleteEvents.size());
+
+      // Verify pre-image consistency for each row
+      for (String pk : Arrays.asList("pk0001", "pk1010", "pk1011")) {
+        Map<String, Object> ttlPreImage = ttlDeleteEvents.get(pk);
+        assertNotNull("Should have TTL delete event for " + pk, ttlPreImage);
+        Map<String, Object> lastPostImage = lastPostImages.get(pk);
+        assertNotNull("TTL pre-image should not be null for " + pk, ttlPreImage);
+        assertNotNull("Last post-image should not be null for " + pk, lastPostImage);
+        assertEquals("TTL delete pre-image should match last post-image for " + pk,
+                lastPostImage, ttlPreImage);
+      }
+    } finally {
+      EnvironmentEdgeManager.reset();
     }
   }
 

@@ -31,6 +31,7 @@ import static org.apache.phoenix.query.QueryConstants.CDC_DELETE_EVENT_TYPE;
 import static org.apache.phoenix.query.QueryConstants.CDC_EVENT_TYPE;
 import static org.apache.phoenix.query.QueryConstants.CDC_POST_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_PRE_IMAGE;
+import static org.apache.phoenix.query.QueryConstants.CDC_TTL_DELETE_EVENT_TYPE;
 import static org.apache.phoenix.query.QueryConstants.CDC_UPSERT_EVENT_TYPE;
 
 public class CDCChangeBuilder {
@@ -69,7 +70,7 @@ public class CDCChangeBuilder {
     }
 
     public boolean isDeletionEvent() {
-        return changeType == CDC_DELETE_EVENT_TYPE;
+        return changeType == CDC_DELETE_EVENT_TYPE || changeType == CDC_TTL_DELETE_EVENT_TYPE;
     }
 
     public boolean isNonEmptyEvent() {
