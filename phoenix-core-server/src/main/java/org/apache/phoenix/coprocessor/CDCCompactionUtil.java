@@ -269,6 +269,9 @@ public class CDCCompactionUtil {
                             cdcIndexTable.put(mergedCdcIndexPut);
                             lastException = null;
                             break;
+                        } else {
+                            LOGGER.warn("Rare event: Skipping CDC TTL mutation because other type"
+                                    + " of CDC event is recorded at time {}", eventTimestamp);
                         }
                     }
                 }

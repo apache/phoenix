@@ -364,7 +364,7 @@ public interface QueryConstants {
     String CDC_DELETE_EVENT_TYPE = "delete";
     String SPLITS_FILE = "SPLITS_FILE";
     String CDC_TTL_DELETE_EVENT_TYPE = "ttl_delete";
-    String CDC_IMAGE_CQ = "__CDC_IMAGE__";
+    String CDC_IMAGE_CQ = "_CDC_IMG_";
     byte[] CDC_IMAGE_CQ_BYTES = Bytes.toBytes(CDC_IMAGE_CQ);
 
     /**
