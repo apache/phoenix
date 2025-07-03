@@ -43,6 +43,7 @@ import org.bson.BsonDouble;
 import org.bson.BsonNull;
 import org.bson.BsonString;
 import org.bson.RawBsonDocument;
+import org.junit.Assume;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -489,6 +490,54 @@ public class Bson4IT extends ParallelStatsDisabledIT {
       assertFalse(rs.next());
 
       validateExplainPlan(ps, tableName, "FULL SCAN ");
+    }
+  }
+
+  @Test
+  public void testBsonValueFunctionWithBSONType() throws Exception {
+    Assume.assumeTrue(this.coveredIndex && this.columnEncoded);
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    String tableName = generateUniqueName();
+    String indexName1 = "IDX1_" + tableName;
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      String ddl = "CREATE TABLE " + tableName
+          + " (PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON"
+          + " CONSTRAINT pk PRIMARY KEY(PK1)) "
+          + (this.columnEncoded ? "" : "COLUMN_ENCODED_BYTES=0");
+
+      conn.createStatement().execute(ddl);
+
+      String sample1 = getJsonString("json/sample_01.json");
+      String sample2 = getJsonString("json/sample_02.json");
+      String sample3 = getJsonString("json/sample_03.json");
+      String result = getJsonString("json/result_03.json");
+      BsonDocument bsonDocument1 = RawBsonDocument.parse(sample1);
+      BsonDocument bsonDocument2 = RawBsonDocument.parse(sample2);
+      BsonDocument bsonDocument3 = RawBsonDocument.parse(sample3);
+      BsonDocument bsonResultDocument = RawBsonDocument.parse(result);
+
+      upsertRows(conn, tableName, bsonDocument1, bsonDocument2, bsonDocument3);
+
+      conn.commit();
+
+      ResultSet rs = conn.createStatement().executeQuery("SELECT count(*) FROM " + tableName);
+      assertTrue(rs.next());
+      assertEquals(3, rs.getInt(1));
+
+
+      PreparedStatement ps = conn.prepareStatement("SELECT PK1, BSON_VALUE(COL, 'result[1]', 'BSON') FROM " + tableName
+          + " WHERE BSON_VALUE(COL, 'result[1].username', 'VARCHAR') = ?");
+      ps.setString(1, "Elliot-Watsica");
+
+      rs = ps.executeQuery();
+
+      assertTrue(rs.next());
+      assertEquals("pk1011", rs.getString(1));
+      BsonDocument actualDoc = (BsonDocument) rs.getObject(2);
+      assertEquals(bsonResultDocument, actualDoc);
+      assertFalse(rs.next());Add commentMore actions
+
+      validateExplainPlan(ps, indexName1, "RANGE SCAN ");
     }
   }
 

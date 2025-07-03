@@ -166,7 +166,10 @@ public class BsonValueFunction extends ScalarFunction {
             ptr.set(PVarbinaryEncoded.INSTANCE.toBytes(((BsonBinary) bsonValue).getData()));
         } else if (bsonValueDataType == PDate.INSTANCE && bsonValue instanceof BsonDateTime) {
             ptr.set(PDate.INSTANCE.toBytes(new Date(((BsonDateTime) bsonValue).getValue())));
-        } else {
+        } else if (bsonValueDataType == PBson.INSTANCE && bsonValue instanceof RawBsonDocument) {
+            ptr.set(PBson.INSTANCE.toBytes((RawBsonDocument) bsonValue));
+        }
+        else {
             throw new IllegalArgumentException(
                 "The function data type does not match with actual data type");
         }
