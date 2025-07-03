@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.PhoenixMasterObserver;
@@ -30,9 +31,11 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -41,6 +44,7 @@ import org.junit.experimental.categories.Category;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixMasterSource;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -166,6 +170,28 @@ public class CDCStreamIT extends CDCBaseIT {
         createCDC(conn, cdc_sql3, null);
         streamName = getStreamName(conn, tableName, cdcName3);
         assertStreamStatus(conn, tableName, streamName, CDCUtil.CdcStreamStatus.ENABLING);
+    }
+
+    @Test
+    public void testStreamMetadataWhenTableIsDropped() throws SQLException, IOException {
+        Connection conn = newConnection();
+        String tableName = generateUniqueName();
+        String create_table_sql = "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER, v2 DATE)";
+        conn.createStatement().execute(create_table_sql);
+        String cdcName = generateUniqueName();
+        String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
+        conn.createStatement().execute(cdc_sql);
+        String drop_table_sql = "DROP TABLE " + tableName;
+        conn.createStatement().execute(drop_table_sql);
+        // check if stream metadata is cleared
+        Assert.assertNull(new MetaDataClient(conn.unwrap(PhoenixConnection.class)).getStreamNameIfCDCEnabled(tableName));
+        ResultSet rs = conn.createStatement().executeQuery(
+                "SELECT * FROM SYSTEM.CDC_STREAM WHERE TABLE_NAME='" + tableName + "'");
+        Assert.assertFalse(rs.next());
+        // should be able to re-create same table with same cdc name
+        conn.createStatement().execute(create_table_sql);
+        conn.createStatement().execute(cdc_sql);
+        Assert.assertNotNull(new MetaDataClient(conn.unwrap(PhoenixConnection.class)).getStreamNameIfCDCEnabled(tableName));
     }
 
     /**
