@@ -263,8 +263,13 @@ public class ReplicationLogGroupIT extends ParallelStatsDisabledIT {
         }
     }
 
+    /**
+     * This test simulates RS crashes in the middle of write transactions after the edits
+     * have been written to the WAL but before they have been replicated to the standby
+     * cluster. Those edits will be replicated when the WAL is replayed.
+     */
     @Test
-    public void testPreWALRestoreSkip() throws Exception {
+    public void testWALRestore() throws Exception {
         HBaseTestingUtility util = getUtility();
         MiniHBaseCluster cluster = util.getHBaseCluster();
         final String tableName = "T_" + generateUniqueName();
@@ -280,8 +285,11 @@ public class ReplicationLogGroupIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             conn.commit();
         }
+        // Mini cluster by default comes with only 1 RS. Starting a second RS so that
+        // we can kill the RS
         JVMClusterUtil.RegionServerThread rs2 = cluster.startRegionServer();
         ServerName sn2 = rs2.getRegionServer().getServerName();
+        // Assign some table regions to the new RS we started above
         moveRegionToServer(table, sn2);
         moveRegionToServer(TableName.valueOf(SYSTEM_CATALOG_NAME), sn2);
         moveRegionToServer(TableName.valueOf(SYSTEM_CHILD_LINK_NAME), sn2);
@@ -307,8 +315,10 @@ public class ReplicationLogGroupIT extends ParallelStatsDisabledIT {
         } finally {
             IndexRegionObserver.setIgnoreSyncReplicationForTesting(false);
         }
+        // Kill the RS
         cluster.killRegionServer(rs2.getRegionServer().getServerName());
         Threads.sleep(20000); // just to be sure that the kill has fully started.
+        // Regions will be re-opened and the WAL will be replayed
         util.waitUntilAllRegionsAssigned(table);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             Map<String, Integer> expected = Maps.newHashMap();
@@ -329,9 +339,11 @@ public class ReplicationLogGroupIT extends ParallelStatsDisabledIT {
         createViewHierarchy();
         Map<String, List<Mutation>> logsByTable = groupLogsByTable();
         dumpTableLogCount(logsByTable);
+        // find all the log entries for system tables
         Map<String, List<Mutation>> systemTables = logsByTable.entrySet().stream()
                 .filter(entry -> entry.getKey().startsWith(QueryConstants.SYSTEM_SCHEMA_NAME))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        // there should be only 2 entries CATALOG, CHILD_LINK
         assertEquals(2, systemTables.size());
         assertEquals(1, getCountForTable(systemTables, SYSTEM_CHILD_LINK_NAME));
         assertTrue(getCountForTable(systemTables, SYSTEM_CATALOG_NAME) > 0);

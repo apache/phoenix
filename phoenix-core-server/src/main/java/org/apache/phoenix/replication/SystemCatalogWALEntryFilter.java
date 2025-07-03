@@ -104,8 +104,7 @@ public class SystemCatalogWALEntryFilter implements
    * @return true if the cell is tenant owned
    */
   private boolean isTenantRowCellSystemChildLink(final Cell cell) {
-    return isTenantIdLeadingInKey(cell) ||
-            isCellChildLinkToTenantView(cell);
+    return isTenantIdLeadingInKey(cell) || isCellChildLinkToTenantView(cell);
   }
 
   /**
@@ -123,8 +122,8 @@ public class SystemCatalogWALEntryFilter implements
     boolean isChildLinkToTenantView = false;
     boolean isChildLink = CellUtil.matchingQualifier(cell,
             PhoenixDatabaseMetaData.LINK_TYPE_BYTES);
-    if ((isChildLink && CellUtil.matchingValue(cell, CHILD_TABLE_BYTES)) ||
-            cell.getType() == Cell.Type.DeleteFamily) {
+    if (isChildLink && CellUtil.matchingValue(cell, CHILD_TABLE_BYTES)
+            || cell.getType() == Cell.Type.DeleteFamily) {
       byte[][] rowViewKeyMetadata = new byte[NUM_COLUMNS_PRIMARY_KEY][];
       SchemaUtil.getVarChars(key.get(), key.getOffset(),
               key.getLength(), 0, rowViewKeyMetadata);

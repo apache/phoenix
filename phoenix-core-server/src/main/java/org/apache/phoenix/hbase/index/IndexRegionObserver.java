@@ -517,15 +517,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           this.useBloomFilter = bloomFilterType == BloomType.ROW;
           byte[] tableName = env.getRegionInfo().getTable().getName();
           boolean isSystemTable = SchemaUtil.isSystemTable(tableName);
-          if (isSystemTable &&
-                  !(SchemaUtil.isMetaTable(tableName) || SchemaUtil.isChildLinkTable(tableName))) {
-              // we only replicate SYSTEM.CATALOG and SYSTEM.CHILD_LINK
-              // Furthermore, for SYSTEM.CATALOG and SYSTEM.CHILD_LINK we only replicate tenant
-              // owned data similar to what we do in SystemCatalogWALEntryFilter.
-              this.shouldReplicate = false;
-          } else {
-              this.shouldReplicate = env.getConfiguration().getBoolean(
-                      SYNCHRONOUS_REPLICATION_ENABLED, DEFAULT_SYNCHRONOUS_REPLICATION_ENABLED);
+          this.shouldReplicate = env.getConfiguration().getBoolean(
+                  SYNCHRONOUS_REPLICATION_ENABLED, DEFAULT_SYNCHRONOUS_REPLICATION_ENABLED);
+          if (this.shouldReplicate) {
+              // replication feature is enabled, check if it is enabled for the table
+              this.shouldReplicate = SchemaUtil.shouldReplicateTable(tableName);
           }
           if (this.shouldReplicate) {
               this.replicationLog = ReplicationLogGroup.get(env.getConfiguration(),
