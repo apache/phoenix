@@ -3872,7 +3872,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     protected String getCDCStreamDDL() {
-        return setSystemDDLProperties(QueryConstants.CREATE_CDC_STREAM_METADATA);
+        long partitionExpiryMinAge = getProps().getLong(
+                QueryServices.PHOENIX_CDC_STREAM_PARTITION_EXPIRY_MIN_AGE_MS,
+                QueryServicesOptions.DEFAULT_PHOENIX_CDC_STREAM_PARTITION_EXPIRY_MIN_AGE_MS);
+        String ttlExpression = String.format("PARTITION_END_TIME IS NOT NULL " +
+                "AND TO_NUMBER(CURRENT_TIME()) - TO_NUMBER(PHOENIX_ROW_TIMESTAMP()) >= %d",
+                partitionExpiryMinAge);
+        String ddl = setSystemDDLProperties(QueryConstants.CREATE_CDC_STREAM_METADATA);
+        return ddl + ",TTL='" + ttlExpression + "'";
     }
 
     private String setSystemDDLProperties(String ddl) {

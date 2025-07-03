@@ -1413,12 +1413,13 @@ public class ScanUtil {
             return;
         }
 
-        // If is a system table or If Phoenix level TTL/compaction  is not enabled
+        // If is a system table with TTL not supported or If Phoenix level TTL/compaction  is not enabled
         // then set the TTL scan attribute to TTL_DEFINED_IN_TABLE_DESCRIPTOR.
         if ((!isPhoenixCompactionEnabled(phoenixConnection.getQueryServices().getConfiguration())) ||
-                SchemaUtil.isSystemTable(
+                (SchemaUtil.isSystemTable(
                         SchemaUtil.getTableNameAsBytes(table.getSchemaName().getString(),
-                        table.getTableName().getString()))) {
+                        table.getTableName().getString()))
+                        && !MetaDataUtil.SYSTEM_TABLES_WITH_TTL_SUPPORTED.contains(table.getName().getString()))) {
             byte[] ttlForScan = TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR.serialize();
             scan.setAttribute(BaseScannerRegionObserverConstants.TTL, ttlForScan);
             return;

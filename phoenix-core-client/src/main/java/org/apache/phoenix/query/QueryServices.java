@@ -557,6 +557,8 @@ public interface QueryServices extends SQLCloseable {
 
     String CQSI_THREAD_POOL_METRICS_ENABLED = "phoenix.cqsi.thread.pool.metrics.enabled";
 
+    String PHOENIX_CDC_STREAM_PARTITION_EXPIRY_MIN_AGE_MS = "phoenix.cdc.stream.partition.expiry.min.age.ms";
+
     /**
      * Get executor service used for parallel scans
      */
