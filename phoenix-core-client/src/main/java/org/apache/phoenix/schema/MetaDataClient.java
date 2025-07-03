@@ -24,6 +24,7 @@ import static org.apache.phoenix.exception.SQLExceptionCode.ERROR_WRITING_TO_SCH
 import static org.apache.phoenix.exception.SQLExceptionCode.SALTING_NOT_ALLOWED_FOR_CDC;
 import static org.apache.phoenix.exception.SQLExceptionCode.TABLE_ALREADY_EXIST;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CDC_INCLUDE_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_STATUS_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_STATUS_TABLE;
@@ -4034,7 +4035,7 @@ public class MetaDataClient {
 
     private void deleteAllStreamMetadataForTable(String tableName) throws SQLException {
         String deleteStreamStatusQuery = "DELETE FROM " + SYSTEM_CDC_STREAM_STATUS_NAME + " WHERE TABLE_NAME = ?";
-        String deleteStreamPartitionsQuery = "DELETE FROM " + SYSTEM_CDC_STREAM_STATUS_NAME + " WHERE TABLE_NAME = ?";
+        String deleteStreamPartitionsQuery = "DELETE FROM " + SYSTEM_CDC_STREAM_NAME + " WHERE TABLE_NAME = ?";
         LOGGER.info("Deleting Stream Metadata for table {}", tableName);
         try (PreparedStatement ps = connection.prepareStatement(deleteStreamStatusQuery)) {
             ps.setString(1, tableName);

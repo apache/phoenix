@@ -175,26 +175,37 @@ public class CDCStreamIT extends CDCBaseIT {
     @Test
     public void testStreamMetadataWhenTableIsDropped() throws SQLException {
         Connection conn = newConnection();
+        MetaDataClient mdc = new MetaDataClient(conn.unwrap(PhoenixConnection.class));
         String schemaName = "\"" + generateUniqueName().toLowerCase() + "\"";
         String tableName = SchemaUtil.getTableName(schemaName, "\"" + generateUniqueName().toLowerCase() + "\"");
+        String unescapedFullTableName = SchemaUtil.getUnEscapedFullName(tableName);
         String create_table_sql = "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER, v2 DATE)";
         conn.createStatement().execute(create_table_sql);
         String cdcName = "\"" + generateUniqueName().toLowerCase() + "\"";
         String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
         conn.createStatement().execute(cdc_sql);
+        TaskRegionObserver.SelfHealingTask task =
+                new TaskRegionObserver.SelfHealingTask(
+                        taskRegionEnvironment,
+                        QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
+        task.run();
+        String partitionQuery = "SELECT * FROM SYSTEM.CDC_STREAM WHERE TABLE_NAME='" + unescapedFullTableName + "'";
+        ResultSet rs = conn.createStatement().executeQuery(partitionQuery);
+        Assert.assertTrue(rs.next());
         String drop_table_sql = "DROP TABLE " + tableName;
+        Assert.assertNotNull(mdc.getStreamNameIfCDCEnabled(unescapedFullTableName));
+        // check if stream metadata is cleared when table is dropped
         conn.createStatement().execute(drop_table_sql);
-        // check if stream metadata is cleared
-        Assert.assertNull(new MetaDataClient(conn.unwrap(PhoenixConnection.class))
-                .getStreamNameIfCDCEnabled(SchemaUtil.getUnEscapedFullName(tableName)));
-        ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT * FROM SYSTEM.CDC_STREAM WHERE TABLE_NAME='" + tableName + "'");
+        Assert.assertNull(mdc.getStreamNameIfCDCEnabled(unescapedFullTableName));
+        rs = conn.createStatement().executeQuery(partitionQuery);
         Assert.assertFalse(rs.next());
-        // should be able to re-create same table with same cdc name
+        // should be able to re-create same table with same cdc name and metadata should be populated
         conn.createStatement().execute(create_table_sql);
         conn.createStatement().execute(cdc_sql);
-        Assert.assertNotNull(new MetaDataClient(conn.unwrap(PhoenixConnection.class))
-                .getStreamNameIfCDCEnabled(SchemaUtil.getUnEscapedFullName(tableName)));
+        Assert.assertNotNull(mdc.getStreamNameIfCDCEnabled(unescapedFullTableName));
+        task.run();
+        rs = conn.createStatement().executeQuery(partitionQuery);
+        Assert.assertTrue(rs.next());
     }
 
     /**
