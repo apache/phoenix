@@ -43,6 +43,7 @@ import org.bson.BsonDouble;
 import org.bson.BsonNull;
 import org.bson.BsonString;
 import org.bson.RawBsonDocument;
+import org.bson.Document;
 import org.junit.Assume;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -495,10 +496,9 @@ public class Bson4IT extends ParallelStatsDisabledIT {
 
   @Test
   public void testBsonValueFunctionWithBSONType() throws Exception {
-    Assume.assumeTrue(this.coveredIndex && this.columnEncoded);
+    Assume.assumeTrue(this.coveredIndex && this.columnEncoded); // Since indexing on BSON not supported PHOENIX-7654
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     String tableName = generateUniqueName();
-    String indexName1 = "IDX1_" + tableName;
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       String ddl = "CREATE TABLE " + tableName
           + " (PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON"
@@ -525,19 +525,31 @@ public class Bson4IT extends ParallelStatsDisabledIT {
       assertEquals(3, rs.getInt(1));
 
 
-      PreparedStatement ps = conn.prepareStatement("SELECT PK1, BSON_VALUE(COL, 'result[1]', 'BSON') FROM " + tableName
-          + " WHERE BSON_VALUE(COL, 'result[1].username', 'VARCHAR') = ?");
-      ps.setString(1, "Elliot-Watsica");
+      PreparedStatement ps = conn.prepareStatement("SELECT PK1, COL, "
+          + "BSON_VALUE(COL, 'result[1]', 'BSON') FROM " + tableName
+          + " WHERE BSON_VALUE(COL, 'result[1].location', 'BSON') = ?");
 
+      Document info = new Document()
+          .append("street", "4897 Gerhold Lodge")
+          .append("city", "Minneapolis")
+          .append("state", "Arkansas")
+          .append("country", "Democratic Republic of the Congo")
+          .append("zip", "79299")
+          .append("coordinates", new Document()
+              .append("latitude", 3.4015)
+              .append("longitude", 52.3736));
+      RawBsonDocument document = RawBsonDocument.parse(info.toJson());
+
+      ps.setObject(1, document);
       rs = ps.executeQuery();
 
       assertTrue(rs.next());
       assertEquals("pk1011", rs.getString(1));
-      BsonDocument actualDoc = (BsonDocument) rs.getObject(2);
+      BsonDocument actualDoc = (BsonDocument) rs.getObject(3);
       assertEquals(bsonResultDocument, actualDoc);
-      assertFalse(rs.next());Add commentMore actions
+      assertFalse(rs.next());
 
-      validateExplainPlan(ps, indexName1, "RANGE SCAN ");
+      validateExplainPlan(ps, tableName, "FULL SCAN ");
     }
   }
 
