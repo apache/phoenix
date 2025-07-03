@@ -18,13 +18,12 @@
 package org.apache.phoenix.query;
 
 import static org.apache.hadoop.hbase.coprocessor.CoprocessorHost.REGIONSERVER_COPROCESSOR_CONF_KEY;
+import static org.apache.hadoop.hbase.HConstants.ZOOKEEPER_CLIENT_PORT;
 import static org.apache.phoenix.hbase.index.write.ParallelWriterIndexCommitter.NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
-import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
-import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.A_VALUE;
@@ -138,6 +137,7 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.PhoenixTestTableName;
 import org.apache.phoenix.SystemExitRule;
 import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
@@ -170,6 +170,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil.ConnectionFactory;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.ClassRule;
+import org.junit.Rule;
 import org.junit.rules.TemporaryFolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -463,8 +464,10 @@ public abstract class BaseTest {
     protected static String setUpTestCluster(@Nonnull Configuration conf, ReadOnlyProps overrideProps) throws Exception {
         boolean isDistributedCluster = isDistributedClusterModeEnabled(conf);
         if (!isDistributedCluster) {
+            TEARDOWN_THRESHOLD.set(30);
             return initMiniCluster(conf, overrideProps);
         } else {
+            TEARDOWN_THRESHOLD.set(1);
             return initClusterDistributedMode(conf, overrideProps);
         }
     }
@@ -596,6 +599,7 @@ public abstract class BaseTest {
      */
     private static String initClusterDistributedMode(Configuration conf, ReadOnlyProps overrideProps) throws Exception {
         setTestConfigForDistribuedCluster(conf, overrideProps);
+        conf.set(ZOOKEEPER_CLIENT_PORT, System.getProperty(ZOOKEEPER_CLIENT_PORT));
         try {
             IntegrationTestingUtility util =  new IntegrationTestingUtility(conf);
             utility = util;
@@ -603,7 +607,7 @@ public abstract class BaseTest {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-        return JDBC_PROTOCOL + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
+        return getLocalClusterUrl(utility);
     }
 
     private static void setTestConfigForDistribuedCluster(Configuration conf, ReadOnlyProps overrideProps) throws Exception {
@@ -814,7 +818,10 @@ public abstract class BaseTest {
      * Note, we can't have this value too high since we don't want the shutdown to take too
      * long a time either.
      */
-    private static final int TEARDOWN_THRESHOLD = 30;
+    private static final AtomicInteger TEARDOWN_THRESHOLD = new AtomicInteger(0);
+
+    @ClassRule
+    public static PhoenixTestTableName phoenixTestTableName = new PhoenixTestTableName();
 
     public static String generateUniqueName() {
         int nextName = NAME_SUFFIX.incrementAndGet();
@@ -822,7 +829,11 @@ public abstract class BaseTest {
             throw new IllegalStateException("Used up all unique names");
         }
         TABLE_COUNTER.incrementAndGet();
-        return "N" + Integer.toString(MAX_SUFFIX_VALUE + nextName).substring(1);
+        if (!isDistributedClusterModeEnabled(config)) {
+            phoenixTestTableName.setTableName("N" + Integer.toString(MAX_SUFFIX_VALUE + nextName).substring(1));
+            return phoenixTestTableName.getTableName();
+        }
+        return phoenixTestTableName.getTableName() + "_" + Integer.toString(MAX_SUFFIX_VALUE + nextName).substring(1);
     }
     
     private static AtomicInteger SEQ_NAME_SUFFIX = new AtomicInteger(0);
@@ -849,18 +860,18 @@ public abstract class BaseTest {
     }
 
     public static synchronized void freeResourcesIfBeyondThreshold() throws Exception {
-        if (TABLE_COUNTER.get() > TEARDOWN_THRESHOLD) {
+        if (TABLE_COUNTER.get() > TEARDOWN_THRESHOLD.get()) {
             int numTables = TABLE_COUNTER.get();
             TABLE_COUNTER.set(0);
             if (isDistributedClusterModeEnabled(config)) {
                 LOGGER.info("Deleting old tables on distributed cluster because "
                         + "number of tables is likely greater than {}",
-                    TEARDOWN_THRESHOLD);
+                    TEARDOWN_THRESHOLD.get());
                 deletePriorMetaData(HConstants.LATEST_TIMESTAMP, url);
             } else {
                 LOGGER.info("Shutting down mini cluster because number of tables"
                         + " on this mini cluster is likely greater than {}",
-                    TEARDOWN_THRESHOLD);
+                    TEARDOWN_THRESHOLD.get());
                 resetHbase();
             }
         }
@@ -933,14 +944,17 @@ public abstract class BaseTest {
         }
         try (Connection conn = DriverManager.getConnection(url, props)) {
             DatabaseMetaData dbmd = conn.getMetaData();
-            ResultSet rs = dbmd.getSchemas();
+            ResultSet rs = dbmd.getSchemas(null, "%" + phoenixTestTableName.getTableName() + "%");
             while (rs.next()) {
                 String schemaName = rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM);
+                if ((schemaName == null) || (schemaName != null && schemaName.isEmpty())) {
+                    continue;
+                }
                 if (schemaName.equals(PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME)) {
                     continue;
                 }
                 schemaName = SchemaUtil.getEscapedArgument(schemaName);
-
+                LOGGER.info("Dropping schema " + schemaName + " for cleanup.");
                 String ddl = "DROP SCHEMA " + schemaName;
                 conn.createStatement().executeUpdate(ddl);
             }
@@ -950,10 +964,17 @@ public abstract class BaseTest {
         props.remove(CURRENT_SCN_ATTRIB);
         try (Connection seeLatestConn = DriverManager.getConnection(url, props)) {
             DatabaseMetaData dbmd = seeLatestConn.getMetaData();
-            ResultSet rs = dbmd.getSchemas();
-            boolean hasSchemas = rs.next();
-            if (hasSchemas) {
+            ResultSet rs = dbmd.getSchemas(null, "%" + phoenixTestTableName.getTableName() + "%");
+            boolean hasSchemas = false;
+            while (rs.next()) {
                 String schemaName = rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM);
+                if ((schemaName == null) || (schemaName != null && schemaName.isEmpty())) {
+                    continue;
+                }
+                if (schemaName.equals(PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME)) {
+                    continue;
+                }
+                schemaName = SchemaUtil.getEscapedArgument(schemaName);
                 if (schemaName.equals(PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME)) {
                     hasSchemas = rs.next();
                 }
@@ -984,7 +1005,11 @@ public abstract class BaseTest {
         }
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            deletePriorTables(ts, conn, url);
+            if(isDistributedClusterModeEnabled(config)){
+                deleteCurrentTestTables(ts, conn, url);
+            }else{
+                deletePriorTables(ts, conn, url);
+            }
             deletePriorSequences(ts, conn);
             
             // Make sure all tables and views have been dropped
@@ -1008,7 +1033,6 @@ public abstract class BaseTest {
             conn.close();
         }
     }
-    
     private static void deletePriorTables(long ts, Connection globalConn, String url) throws Exception {
         DatabaseMetaData dbmd = globalConn.getMetaData();
         // Drop VIEWs first, as we don't allow a TABLE with views to be dropped
@@ -1022,6 +1046,47 @@ public abstract class BaseTest {
                 String fullTableName = SchemaUtil.getEscapedTableName(
                         rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM),
                         rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
+
+                String ddl = "DROP " + rs.getString(PhoenixDatabaseMetaData.TABLE_TYPE) + " " + fullTableName + "  CASCADE";
+                String tenantId = rs.getString(1);
+                if (tenantId != null && !tenantId.equals(lastTenantId))  {
+                    if (lastTenantId != null) {
+                        conn.close();
+                    }
+                    // Open tenant-specific connection when we find a new one
+                    Properties props = PropertiesUtil.deepCopy(globalConn.getClientInfo());
+                    props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+                    conn = DriverManager.getConnection(url, props);
+                    lastTenantId = tenantId;
+                }
+                try {
+                    conn.createStatement().executeUpdate(ddl);
+                } catch (NewerTableAlreadyExistsException ex) {
+                    LOGGER.info("Newer table " + fullTableName + " or its delete marker exists. Ignore current deletion");
+                } catch (TableNotFoundException ex) {
+                    LOGGER.info("Table " + fullTableName + " is already deleted.");
+                }
+            }
+            rs.close();
+            if (lastTenantId != null) {
+                conn.close();
+            }
+        }
+    }
+    private static void deleteCurrentTestTables(long ts, Connection globalConn, String url) throws Exception {
+        DatabaseMetaData dbmd = globalConn.getMetaData();
+        // Drop VIEWs first, as we don't allow a TABLE with views to be dropped
+        // Tables are sorted by TENANT_ID
+        List<String[]> tableTypesList = Arrays.asList(new String[] {PTableType.VIEW.toString()}, new String[] {PTableType.TABLE.toString()});
+        for (String[] tableTypes: tableTypesList) {
+            ResultSet rs = dbmd.getTables(null, null, "%" + phoenixTestTableName.getTableName() + "%", tableTypes);
+            String lastTenantId = null;
+            Connection conn = globalConn;
+            while (rs.next()) {
+                String fullTableName = SchemaUtil.getEscapedTableName(
+                        rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM),
+                        rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
+                LOGGER.info("Dropping Table " + fullTableName + " for cleanup.");
                 String ddl = "DROP " + rs.getString(PhoenixDatabaseMetaData.TABLE_TYPE) + " " + fullTableName + "  CASCADE";
                 String tenantId = rs.getString(1);
                 if (tenantId != null && !tenantId.equals(lastTenantId))  {

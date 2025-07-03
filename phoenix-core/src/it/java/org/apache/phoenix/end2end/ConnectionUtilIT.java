@@ -37,7 +37,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class, SupportsDistributedClusterTest.class})
 public class ConnectionUtilIT {
 
     private static HBaseTestingUtility hbaseTestUtil;

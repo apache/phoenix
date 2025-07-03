@@ -53,7 +53,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class})
 public class ViewUtilIT extends ParallelStatsDisabledIT {
 
     @Test
