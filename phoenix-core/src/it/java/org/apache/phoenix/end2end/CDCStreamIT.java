@@ -173,25 +173,28 @@ public class CDCStreamIT extends CDCBaseIT {
     }
 
     @Test
-    public void testStreamMetadataWhenTableIsDropped() throws SQLException, IOException {
+    public void testStreamMetadataWhenTableIsDropped() throws SQLException {
         Connection conn = newConnection();
-        String tableName = generateUniqueName();
+        String schemaName = "\"" + generateUniqueName().toLowerCase() + "\"";
+        String tableName = SchemaUtil.getTableName(schemaName, "\"" + generateUniqueName().toLowerCase() + "\"");
         String create_table_sql = "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER, v2 DATE)";
         conn.createStatement().execute(create_table_sql);
-        String cdcName = generateUniqueName();
+        String cdcName = "\"" + generateUniqueName().toLowerCase() + "\"";
         String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
         conn.createStatement().execute(cdc_sql);
         String drop_table_sql = "DROP TABLE " + tableName;
         conn.createStatement().execute(drop_table_sql);
         // check if stream metadata is cleared
-        Assert.assertNull(new MetaDataClient(conn.unwrap(PhoenixConnection.class)).getStreamNameIfCDCEnabled(tableName));
+        Assert.assertNull(new MetaDataClient(conn.unwrap(PhoenixConnection.class))
+                .getStreamNameIfCDCEnabled(SchemaUtil.getUnEscapedFullName(tableName)));
         ResultSet rs = conn.createStatement().executeQuery(
                 "SELECT * FROM SYSTEM.CDC_STREAM WHERE TABLE_NAME='" + tableName + "'");
         Assert.assertFalse(rs.next());
         // should be able to re-create same table with same cdc name
         conn.createStatement().execute(create_table_sql);
         conn.createStatement().execute(cdc_sql);
-        Assert.assertNotNull(new MetaDataClient(conn.unwrap(PhoenixConnection.class)).getStreamNameIfCDCEnabled(tableName));
+        Assert.assertNotNull(new MetaDataClient(conn.unwrap(PhoenixConnection.class))
+                .getStreamNameIfCDCEnabled(SchemaUtil.getUnEscapedFullName(tableName)));
     }
 
     /**

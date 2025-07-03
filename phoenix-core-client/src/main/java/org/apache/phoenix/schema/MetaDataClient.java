@@ -4057,7 +4057,7 @@ public class MetaDataClient {
             ps.setString(3, status.getSerializedValue());
             ps.executeUpdate();
             connection.commit();
-            LOGGER.info("Marked stream {} for table {} as {}", status, streamName, tableName);
+            LOGGER.info("Marked stream {} for table {} as {}", streamName, tableName, status);
         }
     }
 
