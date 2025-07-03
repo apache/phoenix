@@ -112,6 +112,19 @@ public class CDCUtil {
         return isCDCIndex(indexTable.getTableName().getString());
     }
 
+    /**
+     * Check if the given table has any CDC indexes.
+     *
+     * @param table The PTable object.
+     * @return true if the table has an CDC index, false otherwise.
+     */
+    public static boolean hasCDCIndex(PTable table) {
+        if (table == null || table.getIndexes() == null) {
+            return false;
+        }
+        return table.getIndexes().stream().anyMatch(CDCUtil::isCDCIndex);
+    }
+
     public static Scan setupScanForCDC(Scan scan) {
         scan.setRaw(true);
         scan.readAllVersions();

@@ -4109,7 +4109,7 @@ public class MetaDataClient {
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         try {
             PTable ptable = connection.getTable(fullTableName);
-            if (PTableType.TABLE.equals(ptable.getType())) {
+            if (PTableType.TABLE.equals(ptable.getType()) && CDCUtil.hasCDCIndex(ptable)) {
                 deleteAllStreamMetadataForTable(fullTableName);
             }
             if (parentTableName != null &&!parentTableName.equals(ptable.getParentTableName().getString())) {
