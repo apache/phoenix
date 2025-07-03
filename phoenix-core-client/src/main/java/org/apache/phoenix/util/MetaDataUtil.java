@@ -21,6 +21,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.*;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_DEFINED;
+import static org.apache.phoenix.schema.PTableType.SYSTEM;
 import static org.apache.phoenix.schema.PTableType.TABLE;
 import static org.apache.phoenix.schema.PTableType.VIEW;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
@@ -1261,6 +1262,6 @@ public class MetaDataUtil {
     public static boolean isTTLSupported(PTableType tableType, PTable.ViewType viewType, String tableName) {
         return tableType == TABLE
                 || (tableType == VIEW && viewType == PTable.ViewType.UPDATABLE)
-                || SYSTEM_TABLES_WITH_TTL_SUPPORTED.contains(tableName);
+                || (tableType == SYSTEM && SYSTEM_TABLES_WITH_TTL_SUPPORTED.contains(tableName));
     }
 }
