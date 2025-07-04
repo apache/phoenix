@@ -168,8 +168,7 @@ public class BsonValueFunction extends ScalarFunction {
             ptr.set(PDate.INSTANCE.toBytes(new Date(((BsonDateTime) bsonValue).getValue())));
         } else if (bsonValueDataType == PBson.INSTANCE && bsonValue instanceof RawBsonDocument) {
             ptr.set(PBson.INSTANCE.toBytes((RawBsonDocument) bsonValue));
-        }
-        else {
+        } else {
             throw new IllegalArgumentException(
                 "The function data type does not match with actual data type");
         }
