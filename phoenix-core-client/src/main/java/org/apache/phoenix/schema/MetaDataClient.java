@@ -283,13 +283,13 @@ import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.schema.task.Task;
+import org.apache.phoenix.schema.types.PBson;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.schema.types.PBson;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider;
@@ -3288,8 +3288,7 @@ public class MetaDataClient {
                         .setTableName(tableName)
                         .setColumnName(column.getName().getString())
                         .build().buildException();
-                }
-                else if (colDef.getDataType() == PBson.INSTANCE && SchemaUtil.isPKColumn(column)
+                } else if (colDef.getDataType() == PBson.INSTANCE && SchemaUtil.isPKColumn(column)
                     && pkColumnsIterator.hasNext()) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.BSON_IN_ROW_KEY)
                         .setSchemaName(schemaName)

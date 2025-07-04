@@ -44,6 +44,7 @@ import org.bson.BsonDouble;
 import org.bson.BsonNull;
 import org.bson.BsonString;
 import org.bson.RawBsonDocument;
+import org.junit.Assume;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -60,6 +61,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.fail;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
