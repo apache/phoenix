@@ -283,6 +283,7 @@ import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.schema.task.Task;
+import org.apache.phoenix.schema.types.PBson;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PLong;
@@ -3287,6 +3288,13 @@ public class MetaDataClient {
                         .setTableName(tableName)
                         .setColumnName(column.getName().getString())
                         .build().buildException();
+                } else if (colDef.getDataType() == PBson.INSTANCE && SchemaUtil.isPKColumn(column)
+                    && pkColumnsIterator.hasNext()) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.BSON_IN_ROW_KEY)
+                        .setSchemaName(schemaName)
+                        .setTableName(tableName)
+                        .setColumnName(column.getName().getString())
+                        .build().buildException();
                 }
                 if (column.getFamilyName() != null) {
                     familyNames.put(
@@ -4632,6 +4640,11 @@ public class MetaDataClient {
                     if (lastPK.getDataType() == PVarbinary.INSTANCE || lastPK.getDataType().isArrayType()) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.VARBINARY_LAST_PK)
                         .setColumnName(lastPK.getName().getString()).build().buildException();
+                    }
+                    // Disallow adding columns if the last column in the primary key is BSON.
+                    if (lastPK.getDataType() == PBson.INSTANCE) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.BSON_LAST_PK)
+                            .setColumnName(lastPK.getName().getString()).build().buildException();
                     }
                     // Disallow adding columns if last column in the primary key is fixed width
                     // and nullable.
