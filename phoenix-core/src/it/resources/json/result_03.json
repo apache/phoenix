@@ -1,0 +1,36 @@
+{
+  "status": "disabled",
+  "name": {
+    "first": "Elliot",
+    "middle": "Jamie",
+    "last": "Watsica"
+  },
+  "username": "Elliot-Watsica",
+  "emails": [
+    "Petra.Upton-Kozey@gmail.com",
+    "Regan78@example.com"
+  ],
+  "phoneNumber": "(308) 971-1166 x5940",
+  "location": {
+    "street": "4897 Gerhold Lodge",
+    "city": "Minneapolis",
+    "state": "Arkansas",
+    "country": "Democratic Republic of the Congo",
+    "zip": "79299",
+    "coordinates": {
+      "latitude": 3.4015,
+      "longitude": 52.3736
+    }
+  },
+  "website": "https://cautious-fugato.info",
+  "domain": "pricey-block.org",
+  "job": {
+    "title": "Forward Program Developer",
+    "descriptor": "Direct",
+    "area": "Quality",
+    "type": "Producer",
+    "company": "Davis, Turcotte and Padberg"
+  },
+  "uuid": "80874c0d-3014-4860-8a08-d0f59c709a82",
+  "objectId": "666bdf52dd6539db3454d49a"
+}
