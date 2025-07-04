@@ -238,8 +238,10 @@ public enum SQLExceptionCode {
     VARBINARY_IN_ROW_KEY(1005, "42J03",
         "The VARBINARY/ARRAY type can only be used as the last part of a multi-part row key. "
             + "For Binary types, you can use VARBINARY_ENCODED for early part of multi-part row key."),
+    BSON_IN_ROW_KEY(11157, "42J03", "The BSON type can only be used as the last part of a multi-part row key."),
     NOT_NULLABLE_COLUMN_IN_ROW_KEY(1006, "42J04", "Only nullable columns may be added to primary key."),
     VARBINARY_LAST_PK(1015, "42J04", "Cannot add column to table when the last PK column is of type VARBINARY or ARRAY."),
+    BSON_LAST_PK(1156, "42J04", "Cannot add column to table when the last PK column is of type BSON."),
     NULLABLE_FIXED_WIDTH_LAST_PK(1023, "42J04", "Cannot add column to table when the last PK column is nullable and fixed width."),
     CANNOT_MODIFY_VIEW_PK(1036, "42J04", "Cannot modify the primary key of a VIEW if last PK column of parent is variable length."),
     BASE_TABLE_COLUMN(1037, "42J04", "Cannot modify columns of base table used by tenant-specific tables."),

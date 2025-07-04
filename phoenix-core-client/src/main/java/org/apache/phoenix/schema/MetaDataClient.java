@@ -289,6 +289,7 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PBson;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider;
@@ -3288,6 +3289,14 @@ public class MetaDataClient {
                         .setColumnName(column.getName().getString())
                         .build().buildException();
                 }
+                else if (colDef.getDataType() == PBson.INSTANCE && SchemaUtil.isPKColumn(column)
+                    && pkColumnsIterator.hasNext()) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.BSON_IN_ROW_KEY)
+                        .setSchemaName(schemaName)
+                        .setTableName(tableName)
+                        .setColumnName(column.getName().getString())
+                        .build().buildException();
+                }
                 if (column.getFamilyName() != null) {
                     familyNames.put(
                         IndexUtil.getActualColumnFamilyName(column.getFamilyName().getString()),
@@ -4632,6 +4641,11 @@ public class MetaDataClient {
                     if (lastPK.getDataType() == PVarbinary.INSTANCE || lastPK.getDataType().isArrayType()) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.VARBINARY_LAST_PK)
                         .setColumnName(lastPK.getName().getString()).build().buildException();
+                    }
+                    // Disallow adding columns if the last column in the primary key is BSON.
+                    if (lastPK.getDataType() == PBson.INSTANCE) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.BSON_LAST_PK)
+                            .setColumnName(lastPK.getName().getString()).build().buildException();
                     }
                     // Disallow adding columns if last column in the primary key is fixed width
                     // and nullable.

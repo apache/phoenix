@@ -33,6 +33,7 @@ import java.util.Collection;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.schema.types.PDouble;
@@ -990,6 +991,47 @@ public class Bson4IT extends ParallelStatsDisabledIT {
       assertEquals(bsonDocument2, document3);
 
       assertFalse(rs.next());
+    }
+  }
+
+  @Test
+  public void testIndexingONBsonNotAllowed() throws Exception {
+    Assume.assumeTrue(this.coveredIndex && this.columnEncoded);
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    String tableName = generateUniqueName();
+    String indexName1 = "IDX1_" + tableName;
+    String indexName2 = "IDX2_" + tableName;
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      String ddl =
+          "CREATE TABLE " + tableName + " "
+              + "(PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON "
+              + " CONSTRAINT pk PRIMARY KEY(PK1)) "
+              + (this.columnEncoded ? "" : "COLUMN_ENCODED_BYTES=0");
+      String indexDdl1 = "CREATE INDEX " + indexName1 + " ON " + tableName + "(COL)";
+      String indexDdl2 = "CREATE INDEX " + indexName2 + " ON " + tableName + "(C1)";
+
+      conn.createStatement().execute(ddl);
+      try {
+        conn.createStatement().execute(indexDdl1);
+        fail("Should have seen SQLExceptionCode.BSON_IN_ROW_KEY");
+      } catch (SQLException e) {
+        assertEquals(SQLExceptionCode.BSON_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
+      }
+
+      conn.createStatement().execute(indexDdl2);
+
+      String sample1 = getJsonString("json/sample_01.json");
+      String sample2 = getJsonString("json/sample_02.json");
+      String sample3 = getJsonString("json/sample_03.json");
+      BsonDocument bsonDocument1 = RawBsonDocument.parse(sample1);
+      BsonDocument bsonDocument2 = RawBsonDocument.parse(sample2);
+      BsonDocument bsonDocument3 = RawBsonDocument.parse(sample3);
+
+      upsertRows(conn, tableName, bsonDocument1, bsonDocument2, bsonDocument3);
+      conn.commit();
+      ResultSet rs = conn.createStatement().executeQuery("SELECT count(*) FROM " + indexName2);
+      assertTrue(rs.next());
+      assertEquals(3, rs.getInt(1));
     }
   }
 
