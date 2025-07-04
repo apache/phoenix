@@ -470,6 +470,7 @@ public class QueryServicesOptions {
     public static final Boolean DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT = true;
     public static final Boolean DEFAULT_CQSI_THREAD_POOL_METRICS_ENABLED = false;
 
+    public static final Boolean DEFAULT_SYNCHRONOUS_REPLICATION_ENABLED = false;
 
     private final Configuration config;
 

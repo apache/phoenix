@@ -1445,4 +1445,33 @@ public class SchemaUtil {
         }
         return false;
     }
+
+    /**
+     * Data of non system tables is always replicated.
+     * Data of the system tables in the list below is not replicated because this data is very
+     * specific to the cluster.
+     * SYSTEM.SEQUENCE
+     * SYSTEM.STATS
+     * SYSTEM.LOG
+     * SYSTEM.TASK
+     * SYSTEM.FUNCTION
+     * SYSTEM.MUTEX
+     * SYSTEM.TRANSFORM
+     * SYSTEM.CDC_STREAM_STATUS
+     * SYSTEM.CDC_STREAM
+     * For SYSTEM.CATALOG and SYSTEM.CHILD_LINK we only replicate rows with tenant information.
+     * Non tenant (Global) rows are assumed to be executed by an admin or an admin process in each
+     * cluster separately and thus not replicated.
+     * @param tableName full name of the table
+     * @return true if the table data should be replicated, else false
+     */
+    public static boolean shouldReplicateTable(byte[] tableName) {
+        if (!isSystemTable(tableName)) {
+            return true;
+        }
+        if (isMetaTable(tableName) || isChildLinkTable(tableName)) {
+            return true;
+        }
+        return false;
+    }
 }

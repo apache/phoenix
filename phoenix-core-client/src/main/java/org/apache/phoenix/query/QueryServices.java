@@ -557,6 +557,9 @@ public interface QueryServices extends SQLCloseable {
 
     String CQSI_THREAD_POOL_METRICS_ENABLED = "phoenix.cqsi.thread.pool.metrics.enabled";
 
+    public static final String SYNCHRONOUS_REPLICATION_ENABLED = "phoenix.synchronous.replication.enabled";
+
+
     /**
      * Get executor service used for parallel scans
      */

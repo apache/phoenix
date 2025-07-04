@@ -85,6 +85,7 @@ import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
+import java.net.URI;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.Date;
@@ -119,6 +120,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nonnull;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
@@ -154,6 +156,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
+import org.apache.phoenix.replication.ReplicationLogGroup;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
@@ -432,6 +435,8 @@ public abstract class BaseTest {
     protected static boolean clusterInitialized = false;
     protected static HBaseTestingUtility utility;
     protected static final Configuration config = HBaseConfiguration.create();
+    protected static final String logDir = "/PHOENIX_REPLICATION_IN";
+    protected static URI standbyUri = new Path(logDir).toUri();
 
     protected static String getUrl() {
         if (!clusterInitialized) {
@@ -669,6 +674,8 @@ public abstract class BaseTest {
             conf.setLong(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, 0);
         }
         setPhoenixRegionServerEndpoint(conf);
+        // setup up synchronous replication
+        conf.set(ReplicationLogGroup.REPLICATION_STANDBY_HDFS_URL_KEY, standbyUri.toString());
         return conf;
     }
 
@@ -1985,7 +1992,7 @@ public abstract class BaseTest {
     }
 
     /**
-     * Returns true if the region contains atleast one of the metadata rows we are interested in
+     * Returns true if the region contains at least one of the metadata rows we are interested in
      */
     protected static boolean regionContainsMetadataRows(RegionInfo regionInfo,
             List<byte[]> metadataRowKeys) {
