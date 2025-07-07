@@ -76,20 +76,39 @@ public class SystemCatalogWALEntryFilter implements
   }
 
   /**
-   * Does the cell key have leading tenant Id.
+   * Does the cell row key have leading tenant Id.
    * @param cell hbase cell
    * @return true if the cell has leading tenant Id in key
    */
   private boolean isTenantIdLeadingInKey(final Cell cell) {
     // rows in system.catalog or system child that aren't tenant-owned
     // will have a leading separator byte
-    return cell.getRowArray()[cell.getRowOffset()]
-      != QueryConstants.SEPARATOR_BYTE;
+    return isTenantIdLeadingInKey(cell.getRowArray(), cell.getRowOffset());
+
   }
 
   /**
-   * is the cell for system child link a tenant owned. Besides the non empty
-   * tenant id, system.child_link table have tenant owned data for parent child
+   * Checks if the row key of SYSTEM.CATALOG or SYSTEM.CHILD_LINK row has leading tenant ID
+   * @param rowKey
+   * @param rowOffset
+   * @return true if the row key has leading tenant ID
+   */
+  public static boolean isTenantIdLeadingInKey(byte[] rowKey, int rowOffset) {
+    return rowKey[rowOffset] != QueryConstants.SEPARATOR_BYTE;
+  }
+
+  /**
+   * Is the cell for system child link a tenant owned. This happens if the tenant id is
+   * leading in the row key or the cell has tenant owned data for parent child links.
+   * @param cell hbase cell
+   * @return true if the cell is tenant owned
+   */
+  private boolean isTenantRowCellSystemChildLink(final Cell cell) {
+    return isTenantIdLeadingInKey(cell) || isCellChildLinkToTenantView(cell);
+  }
+
+  /**
+   * SYSTEM.CHILD_LINK table have tenant owned data for parent child
    * links. In this case, the column qualifier is
    * {@code PhoenixDatabaseMetaData#LINK_TYPE_BYTES} and value is
    * {@code PTable.LinkType.CHILD_TABLE}. For corresponding delete markers the
@@ -97,29 +116,27 @@ public class SystemCatalogWALEntryFilter implements
    * @param cell hbase cell
    * @return true if the cell is tenant owned
    */
-  private boolean isTenantRowCellSystemChildLink(final Cell cell) {
-    boolean isTenantRowCell = isTenantIdLeadingInKey(cell);
-
+  public static boolean isCellChildLinkToTenantView(final Cell cell) {
     ImmutableBytesWritable key = new ImmutableBytesWritable(
-      cell.getRowArray(), cell.getRowOffset(), cell.getRowLength());
+            cell.getRowArray(), cell.getRowOffset(), cell.getRowLength());
     boolean isChildLinkToTenantView = false;
-    if (!isTenantRowCell) {
-      boolean isChildLink = CellUtil.matchingQualifier(
-        cell, PhoenixDatabaseMetaData.LINK_TYPE_BYTES);
-      if ((isChildLink && CellUtil.matchingValue(cell, CHILD_TABLE_BYTES)) ||
-              cell.getType() == Cell.Type.DeleteFamily) {
-        byte[][] rowViewKeyMetadata = new byte[NUM_COLUMNS_PRIMARY_KEY][];
-        SchemaUtil.getVarChars(key.get(), key.getOffset(),
-            key.getLength(), 0, rowViewKeyMetadata);
-        /** if the child link is to a tenant-owned view, the COLUMN_NAME field will be
-         * the byte[] of the tenant otherwise, it will be an empty byte array
-         * (NOT QueryConstants.SEPARATOR_BYTE, but a byte[0]). This assumption is also
-         * true for child link's delete markers in SYSTEM.CHILD_LINK as it only contains link
-         * rows and does not deal with other type of rows like column rows that also has
-         * COLUMN_NAME populated with actual column name.**/
-        isChildLinkToTenantView = rowViewKeyMetadata[COLUMN_NAME_INDEX].length != 0;
-      }
+    boolean isChildLink = CellUtil.matchingQualifier(cell,
+            PhoenixDatabaseMetaData.LINK_TYPE_BYTES);
+    if (isChildLink && CellUtil.matchingValue(cell, CHILD_TABLE_BYTES)
+            || cell.getType() == Cell.Type.DeleteFamily) {
+      byte[][] rowViewKeyMetadata = new byte[NUM_COLUMNS_PRIMARY_KEY][];
+      SchemaUtil.getVarChars(key.get(), key.getOffset(),
+              key.getLength(), 0, rowViewKeyMetadata);
+      /** if the child link is to a tenant-owned view, the COLUMN_NAME field will be
+       * the byte[] of the tenant otherwise, it will be an empty byte array
+       * (NOT QueryConstants.SEPARATOR_BYTE, but a byte[0]). This assumption is also
+       * true for child link's delete markers in SYSTEM.CHILD_LINK as it only contains link
+       * rows and does not deal with other type of rows like column rows that also has
+       * COLUMN_NAME populated with actual column name.
+       **/
+      isChildLinkToTenantView = rowViewKeyMetadata[COLUMN_NAME_INDEX].length != 0;
     }
-    return isTenantRowCell || isChildLinkToTenantView;
+    return isChildLinkToTenantView;
   }
+
 }

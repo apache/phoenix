@@ -18,20 +18,25 @@
 package org.apache.phoenix.replication.tool;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PathNotFoundException;
 import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
+import org.apache.phoenix.replication.log.LogFile;
 import org.apache.phoenix.replication.log.LogFile.Record;
 import org.apache.phoenix.replication.log.LogFileReader;
 import org.apache.phoenix.replication.log.LogFileReaderContext;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,6 +61,18 @@ public class LogFileAnalyzer extends Configured implements Tool {
     private boolean verbose = false;
     private boolean decode = false;
     private boolean check = false;
+    FileSystem fs;
+
+    private void init() throws IOException {
+        Configuration conf = getConf();
+        if (conf == null) {
+            conf = HBaseConfiguration.create();
+            setConf(conf);
+        }
+        if (fs == null) {
+            fs = FileSystem.get(getConf());
+        }
+    }
 
     @Override
     public int run(String[] args) throws Exception {
@@ -63,40 +80,18 @@ public class LogFileAnalyzer extends Configured implements Tool {
             System.err.println(USAGE);
             return 1;
         }
-
-        Configuration conf = getConf();
-        if (conf == null) {
-            conf = HBaseConfiguration.create();
-            setConf(conf);
-        }
-
         try {
-            FileSystem fs = FileSystem.get(conf);
+            init();
             Path path = new Path(args[args.length - 1]);
-
-            if (!fs.exists(path)) {
-                System.err.println("Path does not exist: " + path);
-                return 1;
-            }
-
-            List<Path> filesToAnalyze = new ArrayList<>();
-            if (fs.getFileStatus(path).isDirectory()) {
-                // Recursively find all .plog files
-                findLogFiles(fs, path, filesToAnalyze);
-            } else {
-                filesToAnalyze.add(path);
-            }
-
+            List<Path> filesToAnalyze = getFilesToAnalyze(path);
             if (filesToAnalyze.isEmpty()) {
                 System.err.println("No log files found in: " + path);
                 return 1;
             }
-
             // Analyze each file
             for (Path file : filesToAnalyze) {
-                analyzeFile(fs, file);
+                analyzeFile(file);
             }
-
             return 0;
         } catch (Exception e) {
             LOG.error("Error analyzing log files", e);
@@ -104,19 +99,62 @@ public class LogFileAnalyzer extends Configured implements Tool {
         }
     }
 
-    private void findLogFiles(FileSystem fs, Path dir, List<Path> files) throws IOException {
+    /**
+     * Returns all the mutations grouped by the table name under a source path
+     * @param source Path which can be a file or directory
+     * @return Mutations grouped by the table name
+     * @throws IOException
+     */
+    public Map<String, List<Mutation>> groupLogsByTable(String source) throws IOException {
+        Map<String, List<Mutation>> allFiles = Maps.newHashMap();
+        init();
+        Path path = new Path(source);
+        List<Path> filesToAnalyze = getFilesToAnalyze(path);
+        if (filesToAnalyze.isEmpty()) {
+            return allFiles;
+        }
+        // Analyze each file
+        for (Path file : filesToAnalyze) {
+            Map<String, List<Mutation>> perFile = groupLogsByTable(file);
+            for (Map.Entry<String, List<Mutation>> entry : perFile.entrySet()) {
+                List<Mutation> mutations = allFiles.get(entry.getKey());
+                if (mutations == null) {
+                    allFiles.put(entry.getKey(), entry.getValue());
+                } else {
+                    mutations.addAll(entry.getValue());
+                }
+            }
+        }
+        return allFiles;
+    }
+
+    private List<Path> getFilesToAnalyze(Path path) throws IOException {
+        if (!fs.exists(path)) {
+            throw new PathNotFoundException(path.toString());
+        }
+        List<Path> filesToAnalyze = Lists.newArrayList();
+        if (fs.getFileStatus(path).isDirectory()) {
+            // Recursively find all .plog files
+            findLogFiles(path, filesToAnalyze);
+        } else {
+            filesToAnalyze.add(path);
+        }
+        return filesToAnalyze;
+    }
+
+    private void findLogFiles(Path dir, List<Path> files) throws IOException {
         FileStatus[] statuses = fs.listStatus(dir);
         for (FileStatus status : statuses) {
             Path path = status.getPath();
             if (status.isDirectory()) {
-                findLogFiles(fs, path, files);
+                findLogFiles(path, files);
             } else if (path.getName().endsWith(".plog")) {
                 files.add(path);
             }
         }
     }
 
-    private void analyzeFile(FileSystem fs, Path file) throws IOException {
+    private void analyzeFile(Path file) throws IOException {
         System.out.println("\nAnalyzing file: " + file);
 
         LogFileReaderContext context = new LogFileReaderContext(getConf())
@@ -150,13 +188,18 @@ public class LogFileAnalyzer extends Configured implements Tool {
             }
 
             // Print trailer information
-            System.out.println("\nTrailer:");
-            System.out.println("  Record Count: " + reader.getTrailer().getRecordCount());
-            System.out.println("  Block Count: " + reader.getTrailer().getBlockCount());
-            System.out.println("  Blocks Start Offset: "
-                + reader.getTrailer().getBlocksStartOffset());
-            System.out.println("  Trailer Start Offset: "
-                + reader.getTrailer().getTrailerStartOffset());
+            LogFile.Trailer trailer = reader.getTrailer();
+            if (trailer != null) {
+                System.out.println("\nTrailer:");
+                System.out.println("  Record Count: " + reader.getTrailer().getRecordCount());
+                System.out.println("  Block Count: " + reader.getTrailer().getBlockCount());
+                System.out.println("  Blocks Start Offset: "
+                        + reader.getTrailer().getBlocksStartOffset());
+                System.out.println("  Trailer Start Offset: "
+                        + reader.getTrailer().getTrailerStartOffset());
+            } else {
+                System.out.println("\nTrailer is null");
+            }
 
             // Print verification results if checking
             if (check) {
@@ -177,6 +220,31 @@ public class LogFileAnalyzer extends Configured implements Tool {
         } finally {
             reader.close();
         }
+    }
+
+    private Map<String, List<Mutation>> groupLogsByTable(Path file) throws IOException {
+        Map<String, List<Mutation>> mutationsByTable = Maps.newHashMap();
+        System.out.println("\nAnalyzing file: " + file);
+        LogFileReaderContext context = new LogFileReaderContext(getConf())
+                .setFileSystem(fs)
+                .setFilePath(file)
+                .setSkipCorruptBlocks(check); // Skip corrupt blocks if checking
+        LogFileReader reader = new LogFileReader();
+        try {
+            reader.init(context);
+            // Process records
+            Record record;
+            while ((record = reader.next()) != null) {
+                String tableName = record.getHBaseTableName();
+                List<Mutation> mutations = mutationsByTable.getOrDefault(tableName,
+                        Lists.newArrayList());
+                mutations.add(record.getMutation());
+                mutationsByTable.put(tableName, mutations);
+            }
+        } finally {
+            reader.close();
+        }
+        return mutationsByTable;
     }
 
     private boolean parseArgs(String[] args) {

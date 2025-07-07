@@ -46,6 +46,7 @@ import org.apache.hadoop.hbase.regionserver.OperationStatus;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.FutureUtils;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.wal.WALEdit;
 import org.apache.hadoop.hbase.wal.WALKey;
@@ -77,6 +78,7 @@ import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.wal.IndexedKeyValue;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.LazyParallelWriterIndexCommitter;
 import org.apache.phoenix.index.IndexMaintainer;
@@ -86,6 +88,8 @@ import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.replication.ReplicationLogGroup;
+import org.apache.phoenix.replication.SystemCatalogWALEntryFilter;
 import org.apache.phoenix.schema.CompiledConditionalTTLExpression;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PRow;
@@ -134,9 +138,11 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 
 import static org.apache.hadoop.hbase.HConstants.OperationStatusCode.SUCCESS;
 import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.applyNew;
@@ -146,6 +152,8 @@ import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverCons
 import static org.apache.phoenix.hbase.index.util.IndexManagementUtil.rethrowIndexingException;
 import static org.apache.phoenix.index.PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB;
 import static org.apache.phoenix.index.PhoenixIndexBuilderHelper.RETURN_RESULT;
+import static org.apache.phoenix.query.QueryServices.SYNCHRONOUS_REPLICATION_ENABLED;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SYNCHRONOUS_REPLICATION_ENABLED;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
 /**
@@ -163,10 +171,15 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     private static final OperationStatus NOWRITE = new OperationStatus(SUCCESS);
     public static final String PHOENIX_APPEND_METADATA_TO_WAL = "phoenix.append.metadata.to.wal";
     public static final boolean DEFAULT_PHOENIX_APPEND_METADATA_TO_WAL = false;
+    // Mutation attribute to ignore the mutation for replication
+    public static final String IGNORE_REPLICATION_ATTRIB = "_IGNORE_REPLICATION";
+    private static final byte[] IGNORE_REPLICATION_ATTRIB_VAL = new byte[]{0};
+    // TODO hardcoded for now, will fix later
+    public static final String DEFAULT_HA_GROUP = "DEFAULT_HA_GROUP";
 
     /**
      * Class to represent pending data table rows
-     * */
+     */
     private class PendingRow {
         private int count;
         private boolean usable;
@@ -202,33 +215,45 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         }
 
         public int getCount() {
-          return count;
-      }
+            return count;
+        }
 
         public BatchMutateContext getLastContext() {
-          return lastContext;
-      }
+            return lastContext;
+        }
     }
-    private static boolean ignoreIndexRebuildForTesting  = false;
+
+    private static boolean ignoreIndexRebuildForTesting = false;
     private static boolean failPreIndexUpdatesForTesting = false;
     private static boolean failPostIndexUpdatesForTesting = false;
     private static boolean failDataTableUpdatesForTesting = false;
     private static boolean ignoreWritingDeleteColumnsToIndex = false;
+    private static boolean ignoreSyncReplicationForTesting = false;
+
     public static void setIgnoreIndexRebuildForTesting(boolean ignore) {
         ignoreIndexRebuildForTesting = ignore;
     }
+
     public static void setFailPreIndexUpdatesForTesting(boolean fail) {
         failPreIndexUpdatesForTesting = fail;
     }
+
     public static void setFailPostIndexUpdatesForTesting(boolean fail) {
         failPostIndexUpdatesForTesting = fail;
     }
+
     public static void setFailDataTableUpdatesForTesting(boolean fail) {
         failDataTableUpdatesForTesting = fail;
     }
+
     public static void setIgnoreWritingDeleteColumnsToIndex(boolean ignore) {
         ignoreWritingDeleteColumnsToIndex = ignore;
     }
+
+    public static void setIgnoreSyncReplicationForTesting(boolean ignore) {
+        ignoreSyncReplicationForTesting = ignore;
+    }
+
     public enum BatchMutatePhase {
         INIT, PRE, POST, FAILED
     }
@@ -237,13 +262,13 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     // coprocessor calls. TODO: remove after HBASE-18127 when available
 
     /*
-    * The concurrent batch of mutations is a set such that every pair of batches in this set has at
-    * least one common row. Since a BatchMutateContext object of a batch is modified only after the
-    * row locks for all the rows that are mutated by this batch are acquired, there can be only one
-    * thread can acquire the locks for its batch and safely access all the batch contexts in the
-    * set of concurrent batches. Because of this, we do not read atomic variables or additional
-    * locks to serialize the access to the BatchMutateContext objects.
-    */
+     * The concurrent batch of mutations is a set such that every pair of batches in this set has at
+     * least one common row. Since a BatchMutateContext object of a batch is modified only after the
+     * row locks for all the rows that are mutated by this batch are acquired, there can be only one
+     * thread can acquire the locks for its batch and safely access all the batch contexts in the
+     * set of concurrent batches. Because of this, we do not read atomic variables or additional
+     * locks to serialize the access to the BatchMutateContext objects.
+     */
     public static class BatchMutateContext {
         private volatile BatchMutatePhase currentPhase = BatchMutatePhase.INIT;
         // The max of reference counts on the pending rows of this batch at the time this
@@ -301,7 +326,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         }
 
         public BatchMutateContext(int clientVersion) {
-          this.clientVersion = clientVersion;
+            this.clientVersion = clientVersion;
         }
 
         public void populateOriginalMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp) {
@@ -355,50 +380,92 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             return maxPendingRowCount;
         }
     }
+
     private ThreadLocal<BatchMutateContext> batchMutateContext =
             new ThreadLocal<BatchMutateContext>();
 
-  /**
-   * Configuration key for if the indexer should check the version of HBase is running. Generally,
-   * you only want to ignore this for testing or for custom versions of HBase.
-   */
-  public static final String CHECK_VERSION_CONF_KEY = "com.saleforce.hbase.index.checkversion";
+    /**
+     * Configuration key for if the indexer should check the version of HBase is running. Generally,
+     * you only want to ignore this for testing or for custom versions of HBase.
+     */
+    public static final String CHECK_VERSION_CONF_KEY = "com.saleforce.hbase.index.checkversion";
+    public static final String INDEX_LAZY_POST_BATCH_WRITE =
+            "org.apache.hadoop.hbase.index.lazy.post_batch.write";
+    private static final boolean INDEX_LAZY_POST_BATCH_WRITE_DEFAULT = false;
+    private static final String INDEXER_INDEX_WRITE_SLOW_THRESHOLD_KEY =
+            "phoenix.indexer.slow.post.batch.mutate.threshold";
+    private static final long INDEXER_INDEX_WRITE_SLOW_THRESHOLD_DEFAULT = 3_000;
+    private static final String INDEXER_PRE_INCREMENT_SLOW_THRESHOLD_KEY =
+            "phoenix.indexer.slow.pre.increment";
+    private static final long INDEXER_PRE_INCREMENT_SLOW_THRESHOLD_DEFAULT = 3_000;
 
-  public static final String INDEX_LAZY_POST_BATCH_WRITE = "org.apache.hadoop.hbase.index.lazy.post_batch.write";
-  private static final boolean INDEX_LAZY_POST_BATCH_WRITE_DEFAULT = false;
+    // Index writers get invoked before and after data table updates
+    protected IndexWriter preWriter;
+    protected IndexWriter postWriter;
 
-  private static final String INDEXER_INDEX_WRITE_SLOW_THRESHOLD_KEY = "phoenix.indexer.slow.post.batch.mutate.threshold";
-  private static final long INDEXER_INDEX_WRITE_SLOW_THRESHOLD_DEFAULT = 3_000;
-  private static final String INDEXER_PRE_INCREMENT_SLOW_THRESHOLD_KEY = "phoenix.indexer.slow.pre.increment";
-  private static final long INDEXER_PRE_INCREMENT_SLOW_THRESHOLD_DEFAULT = 3_000;
+    protected IndexBuildManager builder;
+    private LockManager lockManager;
 
-  // Index writers get invoked before and after data table updates
-  protected IndexWriter preWriter;
-  protected IndexWriter postWriter;
+    // The collection of pending data table rows
+    private Map<ImmutableBytesPtr, PendingRow> pendingRows = new ConcurrentHashMap<>();
 
-  protected IndexBuildManager builder;
-  private LockManager lockManager;
+    private MetricsIndexerSource metricSource;
 
-  // The collection of pending data table rows
-  private Map<ImmutableBytesPtr, PendingRow> pendingRows = new ConcurrentHashMap<>();
+    private boolean stopped;
+    private boolean disabled;
+    private long slowIndexPrepareThreshold;
+    private long slowPreIncrementThreshold;
+    private int rowLockWaitDuration;
+    private int concurrentMutationWaitDuration;
+    private String dataTableName;
+    private boolean shouldWALAppend = DEFAULT_PHOENIX_APPEND_METADATA_TO_WAL;
+    private boolean isNamespaceEnabled = false;
+    private boolean useBloomFilter = false;
+    private long lastTimestamp = 0;
+    private List<Set<ImmutableBytesPtr>> batchesWithLastTimestamp = new ArrayList<>();
+    private static final int DEFAULT_ROWLOCK_WAIT_DURATION = 30000;
+    private static final int DEFAULT_CONCURRENT_MUTATION_WAIT_DURATION_IN_MS = 100;
+    private byte[] encodedRegionName;
+    private boolean shouldReplicate;
+    private ReplicationLogGroup replicationLog;
 
-  private MetricsIndexerSource metricSource;
+    // Don't replicate the mutation if this attribute is set
+    private static final Predicate<Mutation> IGNORE_REPLICATION = mutation ->
+        mutation.getAttribute(IGNORE_REPLICATION_ATTRIB) != null;
 
-  private boolean stopped;
-  private boolean disabled;
-  private long slowIndexPrepareThreshold;
-  private long slowPreIncrementThreshold;
-  private int rowLockWaitDuration;
-  private int concurrentMutationWaitDuration;
-  private String dataTableName;
-  private boolean shouldWALAppend = DEFAULT_PHOENIX_APPEND_METADATA_TO_WAL;
-  private boolean isNamespaceEnabled = false;
-  private boolean useBloomFilter = false;
-  private long lastTimestamp = 0;
-  private List<Set<ImmutableBytesPtr>> batchesWithLastTimestamp = new ArrayList<>();
-  private static final int DEFAULT_ROWLOCK_WAIT_DURATION = 30000;
-  private static final int DEFAULT_CONCURRENT_MUTATION_WAIT_DURATION_IN_MS = 100;
-  private byte[] encodedRegionName;
+    // Don't replicate the mutation for syscat/child link if the tenantid is not
+    // leading in the row key
+    private static final Predicate<Mutation> NOT_TENANT_ID_ROW_KEY_PREFIX = mutation ->
+        !SystemCatalogWALEntryFilter.isTenantIdLeadingInKey(mutation.getRow(), 0);
+
+    // Don't replicate the mutation for child link if child is not a tenant view
+    private static final Predicate<Mutation> NOT_CHILD_LINK_TENANT_VIEW = mutation -> {
+        boolean isChildLinkToTenantView = false;
+        for (List<Cell> cells : mutation.getFamilyCellMap().values()) {
+            for (Cell cell : cells) {
+                if (SystemCatalogWALEntryFilter.isCellChildLinkToTenantView(cell)) {
+                    isChildLinkToTenantView = true;
+                    break;
+                }
+            }
+        }
+        return !isChildLinkToTenantView;
+    };
+
+    /**
+     * If the replication filter evaluates to true, the mutation is ignored from replication
+     */
+    private static Predicate<Mutation> getSynchronousReplicationFilter(byte[] tableName) {
+        Predicate<Mutation> filter = IGNORE_REPLICATION;
+        if (SchemaUtil.isMetaTable(tableName)) {
+            filter = IGNORE_REPLICATION.or(NOT_TENANT_ID_ROW_KEY_PREFIX);
+        } else if (SchemaUtil.isChildLinkTable(tableName)) {
+            filter = IGNORE_REPLICATION.or
+                    (NOT_TENANT_ID_ROW_KEY_PREFIX.and(NOT_CHILD_LINK_TENANT_VIEW));
+        }
+        return filter;
+    }
+    private Predicate<Mutation> ignoreReplicationFilter;
 
   @Override
   public Optional<RegionObserver> getRegionObserver() {
@@ -448,6 +515,18 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           BloomType bloomFilterType = tableDescriptor.getColumnFamilies()[0].getBloomFilterType();
           // when the table descriptor changes, the coproc is reloaded
           this.useBloomFilter = bloomFilterType == BloomType.ROW;
+          byte[] tableName = env.getRegionInfo().getTable().getName();
+          this.shouldReplicate = env.getConfiguration().getBoolean(
+                  SYNCHRONOUS_REPLICATION_ENABLED, DEFAULT_SYNCHRONOUS_REPLICATION_ENABLED);
+          if (this.shouldReplicate) {
+              // replication feature is enabled, check if it is enabled for the table
+              this.shouldReplicate = SchemaUtil.shouldReplicateTable(tableName);
+          }
+          if (this.shouldReplicate) {
+              this.replicationLog = ReplicationLogGroup.get(env.getConfiguration(),
+                      env.getServerName(), DEFAULT_HA_GROUP);
+              this.ignoreReplicationFilter = getSynchronousReplicationFilter(tableName);
+          }
       } catch (NoSuchMethodError ex) {
           disabled = true;
           LOG.error("Must be too early a version of HBase. Disabled coprocessor ", ex);
@@ -480,7 +559,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         return;
       }
     this.stopped = true;
-    String msg = "Indexer is being stopped";
+    String msg = "IndexRegionObserver is being stopped";
     this.builder.stop(msg);
     this.preWriter.stop(msg);
     this.postWriter.stop(msg);
@@ -556,6 +635,89 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         "Somehow didn't return an index update but also didn't propagate the failure to the client!");
   }
 
+    @Override
+    public void preWALRestore(
+            org.apache.hadoop.hbase.coprocessor.ObserverContext<? extends RegionCoprocessorEnvironment> ctx,
+            org.apache.hadoop.hbase.client.RegionInfo info,
+            org.apache.hadoop.hbase.wal.WALKey logKey,
+            WALEdit logEdit) throws IOException {
+        if (this.disabled) {
+            return;
+        }
+        if (!shouldReplicate) {
+            return;
+        }
+        long start = EnvironmentEdgeManager.currentTimeMillis();
+        try {
+            replicateEditOnWALRestore(logKey, logEdit);
+        } finally {
+            long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
+            metricSource.updatePreWALRestoreTime(dataTableName, duration);
+        }
+    }
+
+    /**
+     * A batch of mutations is recorded in a single WAL edit so a WAL edit can have cells
+     * belonging to multiple rows. Further, for one mutation the WAL edit contains the individual
+     * cells that are part of the mutation.
+     * @param logKey
+     * @param logEdit
+     * @throws IOException
+     */
+    private void replicateEditOnWALRestore(org.apache.hadoop.hbase.wal.WALKey logKey,
+                                           WALEdit logEdit) throws IOException {
+        ImmutableBytesPtr prevKey = null, currentKey = null;
+        Put put = null;
+        Delete del = null;
+        for (Cell kv : logEdit.getCells()) {
+            if (kv instanceof IndexedKeyValue) {
+                IndexedKeyValue ikv = (IndexedKeyValue) kv;
+                replicationLog.append(Bytes.toString(ikv.getIndexTable()), -1, ikv.getMutation());
+            } else {
+                // While we can generate a separate mutation for every cell that is part of the
+                // WAL edit and replicate each such mutation. Doing that will not be very efficient
+                // since a mutation can have large number of cells. Instead, we first group the
+                // cells belonging to the same row into a mutation and then replicate that
+                // mutation.
+                currentKey = new ImmutableBytesPtr(kv.getRowArray(),
+                        kv.getRowOffset(), kv.getRowLength());
+                if (!currentKey.equals(prevKey)) {
+                    if (put != null && !this.ignoreReplicationFilter.test(put)) {
+                        replicationLog.append(logKey.getTableName().getNameAsString(), -1, put);
+                    }
+                    if (del != null && !this.ignoreReplicationFilter.test(del)) {
+                        replicationLog.append(logKey.getTableName().getNameAsString(), -1, del);
+                    }
+                    // reset
+                    put = null;
+                    del = null;
+                }
+                if (kv.getType() == Cell.Type.Put) {
+                    if (put == null) {
+                        put = new Put(currentKey.get(),
+                                currentKey.getOffset(), currentKey.getLength());
+                    }
+                    put.add(kv);
+                } else {
+                    if (del == null) {
+                        del = new Delete(currentKey.get(),
+                                currentKey.getOffset(), currentKey.getLength());
+                    }
+                    del.add(kv);
+                }
+                prevKey = currentKey;
+            }
+        }
+        // append the last one
+        if (put != null && !this.ignoreReplicationFilter.test(put)) {
+            replicationLog.append(logKey.getTableName().getNameAsString(), -1, put);
+        }
+        if (del != null && !this.ignoreReplicationFilter.test(del)) {
+            replicationLog.append(logKey.getTableName().getNameAsString(), -1, del);
+        }
+        replicationLog.sync();
+    }
+
   private void populateRowsToLock(MiniBatchOperationInProgress<Mutation> miniBatchOp,
           BatchMutateContext context) {
       for (int i = 0; i < miniBatchOp.size(); i++) {
@@ -629,6 +791,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                   Result result = Result.create(cells);
                   miniBatchOp.setOperationStatus(i,
                           new OperationStatus(SUCCESS, result));
+                  // since this mutation is ignored by setting it's status to success in the coproc
+                  // it shouldn't be synchronously replicated
+                  if (this.shouldReplicate) {
+                      m.setAttribute(IGNORE_REPLICATION_ATTRIB, IGNORE_REPLICATION_ATTRIB_VAL);
+                  }
               }
           } else if (context.returnResult) {
               Map<ColumnReference, Pair<Cell, Boolean>> currColumnCellExprMap = new HashMap<>();
@@ -1547,6 +1714,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                 waitForPreviousConcurrentBatch(table, context);
             }
             preparePostIndexMutations(context, batchTimestamp, indexMetaData);
+            addGlobalIndexMutationsToWAL(miniBatchOp, context);
         }
         if (context.hasLocalIndex) {
             // Group all the updates for a single row into a single update to be processed (for local indexes)
@@ -1555,6 +1723,53 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         }
         if (failDataTableUpdatesForTesting) {
             throw new DoNotRetryIOException("Simulating the data table write failure");
+        }
+    }
+
+    /**
+     * We need to add the index mutations to the data table's WAL to handle cases where the RS
+     * crashes before the postBatchMutateIndispensably hook is called where the mutations are
+     * synchronously replicated. This is needed because during WAL restore we don't have the
+     * IndexMaintainer object to generate the corresponding index mutations.
+     * @param miniBatchOp
+     * @param context
+     */
+    private void addGlobalIndexMutationsToWAL(MiniBatchOperationInProgress<Mutation> miniBatchOp,
+                                              BatchMutateContext context) {
+        if (!this.shouldReplicate) {
+            return;
+        }
+
+        WALEdit edit = miniBatchOp.getWalEdit(0);
+        if (edit == null) {
+            edit = new WALEdit();
+            miniBatchOp.setWalEdit(0, edit);
+        }
+
+        if (context.preIndexUpdates != null) {
+            for (Map.Entry<HTableInterfaceReference, Mutation> entry
+                    : context.preIndexUpdates.entries()) {
+                if (this.ignoreReplicationFilter.test(entry.getValue())) {
+                    continue;
+                }
+                // This creates cells of family type WALEdit.METAFAMILY which are not applied
+                // on restore
+                edit.add(IndexedKeyValue.newIndexedKeyValue(
+                        entry.getKey().get(), entry.getValue()));
+            }
+        }
+
+        if (context.postIndexUpdates != null) {
+            for (Map.Entry<HTableInterfaceReference, Mutation> entry
+                    : context.postIndexUpdates.entries()) {
+                if (this.ignoreReplicationFilter.test(entry.getValue())) {
+                    continue;
+                }
+                // This creates cells of family type WALEdit.METAFAMILY which are not applied
+                // on restore
+                edit.add(IndexedKeyValue.newIndexedKeyValue(
+                        entry.getKey().get(), entry.getValue()));
+            }
         }
     }
 
@@ -1689,7 +1904,16 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           this.builder.batchCompleted(miniBatchOp);
 
           if (success) { // The pre-index and data table updates are successful, and now, do post index updates
-              doPost(c, context);
+              CompletableFuture<Void> postIndexFuture =
+                      CompletableFuture.runAsync(() -> doPost(c, context));
+              long start = EnvironmentEdgeManager.currentTimeMillis();
+              try {
+                  replicateMutations(miniBatchOp, context);
+              } finally {
+                  long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
+                  metricSource.updateReplicationSyncTime(dataTableName, duration);
+              }
+              FutureUtils.get(postIndexFuture);
           }
        } finally {
            removeBatchMutateContext(c);
@@ -1761,7 +1985,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         }
     }
 
-  private void doPost(ObserverContext<RegionCoprocessorEnvironment> c, BatchMutateContext context) throws IOException {
+  private void doPost(ObserverContext<RegionCoprocessorEnvironment> c, BatchMutateContext context) {
       long start = EnvironmentEdgeManager.currentTimeMillis();
 
       try {
@@ -2230,5 +2454,50 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
      */
     public static boolean isAtomicOperationComplete(OperationStatus status) {
         return status.getOperationStatusCode() == SUCCESS && status.getResult() != null;
+    }
+
+    private void replicateMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp,
+                                    BatchMutateContext context) throws IOException {
+
+        if (!this.shouldReplicate) {
+            return;
+        }
+        if (ignoreSyncReplicationForTesting) {
+            return;
+        }
+        assert this.replicationLog != null;
+
+        for (Integer i = 0; i < miniBatchOp.size(); i++) {
+            Mutation m = miniBatchOp.getOperation(i);
+            if (this.ignoreReplicationFilter.test(m)) {
+                continue;
+            }
+            this.replicationLog.append(this.dataTableName, -1, m);
+            Mutation[] mutationsAddedByCP = miniBatchOp.getOperationsFromCoprocessors(i);
+            if (mutationsAddedByCP != null) {
+                for (Mutation addedMutation : mutationsAddedByCP) {
+                    this.replicationLog.append(this.dataTableName, -1, addedMutation);
+                }
+            }
+        }
+        if (context.preIndexUpdates != null) {
+            for (Map.Entry<HTableInterfaceReference, Mutation> entry
+                    : context.preIndexUpdates.entries()) {
+                if (this.ignoreReplicationFilter.test(entry.getValue())) {
+                    continue;
+                }
+                this.replicationLog.append(entry.getKey().getTableName(), -1, entry.getValue());
+            }
+        }
+        if (context.postIndexUpdates != null) {
+            for (Map.Entry<HTableInterfaceReference, Mutation> entry
+                    : context.postIndexUpdates.entries()) {
+                if (this.ignoreReplicationFilter.test(entry.getValue())) {
+                    continue;
+                }
+                this.replicationLog.append(entry.getKey().getTableName(), -1, entry.getValue());
+            }
+        }
+        this.replicationLog.sync();
     }
 }
