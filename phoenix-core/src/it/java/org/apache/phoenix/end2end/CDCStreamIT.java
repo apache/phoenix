@@ -173,6 +173,7 @@ public class CDCStreamIT extends CDCBaseIT {
         assertStreamStatus(conn, tableName, streamName, CDCUtil.CdcStreamStatus.ENABLING);
     }
 
+    @Test
     public void testStreamMetadataWhenTableIsDropped() throws SQLException {
         Connection conn = newConnection();
         MetaDataClient mdc = new MetaDataClient(conn.unwrap(PhoenixConnection.class));
