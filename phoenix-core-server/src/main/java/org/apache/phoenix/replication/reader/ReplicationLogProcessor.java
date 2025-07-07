@@ -140,7 +140,7 @@ public class ReplicationLogProcessor implements Closeable {
 
     private final MetricsReplicationLogProcessor metrics;
 
-    /** Cache of ReplicationLogGroup instances by HA Group ID */
+    /** Cache of ReplicationLogGroup instances by HA Group Name */
     private static final ConcurrentHashMap<String, ReplicationLogProcessor> INSTANCES =
             new ConcurrentHashMap<>();
 
@@ -159,7 +159,7 @@ public class ReplicationLogProcessor implements Closeable {
     /**
      * Creates a new ReplicationLogProcessor with the given configuration and executor service.
      * @param conf The configuration to use
-     * @param haGroupName The HA group id
+     * @param haGroupName The HA group name
      */
     protected ReplicationLogProcessor(final Configuration conf, final String haGroupName) {
         // Create a copy of configuration as some of the properties would be
