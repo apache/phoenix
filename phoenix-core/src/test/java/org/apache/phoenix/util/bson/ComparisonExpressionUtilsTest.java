@@ -34,11 +34,13 @@ import org.bson.RawBsonDocument;
 import org.junit.Test;
 
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.expression.util.bson.BsonConditionInvalidArgumentException;
 import org.apache.phoenix.expression.util.bson.DocumentComparisonExpressionUtils;
 import org.apache.phoenix.expression.util.bson.SQLComparisonExpressionUtils;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 /**
  * Tests for BSON Condition Expression Utility.
@@ -1568,6 +1570,106 @@ public class ComparisonExpressionUtilsTest {
 
   }
 
+  @Test
+  public void testBeginsWithFunction() {
+    RawBsonDocument rawBsonDocument = getDocumentValue();
+    RawBsonDocument compareValues = getCompareValDocument();
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "begins_with(Title, #Title)", rawBsonDocument, compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "begins_with(ISBN, :ISBN)", rawBsonDocument, compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "begins_with(Title, :TitlePrefix)", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "begins_with(Title, #NestedList1_xyz0123)", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "begins_with(ISBN, #NestedList1_1)", rawBsonDocument, compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "begins_with(NestedMap1.Title, #Title)", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "begins_with(NestedMap1.Title, #NestedList1_xyz0123)", rawBsonDocument, compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "begins_with(NestedMap1.NList1[2], #NestedMap1_NList1_3)", rawBsonDocument,
+            compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "begins_with(NestedMap1.NList1[2], $NestedMap1_NList1_30)", rawBsonDocument,
+            compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "begins_with(NonExistentField, #Title)", rawBsonDocument, compareValues));
+
+    try {
+      SQLComparisonExpressionUtils.evaluateConditionExpression(
+              "begins_with(Id, #Title)", rawBsonDocument, compareValues);
+      fail("Expected BsonConditionInvalidArgumentException");
+    } catch (BsonConditionInvalidArgumentException e) {
+      // expected
+    }
+
+    try {
+      SQLComparisonExpressionUtils.evaluateConditionExpression(
+              "begins_with(Title, #NestedMap1_NList1_3)", rawBsonDocument, compareValues);
+      fail("Expected BsonConditionInvalidArgumentException");
+    } catch (BsonConditionInvalidArgumentException e) {
+      // expected
+    }
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "begins_with(Title, #Title) AND field_exists(Id) = begins_with(Title, #Title)",
+            rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "begins_with(Title, #NestedList1_xyz0123) AND field_exists(Id)", rawBsonDocument,
+            compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "begins_with(Title, #NestedList1_xyz0123) OR field_exists(Id)", rawBsonDocument,
+            compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "begins_with(Title, #Title) OR field_not_exists(Id)", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "NOT begins_with(Title, #Title)", rawBsonDocument, compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "NOT begins_with(Title, #NestedList1_xyz0123)", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "NOT begins_with(Title, #Title)", rawBsonDocument, compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "NOT begins_with(Title, #NestedList1_xyz0123)", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "NOT begins_with(Title, :TitlePrefix)", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "NOT begins_with(NestedMap1.NList1[2], #NestedMap1_NList1_3)", rawBsonDocument,
+            compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "NOT begins_with(NestedMap1.NList1[2], $NestedMap1_NList1_30)", rawBsonDocument,
+            compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "NOT begins_with(Title, #NestedList1_xyz0123) AND field_exists(Id)", rawBsonDocument,
+            compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "NOT begins_with(Title, #Title) OR NOT begins_with(Title, :TitlePrefix)",
+            rawBsonDocument, compareValues));
+  }
+
   private static RawBsonDocument getCompareValDocument() {
     String json = "{\n" +
             "  \"$Id20\" : 101.011,\n" +
@@ -1598,7 +1700,8 @@ public class ComparisonExpressionUtilsTest {
             "  \"#NMap1_NList1\" : \"NListVal01\",\n" +
             "  \"$NestedList1_4850\" : -485.35,\n" +
             "  \"$Id\" : 101.01,\n" +
-            "  \"#Title\" : \"Book 101 Title\"\n" +
+            "  \"#Title\" : \"Book 101 Title\",\n" +
+            "  \":TitlePrefix\" : \"Book\"\n" +
             "}";
     //{
     //  "$Id20" : 101.011,
@@ -1628,7 +1731,8 @@ public class ComparisonExpressionUtilsTest {
     //  "#NMap1_NList1" : "NListVal01",
     //  "$NestedList1_4850" : -485.35,
     //  "$Id" : 101.01,
-    //  "#Title" : "Book 101 Title"
+    //  "#Title" : "Book 101 Title",
+    //  ":TitlePrefix" : "Book"
     //}
     return RawBsonDocument.parse(json);
   }
