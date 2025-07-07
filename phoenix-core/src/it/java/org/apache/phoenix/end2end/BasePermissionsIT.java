@@ -117,6 +117,10 @@ public abstract class BasePermissionsIT extends BaseTest {
             QueryConstants.SYSTEM_SCHEMA_NAME + "." + "\""
                     + PhoenixDatabaseMetaData.SYSTEM_MUTEX_TABLE_NAME + "\"";
 
+    private static final String SYSTEM_CDC_STREAM_IDENTIFIER =
+            QueryConstants.SYSTEM_SCHEMA_NAME + "." + "\""
+                    + PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_TABLE + "\"";
+
     static final Set<String> PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES = new HashSet<>(Arrays.asList(
             "SYSTEM:CATALOG", "SYSTEM:SEQUENCE", "SYSTEM:STATS", "SYSTEM:FUNCTION", "SYSTEM:MUTEX",
             "SYSTEM:CHILD_LINK","SYSTEM:TRANSFORM", "SYSTEM:CDC_STREAM_STATUS", "SYSTEM:CDC_STREAM"));
@@ -1070,6 +1074,7 @@ public abstract class BasePermissionsIT extends BaseTest {
             }
             verifyAllowed(grantPermissions("RWX", user, SYSTEM_SEQUENCE_IDENTIFIER, false), superUser);
             verifyAllowed(grantPermissions("RWX", user, SYSTEM_MUTEX_IDENTIFIER, false), superUser);
+            verifyAllowed(grantPermissions("RWX", user, SYSTEM_CDC_STREAM_IDENTIFIER, false), superUser);
         }
     }
 
@@ -1079,6 +1084,7 @@ public abstract class BasePermissionsIT extends BaseTest {
                 verifyAllowed(revokePermissions(user, QueryConstants.SYSTEM_SCHEMA_NAME, true), superUser);
                 verifyAllowed(revokePermissions(user, SYSTEM_SEQUENCE_IDENTIFIER, false), superUser);
                 verifyAllowed(revokePermissions(user, SYSTEM_MUTEX_IDENTIFIER, false), superUser);
+                verifyAllowed(revokePermissions(user, SYSTEM_CDC_STREAM_IDENTIFIER, false), superUser);
             } else {
                 verifyAllowed(revokePermissions(user, PHOENIX_SYSTEM_TABLES_IDENTIFIERS, false), superUser);
             }

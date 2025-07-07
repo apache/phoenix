@@ -34,6 +34,7 @@ import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
 import static org.apache.phoenix.schema.PTableType.CDC;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_DEFINED;
+import static org.apache.phoenix.schema.PTableType.SYSTEM;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSet;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
 import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
@@ -1247,7 +1248,8 @@ public class MetaDataClient {
                 }
                 // Handle when TTL property is set
                 if (prop.getFirst().equalsIgnoreCase(TTL)
-                        && MetaDataUtil.isTTLSupported(tableType, viewType, tableName)) {
+                        && (tableType != PTableType.SYSTEM
+                                || MetaDataUtil.SYSTEM_TABLES_WITH_TTL_SUPPORTED.contains(tableName))) {
                     tableProps.put(prop.getFirst(), prop.getSecond());
                     if (prop.getSecond() != null) {
                         TTLExpression ttlExpr = MetaDataUtil.convertForeverAndNoneTTLValue(prop.getSecond(), false);
@@ -6586,7 +6588,7 @@ public class MetaDataClient {
             } else if (changePermsStatement.getTableName() != null) {
                 PTable inputTable = connection.getTable(SchemaUtil.
                         normalizeFullTableName(changePermsStatement.getTableName().toString()));
-                if (!(PTableType.TABLE.equals(inputTable.getType()) || PTableType.SYSTEM.equals(inputTable.getType()))) {
+                if (!(PTableType.TABLE.equals(inputTable.getType()) || SYSTEM.equals(inputTable.getType()))) {
                     throw new AccessDeniedException("Cannot GRANT or REVOKE permissions on INDEX TABLES or VIEWS");
                 }
 
