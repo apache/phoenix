@@ -516,7 +516,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           // when the table descriptor changes, the coproc is reloaded
           this.useBloomFilter = bloomFilterType == BloomType.ROW;
           byte[] tableName = env.getRegionInfo().getTable().getName();
-          boolean isSystemTable = SchemaUtil.isSystemTable(tableName);
           this.shouldReplicate = env.getConfiguration().getBoolean(
                   SYNCHRONOUS_REPLICATION_ENABLED, DEFAULT_SYNCHRONOUS_REPLICATION_ENABLED);
           if (this.shouldReplicate) {
