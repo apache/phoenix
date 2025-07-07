@@ -58,6 +58,7 @@ import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
+import org.apache.phoenix.exception.MutationBlockedIOException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.Expression;
@@ -278,6 +279,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         // true, will be null if there is no expression on this column, otherwise false
         // This is only initialized for single row atomic mutation.
         private Map<ColumnReference, Pair<Cell, Boolean>> currColumnCellExprMap;
+        // store old row cells into a map for OLD_ROW return result. This preserves the original
+        // state of the row before any conditional updates are applied.
+        private Map<ColumnReference, Pair<Cell, Boolean>> oldRowColumnCellExprMap;
         // list containing the original mutations from the MiniBatchOperationInProgress. Contains
         // any annotations we were sent by the client, and can be used in hooks that don't get
         // passed MiniBatchOperationInProgress, like preWALAppend()
@@ -290,6 +294,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         private boolean hasLocalIndex;
         private boolean hasTransform;
         private boolean returnResult;
+        private boolean returnOldRow;
         private boolean hasConditionalTTL; // table has Conditional TTL
 
         public BatchMutateContext() {
@@ -540,8 +545,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           final Configuration conf = c.getEnvironment().getConfiguration();
           final HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(conf);
           if (haGroupStoreManager.isMutationBlocked()) {
-              throw new IOException("Blocking Mutation as Some CRRs are in ACTIVE_TO_STANDBY "
-                      + "state and CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
+              throw new MutationBlockedIOException("Blocking Mutation as some CRRs "
+                      + "are in ACTIVE_TO_STANDBY state and "
+                      + "CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
           }
           preBatchMutateWithExceptions(c, miniBatchOp);
           return;
@@ -1316,6 +1322,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             Mutation m = miniBatchOp.getOperation(i);
             if (this.builder.returnResult(m) && miniBatchOp.size() == 1) {
                 context.returnResult = true;
+                byte[] returnResult = m.getAttribute(PhoenixIndexBuilderHelper.RETURN_RESULT);
+                if (returnResult != null && Arrays.equals(returnResult,
+                        PhoenixIndexBuilderHelper.RETURN_RESULT_OLD_ROW)) {
+                    context.returnOldRow = true;
+                }
             }
             if (this.builder.hasConditionalTTL(m)) {
                 context.hasConditionalTTL = true;
@@ -1656,7 +1667,13 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                       List<Cell> cells = new ArrayList<>();
                       cells.add(cell);
 
-                      addCellsIfResultReturned(miniBatchOp, context, cells);
+                      if (!context.returnOldRow) {
+                          addCellsIfResultReturned(miniBatchOp, context.returnResult, cells,
+                                  context.currColumnCellExprMap, false);
+                      } else {
+                          addCellsIfResultReturned(miniBatchOp, context.returnResult, cells,
+                                  context.oldRowColumnCellExprMap, true);
+                      }
 
                       Result result = Result.create(cells);
                       miniBatchOp.setOperationStatus(0,
@@ -1682,28 +1699,32 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
     /**
-     * If the result needs to be returned for the given update operation, identify the updated row
-     * cells and add the input list of cells.
+     * If the result needs to be returned for the given update operation, identify the appropriate
+     * row cells and add them to the input list of cells. The method can return either the updated
+     * row cells (for ROW return type) or the original row cells (for OLD_ROW return type).
      *
      * @param miniBatchOp Batch of mutations getting applied to region.
-     * @param context The BatchMutateContext object shared during coproc hooks execution as part of
-     * the batch mutate life cycle.
+     * @param returnResult Whether the result should be returned to the client.
      * @param cells The list of cells to be returned back to the client.
+     * @param currColumnCellExprMap The map containing column reference to cell mappings. This
+     * can be either the current/updated state (for ROW) or the original state (for OLD_ROW)
+     * depending on the return type requested.
      */
     private static void addCellsIfResultReturned(MiniBatchOperationInProgress<Mutation> miniBatchOp,
-                                                 BatchMutateContext context, List<Cell> cells) {
-        if (context.returnResult) {
-            Map<ColumnReference, Pair<Cell, Boolean>> currColumnCellExprMap =
-                    context.currColumnCellExprMap;
+                                                 boolean returnResult, List<Cell> cells,
+                                                 Map<ColumnReference, Pair<Cell, Boolean>>
+                                                         currColumnCellExprMap,
+                                                 boolean retainOldRow) {
+        if (returnResult) {
             if (currColumnCellExprMap == null) {
                 return;
             }
             Mutation mutation = miniBatchOp.getOperation(0);
-            if (mutation instanceof Put) {
+            if (mutation instanceof Put && !retainOldRow) {
                 updateColumnCellExprMap(mutation, currColumnCellExprMap);
             }
             Mutation[] mutations = miniBatchOp.getOperationsFromCoprocessors(0);
-            if (mutations != null) {
+            if (mutations != null && !retainOldRow) {
                 for (Mutation m : mutations) {
                     updateColumnCellExprMap(m, currColumnCellExprMap);
                 }
@@ -1892,6 +1913,13 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       Pair<Put, Put> dataRowState = context.dataRowStates.get(rowKeyPtr);
       Put currentDataRowState = dataRowState != null ? dataRowState.getFirst() : null;
 
+        // Create separate map for old row data when OLD_ROW is requested
+        // This must be done before any conditional update logic to preserve original state
+        if (context.returnResult && context.returnOldRow && currentDataRowState != null) {
+            context.oldRowColumnCellExprMap = new HashMap<>();
+            updateCurrColumnCellExpr(currentDataRowState, context.oldRowColumnCellExprMap);
+        }
+
         // if result needs to be returned but the DML does not have ON DUPLICATE KEY present,
         // perform the mutation and return the result.
         if (opBytes == null) {
@@ -1917,6 +1945,16 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           }
           return mutations;
       }
+
+        boolean isUpdateOnly = atomicPut.getAttribute(
+                PhoenixIndexBuilderHelper.ATOMIC_OP_UPDATE_ONLY_ATTRIB) != null;
+        if (isUpdateOnly && currentDataRowState == null) {
+            // UPDATE_ONLY: If row doesn't exist, do nothing
+            if (context.returnResult) {
+                context.currColumnCellExprMap = currColumnCellExprMap;
+            }
+            return Collections.emptyList();
+        }
 
       ByteArrayInputStream stream = new ByteArrayInputStream(opBytes);
       DataInputStream input = new DataInputStream(stream);
@@ -2074,6 +2112,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     private static void updateCurrColumnCellExpr(Put put,
                                                  Map<ColumnReference, Pair<Cell, Boolean>>
                                                          currColumnCellExprMap) {
+        if (put == null) {
+            return;
+        }
         for (Map.Entry<byte[], List<Cell>> entry :
                 put.getFamilyCellMap().entrySet()) {
             for (Cell cell : entry.getValue()) {

@@ -36,7 +36,6 @@ import java.sql.RowId;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.SQLXML;
-import java.sql.Statement;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.time.ZoneOffset;
@@ -217,6 +216,28 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
 
     /**
      * Executes the given SQL statement similar to JDBC API executeUpdate() but also returns the
+     * old row (before update) as Result object back to the client. This must be used with
+     * auto-commit Connection. This makes the operation atomic.
+     * Return the old row (state before update) regardless of whether the update is
+     * successful or not.
+     *
+     * @return The pair of int and ResultSet, where int represents value 1 for successful row update
+     * and 0 for non-successful row update, and ResultSet represents the old state of the row.
+     * @throws SQLException If the statement cannot be executed.
+     */
+    // Note: Do Not remove this, it is expected to be used by downstream applications
+    public Pair<Integer, ResultSet> executeAtomicUpdateReturnOldRow() throws SQLException {
+        if (!connection.getAutoCommit()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.AUTO_COMMIT_NOT_ENABLED).build()
+                    .buildException();
+        }
+        preExecuteUpdate();
+        return executeMutation(statement, createAuditQueryLogger(statement, query),
+                MutationState.ReturnResult.OLD_ROW_ALWAYS);
+    }
+
+    /**
+     * Executes the given SQL statement similar to JDBC API executeUpdate() but also returns the
      * updated or non-updated row as Result object back to the client. This must be used with
      * auto-commit Connection. This makes the operation atomic.
      * If the row is successfully updated, return the updated row, otherwise if the row
@@ -226,6 +247,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
      * and 0 for non-successful row update, and ResultSet represents the state of the row.
      * @throws SQLException If the statement cannot be executed.
      */
+    // Note: Do Not remove this, it is expected to be used by downstream applications
     public Pair<Integer, ResultSet> executeAtomicUpdateReturnRow() throws SQLException {
         if (!connection.getAutoCommit()) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.AUTO_COMMIT_NOT_ENABLED).build()
@@ -233,7 +255,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
         }
         preExecuteUpdate();
         return executeMutation(statement, createAuditQueryLogger(statement, query),
-                MutationState.ReturnResult.ROW);
+                MutationState.ReturnResult.NEW_ROW_ON_SUCCESS);
     }
 
     public QueryPlan optimizeQuery() throws SQLException {

@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.PhoenixMasterObserver;
@@ -30,11 +31,13 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -43,6 +46,7 @@ import org.junit.experimental.categories.Category;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixMasterSource;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -167,6 +171,41 @@ public class CDCStreamIT extends CDCBaseIT {
         createCDC(conn, cdc_sql3, null);
         streamName = getStreamName(conn, tableName, cdcName3);
         assertStreamStatus(conn, tableName, streamName, CDCUtil.CdcStreamStatus.ENABLING);
+    }
+
+    public void testStreamMetadataWhenTableIsDropped() throws SQLException {
+        Connection conn = newConnection();
+        MetaDataClient mdc = new MetaDataClient(conn.unwrap(PhoenixConnection.class));
+        String schemaName = "\"" + generateUniqueName().toLowerCase() + "\"";
+        String tableName = SchemaUtil.getTableName(schemaName, "\"" + generateUniqueName().toLowerCase() + "\"");
+        String unescapedFullTableName = SchemaUtil.getUnEscapedFullName(tableName);
+        String create_table_sql = "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER, v2 DATE)";
+        conn.createStatement().execute(create_table_sql);
+        String cdcName = "\"" + generateUniqueName().toLowerCase() + "\"";
+        String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
+        conn.createStatement().execute(cdc_sql);
+        TaskRegionObserver.SelfHealingTask task =
+                new TaskRegionObserver.SelfHealingTask(
+                        taskRegionEnvironment,
+                        QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
+        task.run();
+        String partitionQuery = "SELECT * FROM SYSTEM.CDC_STREAM WHERE TABLE_NAME='" + unescapedFullTableName + "'";
+        ResultSet rs = conn.createStatement().executeQuery(partitionQuery);
+        Assert.assertTrue(rs.next());
+        String drop_table_sql = "DROP TABLE " + tableName;
+        Assert.assertNotNull(mdc.getStreamNameIfCDCEnabled(unescapedFullTableName));
+        // check if stream metadata is cleared when table is dropped
+        conn.createStatement().execute(drop_table_sql);
+        Assert.assertNull(mdc.getStreamNameIfCDCEnabled(unescapedFullTableName));
+        rs = conn.createStatement().executeQuery(partitionQuery);
+        Assert.assertFalse(rs.next());
+        // should be able to re-create same table with same cdc name and metadata should be populated
+        conn.createStatement().execute(create_table_sql);
+        conn.createStatement().execute(cdc_sql);
+        Assert.assertNotNull(mdc.getStreamNameIfCDCEnabled(unescapedFullTableName));
+        task.run();
+        rs = conn.createStatement().executeQuery(partitionQuery);
+        Assert.assertTrue(rs.next());
     }
 
     @Test

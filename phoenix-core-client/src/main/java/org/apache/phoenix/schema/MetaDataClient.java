@@ -24,8 +24,10 @@ import static org.apache.phoenix.exception.SQLExceptionCode.ERROR_WRITING_TO_SCH
 import static org.apache.phoenix.exception.SQLExceptionCode.SALTING_NOT_ALLOWED_FOR_CDC;
 import static org.apache.phoenix.exception.SQLExceptionCode.TABLE_ALREADY_EXIST;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CDC_INCLUDE_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_STATUS_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_STATUS_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL;
 import static org.apache.phoenix.query.QueryConstants.SPLITS_FILE;
@@ -2070,18 +2072,10 @@ public class MetaDataClient {
     private void updateStreamPartitionMetadata(String tableName, String cdcObjName) throws SQLException {
         // create Stream with ENABLING status
         long cdcIndexTimestamp = CDCUtil.getCDCCreationTimestamp(connection.getTable(tableName));
-        String streamStatusSQL = "UPSERT INTO " + SYSTEM_CDC_STREAM_STATUS_NAME + " VALUES (?, ?, ?)";
         String streamName = String.format(CDC_STREAM_NAME_FORMAT,
                 tableName, cdcObjName, cdcIndexTimestamp,
                 CDCUtil.getCDCCreationUTCDateTime(cdcIndexTimestamp));
-        try (PreparedStatement ps = connection.prepareStatement(streamStatusSQL)) {
-            ps.setString(1, tableName);
-            ps.setString(2, streamName);
-            ps.setString(3, CDCUtil.CdcStreamStatus.ENABLING.getSerializedValue());
-            ps.executeUpdate();
-            connection.commit();
-            LOGGER.info("Marked stream {} for table {} as ENABLING", streamName, tableName);
-        }
+        markCDCStreamStatus(tableName, streamName, CDCUtil.CdcStreamStatus.ENABLING);
 
         // insert task to update partition metadata for stream
         try {
@@ -2112,7 +2106,7 @@ public class MetaDataClient {
         }
     }
 
-    private String getStreamNameIfCDCEnabled(String tableName) throws SQLException {
+    public String getStreamNameIfCDCEnabled(String tableName) throws SQLException {
         // check if a stream is already enabled for this table
         String query = "SELECT STREAM_NAME FROM " + SYSTEM_CDC_STREAM_STATUS_NAME
                 + " WHERE TABLE_NAME = ? AND STREAM_STATUS IN (?, ?)";
@@ -4026,18 +4020,10 @@ public class MetaDataClient {
         String indexName = CDCUtil.getCDCIndexName(statement.getCdcObjName().getName());
         // Mark CDC Stream as Disabled
         long cdcIndexTimestamp = connection.getTable(indexName).getTimeStamp();
-        String streamStatusSQL = "UPSERT INTO " + SYSTEM_CDC_STREAM_STATUS_NAME + " VALUES (?, ?, ?)";
         String streamName = String.format(CDC_STREAM_NAME_FORMAT,
                 parentTableName, cdcTableName, cdcIndexTimestamp,
                 CDCUtil.getCDCCreationUTCDateTime(cdcIndexTimestamp));
-        try (PreparedStatement ps = connection.prepareStatement(streamStatusSQL)) {
-            ps.setString(1, parentTableName);
-            ps.setString(2, streamName);
-            ps.setString(3, CDCUtil.CdcStreamStatus.DISABLED.getSerializedValue());
-            ps.executeUpdate();
-            connection.commit();
-            LOGGER.info("Marked stream {} for table {} as DISABLED", streamName, parentTableName);
-        }
+        markCDCStreamStatus(parentTableName, streamName, CDCUtil.CdcStreamStatus.DISABLED);
         // Dropping the virtual CDC Table
         dropTable(schemaName, cdcTableName, parentTableName, PTableType.CDC, statement.ifExists(),
                 false, false);
@@ -4049,6 +4035,35 @@ public class MetaDataClient {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.fromErrorCode(e.getErrorCode()))
                     .setTableName(statement.getCdcObjName().getName()).setRootCause(e.getCause())
                     .build().buildException();
+        }
+    }
+
+    private void deleteAllStreamMetadataForTable(String tableName) throws SQLException {
+        String deleteStreamStatusQuery = "DELETE FROM " + SYSTEM_CDC_STREAM_STATUS_NAME + " WHERE TABLE_NAME = ?";
+        String deleteStreamPartitionsQuery = "DELETE FROM " + SYSTEM_CDC_STREAM_NAME + " WHERE TABLE_NAME = ?";
+        LOGGER.info("Deleting Stream Metadata for table {}", tableName);
+        try (PreparedStatement ps = connection.prepareStatement(deleteStreamStatusQuery)) {
+            ps.setString(1, tableName);
+            ps.executeUpdate();
+            connection.commit();
+        }
+        try (PreparedStatement ps = connection.prepareStatement(deleteStreamPartitionsQuery)) {
+            ps.setString(1, tableName);
+            ps.executeUpdate();
+            connection.commit();
+        }
+    }
+
+    private void markCDCStreamStatus(String tableName, String streamName,
+                                     CDCUtil.CdcStreamStatus status) throws SQLException {
+        String streamStatusSQL = "UPSERT INTO " + SYSTEM_CDC_STREAM_STATUS_NAME + " VALUES (?, ?, ?)";
+        try (PreparedStatement ps = connection.prepareStatement(streamStatusSQL)) {
+            ps.setString(1, tableName);
+            ps.setString(2, streamName);
+            ps.setString(3, status.getSerializedValue());
+            ps.executeUpdate();
+            connection.commit();
+            LOGGER.info("Marked stream {} for table {} as {}", streamName, tableName, status);
         }
     }
 
@@ -4099,6 +4114,9 @@ public class MetaDataClient {
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         try {
             PTable ptable = connection.getTable(fullTableName);
+            if (PTableType.TABLE.equals(ptable.getType()) && CDCUtil.hasCDCIndex(ptable)) {
+                deleteAllStreamMetadataForTable(fullTableName);
+            }
             if (parentTableName != null &&!parentTableName.equals(ptable.getParentTableName().getString())) {
                 throw new SQLExceptionInfo.Builder(PARENT_TABLE_NOT_FOUND)
                         .setSchemaName(schemaName).setTableName(tableName).build().buildException();

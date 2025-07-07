@@ -17,10 +17,12 @@
  */
 package org.apache.phoenix.expression.function;
 
+import java.math.BigDecimal;
+import java.util.Base64;
 import java.util.Date;
 import java.util.List;
 
-import org.apache.phoenix.schema.types.PVarbinaryEncoded;
+import org.apache.phoenix.util.DateUtil;
 import org.bson.BsonBinary;
 import org.bson.BsonBoolean;
 import org.bson.BsonDateTime;
@@ -46,7 +48,7 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PJson;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarbinary;
-//import org.apache.phoenix.schema.types.PVarbinaryEncoded;
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.ByteUtil;
@@ -63,17 +65,22 @@ import org.apache.phoenix.util.ByteUtil;
  * field to be converted to while returning the value.
  */
 @FunctionParseNode.BuiltInFunction(
-    name = BsonValueFunction.NAME,
-    nodeClass = BsonValueParseNode.class,
-    args = {
-        @FunctionParseNode.Argument(allowedTypes = {PJson.class, PBson.class, PVarbinary.class}),
-        @FunctionParseNode.Argument(allowedTypes = {PVarchar.class}, isConstant = true),
-        @FunctionParseNode.Argument(allowedTypes = {PVarchar.class}, isConstant = true),
-    }
+        name = BsonValueFunction.NAME,
+        nodeClass = BsonValueParseNode.class,
+        args = {
+                @FunctionParseNode.Argument(
+                        allowedTypes = {PJson.class, PBson.class, PVarbinary.class}),
+                @FunctionParseNode.Argument(allowedTypes = {PVarchar.class}, isConstant = true),
+                @FunctionParseNode.Argument(allowedTypes = {PVarchar.class}, isConstant = true),
+                @FunctionParseNode.Argument(allowedTypes = {PVarchar.class}, isConstant = true,
+                        defaultValue = BsonValueFunction.DEFAULT_VALUE),
+        }
 )
 public class BsonValueFunction extends ScalarFunction {
 
     public static final String NAME = "BSON_VALUE";
+
+    static final String DEFAULT_VALUE = "null";
 
     public BsonValueFunction() {
         // no-op
@@ -124,7 +131,7 @@ public class BsonValueFunction extends ScalarFunction {
         BsonValue bsonValue =
             CommonComparisonExpressionUtils.getFieldFromDocument(documentFieldKey, rawBsonDocument);
         if (bsonValue == null) {
-            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+            returnDefaultValue(ptr, bsonValueDataType);
             return true;
         }
         if (bsonValueDataType == PVarchar.INSTANCE) {
@@ -164,6 +171,35 @@ public class BsonValueFunction extends ScalarFunction {
                 "The function data type does not match with actual data type");
         }
         return true;
+    }
+
+    private void returnDefaultValue(ImmutableBytesWritable ptr, PDataType<?> bsonValueDataType) {
+        String defaultValue =
+                (String) ((LiteralExpression) getChildren().get(3)).getValue();
+        if (defaultValue == null) {
+            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+        } else {
+            if (bsonValueDataType == PVarchar.INSTANCE) {
+                ptr.set(PVarchar.INSTANCE.toBytes(defaultValue));
+            } else if (bsonValueDataType == PInteger.INSTANCE) {
+                ptr.set(PInteger.INSTANCE.toBytes(Integer.parseInt(defaultValue)));
+            } else if (bsonValueDataType == PLong.INSTANCE) {
+                ptr.set(PLong.INSTANCE.toBytes(Long.parseLong(defaultValue)));
+            } else if (bsonValueDataType == PDouble.INSTANCE) {
+                ptr.set(PDouble.INSTANCE.toBytes(Double.parseDouble(defaultValue)));
+            } else if (bsonValueDataType == PDecimal.INSTANCE) {
+                ptr.set(PDecimal.INSTANCE.toBytes(new BigDecimal(defaultValue)));
+            } else if (bsonValueDataType == PBoolean.INSTANCE) {
+                ptr.set(PBoolean.INSTANCE.toBytes(Boolean.parseBoolean(defaultValue)));
+            } else if (bsonValueDataType == PVarbinary.INSTANCE) {
+                ptr.set(PVarbinary.INSTANCE.toBytes(Base64.getDecoder().decode(defaultValue)));
+            } else if (bsonValueDataType == PVarbinaryEncoded.INSTANCE) {
+                ptr.set(PVarbinaryEncoded.INSTANCE.toBytes(
+                        Base64.getDecoder().decode(defaultValue)));
+            } else if (bsonValueDataType == PDate.INSTANCE) {
+                ptr.set(PDate.INSTANCE.toBytes(DateUtil.parseDate(defaultValue)));
+            }
+        }
     }
 
     @Override

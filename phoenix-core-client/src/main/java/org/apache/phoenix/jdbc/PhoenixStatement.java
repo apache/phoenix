@@ -583,7 +583,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     protected int executeMutation(final CompilableStatement stmt,
                                   final AuditQueryLogger queryLogger) throws SQLException {
         return executeMutation(stmt, true, queryLogger,
-                isResultSetExpected(stmt) ? ReturnResult.ROW : null).getFirst();
+                isResultSetExpected(stmt) ? ReturnResult.NEW_ROW_ON_SUCCESS : null).getFirst();
     }
 
     Pair<Integer, ResultSet> executeMutation(final CompilableStatement stmt,
@@ -626,7 +626,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 isUpsert = stmt instanceof ExecutableUpsertStatement;
                                 isDelete = stmt instanceof ExecutableDeleteStatement;
                                 if (isDelete && connection.getAutoCommit() &&
-                                        returnResult == ReturnResult.ROW) {
+                                        (returnResult == ReturnResult.NEW_ROW_ON_SUCCESS ||
+                                                returnResult == ReturnResult.OLD_ROW_ALWAYS)) {
                                     // used only if single row deletion needs to atomically
                                     // return row that is deleted.
                                     plan = ((ExecutableDeleteStatement) stmt).compilePlan(
@@ -1166,10 +1167,15 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     }
 
     private static class ExecutableUpsertStatement extends UpsertStatement implements CompilableStatement {
-        private ExecutableUpsertStatement(NamedTableNode table, HintNode hintNode, List<ColumnName> columns,
-                List<ParseNode> values, SelectStatement select, int bindCount, Map<String, UDFParseNode> udfParseNodes,
-                List<Pair<ColumnName, ParseNode>> onDupKeyPairs) {
-            super(table, hintNode, columns, values, select, bindCount, udfParseNodes, onDupKeyPairs);
+
+        private ExecutableUpsertStatement(NamedTableNode table, HintNode hintNode,
+                                          List<ColumnName> columns,
+                                          List<ParseNode> values, SelectStatement select,
+                                          int bindCount, Map<String, UDFParseNode> udfParseNodes,
+                                          List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
+                                          OnDuplicateKeyType onDupKeyType) {
+            super(table, hintNode, columns, values, select, bindCount, udfParseNodes, onDupKeyPairs,
+                    onDupKeyType);
         }
 
         @SuppressWarnings("unchecked")
@@ -2039,9 +2045,14 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         }
 
         @Override
-        public ExecutableUpsertStatement upsert(NamedTableNode table, HintNode hintNode, List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount, 
-                Map<String, UDFParseNode> udfParseNodes, List<Pair<ColumnName,ParseNode>> onDupKeyPairs) {
-            return new ExecutableUpsertStatement(table, hintNode, columns, values, select, bindCount, udfParseNodes, onDupKeyPairs);
+        public ExecutableUpsertStatement upsert(NamedTableNode table, HintNode hintNode,
+                                                List<ColumnName> columns, List<ParseNode> values,
+                                                SelectStatement select, int bindCount,
+                                                Map<String, UDFParseNode> udfParseNodes,
+                                                List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
+                                                UpsertStatement.OnDuplicateKeyType onDupKeyType) {
+            return new ExecutableUpsertStatement(table, hintNode, columns, values, select,
+                    bindCount, udfParseNodes, onDupKeyPairs, onDupKeyType);
         }
 
         @Override
@@ -2489,6 +2500,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
      * update and 0 for non-successful row update, and ResultSet represents the state of the row.
      * @throws SQLException If the statement cannot be executed.
      */
+    // Note: Do Not remove this, it is expected to be used by downstream applications
     public Pair<Integer, ResultSet> executeAtomicUpdateReturnRow(String sql) throws SQLException {
         if (!connection.getAutoCommit()) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.AUTO_COMMIT_NOT_ENABLED).build()
@@ -2496,7 +2508,36 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         }
         CompilableStatement stmt = preExecuteUpdate(sql);
         Pair<Integer, ResultSet> result =
-                executeMutation(stmt, createAuditQueryLogger(stmt, sql), ReturnResult.ROW);
+                executeMutation(stmt, createAuditQueryLogger(stmt, sql),
+                        ReturnResult.NEW_ROW_ON_SUCCESS);
+        flushIfNecessary();
+        return result;
+    }
+
+    /**
+     * Executes the given SQL statement similar to JDBC API executeUpdate() but also returns the
+     * old row (before update) as Result object back to the client. This must be used with
+     * auto-commit Connection. This makes the operation atomic.
+     * Return the old row (state before update) regardless of whether the update is
+     * successful or not.
+     *
+     * @param sql The SQL DML statement, UPSERT or DELETE for Phoenix.
+     * @return The pair of int and ResultSet, where int represents value 1 for successful row
+     * update and 0 for non-successful row update, and ResultSet represents the old state of the
+     * row.
+     * @throws SQLException If the statement cannot be executed.
+     */
+    // Note: Do Not remove this, it is expected to be used by downstream applications
+    public Pair<Integer, ResultSet> executeAtomicUpdateReturnOldRow(String sql)
+            throws SQLException {
+        if (!connection.getAutoCommit()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.AUTO_COMMIT_NOT_ENABLED).build()
+                    .buildException();
+        }
+        CompilableStatement stmt = preExecuteUpdate(sql);
+        Pair<Integer, ResultSet> result =
+                executeMutation(stmt, createAuditQueryLogger(stmt, sql),
+                        ReturnResult.OLD_ROW_ALWAYS);
         flushIfNecessary();
         return result;
     }
