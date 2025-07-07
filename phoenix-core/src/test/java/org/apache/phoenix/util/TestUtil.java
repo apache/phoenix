@@ -220,7 +220,7 @@ public class TestUtil {
     public final static String E_VALUE = "e";
     public final static byte[] E = Bytes.toBytes(E_VALUE);
 
-    public final static String ROW1 = "00A123122312312";
+    public final static String ROW1 = "0A123122312312";
     public final static String ROW2 = "00A223122312312";
     public final static String ROW3 = "00A323122312312";
     public final static String ROW4 = "00A423122312312";

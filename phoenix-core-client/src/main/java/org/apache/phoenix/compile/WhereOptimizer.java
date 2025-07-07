@@ -39,6 +39,8 @@ import org.apache.phoenix.expression.OrExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.expression.function.FunctionExpression.OrderPreserving;
+import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
+import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.function.ScalarFunction;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.expression.visitor.StatelessTraverseNoExpressionVisitor;
@@ -64,6 +66,7 @@ import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Iterators;
@@ -1882,6 +1885,97 @@ public class WhereOptimizer {
                 }
             }
             return newKeyParts(childSlot, node, new ArrayList<KeyRange>(ranges));
+        }
+
+        /**
+         * @param node
+         * @return
+         */
+        private boolean prepareForArrayAnyComparisonKeySlots(ArrayAnyComparisonExpression node,
+            List<Expression> keyExpressions) {
+            Expression childExpr = node.getChildren().get(1);
+            if (!(childExpr instanceof ComparisonExpression)) {
+                return false;
+            }
+            ComparisonExpression comparisonExpr = (ComparisonExpression) childExpr;
+            if (comparisonExpr.getFilterOp() != CompareOperator.EQUAL) {
+                return false;
+            }
+            Expression lhs = comparisonExpr.getChildren().get(0);
+            Expression rhs = comparisonExpr.getChildren().get(1);
+            if (lhs instanceof RowKeyColumnExpression && rhs instanceof ArrayElemRefExpression) {
+                ArrayElemRefExpression arrayElemRefExpr = (ArrayElemRefExpression) rhs;
+                if (!(arrayElemRefExpr.getChildren().get(0) instanceof LiteralExpression)) {
+                    return false;
+                }
+                keyExpressions.add(lhs);
+
+            } else if (
+                lhs instanceof ArrayElemRefExpression && rhs instanceof RowKeyColumnExpression
+            ) {
+                ArrayElemRefExpression arrayElemRefExpr = (ArrayElemRefExpression) lhs;
+                if (!(arrayElemRefExpr.getChildren().get(0) instanceof LiteralExpression)) {
+                    return false;
+                }
+                keyExpressions.add(rhs);
+            }
+            return true;
+        }
+
+        @Override
+        public Iterator<Expression> visitEnter(ArrayAnyComparisonExpression node) {
+            ArrayList<Expression> keyExpressions = new ArrayList<>();
+            if (prepareForArrayAnyComparisonKeySlots(node, keyExpressions)) {
+                return keyExpressions.iterator();
+            }
+            return Collections.emptyIterator();
+        }
+
+        @Override
+        public KeySlots visitLeave(ArrayAnyComparisonExpression node, List<KeySlots> childParts) {
+            if (childParts == null || childParts.isEmpty()) {
+                return null;
+            }
+            Expression arrayExpr = node.getChildren().get(0);
+            PhoenixArray arr = (PhoenixArray) ((LiteralExpression) arrayExpr).getValue();
+            int numElements = arr.getDimensions();
+
+            ComparisonExpression comparisonExpr = (ComparisonExpression) node.getChildren().get(1);
+            Expression lhsExpr = comparisonExpr.getChildren().get(0);
+            Expression rhsExpr = comparisonExpr.getChildren().get(1);
+            ArrayElemRefExpression arrayElemRefExpr;
+            if (lhsExpr instanceof ArrayElemRefExpression) {
+                arrayElemRefExpr = (ArrayElemRefExpression) lhsExpr;
+            }
+            else {
+                arrayElemRefExpr = (ArrayElemRefExpression) rhsExpr;
+            }
+
+            KeySlots childSlots = childParts.get(0);
+            KeySlot childSlot = childSlots.getSlots().get(0);
+            KeyPart childPart = childSlot.getKeyPart();
+            PColumn column = childPart.getColumn();
+
+            List<KeyRange> keyRanges = new ArrayList<>();
+            for (int i = 1; i <= numElements; i++) {
+                arrayElemRefExpr.setIndex(i);
+                KeyRange keyRange = null;
+                try {
+                    Expression coerceExpr = CoerceExpression.create(arrayElemRefExpr,
+                        column.getDataType(), column.getSortOrder(), column.getMaxLength());
+                    keyRange = childPart.getKeyRange(CompareOperator.EQUAL, coerceExpr);
+                } catch (SQLException e) {
+                    continue;
+                }
+                if (keyRange == null || keyRange == KeyRange.EMPTY_RANGE) {
+                    continue;
+                }
+                keyRanges.add(keyRange);
+            }
+            if (keyRanges.isEmpty()) {
+                return super.visitLeave(node, childParts);
+            }
+            return newKeyParts(childSlot, node, keyRanges);
         }
 
         @Override
