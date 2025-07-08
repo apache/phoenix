@@ -363,6 +363,9 @@ public interface QueryConstants {
     String CDC_UPSERT_EVENT_TYPE = "upsert";
     String CDC_DELETE_EVENT_TYPE = "delete";
     String SPLITS_FILE = "SPLITS_FILE";
+    String CDC_TTL_DELETE_EVENT_TYPE = "ttl_delete";
+    String CDC_IMAGE_CQ = "_CDC_IMG_";
+    byte[] CDC_IMAGE_CQ_BYTES = Bytes.toBytes(CDC_IMAGE_CQ);
 
     /**
      * We mark counter values 0 to 10 as reserved. Value 0 is used by

@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -82,6 +83,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TTLExpression;
 import org.apache.phoenix.schema.TTLExpressionFactory;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
@@ -150,6 +152,7 @@ public class CompactionScanner implements InternalScanner {
     private final int familyCount;
     private KeepDeletedCells keepDeletedCells;
     private long compactionTime;
+    private byte[] compactionTimeBytes;
     private final byte[] emptyCF;
     private final byte[] emptyCQ;
     private final byte[] storeColumnFamily;
@@ -163,6 +166,9 @@ public class CompactionScanner implements InternalScanner {
     private long outputCellCount = 0;
     private boolean phoenixLevelOnly = false;
     private boolean isCDCIndex;
+    private final boolean isCdcTtlEnabled;
+    private final PTable table;
+    private final int cdcTtlMutationMaxRetries;
 
     // Only for forcing minor compaction while testing
     private static boolean forceMinorCompaction = false;
@@ -184,6 +190,7 @@ public class CompactionScanner implements InternalScanner {
         this.emptyCF = SchemaUtil.getEmptyColumnFamily(table);
         this.emptyCQ = SchemaUtil.getEmptyColumnQualifier(table);
         compactionTime = EnvironmentEdgeManager.currentTimeMillis();
+        compactionTimeBytes = PDate.INSTANCE.toBytes(new Date(compactionTime));
         columnFamilyName = store.getColumnFamilyName();
         storeColumnFamily = columnFamilyName.getBytes();
         tableName = region.getRegionInfo().getTable().getNameAsString();
@@ -205,7 +212,15 @@ public class CompactionScanner implements InternalScanner {
         emptyCFStore = familyCount == 1 || columnFamilyName.equals(Bytes.toString(emptyCF))
                         || localIndex;
 
-        isCDCIndex = table != null ? CDCUtil.isCDCIndex(table) : false;
+        this.table = table;
+        isCDCIndex = CDCUtil.isCDCIndex(table);
+        isCdcTtlEnabled =
+                CDCUtil.hasActiveCDCIndex(table) && major && !table.isMultiTenant()
+                        && table.getType() == PTableType.TABLE;
+        cdcTtlMutationMaxRetries = env.getConfiguration().getInt(
+                QueryServices.CDC_TTL_MUTATION_MAX_RETRIES,
+                QueryServicesOptions.DEFAULT_CDC_TTL_MUTATION_MAX_RETRIES);
+
         // Initialize the tracker that computes the TTL for the compacting table.
         // The TTL tracker can be
         // simple (one single TTL for the table) when the compacting table is not Partitioned
@@ -412,6 +427,11 @@ public class CompactionScanner implements InternalScanner {
         CompiledConditionalTTLExpression ttlExpr =
                 (CompiledConditionalTTLExpression) rowContext.ttlExprForRow;
         if (ttlExpr.isExpired(result, true)) {
+            if (isCdcTtlEnabled && !result.isEmpty()) {
+                CDCCompactionUtil.handleTTLRowExpiration(result, "conditional_ttl", tableName,
+                        compactionTime, table, env, region, compactionTimeBytes,
+                        cdcTtlMutationMaxRetries);
+            }
             // If the row is expired, purge the row
             result.clear();
         }
@@ -2591,6 +2611,12 @@ public class CompactionScanner implements InternalScanner {
             if (major && compactionTime - rowContext.maxTimestamp > maxLookbackInMillis + ttl) {
                 // Only do this check for major compaction as for minor compactions we don't expire cells.
                 // The row version should not be visible via the max lookback window. Nothing to do
+
+                if (isCdcTtlEnabled && !lastRow.isEmpty()) {
+                    CDCCompactionUtil.handleTTLRowExpiration(lastRow, "time_based_ttl", tableName,
+                            compactionTime, table, env, region, compactionTimeBytes,
+                            cdcTtlMutationMaxRetries);
+                }
                 return;
             }
             retainedCells.addAll(lastRow);
@@ -2682,6 +2708,11 @@ public class CompactionScanner implements InternalScanner {
                     // if we should retain it with the store level compaction when the current
                     // store is not the empty column family store.
                     return false;
+                }
+                if (isCdcTtlEnabled && !lastRowVersion.isEmpty()) {
+                    CDCCompactionUtil.handleTTLRowExpiration(lastRowVersion, "max_lookback_ttl",
+                            tableName, compactionTime, table, env, region, compactionTimeBytes,
+                            cdcTtlMutationMaxRetries);
                 }
                 return true;
             }

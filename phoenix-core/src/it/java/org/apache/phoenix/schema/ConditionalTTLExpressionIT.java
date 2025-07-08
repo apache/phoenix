@@ -31,7 +31,6 @@ import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FORE
 import static org.apache.phoenix.util.TestUtil.retainSingleQuotes;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -43,6 +42,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Date;
@@ -55,6 +55,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.CounterGroup;
@@ -66,6 +67,7 @@ import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.mapreduce.index.IndexTool;
+import org.apache.phoenix.query.PhoenixTestBuilder;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.OtherOptions;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TableOptions;
@@ -129,6 +131,8 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
     // map of row-pos -> HBase row-key, used for verification
     private Map<Integer, String> dataRowPosToKey = Maps.newHashMap();
     private Map<Integer, String> indexRowPosToKey = Maps.newHashMap();
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     public ConditionalTTLExpressionIT(boolean columnEncoded,
                                       Integer tableLevelMaxLooback) {
@@ -418,6 +422,193 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             CellCount expectedCellCount = new CellCount();
             expectedCellCount.insertRow(dataRowPosToKey.get(1), 2);
             validateTable(conn, tableName, expectedCellCount, dataRowPosToKey.values());
+        }
+    }
+
+    /**
+     * Tests CDC (Change Data Capture) functionality with TTL (Time To Live) expired rows.
+     * This test validates the complete CDC lifecycle including:
+     */
+    @Test
+    public void testPhoenixRowTimestampWithCdc() throws Exception {
+        int ttl = 50 * 1000;
+        String ttlExpression = String.format(
+                "TO_NUMBER(CURRENT_TIME()) - TO_NUMBER(PHOENIX_ROW_TIMESTAMP()) >= %d", ttl);
+        createTable(ttlExpression);
+        String tableName = schemaBuilder.getEntityTableName();
+        String cdcName = "cdc_" + generateUniqueName();
+        injectEdge();
+        int rowCount = 5;
+        long actual;
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            // Initial Setup - Create CDC index on the table
+            conn.createStatement().execute("CREATE CDC " + cdcName + " ON " + tableName);
+            populateTable(conn, rowCount);
+
+            // Verify initial row count
+            actual = TestUtil.getRowCount(conn, tableName, true);
+            assertEquals("Table should contain all inserted rows", 5, actual);
+
+            // Query initial CDC events (inserts)
+            String cdcQuery = "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " +
+                    PhoenixTestBuilder.DDLDefaults.DEFAULT_SCHEMA_NAME + "." + cdcName;
+
+            ResultSet resultSet = conn.createStatement().executeQuery(cdcQuery);
+            List<Map<String, Object>> postImageList = new ArrayList<>();
+            while (resultSet.next()) {
+                String cdcVal = resultSet.getString(4);
+                Map<String, Object> map = OBJECT_MAPPER.readValue(cdcVal, Map.class);
+
+                // Validate insert events have no pre-image but have post-image
+                Map<String, Object> preImage =
+                        (Map<String, Object>) map.get(QueryConstants.CDC_PRE_IMAGE);
+                assertTrue("Insert events should have empty pre-image", preImage.isEmpty());
+
+                Map<String, Object> postImage =
+                        (Map<String, Object>) map.get(QueryConstants.CDC_POST_IMAGE);
+                assertFalse("Insert events should have non-empty post-image", postImage.isEmpty());
+                postImageList.add(postImage);
+
+                assertEquals("Initial events should be UPSERT type",
+                        QueryConstants.CDC_UPSERT_EVENT_TYPE,
+                        map.get(QueryConstants.CDC_EVENT_TYPE));
+            }
+            assertEquals("Post image list size should be 5 but it is " + postImageList.size(), 5,
+                    postImageList.size());
+
+            // TTL Expiration - Advance time to trigger TTL expiration
+            injectEdge.incrementValue(ttl);
+            doMajorCompaction(tableName);
+
+            // Verify all rows are expired from data table
+            actual = TestUtil.getRowCount(conn, tableName, true);
+            assertEquals("All rows should be expired after TTL", 0, actual);
+
+            // TTL CDC Events - Validate TTL_DELETE events are generated
+            resultSet = conn.createStatement().executeQuery(cdcQuery);
+            int i = 0;
+            while (resultSet.next()) {
+                String cdcVal = resultSet.getString(4);
+                Map<String, Object> map = OBJECT_MAPPER.readValue(cdcVal, Map.class);
+
+                // Validate TTL delete events
+                assertEquals("TTL expired rows should generate TTL_DELETE events",
+                        QueryConstants.CDC_TTL_DELETE_EVENT_TYPE,
+                        map.get(QueryConstants.CDC_EVENT_TYPE));
+
+                Map<String, Object> preImage =
+                        (Map<String, Object>) map.get(QueryConstants.CDC_PRE_IMAGE);
+                assertFalse("TTL_DELETE events should have non-empty pre-image",
+                        preImage.isEmpty());
+
+                Map<String, Object> postImage =
+                        (Map<String, Object>) map.get(QueryConstants.CDC_POST_IMAGE);
+                assertTrue("TTL_DELETE events should have empty post-image", postImage.isEmpty());
+
+                // TTL delete pre-image should match previous upsert post-image
+                assertEquals("TTL_DELETE pre-image should match original insert post-image",
+                        postImageList.get(i), preImage);
+                i++;
+            }
+            assertEquals("Num of TTL_DELETE events verified should be 5 but it is " + i, 5, i);
+
+            // Update an expired row to bring it back
+            injectEdge.incrementValue(1);
+            long currentTime = injectEdge.currentTime();
+            updateColumn(conn, 1, "VAL4", currentTime);
+
+            // Verify the row
+            actual = TestUtil.getRowCount(conn, tableName, true);
+            assertEquals("Only one row should be resurrected after update", 1, actual);
+
+            // Verify resurrected row has only updated column visible
+            try (ResultSet rs = readRow(conn, 1)) {
+                assertTrue("Resurrected row should exist", rs.next());
+                for (String col : COLUMNS) {
+                    if (!col.equals("VAL4")) {
+                        assertNull("Non-updated columns should be null in resurrected row",
+                                rs.getObject(col));
+                    } else {
+                        assertEquals("Updated column should have new timestamp",
+                                currentTime, rs.getTimestamp("VAL4").getTime());
+                    }
+                }
+            }
+
+            // Advance time beyond max lookback window
+            injectEdge.incrementValue(tableLevelMaxLookback * 1000L + 2);
+            doMajorCompaction(tableName);
+            CellCount expectedCellCount = new CellCount();
+            expectedCellCount.insertRow(dataRowPosToKey.get(1), 2);
+            validateTable(conn, tableName, expectedCellCount, dataRowPosToKey.values());
+
+            // Query CDC events
+            cdcQuery = "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " +
+                    PhoenixTestBuilder.DDLDefaults.DEFAULT_SCHEMA_NAME + "." + cdcName
+                    + " WHERE PHOENIX_ROW_TIMESTAMP() >= ?";
+            PreparedStatement ps = conn.prepareStatement(cdcQuery);
+            ps.setTimestamp(1, new Timestamp(currentTime));
+            resultSet = ps.executeQuery();
+            postImageList = new ArrayList<>();
+            while (resultSet.next()) {
+                String cdcVal = resultSet.getString(4);
+                Map<String, Object> map = OBJECT_MAPPER.readValue(cdcVal, Map.class);
+
+                assertEquals("Resurrection event should be UPSERT type",
+                        QueryConstants.CDC_UPSERT_EVENT_TYPE,
+                        map.get(QueryConstants.CDC_EVENT_TYPE));
+
+                Map<String, Object> preImage =
+                        (Map<String, Object>) map.get(QueryConstants.CDC_PRE_IMAGE);
+                assertTrue("Resurrection event should have empty pre-image", preImage.isEmpty());
+
+                Map<String, Object> postImage =
+                        (Map<String, Object>) map.get(QueryConstants.CDC_POST_IMAGE);
+                assertFalse("Resurrection event should have non-empty post-image",
+                        postImage.isEmpty());
+                postImageList.add(postImage);
+            }
+            assertEquals("Post image list size should be 5 but it is " + postImageList.size(), 1,
+                    postImageList.size());
+
+            // Trigger TTL expiration again
+            injectEdge.incrementValue(ttl);
+            doMajorCompaction(tableName);
+
+            // Verify all rows are expired from data table
+            actual = TestUtil.getRowCount(conn, tableName, true);
+            assertEquals("All rows should be expired after TTL", 0, actual);
+
+            expectedCellCount = new CellCount();
+            validateTable(conn, tableName, expectedCellCount, dataRowPosToKey.values());
+
+            // Validate second round of TTL_DELETE events
+            ps = conn.prepareStatement(cdcQuery);
+            ps.setTimestamp(1, new Timestamp(currentTime));
+            resultSet = ps.executeQuery();
+            i = 0;
+            while (resultSet.next()) {
+                String cdcVal = resultSet.getString(4);
+                Map<String, Object> map = OBJECT_MAPPER.readValue(cdcVal, Map.class);
+
+                assertEquals("Second TTL expiration should generate TTL_DELETE events",
+                        QueryConstants.CDC_TTL_DELETE_EVENT_TYPE,
+                        map.get(QueryConstants.CDC_EVENT_TYPE));
+
+                Map<String, Object> preImage =
+                        (Map<String, Object>) map.get(QueryConstants.CDC_PRE_IMAGE);
+                assertFalse("Second TTL_DELETE should have non-empty pre-image",
+                        preImage.isEmpty());
+
+                Map<String, Object> postImage =
+                        (Map<String, Object>) map.get(QueryConstants.CDC_POST_IMAGE);
+                assertTrue("Second TTL_DELETE should have empty post-image", postImage.isEmpty());
+
+                assertEquals("Second TTL_DELETE pre-image should match resurrection post-image",
+                        postImageList.get(i), preImage);
+                i++;
+            }
+            assertEquals("Num of TTL_DELETE events verified should be 5 but it is " + i, 1, i);
         }
     }
 
