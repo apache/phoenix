@@ -186,6 +186,27 @@ public class Bson1IT extends ParallelStatsDisabledIT {
       assertEquals(bsonDocument2, document2);
 
       assertFalse(rs.next());
+
+      conditionExpression =
+              "NestedList1[0] <= :NestedList1_485 AND NestedList1[2][0] >= :NestedList1_xyz0123 "
+                      + "AND NestedList1[2][1].Id < :Id1 AND IdS < :Ids1 AND Id2 > :Id2 "
+                      + "AND begins_with(Title, :TitlePrefix)";
+
+      conditionDoc = new BsonDocument();
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", compareValuesDocument);
+
+      query = "SELECT * FROM " + tableName + " WHERE BSON_CONDITION_EXPRESSION(COL, '"
+          + conditionDoc.toJson() + "')";
+      rs = conn.createStatement().executeQuery(query);
+
+      assertTrue(rs.next());
+      assertEquals("pk0002", rs.getString(1));
+      assertEquals(4596.354, rs.getDouble(2), 0.0);
+      document2 = (BsonDocument) rs.getObject(3);
+      assertEquals(bsonDocument2, document2);
+
+      assertFalse(rs.next());
     }
   }
 
@@ -194,6 +215,7 @@ public class Bson1IT extends ParallelStatsDisabledIT {
             "  \":NestedList1_485\" : -485.33,\n" +
             "  \":ISBN\" : \"111-1111111111\",\n" +
             "  \":Title\" : \"Book 101 Title\",\n" +
+            "  \":TitlePrefix\" : \"Book \",\n" +
             "  \":Id\" : 101.01,\n" +
             "  \":Id2\" : 12,\n" +
             "  \":Id1\" : 120,\n" +

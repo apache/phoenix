@@ -440,6 +440,9 @@ public interface QueryServices extends SQLCloseable {
     String CONNECTION_QUERY_SERVICE_HISTOGRAM_SIZE_RANGES =
             "phoenix.conn.query.service.histogram.size.ranges";
 
+    // CDC TTL mutation retry configuration
+    String CDC_TTL_MUTATION_MAX_RETRIES = "phoenix.cdc.ttl.mutation.max.retries";
+
     // This config is used to move (copy and delete) the child links from the SYSTEM.CATALOG to SYSTEM.CHILD_LINK table.
     // As opposed to a copy and async (out of band) delete.
     public static final String MOVE_CHILD_LINKS_DURING_UPGRADE_ENABLED = "phoenix.move.child_link.during.upgrade";

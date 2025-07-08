@@ -15,33 +15,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.phoenix.compat.hbase;
 
-package org.apache.phoenix.hbase.index.covered.filter;
+import com.google.protobuf.ByteString;
 
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.filter.FilterBase;
+// This has different signature in the HBase 2 and 3 modules
+// This only comes together after the maven-replacer plugin relocates all protobuf code.
+public class ByteStringer {
 
-/**
- * Server-side only class used in the indexer to filter out keyvalues newer than a given timestamp
- * (so allows anything {@code <= } timestamp through).
- * <p>
- */
-public class NewerTimestampFilter extends FilterBase {
+    private ByteStringer() { }
 
-  private long timestamp;
-
-  public NewerTimestampFilter(long timestamp) {
-    this.timestamp = timestamp;
-  }
-
-  // No @Override for HBase 3 compatibility
-  public ReturnCode filterKeyValue(Cell ignored) {
-    return this.filterCell(ignored);
-  }
-
-  @Override
-  public ReturnCode filterCell(Cell ignored) {
-    return ignored.getTimestamp() > timestamp ? ReturnCode.SKIP : ReturnCode.INCLUDE;
-  }
-
+    public static ByteString wrap(final byte[] array) {
+        return org.apache.hadoop.hbase.util.ByteStringer.wrap(array);
+    }
 }

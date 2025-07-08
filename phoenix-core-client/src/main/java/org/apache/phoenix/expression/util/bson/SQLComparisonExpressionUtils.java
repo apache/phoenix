@@ -21,6 +21,7 @@ package org.apache.phoenix.expression.util.bson;
 import org.apache.phoenix.parse.AndParseNode;
 import org.apache.phoenix.parse.BetweenParseNode;
 import org.apache.phoenix.parse.DocumentFieldExistsParseNode;
+import org.apache.phoenix.parse.DocumentFieldBeginsWithParseNode;
 import org.apache.phoenix.parse.BsonExpressionParser;
 import org.apache.phoenix.parse.EqualParseNode;
 import org.apache.phoenix.parse.GreaterThanOrEqualParseNode;
@@ -44,6 +45,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.IntStream;
 
 /**
  * SQL style condition expression evaluation support.
@@ -164,6 +166,17 @@ public final class SQLComparisonExpressionUtils {
       String fieldName = (String) fieldKey.getValue();
       fieldName = replaceExpressionFieldNames(fieldName, keyAliasDocument, sortedKeyNames);
       return documentFieldExistsParseNode.isExists() == exists(fieldName, rawBsonDocument);
+    } else if (parseNode instanceof DocumentFieldBeginsWithParseNode) {
+      final DocumentFieldBeginsWithParseNode documentFieldBeginsWithParseNode =
+              (DocumentFieldBeginsWithParseNode) parseNode;
+      final LiteralParseNode fieldKey =
+              (LiteralParseNode) documentFieldBeginsWithParseNode.getFieldKey();
+      final LiteralParseNode value =
+              (LiteralParseNode) documentFieldBeginsWithParseNode.getValue();
+      String fieldName = (String) fieldKey.getValue();
+      fieldName = replaceExpressionFieldNames(fieldName, keyAliasDocument, sortedKeyNames);
+      final String prefixValue = (String) value.getValue();
+      return beginsWith(fieldName, prefixValue, rawBsonDocument, comparisonValuesDocument);
     } else if (parseNode instanceof EqualParseNode) {
       final EqualParseNode equalParseNode = (EqualParseNode) parseNode;
       final LiteralParseNode lhs = (LiteralParseNode) equalParseNode.getLHS();
@@ -512,6 +525,52 @@ public final class SQLComparisonExpressionUtils {
     return compare(fieldKey, expectedFieldValue,
             CommonComparisonExpressionUtils.CompareOp.EQUALS, rawBsonDocument,
             comparisonValuesDocument);
+  }
+
+  /**
+   * Returns true if the value of the field begins with the prefix value represented by
+   * {@code prefixValue}. The comparison supports String and Binary data types only.
+   * For other data types, throws BsonConditionInvalidArgumentException.
+   *
+   * @param fieldKey The field key for which value is checked for prefix.
+   * @param prefixValue The prefix value to check against the field value.
+   * @param rawBsonDocument Bson Document representing the cell value on which the comparison is
+   * to be performed.
+   * @param comparisonValuesDocument Bson Document with values placeholder.
+   * @return True if the value of the field begins with prefixValue.
+   * @throws BsonConditionInvalidArgumentException if unsupported data types are used.
+   */
+  private static boolean beginsWith(final String fieldKey, final String prefixValue,
+                                    final RawBsonDocument rawBsonDocument,
+                                    final BsonDocument comparisonValuesDocument)
+          throws BsonConditionInvalidArgumentException {
+    BsonValue topLevelValue = rawBsonDocument.get(fieldKey);
+    BsonValue fieldValue = topLevelValue != null ?
+            topLevelValue :
+            CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, rawBsonDocument);
+    if (fieldValue == null) {
+      return false;
+    }
+    BsonValue prefixBsonValue = comparisonValuesDocument.get(prefixValue);
+    if (prefixBsonValue == null) {
+      return false;
+    }
+    if (fieldValue.isString() && prefixBsonValue.isString()) {
+      String fieldStr = ((BsonString) fieldValue).getValue();
+      String prefixStr = ((BsonString) prefixBsonValue).getValue();
+      return fieldStr.startsWith(prefixStr);
+    } else if (fieldValue.isBinary() && prefixBsonValue.isBinary()) {
+      byte[] fieldBytes = fieldValue.asBinary().getData();
+      byte[] prefixBytes = prefixBsonValue.asBinary().getData();
+      if (prefixBytes.length > fieldBytes.length) {
+        return false;
+      }
+      return IntStream.range(0, prefixBytes.length)
+              .noneMatch(i -> fieldBytes[i] != prefixBytes[i]);
+    } else {
+      throw new BsonConditionInvalidArgumentException(
+              "begins_with function only supports String and Binary data types.");
+    }
   }
 
 }

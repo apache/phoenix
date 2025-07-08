@@ -156,6 +156,31 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testAlterTableWithBSONKey() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+
+        String ddl = "CREATE TABLE  " + dataTableFullName +
+            "  (a_string varchar not null, a_bson BSON not null, col1 integer" +
+            "  CONSTRAINT pk PRIMARY KEY (a_string, a_bson)) " + tableDDLOptions;
+        createTestTable(getUrl(), ddl);
+
+        conn.createStatement().execute("ALTER TABLE " + dataTableFullName + " SET DISABLE_WAL = true");
+
+        try {
+            ddl = "ALTER TABLE " + dataTableFullName + " ADD b_string VARCHAR NULL PRIMARY KEY";
+            PreparedStatement stmt = conn.prepareStatement(ddl);
+            stmt.execute();
+            fail("Should have caught bad alter.");
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.BSON_LAST_PK.getErrorCode(), e.getErrorCode());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
     public void testDropSystemTable() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
