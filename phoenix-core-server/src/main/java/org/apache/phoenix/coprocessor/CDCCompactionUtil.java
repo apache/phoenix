@@ -75,7 +75,7 @@ public final class CDCCompactionUtil {
      * @param cell      The cell
      * @return The column name or null if not found
      */
-    static String findColumnName(PTable dataTable, Cell cell) {
+    private static String findColumnName(PTable dataTable, Cell cell) {
         try {
             byte[] family = CellUtil.cloneFamily(cell);
             byte[] qualifier = CellUtil.cloneQualifier(cell);
@@ -109,8 +109,8 @@ public final class CDCCompactionUtil {
      * @param preImage      Pre-image map
      * @return CDC event map
      */
-    static Map<String, Object> createTTLDeleteCDCEvent(Put expiredRowPut, PTable dataTable,
-                                                       Map<String, Object> preImage)
+    private static Map<String, Object> createTTLDeleteCDCEvent(Put expiredRowPut, PTable dataTable,
+                                                               Map<String, Object> preImage)
             throws Exception {
         Map<String, Object> cdcEvent = new HashMap<>();
         cdcEvent.put(QueryConstants.CDC_EVENT_TYPE, QueryConstants.CDC_TTL_DELETE_EVENT_TYPE);
@@ -147,10 +147,10 @@ public final class CDCCompactionUtil {
      * @param compactionTimeBytes The compaction time as bytes
      * @return The CDC index Put mutation
      */
-    static Put buildCDCIndexPut(PTable cdcIndex, Put expiredRowPut, long eventTimestamp,
-                                byte[] cdcEventBytes, PTable dataTable,
-                                RegionCoprocessorEnvironment env, Region region,
-                                byte[] compactionTimeBytes) throws Exception {
+    private static Put buildCDCIndexPut(PTable cdcIndex, Put expiredRowPut, long eventTimestamp,
+                                        byte[] cdcEventBytes, PTable dataTable,
+                                        RegionCoprocessorEnvironment env, Region region,
+                                        byte[] compactionTimeBytes) throws Exception {
 
         try (PhoenixConnection serverConnection = QueryUtil.getConnectionOnServer(new Properties(),
                 env.getConfiguration()).unwrap(PhoenixConnection.class)) {
@@ -205,12 +205,12 @@ public final class CDCCompactionUtil {
      * @param compactionTimeBytes      The compaction time as bytes
      * @param cdcTtlMutationMaxRetries Maximum retry attempts for CDC mutations
      */
-    static void generateCDCIndexMutation(PTable cdcIndex, PTable dataTable,
-                                         Put expiredRowPut,
-                                         long eventTimestamp, String tableName,
-                                         RegionCoprocessorEnvironment env, Region region,
-                                         byte[] compactionTimeBytes,
-                                         int cdcTtlMutationMaxRetries)
+    private static void generateCDCIndexMutation(PTable cdcIndex, PTable dataTable,
+                                                 Put expiredRowPut,
+                                                 long eventTimestamp, String tableName,
+                                                 RegionCoprocessorEnvironment env, Region region,
+                                                 byte[] compactionTimeBytes,
+                                                 int cdcTtlMutationMaxRetries)
             throws Exception {
         Map<String, Object> cdcEvent =
                 createTTLDeleteCDCEvent(expiredRowPut, dataTable, new HashMap<>());
@@ -319,11 +319,11 @@ public final class CDCCompactionUtil {
      * @param compactionTimeBytes      The compaction time as bytes
      * @param cdcTtlMutationMaxRetries Maximum retry attempts for CDC mutations
      */
-    static void generateCDCTTLDeleteEvent(List<Cell> expiredRow, String tableName,
-                                          long compactionTime, PTable dataTable,
-                                          RegionCoprocessorEnvironment env, Region region,
-                                          byte[] compactionTimeBytes,
-                                          int cdcTtlMutationMaxRetries) {
+    private static void generateCDCTTLDeleteEvent(List<Cell> expiredRow, String tableName,
+                                                  long compactionTime, PTable dataTable,
+                                                  RegionCoprocessorEnvironment env, Region region,
+                                                  byte[] compactionTimeBytes,
+                                                  int cdcTtlMutationMaxRetries) {
         try {
             PTable cdcIndex = CDCUtil.getActiveCDCIndex(dataTable);
             if (cdcIndex == null) {
