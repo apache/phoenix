@@ -15,36 +15,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.filter;
+package org.apache.phoenix.compat.hbase;
 
 import java.io.IOException;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.filter.FilterBase;
 
-/**
- * This filter overrides the behavior of delegate so that we do not jump to the next
- * column as soon as we find a value for a column but rather include all versions which is
- * needed for rebuilds.
- */
-public class AllVersionsIndexRebuildFilter extends DelegateFilter {
+public abstract class CompatPagingFilter extends FilterBase {
+    protected Filter delegate = null;
 
-    public AllVersionsIndexRebuildFilter(Filter originalFilter) {
-        super(originalFilter);
-    }
-
-    // No @Override for HBase 3 compatibility
-    public ReturnCode filterKeyValue(Cell v) throws IOException {
-        return filterCell(v);
+    public CompatPagingFilter(Filter delegate) {
+        this.delegate = delegate;
     }
 
     @Override
-    public ReturnCode filterCell(Cell v) throws IOException {
-        ReturnCode delegateCode = super.filterCell(v);
-        if (delegateCode == ReturnCode.INCLUDE_AND_NEXT_COL) {
-            return ReturnCode.INCLUDE;
-        } else {
-            return delegateCode;
+    public ReturnCode filterKeyValue(Cell v) throws IOException {
+
+        if (delegate != null) {
+            return delegate.filterKeyValue(v);
         }
+        return super.filterKeyValue(v);
     }
 }

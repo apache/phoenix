@@ -16,32 +16,8 @@
  * limitations under the License.
  */
 
-package org.apache.phoenix.hbase.index.covered.filter;
-
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.filter.FilterBase;
-
 /**
- * Server-side only class used in the indexer to filter out keyvalues newer than a given timestamp
- * (so allows anything {@code <= } timestamp through).
- * <p>
+ * This package contains compatibility classes for bridging differences
+ * between different versions of HBase.
  */
-public class NewerTimestampFilter extends FilterBase {
-
-  private long timestamp;
-
-  public NewerTimestampFilter(long timestamp) {
-    this.timestamp = timestamp;
-  }
-
-  // No @Override for HBase 3 compatibility
-  public ReturnCode filterKeyValue(Cell ignored) {
-    return this.filterCell(ignored);
-  }
-
-  @Override
-  public ReturnCode filterCell(Cell ignored) {
-    return ignored.getTimestamp() > timestamp ? ReturnCode.SKIP : ReturnCode.INCLUDE;
-  }
-
-}
+package org.apache.phoenix.compat.hbase;
