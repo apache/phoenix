@@ -149,4 +149,8 @@ public class CDCChangeBuilder {
         return (cell.getTimestamp() < changeTimestamp &&
                 cell.getTimestamp() > lastDeletedTimestamp) ? true : false;
     }
+
+    public boolean isPreImageInScope() {
+        return isPreImageInScope;
+    }
 }
