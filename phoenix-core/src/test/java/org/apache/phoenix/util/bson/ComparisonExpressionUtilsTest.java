@@ -1607,17 +1607,12 @@ public class ComparisonExpressionUtilsTest {
     assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
             "begins_with(NonExistentField, #Title)", rawBsonDocument, compareValues));
 
-    try {
-      SQLComparisonExpressionUtils.evaluateConditionExpression(
-              "begins_with(Id, #Title)", rawBsonDocument, compareValues);
-      fail("Expected BsonConditionInvalidArgumentException");
-    } catch (BsonConditionInvalidArgumentException e) {
-      // expected
-    }
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "begins_with(Id, #Title)", rawBsonDocument, compareValues));
 
     try {
       SQLComparisonExpressionUtils.evaluateConditionExpression(
-              "begins_with(Title, #NestedMap1_NList1_3)", rawBsonDocument, compareValues);
+              "begins_with(Title, :1)", rawBsonDocument, compareValues);
       fail("Expected BsonConditionInvalidArgumentException");
     } catch (BsonConditionInvalidArgumentException e) {
       // expected
@@ -1677,7 +1672,7 @@ public class ComparisonExpressionUtilsTest {
             "  \"#NestedList1_10\" : \"1234abce\",\n" +
             "  \"$Id1\" : 120,\n" +
             "  \"$Id10\" : 101,\n" +
-            "  \":>\" : 100,\n " +
+            "  \":1\" : 100,\n " +
             "  \"$Ids1\" : \"12\",\n" +
             "  \":ISBN\" : \"111-1111111111\",\n" +
             "  \"#NestedList1_xyz0123\" : \"xyz0123\",\n" +

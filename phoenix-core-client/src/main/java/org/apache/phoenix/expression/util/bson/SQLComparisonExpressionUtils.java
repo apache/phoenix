@@ -555,6 +555,10 @@ public final class SQLComparisonExpressionUtils {
     if (prefixBsonValue == null) {
       return false;
     }
+    if (!prefixBsonValue.isString() && !prefixBsonValue.isBinary()) {
+      throw new BsonConditionInvalidArgumentException(
+              "begins_with function only supports String and Binary data types.");
+    }
     if (fieldValue.isString() && prefixBsonValue.isString()) {
       String fieldStr = ((BsonString) fieldValue).getValue();
       String prefixStr = ((BsonString) prefixBsonValue).getValue();
@@ -568,8 +572,7 @@ public final class SQLComparisonExpressionUtils {
       return IntStream.range(0, prefixBytes.length)
               .noneMatch(i -> fieldBytes[i] != prefixBytes[i]);
     } else {
-      throw new BsonConditionInvalidArgumentException(
-              "begins_with function only supports String and Binary data types.");
+      return false;
     }
   }
 
