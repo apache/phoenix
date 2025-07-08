@@ -298,6 +298,11 @@ public class ParseNodeFactory {
         return new DocumentFieldExistsParseNode(fieldName, exists);
     }
 
+    public DocumentFieldBeginsWithParseNode documentFieldBeginsWith(ParseNode fieldKey,
+                                                                    ParseNode value) {
+        return new DocumentFieldBeginsWithParseNode(fieldKey, value);
+    }
+
     public ColumnDef columnDef(ColumnName columnDefName, String sqlTypeName,
                                boolean isArray, Integer arrSize, Boolean isNull,
                                Integer maxLength, Integer scale, boolean isPK,

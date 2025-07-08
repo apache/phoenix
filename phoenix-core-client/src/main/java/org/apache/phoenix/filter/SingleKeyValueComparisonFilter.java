@@ -71,7 +71,7 @@ public abstract class SingleKeyValueComparisonFilter extends BooleanExpressionFi
         return inputTuple.size() > 0;
     }
 
-    @Override
+    // No @Override for HBase 3 compatibility
     public ReturnCode filterKeyValue(Cell keyValue) {
         return filterCell(keyValue);
     }

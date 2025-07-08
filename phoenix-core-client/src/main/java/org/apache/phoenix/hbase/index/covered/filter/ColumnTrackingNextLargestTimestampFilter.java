@@ -47,7 +47,7 @@ public class ColumnTrackingNextLargestTimestampFilter extends FilterBase {
     this.column = toTrack;
   }
 
-  @Override
+  // No @Override for HBase 3 compatibility
   public ReturnCode filterKeyValue(Cell v) {
     return this.filterCell(v);
   }
