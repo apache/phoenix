@@ -67,6 +67,17 @@ public class ReplicationLogProcessor implements Closeable {
     public static final int DEFAULT_REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE = 6400;
 
     /**
+     * The maximum total size of mutations to process in single batch while reading replication log file
+     */
+    public static final String REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE_BYTES =
+            "phoenix.replication.log.standby.replay.batch.size.bytes";
+
+    /**
+     * The default batch size in bytes for reading the replication log file (64 MB)
+     */
+    public static final long DEFAULT_REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE_BYTES = 64 * 1024 * 1024L;
+
+    /**
      * The number of threads to apply mutations via async hbase client
      */
     public static final String REPLICATION_STANDBY_LOG_REPLAY_THREAD_POOL_SIZE =
@@ -134,6 +145,8 @@ public class ReplicationLogProcessor implements Closeable {
 
     private final int batchSize;
 
+    private final long batchSizeBytes;
+
     private final int batchRetryCount;
 
     private final long maxRetryDelayMs;
@@ -168,6 +181,8 @@ public class ReplicationLogProcessor implements Closeable {
         this.haGroupName = haGroupName;
         this.batchSize = this.conf.getInt(REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE,
                 DEFAULT_REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE);
+        this.batchSizeBytes = this.conf.getLong(REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE_BYTES,
+                DEFAULT_REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE_BYTES);
         this.batchRetryCount = this.conf.getInt(REPLICATION_STANDBY_BATCH_RETRY_COUNT,
                 DEFAULT_REPLICATION_STANDBY_BATCH_RETRY_COUNT);
         this.maxRetryDelayMs = this.conf.getLong(REPLICATION_STANDBY_BATCH_RETRY_MAX_DELAY_MS,
@@ -207,6 +222,9 @@ public class ReplicationLogProcessor implements Closeable {
         // {@link REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE}
         long currentBatchSize = 0;
 
+        // Track the current batch size in bytes
+        long currentBatchSizeBytes = 0;
+
         LogFileReader logFileReader = null;
 
         long startTime = System.currentTimeMillis();
@@ -221,15 +239,18 @@ public class ReplicationLogProcessor implements Closeable {
 
                 tableToMutationsMap.computeIfAbsent(tableName, k -> new ArrayList<>())
                         .add(mutation);
-                currentBatchSize++;
 
-                // Process when we reach the batch size and reset the batch size and
-                // table to mutations map
-                if (currentBatchSize >= getBatchSize()) {
+                // Increment current batch size and current batch size bytes
+                currentBatchSize++;
+                currentBatchSizeBytes += mutation.heapSize();
+
+                // Process when we reach either the batch count or size limit
+                if (currentBatchSize >= getBatchSize() || currentBatchSizeBytes >= getBatchSizeBytes()) {
                     processReplicationLogBatch(tableToMutationsMap);
                     totalProcessed += currentBatchSize;
                     tableToMutationsMap.clear();
                     currentBatchSize = 0;
+                    currentBatchSizeBytes = 0;
                 }
             }
 
@@ -469,6 +490,10 @@ public class ReplicationLogProcessor implements Closeable {
         return this.batchSize;
     }
 
+    public long getBatchSizeBytes() {
+        return this.batchSizeBytes;
+    }
+
     public int getHBaseClientRetriesCount() {
         return this.conf.getInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
                 DEFAULT_REPLICATION_STANDBY_HBASE_CLIENT_RETRIES_COUNT);
@@ -502,10 +527,10 @@ public class ReplicationLogProcessor implements Closeable {
         private final Map<TableName, List<Mutation>> failedMutations;
         private final Exception exception;
 
-        public ApplyMutationBatchResult(Map<TableName, List<Mutation>> failedMutations,
-                Exception exception) {
+        public ApplyMutationBatchResult(final Map<TableName, List<Mutation>> failedMutations,
+                final Exception exception) {
             this.failedMutations = failedMutations != null
-                    ? failedMutations : Collections.emptyMap();
+                    ? Collections.unmodifiableMap(failedMutations) : Collections.emptyMap();
             this.exception = exception;
         }
 

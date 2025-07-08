@@ -78,6 +78,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
@@ -106,6 +107,11 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
     public static void setupBeforeClass() throws Exception {
         conf = getUtility().getConfiguration();
         localFs = FileSystem.getLocal(conf);
+    }
+
+    @AfterClass
+    public static void cleanUp() throws IOException {
+        localFs.delete(new Path(testFolder.getRoot().toURI()), true);
     }
 
     /**
@@ -284,6 +290,11 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
                 ReplicationLogProcessor.DEFAULT_REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE,
                 replicationLogProcessor.getBatchSize());
 
+        // Validate default batch size bytes
+        assertEquals("Default batch size bytes should be used",
+                ReplicationLogProcessor.DEFAULT_REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE_BYTES,
+                replicationLogProcessor.getBatchSizeBytes());
+
         // Validate default HBase client retries count
         assertEquals("Default HBase client retries count should be used",
                 ReplicationLogProcessor.DEFAULT_REPLICATION_STANDBY_HBASE_CLIENT_RETRIES_COUNT,
@@ -319,6 +330,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
 
         // Set custom values for all configuration parameters
         int customBatchSize = 1000;
+        long customBatchSizeBytes = 128 * 1024 * 1024L; // 128 MB
         int customRetriesCount = 6;
         long customOperationTimeout = 15000L;
         int customBatchRetryCount = 5;
@@ -326,6 +338,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         int customThreadPoolSize = 10;
 
         customConf.setInt(ReplicationLogProcessor.REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE, customBatchSize);
+        customConf.setLong(ReplicationLogProcessor.REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE_BYTES, customBatchSizeBytes);
         customConf.setInt(ReplicationLogProcessor.REPLICATION_STANDBY_HBASE_CLIENT_RETRIES_COUNT, customRetriesCount);
         customConf.setLong(ReplicationLogProcessor.REPLICATION_STANDBY_HBASE_CLIENT_OPERATION_TIMEOUT_MS, customOperationTimeout);
         customConf.setInt(ReplicationLogProcessor.REPLICATION_STANDBY_BATCH_RETRY_COUNT, customBatchRetryCount);
@@ -337,6 +350,9 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         // Validate all custom configurations are honored
         assertEquals("Custom batch size should be honored",
                 customBatchSize, customProcessor.getBatchSize());
+
+        assertEquals("Custom batch size bytes should be honored",
+                customBatchSizeBytes, customProcessor.getBatchSizeBytes());
 
         assertEquals("Custom HBase client retries count should be honored",
                 customRetriesCount, customProcessor.getHBaseClientRetriesCount());
@@ -540,6 +556,185 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
 
         // Test case 4: Multiple full batches
         testProcessLogFileBatching(12, 4);
+    }
+
+    /**
+     * Tests batch size logic when both count and size limits are configured.
+     * Verifies that batching occurs when either count or size limit is reached first.
+     */
+    @Test
+    public void testProcessLogFileBatchSizeLogic() throws Exception {
+        final Path batchSizeFilePath = new Path(testFolder.newFile("testProcessLogFileBatchSizeLogic").toURI());
+        final String tableName = "T_" + generateUniqueName();
+        final int batchSize = 5;
+        final long batchSizeBytes = 1800;
+
+        // Create log file with mutations of varying sizes
+        LogFileWriter writer = initLogFileWriter(batchSizeFilePath);
+
+        // Create mutations with fixed sizes to test both count and size limits
+        List<Mutation> mutations = new ArrayList<>();
+
+        // Add first 4 small mutations (each ~344 bytes)
+        for (int i = 0; i < 3; i++) {
+            Put put = new Put(Bytes.toBytes("row" + i));
+            put.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("qual"),
+                Bytes.toBytes("abcd"));
+            mutations.add(put);
+            writer.append(tableName, i, put);
+        }
+
+        // Add 1 big mutation that will cross the byte size threshold before count threashold
+        Put bigPut = new Put(Bytes.toBytes("bigRow"));
+        bigPut.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("qual"),
+            Bytes.toBytes("This is a very large mutation that will exceed the size limit. " +
+                "It needs to be large enough to trigger the size-based batching logic. " +
+                "The mutation should be significantly larger than the small mutations to ensure " +
+                "it crosses the byte size threshold and forces a batch to be processed. " +
+                    "This is a very large mutation that will exceed the size limit. " +
+                "It needs to be large enough to trigger the size-based batching logic. " +
+                "The mutation should be significantly larger than the small mutations to ensure " +
+                "it crosses the byte size threshold and forces a batch to be processed."));
+
+        mutations.add(bigPut);
+        writer.append(tableName, 100, bigPut);
+
+        // Add more small mutations that will be batched due to count limit
+        for (int i = 3; i < 10; i++) {
+            Put put = new Put(Bytes.toBytes("row" + i));
+            put.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("qual"),
+                Bytes.toBytes("abcd"));
+            mutations.add(put);
+            writer.append(tableName, i, put);
+        }
+
+        writer.close();
+
+        // Create processor with custom batch size and size limits
+        Configuration testConf = new Configuration(conf);
+        testConf.setInt(ReplicationLogProcessor.REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE, batchSize);
+        testConf.setLong(ReplicationLogProcessor.REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE_BYTES, batchSizeBytes);
+
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(testConf, testHAGroupName);
+
+        // Validate that the batch sizes are correctly set
+        assertEquals("Batch size should be set correctly", batchSize, replicationLogProcessor.getBatchSize());
+        assertEquals("Batch size bytes should be set correctly", batchSizeBytes, replicationLogProcessor.getBatchSizeBytes());
+
+        ReplicationLogProcessor spyProcessor = Mockito.spy(replicationLogProcessor);
+
+        // Store captured arguments
+        List<Map<TableName, List<Mutation>>> capturedArguments = new ArrayList<>();
+
+        // Mock processReplicationLogBatch to capture deep copies
+        Mockito.doAnswer(invocation -> {
+            Map<TableName, List<Mutation>> originalMap = invocation.getArgument(0);
+            Map<TableName, List<Mutation>> deepCopy = new HashMap<>(originalMap);
+            capturedArguments.add(deepCopy);
+            return null;
+        }).when(spyProcessor).processReplicationLogBatch(Mockito.any(Map.class));
+
+        // Process the log file
+        spyProcessor.processLogFile(localFs, batchSizeFilePath);
+
+        // Verify processReplicationLogBatch was called multiple times
+        Mockito.verify(spyProcessor, Mockito.atLeast(3))
+                .processReplicationLogBatch(Mockito.any(Map.class));
+
+        // Validate that we have captured batch calls
+        assertEquals("Should have 3 captured batch calls", 3, capturedArguments.size());
+
+        // Validate first batch (should be triggered by size limit)
+        Map<TableName, List<Mutation>> firstBatch = capturedArguments.get(0);
+        assertNotNull("First batch should not be null", firstBatch);
+
+        TableName expectedTableName = TableName.valueOf(tableName);
+        assertTrue("First batch should contain the table", firstBatch.containsKey(expectedTableName));
+
+        List<Mutation> firstBatchMutations = firstBatch.get(expectedTableName);
+        assertNotNull("First batch mutations should not be null", firstBatchMutations);
+
+        // First batch should be triggered by size limit (3 small + 1 big mutation)
+        assertEquals("First batch should have 4 mutations (3 small + 1 big)", 4, firstBatchMutations.size());
+
+        // Calculate expected size of first batch
+        long firstBatchSize = 0;
+        for (Mutation mutation : firstBatchMutations) {
+            firstBatchSize += mutation.heapSize();
+        }
+
+        // First batch should exceed the size limit due to the large mutation
+        assertTrue("First batch should exceed size limit", firstBatchSize >= batchSizeBytes);
+
+        // Validate that captured mutations match input mutations
+        // First batch should contain mutations 0-3 (3 small + 1 big)
+        for (int i = 0; i < 3; i++) {
+            LogFileTestUtil.assertMutationEquals("First batch small mutation " + i + " mismatch",
+                    mutations.get(i), firstBatchMutations.get(i));
+        }
+        LogFileTestUtil.assertMutationEquals("First batch big mutation mismatch",
+                mutations.get(3), firstBatchMutations.get(3));
+
+        // Validate second batch (should contain remaining small mutations)
+        Map<TableName, List<Mutation>> secondBatch = capturedArguments.get(1);
+        assertNotNull("Second batch should not be null", secondBatch);
+        assertTrue("Second batch should contain the table", secondBatch.containsKey(expectedTableName));
+
+        List<Mutation> secondBatchMutations = secondBatch.get(expectedTableName);
+        assertNotNull("Second batch mutations should not be null", secondBatchMutations);
+
+        // Second batch should be triggered by count limit (5 small mutations)
+        assertEquals("Second batch should have 5 (equal to batch size) mutations (count limit)", 5, secondBatchMutations.size());
+
+        // Calculate expected size of second batch
+        long secondBatchSize = 0;
+        for (Mutation mutation : secondBatchMutations) {
+            secondBatchSize += mutation.heapSize();
+        }
+
+        // Second batch should be smaller than the size limit
+        assertTrue("Second batch should be within size limit", secondBatchSize < batchSizeBytes);
+
+        // Second batch should contain mutations 4-8 (5 small mutations)
+        for (int i = 0; i < 5; i++) {
+            LogFileTestUtil.assertMutationEquals("Second batch mutation " + i + " mismatch",
+                    mutations.get(i + 4), secondBatchMutations.get(i));
+        }
+
+        // Validate third batch (should contain remaining 6 mutations)
+        Map<TableName, List<Mutation>> thirdBatch = capturedArguments.get(2);
+        assertNotNull("Third batch should not be null", thirdBatch);
+        assertTrue("Third batch should contain the table", thirdBatch.containsKey(expectedTableName));
+
+        List<Mutation> thirdBatchMutations = thirdBatch.get(expectedTableName);
+        assertNotNull("Third batch mutations should not be null", thirdBatchMutations);
+
+        // Third batch should contain remaining 2 small mutations
+        assertEquals("Third batch should have 2 mutations (remaining small mutations)", 2, thirdBatchMutations.size());
+
+        // Calculate expected size of third batch
+        long thirdBatchSize = 0;
+        for (Mutation mutation : thirdBatchMutations) {
+            thirdBatchSize += mutation.heapSize();
+        }
+
+        // Third batch should be smaller than the size limit
+        assertTrue("Third batch should be within size limit", thirdBatchSize < batchSizeBytes);
+
+        // Third batch should contain mutations 9-10 (2 remaining small mutations)
+        for (int i = 0; i < 2; i++) {
+            LogFileTestUtil.assertMutationEquals("Third batch mutation " + i + " mismatch",
+                mutations.get(i + 9), thirdBatchMutations.get(i));
+        }
+
+        // Ensure metrics are correctly populated
+        ReplicationLogProcessorMetricValues metricValues = spyProcessor.getMetrics().getCurrentMetricValues();
+        assertEquals("Invalid log file success count", 1, metricValues.getLogFileReplaySuccessCount());
+        assertEquals("There must not be any failed mutations", 0, metricValues.getFailedMutationsCount());
+        assertEquals("There must not be any failed files", 0, metricValues.getLogFileReplayFailureCount());
+
+        // Clean up
+        spyProcessor.close();
     }
 
     /**
