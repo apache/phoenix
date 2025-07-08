@@ -30,4 +30,4 @@ public class BsonConditionInvalidArgumentException extends IllegalArgumentExcept
     public BsonConditionInvalidArgumentException(String message, Throwable cause) {
         super(message, cause);
     }
-} 
+}
