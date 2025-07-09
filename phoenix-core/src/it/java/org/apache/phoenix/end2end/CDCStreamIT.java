@@ -34,6 +34,8 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.CDCUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -64,7 +66,6 @@ import static org.apache.phoenix.query.QueryConstants.CDC_PRE_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_UPSERT_EVENT_TYPE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 @Category(NeedsOwnMiniClusterTest.class)
@@ -206,6 +207,41 @@ public class CDCStreamIT extends CDCBaseIT {
         task.run();
         rs = conn.createStatement().executeQuery(partitionQuery);
         Assert.assertTrue(rs.next());
+    }
+
+    @Test
+    public void testCDCStreamTTL() throws Exception {
+        Connection conn = newConnection();
+        String tableName = generateUniqueName();
+        createTableAndEnableCDC(conn, tableName, true);
+        TestUtil.splitTable(conn, tableName, Bytes.toBytes("m"));
+        String sql = "SELECT PARTITION_END_TIME FROM SYSTEM.CDC_STREAM WHERE TABLE_NAME='" + tableName + "'";
+        ResultSet rs = conn.createStatement().executeQuery(sql);
+        int count = 0;
+        while (rs.next()) {
+            count++;
+        }
+        Assert.assertEquals(3, count);
+        try {
+            ManualEnvironmentEdge injectEdge = new ManualEnvironmentEdge();
+            long t = System.currentTimeMillis() +
+                    QueryServicesOptions.DEFAULT_PHOENIX_CDC_STREAM_PARTITION_EXPIRY_MIN_AGE_MS;
+            t = (t / 1000) * 1000;
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            injectEdge.setValue(t);
+            rs = conn.createStatement().executeQuery(sql);
+            int newCount = 0;
+            while (rs.next()) {
+                // parent partition row with non-zero end time should have expired
+                if (rs.getLong(1) > 0) {
+                    Assert.fail("Closed partition should have expired after TTL.");
+                }
+                newCount++;
+            }
+            Assert.assertEquals(2, newCount);
+        } finally {
+            EnvironmentEdgeManager.reset();
+        }
     }
 
     /**

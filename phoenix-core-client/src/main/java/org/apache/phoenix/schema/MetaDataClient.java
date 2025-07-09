@@ -36,6 +36,7 @@ import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
 import static org.apache.phoenix.schema.PTableType.CDC;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_DEFINED;
+import static org.apache.phoenix.schema.PTableType.SYSTEM;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSet;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
 import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
@@ -1080,7 +1081,7 @@ public class MetaDataClient {
         Map<String,Object> tableProps = Maps.newHashMapWithExpectedSize(statement.getProps().size());
         Map<String,Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(statement.getProps().size() + 1);
         populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps,
-                statement.getTableType(), false);
+                statement.getTableType(), SchemaUtil.getUnEscapedFullName(tableName.toString()), false);
 
         splits = processSplits(tableProps, splits);
         boolean isAppendOnlySchema = false;
@@ -1236,7 +1237,7 @@ public class MetaDataClient {
      * @throws SQLException
      */
     private void populatePropertyMaps(ListMultimap<String,Pair<String,Object>> statementProps, Map<String, Object> tableProps,
-            Map<String, Object> commonFamilyProps, PTableType tableType, boolean isCDCIndex) throws SQLException {
+            Map<String, Object> commonFamilyProps, PTableType tableType, String tableName, boolean isCDCIndex) throws SQLException {
         // Somewhat hacky way of determining if property is for HColumnDescriptor or HTableDescriptor
         ColumnFamilyDescriptor defaultDescriptor = ColumnFamilyDescriptorBuilder.of(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
         if (!statementProps.isEmpty()) {
@@ -1249,7 +1250,9 @@ public class MetaDataClient {
                             .buildException();
                 }
                 // Handle when TTL property is set
-                if (prop.getFirst().equalsIgnoreCase(TTL) && tableType != PTableType.SYSTEM) {
+                if (prop.getFirst().equalsIgnoreCase(TTL)
+                        && (tableType != PTableType.SYSTEM
+                                || MetaDataUtil.SYSTEM_TABLES_WITH_TTL_SUPPORTED.contains(tableName))) {
                     tableProps.put(prop.getFirst(), prop.getSecond());
                     if (prop.getSecond() != null) {
                         TTLExpression ttlExpr = MetaDataUtil.convertForeverAndNoneTTLValue(prop.getSecond(), false);
@@ -1637,7 +1640,7 @@ public class MetaDataClient {
 
         Map<String,Object> tableProps = Maps.newHashMapWithExpectedSize(statement.getProps().size());
         Map<String,Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(statement.getProps().size() + 1);
-        populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps, PTableType.INDEX,
+        populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps, PTableType.INDEX, indexTableName.toString(),
                 CDCUtil.isCDCIndex(SchemaUtil
                         .getTableNameFromFullName(statement.getIndexTableName().toString())));
         List<Pair<ParseNode, SortOrder>> indexParseNodeAndSortOrderList = ik.getParseNodeAndSortOrderList();
@@ -1982,7 +1985,7 @@ public class MetaDataClient {
         Map<String, Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(
                 statement.getProps().size() + 1);
         populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps, PTableType.CDC,
-                false);
+                cdcObjName, false);
         Properties props = connection.getClientInfo();
         props.put(INDEX_CREATE_DEFAULT_STATE, "ACTIVE");
 
@@ -2495,6 +2498,7 @@ public class MetaDataClient {
             tableNameNode = statement.getTableName();
             final String schemaName = connection.getSchema() != null && tableNameNode.getSchemaName() == null ? connection.getSchema() : tableNameNode.getSchemaName();
             final String tableName = tableNameNode.getTableName();
+            String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
             String parentTableName = null;
             PName tenantId = connection.getTenantId();
             String tenantIdStr = tenantId == null ? null : tenantId.getString();
@@ -2536,7 +2540,7 @@ public class MetaDataClient {
                         .buildException();
                 }
 
-                if (tableType != TABLE && (tableType != VIEW || viewType != UPDATABLE)) {
+                if (!MetaDataUtil.isTTLSupported(tableType, viewType, fullTableName)) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.
                         TTL_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY)
                         .setSchemaName(schemaName)
@@ -2563,7 +2567,7 @@ public class MetaDataClient {
                             .build()
                             .buildException();
                 }
-                ttl = getCompatibleTTLExpression(ttlProp, tableType);
+                ttl = getCompatibleTTLExpression(ttlProp, tableType, viewType, fullTableName);
             } else {
                 ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent, tableName);
                 if (!ttlFromHierarchy.equals(TTL_EXPRESSION_NOT_DEFINED)) {
@@ -6212,8 +6216,8 @@ public class MetaDataClient {
                         .buildException();
             }
 
-            if (table.getType() != PTableType.TABLE && (table.getType() != PTableType.VIEW ||
-                    table.getViewType() != UPDATABLE)) {
+            if (!MetaDataUtil.isTTLSupported(
+                    table.getType(), table.getViewType(), table.getName().toString())) {
                 throw new SQLExceptionInfo.Builder(
                         SQLExceptionCode.TTL_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY)
                         .build()
@@ -6223,7 +6227,8 @@ public class MetaDataClient {
                 TTLExpression newTTL = metaProperties.getTTL();
                 newTTL.validateTTLOnAlter(connection, table);
                 metaPropertiesEvaluated.setTTL(
-                        getCompatibleTTLExpression(metaProperties.getTTL(), table.getType()));
+                        getCompatibleTTLExpression(metaProperties.getTTL(), table.getType(),
+                                table.getViewType(), table.getName().toString()));
                 changingPhoenixTableProperty = true;
             }
             //Updating Introducing TTL variable to true so that we will check if TTL is already
@@ -6613,7 +6618,7 @@ public class MetaDataClient {
             } else if (changePermsStatement.getTableName() != null) {
                 PTable inputTable = connection.getTable(SchemaUtil.
                         normalizeFullTableName(changePermsStatement.getTableName().toString()));
-                if (!(PTableType.TABLE.equals(inputTable.getType()) || PTableType.SYSTEM.equals(inputTable.getType()))) {
+                if (!(PTableType.TABLE.equals(inputTable.getType()) || SYSTEM.equals(inputTable.getType()))) {
                     throw new AccessDeniedException("Cannot GRANT or REVOKE permissions on INDEX TABLES or VIEWS");
                 }
 

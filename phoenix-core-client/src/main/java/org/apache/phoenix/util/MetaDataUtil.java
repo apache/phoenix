@@ -21,6 +21,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.*;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_DEFINED;
+import static org.apache.phoenix.schema.PTableType.SYSTEM;
 import static org.apache.phoenix.schema.PTableType.TABLE;
 import static org.apache.phoenix.schema.PTableType.VIEW;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
@@ -123,6 +124,10 @@ public class MetaDataUtil {
             ColumnFamilyDescriptorBuilder.TTL,
             ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS,
             ColumnFamilyDescriptorBuilder.REPLICATION_SCOPE);
+
+    public static final List<String> SYSTEM_TABLES_WITH_TTL_SUPPORTED
+            = Arrays.asList(SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_CDC_STREAM_TABLE),
+                SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_CDC_STREAM_STATUS_TABLE));
 
     public static Put getLastDDLTimestampUpdate(byte[] tableHeaderRowKey,
                                                      long clientTimestamp,
@@ -1229,9 +1234,12 @@ public class MetaDataUtil {
      * if expression == TTL_NOT_DEFINED OR FOREVER then
      * TTL_NOT_DEFINED will be stores in SYSTEM.CATALOG
      */
-    public static TTLExpression getCompatibleTTLExpression(TTLExpression expression, PTableType tableType)
+    public static TTLExpression getCompatibleTTLExpression(TTLExpression expression,
+                                                           PTableType tableType,
+                                                           PTable.ViewType viewType,
+                                                           String tableName)
             throws SQLException {
-        if (tableType != TABLE && tableType != VIEW) {
+        if (!isTTLSupported(tableType, viewType, tableName)) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.
                     TTL_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY)
                     .build()
@@ -1248,4 +1256,13 @@ public class MetaDataUtil {
         return ttl;
     }
 
+    /**
+     * TTL is supported only for tables, updatable views and few SYSTEM tables
+     * defined in SYSTEM_TABLES_WITH_TTL_SUPPORTED.
+     */
+    public static boolean isTTLSupported(PTableType tableType, PTable.ViewType viewType, String tableName) {
+        return tableType == TABLE
+                || (tableType == VIEW && viewType == PTable.ViewType.UPDATABLE)
+                || (tableType == SYSTEM && SYSTEM_TABLES_WITH_TTL_SUPPORTED.contains(tableName));
+    }
 }

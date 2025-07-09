@@ -471,6 +471,8 @@ public class QueryServicesOptions {
     public static final Boolean DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT = true;
     public static final Boolean DEFAULT_CQSI_THREAD_POOL_METRICS_ENABLED = false;
     public static final int DEFAULT_CDC_TTL_MUTATION_MAX_RETRIES = 5;
+  
+    public static final long DEFAULT_PHOENIX_CDC_STREAM_PARTITION_EXPIRY_MIN_AGE_MS = 30*60*60*1000; // 30 hours
 
     private final Configuration config;
 
