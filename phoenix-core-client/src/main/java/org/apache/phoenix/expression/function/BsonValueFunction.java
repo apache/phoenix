@@ -30,6 +30,7 @@ import org.bson.BsonNumber;
 import org.bson.BsonString;
 import org.bson.BsonValue;
 import org.bson.RawBsonDocument;
+import org.bson.BsonDocument;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
