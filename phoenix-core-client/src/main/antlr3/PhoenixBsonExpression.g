@@ -32,6 +32,7 @@ tokens
     ATTR_NOT = 'attribute_not_exists';
     FIELD = 'field_exists';
     FIELD_NOT = 'field_not_exists';
+    BEGINS_WITH = 'begins_with';
 }
 
 @parser::header {
@@ -211,8 +212,6 @@ and_expression returns [ParseNode ret]
 not_expression returns [ParseNode ret]
     :   (NOT? boolean_expression ) => n=NOT? e=boolean_expression { $ret = n == null ? e : factory.not(e); }
     |   n=NOT? LPAREN e=expression RPAREN { $ret = n == null ? e : factory.not(e); }
-    |   (ATTR | FIELD) ( LPAREN t=literal RPAREN {$ret = factory.documentFieldExists(t, true); } )
-    |   (ATTR_NOT | FIELD_NOT) ( LPAREN t=literal RPAREN {$ret = factory.documentFieldExists(t, false); } )
     ;
 
 comparison_op returns [CompareOperator ret]
@@ -232,6 +231,10 @@ boolean_expression returns [ParseNode ret]
                       |        (IN (LPAREN v=one_or_more_expressions RPAREN {List<ParseNode> il = new ArrayList<ParseNode>(v.size() + 1); il.add(l); il.addAll(v); $ret = factory.inList(il,n!=null);}))
                       ))
                   |  { $ret = l; } )
+        |   (ATTR | FIELD) ( LPAREN t=literal RPAREN {$ret = factory.documentFieldExists(t, true); } )
+        |   (ATTR_NOT | FIELD_NOT) ( LPAREN t=literal RPAREN {$ret = factory.documentFieldExists(t, false); } )
+        |   BEGINS_WITH ( LPAREN l=value_expression COMMA r=value_expression RPAREN
+                {$ret = factory.documentFieldBeginsWith(l, r); } )
     ;
 
 value_expression returns [ParseNode ret]
@@ -511,4 +514,13 @@ CHAR_ESC
         |       { setText("\\"); }
         )
     |   '\'\''  { setText("\'"); }
+    ;
+
+WS
+    :   ( ' ' | '\t' | '\u2002' ) { $channel=HIDDEN; }
+    ;
+
+EOL
+    :  ('\r' | '\n')
+    { skip(); }
     ;

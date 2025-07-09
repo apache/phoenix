@@ -38,6 +38,7 @@ import org.apache.hadoop.util.StringUtils;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PDataType;
 import org.bson.RawBsonDocument;
@@ -112,6 +113,50 @@ public class CDCUtil {
         return isCDCIndex(indexTable.getTableName().getString());
     }
 
+    public static boolean isCDCIndexActive(PTable indexTable) {
+        return isCDCIndex(indexTable.getTableName().getString())
+                && indexTable.getIndexState() == PIndexState.ACTIVE;
+    }
+
+    /**
+     * Check if the given table has an active CDC index.
+     *
+     * @param table The PTable object.
+     * @return true if the table has an active CDC index, false otherwise.
+     */
+    public static boolean hasActiveCDCIndex(PTable table) {
+        if (table == null || table.getIndexes() == null) {
+            return false;
+        }
+        return table.getIndexes().stream().anyMatch(CDCUtil::isCDCIndexActive);
+    }
+
+    /**
+     * Return PTable of the active CDC index for the given data table.
+     *
+     * @param dataTable The data table.
+     * @return active CDC index.
+     */
+    public static PTable getActiveCDCIndex(PTable dataTable) {
+        return dataTable.getIndexes().stream()
+                .filter(CDCUtil::isCDCIndexActive)
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * Check if the given table has any CDC indexes.
+     *
+     * @param table The PTable object.
+     * @return true if the table has an CDC index, false otherwise.
+     */
+    public static boolean hasCDCIndex(PTable table) {
+        if (table == null || table.getIndexes() == null) {
+            return false;
+        }
+        return table.getIndexes().stream().anyMatch(CDCUtil::isCDCIndex);
+    }
+
     public static Scan setupScanForCDC(Scan scan) {
         scan.setRaw(true);
         scan.readAllVersions();
@@ -139,7 +184,7 @@ public class CDCUtil {
     public static Object getColumnEncodedValue(Object value, PDataType dataType) {
         if (value != null) {
             if (dataType.getSqlType() == PDataType.BSON_TYPE) {
-                value = Bytes.toBytes(((RawBsonDocument) value).getByteBuffer().asNIO());
+                value = ByteUtil.toBytes(((RawBsonDocument) value).getByteBuffer().asNIO());
             } else if (isBinaryType(dataType)) {
                 // Unfortunately, Base64.Encoder has no option to specify offset and length so can't
                 // avoid copying bytes.
