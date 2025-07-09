@@ -1081,7 +1081,7 @@ public class MetaDataClient {
         Map<String,Object> tableProps = Maps.newHashMapWithExpectedSize(statement.getProps().size());
         Map<String,Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(statement.getProps().size() + 1);
         populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps,
-                statement.getTableType(), viewType, SchemaUtil.getUnEscapedFullName(tableName.toString()), false);
+                statement.getTableType(), SchemaUtil.getUnEscapedFullName(tableName.toString()), false);
 
         splits = processSplits(tableProps, splits);
         boolean isAppendOnlySchema = false;
@@ -1237,7 +1237,7 @@ public class MetaDataClient {
      * @throws SQLException
      */
     private void populatePropertyMaps(ListMultimap<String,Pair<String,Object>> statementProps, Map<String, Object> tableProps,
-            Map<String, Object> commonFamilyProps, PTableType tableType, ViewType viewType, String tableName, boolean isCDCIndex) throws SQLException {
+            Map<String, Object> commonFamilyProps, PTableType tableType, String tableName, boolean isCDCIndex) throws SQLException {
         // Somewhat hacky way of determining if property is for HColumnDescriptor or HTableDescriptor
         ColumnFamilyDescriptor defaultDescriptor = ColumnFamilyDescriptorBuilder.of(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
         if (!statementProps.isEmpty()) {
@@ -1640,8 +1640,7 @@ public class MetaDataClient {
 
         Map<String,Object> tableProps = Maps.newHashMapWithExpectedSize(statement.getProps().size());
         Map<String,Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(statement.getProps().size() + 1);
-        populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps, PTableType.INDEX,
-                null, indexTableName.toString(),
+        populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps, PTableType.INDEX, indexTableName.toString(),
                 CDCUtil.isCDCIndex(SchemaUtil
                         .getTableNameFromFullName(statement.getIndexTableName().toString())));
         List<Pair<ParseNode, SortOrder>> indexParseNodeAndSortOrderList = ik.getParseNodeAndSortOrderList();
@@ -1986,7 +1985,7 @@ public class MetaDataClient {
         Map<String, Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(
                 statement.getProps().size() + 1);
         populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps, PTableType.CDC,
-                null, cdcObjName, false);
+                cdcObjName, false);
         Properties props = connection.getClientInfo();
         props.put(INDEX_CREATE_DEFAULT_STATE, "ACTIVE");
 

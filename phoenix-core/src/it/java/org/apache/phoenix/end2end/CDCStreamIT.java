@@ -222,22 +222,26 @@ public class CDCStreamIT extends CDCBaseIT {
             count++;
         }
         Assert.assertEquals(3, count);
-        ManualEnvironmentEdge injectEdge = new ManualEnvironmentEdge();
-        long t = System.currentTimeMillis() + QueryServicesOptions.DEFAULT_PHOENIX_CDC_STREAM_PARTITION_EXPIRY_MIN_AGE_MS;
-        t = (t / 1000) * 1000;
-        EnvironmentEdgeManager.injectEdge(injectEdge);
-        injectEdge.setValue(t);
-        rs = conn.createStatement().executeQuery(sql);
-        int newCount = 0;
-        while (rs.next()) {
-            // parent partition row with non-zero end time should have expired
-            if (rs.getLong(1) > 0) {
-                Assert.fail("Closed partition should have expired after TTL.");
+        try {
+            ManualEnvironmentEdge injectEdge = new ManualEnvironmentEdge();
+            long t = System.currentTimeMillis() +
+                    QueryServicesOptions.DEFAULT_PHOENIX_CDC_STREAM_PARTITION_EXPIRY_MIN_AGE_MS;
+            t = (t / 1000) * 1000;
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            injectEdge.setValue(t);
+            rs = conn.createStatement().executeQuery(sql);
+            int newCount = 0;
+            while (rs.next()) {
+                // parent partition row with non-zero end time should have expired
+                if (rs.getLong(1) > 0) {
+                    Assert.fail("Closed partition should have expired after TTL.");
+                }
+                newCount++;
             }
-            newCount++;
+            Assert.assertEquals(2, newCount);
+        } finally {
+            EnvironmentEdgeManager.reset();
         }
-        Assert.assertEquals(2, newCount);
-        EnvironmentEdgeManager.reset();
     }
 
     /**
