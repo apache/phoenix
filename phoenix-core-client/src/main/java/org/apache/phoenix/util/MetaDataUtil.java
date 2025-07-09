@@ -126,7 +126,8 @@ public class MetaDataUtil {
             ColumnFamilyDescriptorBuilder.REPLICATION_SCOPE);
 
     public static final List<String> SYSTEM_TABLES_WITH_TTL_SUPPORTED
-            = Arrays.asList(SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_CDC_STREAM_TABLE));
+            = Arrays.asList(SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_CDC_STREAM_TABLE),
+                SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_CDC_STREAM_STATUS_TABLE));
 
     public static Put getLastDDLTimestampUpdate(byte[] tableHeaderRowKey,
                                                      long clientTimestamp,
