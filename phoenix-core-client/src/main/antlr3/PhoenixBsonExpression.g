@@ -33,6 +33,7 @@ tokens
     FIELD = 'field_exists';
     FIELD_NOT = 'field_not_exists';
     BEGINS_WITH = 'begins_with';
+    CONTAINS = 'contains';
 }
 
 @parser::header {
@@ -235,6 +236,8 @@ boolean_expression returns [ParseNode ret]
         |   (ATTR_NOT | FIELD_NOT) ( LPAREN t=literal RPAREN {$ret = factory.documentFieldExists(t, false); } )
         |   BEGINS_WITH ( LPAREN l=value_expression COMMA r=value_expression RPAREN
                 {$ret = factory.documentFieldBeginsWith(l, r); } )
+        |   CONTAINS ( LPAREN l=value_expression COMMA r=value_expression RPAREN
+                {$ret = factory.documentFieldContains(l, r); } )
     ;
 
 value_expression returns [ParseNode ret]
