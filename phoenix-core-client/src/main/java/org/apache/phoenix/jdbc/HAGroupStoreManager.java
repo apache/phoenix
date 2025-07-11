@@ -18,72 +18,78 @@
 package org.apache.phoenix.jdbc;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.exception.InvalidClusterRoleTransitionException;
+import org.apache.phoenix.exception.StaleHAGroupStoreRecordVersionException;
+
 import java.io.IOException;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Optional;
 
-import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
-import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
-
-public class HAGroupStoreManager {
-    private final boolean mutationBlockEnabled;
-    private final Configuration conf;
-    private static volatile Map<String, HAGroupStoreManager> INSTANCES = new ConcurrentHashMap<>();
+/**
+ * Interface for managing HA group store operations including mutation blocking checks
+ * and client invalidation.
+ */
+public interface HAGroupStoreManager {
 
     /**
-     * Creates/gets an instance of HAGroupStoreManager.
-     * Provides unique instance for each ZK URL
-     *
-     * @param conf configuration
-     * @return HAGroupStoreManager instance
-     */
-    public static HAGroupStoreManager getInstance(Configuration conf) {
-        final String zkUrl = getLocalZkUrl(conf);
-        HAGroupStoreManager result = INSTANCES.get(zkUrl);
-        if (result == null) {
-            synchronized (HAGroupStoreManager.class) {
-                result = INSTANCES.get(zkUrl);
-                if (result == null) {
-                    result = new HAGroupStoreManager(conf);
-                    INSTANCES.put(zkUrl, result);
-                }
-            }
-        }
-        return result;
-    }
-
-    private HAGroupStoreManager(final Configuration conf) {
-        this.mutationBlockEnabled = conf.getBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED,
-                DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED);
-        this.conf = conf;
-    }
-
-    /**
-     * Checks whether mutation is blocked or not.
+     * Checks whether mutation is blocked or not across all HA groups.
+     * If any HAGroupStoreClient instance is not created, it will be created.
+     * If any HAGroup mutation is blocked, it will return true.
      * @throws IOException when HAGroupStoreClient is not healthy.
      */
-    public boolean isMutationBlocked() throws IOException {
-        if (mutationBlockEnabled) {
-            HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstance(conf);
-            if (haGroupStoreClient != null) {
-                return !haGroupStoreClient.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).isEmpty();
-            }
-            throw new IOException("HAGroupStoreClient is not initialized");
-        }
-        return false;
-    }
+    boolean isMutationBlocked(Configuration conf) throws IOException;
 
     /**
-     * Force rebuilds the HAGroupStoreClient
+     * Checks whether mutation is blocked or not for a specific HA group.
+     *
+     * @param conf
+     * @param haGroupName name of the HA group, null for default HA group which tracks all HA groups.
+     * @return true if mutation is blocked, false otherwise.
+     * @throws IOException when HAGroupStoreClient is not healthy.
+     */
+    boolean isMutationBlocked(Configuration conf, String haGroupName) throws IOException;
+
+    /**
+     * Force rebuilds the HAGroupStoreClient instance for all HA groups.
+     * If any HAGroupStoreClient instance is not created, it will be created.
      * @throws Exception
      */
-    public void invalidateHAGroupStoreClient() throws Exception {
-        HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstance(conf);
-        if (haGroupStoreClient != null) {
-            haGroupStoreClient.rebuild();
-        } else {
-            throw new IOException("HAGroupStoreClient is not initialized");
-        }
-    }
+    void invalidateHAGroupStoreClient(Configuration conf) throws Exception;
+
+    /**
+     * Force rebuilds the HAGroupStoreClient for a specific HA group.
+     *
+     * @param conf
+     * @param haGroupName name of the HA group, null for default HA group and tracks all HA groups.
+     * @throws Exception
+     */
+    void invalidateHAGroupStoreClient(Configuration conf, String haGroupName) throws Exception;
+
+    /**
+     * Returns the HAGroupStoreRecord for a specific HA group.
+     *
+     * @param conf
+     * @param haGroupName name of the HA group
+     * @return Optional HAGroupStoreRecord for the HA group, can be empty if the HA group is not found.
+     * @throws IOException when HAGroupStoreClient is not healthy.
+     */
+    Optional<HAGroupStoreRecord> getHAGroupStoreRecord(Configuration conf, String haGroupName) throws IOException;
+
+    /**
+     * Sets the HAGroupStoreRecord to StoreAndForward mode in local cluster.
+     *
+     * @param conf
+     * @param haGroupName name of the HA group
+     * @throws IOException when HAGroupStoreClient is not healthy.
+     */
+    void setHAGroupStatusToStoreAndForward(Configuration conf, String haGroupName) throws IOException, StaleHAGroupStoreRecordVersionException, InvalidClusterRoleTransitionException;
+
+    /**
+     * Sets the HAGroupStoreRecord to Sync mode in local cluster.
+     *
+     * @param conf
+     * @param haGroupName name of the HA group
+     * @throws IOException when HAGroupStoreClient is not healthy.
+     */
+    void setHAGroupStatusRecordToSync(Configuration conf, String haGroupName) throws IOException, StaleHAGroupStoreRecordVersionException, InvalidClusterRoleTransitionException;
+
 }

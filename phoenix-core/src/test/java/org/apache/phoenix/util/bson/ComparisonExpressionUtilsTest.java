@@ -1665,6 +1665,171 @@ public class ComparisonExpressionUtilsTest {
             rawBsonDocument, compareValues));
   }
 
+  @Test
+  public void testContainsFunction() {
+    RawBsonDocument rawBsonDocument = getContainsTestDocument();
+    RawBsonDocument compareValues = getContainsCompareValDocument();
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(Title, :TitleSubstring)", rawBsonDocument, compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(Description, :DescriptionWord)", rawBsonDocument, compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(NestedMap1.Title, :TitleSubstring)", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(Title, :NonExistentSubstring)", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(Description, :WrongWord)", rawBsonDocument, compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(Tags, :TagScience)", rawBsonDocument, compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(Numbers, :NumberFive)", rawBsonDocument, compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(NestedList1, :NestedListString)", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(Tags, :NonExistentTag)", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(Numbers, :NumberTen)", rawBsonDocument, compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(Categories, :CategoryFiction)", rawBsonDocument, compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(StatusSet, :StatusActive)", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(Categories, :NonExistentCategory)", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(StatusSet, :StatusInactive)", rawBsonDocument, compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(BinaryDataSet, :BinaryHello)", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(BinaryDataSet, :BinaryNotFound)", rawBsonDocument, compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(Title, :TitleSubstring) AND contains(Tags, :TagScience)", rawBsonDocument,
+            compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(Title, :NonExistentSubstring) OR contains(Tags, :TagScience)",
+            rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(Title, :NonExistentSubstring) AND contains(Tags, :TagScience)",
+            rawBsonDocument, compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "NOT contains(Title, :NonExistentSubstring)", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "NOT contains(Title, :TitleSubstring)", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(NonExistentField, :TitleSubstring)", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(Title, :NonExistentValue)", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(Title, :NumberFive)", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(Numbers, :TitleSubstring)", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(Id, :TitleSubstring)", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(InPublication, :TitleSubstring)", rawBsonDocument, compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(NestedMap1.SubTags, :TagMath)", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "contains(NestedMap1.SubTags, :NonExistentTag)", rawBsonDocument, compareValues));
+  }
+
+  private static RawBsonDocument getContainsTestDocument() {
+    String json = "{\n" +
+            "  \"Title\" : \"Advanced Data Science and Machine Learning\",\n" +
+            "  \"Description\" : \"This book covers comprehensive topics in Quantum Computing\",\n" +
+            "  \"Tags\" : [ \"science\", \"technology\", \"programming\", \"AI\" ],\n" +
+            "  \"Numbers\" : [ 1, 2, 3, 5, 8, 13 ],\n" +
+            "  \"NestedList1\" : [ -485.34, \"1234abcd\", \"xyz0123\", \"test_string\" ],\n" +
+            "  \"Categories\" : { \"$set\" : [ \"fiction\", \"educational\", \"technical\" ] },\n" +
+            "  \"StatusSet\" : { \"$set\" : [ \"active\", \"published\", \"available\" ] },\n" +
+            "  \"BinaryDataSet\" : { \"$set\" : [ {\n" +
+            "    \"$binary\" : {\n" +
+            "      \"base64\" : \"SGVsbG8=\",\n" +
+            "      \"subType\" : \"00\"\n" +
+            "    }\n" +
+            "  }, {\n" +
+            "    \"$binary\" : {\n" +
+            "      \"base64\" : \"V29ybGQ=\",\n" +
+            "      \"subType\" : \"00\"\n" +
+            "    }\n" +
+            "  }, {\n" +
+            "    \"$binary\" : {\n" +
+            "      \"base64\" : \"VGVzdA==\",\n" +
+            "      \"subType\" : \"00\"\n" +
+            "    }\n" +
+            "  } ] },\n" +
+            "  \"NestedMap1\" : {\n" +
+            "    \"Title\" : \"Nested Advanced Data Science Guide\",\n" +
+            "    \"SubTags\" : [ \"mathematics\", \"statistics\", \"algorithms\" ],\n" +
+            "    \"InnerSet\" : { \"$set\" : [ \"regression\", \"classification\" ] }\n" +
+            "  },\n" +
+            "  \"Id\" : 101.01,\n" +
+            "  \"InPublication\" : true\n" +
+            "}";
+    return RawBsonDocument.parse(json);
+  }
+
+  private static RawBsonDocument getContainsCompareValDocument() {
+    String json = "{\n" +
+            "  \":TitleSubstring\" : \"Data Science\",\n" +
+            "  \":DescriptionWord\" : \"Quantum Comput\",\n" +
+            "  \":NonExistentSubstring\" : \"Quantum Physics\",\n" +
+            "  \":WrongWord\" : \"geology\",\n" +
+            "  \":TagScience\" : \"science\",\n" +
+            "  \":TagMath\" : \"mathematics\",\n" +
+            "  \":NonExistentTag\" : \"biology\",\n" +
+            "  \":NumberFive\" : 5,\n" +
+            "  \":NumberTen\" : 10,\n" +
+            "  \":NestedListString\" : \"test_string\",\n" +
+            "  \":CategoryFiction\" : \"fiction\",\n" +
+            "  \":NonExistentCategory\" : \"romance\",\n" +
+            "  \":StatusActive\" : \"active\",\n" +
+            "  \":StatusInactive\" : \"inactive\",\n" +
+            "  \":NonExistentValue\" : \"does_not_exist\",\n" +
+            "  \":BinaryHello\" : {\n" +
+            "    \"$binary\" : {\n" +
+            "      \"base64\" : \"SGVsbG8=\",\n" +
+            "      \"subType\" : \"00\"\n" +
+            "    }\n" +
+            "  },\n" +
+            "  \":BinaryNotFound\" : {\n" +
+            "    \"$binary\" : {\n" +
+            "      \"base64\" : \"Tm90Rm91bmQ=\",\n" +
+            "      \"subType\" : \"00\"\n" +
+            "    }\n" +
+            "  }\n" +
+            "}";
+    return RawBsonDocument.parse(json);
+  }
+
   private static RawBsonDocument getCompareValDocument() {
     String json = "{\n" +
             "  \"$Id20\" : 101.011,\n" +

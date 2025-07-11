@@ -33,7 +33,6 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.MutationBlockedIOException;
 import org.apache.phoenix.execute.CommitException;
 import org.apache.phoenix.jdbc.ClusterRoleRecord;
-import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
 import org.apache.phoenix.jdbc.PhoenixHAAdmin;
 import org.apache.phoenix.query.BaseTest;
@@ -55,7 +54,6 @@ public class IndexRegionObserverMutationBlockingIT extends BaseTest {
 
     private static final Long ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS = 1000L;
     private PhoenixHAAdmin haAdmin;
-    private HAGroupStoreManager haGroupStoreManager;
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -70,7 +68,6 @@ public class IndexRegionObserverMutationBlockingIT extends BaseTest {
     @Before
     public void setUp() throws Exception {
         haAdmin = new PhoenixHAAdmin(config);
-        haGroupStoreManager = HAGroupStoreManager.getInstance(config);
 
         // Clean up all existing CRRs before each test
         List<ClusterRoleRecord> crrs = haAdmin.listAllClusterRoleRecordsOnZookeeper();
@@ -120,9 +117,6 @@ public class IndexRegionObserverMutationBlockingIT extends BaseTest {
 
             // Wait for the event to propagate
             Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-
-            // Verify that mutations are now blocked
-            assertTrue("Mutations should be blocked", haGroupStoreManager.isMutationBlocked());
 
             // Test that UPSERT throws MutationBlockedIOException
             try {

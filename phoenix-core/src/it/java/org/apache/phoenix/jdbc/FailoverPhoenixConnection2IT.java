@@ -66,7 +66,6 @@ import org.slf4j.LoggerFactory;
 public class FailoverPhoenixConnection2IT {
     private static final Logger LOG = LoggerFactory.getLogger(FailoverPhoenixConnectionIT.class);
     private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS = new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();
-    private static final long ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS = 1000L;
 
     @Rule
     public final TestName testName = new TestName();

@@ -44,6 +44,7 @@ import org.bson.BsonDouble;
 import org.bson.BsonNull;
 import org.bson.BsonString;
 import org.bson.RawBsonDocument;
+import org.bson.Document;
 import org.junit.Assume;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -489,6 +490,65 @@ public class Bson4IT extends ParallelStatsDisabledIT {
       assertEquals("c1_value3", rs.getString(2));
       actualDoc = (BsonDocument) rs.getObject(3);
       assertEquals(doc3, actualDoc);
+      assertFalse(rs.next());
+
+      validateExplainPlan(ps, tableName, "FULL SCAN ");
+    }
+  }
+
+  @Test
+  public void testBsonValueFunctionWithBSONType() throws Exception {
+    Assume.assumeTrue(this.coveredIndex && this.columnEncoded); // Since indexing on BSON not supported PHOENIX-7654
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    String tableName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      String ddl = "CREATE TABLE " + tableName
+          + " (PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON"
+          + " CONSTRAINT pk PRIMARY KEY(PK1)) "
+          + (this.columnEncoded ? "" : "COLUMN_ENCODED_BYTES=0");
+
+      conn.createStatement().execute(ddl);
+
+      String sample1 = getJsonString("json/sample_01.json");
+      String sample2 = getJsonString("json/sample_02.json");
+      String sample3 = getJsonString("json/sample_03.json");
+      String result = getJsonString("json/result_03.json");
+      BsonDocument bsonDocument1 = RawBsonDocument.parse(sample1);
+      BsonDocument bsonDocument2 = RawBsonDocument.parse(sample2);
+      BsonDocument bsonDocument3 = RawBsonDocument.parse(sample3);
+      BsonDocument bsonResultDocument = RawBsonDocument.parse(result);
+
+      upsertRows(conn, tableName, bsonDocument1, bsonDocument2, bsonDocument3);
+
+      conn.commit();
+
+      ResultSet rs = conn.createStatement().executeQuery("SELECT count(*) FROM " + tableName);
+      assertTrue(rs.next());
+      assertEquals(3, rs.getInt(1));
+
+
+      PreparedStatement ps = conn.prepareStatement("SELECT PK1, COL, "
+          + "BSON_VALUE(COL, 'result[1]', 'BSON') FROM " + tableName
+          + " WHERE BSON_VALUE(COL, 'result[1].location', 'BSON') = ?");
+
+      Document info = new Document()
+          .append("street", "4897 Gerhold Lodge")
+          .append("city", "Minneapolis")
+          .append("state", "Arkansas")
+          .append("country", "Democratic Republic of the Congo")
+          .append("zip", "79299")
+          .append("coordinates", new Document()
+              .append("latitude", 3.4015)
+              .append("longitude", 52.3736));
+      RawBsonDocument document = RawBsonDocument.parse(info.toJson());
+
+      ps.setObject(1, document);
+      rs = ps.executeQuery();
+
+      assertTrue(rs.next());
+      assertEquals("pk1011", rs.getString(1));
+      BsonDocument actualDoc = (BsonDocument) rs.getObject(3);
+      assertEquals(bsonResultDocument, actualDoc);
       assertFalse(rs.next());
 
       validateExplainPlan(ps, tableName, "FULL SCAN ");

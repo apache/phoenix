@@ -147,7 +147,7 @@ public class UpdateExpressionUtils {
       String fieldKey = deleteEntry.getKey();
       BsonValue newVal = deleteEntry.getValue();
       BsonValue topLevelValue = bsonDocument.get(fieldKey);
-      if (!isBsonSet(newVal)) {
+      if (!CommonComparisonExpressionUtils.isBsonSet(newVal)) {
         throw new RuntimeException("Type of new value to be removed should be sets only");
       }
       // If the top level field exists, perform the operation here and return.
@@ -225,7 +225,8 @@ public class UpdateExpressionUtils {
       String fieldKey = addEntry.getKey();
       BsonValue newVal = addEntry.getValue();
       BsonValue topLevelValue = bsonDocument.get(fieldKey);
-      if (!newVal.isNumber() && !newVal.isDecimal128() && !isBsonSet(newVal)) {
+      if (!newVal.isNumber() && !newVal.isDecimal128()
+              && !CommonComparisonExpressionUtils.isBsonSet(newVal)) {
         throw new RuntimeException(
             "Type of new value to be updated should be either number or sets only");
       }
@@ -778,24 +779,6 @@ public class UpdateExpressionUtils {
   }
 
   /**
-   * Returns true if the given BsonValue represents Set data structure.
-   *
-   * @param bsonValue The value.
-   * @return True if the given BsonValue represents Set data structure.
-   */
-  private static boolean isBsonSet(final BsonValue bsonValue) {
-    if (!bsonValue.isDocument()) {
-      return false;
-    }
-    BsonDocument bsonDocument = (BsonDocument) bsonValue;
-    if (bsonDocument.size() == 1 && bsonDocument.containsKey("$set")) {
-      BsonValue value = bsonDocument.get("$set");
-      return value != null && value.isArray();
-    }
-    return false;
-  }
-
-  /**
    * Returns true if both values represent Set data structure and the contents of the Set are
    * of same type.
    *
@@ -806,7 +789,8 @@ public class UpdateExpressionUtils {
    */
   private static boolean areBsonSetOfSameType(final BsonValue bsonValue1,
       final BsonValue bsonValue2) {
-    if (!isBsonSet(bsonValue1) || !isBsonSet(bsonValue2)) {
+    if (!CommonComparisonExpressionUtils.isBsonSet(bsonValue1)
+            || !CommonComparisonExpressionUtils.isBsonSet(bsonValue2)) {
       return false;
     }
     BsonArray bsonArray1 = (BsonArray) ((BsonDocument) bsonValue1).get("$set");

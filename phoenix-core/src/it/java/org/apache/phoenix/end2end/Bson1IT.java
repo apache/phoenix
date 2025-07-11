@@ -207,6 +207,49 @@ public class Bson1IT extends ParallelStatsDisabledIT {
       assertEquals(bsonDocument2, document2);
 
       assertFalse(rs.next());
+
+      conditionExpression =
+              "begins_with(Title, :TitlePrefix) AND contains(#attr_5, :Attr5Value) "
+                      + "AND contains(#0, :NestedList1String)";
+
+      conditionDoc = new BsonDocument();
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", compareValuesDocument);
+      BsonDocument keyDoc = new BsonDocument();
+      keyDoc.put("#attr_5", new BsonString("attr_5"));
+      keyDoc.put("#0", new BsonString("NestedList1"));
+      conditionDoc.put("$KEYS", keyDoc);
+
+      query = "SELECT * FROM " + tableName + " WHERE BSON_CONDITION_EXPRESSION(COL, '"
+              + conditionDoc.toJson() + "')";
+      rs = conn.createStatement().executeQuery(query);
+
+      assertTrue(rs.next());
+      assertEquals("pk0002", rs.getString(1));
+      assertEquals(4596.354, rs.getDouble(2), 0.0);
+      document2 = (BsonDocument) rs.getObject(3);
+      assertEquals(bsonDocument2, document2);
+
+      assertFalse(rs.next());
+
+      conditionExpression =
+              "contains(attr_5, :NonExistentValue) OR begins_with(Title, :TitlePrefix)";
+
+      conditionDoc = new BsonDocument();
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", compareValuesDocument);
+
+      query = "SELECT * FROM " + tableName + " WHERE BSON_CONDITION_EXPRESSION(COL, '"
+              + conditionDoc.toJson() + "')";
+      rs = conn.createStatement().executeQuery(query);
+
+      assertTrue(rs.next());
+      assertEquals("pk0002", rs.getString(1));
+      assertEquals(4596.354, rs.getDouble(2), 0.0);
+      document2 = (BsonDocument) rs.getObject(3);
+      assertEquals(bsonDocument2, document2);
+
+      assertFalse(rs.next());
     }
   }
 
@@ -222,7 +265,10 @@ public class Bson1IT extends ParallelStatsDisabledIT {
             "  \":Ids1\" : \"12\",\n" +
             "  \":NMap1_NList1\" : \"NListVal01\",\n" +
             "  \":InPublication\" : false,\n" +
-            "  \":NestedList1_xyz0123\" : \"xyz0123\"\n" +
+            "  \":NestedList1_xyz0123\" : \"xyz0123\",\n" +
+            "  \":Attr5Value\" : \"str001\",\n" +
+            "  \":NestedList1String\" : \"1234abcd\",\n" +
+            "  \":NonExistentValue\" : \"does_not_exist\"\n" +
             "}";
     return RawBsonDocument.parse(json);
   }
