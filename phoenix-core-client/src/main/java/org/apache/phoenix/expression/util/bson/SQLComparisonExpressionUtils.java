@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,6 +22,7 @@ import org.apache.phoenix.parse.AndParseNode;
 import org.apache.phoenix.parse.BetweenParseNode;
 import org.apache.phoenix.parse.DocumentFieldExistsParseNode;
 import org.apache.phoenix.parse.DocumentFieldBeginsWithParseNode;
+import org.apache.phoenix.parse.DocumentFieldContainsParseNode;
 import org.apache.phoenix.parse.BsonExpressionParser;
 import org.apache.phoenix.parse.EqualParseNode;
 import org.apache.phoenix.parse.GreaterThanOrEqualParseNode;
@@ -34,6 +35,7 @@ import org.apache.phoenix.parse.NotEqualParseNode;
 import org.apache.phoenix.parse.NotParseNode;
 import org.apache.phoenix.parse.OrParseNode;
 import org.apache.phoenix.parse.ParseNode;
+import org.bson.BsonArray;
 import org.bson.BsonDocument;
 import org.bson.BsonString;
 import org.bson.BsonValue;
@@ -177,6 +179,17 @@ public final class SQLComparisonExpressionUtils {
       fieldName = replaceExpressionFieldNames(fieldName, keyAliasDocument, sortedKeyNames);
       final String prefixValue = (String) value.getValue();
       return beginsWith(fieldName, prefixValue, rawBsonDocument, comparisonValuesDocument);
+    } else if (parseNode instanceof DocumentFieldContainsParseNode) {
+      final DocumentFieldContainsParseNode documentFieldContainsParseNode =
+              (DocumentFieldContainsParseNode) parseNode;
+      final LiteralParseNode fieldKey =
+              (LiteralParseNode) documentFieldContainsParseNode.getFieldKey();
+      final LiteralParseNode value =
+              (LiteralParseNode) documentFieldContainsParseNode.getValue();
+      String fieldName = (String) fieldKey.getValue();
+      fieldName = replaceExpressionFieldNames(fieldName, keyAliasDocument, sortedKeyNames);
+      final String containsValue = (String) value.getValue();
+      return contains(fieldName, containsValue, rawBsonDocument, comparisonValuesDocument);
     } else if (parseNode instanceof EqualParseNode) {
       final EqualParseNode equalParseNode = (EqualParseNode) parseNode;
       final LiteralParseNode lhs = (LiteralParseNode) equalParseNode.getLHS();
@@ -574,6 +587,63 @@ public final class SQLComparisonExpressionUtils {
     } else {
       return false;
     }
+  }
+
+  /**
+   * Returns true if the value of the field contains the specified value. The field can be:
+   * - A String that contains a particular substring
+   * - A Set that contains a particular element within the set
+   * - A List that contains a particular element within the list
+   * For other data types, returns false.
+   *
+   * @param fieldKey The field key for which value is checked for contains.
+   * @param containsValue The value to check against the field value.
+   * @param rawBsonDocument Bson Document representing the cell value on which the comparison is
+   * to be performed.
+   * @param comparisonValuesDocument Bson Document with values placeholder.
+   * @return True if the value of the field contains containsValue, false otherwise.
+   */
+  private static boolean contains(final String fieldKey, final String containsValue,
+                                  final RawBsonDocument rawBsonDocument,
+                                  final BsonDocument comparisonValuesDocument) {
+    BsonValue topLevelValue = rawBsonDocument.get(fieldKey);
+    BsonValue fieldValue = topLevelValue != null ?
+            topLevelValue :
+            CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, rawBsonDocument);
+    if (fieldValue == null) {
+      return false;
+    }
+    BsonValue containsBsonValue = comparisonValuesDocument.get(containsValue);
+    if (containsBsonValue == null) {
+      return false;
+    }
+
+    if (fieldValue.isString()) {
+      if (!containsBsonValue.isString()) {
+        return false;
+      }
+      String fieldStr = ((BsonString) fieldValue).getValue();
+      String containsStr = ((BsonString) containsBsonValue).getValue();
+      return fieldStr.contains(containsStr);
+    } else if (fieldValue.isArray()) {
+      List<BsonValue> fieldValues = ((BsonArray) fieldValue).getValues();
+      return fieldValues.stream().anyMatch(element -> areEqual(element, containsBsonValue));
+    } else if (CommonComparisonExpressionUtils.isBsonSet(fieldValue)) {
+      List<BsonValue> fieldValues =
+              ((BsonArray) ((BsonDocument) fieldValue).get("$set")).getValues();
+      return fieldValues.stream().anyMatch(element -> areEqual(element, containsBsonValue));
+    }
+    return false;
+  }
+
+  private static boolean areEqual(BsonValue value1, BsonValue value2) {
+    if (value1 == null && value2 == null) {
+      return true;
+    }
+    if (value1 == null || value2 == null) {
+      return false;
+    }
+    return value1.equals(value2);
   }
 
 }

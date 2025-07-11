@@ -40,6 +40,24 @@ public class CommonComparisonExpressionUtils {
       LoggerFactory.getLogger(CommonComparisonExpressionUtils.class);
 
   /**
+   * Returns true if the given BsonValue represents Set data structure.
+   *
+   * @param bsonValue The value.
+   * @return True if the given BsonValue represents Set data structure.
+   */
+  static boolean isBsonSet(final BsonValue bsonValue) {
+    if (!bsonValue.isDocument()) {
+      return false;
+    }
+    BsonDocument bsonDocument = (BsonDocument) bsonValue;
+    if (bsonDocument.size() == 1 && bsonDocument.containsKey("$set")) {
+      BsonValue value = bsonDocument.get("$set");
+      return value != null && value.isArray();
+    }
+    return false;
+  }
+
+  /**
    * Comparison operators supported for the Document value comparisons.
    */
   public enum CompareOp {
