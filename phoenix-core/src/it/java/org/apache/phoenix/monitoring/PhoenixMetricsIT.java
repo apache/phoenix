@@ -49,6 +49,9 @@ import static org.apache.phoenix.monitoring.MetricType.TASK_EXECUTED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.TASK_EXECUTION_TIME;
 import static org.apache.phoenix.monitoring.MetricType.TASK_QUEUE_WAIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_COMMIT_TIME;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_COMPILER_TIME_NS;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_OPTIMIZER_TIME_NS;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_RESULT_ITR_SET_TIME_NS;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.UPSERT_BATCH_SIZE_ATTRIB;
 import static org.junit.Assert.assertEquals;
@@ -973,8 +976,12 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
     }
 
     private void assertReadMetricValuesForSelectSql(ArrayList<Long> numRows, ArrayList<Long> numExpectedTasks,
-            PhoenixResultSet resultSetBeingTested, Set<String> expectedTableNames) throws SQLException {
+            PhoenixResultSet resultSetBeingTested, Set<String> expectedTableNames) throws Exception {
         Map<String, Map<MetricType, Long>> metrics = PhoenixRuntime.getRequestReadMetricInfo(resultSetBeingTested);
+        Map<MetricType, Long> overallReadMetrics = PhoenixRuntime.getOverAllReadRequestMetricInfo(resultSetBeingTested);
+        assertTrue("Query compiler time should be greater than zero", overallReadMetrics.get(QUERY_COMPILER_TIME_NS) > 0);
+        assertTrue("Query optimizer time should be greater than zero", overallReadMetrics.get(QUERY_OPTIMIZER_TIME_NS) > 0);
+        assertTrue("Query Result Itr time should be greater than zero", overallReadMetrics.get(QUERY_RESULT_ITR_SET_TIME_NS) > 0);
         int counter = 0;
         for (Entry<String, Map<MetricType, Long>> entry : metrics.entrySet()) {
             String tableName = entry.getKey();
