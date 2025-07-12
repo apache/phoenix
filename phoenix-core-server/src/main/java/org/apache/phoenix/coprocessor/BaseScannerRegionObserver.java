@@ -160,7 +160,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             byte[] cdcScan = scan.getAttribute(CDC_DATA_TABLE_DEF);
             if (cdcScan != null) {
                 CDCUtil.setupScanForCDC(scan);
-                ScanUtil.adjustScanFilterForGlobalIndexRegionScanner(scan);
+                ScanUtil.adjustScanFilterForCDC(scan);
             }
         }
         if (isRegionObserverFor(scan)) {

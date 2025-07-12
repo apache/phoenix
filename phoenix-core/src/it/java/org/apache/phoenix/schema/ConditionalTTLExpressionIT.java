@@ -55,6 +55,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -450,31 +451,20 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             assertEquals("Table should contain all inserted rows", 5, actual);
 
             // Query initial CDC events (inserts)
-            String cdcQuery = "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " +
-                    PhoenixTestBuilder.DDLDefaults.DEFAULT_SCHEMA_NAME + "." + cdcName;
+            String cdcQuery1 = "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM "
+                    + PhoenixTestBuilder.DDLDefaults.DEFAULT_SCHEMA_NAME + "." + cdcName;
 
-            ResultSet resultSet = conn.createStatement().executeQuery(cdcQuery);
-            List<Map<String, Object>> postImageList = new ArrayList<>();
-            while (resultSet.next()) {
-                String cdcVal = resultSet.getString(4);
-                Map<String, Object> map = OBJECT_MAPPER.readValue(cdcVal, Map.class);
+            String cdcQuery2 = "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM "
+                    + PhoenixTestBuilder.DDLDefaults.DEFAULT_SCHEMA_NAME + "." + cdcName
+                    + " LIMIT 7";
 
-                // Validate insert events have no pre-image but have post-image
-                Map<String, Object> preImage =
-                        (Map<String, Object>) map.get(QueryConstants.CDC_PRE_IMAGE);
-                assertTrue("Insert events should have empty pre-image", preImage.isEmpty());
+            String cdcQuery3 = "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM "
+                    + PhoenixTestBuilder.DDLDefaults.DEFAULT_SCHEMA_NAME + "." + cdcName
+                    + " LIMIT 10 OFFSET 2";
 
-                Map<String, Object> postImage =
-                        (Map<String, Object>) map.get(QueryConstants.CDC_POST_IMAGE);
-                assertFalse("Insert events should have non-empty post-image", postImage.isEmpty());
-                postImageList.add(postImage);
-
-                assertEquals("Initial events should be UPSERT type",
-                        QueryConstants.CDC_UPSERT_EVENT_TYPE,
-                        map.get(QueryConstants.CDC_EVENT_TYPE));
-            }
-            assertEquals("Post image list size should be 5 but it is " + postImageList.size(), 5,
-                    postImageList.size());
+            List<Map<String, Object>> postImageList1 = getPostImageList(conn, cdcQuery1, 5);
+            List<Map<String, Object>> postImageList2 = getPostImageList(conn, cdcQuery2, 5);
+            List<Map<String, Object>> postImageList3 = getPostImageList(conn, cdcQuery3, 3);
 
             // TTL Expiration - Advance time to trigger TTL expiration
             injectEdge.incrementValue(ttl);
@@ -484,32 +474,13 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             actual = TestUtil.getRowCount(conn, tableName, true);
             assertEquals("All rows should be expired after TTL", 0, actual);
 
+            cdcQuery2 = "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM "
+                    + PhoenixTestBuilder.DDLDefaults.DEFAULT_SCHEMA_NAME + "." + cdcName
+                    + " LIMIT 11";
             // TTL CDC Events - Validate TTL_DELETE events are generated
-            resultSet = conn.createStatement().executeQuery(cdcQuery);
-            int i = 0;
-            while (resultSet.next()) {
-                String cdcVal = resultSet.getString(4);
-                Map<String, Object> map = OBJECT_MAPPER.readValue(cdcVal, Map.class);
-
-                // Validate TTL delete events
-                assertEquals("TTL expired rows should generate TTL_DELETE events",
-                        QueryConstants.CDC_TTL_DELETE_EVENT_TYPE,
-                        map.get(QueryConstants.CDC_EVENT_TYPE));
-
-                Map<String, Object> preImage =
-                        (Map<String, Object>) map.get(QueryConstants.CDC_PRE_IMAGE);
-                assertFalse("TTL_DELETE events should have non-empty pre-image",
-                        preImage.isEmpty());
-
-                assertNull("TTL_DELETE events should have empty post-image",
-                        map.get(QueryConstants.CDC_POST_IMAGE));
-
-                // TTL delete pre-image should match previous upsert post-image
-                assertEquals("TTL_DELETE pre-image should match original insert post-image",
-                        postImageList.get(i), preImage);
-                i++;
-            }
-            assertEquals("Num of TTL_DELETE events verified should be 5 but it is " + i, 5, i);
+            compareTtlPreImagesWithLastPostImages(conn, cdcQuery1, postImageList1, 5);
+            compareTtlPreImagesWithLastPostImages(conn, cdcQuery2, postImageList2, 5);
+            compareTtlPreImagesWithLastPostImages(conn, cdcQuery3, postImageList3, 3);
 
             // Update an expired row to bring it back
             injectEdge.incrementValue(1);
@@ -542,13 +513,13 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             validateTable(conn, tableName, expectedCellCount, dataRowPosToKey.values());
 
             // Query CDC events
-            cdcQuery = "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " +
+            String cdcQuery = "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " +
                     PhoenixTestBuilder.DDLDefaults.DEFAULT_SCHEMA_NAME + "." + cdcName
                     + " WHERE PHOENIX_ROW_TIMESTAMP() >= ?";
             PreparedStatement ps = conn.prepareStatement(cdcQuery);
             ps.setTimestamp(1, new Timestamp(currentTime));
-            resultSet = ps.executeQuery();
-            postImageList = new ArrayList<>();
+            ResultSet resultSet = ps.executeQuery();
+            List<Map<String, Object>> postImageList = new ArrayList<>();
             while (resultSet.next()) {
                 String cdcVal = resultSet.getString(4);
                 Map<String, Object> map = OBJECT_MAPPER.readValue(cdcVal, Map.class);
@@ -585,7 +556,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             ps = conn.prepareStatement(cdcQuery);
             ps.setTimestamp(1, new Timestamp(currentTime));
             resultSet = ps.executeQuery();
-            i = 0;
+            int i = 0;
             while (resultSet.next()) {
                 String cdcVal = resultSet.getString(4);
                 Map<String, Object> map = OBJECT_MAPPER.readValue(cdcVal, Map.class);
@@ -608,6 +579,67 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             }
             assertEquals("Num of TTL_DELETE events verified should be 5 but it is " + i, 1, i);
         }
+    }
+
+    private static void compareTtlPreImagesWithLastPostImages(Connection conn, String cdcQuery,
+                                                              List<Map<String, Object>> postImageList,
+                                                              int expectedCount)
+            throws SQLException, JsonProcessingException {
+        ResultSet resultSet = conn.createStatement().executeQuery(cdcQuery);
+        int i = 0;
+        while (resultSet.next()) {
+            String cdcVal = resultSet.getString(4);
+            Map<String, Object> map = OBJECT_MAPPER.readValue(cdcVal, Map.class);
+
+            // Validate TTL delete events
+            assertEquals("TTL expired rows should generate TTL_DELETE events",
+                    QueryConstants.CDC_TTL_DELETE_EVENT_TYPE,
+                    map.get(QueryConstants.CDC_EVENT_TYPE));
+
+            Map<String, Object> preImage =
+                    (Map<String, Object>) map.get(QueryConstants.CDC_PRE_IMAGE);
+            assertFalse("TTL_DELETE events should have non-empty pre-image",
+                    preImage.isEmpty());
+
+            assertNull("TTL_DELETE events should have empty post-image",
+                    map.get(QueryConstants.CDC_POST_IMAGE));
+
+            // TTL delete pre-image should match previous upsert post-image
+            assertEquals("TTL_DELETE pre-image should match original insert post-image",
+                    postImageList.get(i), preImage);
+            i++;
+        }
+        assertEquals(
+                "Num of TTL_DELETE events verified should be " + expectedCount + " but it is " + i,
+                expectedCount, i);
+    }
+
+    private static List<Map<String, Object>> getPostImageList(Connection conn, String cdcQuery,
+                                                              int expectedCount)
+            throws SQLException, JsonProcessingException {
+        ResultSet resultSet = conn.createStatement().executeQuery(cdcQuery);
+        List<Map<String, Object>> postImageList = new ArrayList<>();
+        while (resultSet.next()) {
+            String cdcVal = resultSet.getString(4);
+            Map<String, Object> map = OBJECT_MAPPER.readValue(cdcVal, Map.class);
+
+            // Validate insert events have no pre-image but have post-image
+            Map<String, Object> preImage =
+                    (Map<String, Object>) map.get(QueryConstants.CDC_PRE_IMAGE);
+            assertTrue("Insert events should have empty pre-image", preImage.isEmpty());
+
+            Map<String, Object> postImage =
+                    (Map<String, Object>) map.get(QueryConstants.CDC_POST_IMAGE);
+            assertFalse("Insert events should have non-empty post-image", postImage.isEmpty());
+            postImageList.add(postImage);
+
+            assertEquals("Initial events should be UPSERT type",
+                    QueryConstants.CDC_UPSERT_EVENT_TYPE,
+                    map.get(QueryConstants.CDC_EVENT_TYPE));
+        }
+        assertEquals("Post image list size should be " + expectedCount + " but it is "
+                + postImageList.size(), expectedCount, postImageList.size());
+        return postImageList;
     }
 
     @Test

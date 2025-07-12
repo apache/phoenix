@@ -2191,18 +2191,50 @@ public class Bson3IT extends ParallelStatsDisabledIT {
       }
 
       // Verify TTL delete events for all rows
-      assertEquals("Should have TTL delete events for all 3 rows", 3, ttlDeleteEvents.size());
+      verifyFinalPreImagesWithLastPostImages(ttlDeleteEvents, lastPostImages);
 
-      // Verify pre-image consistency for each row
-      for (String pk : Arrays.asList("pk0001", "pk1010", "pk1011")) {
-        Map<String, Object> ttlPreImage = ttlDeleteEvents.get(pk);
-        assertNotNull("Should have TTL delete event for " + pk, ttlPreImage);
-        Map<String, Object> lastPostImage = lastPostImages.get(pk);
-        assertNotNull("TTL pre-image should not be null for " + pk, ttlPreImage);
-        assertNotNull("Last post-image should not be null for " + pk, lastPostImage);
-        assertEquals("TTL delete pre-image should match last post-image for " + pk,
-                lastPostImage, ttlPreImage);
+      ttlDeleteQuery = "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcName +
+              " WHERE PHOENIX_ROW_TIMESTAMP() > ? LIMIT 1";
+      ttlDeleteEvents = new HashMap<>();
+
+      try (PreparedStatement pst = conn.prepareStatement(ttlDeleteQuery)) {
+        pst.setTimestamp(1, beforeTTLTimestamp);
+        try (ResultSet ttlRs = pst.executeQuery()) {
+          while (ttlRs.next()) {
+            String pk = ttlRs.getString(2);
+            String cdcVal = ttlRs.getString(3);
+            Map<String, Object> cdcEvent = OBJECT_MAPPER.readValue(cdcVal, HashMap.class);
+
+            // Only process TTL delete events
+            if (CDC_TTL_DELETE_EVENT_TYPE.equals(cdcEvent.get(CDC_EVENT_TYPE))) {
+              ttlDeleteEvents.put(pk, (Map<String, Object>) cdcEvent.get(CDC_PRE_IMAGE));
+            }
+          }
+        }
       }
+
+      assertEquals("Should have TTL delete events for initial 1 row", 1, ttlDeleteEvents.size());
+
+      ttlDeleteQuery = "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcName +
+              " WHERE PHOENIX_ROW_TIMESTAMP() > ? LIMIT 3 OFFSET 1";
+
+      try (PreparedStatement pst = conn.prepareStatement(ttlDeleteQuery)) {
+        pst.setTimestamp(1, beforeTTLTimestamp);
+        try (ResultSet ttlRs = pst.executeQuery()) {
+          while (ttlRs.next()) {
+            String pk = ttlRs.getString(2);
+            String cdcVal = ttlRs.getString(3);
+            Map<String, Object> cdcEvent = OBJECT_MAPPER.readValue(cdcVal, HashMap.class);
+
+            // Only process TTL delete events
+            if (CDC_TTL_DELETE_EVENT_TYPE.equals(cdcEvent.get(CDC_EVENT_TYPE))) {
+              ttlDeleteEvents.put(pk, (Map<String, Object>) cdcEvent.get(CDC_PRE_IMAGE));
+            }
+          }
+        }
+      }
+
+      verifyFinalPreImagesWithLastPostImages(ttlDeleteEvents, lastPostImages);
 
       ttlDeleteQuery = "SELECT /*+ CDC_INCLUDE(POST) */ * FROM " + cdcName +
               " WHERE PHOENIX_ROW_TIMESTAMP() > ?";
@@ -2220,10 +2252,28 @@ public class Bson3IT extends ParallelStatsDisabledIT {
           }
         }
       }
-      assertEquals("Total num of TTL_DELETE events without pre-image should be 3 but it is " +
-                      nonePreImages, 3, nonePreImages);
+      assertEquals("Total num of TTL_DELETE events without pre-image should be 3 but it is "
+              + nonePreImages, 3, nonePreImages);
     } finally {
       EnvironmentEdgeManager.reset();
+    }
+  }
+
+  private static void verifyFinalPreImagesWithLastPostImages(
+          Map<String, Map<String, Object>> ttlDeleteEvents,
+          Map<String, Map<String, Object>> lastPostImages) {
+    // Verify TTL delete events for all rows
+    assertEquals("Should have TTL delete events for all 3 rows", 3, ttlDeleteEvents.size());
+
+    // Verify pre-image consistency for each row
+    for (String pk : Arrays.asList("pk0001", "pk1010", "pk1011")) {
+      Map<String, Object> ttlPreImage = ttlDeleteEvents.get(pk);
+      assertNotNull("Should have TTL delete event for " + pk, ttlPreImage);
+      Map<String, Object> lastPostImage = lastPostImages.get(pk);
+      assertNotNull("TTL pre-image should not be null for " + pk, ttlPreImage);
+      assertNotNull("Last post-image should not be null for " + pk, lastPostImage);
+      assertEquals("TTL delete pre-image should match last post-image for " + pk,
+              lastPostImage, ttlPreImage);
     }
   }
 

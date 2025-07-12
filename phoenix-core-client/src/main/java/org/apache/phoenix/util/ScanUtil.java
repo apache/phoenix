@@ -25,13 +25,10 @@ import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverCons
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_STOP_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.CDC_DATA_TABLE_DEF;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_TTL;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_DEFINED_IN_TABLE_DESCRIPTOR;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR;
-import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
@@ -44,7 +41,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
-import java.util.Set;
 import java.util.TreeMap;
 
 import org.apache.hadoop.conf.Configuration;
@@ -85,7 +81,6 @@ import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.filter.MultiEncodedCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
-import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.index.CDCTableInfo;
@@ -97,9 +92,7 @@ import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.CompiledConditionalTTLExpression;
 import org.apache.phoenix.schema.CompiledTTLExpression;
-import org.apache.phoenix.schema.ConditionalTTLExpression;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
@@ -110,7 +103,6 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.TTLExpression;
 import org.apache.phoenix.schema.LiteralTTLExpression;
 import org.apache.phoenix.schema.TTLExpressionFactory;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -657,6 +649,45 @@ public class ScanUtil {
             scan.setFilter(new AllVersionsIndexRebuildFilter(filter));
         }
         return false;
+    }
+
+    /**
+     * Adjusts the scan filter for CDC scans.
+     * Remove EmptyColumnOnlyFilter and FirstKeyOnlyFilter if present.
+     *
+     * @param scan the scan to adjust.
+     */
+    public static void adjustScanFilterForCDC(Scan scan) {
+        Filter originalFilter = scan.getFilter();
+
+        if (originalFilter instanceof FilterList) {
+            FilterList filterList = (FilterList) originalFilter;
+            List<Filter> filters = filterList.getFilters();
+            List<Filter> newFilters = new ArrayList<>();
+
+            boolean filtersRemoved = false;
+            for (Filter filter : filters) {
+                if (!(filter instanceof EmptyColumnOnlyFilter)
+                        && !(filter instanceof FirstKeyOnlyFilter)) {
+                    newFilters.add(filter);
+                } else {
+                    filtersRemoved = true;
+                }
+            }
+
+            if (filtersRemoved) {
+                if (newFilters.isEmpty()) {
+                    scan.setFilter(null);
+                } else if (newFilters.size() == 1) {
+                    scan.setFilter(newFilters.get(0));
+                } else {
+                    FilterList newFilterList = new FilterList(filterList.getOperator(), newFilters);
+                    scan.setFilter(newFilterList);
+                }
+            }
+        } else {
+            adjustScanFilterForGlobalIndexRegionScanner(scan);
+        }
     }
 
     public static interface BytesComparator {
