@@ -19,9 +19,12 @@ package org.apache.phoenix.monitoring;
 
 import static org.apache.phoenix.monitoring.MetricType.CACHE_REFRESH_SPLITS_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.NUM_PARALLEL_SCANS;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_COMPILER_TIME_MS;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_FAILED_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_OPTIMIZER_TIME_MS;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_POINTLOOKUP_FAILED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_POINTLOOKUP_TIMEOUT_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_RESULT_ITR_TIME_MS;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_SCAN_FAILED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_SCAN_TIMEOUT_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_TIMEOUT_COUNTER;
@@ -43,6 +46,9 @@ public class OverAllQueryMetrics {
     private final CombinableMetric numParallelScans;
     private final CombinableMetric wallClockTimeMS;
     private final CombinableMetric resultSetTimeMS;
+    private final CombinableMetric queryCompilerTimeMS;
+    private final CombinableMetric queryOptimizerTimeMS;
+    private final CombinableMetric queryResultItrSetTimeMS;
     private final CombinableMetric queryTimedOut;
     private final CombinableMetric queryPointLookupTimedOut;
     private final CombinableMetric queryScanTimedOut;
@@ -56,6 +62,12 @@ public class OverAllQueryMetrics {
                 WALL_CLOCK_TIME_MS);
         resultSetWatch = MetricUtil.getMetricsStopWatch(isRequestMetricsEnabled, connectionLogLevel,
                 RESULT_SET_TIME_MS);
+        queryCompilerTimeMS = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,
+            connectionLogLevel, QUERY_COMPILER_TIME_MS);
+        queryOptimizerTimeMS = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,
+            connectionLogLevel, QUERY_OPTIMIZER_TIME_MS);
+        queryResultItrSetTimeMS = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,
+            connectionLogLevel, QUERY_RESULT_ITR_TIME_MS);
         numParallelScans = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,
                 connectionLogLevel, NUM_PARALLEL_SCANS);
         wallClockTimeMS = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,
@@ -106,6 +118,18 @@ public class OverAllQueryMetrics {
         cacheRefreshedDueToSplits.increment();
     }
 
+    public void setQueryCompilerTimeMS(long time) {
+        queryCompilerTimeMS.set(time);
+    }
+
+    public void setQueryOptimizerTimeMS(long time) {
+        queryOptimizerTimeMS.set(time);
+    }
+
+    public void setQueryResultItrTimeMS(long time) {
+        queryResultItrSetTimeMS.set(time);
+    }
+
     public void startQuery() {
         if (!queryWatch.isRunning()) {
             queryWatch.start();
@@ -147,6 +171,9 @@ public class OverAllQueryMetrics {
         metricsForPublish.put(numParallelScans.getMetricType(), numParallelScans.getValue());
         metricsForPublish.put(wallClockTimeMS.getMetricType(), wallClockTimeMS.getValue());
         metricsForPublish.put(resultSetTimeMS.getMetricType(), resultSetTimeMS.getValue());
+        metricsForPublish.put(queryCompilerTimeMS.getMetricType(), queryCompilerTimeMS.getValue());
+        metricsForPublish.put(queryOptimizerTimeMS.getMetricType(), queryOptimizerTimeMS.getValue());
+        metricsForPublish.put(queryResultItrSetTimeMS.getMetricType(), queryResultItrSetTimeMS.getValue());
         metricsForPublish.put(queryTimedOut.getMetricType(), queryTimedOut.getValue());
         metricsForPublish.put(queryPointLookupTimedOut.getMetricType(), queryPointLookupTimedOut.getValue());
         metricsForPublish.put(queryScanTimedOut.getMetricType(), queryScanTimedOut.getValue());
@@ -161,6 +188,9 @@ public class OverAllQueryMetrics {
         numParallelScans.reset();
         wallClockTimeMS.reset();
         resultSetTimeMS.reset();
+        queryCompilerTimeMS.reset();
+        queryOptimizerTimeMS.reset();
+        queryResultItrSetTimeMS.reset();
         queryTimedOut.reset();
         queryPointLookupTimedOut.reset();
         queryScanTimedOut.reset();
@@ -183,6 +213,9 @@ public class OverAllQueryMetrics {
         numParallelScans.combine(metric.numParallelScans);
         wallClockTimeMS.combine(metric.wallClockTimeMS);
         resultSetTimeMS.combine(metric.resultSetTimeMS);
+        queryCompilerTimeMS.combine(queryCompilerTimeMS);
+        queryOptimizerTimeMS.combine(queryOptimizerTimeMS);
+        queryResultItrSetTimeMS.combine(queryResultItrSetTimeMS);
         return this;
     }
 

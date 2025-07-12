@@ -43,6 +43,9 @@ import static org.apache.phoenix.monitoring.MetricType.DELETE_COMMIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.MEMORY_CHUNK_BYTES;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_COMMIT_TIME;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_COMPILER_TIME_MS;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_OPTIMIZER_TIME_MS;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_RESULT_ITR_TIME_MS;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_TIMEOUT_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.TASK_END_TO_END_TIME;
 import static org.apache.phoenix.monitoring.MetricType.TASK_EXECUTED_COUNTER;
@@ -56,6 +59,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.lang.reflect.Field;
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
@@ -492,6 +496,78 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         Set<String> expectedTableNames = Sets.newHashSet(tableName);
         assertReadMetricValuesForSelectSql(Lists.newArrayList(numRows), Lists.newArrayList(numExpectedTasks),
                 resultSetBeingTested, expectedTableNames);
+    }
+
+    @Test
+    public void testExecuteQuerySubMetricsForSelect() throws Exception {
+        String tableName = generateUniqueName();
+        String index1Name = generateUniqueName() + "_IDX1";
+        String index2Name = generateUniqueName() + "_IDX2";
+        String index3Name = generateUniqueName() + "_IDX3";
+        // Creating table with high salt bucket to increase ResultIterator time
+        long numSaltBuckets = 50;
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String ddl = "CREATE TABLE " + tableName + " (" +
+                "ID INTEGER NOT NULL PRIMARY KEY, " +
+                "CATEGORY VARCHAR(50), " +
+                "PRICE DECIMAL(12,2), " +
+                "QUANTITY INTEGER)" +
+                " SALT_BUCKETS = " + numSaltBuckets;
+            conn.createStatement().execute(ddl);
+
+            String idx1 = "CREATE INDEX " + index1Name + " ON " + tableName + " (CATEGORY, PRICE)";
+            String idx2 = "CREATE INDEX " + index2Name + " ON " + tableName + " (PRICE, QUANTITY)";
+            String idx3 = "CREATE INDEX " + index3Name + " ON " + tableName + " (QUANTITY, CATEGORY)";
+            conn.createStatement().execute(idx1);
+            conn.createStatement().execute(idx2);
+            conn.createStatement().execute(idx3);
+
+            PreparedStatement stmt = conn.prepareStatement(
+                "UPSERT INTO " + tableName + " VALUES (?, ?, ?, ?)");
+
+            String[] categories = {"A", "B", "C", "D", "E"};
+
+            for (int i = 1; i <= 2000; i++) {
+                stmt.setInt(1, i);
+                stmt.setString(2, categories[i % categories.length]);
+                stmt.setBigDecimal(3, new BigDecimal(i/23));
+                stmt.setInt(4, (i % 200) + 1);
+                stmt.executeUpdate();
+            }
+            conn.commit();
+
+            String selectQuery =
+                "SELECT " +
+                    "  CATEGORY, " +
+                    "  COUNT(*) as total_count, " +
+                    "  AVG(PRICE) as avg_price, " +
+                    "  SUM(QUANTITY) as total_quantity " +
+                    "FROM " + tableName + " " +
+                    "WHERE " +
+                    "  CATEGORY IN (?, ?, ?, ?, ?) " +
+                    "GROUP BY CATEGORY " +
+                    "ORDER BY " +
+                    "  SUM(PRICE * QUANTITY) DESC";
+
+            PreparedStatement queryStmt = conn.prepareStatement(selectQuery);
+            queryStmt.setString(1, "A");
+            queryStmt.setString(2, "B");
+            queryStmt.setString(3, "C");
+            queryStmt.setString(4, "D");
+            queryStmt.setString(5, "E");
+
+            ResultSet rs = queryStmt.executeQuery();
+            PhoenixResultSet phoenixResultSet = rs.unwrap(PhoenixResultSet.class);
+            Map<MetricType, Long> overallReadMetrics = PhoenixRuntime.getOverAllReadRequestMetricInfo(rs);
+
+            assertTrue("Query compiler time should have been greater than zero",
+                overallReadMetrics.get(QUERY_COMPILER_TIME_MS) > 0);
+            assertTrue("Query optimizer time should have been greater than zero",
+                overallReadMetrics.get(QUERY_OPTIMIZER_TIME_MS) > 0);
+            assertTrue("Query Result Itr time should have been greater than zero",
+                overallReadMetrics.get(QUERY_RESULT_ITR_TIME_MS) > 0);
+        }
     }
 
     @Test
