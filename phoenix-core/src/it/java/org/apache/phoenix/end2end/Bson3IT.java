@@ -2203,6 +2203,25 @@ public class Bson3IT extends ParallelStatsDisabledIT {
         assertEquals("TTL delete pre-image should match last post-image for " + pk,
                 lastPostImage, ttlPreImage);
       }
+
+      ttlDeleteQuery = "SELECT /*+ CDC_INCLUDE(POST) */ * FROM " + cdcName +
+              " WHERE PHOENIX_ROW_TIMESTAMP() > ?";
+
+      int nonePreImages = 0;
+      try (PreparedStatement pst = conn.prepareStatement(ttlDeleteQuery)) {
+        pst.setTimestamp(1, beforeTTLTimestamp);
+        try (ResultSet ttlRs = pst.executeQuery()) {
+          while (ttlRs.next()) {
+            String cdcVal = ttlRs.getString(3);
+            Map<String, Object> cdcEvent = OBJECT_MAPPER.readValue(cdcVal, HashMap.class);
+            assertEquals(CDC_TTL_DELETE_EVENT_TYPE, cdcEvent.get(CDC_EVENT_TYPE));
+            assertNull("Pre-image should not be present", cdcEvent.get(CDC_PRE_IMAGE));
+            nonePreImages++;
+          }
+        }
+      }
+      assertEquals("Total num of TTL_DELETE events without pre-image should be 3 but it is " +
+                      nonePreImages, 3, nonePreImages);
     } finally {
       EnvironmentEdgeManager.reset();
     }

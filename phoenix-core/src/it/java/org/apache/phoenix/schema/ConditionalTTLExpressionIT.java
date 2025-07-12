@@ -501,9 +501,8 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
                 assertFalse("TTL_DELETE events should have non-empty pre-image",
                         preImage.isEmpty());
 
-                Map<String, Object> postImage =
-                        (Map<String, Object>) map.get(QueryConstants.CDC_POST_IMAGE);
-                assertTrue("TTL_DELETE events should have empty post-image", postImage.isEmpty());
+                assertNull("TTL_DELETE events should have empty post-image",
+                        map.get(QueryConstants.CDC_POST_IMAGE));
 
                 // TTL delete pre-image should match previous upsert post-image
                 assertEquals("TTL_DELETE pre-image should match original insert post-image",
@@ -600,9 +599,8 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
                 assertFalse("Second TTL_DELETE should have non-empty pre-image",
                         preImage.isEmpty());
 
-                Map<String, Object> postImage =
-                        (Map<String, Object>) map.get(QueryConstants.CDC_POST_IMAGE);
-                assertTrue("Second TTL_DELETE should have empty post-image", postImage.isEmpty());
+                assertNull("TTL_DELETE events should have empty post-image",
+                        map.get(QueryConstants.CDC_POST_IMAGE));
 
                 assertEquals("Second TTL_DELETE pre-image should match resurrection post-image",
                         postImageList.get(i), preImage);

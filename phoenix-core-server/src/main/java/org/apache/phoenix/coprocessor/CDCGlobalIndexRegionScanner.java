@@ -54,6 +54,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.CDC_DATA_TABLE_DEF;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
@@ -320,9 +321,10 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
      * @param indexCell   The primary index cell
      * @param result      The result list to populate
      * @return true if event was processed successfully
+     * @throws IOException If error is encountered while handling built-in image data.
      */
     private boolean handlePreImageCDCEvent(List<Cell> indexRow, byte[] indexRowKey,
-                                           Cell indexCell, List<Cell> result) {
+                                           Cell indexCell, List<Cell> result) throws IOException {
         Cell cdcDataCell = null;
         for (Cell cell : indexRow) {
             if (Bytes.equals(cell.getQualifierArray(), cell.getQualifierOffset(),
@@ -337,6 +339,12 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
             return false;
         }
         byte[] cdcEventBytes = CellUtil.cloneValue(cdcDataCell);
+        if (!this.changeBuilder.isPreImageInScope()) {
+            Map<String, Object> cdcJson =
+                    JacksonUtil.getObjectReader(HashMap.class).readValue(cdcEventBytes);
+            cdcJson.remove(QueryConstants.CDC_PRE_IMAGE);
+            cdcEventBytes = JacksonUtil.getObjectWriter(HashMap.class).writeValueAsBytes(cdcJson);
+        }
         Result cdcRow = createCDCResult(indexRowKey, indexCell, cdcDataCell.getTimestamp(),
                 cdcEventBytes);
 
