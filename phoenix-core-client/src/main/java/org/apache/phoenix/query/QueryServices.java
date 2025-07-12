@@ -141,6 +141,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String MAX_SERVER_METADATA_CACHE_SIZE_ATTRIB = "phoenix.coprocessor.maxMetaDataCacheSize";
     public static final String MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB = "phoenix.client.maxMetaDataCacheSize";
     public static final String HA_GROUP_NAME_ATTRIB = "phoenix.ha.group";
+    public static final String HA_GROUP_STORE_MANAGER_IMPL_CLASS = "phoenix.ha.groupstore.manager.impl.class";
     public static final String AUTO_UPGRADE_WHITELIST_ATTRIB = "phoenix.client.autoUpgradeWhiteList";
     // Mainly for testing to force spilling
     public static final String MAX_MEMORY_SIZE_ATTRIB = "phoenix.query.maxGlobalMemorySize";
@@ -387,6 +388,13 @@ public interface QueryServices extends SQLCloseable {
     public static final String PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT = "phoenix.view.ttl.tenant_views_per_scan.limit";
     // Block mutations based on cluster role record
     public static final String CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED = "phoenix.cluster.role.based.mutation.block.enabled";
+
+    // TODO: Revisit this default value based on production usage patterns
+    // Refresh interval for store and forward mode status updates in milliseconds
+    public static final String HA_STORE_AND_FORWARD_MODE_REFRESH_INTERVAL_MS = "phoenix.ha.store.forward.mode.refresh.interval.ms";
+    // TODO: Revisit this default value based on production usage patterns
+    // Refresh interval for sync mode status updates in milliseconds
+    public static final String HA_SYNC_MODE_REFRESH_INTERVAL_MS = "phoenix.ha.sync.mode.refresh.interval.ms";
     //Enable Thread Pool Creation in CQSI to be used for HBase Client.
     String CQSI_THREAD_POOL_ENABLED = "phoenix.cqsi.thread.pool.enabled";
     //CQSI Thread Pool Related Configuration.

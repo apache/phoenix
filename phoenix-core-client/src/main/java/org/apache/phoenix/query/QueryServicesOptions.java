@@ -28,6 +28,9 @@ import static org.apache.phoenix.query.QueryServices.CDC_TTL_MUTATION_MAX_RETRIE
 import static org.apache.phoenix.query.QueryServices.CLIENT_METRICS_TAG;
 import static org.apache.phoenix.query.QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
+import static org.apache.phoenix.query.QueryServices.HA_GROUP_STORE_MANAGER_IMPL_CLASS;
+import static org.apache.phoenix.query.QueryServices.HA_STORE_AND_FORWARD_MODE_REFRESH_INTERVAL_MS;
+import static org.apache.phoenix.query.QueryServices.HA_SYNC_MODE_REFRESH_INTERVAL_MS;
 import static org.apache.phoenix.query.QueryServices.COLLECT_REQUEST_LEVEL_METRICS;
 import static org.apache.phoenix.query.QueryServices.COMMIT_STATS_ASYNC;
 import static org.apache.phoenix.query.QueryServices.CONNECTION_ACTIVITY_LOGGING_ENABLED;
@@ -463,6 +466,12 @@ public class QueryServicesOptions {
 
 
     public static final Boolean DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED = false;
+
+    // TODO: Revisit these default values based on production usage patterns
+    public static final long DEFAULT_HA_STORE_AND_FORWARD_MODE_REFRESH_INTERVAL_MS = 1000L; // 2.5 seconds
+    public static final long DEFAULT_HA_SYNC_MODE_REFRESH_INTERVAL_MS = 3000L; // 5 seconds
+    public static final String DEFAULT_HA_GROUP_STORE_MANAGER_IMPL_CLASS = "org.apache.phoenix.jdbc.HAGroupStoreManagerV1Impl";
+
     public static final Boolean DEFAULT_CQSI_THREAD_POOL_ENABLED = false;
     public static final int DEFAULT_CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS = 60;
     public static final int DEFAULT_CQSI_THREAD_POOL_CORE_POOL_SIZE = 25;
@@ -471,8 +480,9 @@ public class QueryServicesOptions {
     public static final Boolean DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT = true;
     public static final Boolean DEFAULT_CQSI_THREAD_POOL_METRICS_ENABLED = false;
     public static final int DEFAULT_CDC_TTL_MUTATION_MAX_RETRIES = 5;
-  
+
     public static final long DEFAULT_PHOENIX_CDC_STREAM_PARTITION_EXPIRY_MIN_AGE_MS = 30*60*60*1000; // 30 hours
+
 
     private final Configuration config;
 
@@ -580,6 +590,11 @@ public class QueryServicesOptions {
                     DEFAULT_CONNECTION_ACTIVITY_LOGGING_INTERVAL_IN_MINS)
             .setIfUnset(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED,
                     DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED)
+            .setIfUnset(HA_STORE_AND_FORWARD_MODE_REFRESH_INTERVAL_MS,
+                    DEFAULT_HA_STORE_AND_FORWARD_MODE_REFRESH_INTERVAL_MS)
+            .setIfUnset(HA_SYNC_MODE_REFRESH_INTERVAL_MS,
+                    DEFAULT_HA_SYNC_MODE_REFRESH_INTERVAL_MS)
+            .setIfUnset(HA_GROUP_STORE_MANAGER_IMPL_CLASS, DEFAULT_HA_GROUP_STORE_MANAGER_IMPL_CLASS)
             .setIfUnset(CQSI_THREAD_POOL_ENABLED, DEFAULT_CQSI_THREAD_POOL_ENABLED)
             .setIfUnset(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS,
                     DEFAULT_CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS)
