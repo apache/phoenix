@@ -67,7 +67,8 @@ public class ReplicationLogProcessor implements Closeable {
     public static final int DEFAULT_REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE = 6400;
 
     /**
-     * The maximum total size of mutations to process in single batch while reading replication log file
+     * The maximum total size of mutations to process in single batch while reading
+     * replication log file
      */
     public static final String REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE_BYTES =
             "phoenix.replication.log.standby.replay.batch.size.bytes";
@@ -75,7 +76,8 @@ public class ReplicationLogProcessor implements Closeable {
     /**
      * The default batch size in bytes for reading the replication log file (64 MB)
      */
-    public static final long DEFAULT_REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE_BYTES = 64 * 1024 * 1024L;
+    public static final long DEFAULT_REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE_BYTES =
+            64 * 1024 * 1024L;
 
     /**
      * The number of threads to apply mutations via async hbase client
@@ -245,7 +247,8 @@ public class ReplicationLogProcessor implements Closeable {
                 currentBatchSizeBytes += mutation.heapSize();
 
                 // Process when we reach either the batch count or size limit
-                if (currentBatchSize >= getBatchSize() || currentBatchSizeBytes >= getBatchSizeBytes()) {
+                if (currentBatchSize >= getBatchSize() ||
+                    currentBatchSizeBytes >= getBatchSizeBytes()) {
                     processReplicationLogBatch(tableToMutationsMap);
                     totalProcessed += currentBatchSize;
                     tableToMutationsMap.clear();

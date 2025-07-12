@@ -584,7 +584,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
             writer.append(tableName, i, put);
         }
 
-        // Add 1 big mutation that will cross the byte size threshold before count threashold
+        // Add 1 big mutation that will cross the byte size threshold before count threshold
         Put bigPut = new Put(Bytes.toBytes("bigRow"));
         bigPut.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("qual"),
             Bytes.toBytes("This is a very large mutation that will exceed the size limit. " +
