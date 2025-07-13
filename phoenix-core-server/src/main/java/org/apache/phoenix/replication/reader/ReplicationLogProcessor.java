@@ -247,8 +247,8 @@ public class ReplicationLogProcessor implements Closeable {
                 currentBatchSizeBytes += mutation.heapSize();
 
                 // Process when we reach either the batch count or size limit
-                if (currentBatchSize >= getBatchSize() ||
-                    currentBatchSizeBytes >= getBatchSizeBytes()) {
+                if (currentBatchSize >= getBatchSize()
+                        || currentBatchSizeBytes >= getBatchSizeBytes()) {
                     processReplicationLogBatch(tableToMutationsMap);
                     totalProcessed += currentBatchSize;
                     tableToMutationsMap.clear();
