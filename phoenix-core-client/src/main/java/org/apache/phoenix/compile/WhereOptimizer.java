@@ -1888,19 +1888,63 @@ public class WhereOptimizer {
         }
 
         /**
-         * @param node
-         * @return
+         * If {@link ArrayAnyComparisonExpression} is of the form:
+         * 
+         * <pre>
+         * COL = ANY(ARR)
+         * </pre>
+         * 
+         * then we can extract the scan ranges for the COL, given COL is a PK column. This
+         * syntactical pattern can be used as a replacement for a IN expression. So, instead of
+         * following IN expression:
+         * 
+         * <pre>
+         * COL IN (VAL1, VAL2, ... VALN)
+         * </pre>
+         * 
+         * we can use the following ANY expression:
+         * 
+         * <pre>
+         * try (Connection conn = DriverManager.getConnection(url)) {
+         *      conn.createArrayOf("CHAR", new String[] {"VAL1", "VAL2", ... "VALN"});
+         *      try (PreparedStatement stmt = conn.prepareStatement(
+         *          "SELECT ... FROM TABLE WHERE COL = ANY(?)")) {
+         *          stmt.setArray(1, arr);
+         *          ResultSet rs = stmt.executeQuery();
+         *      }
+         * }
+         * </pre>
+         * 
+         * This will help in saving the query parsing time as on using IN list query parsing time
+         * increases with the size of IN list but in case of ANY expression it is constant. Below we
+         * account for cases where COL is on the LHS or RHS of the comparison expression.
+         * @param node           {@link ArrayAnyComparisonExpression} node for which scan ranges are
+         *                       to be extracted
+         * @param keyExpressions {@link RowKeyColumnExpression} for the PK column for which scan
+         *                       ranges are to be extracted
+         * @return true if the scan ranges can be extracted, false otherwise
          */
         private boolean prepareForArrayAnyComparisonKeySlots(ArrayAnyComparisonExpression node,
             List<Expression> keyExpressions) {
+            // {@link ArrayAnyComparisonExpression} has two children, and the second child is
+            // comparison expression
             Expression childExpr = node.getChildren().get(1);
             if (!(childExpr instanceof ComparisonExpression)) {
                 return false;
             }
             ComparisonExpression comparisonExpr = (ComparisonExpression) childExpr;
+            
+            // Replacing IN() with =ANY() is only valid if the comparison operator is EQUAL
             if (comparisonExpr.getFilterOp() != CompareOperator.EQUAL) {
                 return false;
             }
+            
+            // {@link ComparisonExpression} will have two children in this case, we need to make
+            // sure that one of them is a {@link RowKeyColumnExpression} and the other is a {@link
+            // ArrayElemRefExpression}. Further, the first child of {@link ArrayElemRefExpression}
+            // must be a {@link LiteralExpression}. The first child of {@link
+            // ArrayElemRefExpression} is same as the first child of {@link
+            // ArrayAnyComparisonExpression}.
             Expression lhs = comparisonExpr.getChildren().get(0);
             Expression rhs = comparisonExpr.getChildren().get(1);
             if (lhs instanceof RowKeyColumnExpression && rhs instanceof ArrayElemRefExpression) {
@@ -1908,6 +1952,7 @@ public class WhereOptimizer {
                 if (!(arrayElemRefExpr.getChildren().get(0) instanceof LiteralExpression)) {
                     return false;
                 }
+                // Capture {@link RowKeyColumnExpression} for the generation of key slots.
                 keyExpressions.add(lhs);
 
             } else if (
@@ -1917,6 +1962,7 @@ public class WhereOptimizer {
                 if (!(arrayElemRefExpr.getChildren().get(0) instanceof LiteralExpression)) {
                     return false;
                 }
+                // Capture {@link RowKeyColumnExpression} for the generation of key slots.
                 keyExpressions.add(rhs);
             }
             return true;
@@ -1928,6 +1974,7 @@ public class WhereOptimizer {
             if (prepareForArrayAnyComparisonKeySlots(node, keyExpressions)) {
                 return keyExpressions.iterator();
             }
+            // If the scan ranges cannot be extracted, we return an empty iterator
             return Collections.emptyIterator();
         }
 
@@ -1936,6 +1983,8 @@ public class WhereOptimizer {
             if (childParts == null || childParts.isEmpty()) {
                 return null;
             }
+            // Doing type casting is safe here as we won't have reached here unless the expression
+            // tree is of the form expected by the method prepareForArrayAnyComparisonKeySlots.
             Expression arrayExpr = node.getChildren().get(0);
             PhoenixArray arr = (PhoenixArray) ((LiteralExpression) arrayExpr).getValue();
             int numElements = arr.getDimensions();
@@ -1965,7 +2014,10 @@ public class WhereOptimizer {
                         column.getDataType(), column.getSortOrder(), column.getMaxLength());
                     keyRange = childPart.getKeyRange(CompareOperator.EQUAL, coerceExpr);
                 } catch (SQLException e) {
-                    continue;
+                    LOGGER.warn(String.format(
+                        "Error coercing array element with index %d to column type: %s", i - 1,
+                        column.getDataType().getSqlTypeName()), e);
+                    return super.visitLeave(node, childParts);
                 }
                 if (keyRange == null || keyRange == KeyRange.EMPTY_RANGE) {
                     continue;
