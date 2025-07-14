@@ -1170,7 +1170,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
         private ExecutableUpsertStatement(NamedTableNode table, HintNode hintNode,
                                           List<ColumnName> columns,
-                                          List<ParseNode> values, SelectStatement select,
+                                          List<List<ParseNode>> values, SelectStatement select,
                                           int bindCount, Map<String, UDFParseNode> udfParseNodes,
                                           List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
                                           OnDuplicateKeyType onDupKeyType) {
@@ -2046,7 +2046,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
         @Override
         public ExecutableUpsertStatement upsert(NamedTableNode table, HintNode hintNode,
-                                                List<ColumnName> columns, List<ParseNode> values,
+                                                List<ColumnName> columns, List<List<ParseNode>> values,
                                                 SelectStatement select, int bindCount,
                                                 Map<String, UDFParseNode> udfParseNodes,
                                                 List<Pair<ColumnName, ParseNode>> onDupKeyPairs,

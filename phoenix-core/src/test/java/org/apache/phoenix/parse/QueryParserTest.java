@@ -804,6 +804,26 @@ public class QueryParserTest {
     }
 
     @Test
+    public void testValidMultipleUpsert() throws Exception {
+        String sql = (
+                (
+                        "upsert into t VALUES(1,2),(3,4)"));
+        parseQuery(sql);
+    }
+
+    @Test
+    public void testValidMultipleUpsert2() throws Exception {
+        String sql = "upsert into t(a,b) VALUES(1,2),(3,4)";
+        parseQuery(sql);
+    }
+
+    @Test
+    public void testValidMultipleUpsert3() throws Exception {
+        String sql = (("upsert into t(a,b) VALUES(1,2),(3,4),"));
+        parseQueryThatShouldFail(sql);
+    }
+
+    @Test
     public void testHavingWithNot() throws Exception {
         String sql = (
                 (
