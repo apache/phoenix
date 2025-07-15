@@ -49,6 +49,9 @@ import static org.apache.phoenix.query.QueryServices.GLOBAL_METRICS_ENABLED;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_MAX_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILLABLE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILL_FILES_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.HA_GROUP_STORE_MANAGER_IMPL_CLASS;
+import static org.apache.phoenix.query.QueryServices.HA_STORE_AND_FORWARD_MODE_REFRESH_INTERVAL_MS;
+import static org.apache.phoenix.query.QueryServices.HA_SYNC_MODE_REFRESH_INTERVAL_MS;
 import static org.apache.phoenix.query.QueryServices.HBASE_CLIENT_SCANNER_TIMEOUT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.IMMUTABLE_ROWS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
@@ -471,6 +474,11 @@ public class QueryServicesOptions {
     public static final Boolean DEFAULT_CQSI_THREAD_POOL_METRICS_ENABLED = false;
 
     public static final Boolean DEFAULT_SYNCHRONOUS_REPLICATION_ENABLED = false;
+    // TODO: Revisit these default values based on standard ZK update time
+    // and time it takes for an update to reach regionserver cache.
+    public static final long DEFAULT_HA_STORE_AND_FORWARD_MODE_REFRESH_INTERVAL_MS = 1500L; // 1.5 seconds
+    public static final long DEFAULT_HA_SYNC_MODE_REFRESH_INTERVAL_MS = 3000L; // 3 seconds
+    public static final String DEFAULT_HA_GROUP_STORE_MANAGER_IMPL_CLASS = "org.apache.phoenix.jdbc.HAGroupStoreManagerV1Impl";
 
     private final Configuration config;
 
@@ -578,6 +586,11 @@ public class QueryServicesOptions {
                     DEFAULT_CONNECTION_ACTIVITY_LOGGING_INTERVAL_IN_MINS)
             .setIfUnset(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED,
                     DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED)
+            .setIfUnset(HA_STORE_AND_FORWARD_MODE_REFRESH_INTERVAL_MS,
+                    DEFAULT_HA_STORE_AND_FORWARD_MODE_REFRESH_INTERVAL_MS)
+            .setIfUnset(HA_SYNC_MODE_REFRESH_INTERVAL_MS,
+                    DEFAULT_HA_SYNC_MODE_REFRESH_INTERVAL_MS)
+            .setIfUnset(HA_GROUP_STORE_MANAGER_IMPL_CLASS, DEFAULT_HA_GROUP_STORE_MANAGER_IMPL_CLASS)
             .setIfUnset(CQSI_THREAD_POOL_ENABLED, DEFAULT_CQSI_THREAD_POOL_ENABLED)
             .setIfUnset(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS,
                     DEFAULT_CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS)

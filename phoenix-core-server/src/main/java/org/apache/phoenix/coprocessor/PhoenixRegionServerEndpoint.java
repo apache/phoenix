@@ -23,6 +23,7 @@ import com.google.protobuf.Service;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.Optional;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
@@ -34,6 +35,7 @@ import org.apache.phoenix.coprocessor.generated.RegionServerEndpointProtos;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsMetadataCachingSource;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
+import org.apache.phoenix.jdbc.HAGroupStoreManagerFactory;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -119,10 +121,15 @@ public class PhoenixRegionServerEndpoint
             RegionServerEndpointProtos.InvalidateHAGroupStoreClientRequest request,
             RpcCallback<RegionServerEndpointProtos.InvalidateHAGroupStoreClientResponse> done) {
         LOGGER.info("PhoenixRegionServerEndpoint invalidating HAGroupStoreClient");
-        HAGroupStoreManager haGroupStoreManager;
         try {
-            haGroupStoreManager = HAGroupStoreManager.getInstance(conf);
-            haGroupStoreManager.invalidateHAGroupStoreClient();
+            Optional<HAGroupStoreManager> haGroupStoreManagerOptional
+                    = HAGroupStoreManagerFactory.getInstance(conf);
+            if (haGroupStoreManagerOptional.isPresent()) {
+                haGroupStoreManagerOptional.get().invalidateHAGroupStoreClient(conf);
+            } else {
+                throw new IOException("HAGroupStoreManager is null for "
+                        + "current cluster, check configuration");
+            }
         } catch (Throwable t) {
             String errorMsg = "Invalidating HAGroupStoreClient FAILED, check exception for "
                     + "specific details";
