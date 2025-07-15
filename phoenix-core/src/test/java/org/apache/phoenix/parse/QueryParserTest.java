@@ -32,6 +32,7 @@ import java.util.HashSet;
 import java.util.List;
 
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.hadoop.yarn.webapp.hamlet2.Hamlet.P;
 import org.apache.phoenix.exception.PhoenixParserException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
@@ -152,12 +153,12 @@ public class QueryParserTest {
     @Test
     public void testParsePreQuery2() throws Exception {
         String sql = ((
-            "select /*gatherSlowStats*/ count(1) from core.custom_index_value ind\n" + 
-            "where (ind.string_value in ('a', 'b', 'c', 'd'))\n" + 
-            "and rownum <= ( 3 + 1 )\n" + 
-            "and (ind.organization_id = '000000000000000')\n" + 
-            "and (ind.key_prefix = '00T')\n" + 
-            "and (ind.deleted = '0')\n" + 
+            "select /*gatherSlowStats*/ count(1) from core.custom_index_value ind\n" +
+            "where (ind.string_value in ('a', 'b', 'c', 'd'))\n" +
+            "and rownum <= ( 3 + 1 )\n" +
+            "and (ind.organization_id = '000000000000000')\n" +
+            "and (ind.key_prefix = '00T')\n" +
+            "and (ind.deleted = '0')\n" +
             "and (ind.index_num = 1)"
             ));
         parseQuery(sql);
@@ -166,12 +167,12 @@ public class QueryParserTest {
     @Test
     public void testParsePreQuery3() throws Exception {
         String sql = ((
-            "select /*gatherSlowStats*/ count(1) from core.custom_index_value ind\n" + 
-            "where (ind.number_value > 3)\n" + 
-            "and rownum <= 1000\n" + 
-            "and (ind.organization_id = '000000000000000')\n" + 
-            "and (ind.key_prefix = '001'\n" + 
-            "and (ind.deleted = '0'))\n" + 
+            "select /*gatherSlowStats*/ count(1) from core.custom_index_value ind\n" +
+            "where (ind.number_value > 3)\n" +
+            "and rownum <= 1000\n" +
+            "and (ind.organization_id = '000000000000000')\n" +
+            "and (ind.key_prefix = '001'\n" +
+            "and (ind.deleted = '0'))\n" +
             "and (ind.index_num = 2)"
             ));
         parseQuery(sql);
@@ -180,10 +181,10 @@ public class QueryParserTest {
     @Test
     public void testParsePreQuery4() throws Exception {
         String sql = ((
-            "select /*+ index(t iecustom_entity_data_created) */ /*gatherSlowStats*/ count(1) from core.custom_entity_data t\n" + 
-            "where (t.created_date > to_date('01/01/2001'))\n" + 
-            "and rownum <= 4500\n" + 
-            "and (t.organization_id = '000000000000000')\n" + 
+            "select /*+ index(t iecustom_entity_data_created) */ /*gatherSlowStats*/ count(1) from core.custom_entity_data t\n" +
+            "where (t.created_date > to_date('01/01/2001'))\n" +
+            "and rownum <= 4500\n" +
+            "and (t.organization_id = '000000000000000')\n" +
             "and (t.key_prefix = '001')"
             ));
         parseQuery(sql);
@@ -202,8 +203,8 @@ public class QueryParserTest {
     @Test
     public void testIsNullQuery() throws Exception {
         String sql = ((
-            "select count(foo) from core.custom_entity_data t\n" + 
-            "where (t.created_date is null)\n" + 
+            "select count(foo) from core.custom_entity_data t\n" +
+            "where (t.created_date is null)\n" +
             "and (t.organization_id is not null)\n"
             ));
         parseQuery(sql);
@@ -212,8 +213,8 @@ public class QueryParserTest {
     @Test
     public void testAsInColumnAlias() throws Exception {
         String sql = ((
-            "select count(foo) AS c from core.custom_entity_data t\n" + 
-            "where (t.created_date is null)\n" + 
+            "select count(foo) AS c from core.custom_entity_data t\n" +
+            "where (t.created_date is null)\n" +
             "and (t.organization_id is not null)\n"
             ));
         parseQuery(sql);
@@ -222,17 +223,17 @@ public class QueryParserTest {
     @Test
     public void testParseJoin1() throws Exception {
         String sql = ((
-            "select /*SOQL*/ \"Id\"\n" + 
-            "from (select /*+ ordered index(cft) */\n" + 
-            "cft.val188 \"Marketing_Offer_Code__c\",\n" + 
-            "t.account_id \"Id\"\n" + 
-            "from sales.account_cfdata cft,\n" + 
-            "sales.account t\n" + 
-            "where (cft.account_cfdata_id = t.account_id)\n" + 
-            "and (cft.organization_id = '00D300000000XHP')\n" + 
-            "and (t.organization_id = '00D300000000XHP')\n" + 
-            "and (t.deleted = '0')\n" + 
-            "and (t.account_id != '000000000000000'))\n" + 
+            "select /*SOQL*/ \"Id\"\n" +
+            "from (select /*+ ordered index(cft) */\n" +
+            "cft.val188 \"Marketing_Offer_Code__c\",\n" +
+            "t.account_id \"Id\"\n" +
+            "from sales.account_cfdata cft,\n" +
+            "sales.account t\n" +
+            "where (cft.account_cfdata_id = t.account_id)\n" +
+            "and (cft.organization_id = '00D300000000XHP')\n" +
+            "and (t.organization_id = '00D300000000XHP')\n" +
+            "and (t.deleted = '0')\n" +
+            "and (t.account_id != '000000000000000'))\n" +
             "where (\"Marketing_Offer_Code__c\" = 'FSCR')"
             ));
         parseQuery(sql);
@@ -241,35 +242,35 @@ public class QueryParserTest {
     @Test
     public void testParseJoin2() throws Exception {
         String sql = ((
-            "select /*rptacctlist 00O40000002C3of*/ \"00N40000001M8VK\",\n" + 
-            "\"00N40000001M8VK.ID\",\n" + 
-            "\"00N30000000r0K2\",\n" + 
-            "\"00N30000000jgjo\"\n" + 
-            "from (select /*+ ordered use_hash(aval368) index(cfa) */\n" + 
-            "a.record_type_id \"RECORDTYPE\",\n" + 
-            "aval368.last_name,aval368.first_name || ' ' || aval368.last_name,aval368.name \"00N40000001M8VK\",\n" + 
-            "a.last_update \"LAST_UPDATE\",\n" + 
-            "cfa.val368 \"00N40000001M8VK.ID\",\n" + 
-            "TO_DATE(cfa.val282) \"00N30000000r0K2\",\n" + 
-            "cfa.val252 \"00N30000000jgjo\"\n" + 
-            "from sales.account a,\n" + 
-            "sales.account_cfdata cfa,\n" + 
-            "core.name_denorm aval368\n" + 
-            "where (cfa.account_cfdata_id = a.account_id)\n" + 
-            "and (aval368.entity_id = cfa.val368)\n" + 
-            "and (a.deleted = '0')\n" + 
-            "and (a.organization_id = '00D300000000EaE')\n" + 
-            "and (a.account_id <> '000000000000000')\n" + 
-            "and (cfa.organization_id = '00D300000000EaE')\n" + 
-            "and (aval368.organization_id = '00D300000000EaE')\n" + 
-            "and (aval368.entity_id like '005%'))\n" + 
-            "where (\"RECORDTYPE\" = '0123000000002Gv')\n" + 
-            "AND (\"00N40000001M8VK\" is null or \"00N40000001M8VK\" in ('BRIAN IRWIN', 'BRIAN MILLER', 'COLLEEN HORNYAK', 'ERNIE ZAVORAL JR', 'JAMIE TRIMBUR', 'JOE ANTESBERGER', 'MICHAEL HYTLA', 'NATHAN DELSIGNORE', 'SANJAY GANDHI', 'TOM BASHIOUM'))\n" + 
+            "select /*rptacctlist 00O40000002C3of*/ \"00N40000001M8VK\",\n" +
+            "\"00N40000001M8VK.ID\",\n" +
+            "\"00N30000000r0K2\",\n" +
+            "\"00N30000000jgjo\"\n" +
+            "from (select /*+ ordered use_hash(aval368) index(cfa) */\n" +
+            "a.record_type_id \"RECORDTYPE\",\n" +
+            "aval368.last_name,aval368.first_name || ' ' || aval368.last_name,aval368.name \"00N40000001M8VK\",\n" +
+            "a.last_update \"LAST_UPDATE\",\n" +
+            "cfa.val368 \"00N40000001M8VK.ID\",\n" +
+            "TO_DATE(cfa.val282) \"00N30000000r0K2\",\n" +
+            "cfa.val252 \"00N30000000jgjo\"\n" +
+            "from sales.account a,\n" +
+            "sales.account_cfdata cfa,\n" +
+            "core.name_denorm aval368\n" +
+            "where (cfa.account_cfdata_id = a.account_id)\n" +
+            "and (aval368.entity_id = cfa.val368)\n" +
+            "and (a.deleted = '0')\n" +
+            "and (a.organization_id = '00D300000000EaE')\n" +
+            "and (a.account_id <> '000000000000000')\n" +
+            "and (cfa.organization_id = '00D300000000EaE')\n" +
+            "and (aval368.organization_id = '00D300000000EaE')\n" +
+            "and (aval368.entity_id like '005%'))\n" +
+            "where (\"RECORDTYPE\" = '0123000000002Gv')\n" +
+            "AND (\"00N40000001M8VK\" is null or \"00N40000001M8VK\" in ('BRIAN IRWIN', 'BRIAN MILLER', 'COLLEEN HORNYAK', 'ERNIE ZAVORAL JR', 'JAMIE TRIMBUR', 'JOE ANTESBERGER', 'MICHAEL HYTLA', 'NATHAN DELSIGNORE', 'SANJAY GANDHI', 'TOM BASHIOUM'))\n" +
             "AND (\"LAST_UPDATE\" >= to_date('2009-08-01 07:00:00'))"
             ));
         parseQuery(sql);
     }
-    
+
     @Test
     public void testNegative1() throws Exception {
         String sql = ((
@@ -373,7 +374,7 @@ public class QueryParserTest {
             // expected
         }
     }
-    
+
     @Test
     public void testCommentQuery() throws Exception {
         String sql = ((
@@ -453,10 +454,10 @@ public class QueryParserTest {
             CreateTableStatement stmt = (CreateTableStatement)new SQLParser((s)).parseStatement();
             List<ColumnDef> columnDefs = stmt.getColumnDefs();
             assertEquals(1, columnDefs.size());
-            assertEquals(SortOrder.fromDDLValue(order), columnDefs.iterator().next().getSortOrder()); 
+            assertEquals(SortOrder.fromDDLValue(order), columnDefs.iterator().next().getSortOrder());
         }
     }
-    
+
     @Test
     public void testParseCreateTableOrderWithoutPrimaryKeyFails() throws Exception {
         for (String order : new String[]{"asc", "desc"}) {
@@ -470,7 +471,7 @@ public class QueryParserTest {
             }
         }
     }
-    
+
     @Test
     public void testParseCreateTablePrimaryKeyConstraintWithOrder() throws Exception {
         for (String order : new String[]{"asc", "desc"}) {
@@ -481,7 +482,7 @@ public class QueryParserTest {
             assertEquals(2, columns.size());
             for (Pair<ColumnName,SortOrder> pair : columns) {
                 assertEquals(SortOrder.fromDDLValue(order), pkConstraint.getColumnWithSortOrder(pair.getFirst()).getSecond());
-            }           
+            }
         }
     }
 
@@ -577,8 +578,8 @@ public class QueryParserTest {
     @Test
     public void testCreateSequence() throws Exception {
         String sql = ((
-                "create sequence foo.bar\n" + 
-                        "start with 0\n"    + 
+                "create sequence foo.bar\n" +
+                        "start with 0\n"    +
                         "increment by 1\n"));
         parseQuery(sql);
     }
@@ -628,23 +629,23 @@ public class QueryParserTest {
     @Test
     public void testNextValueForSelect() throws Exception {
         String sql = ((
-                "select next value for foo.bar \n" + 
-                        "from core.custom_entity_data\n"));                     
+                "select next value for foo.bar \n" +
+                        "from core.custom_entity_data\n"));
         parseQuery(sql);
     }
-    
+
     @Test
     public void testNextValueForWhere() throws Exception {
         String sql = ((
-                "upsert into core.custom_entity_data\n" + 
-                        "select next value for foo.bar from core.custom_entity_data\n"));                    
+                "upsert into core.custom_entity_data\n" +
+                        "select next value for foo.bar from core.custom_entity_data\n"));
         parseQuery(sql);
     }
 
     @Test
     public void testBadCharDef() throws Exception {
         try {
-            String sql = ("CREATE TABLE IF NOT EXISTS testBadVarcharDef" + 
+            String sql = ("CREATE TABLE IF NOT EXISTS testBadVarcharDef" +
                     "  (pk VARCHAR NOT NULL PRIMARY KEY, col CHAR(0))");
             parseQuery(sql);
             fail("Should have caught bad char definition.");
@@ -652,7 +653,7 @@ public class QueryParserTest {
             assertEquals(SQLExceptionCode.NONPOSITIVE_MAX_LENGTH.getErrorCode(), e.getErrorCode());
         }
         try {
-            String sql = ("CREATE TABLE IF NOT EXISTS testBadVarcharDef" + 
+            String sql = ("CREATE TABLE IF NOT EXISTS testBadVarcharDef" +
                     "  (pk VARCHAR NOT NULL PRIMARY KEY, col CHAR)");
             parseQuery(sql);
             fail("Should have caught bad char definition.");
@@ -664,7 +665,7 @@ public class QueryParserTest {
     @Test
     public void testBadVarcharDef() throws Exception {
         try {
-            String sql = ("CREATE TABLE IF NOT EXISTS testBadVarcharDef" + 
+            String sql = ("CREATE TABLE IF NOT EXISTS testBadVarcharDef" +
                     "  (pk VARCHAR NOT NULL PRIMARY KEY, col VARCHAR(0))");
             parseQuery(sql);
             fail("Should have caught bad varchar definition.");
@@ -676,7 +677,7 @@ public class QueryParserTest {
     @Test
     public void testBadDecimalDef() throws Exception {
         try {
-            String sql = ("CREATE TABLE IF NOT EXISTS testBadDecimalDef" + 
+            String sql = ("CREATE TABLE IF NOT EXISTS testBadDecimalDef" +
                     "  (pk VARCHAR NOT NULL PRIMARY KEY, col DECIMAL(0, 5))");
             parseQuery(sql);
             fail("Should have caught bad decimal definition.");
@@ -684,7 +685,7 @@ public class QueryParserTest {
             assertTrue(e.getMessage(), e.getMessage().contains("ERROR 209 (22003): Decimal precision outside of range. Should be within 1 and 38. columnName=COL"));
         }
         try {
-            String sql = ("CREATE TABLE IF NOT EXISTS testBadDecimalDef" + 
+            String sql = ("CREATE TABLE IF NOT EXISTS testBadDecimalDef" +
                     "  (pk VARCHAR NOT NULL PRIMARY KEY, col DECIMAL(40, 5))");
             parseQuery(sql);
             fail("Should have caught bad decimal definition.");
@@ -696,7 +697,7 @@ public class QueryParserTest {
     @Test
     public void testBadBinaryDef() throws Exception {
         try {
-            String sql = ("CREATE TABLE IF NOT EXISTS testBadBinaryDef" + 
+            String sql = ("CREATE TABLE IF NOT EXISTS testBadBinaryDef" +
                     "  (pk VARCHAR NOT NULL PRIMARY KEY, col BINARY(0))");
             parseQuery(sql);
             fail("Should have caught bad binary definition.");
@@ -704,7 +705,7 @@ public class QueryParserTest {
             assertEquals(SQLExceptionCode.NONPOSITIVE_MAX_LENGTH.getErrorCode(), e.getErrorCode());
         }
         try {
-            String sql = ("CREATE TABLE IF NOT EXISTS testBadVarcharDef" + 
+            String sql = ("CREATE TABLE IF NOT EXISTS testBadVarcharDef" +
                     "  (pk VARCHAR NOT NULL PRIMARY KEY, col BINARY)");
             parseQuery(sql);
             fail("Should have caught bad char definition.");
@@ -728,7 +729,7 @@ public class QueryParserTest {
                         "select PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY mark ASC) from core.custom_index_value ind"));
         parseQuery(sql);
     }
-    
+
     @Test
     public void testRowValueConstructorQuery() throws Exception {
         String sql = (
@@ -804,24 +805,61 @@ public class QueryParserTest {
     }
 
     @Test
+    public void testUpsertWithOnDuplicateKey() throws Exception {
+        String sql = "upsert into t (k, v) values ( 1, 2 ) "
+                + "ON DUPLICATE KEY UPDATE k = k + 1";
+        parseQuery(sql);
+    }
+
+    @Test
+    public void testUpsertInvalidReturningProjections() throws Exception {
+        String sql = "upsert into t (k, v) values ( 1, 2 ) "
+                + "ON DUPLICATE KEY UPDATE k = k + 1 RETURNING k";
+        try {
+            parseQuery(sql);
+            fail();
+        } catch (PhoenixParserException e) {
+            assertEquals(SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode(), e.getErrorCode());
+        }
+    }
+
+    @Test
+    public void testUpsertReturningWithoutOnDuplicateKey() throws Exception {
+        String sql = "upsert into t (k, v) values ( 1, 2 ) RETURNING *";
+        try {
+            parseQuery(sql);
+            fail();
+        } catch (PhoenixParserException e) {
+            assertEquals(SQLExceptionCode.MISSING_TOKEN.getErrorCode(), e.getErrorCode());
+        }
+    }
+
+    @Test
+    public void testUpsertReturningRow() throws Exception {
+        String sql = "upsert into t (k, v) values ( 1, 2 ) "
+                + "ON DUPLICATE KEY UPDATE k = k + 1 RETURNING *";
+        parseQuery(sql);
+    }
+
+    @Test
     public void testHavingWithNot() throws Exception {
         String sql = (
                 (
-                        "select\n" + 
-                        "\"WEB_STAT_ALIAS\".\"DOMAIN\" as \"c0\"\n" + 
-                        "from \"WEB_STAT\" \"WEB_STAT_ALIAS\"\n" + 
-                        "group by \"WEB_STAT_ALIAS\".\"DOMAIN\" having\n" + 
-                        "(\n" + 
-                        "(\n" + 
-                        "NOT\n" + 
-                        "(\n" + 
-                        "(sum(\"WEB_STAT_ALIAS\".\"ACTIVE_VISITOR\") is null)\n" + 
-                        ")\n" + 
-                        "OR NOT((sum(\"WEB_STAT_ALIAS\".\"ACTIVE_VISITOR\") is null))\n" + 
-                        ")\n" + 
-                        "OR NOT((sum(\"WEB_STAT_ALIAS\".\"ACTIVE_VISITOR\") is null))\n" + 
-                        ")\n" + 
-                        "order by CASE WHEN \"WEB_STAT_ALIAS\".\"DOMAIN\" IS NULL THEN 1 ELSE 0 END,\n" + 
+                        "select\n" +
+                        "\"WEB_STAT_ALIAS\".\"DOMAIN\" as \"c0\"\n" +
+                        "from \"WEB_STAT\" \"WEB_STAT_ALIAS\"\n" +
+                        "group by \"WEB_STAT_ALIAS\".\"DOMAIN\" having\n" +
+                        "(\n" +
+                        "(\n" +
+                        "NOT\n" +
+                        "(\n" +
+                        "(sum(\"WEB_STAT_ALIAS\".\"ACTIVE_VISITOR\") is null)\n" +
+                        ")\n" +
+                        "OR NOT((sum(\"WEB_STAT_ALIAS\".\"ACTIVE_VISITOR\") is null))\n" +
+                        ")\n" +
+                        "OR NOT((sum(\"WEB_STAT_ALIAS\".\"ACTIVE_VISITOR\") is null))\n" +
+                        ")\n" +
+                        "order by CASE WHEN \"WEB_STAT_ALIAS\".\"DOMAIN\" IS NULL THEN 1 ELSE 0 END,\n" +
                         "\"WEB_STAT_ALIAS\".\"DOMAIN\" ASC"));
         parseQuery(sql);
     }
@@ -832,7 +870,7 @@ public class QueryParserTest {
                 ("select * from date_test where d in (to_date('2013-11-04 09:12:00'))"));
         parseQuery(sql);
     }
-    
+
     @Test
     public void testDateLiteral() throws Exception {
         String sql = (
@@ -857,7 +895,7 @@ public class QueryParserTest {
                         "select * from t where d = TIMESTAMP '2013-11-04 09:12:00'"));
         parseQuery(sql);
     }
-    
+
     @Test
     public void testUnsignedDateLiteral() throws Exception {
         String sql = (
@@ -882,7 +920,7 @@ public class QueryParserTest {
                         "select * from t where d = UNSIGNED_TIMESTAMP '2013-11-04 09:12:00'"));
         parseQuery(sql);
     }
-    
+
     @Test
     public void testParseDateEquality() throws Exception {
         SQLParser parser = new SQLParser(new StringReader(
@@ -900,7 +938,7 @@ public class QueryParserTest {
             ));
         parser.parseStatement();
     }
-    
+
     @Test
     public void testUnknownLiteral() throws Exception {
         String sql = (
@@ -913,7 +951,7 @@ public class QueryParserTest {
             assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
         }
     }
-    
+
     @Test
     public void testUnsupportedLiteral() throws Exception {
         String sql = (
@@ -926,7 +964,7 @@ public class QueryParserTest {
             assertEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
         }
     }
-    
+
     @Test
     public void testAnyElementExpression1() throws Exception {
         String sql = "select * from t where 'a' = ANY(a)";
@@ -953,7 +991,7 @@ public class QueryParserTest {
 
     @Test
     public void testUnicodeSpace() throws Exception {
-        // U+2002 (8194) is a "EN Space" which looks just like a normal space (0x20 in ascii) 
+        // U+2002 (8194) is a "EN Space" which looks just like a normal space (0x20 in ascii)
         String unicodeEnSpace = String.valueOf(Character.toChars(8194));
         String sql = Joiner.on(unicodeEnSpace).join(new String[] {"SELECT", "*", "FROM", "T"});
         parseQuery(sql);

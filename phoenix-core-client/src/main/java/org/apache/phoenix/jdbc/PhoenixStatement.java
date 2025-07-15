@@ -241,7 +241,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.math.IntMath;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 /**
- * 
+ *
  * JDBC Statement implementation of Phoenix.
  * Currently only the following methods are supported:
  * - {@link #executeQuery(String)}
@@ -254,14 +254,14 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
  * - ResultSet.FETCH_FORWARD
  * - ResultSet.TYPE_FORWARD_ONLY
  * - ResultSet.CLOSE_CURSORS_AT_COMMIT
- * 
- * 
+ *
+ *
  * @since 0.1
  */
 public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable {
-	
+
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixStatement.class);
-    
+
     public enum Operation {
         QUERY("queried", false),
         DELETE("deleted", true),
@@ -275,11 +275,11 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             this.toString = toString;
             this.isMutation = isMutation;
         }
-        
+
         public boolean isMutation() {
             return isMutation;
         }
-        
+
         @Override
         public String toString() {
             return toString;
@@ -316,19 +316,19 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
      * via the phoenix.query.timeoutMs. Therefore we store the time in millis.
      */
     private int getDefaultQueryTimeoutMillis() {
-        return connection.getQueryServices().getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, 
+        return connection.getQueryServices().getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB,
             QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
     }
 
     public PhoenixResultSet newResultSet(ResultIterator iterator, RowProjector projector, StatementContext context) throws SQLException {
         return new PhoenixResultSet(iterator, projector, context);
     }
-    
+
     protected QueryPlan optimizeQuery(CompilableStatement stmt) throws SQLException {
         QueryPlan plan = stmt.compilePlan(this, Sequence.ValueOp.VALIDATE_SEQUENCE);
         return connection.getQueryServices().getOptimizer().optimize(this, plan);
     }
-    
+
     protected PhoenixResultSet executeQuery(final CompilableStatement stmt, final QueryLogger queryLogger)
             throws SQLException {
         return executeQuery(stmt, true, queryLogger, false, this.validateLastDdlTimestamp);
@@ -577,7 +577,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
     private boolean isResultSetExpected(final CompilableStatement stmt) {
         return stmt instanceof ExecutableUpsertStatement &&
-                ((ExecutableUpsertStatement) stmt).getOnDupKeyPairs() != null;
+                ((ExecutableUpsertStatement) stmt).isReturningRow();
     }
 
     protected int executeMutation(final CompilableStatement stmt,
@@ -813,7 +813,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     protected static interface CompilableStatement extends BindableStatement {
         public <T extends StatementPlan> T compilePlan (PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException;
     }
-    
+
     private static class ExecutableSelectStatement extends SelectStatement implements CompilableStatement {
         private ExecutableSelectStatement(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
                 List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, OffsetNode offset, int bindCount, boolean isAggregate, boolean hasSequence, Map<String, UDFParseNode> udfParseNodes) {
@@ -825,14 +825,14 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                 boolean hasSequence, List<SelectStatement> selects, Map<String, UDFParseNode> udfParseNodes) {
             super(from, hint, isDistinct, select, where, groupBy, having, orderBy, limit, offset, bindCount, isAggregate, hasSequence, selects, udfParseNodes);
         }
-        
+
         private ExecutableSelectStatement(ExecutableSelectStatement select) {
             this(select.getFrom(), select.getHint(), select.isDistinct(), select.getSelect(), select.getWhere(),
                     select.getGroupBy(), select.getHaving(), select.getOrderBy(), select.getLimit(), select.getOffset(), select.getBindCount(),
                     select.isAggregate(), select.hasSequence(), select.getSelects(), select.getUdfParseNodes());
         }
-		
-        
+
+
         @SuppressWarnings("unchecked")
         @Override
         public QueryPlan compilePlan(PhoenixStatement phoenixStatement, Sequence.ValueOp seqAction) throws SQLException {
@@ -857,7 +857,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         }
 
     }
-    
+
     private static final byte[] EXPLAIN_PLAN_FAMILY = QueryConstants.SINGLE_COLUMN_FAMILY;
     private static final byte[] EXPLAIN_PLAN_COLUMN = PVarchar.INSTANCE.toBytes("Plan");
     private static final String EXPLAIN_PLAN_ALIAS = "PLAN";
@@ -950,7 +950,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         public CompilableStatement getStatement() {
             return (CompilableStatement) super.getStatement();
         }
-        
+
         @Override
         public int getBindCount() {
             return getStatement().getBindCount();
@@ -1037,7 +1037,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                 public ResultIterator iterator() throws SQLException {
                     return iterator;
                 }
-                
+
                 @Override
                 public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
                     return iterator;
@@ -1147,7 +1147,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                 public Long getEstimatedBytesToScan() {
                     return estimatedBytes;
                 }
-                
+
                 @Override
                 public Long getEstimateInfoTimestamp() throws SQLException {
                     return estimateTs;
@@ -1173,9 +1173,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                           List<ParseNode> values, SelectStatement select,
                                           int bindCount, Map<String, UDFParseNode> udfParseNodes,
                                           List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
-                                          OnDuplicateKeyType onDupKeyType) {
+                                          OnDuplicateKeyType onDupKeyType,
+                                          boolean returningRow) {
             super(table, hintNode, columns, values, select, bindCount, udfParseNodes, onDupKeyPairs,
-                    onDupKeyType);
+                    onDupKeyType, returningRow);
         }
 
         @SuppressWarnings("unchecked")
@@ -1190,7 +1191,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             return plan;
         }
     }
-    
+
     private static class ExecutableDeleteStatement extends DeleteStatement implements CompilableStatement {
         private ExecutableDeleteStatement(NamedTableNode table, HintNode hint, ParseNode whereNode, List<OrderByNode> orderBy, LimitNode limit, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
             super(table, hint, whereNode, orderBy, limit, bindCount, udfParseNodes);
@@ -1231,7 +1232,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             return plan;
         }
     }
-    
+
     private static class ExecutableCreateTableStatement extends CreateTableStatement implements CompilableStatement {
         ExecutableCreateTableStatement(TableName tableName, ListMultimap<String,Pair<String,Object>> props, List<ColumnDef> columnDefs,
                                        PrimaryKeyConstraint pkConstraint, List<ParseNode> splitNodes, PTableType tableType, boolean ifNotExists,
@@ -1338,7 +1339,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                 };
         }
     }
-    
+
     private static class ExecutableAddJarsStatement extends AddJarsStatement implements CompilableStatement {
 
         public ExecutableAddJarsStatement(List<LiteralParseNode> jarPaths) {
@@ -1408,7 +1409,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             }
         }
     }
-    
+
     private static class ExecutableDeclareCursorStatement extends DeclareCursorStatement implements CompilableStatement {
         public ExecutableDeclareCursorStatement(CursorName cursor, SelectStatement select){
             super(cursor, select);
@@ -1605,7 +1606,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             return compiler.compile(this);
         }
     }
-    
+
     private static class ExecutableCreateSequenceStatement extends	CreateSequenceStatement implements CompilableStatement {
 
         public ExecutableCreateSequenceStatement(TableName sequenceName, ParseNode startWith,
@@ -1919,28 +1920,28 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         }
 
     }
-    
+
     private static class ExecutableExecuteUpgradeStatement extends ExecuteUpgradeStatement implements CompilableStatement {
         @SuppressWarnings("unchecked")
         @Override
         public MutationPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
             return new MutationPlan() {
-                
+
                 @Override
                 public Set<TableRef> getSourceRefs() {
                     return Collections.emptySet();
                 }
-                
+
                 @Override
                 public ParameterMetaData getParameterMetaData() {
                     return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
                 }
-                
+
                 @Override
                 public Operation getOperation() {
                     return Operation.UPGRADE;
                 }
-                
+
                 @Override
                 public ExplainPlan getExplainPlan() throws SQLException {
                     return new ExplainPlan(Collections.singletonList("EXECUTE UPGRADE"));
@@ -1951,12 +1952,12 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
                 @Override
                 public StatementContext getContext() { return new StatementContext(stmt); }
-                
+
                 @Override
                 public TableRef getTargetRef() {
                     return TableRef.EMPTY_TABLE_REF;
                 }
-                
+
                 @Override
                 public MutationState execute() throws SQLException {
                     PhoenixConnection phxConn = stmt.getConnection();
@@ -2050,9 +2051,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                                 SelectStatement select, int bindCount,
                                                 Map<String, UDFParseNode> udfParseNodes,
                                                 List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
-                                                UpsertStatement.OnDuplicateKeyType onDupKeyType) {
+                                                UpsertStatement.OnDuplicateKeyType onDupKeyType,
+                                                boolean returningRow) {
             return new ExecutableUpsertStatement(table, hintNode, columns, values, select,
-                    bindCount, udfParseNodes, onDupKeyPairs, onDupKeyType);
+                    bindCount, udfParseNodes, onDupKeyPairs, onDupKeyType, returningRow);
         }
 
         @Override
@@ -2120,7 +2122,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             return new ExecutableCreateSequenceStatement(tableName, startsWith, incrementBy,
                     cacheSize, minValue, maxValue, cycle, ifNotExists, bindCount);
         }
-        
+
         @Override
         public CreateFunctionStatement createFunction(PFunction functionInfo, boolean temporary, boolean isReplace) {
             return new ExecutableCreateFunctionStatement(functionInfo, temporary, isReplace);
@@ -2146,7 +2148,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         public DropSequenceStatement dropSequence(TableName tableName, boolean ifExists, int bindCount) {
             return new ExecutableDropSequenceStatement(tableName, ifExists, bindCount);
         }
-        
+
         @Override
         public CreateIndexStatement createIndex(NamedNode indexName, NamedTableNode dataTable,
                 IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns,
@@ -2157,17 +2159,17 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                     includeColumns, splits, props, ifNotExists, indexType, async, bindCount,
                     udfParseNodes, where);
         }
-        
+
         @Override
         public AddColumnStatement addColumn(NamedTableNode table,  PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props, boolean cascade, List<NamedNode> indexes) {
             return new ExecutableAddColumnStatement(table, tableType, columnDefs, ifNotExists, props, cascade, indexes);
         }
-        
+
         @Override
         public DropColumnStatement dropColumn(NamedTableNode table,  PTableType tableType, List<ColumnName> columnNodes, boolean ifExists) {
             return new ExecutableDropColumnStatement(table, tableType, columnNodes, ifExists);
         }
-        
+
         @Override
         public DropTableStatement dropTable(TableName tableName, PTableType tableType, boolean ifExists, boolean cascade) {
             return new ExecutableDropTableStatement(tableName, tableType, ifExists, cascade);
@@ -2187,7 +2189,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         public DropFunctionStatement dropFunction(String functionName, boolean ifExists) {
             return new ExecutableDropFunctionStatement(functionName, ifExists);
         }
-        
+
         @Override
         public DropIndexStatement dropIndex(NamedNode indexName, TableName tableName, boolean ifExists) {
             return new ExecutableDropIndexStatement(indexName, tableName, ifExists);
@@ -2222,7 +2224,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         public UpdateStatisticsStatement updateStatistics(NamedTableNode table, StatisticsCollectionScope scope, Map<String,Object> props) {
             return new ExecutableUpdateStatisticsStatement(table, scope, props);
         }
-        
+
         @Override
         public ExecuteUpgradeStatement executeUpgrade() {
             return new ExecutableExecuteUpgradeStatement();
@@ -2250,7 +2252,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         }
 
     }
-    
+
     static class PhoenixStatementParser extends SQLParser {
         PhoenixStatementParser(String query, ParseNodeFactory nodeFactory) throws IOException {
             super(query, nodeFactory);
@@ -2259,7 +2261,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         PhoenixStatementParser(Reader reader) throws IOException {
             super(reader);
         }
-        
+
         @Override
         public CompilableStatement nextStatement(ParseNodeFactory nodeFactory) throws SQLException {
             return (CompilableStatement) super.nextStatement(nodeFactory);
@@ -2270,13 +2272,13 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             return (CompilableStatement) super.parseStatement();
         }
     }
-    
+
     public Format getFormatter(PDataType type) {
         return connection.getFormatter(type);
     }
-    
+
     protected final List<PhoenixPreparedStatement> batch = Lists.newArrayList();
-    
+
     @Override
     public void addBatch(String sql) throws SQLException {
         batch.add(new PhoenixPreparedStatement(connection, sql));
@@ -2376,7 +2378,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     public List<Object> getParameters() {
         return Collections.<Object>emptyList();
     }
-    
+
     protected CompilableStatement parseStatement(String sql) throws SQLException {
         PhoenixStatementParser parser = null;
         try {
@@ -2387,7 +2389,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         CompilableStatement statement = parser.parseStatement();
         return statement;
     }
-    
+
     public QueryPlan optimizeQuery(String sql) throws SQLException {
         QueryPlan plan = compileQuery(sql);
         return connection.getQueryServices().getOptimizer().optimize(this, plan);
@@ -2465,14 +2467,14 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                 connection.getQueryServices(), sql, getParameters());
         return queryLogger;
     }
-    
+
     @Override
     public ResultSet executeQuery(String sql) throws SQLException {
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug(LogUtil.addCustomAnnotations(
                     "Execute query: " + sql, connection));
         }
-        
+
         CompilableStatement stmt = parseStatement(sql);
         if (stmt.getOperation().isMutation()) {
             throw new ExecuteQueryNotApplicableException(sql);
@@ -2559,7 +2561,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             connection.flush();
         }
     }
-    
+
     @Override
     public boolean execute(String sql) throws SQLException {
         CompilableStatement stmt = parseStatement(sql);
@@ -2572,7 +2574,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             flushIfNecessary();
             return isResultSetExpected(stmt);
         }
-        
+
         executeQuery(stmt, createQueryLogger(stmt, sql));
         return true;
     }
@@ -2657,7 +2659,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     public QueryPlan getQueryPlan() {
         return getLastQueryPlan();
     }
-    
+
     @Override
     public ResultSet getResultSet() throws SQLException {
         ResultSet rs = getLastResultSet();
@@ -2684,7 +2686,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     public Operation getUpdateOperation() {
         return getLastUpdateOperation();
     }
-    
+
     @Override
     public int getUpdateCount() throws SQLException {
         int updateCount = getLastUpdateCount();
@@ -2753,7 +2755,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     @Override
     /**
      * When setting the query timeout via JDBC timeouts must be expressed in seconds. Therefore
-     * we need to convert the default timeout to milliseconds for internal use. 
+     * we need to convert the default timeout to milliseconds for internal use.
      */
     public void setQueryTimeout(int seconds) throws SQLException {
         if (seconds < 0) {
@@ -2768,7 +2770,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     @Override
     /**
      * When getting the query timeout via JDBC timeouts must be expressed in seconds. Therefore
-     * we need to convert the default millisecond timeout to seconds. 
+     * we need to convert the default millisecond timeout to seconds.
      */
     public int getQueryTimeout() throws SQLException {
         // Convert milliseconds to seconds by taking the CEIL up to the next second
@@ -2780,7 +2782,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         }
         return scaledValue / 1000;
     }
-    
+
     /**
      * Returns the configured timeout in milliseconds. This
      * internally enables the of use millisecond timeout granularity
@@ -2789,7 +2791,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     public int getQueryTimeoutInMillis() {
         return queryTimeoutMillis;
     }
-    
+
     @Override
     public boolean isWrapperFor(Class<?> iface) throws SQLException {
         return iface.isInstance(this);

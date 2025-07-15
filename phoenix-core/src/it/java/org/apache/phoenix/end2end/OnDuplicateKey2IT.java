@@ -126,7 +126,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a',10)");
 
         int actualReturnValue = conn.createStatement().executeUpdate(
-                "UPSERT INTO " + tableName + " VALUES('a',0) ON DUPLICATE KEY IGNORE");
+                "UPSERT INTO " + tableName + " VALUES('a',0) ON DUPLICATE KEY IGNORE " +
+                        "RETURNING *");
         assertEquals(0, actualReturnValue);
 
         conn.close();
@@ -426,13 +427,14 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                                   BsonDocument bsonDocument2) throws SQLException {
         String upsertSql = "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1, COL3, COL4)"
                 + " VALUES('pk000', -123.98, 'pk003', 1011.202, ?, 123) ON DUPLICATE KEY " +
-                "IGNORE";
+                "IGNORE RETURNING *";
         validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 1011.202, null, true,
                 bsonDocument1, bsonDocument1, 123);
 
         upsertSql =
                 "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1) "
-                        + "VALUES('pk000', -123.98, 'pk003', 0) ON DUPLICATE KEY IGNORE";
+                        + "VALUES('pk000', -123.98, 'pk003', 0) ON DUPLICATE KEY IGNORE " +
+                        "RETURNING *";
         validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 1011.202, null, false,
                 null, bsonDocument1, 123);
 
@@ -450,7 +452,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                 + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 "
                 + "END, "
                 + "COL3 = ?, "
-                + "COL4 = 234";
+                + "COL4 = 234 "
+                + "RETURNING *";
         validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 2233.99, "col2_001", true,
                 bsonDocument2, bsonDocument2, 234);
 
@@ -459,7 +462,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                 + "COUNTER1 = CASE WHEN COUNTER1 < 2000 THEN COUNTER1 + 1999.99 ELSE COUNTER1"
                 + " END,"
                 + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 "
-                + "END";
+                + "END "
+                + "RETURNING *";
         validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 2233.99, "col2_001", false
                 , null, bsonDocument2, 234);
     }
@@ -470,13 +474,14 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             throws SQLException {
         String upsertSql = "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1, COL3, COL4)"
                 + " VALUES('pk000', -123.98, 'pk003', 1011.202, ?, 123) ON DUPLICATE KEY " +
-                "IGNORE";
+                "IGNORE RETURNING *";
         validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 1011.202, null, true,
                 bsonDocument1, bsonDocument1, 123);
 
         upsertSql =
                 "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1) "
-                        + "VALUES('pk000', -123.98, 'pk003', 0) ON DUPLICATE KEY IGNORE";
+                        + "VALUES('pk000', -123.98, 'pk003', 0) ON DUPLICATE KEY IGNORE " +
+                        "RETURNING *";
         validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 1011.202, null, false,
                 null, bsonDocument1, 123);
 
@@ -494,7 +499,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                 + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 "
                 + "END, "
                 + "COL3 = ?, "
-                + "COL4 = 234";
+                + "COL4 = 234 "
+                + "RETURNING *";
         validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 2233.99, "col2_001", true,
                 bsonDocument2, bsonDocument2, 234);
 
@@ -503,7 +509,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                 + "COUNTER1 = CASE WHEN COUNTER1 < 2000 THEN COUNTER1 + 1999.99 ELSE COUNTER1"
                 + " END,"
                 + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 "
-                + "END";
+                + "END "
+                + "RETURNING *";
         validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 2233.99, "col2_001", false
                 , null, bsonDocument2, 234);
     }
@@ -589,8 +596,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             resultSet = stmt.execute(upsertSql) ? stmt.getResultSet() : null;
             updateCount = stmt.getUpdateCount();
         }
-        boolean isOnDuplicateKey = upsertSql.toUpperCase().contains("ON DUPLICATE KEY");
-        if (conn.getAutoCommit() && isOnDuplicateKey) {
+        boolean isReturningRow = upsertSql.toUpperCase().contains("RETURNING *");
+        if (conn.getAutoCommit() && isReturningRow) {
             assertEquals(success ? 1 : 0, updateCount);
             assertEquals("pk000", resultSet.getString(1));
             assertEquals(-123.98, resultSet.getDouble(2), 0.0);
@@ -635,8 +642,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             updateCount = resultPair.getFirst();
             resultSet = resultPair.getSecond();
         }
-        boolean isOnDuplicateKey = upsertSql.toUpperCase().contains("ON DUPLICATE KEY");
-        if (conn.getAutoCommit() && isOnDuplicateKey) {
+        boolean isReturningRow = upsertSql.toUpperCase().contains("RETURNING *");
+        if (conn.getAutoCommit() && isReturningRow) {
             assertEquals(success ? 1 : 0, updateCount);
             if (resultSet != null) {
                 assertEquals("pk000", resultSet.getString(1));
@@ -717,13 +724,14 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             throws SQLException {
         String upsertSql = "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1, COL3, COL4)"
                 + " VALUES('pk000', -123.98, 'pk003', 1011.202, ?, 123) ON DUPLICATE KEY " +
-                "IGNORE";
+                "IGNORE RETURNING *";
         validateReturnedRowBeforeUpsert(conn, upsertSql, tableName, 0.0, null, true,
                 bsonDocument1, null, null);
 
         upsertSql =
                 "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1) "
-                        + "VALUES('pk000', -123.98, 'pk003', 0) ON DUPLICATE KEY IGNORE";
+                        + "VALUES('pk000', -123.98, 'pk003', 0) ON DUPLICATE KEY IGNORE " +
+                        "RETURNING *";
         validateReturnedRowBeforeUpsert(conn, upsertSql, tableName, 1011.202, null, false,
                 null, bsonDocument1, 123);
 
@@ -741,7 +749,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                 + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 "
                 + "END, "
                 + "COL3 = ?, "
-                + "COL4 = 234";
+                + "COL4 = 234 "
+                + "RETURNING *";
         validateReturnedRowBeforeUpsert(conn, upsertSql, tableName, 234d, "col2_000", true,
                 bsonDocument2, bsonDocument1, 123);
 
@@ -750,7 +759,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                 + "COUNTER1 = CASE WHEN COUNTER1 < 2000 THEN COUNTER1 + 1999.99 ELSE COUNTER1"
                 + " END,"
                 + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 "
-                + "END";
+                + "END "
+                + "RETURNING *";
         validateReturnedRowBeforeUpsert(conn, upsertSql, tableName, 2233.99, "col2_001", false
                 , null, bsonDocument2, 234);
     }
@@ -761,13 +771,14 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             throws SQLException {
         String upsertSql = "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1, COL3, COL4)"
                 + " VALUES('pk000', -123.98, 'pk003', 1011.202, ?, 123) ON DUPLICATE KEY " +
-                "IGNORE";
+                "IGNORE RETURNING *";
         validateReturnedRowBeforeUpsert(conn, upsertSql, tableName, 0.0, null, true,
                 bsonDocument1, null, null);
 
         upsertSql =
                 "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1) "
-                        + "VALUES('pk000', -123.98, 'pk003', 0) ON DUPLICATE KEY IGNORE";
+                        + "VALUES('pk000', -123.98, 'pk003', 0) ON DUPLICATE KEY IGNORE " +
+                        "RETURNING *";
         validateReturnedRowBeforeUpsert(conn, upsertSql, tableName, 1011.202, null, false,
                 null, bsonDocument1, 123);
 
@@ -785,7 +796,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                 + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 "
                 + "END, "
                 + "COL3 = ?, "
-                + "COL4 = 234";
+                + "COL4 = 234 "
+                + "RETURNING *";
         validateReturnedRowBeforeUpsert(conn, upsertSql, tableName, 234d, "col2_000", true,
                 bsonDocument2, bsonDocument1, 123);
 
@@ -794,7 +806,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                 + "COUNTER1 = CASE WHEN COUNTER1 < 2000 THEN COUNTER1 + 1999.99 ELSE COUNTER1"
                 + " END,"
                 + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 "
-                + "END";
+                + "END "
+                + "RETURNING *";
         validateReturnedRowBeforeUpsert(conn, upsertSql, tableName, 2233.99, "col2_001", false
                 , null, bsonDocument2, 234);
     }
@@ -826,13 +839,13 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
 
             String upsertSql = "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1, COL3, COL4)"
                     + " VALUES('pk000', -123.98, 'pk003', 999.999, ?, 999) ON DUPLICATE KEY " +
-                    "IGNORE";
+                    "IGNORE RETURNING *";
             validateReturnedRowBeforeUpsert(conn, upsertSql, tableName, 0.0, null, true,
                     bsonDocument1, null, null);
 
             upsertSql = "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1, COL3, COL4)"
                     + " VALUES('pk000', -123.98, 'pk003', 888.888, ?, 888) ON DUPLICATE KEY " +
-                    "IGNORE";
+                    "IGNORE RETURNING *";
             validateReturnedRowBeforeUpsert(conn, upsertSql, tableName, 999.999, null, false,
                     bsonDocument2, bsonDocument1, 999);
         }
@@ -905,7 +918,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
 
             String upsertSql = "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1, COL3, COL4)"
                     + " VALUES('pk000', -123.98, 'pk003', 1011.202, ?, 123) ON DUPLICATE KEY " +
-                    "IGNORE";
+                    "IGNORE RETURNING *";
             validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 1011.202, null, true,
                     bsonDocument1, bsonDocument1, 123);
         }
@@ -942,7 +955,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                     // intentional update with different value
                     "counter3 = counter3 + 100, " +
                     // intentional update with same value
-                    "counter4 = counter4";
+                    "counter4 = counter4 " +
+                    "RETURNING *";
             actualReturnValue = conn.createStatement().executeUpdate(dml);
             assertEquals(1, actualReturnValue);
 
@@ -999,8 +1013,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             // Case 1: timestamps update with different value in WHEN-THEN-clause
             dml = String.format("UPSERT INTO %s(pk, counter1, counter2) VALUES ('abc', 0, 10) " +
                             "ON DUPLICATE KEY UPDATE " +
-                            "counter1 = CASE WHEN counter1 < 1 THEN counter1 + 1 ELSE counter1 END",
-                    tableName);
+                            "counter1 = CASE WHEN counter1 < 1 THEN counter1 + 1 ELSE counter1 END "
+                            + "RETURNING *", tableName);
             actualReturnValue = conn.createStatement().executeUpdate(dml);
             assertEquals(1, actualReturnValue);
 
@@ -1033,8 +1047,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             // Case 3: timestamps update with different value in ELSE-clause
             dml = String.format("UPSERT INTO %s(pk, counter1, counter2) VALUES ('abc', 0, 10) " +
                             "ON DUPLICATE KEY UPDATE " +
-                            "counter1 = CASE WHEN counter1 < 1 THEN counter1 ELSE counter1 + 1 END",
-                    tableName);
+                            "counter1 = CASE WHEN counter1 < 1 THEN counter1 ELSE counter1 + 1 END "
+                            + "RETURNING *", tableName);
             actualReturnValue = conn.createStatement().executeUpdate(dml);
             assertEquals(1, actualReturnValue);
 
@@ -1089,7 +1103,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             // Case 1: timestamps update with same value in WHEN-THEN-clause
             dml = String.format("UPSERT INTO %s(pk, counter1, counter2) VALUES ('abc', 0, 10) " +
                     "ON DUPLICATE KEY UPDATE " +
-                    "counter1 = CASE WHEN counter2 <= 100 THEN 1 ELSE 0 END", tableName);
+                    "counter1 = CASE WHEN counter2 <= 100 THEN 1 ELSE 0 END " +
+                    "RETURNING *", tableName);
             actualReturnValue = conn.createStatement().executeUpdate(dml);
             assertEquals(1, actualReturnValue);
 
@@ -1110,7 +1125,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             // Case 2: timestamps NOT update with same value in ELSE-clause
             dml = String.format("UPSERT INTO %s(pk, counter1, counter2) VALUES ('abc', 0, 10) " +
                     "ON DUPLICATE KEY UPDATE " +
-                    "counter1 = CASE WHEN counter2 > 100 THEN 0 ELSE 1 END", tableName);
+                    "counter1 = CASE WHEN counter2 > 100 THEN 0 ELSE 1 END " +
+                    "RETURNING *", tableName);
             actualReturnValue = conn.createStatement().executeUpdate(dml);
             assertEquals(0, actualReturnValue);
 
@@ -1158,7 +1174,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                     "counter2 = CASE WHEN counter2 < 11 THEN counter2 + 1 ELSE counter2 END," +
                     "approval = CASE WHEN counter2 < 10 THEN 'NONE' " +
                     "WHEN counter2 < 11 THEN 'MANAGER_APPROVAL' " +
-                    "ELSE approval END", tableName);
+                    "ELSE approval END " +
+                    "RETURNING *", tableName);
             actualReturnValue = conn.createStatement().executeUpdate(dml);
             assertEquals(1, actualReturnValue);
 
@@ -1236,8 +1253,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
 
             // Case 1: different value of one column
             dml = String.format("UPSERT INTO %s(pk, counter1, counter2) VALUES ('abc', 0, 10) " +
-                            "ON DUPLICATE KEY UPDATE counter1 = counter1 + 1",
-                    tableName);
+                            "ON DUPLICATE KEY UPDATE counter1 = counter1 + 1 "
+                            + "RETURNING *", tableName);
             actualReturnValue = conn.createStatement().executeUpdate(dml);
             assertEquals(1, actualReturnValue);
 
@@ -1256,8 +1273,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
 
             // Case 2: same value of one column will also be updated
             dml = String.format("UPSERT INTO %s(pk, counter1, counter2) VALUES ('abc', 0, 10) " +
-                            "ON DUPLICATE KEY UPDATE counter1 = counter1",
-                    tableName);
+                            "ON DUPLICATE KEY UPDATE counter1 = counter1 "
+                            + "RETURNING *", tableName);
             actualReturnValue = conn.createStatement().executeUpdate(dml);
             assertEquals(1, actualReturnValue);
 
@@ -1275,8 +1292,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
 
             // Case 3: same value of one column, different of the other
             dml = String.format("UPSERT INTO %s(pk, counter1, counter2) VALUES ('abc', 0, 10) " +
-                            "ON DUPLICATE KEY UPDATE counter1 = counter1, counter2 = counter2 + 1",
-                    tableName);
+                            "ON DUPLICATE KEY UPDATE counter1 = counter1, counter2 = counter2 + 1 "
+                            + "RETURNING *", tableName);
             actualReturnValue = conn.createStatement().executeUpdate(dml);
             assertEquals(1, actualReturnValue);
 
@@ -1294,8 +1311,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
 
             // Case 4: same values of all columns will also be updated
             dml = String.format("UPSERT INTO %s(pk, counter1, counter2) VALUES ('abc', 0, 10) " +
-                            "ON DUPLICATE KEY UPDATE counter1 = counter1, counter2 = counter2",
-                    tableName);
+                            "ON DUPLICATE KEY UPDATE counter1 = counter1, counter2 = counter2 "
+                            + "RETURNING *", tableName);
             actualReturnValue = conn.createStatement().executeUpdate(dml);
             assertEquals(1, actualReturnValue);
 
@@ -1339,19 +1356,23 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             conn.commit();
 
             stmt.addBatch("UPSERT INTO " + tableName +
-                    " (pk, counter1, counter2) VALUES ('a', 0, 10) ON DUPLICATE KEY IGNORE");
+                    " (pk, counter1, counter2) VALUES ('a', 0, 10) ON DUPLICATE KEY IGNORE " +
+                    "RETURNING *");
             stmt.addBatch("UPSERT INTO " + tableName +
                     " (pk, counter1, counter2) VALUES ('a', 0, 10) ON DUPLICATE KEY UPDATE" +
-                    " counter1 = CASE WHEN counter1 < 1 THEN 1 ELSE counter1 END");
+                    " counter1 = CASE WHEN counter1 < 1 THEN 1 ELSE counter1 END "
+                    + "RETURNING *");
 
             stmt.addBatch("UPSERT INTO " + tableName +
-                    " (pk, counter1, counter2) VALUES ('b', 0, 9) ON DUPLICATE KEY IGNORE");
+                    " (pk, counter1, counter2) VALUES ('b', 0, 9) ON DUPLICATE KEY IGNORE " +
+                    "RETURNING *");
             String dml =  "UPSERT INTO " + tableName +
                     " (pk, counter1, counter2) VALUES ('b', 0, 10) ON DUPLICATE KEY UPDATE" +
                     " counter2 = CASE WHEN counter2 < 11 THEN counter2 + 1 ELSE counter2 END," +
                     " approval = CASE WHEN counter2 < 10 THEN 'NONE'" +
                     " WHEN counter2 < 11 THEN 'MANAGER_APPROVAL'" +
-                    " ELSE approval END";
+                    " ELSE approval END "
+                    + "RETURNING *";
             stmt.addBatch(dml);
             stmt.addBatch(dml);
             stmt.addBatch(dml);

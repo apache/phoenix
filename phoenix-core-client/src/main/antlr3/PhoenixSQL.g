@@ -52,7 +52,7 @@ tokens
     END='end';
     EXISTS='exists';
     IS='is';
-    FIRST='first';    
+    FIRST='first';
     DISTINCT='distinct';
     JOIN='join';
     INNER='inner';
@@ -160,6 +160,7 @@ tokens
     UNCOVERED = 'uncovered';
     REGIONS = 'regions';
     NOVERIFY = 'noverify';
+    RETURNING = 'returning';
 }
 
 
@@ -255,7 +256,7 @@ package org.apache.phoenix.parse;
 
 @parser::members
 {
-    
+
     /**
      * used to turn '?' binds into : binds.
      */
@@ -267,11 +268,11 @@ package org.apache.phoenix.parse;
     public void setParseNodeFactory(ParseNodeFactory factory) {
         this.factory = factory;
     }
-    
+
     public boolean isCountFunction(String field) {
         return CountAggregateFunction.NORMALIZED_NAME.equals(SchemaUtil.normalizeIdentifier(field));
     }
-     
+
     public int line(Token t) {
         return t.getLine();
     }
@@ -279,7 +280,7 @@ package org.apache.phoenix.parse;
     public int column(Token t) {
         return t.getCharPositionInLine() + 1;
     }
-    
+
     private void throwRecognitionException(Token t) throws RecognitionException {
         RecognitionException e = new RecognitionException();
         e.token = t;
@@ -288,11 +289,11 @@ package org.apache.phoenix.parse;
         e.input = input;
         throw e;
     }
-    
+
     public int getBindCount() {
         return anonBindNum;
     }
-    
+
     public void resetBindCount() {
         anonBindNum = 0;
     }
@@ -300,7 +301,7 @@ package org.apache.phoenix.parse;
     public String nextBind() {
         return Integer.toString(++anonBindNum);
     }
-    
+
     public void updateBind(String namedBind){
          int nBind = Integer.parseInt(namedBind);
          if (nBind > anonBindNum) {
@@ -328,7 +329,7 @@ package org.apache.phoenix.parse;
     {
         throw e;
     }
-    
+
     @Override
     public String getErrorMessage(RecognitionException e, String[] tokenNames) {
         if (e instanceof MismatchedTokenException) {
@@ -464,7 +465,7 @@ oneStatement returns [BindableStatement ret]
     |   s=explain_node) { $ret = s; }
     ;
 finally{ contextStack.pop(); }
-    
+
 explain_node returns [BindableStatement ret]
     :   EXPLAIN (w=WITH)? (r=REGIONS)? q=oneStatement
      {
@@ -478,7 +479,7 @@ explain_node returns [BindableStatement ret]
 
 // Parse a create table statement.
 create_table_node returns [CreateTableStatement ret]
-    :   CREATE (im=IMMUTABLE)? TABLE (IF NOT ex=EXISTS)? t=from_table_name 
+    :   CREATE (im=IMMUTABLE)? TABLE (IF NOT ex=EXISTS)? t=from_table_name
         (LPAREN c=column_defs (pk=pk_constraint)? RPAREN)
         (noverify=NOVERIFY)?
         (p=fam_properties)?
@@ -486,7 +487,7 @@ create_table_node returns [CreateTableStatement ret]
         (COLUMN_QUALIFIER_COUNTER LPAREN cqc=initializiation_list RPAREN)?
         {ret = factory.createTable(t, p, c, pk, s, PTableType.TABLE, ex!=null, null, null, getBindCount(), im!=null ? true : null, cqc, noverify!=null); }
     ;
-   
+
 // Parse a create schema statement.
 create_schema_node returns [CreateSchemaStatement ret]
     :   CREATE SCHEMA (IF NOT ex=EXISTS)? s=identifier
@@ -530,7 +531,7 @@ show_create_table_node returns [ShowCreateTable ret]
 
 // Parse a create view statement.
 create_view_node returns [CreateTableStatement ret]
-    :   CREATE VIEW (IF NOT ex=EXISTS)? t=from_table_name 
+    :   CREATE VIEW (IF NOT ex=EXISTS)? t=from_table_name
         (LPAREN c=column_defs (pk=pk_constraint)? RPAREN)?
         ( AS SELECT ASTERISK
           FROM bt=from_table_name
@@ -597,7 +598,7 @@ create_sequence_node returns [CreateSequenceStatement ret]
         (INCREMENT BY? i=value_expression)?
         (MINVALUE min=value_expression)?
         (MAXVALUE max=value_expression)?
-        (cyc=CYCLE)? 
+        (cyc=CYCLE)?
         (CACHE c=int_literal_or_bind)?
     { $ret = factory.createSequence(t, s, i, c, min, max, cyc!=null, ex!=null, getBindCount()); }
     ;
@@ -626,7 +627,7 @@ col_name_with_sort_order_rowtimestamp_list returns [List<ColumnDefInPkConstraint
 @init{ret = new ArrayList<ColumnDefInPkConstraint>(); }
     :   p=col_name_with_sort_order_rowtimestamp {$ret.add(p);}  (COMMA p = col_name_with_sort_order_rowtimestamp {$ret.add(p);} )*
 ;
- 
+
 col_name_with_sort_order_rowtimestamp returns [ColumnDefInPkConstraint ret]
     :   f=identifier (order=ASC|order=DESC)? (rr=ROW_TIMESTAMP)?
         { $ret = factory.columnDefInPkConstraint(factory.columnName(f), order == null ? SortOrder.getDefault() : SortOrder.fromDDLValue(order.getText()), rr != null); }
@@ -654,12 +655,12 @@ fam_prop_name returns [PropertyName ret]
     :   propName=identifier {$ret = factory.propertyName(propName); }
     |   familyName=identifier DOT propName=identifier {$ret = factory.propertyName(familyName, propName); }
     ;
-    
+
 prop_value returns [Object ret]
     :   v=identifier { $ret = v; }
     |   l=literal { $ret = l.getValue(); }
     ;
-    
+
 column_name returns [ColumnName ret]
     :   field=identifier {$ret = factory.columnName(field); }
     |   family=identifier DOT field=identifier {$ret = factory.columnName(family, field); }
@@ -670,7 +671,7 @@ column_names returns [List<ColumnName> ret]
     :  v = column_name {$ret.add(v);}  (COMMA v = column_name {$ret.add(v);} )*
 ;
 
-	
+
 // Parse a drop table statement.
 drop_table_node returns [DropTableStatement ret]
     :   DROP (v=VIEW | TABLE) (IF ex=EXISTS)? t=from_table_name (c=CASCADE)?
@@ -710,13 +711,13 @@ trace_node returns [TraceStatement ret]
 
 // Parse a create function statement.
 create_function_node returns [CreateFunctionStatement ret]
-    :   CREATE (OR replace=REPLACE)? (temp=TEMPORARY)? FUNCTION function=identifier 
+    :   CREATE (OR replace=REPLACE)? (temp=TEMPORARY)? FUNCTION function=identifier
        (LPAREN args=zero_or_more_data_types RPAREN)
        RETURNS r=identifier AS (className= jar_path)
        (USING JAR (jarPath = jar_path))?
         {
             $ret = factory.createFunction(new PFunction(SchemaUtil.normalizeIdentifier(function), args,r,(String)className.getValue(), jarPath == null ? null : (String)jarPath.getValue()), temp!=null, replace!=null);
-        } 
+        }
     ;
 
 jar_path returns [LiteralParseNode ret]
@@ -765,7 +766,7 @@ execute_upgrade_node returns [ExecuteUpgradeStatement ret]
 prop_name returns [String ret]
     :   p=identifier {$ret = SchemaUtil.normalizeIdentifier(p); }
     ;
-    
+
 properties returns [Map<String,Object> ret]
 @init{ret = new HashMap<String,Object>(); }
     :  k=prop_name EQ v=prop_value {$ret.put(k,v);}  (COMMA k=prop_name EQ v=prop_value {$ret.put(k,v);} )*
@@ -797,7 +798,7 @@ column_def returns [ColumnDef ret]
             nn!=null ? Boolean.FALSE : n!=null ? Boolean.TRUE : null,
             l == null ? null : Integer.parseInt( l.getText() ),
             s == null ? null : Integer.parseInt( s.getText() ),
-            pk != null, 
+            pk != null,
             order == null ? SortOrder.getDefault() : SortOrder.fromDDLValue(order.getText()),
             df == null ? null : df.toString(),
             eq == null ? null : Integer.parseInt( eq.getText() ),
@@ -814,17 +815,17 @@ dyn_column_def returns [ColumnDef ret]
         {$ret = factory.columnDef(c, dt, ar != null || lsq != null, a == null ? null :  Integer.parseInt( a.getText() ), Boolean.TRUE,
             l == null ? null : Integer.parseInt( l.getText() ),
             s == null ? null : Integer.parseInt( s.getText() ),
-            false, 
+            false,
             SortOrder.getDefault(),
             false); }
     ;
 
 dyn_column_name_or_def returns [ColumnDef ret]
-    :   c=column_name (dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? )? 
+    :   c=column_name (dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? )?
         {$ret = factory.columnDef(c, dt, ar != null || lsq != null, a == null ? null :  Integer.parseInt( a.getText() ), Boolean.TRUE,
             l == null ? null : Integer.parseInt( l.getText() ),
             s == null ? null : Integer.parseInt( s.getText() ),
-            false, 
+            false,
             SortOrder.getDefault(),
             false); }
     ;
@@ -832,10 +833,10 @@ dyn_column_name_or_def returns [ColumnDef ret]
 subquery_expression returns [ParseNode ret]
     :  s=select_node {$ret = factory.subquery(s, false);}
     ;
-    
+
 single_select returns [SelectStatement ret]
 @init{ contextStack.push(new ParseContext()); }
-    :   SELECT (h=hintClause)? 
+    :   SELECT (h=hintClause)?
         (d=DISTINCT | ALL)? sel=select_list
         (FROM from=parseFrom)?
         (WHERE where=expression)?
@@ -849,7 +850,7 @@ unioned_selects returns [List<SelectStatement> ret]
 @init{ret = new ArrayList<SelectStatement>();}
     :   s=single_select {ret.add(s);} (UNION ALL s=single_select {ret.add(s);})*
     ;
-    
+
 // Parse a full select expression structure.
 select_node returns [SelectStatement ret]
 @init{ contextStack.push(new ParseContext()); }
@@ -866,22 +867,27 @@ finally{ contextStack.pop(); }
 upsert_node returns [UpsertStatement ret]
     :   UPSERT (hint=hintClause)? INTO t=from_table_name
         (LPAREN p=upsert_column_refs RPAREN)?
-        ((VALUES LPAREN v=one_or_more_expressions RPAREN ( ON DUPLICATE KEY ( ig=IGNORE |
-         ( upd=UPDATE pairs=update_column_pairs ) | ( updo=UPDATE_ONLY upopairs=update_column_pairs ) ) )? )
+        ((VALUES LPAREN v=one_or_more_expressions RPAREN (
+            ON DUPLICATE KEY (
+                ig=IGNORE
+              | ( upd=UPDATE pairs=update_column_pairs )
+              | ( updo=UPDATE_ONLY upopairs=update_column_pairs )
+            ) rc=( RETURNING ASTERISK )? )? )
           | s=select_node)
         {ret = factory.upsert(
-            factory.namedTable(null,t,p == null ? null : p.getFirst()), 
-            hint, p == null ? null : p.getSecond(), 
-            v, s, getBindCount(), 
+            factory.namedTable(null,t,p == null ? null : p.getFirst()),
+            hint, p == null ? null : p.getSecond(),
+            v, s, getBindCount(),
             new HashMap<String, UDFParseNode>(udfParseNodes),
             ig != null ? Collections.<Pair<ColumnName,ParseNode>>emptyList() : pairs != null ? pairs
              : upopairs != null ? upopairs : null,
             ig != null ? UpsertStatement.OnDuplicateKeyType.IGNORE :
             upd != null ? UpsertStatement.OnDuplicateKeyType.UPDATE :
             updo != null ? UpsertStatement.OnDuplicateKeyType.UPDATE_ONLY
-             : UpsertStatement.OnDuplicateKeyType.NONE); }
+             : UpsertStatement.OnDuplicateKeyType.NONE,
+            rc != null ? true : false); }
     ;
-  
+
 update_column_pairs returns [ List<Pair<ColumnName,ParseNode>> ret]
 @init{ret = new ArrayList<Pair<ColumnName,ParseNode>>(); }
     :  p=update_column_pair { ret.add(p); }
@@ -892,13 +898,13 @@ update_column_pair returns [ Pair<ColumnName,ParseNode> ret ]
     :  c=column_name EQ e=expression { $ret = new Pair<ColumnName,ParseNode>(c,e); }
 ;
 
-  
+
 upsert_column_refs returns [Pair<List<ColumnDef>,List<ColumnName>> ret]
 @init{ret = new Pair<List<ColumnDef>,List<ColumnName>>(new ArrayList<ColumnDef>(), new ArrayList<ColumnName>()); }
-    :  d=dyn_column_name_or_def { if (d.getDataType()!=null) { $ret.getFirst().add(d); } $ret.getSecond().add(d.getColumnDefName()); } 
+    :  d=dyn_column_name_or_def { if (d.getDataType()!=null) { $ret.getFirst().add(d); } $ret.getSecond().add(d.getColumnDefName()); }
        (COMMA d=dyn_column_name_or_def { if (d.getDataType()!=null) { $ret.getFirst().add(d); } $ret.getSecond().add(d.getColumnDefName()); } )*
 ;
-	
+
 
 // Parse a full declare cursor expression structure.
 declare_cursor_node returns [DeclareCursorStatement ret]
@@ -909,7 +915,7 @@ declare_cursor_node returns [DeclareCursorStatement ret]
 cursor_open_node returns [OpenStatement ret]
     :    OPEN c=cursor_name {ret = factory.open(c);}
     ;
- 
+
 cursor_close_node returns [CloseStatement ret]
     :    CLOSE c=cursor_name {ret = factory.close(c);}
     ;
@@ -931,7 +937,7 @@ limit returns [LimitNode ret]
     : b=bind_expression { $ret = factory.limit(b); }
     | l=int_or_long_literal { $ret = factory.limit(l); }
     ;
-    
+
 offset returns [OffsetNode ret]
 	: b=bind_expression (ROW | ROWS)? {  try { $ret = factory.offset(b); } catch (SQLException e) { throw new RuntimeException(e); } }
     | l=int_or_long_literal (ROW | ROWS)? { try { $ret = factory.offset(l); } catch (SQLException e) { throw new RuntimeException(e); } }
@@ -954,13 +960,13 @@ hintClause returns [HintNode ret]
 select_list returns [List<AliasedNode> ret]
 @init{ret = new ArrayList<AliasedNode>();}
     :   n=selectable {ret.add(n);} (COMMA n=selectable {ret.add(n);})*
-    |	ASTERISK { $ret = Collections.<AliasedNode>singletonList(factory.aliasedNode(null, factory.wildcard()));} // i.e. the '*' in 'select * from'    
+    |	ASTERISK { $ret = Collections.<AliasedNode>singletonList(factory.aliasedNode(null, factory.wildcard()));} // i.e. the '*' in 'select * from'
     ;
 
 // Parse either a select field or a sub select.
 selectable returns [AliasedNode ret]
     :   field=expression (a=parseAlias)? { $ret = factory.aliasedNode(a, field); }
-    | 	familyName=identifier DOT ASTERISK { $ret = factory.aliasedNode(null, factory.family(familyName));} // i.e. the 'cf.*' in 'select cf.* from' cf being column family of an hbase table    
+    | 	familyName=identifier DOT ASTERISK { $ret = factory.aliasedNode(null, factory.family(familyName));} // i.e. the 'cf.*' in 'select cf.* from' cf being column family of an hbase table
     |   s=identifier DOT t=identifier DOT ASTERISK { $ret = factory.aliasedNode(null, factory.tableWildcard(factory.table(s, t))); }
     ;
 
@@ -991,7 +997,7 @@ parseOrderByField returns [OrderByNode ret]
 parseFrom returns [TableNode ret]
     :   t=table_list {$ret = t;}
     ;
-    
+
 table_list returns [TableNode ret]
     :   t=table_ref {$ret = t;} (COMMA s=table_ref { $ret = factory.join(JoinTableNode.JoinType.Inner, ret, s, null, false); })*
     ;
@@ -1013,7 +1019,7 @@ join_type returns [JoinTableNode.JoinType ret]
     |   RIGHT OUTER?  { $ret = JoinTableNode.JoinType.Right; }
     |   FULL  OUTER?  { $ret = JoinTableNode.JoinType.Full; }
     ;
-    
+
 parseAlias returns [String ret]
     :   AS? alias=parseNoReserved { $ret = alias; }
     ;
@@ -1035,7 +1041,7 @@ and_expression returns [ParseNode ret]
     :   i=not_expression {l.add(i);} (AND i=not_expression {l.add(i);})* { $ret = l.size() == 1 ? l.get(0) : factory.and(l); }
     ;
 
-// NOT or parenthesis 
+// NOT or parenthesis
 not_expression returns [ParseNode ret]
     :   (NOT? boolean_expression ) => n=NOT? e=boolean_expression { $ret = n == null ? e : factory.not(e); }
     |   n=NOT? LPAREN e=expression RPAREN { $ret = n == null ? e : factory.not(e); }
@@ -1049,7 +1055,7 @@ comparison_op returns [CompareOperator ret]
 	| GT EQ { $ret = CompareOperator.GREATER_OR_EQUAL; }
 	| (NOEQ1 | NOEQ2) { $ret = CompareOperator.NOT_EQUAL; }
 	;
-	
+
 boolean_expression returns [ParseNode ret]
     :   l=value_expression ((op=comparison_op (r=value_expression | (LPAREN r=subquery_expression RPAREN) | ((all=ALL | any=ANY) LPAREN r=value_expression RPAREN)  | ((all=ALL | any=ANY) LPAREN r=subquery_expression RPAREN)) {$ret = all != null ? factory.wrapInAll(op, l, r) : any != null ? factory.wrapInAny(op, l, r) : factory.comparison(op,l,r); } )
                   |  (IS n=NOT? NULL {$ret = factory.isNull(l,n!=null); } )
@@ -1068,7 +1074,7 @@ boolean_expression returns [ParseNode ret]
 bind_expression  returns [BindParseNode ret]
     :   b=bind_name { $ret = factory.bind(b); }
     ;
-    
+
 value_expression returns [ParseNode ret]
     :   i=add_expression { $ret = i; }
     ;
@@ -1090,9 +1096,9 @@ concat_expression returns [ParseNode ret]
 
 multiply_divide_modulo_expression returns [ParseNode ret]
 @init{ParseNode lhs = null; List<ParseNode> l;}
-    :   i=negate_expression {lhs = i;} 
+    :   i=negate_expression {lhs = i;}
         (op=(ASTERISK | DIVIDE | PERCENT) rhs=negate_expression {
-            l = Arrays.asList(lhs, rhs); 
+            l = Arrays.asList(lhs, rhs);
             // determine the expression type based on the operator found
             lhs = op.getType() == ASTERISK ? factory.multiply(l)
                 : op.getType() == DIVIDE   ? factory.divide(l)
@@ -1113,9 +1119,9 @@ negate_expression returns [ParseNode ret]
 
 // The lowest level function, which includes literals, binds, but also parenthesized expressions, functions, and case statements.
 array_expression returns [ParseNode ret]
-    :   e=term (LSQUARE s=value_expression RSQUARE)?  { if (s == null) { $ret = e; } else { $ret = factory.arrayElemRef(Arrays.<ParseNode>asList(e,s)); } } 
+    :   e=term (LSQUARE s=value_expression RSQUARE)?  { if (s == null) { $ret = e; } else { $ret = factory.arrayElemRef(Arrays.<ParseNode>asList(e,s)); } }
 	;
-	    
+
 term returns [ParseNode ret]
     :   e=literal_or_bind { $ret = e; }
     |   field=identifier { $ret = factory.column(null,field,field); }
@@ -1129,8 +1135,8 @@ term returns [ParseNode ret]
             }
             if(f instanceof UDFParseNode) udfParseNodes.put(f.getName(),(UDFParseNode)f);
             $ret = f;
-        } 
-    |   field=identifier LPAREN t=ASTERISK RPAREN 
+        }
+    |   field=identifier LPAREN t=ASTERISK RPAREN
         {
             if (!isCountFunction(field)) {
                 throwRecognitionException(t);
@@ -1141,8 +1147,8 @@ term returns [ParseNode ret]
             }
             if(f instanceof UDFParseNode) udfParseNodes.put(f.getName(),(UDFParseNode)f);
             $ret = f;
-        } 
-    |   field=identifier LPAREN t=DISTINCT l=zero_or_more_expressions RPAREN 
+        }
+    |   field=identifier LPAREN t=DISTINCT l=zero_or_more_expressions RPAREN
         {
             FunctionParseNode f = factory.functionDistinct(field, l);
             if (!contextStack.isEmpty()) {
@@ -1152,14 +1158,14 @@ term returns [ParseNode ret]
             $ret = f;
         }
     |   e=case_statement { $ret = e; }
-    |   LPAREN l=one_or_more_expressions RPAREN 
-    	{ 
+    |   LPAREN l=one_or_more_expressions RPAREN
+    	{
     		if(l.size() == 1) {
     			$ret = l.get(0);
-    		}	
+    		}
     		else {
     			$ret = factory.rowValueConstructor(l);
-    		}	 
+    		}
     	}
     |   CAST LPAREN e=expression AS dt=identifier (LPAREN length=NUMBER (COMMA scale=NUMBER)? RPAREN)? ar=(ARRAY | (LSQUARE RSQUARE))? RPAREN
         { $ret = factory.cast(e, dt,
@@ -1167,12 +1173,12 @@ term returns [ParseNode ret]
                      scale == null ? null : Integer.parseInt(scale.getText()),
                      ar!=null);
         }
-    |   (n=NEXT | CURRENT) VALUE FOR s=from_table_name 
+    |   (n=NEXT | CURRENT) VALUE FOR s=from_table_name
         { contextStack.peek().hasSequences(true);
-          $ret = n==null ? factory.currentValueFor(s) : factory.nextValueFor(s, null); }    
-    |   (n=NEXT) lorb=literal_or_bind VALUES FOR s=from_table_name 
+          $ret = n==null ? factory.currentValueFor(s) : factory.nextValueFor(s, null); }
+    |   (n=NEXT) lorb=literal_or_bind VALUES FOR s=from_table_name
         { contextStack.peek().hasSequences(true);
-          $ret = factory.nextValueFor(s, lorb); }    
+          $ret = factory.nextValueFor(s, lorb); }
     ;
 
 one_or_more_expressions returns [List<ParseNode> ret]
@@ -1192,14 +1198,14 @@ zero_or_more_expressions returns [List<ParseNode> ret]
 
 zero_or_more_data_types returns [List<FunctionArgument> ret]
 @init{ret = new ArrayList<FunctionArgument>(); }
-    : (fa = function_argument {$ret.add(fa);})? (COMMA fa = function_argument {$ret.add(fa);})* 
+    : (fa = function_argument {$ret.add(fa);})? (COMMA fa = function_argument {$ret.add(fa);})*
 	;
 
 function_argument returns [FunctionArgument ret]
-	: (dt = identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (c = CONSTANT)? (DEFAULTVALUE EQ dv = expression)? (MINVALUE EQ minv = expression)?  (MAXVALUE EQ maxv = expression)? 
-	{ $ret = new FunctionArgument(dt,  ar != null || lsq != null, c!=null, 
-    dv == null ? null : LiteralExpression.newConstant(((LiteralParseNode)dv).getValue()), 
-    minv == null ? null : LiteralExpression.newConstant(((LiteralParseNode)minv).getValue()), 
+	: (dt = identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (c = CONSTANT)? (DEFAULTVALUE EQ dv = expression)? (MINVALUE EQ minv = expression)?  (MAXVALUE EQ maxv = expression)?
+	{ $ret = new FunctionArgument(dt,  ar != null || lsq != null, c!=null,
+    dv == null ? null : LiteralExpression.newConstant(((LiteralParseNode)dv).getValue()),
+    minv == null ? null : LiteralExpression.newConstant(((LiteralParseNode)minv).getValue()),
     maxv == null ? null : LiteralExpression.newConstant(((LiteralParseNode)maxv).getValue()));})
 	;
 
@@ -1234,11 +1240,11 @@ table_identifier returns [String ret]
            $ret = c;
     }
     ;
-    
+
 // The lowest level function, which includes literals, binds, but also parenthesized expressions, functions, and case statements.
 literal_or_bind returns [ParseNode ret]
     :   e=literal { $ret = e; }
-    |   b=bind_name { $ret = factory.bind(b); }    
+    |   b=bind_name { $ret = factory.bind(b); }
     ;
 
 // Get a string, integer, double, date, boolean, or NULL value.
@@ -1247,7 +1253,7 @@ literal returns [LiteralParseNode ret]
     h=hex_literal { ret = h; }
     |   b=bin_literal { ret = b; }
     |   s=STRING_LITERAL {
-            ret = factory.literal(s.getText()); 
+            ret = factory.literal(s.getText());
         }
     |   n=NUMBER {
             ret = factory.wholeNumber(n.getText());
@@ -1259,9 +1265,9 @@ literal returns [LiteralParseNode ret]
             ret = factory.literal(Double.valueOf(dbl.getText()));
         }
     |   NULL {ret = factory.literal(null);}
-    |   TRUE {ret = factory.literal(Boolean.TRUE);} 
+    |   TRUE {ret = factory.literal(Boolean.TRUE);}
     |   FALSE {ret = factory.literal(Boolean.FALSE);}
-    |   dt=identifier t=STRING_LITERAL { 
+    |   dt=identifier t=STRING_LITERAL {
             try {
                 ret = factory.literal(t.getText(), dt);
             } catch (SQLException e) {
@@ -1298,7 +1304,7 @@ bin_literal returns [LiteralParseNode ret]
 
 // Bind names are a colon followed by 1+ letter/digits/underscores, or '?' (unclear how Oracle acutally deals with this, but we'll just treat it as a special bind)
 bind_name returns [String ret]
-    :   n=BIND_NAME { String bind = n.getText().substring(1); updateBind(bind); $ret = bind; } 
+    :   n=BIND_NAME { String bind = n.getText().substring(1); updateBind(bind); $ret = bind; }
     |   QUESTION { $ret = nextBind(); } // TODO: only support this?
     ;
 
@@ -1366,7 +1372,7 @@ NUMBER
 DECIMAL
 	:	POSINTEGER? '.' POSINTEGER
 	;
-	
+
 DOUBLE
     :   '.' POSINTEGER Exponent
     |   POSINTEGER '.' Exponent
@@ -1472,7 +1478,7 @@ ASTERISK
 DIVIDE
     :   '/'
     ;
-    
+
 PERCENT
     :   '%'
     ;
@@ -1521,7 +1527,7 @@ BIN_DIGIT
 STRING_LITERAL
 @init{ StringBuilder sb = new StringBuilder(); }
     :   '\''
-    ( t=CHAR { sb.append(t.getText()); } 
+    ( t=CHAR { sb.append(t.getText()); }
     | t=CHAR_ESC { sb.append(getText()); }
     )* '\'' { setText(sb.toString()); }
     ;
@@ -1596,9 +1602,9 @@ DOT
     : '.'
     ;
 
-OTHER      
+OTHER
     : . { if (true) // to prevent compile error
-              throw new RuntimeException("Unexpected char: '" + $text + "'"); } 
+              throw new RuntimeException("Unexpected char: '" + $text + "'"); }
     ;
 
 
