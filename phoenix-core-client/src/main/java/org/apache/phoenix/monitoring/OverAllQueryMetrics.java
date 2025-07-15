@@ -172,8 +172,10 @@ public class OverAllQueryMetrics {
         metricsForPublish.put(wallClockTimeMS.getMetricType(), wallClockTimeMS.getValue());
         metricsForPublish.put(resultSetTimeMS.getMetricType(), resultSetTimeMS.getValue());
         metricsForPublish.put(queryCompilerTimeMS.getMetricType(), queryCompilerTimeMS.getValue());
-        metricsForPublish.put(queryOptimizerTimeMS.getMetricType(), queryOptimizerTimeMS.getValue());
-        metricsForPublish.put(queryResultItrSetTimeMS.getMetricType(), queryResultItrSetTimeMS.getValue());
+        metricsForPublish.put(queryOptimizerTimeMS.getMetricType(),
+            queryOptimizerTimeMS.getValue());
+        metricsForPublish.put(queryResultItrSetTimeMS.getMetricType(),
+            queryResultItrSetTimeMS.getValue());
         metricsForPublish.put(queryTimedOut.getMetricType(), queryTimedOut.getValue());
         metricsForPublish.put(queryPointLookupTimedOut.getMetricType(), queryPointLookupTimedOut.getValue());
         metricsForPublish.put(queryScanTimedOut.getMetricType(), queryScanTimedOut.getValue());
