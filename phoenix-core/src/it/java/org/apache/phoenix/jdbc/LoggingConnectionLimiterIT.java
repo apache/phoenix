@@ -31,6 +31,7 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.PreparedStatement;
+import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.HashSet;
 import java.util.ArrayList;
@@ -195,6 +196,35 @@ public abstract class LoggingConnectionLimiterIT extends BaseTest {
         Map<String, String> logs = ((LoggingConnectionLimiter) limiter).getActivityLog();
         for (Map.Entry<String, String> logEntry : logs.entrySet()) {
             assertTrue(logEntry.getValue().contains("o=queried"));
+        }
+
+    }
+
+    @Test
+    public void testQueryExplainPlan() throws Exception {
+
+        String query = "SELECT * FROM " + tableName; //FULL SCAN
+
+        if(getConnection() instanceof PhoenixConnection) {
+            try (PhoenixConnection pconn = getConnection().unwrap(PhoenixConnection.class); Statement stmt = pconn.createStatement()) {
+                ResultSet rs = stmt.executeQuery(query);
+                while (rs.next()) {
+                    //  do nothing
+                }
+                boolean queryPlanFound = false;
+                String queryPlan = pconn.getActivityLogger().getExplainPlanInfo();
+                if (queryPlan != null && queryPlan.contains("FULL SCAN"))
+                    queryPlanFound = true;
+                assertTrue(queryPlanFound);
+            }
+            try (PhoenixConnection pconn = getConnection().unwrap(PhoenixConnection.class);) {
+                loadData(pconn, "PhoenixTest", "1", 10, 2);
+                String queryPlan = pconn.getActivityLogger().getExplainPlanInfo();
+                assertTrue(queryPlan.isEmpty());
+            }
+        } else {
+            // for HA case, ignoring as parallelPhoenixConnection object doesn't have activity Logger object defined.
+            assertTrue(getConnection() instanceof ParallelPhoenixConnection);
         }
 
     }
