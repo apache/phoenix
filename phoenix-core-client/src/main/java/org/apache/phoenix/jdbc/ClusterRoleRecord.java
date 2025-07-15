@@ -23,7 +23,10 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
+import org.apache.phoenix.exception.InvalidClusterRoleTransitionException;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSet;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.JacksonUtil;
 import org.slf4j.Logger;
@@ -33,6 +36,13 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Optional;
+import java.util.Set;
+import org.apache.hadoop.conf.Configuration;
+
+import static org.apache.phoenix.query.QueryServices.HA_STORE_AND_FORWARD_MODE_REFRESH_INTERVAL_MS;
+import static org.apache.phoenix.query.QueryServices.HA_SYNC_MODE_REFRESH_INTERVAL_MS;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_HA_STORE_AND_FORWARD_MODE_REFRESH_INTERVAL_MS;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_HA_SYNC_MODE_REFRESH_INTERVAL_MS;
 
 /**
  * Immutable class of a cluster role record for a pair of HBase clusters.
@@ -55,18 +65,136 @@ import java.util.Optional;
 public class ClusterRoleRecord {
     private static final Logger LOG = LoggerFactory.getLogger(ClusterRoleRecord.class);
 
+    private static final Set<ClusterRole> CAN_CONNECT
+            = ImmutableSet.of(ClusterRole.ACTIVE, ClusterRole.ACTIVE_TO_STANDBY,
+            ClusterRole.STANDBY, ClusterRole.ACTIVE_NOT_IN_SYNC,
+            ClusterRole.ABORT_TO_ACTIVE, ClusterRole.ABORT_TO_STANDBY,
+            ClusterRole.DEGRADED_STANDBY, ClusterRole.DEGRADED_STANDBY_FOR_READER,
+            ClusterRole.DEGRADED_STANDBY_FOR_WRITER, ClusterRole.ACTIVE_WITH_OFFLINE_PEER,
+            ClusterRole.ACTIVE_NOT_IN_SYNC_TO_STANDBY, ClusterRole.STANDBY_TO_ACTIVE,
+            ClusterRole.ACTIVE_NOT_IN_SYNC_WITH_OFFLINE_PEER);
+    private static final Set<ClusterRole> IS_ACTIVE = ImmutableSet.of(ClusterRole.ACTIVE,
+            ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.ACTIVE_NOT_IN_SYNC,
+            ClusterRole.ACTIVE_NOT_IN_SYNC_TO_STANDBY, ClusterRole.ACTIVE_WITH_OFFLINE_PEER,
+            ClusterRole.ACTIVE_NOT_IN_SYNC_WITH_OFFLINE_PEER);
+    private static final Set<ClusterRole> IS_STANDBY = ImmutableSet.of(ClusterRole.STANDBY,
+            ClusterRole.DEGRADED_STANDBY, ClusterRole.DEGRADED_STANDBY_FOR_READER,
+            ClusterRole.DEGRADED_STANDBY_FOR_WRITER, ClusterRole.STANDBY_TO_ACTIVE);
+    private static final Set<ClusterRole> IS_MUTATION_BLOCKED = ImmutableSet.of(ClusterRole.ACTIVE_TO_STANDBY,
+            ClusterRole.ACTIVE_NOT_IN_SYNC_TO_STANDBY);
+
     /**
      * Enum for the current state of the cluster.  Exact meaning depends on the Policy but in general Active clusters
      * take traffic, standby and offline do not, and unknown is used if the state cannot be determined.
      */
     public enum ClusterRole {
-        ACTIVE, STANDBY, OFFLINE, UNKNOWN, ACTIVE_TO_STANDBY;
+        ABORT_TO_ACTIVE,
+        ABORT_TO_STANDBY,
+        ACTIVE,
+        ACTIVE_NOT_IN_SYNC,
+        ACTIVE_NOT_IN_SYNC_TO_STANDBY,
+        ACTIVE_NOT_IN_SYNC_WITH_OFFLINE_PEER,
+        ACTIVE_TO_STANDBY,
+        ACTIVE_WITH_OFFLINE_PEER,
+        DEGRADED_STANDBY,
+        DEGRADED_STANDBY_FOR_READER,
+        DEGRADED_STANDBY_FOR_WRITER,
+        OFFLINE,
+        STANDBY,
+        STANDBY_TO_ACTIVE,
+        UNKNOWN;
+
+        private Set<ClusterRole> allowedTransitions;
+
+        static {
+            // Initialize allowed transitions
+            ACTIVE_NOT_IN_SYNC.allowedTransitions = ImmutableSet.of(
+                    ACTIVE_NOT_IN_SYNC, ACTIVE,
+                    ACTIVE_NOT_IN_SYNC_TO_STANDBY, ACTIVE_NOT_IN_SYNC_WITH_OFFLINE_PEER
+            );
+
+            ACTIVE.allowedTransitions = ImmutableSet.of(
+                    ACTIVE_NOT_IN_SYNC, ACTIVE_WITH_OFFLINE_PEER, ACTIVE_TO_STANDBY
+            );
+
+            STANDBY.allowedTransitions = ImmutableSet.of(STANDBY_TO_ACTIVE,
+                    DEGRADED_STANDBY_FOR_READER, DEGRADED_STANDBY_FOR_WRITER);
+            // This needs to be manually recovered by operator
+            OFFLINE.allowedTransitions = ImmutableSet.of();
+            // This needs to be manually recovered by operator
+            UNKNOWN.allowedTransitions = ImmutableSet.of();
+            ACTIVE_TO_STANDBY.allowedTransitions = ImmutableSet.of(ABORT_TO_ACTIVE, STANDBY);
+            STANDBY_TO_ACTIVE.allowedTransitions = ImmutableSet.of(ABORT_TO_STANDBY, ACTIVE);
+            DEGRADED_STANDBY.allowedTransitions
+                    = ImmutableSet.of(DEGRADED_STANDBY_FOR_READER, DEGRADED_STANDBY_FOR_WRITER);
+            DEGRADED_STANDBY_FOR_WRITER.allowedTransitions = ImmutableSet.of(STANDBY, DEGRADED_STANDBY);
+            DEGRADED_STANDBY_FOR_READER.allowedTransitions = ImmutableSet.of(STANDBY, DEGRADED_STANDBY);
+            ACTIVE_WITH_OFFLINE_PEER.allowedTransitions = ImmutableSet.of(ACTIVE);
+            ABORT_TO_ACTIVE.allowedTransitions = ImmutableSet.of(ACTIVE, ACTIVE_NOT_IN_SYNC);
+            ABORT_TO_STANDBY.allowedTransitions = ImmutableSet.of(STANDBY);
+            ACTIVE_NOT_IN_SYNC_TO_STANDBY.allowedTransitions = ImmutableSet.of(ACTIVE_TO_STANDBY, ACTIVE_NOT_IN_SYNC);
+            ACTIVE_NOT_IN_SYNC_WITH_OFFLINE_PEER.allowedTransitions = ImmutableSet.of(ACTIVE_NOT_IN_SYNC);
+        }
+
+        /**
+         * Get the wait time required to transition from this role to the target role,
+         * reading from configuration.
+         * @param targetRole the role to transition to
+         * @param conf configuration to read from
+         * @return wait time in milliseconds, or 0 if transition is not allowed
+         */
+        public long checkTransitionAndGetWaitTime(ClusterRole targetRole, Configuration conf)
+                throws InvalidClusterRoleTransitionException {
+            if (!allowedTransitions.contains(targetRole)) {
+                throw new InvalidClusterRoleTransitionException("Cannot transition from " + this + " to " + targetRole);
+            }
+
+            // Read wait times from configuration based on the transition
+            switch (this) {
+                case ACTIVE_NOT_IN_SYNC:
+                    if (targetRole == ACTIVE) {
+                        return conf.getLong(HA_SYNC_MODE_REFRESH_INTERVAL_MS, DEFAULT_HA_SYNC_MODE_REFRESH_INTERVAL_MS);
+                    } else if (targetRole == ACTIVE_NOT_IN_SYNC) {
+                        return conf.getLong(HA_STORE_AND_FORWARD_MODE_REFRESH_INTERVAL_MS, DEFAULT_HA_STORE_AND_FORWARD_MODE_REFRESH_INTERVAL_MS);
+                    }
+                    break;
+                case ACTIVE:
+                    if (targetRole == ACTIVE_NOT_IN_SYNC) {
+                        return conf.getLong(HA_STORE_AND_FORWARD_MODE_REFRESH_INTERVAL_MS, DEFAULT_HA_STORE_AND_FORWARD_MODE_REFRESH_INTERVAL_MS);
+                    }
+                    break;
+                // Add more cases as needed for other roles
+            }
+            // Return 0L as default if no specific config mapping exists
+            return 0L;
+        }
 
         /**
          * @return true if a cluster with this role can be connected, otherwise false
          */
         public boolean canConnect() {
-            return this == ACTIVE || this == STANDBY || this == ACTIVE_TO_STANDBY;
+            return CAN_CONNECT.contains(this) ;
+        }
+
+        /**
+         * @return whether the current state is in ACTIVE role.
+         */
+        public boolean isActive() {
+            return IS_ACTIVE.contains(this);
+        }
+
+        /**
+         * @return whether the current state is in STANDBY role.
+         */
+        public boolean isStandby() {
+            return IS_STANDBY.contains(this);
+        }
+
+        /**
+         * @return whether mutations should be blocked in this state.
+         */
+        public boolean isMutationBlocked() {
+            return IS_MUTATION_BLOCKED.contains(this);
         }
 
         public static ClusterRole from(byte[] bytes) {
