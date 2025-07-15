@@ -148,6 +148,7 @@ import org.apache.phoenix.parse.DeclareCursorStatement;
 import org.apache.phoenix.parse.DeleteJarStatement;
 import org.apache.phoenix.parse.DeleteStatement;
 import org.apache.phoenix.parse.ExplainType;
+import org.apache.phoenix.parse.RowReturningDMLStatement;
 import org.apache.phoenix.parse.ShowCreateTableStatement;
 import org.apache.phoenix.parse.ShowCreateTable;
 import org.apache.phoenix.parse.DropColumnStatement;
@@ -576,8 +577,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     }
 
     private boolean isResultSetExpected(final CompilableStatement stmt) {
-        return stmt instanceof ExecutableUpsertStatement &&
-                ((ExecutableUpsertStatement) stmt).isReturningRow();
+        return stmt instanceof RowReturningDMLStatement &&
+                ((RowReturningDMLStatement) stmt).isReturningRow();
     }
 
     protected int executeMutation(final CompilableStatement stmt,
@@ -1193,8 +1194,11 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     }
 
     private static class ExecutableDeleteStatement extends DeleteStatement implements CompilableStatement {
-        private ExecutableDeleteStatement(NamedTableNode table, HintNode hint, ParseNode whereNode, List<OrderByNode> orderBy, LimitNode limit, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
-            super(table, hint, whereNode, orderBy, limit, bindCount, udfParseNodes);
+        private ExecutableDeleteStatement(NamedTableNode table, HintNode hint,
+                                          ParseNode whereNode, List<OrderByNode> orderBy,
+                                          LimitNode limit, int bindCount, Map<String,
+                        UDFParseNode> udfParseNodes, boolean returningRow) {
+            super(table, hint, whereNode, orderBy, limit, bindCount, udfParseNodes, returningRow);
         }
 
         @SuppressWarnings("unchecked")
@@ -2078,8 +2082,13 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         }
 
         @Override
-        public ExecutableDeleteStatement delete(NamedTableNode table, HintNode hint, ParseNode whereNode, List<OrderByNode> orderBy, LimitNode limit, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
-            return new ExecutableDeleteStatement(table, hint, whereNode, orderBy, limit, bindCount, udfParseNodes);
+        public ExecutableDeleteStatement delete(NamedTableNode table, HintNode hint,
+                                                ParseNode whereNode, List<OrderByNode> orderBy,
+                                                LimitNode limit, int bindCount,
+                                                Map<String, UDFParseNode> udfParseNodes,
+                                                boolean returningRow) {
+            return new ExecutableDeleteStatement(table, hint, whereNode, orderBy, limit,
+                    bindCount, udfParseNodes, returningRow);
         }
 
         @Override

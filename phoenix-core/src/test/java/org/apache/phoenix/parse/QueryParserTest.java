@@ -842,6 +842,35 @@ public class QueryParserTest {
     }
 
     @Test
+    public void testDeleteReturningRow() throws Exception {
+        String sql = "delete from t RETURNING *";
+        parseQuery(sql);
+    }
+
+    @Test
+    public void testDeleteWhereReturningRow() throws Exception {
+        String sql = "DELETE FROM T WHERE PK1 = ? AND PK2 = ? RETURNING *";
+        parseQuery(sql);
+    }
+
+    @Test
+    public void testDeleteWithOrderLimitWhereReturningRow() throws Exception {
+        String sql = "DELETE FROM T WHERE PK1 = ? AND PK2 = ? ORDER BY PK2 LIMIT 1 RETURNING *";
+        parseQuery(sql);
+    }
+
+    @Test
+    public void testDeleteInvalidReturningRow() throws Exception {
+        String sql = "DELETE FROM T RETURNING PK1";
+        try {
+            parseQuery(sql);
+            fail();
+        } catch (PhoenixParserException e) {
+            assertEquals(SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode(), e.getErrorCode());
+        }
+    }
+
+    @Test
     public void testHavingWithNot() throws Exception {
         String sql = (
                 (

@@ -23,7 +23,7 @@ import java.util.Map;
 
 import org.apache.hadoop.hbase.util.Pair;
 
-public class UpsertStatement extends DMLStatement {
+public class UpsertStatement extends DMLStatement implements RowReturningDMLStatement {
 
     public enum OnDuplicateKeyType {
         NONE,

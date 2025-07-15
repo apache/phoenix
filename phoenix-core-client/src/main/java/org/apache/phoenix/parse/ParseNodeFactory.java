@@ -901,8 +901,11 @@ public class ParseNodeFactory {
         return new CloseStatement(cursor);
     }
 
-    public DeleteStatement delete(NamedTableNode table, HintNode hint, ParseNode node, List<OrderByNode> orderBy, LimitNode limit, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
-        return new DeleteStatement(table, hint, node, orderBy, limit, bindCount, udfParseNodes);
+    public DeleteStatement delete(NamedTableNode table, HintNode hint, ParseNode node,
+                                  List<OrderByNode> orderBy, LimitNode limit, int bindCount,
+                                  Map<String, UDFParseNode> udfParseNodes, boolean returningRow) {
+        return new DeleteStatement(table, hint, node, orderBy, limit, bindCount, udfParseNodes,
+                returningRow);
     }
 
     public SelectStatement select(SelectStatement statement, ParseNode where) {

@@ -161,7 +161,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             validateAtomicUpsertReturnRow(tableName, conn, bsonDocument1, bsonDocument2);
 
             PreparedStatement ps = conn.prepareStatement("DELETE FROM " + tableName
-                    + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ?");
+                    + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? RETURNING *");
             ps.setString(1, "pk000");
             ps.setDouble(2, -123.98);
             ps.setString(3, "pk003");
@@ -202,7 +202,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             verifyIndexRow(conn, tableName, false);
 
             PreparedStatement ps = conn.prepareStatement("DELETE FROM " + tableName
-                    + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ?");
+                    + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ? RETURNING *");
             ps.setString(1, "pk000");
             ps.setDouble(2, -123.98);
             ps.setString(3, "pk003");
@@ -210,7 +210,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             validateReturnedRowAfterDelete(ps, "col2_001", true, false, bsonDocument2, 234);
 
             ps = conn.prepareStatement("DELETE FROM " + tableName
-                    + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ?");
+                    + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ? RETURNING *");
             ps.setString(1, "pk000");
             ps.setDouble(2, -123.98);
             ps.setString(3, "pk003");
@@ -256,7 +256,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             validateAtomicUpsertReturnRow(tableName, conn, bsonDocument1, bsonDocument2);
 
             PreparedStatement ps = conn.prepareStatement("DELETE FROM " + tableName
-                    + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ?");
+                    + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ? RETURNING *");
             ps.setString(1, "pk000");
             ps.setDouble(2, -123.98);
             ps.setString(3, "pk003");
@@ -264,7 +264,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             validateReturnedRowAfterDelete(ps, "col2_001", true, false, bsonDocument2, 234);
 
             ps = conn.prepareStatement("DELETE FROM " + tableName
-                    + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ?");
+                    + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ? RETURNING *");
             ps.setString(1, "pk000");
             ps.setDouble(2, -123.98);
             ps.setString(3, "pk003");
@@ -309,7 +309,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             validateAtomicUpsertOnlyReturnRow(tableName, conn, bsonDocument1, bsonDocument2);
 
             PreparedStatement ps = conn.prepareStatement("DELETE FROM " + tableName
-                    + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ?");
+                    + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ? RETURNING *");
             ps.setString(1, "pk000");
             ps.setDouble(2, -123.98);
             ps.setString(3, "pk003");
@@ -317,7 +317,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             validateReturnedRowAfterDelete(ps, "col2_001", true, false, bsonDocument2, 234);
 
             ps = conn.prepareStatement("DELETE FROM " + tableName
-                    + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ?");
+                    + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ? RETURNING *");
             ps.setString(1, "pk000");
             ps.setDouble(2, -123.98);
             ps.setString(3, "pk003");
@@ -362,7 +362,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             validateAtomicUpsertReturnRow(tableName, conn, bsonDocument1, bsonDocument2);
 
             PreparedStatement ps = conn.prepareStatement("DELETE FROM " + tableName
-                    + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ?");
+                    + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? RETURNING *");
             ps.setString(1, "pk000");
             ps.setDouble(2, -123.98);
             ps.setString(3, "pk003");
@@ -401,12 +401,12 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
         addRows(tableName, conn);
 
         PreparedStatement ps = conn.prepareStatement(
-                "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ?");
+                "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ? RETURNING *");
         ps.setString(1, "pk001");
         ps.setDouble(2, 122.34);
         validateReturnedRowAfterDelete(ps, "col2_001", false, false, bsonDocument2, 234);
 
-        ps = conn.prepareStatement("DELETE FROM " + tableName);
+        ps = conn.prepareStatement("DELETE FROM " + tableName + " RETURNING *");
         validateReturnedRowAfterDelete(ps, "col2_001", false, false, bsonDocument2, 234);
 
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
@@ -415,7 +415,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
         addRows(tableName, conn);
 
         ps = conn.prepareStatement("DELETE FROM " + tableName
-                + " WHERE PK1 IN (?) AND PK2 IN (?) AND PK3 IN (?, ?)");
+                + " WHERE PK1 IN (?) AND PK2 IN (?) AND PK3 IN (?, ?) RETURNING *");
         ps.setString(1, "pk001");
         ps.setDouble(2, 122.34);
         ps.setString(3, "pk004");
@@ -541,9 +541,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                                                        BsonDocument expectedDoc,
                                                        Integer col4)
             throws SQLException {
-        final Pair<Integer, ResultSet> resultPair =
-                ps.unwrap(PhoenixPreparedStatement.class).executeAtomicUpdateReturnRow();
-        ResultSet resultSet = resultPair.getSecond();
+        ps.executeUpdate();
+        ResultSet resultSet = ps.getResultSet();
         if (!isSinglePointLookup) {
             assertNull(resultSet);
             return;
@@ -869,7 +868,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             addRows2(tableName, conn);
 
             PreparedStatement ps = conn.prepareStatement(
-                    "DELETE FROM " + tableName + " WHERE PK IN (?, ?, ?)");
+                    "DELETE FROM " + tableName + " WHERE PK IN (?, ?, ?) RETURNING *");
             ps.setString(1, "pk001");
             ps.setString(2, "pk002");
             ps.setString(3, "pk003");

@@ -930,7 +930,9 @@ delete_node returns [DeleteStatement ret]
         (WHERE v=expression)?
         (ORDER BY order=order_by)?
         (LIMIT l=limit)?
-        {ret = factory.delete(factory.namedTable(null,t), hint, v, order, l, getBindCount(), new HashMap<String, UDFParseNode>(udfParseNodes)); }
+        rc=(RETURNING ASTERISK)?
+        {ret = factory.delete(factory.namedTable(null,t), hint, v, order, l, getBindCount(), new
+        HashMap<String, UDFParseNode>(udfParseNodes), rc != null ? true : false); }
     ;
 
 limit returns [LimitNode ret]
