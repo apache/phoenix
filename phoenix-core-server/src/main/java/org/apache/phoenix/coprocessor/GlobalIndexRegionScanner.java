@@ -103,6 +103,8 @@ import static org.apache.phoenix.query.QueryConstants.VERIFIED_BYTES;
 import static org.apache.phoenix.query.QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_TTL_STRICT;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_TTL_STRICT;
 import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 /**
@@ -171,6 +173,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     protected byte[] tableType;
     protected byte[] lastDdlTimestamp;
     private final CompiledTTLExpression ttlExpression;
+    private final boolean isTTLStrict;
 
     // This relies on Hadoop Configuration to handle warning about deprecated configs and
     // to set the correct non-deprecated configs when an old one shows up.
@@ -219,6 +222,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         lastDdlTimestamp = scan.getAttribute(
                 MutationState.MutationMetadataType.TIMESTAMP.toString());
         ttlExpression = ScanUtil.getTTLExpression(scan);
+        isTTLStrict = config.getBoolean(PHOENIX_TTL_STRICT, DEFAULT_PHOENIX_TTL_STRICT);
         byte[] transforming = scan.getAttribute(BaseScannerRegionObserverConstants.DO_TRANSFORMING);
         List<IndexMaintainer> maintainers = null;
         if (transforming == null) {
@@ -1257,7 +1261,8 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
             Put dataPut,
             Delete dataDel,
             byte[] encodedRegionName,
-            CompiledTTLExpression ttlExpr) throws IOException {
+            CompiledTTLExpression ttlExpr,
+            boolean isTTLStrict) throws IOException {
         boolean isCondTTL = ttlExpr instanceof CompiledConditionalTTLExpression;
         List<Mutation> dataMutations = getMutationsWithSameTS(dataPut, dataDel);
         List<Mutation> indexMutations = Lists.newArrayListWithExpectedSize(dataMutations.size());
@@ -1270,7 +1275,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         byte[] indexRowKeyForCurrentDataRow = null;
         int dataMutationListSize = dataMutations.size();
         for (int i = 0; i < dataMutationListSize; i++) {
-            if (isCondTTL && currentDataRowState != null) {
+            if (isCondTTL && currentDataRowState != null && isTTLStrict) {
                 CompiledConditionalTTLExpression condExpr =
                         (CompiledConditionalTTLExpression) ttlExpr;
                 List<Cell> currentRow = flattenCells(currentDataRowState);
@@ -1432,7 +1437,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         List<Mutation> indexMutations;
 
         indexMutations = prepareIndexMutationsForRebuild(indexMaintainer, put, del,
-                region.getRegionInfo().getEncodedNameAsBytes(), ttlExpression);
+                region.getRegionInfo().getEncodedNameAsBytes(), ttlExpression, isTTLStrict);
         Collections.reverse(indexMutations);
 
         boolean mostRecentDone = false;

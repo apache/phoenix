@@ -1059,6 +1059,14 @@ public class TestUtil {
             CellCount other = (CellCount) o;
             return rowCountMap.equals(other.rowCountMap);
         }
+
+        @Override
+        public String toString() {
+            final StringBuilder sb = new StringBuilder("CellCount{");
+            sb.append("rowCountMap=").append(rowCountMap);
+            sb.append('}');
+            return sb.toString();
+        }
     }
 
 

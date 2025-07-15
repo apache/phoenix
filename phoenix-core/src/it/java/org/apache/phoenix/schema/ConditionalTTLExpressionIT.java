@@ -31,6 +31,7 @@ import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FORE
 import static org.apache.phoenix.util.TestUtil.retainSingleQuotes;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -92,6 +93,7 @@ import org.bson.BsonInt32;
 import org.bson.BsonString;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
@@ -127,6 +129,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
     private String tableDDLOptions;
     private final boolean columnEncoded;
     private final Integer tableLevelMaxLookback;
+    private final boolean isStrictTTL;
     // column names -> fully qualified column names
     private SchemaBuilder schemaBuilder;
     // map of row-pos -> HBase row-key, used for verification
@@ -136,20 +139,25 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     public ConditionalTTLExpressionIT(boolean columnEncoded,
-                                      Integer tableLevelMaxLooback) {
+                                      Integer tableLevelMaxLooback,
+                                      boolean isStrictTTL) {
         this.columnEncoded = columnEncoded;
         this.tableLevelMaxLookback = tableLevelMaxLooback; // in ms
+        this.isStrictTTL = isStrictTTL;
         schemaBuilder = new SchemaBuilder(getUrl());
     }
 
-    @Parameterized.Parameters(name = "columnEncoded={0}, tableLevelMaxLookback={1}")
+    @Parameterized.Parameters(
+            name = "columnEncoded={0}, tableLevelMaxLookback={1}, isStrictTTL={2}")
     public static synchronized Collection<Object[]> data() {
         // maxlookback value is in sec
         return Arrays.asList(new Object[][]{
-                {false, 0},
-                {true, 0},
-                {false, 15},
-                {true, 15}
+                {false, 0, false},
+                {true, 15, false},
+                {false, 0, true},
+                {true, 0, true},
+                {false, 15, true},
+                {true, 15, true}
         });
     }
 
@@ -174,6 +182,11 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             optionBuilder.append(", COLUMN_ENCODED_BYTES=2");
         } else {
             optionBuilder.append(", COLUMN_ENCODED_BYTES=0");
+        }
+        if (!isStrictTTL) {
+            optionBuilder.append(", \"phoenix.ttl.strict\" = false");
+        } else {
+            optionBuilder.append(", \"phoenix.ttl.strict\" = true");
         }
         this.tableDDLOptions = optionBuilder.toString();
         EnvironmentEdgeManager.reset();
@@ -208,20 +221,20 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             // expire 1 row by setting to true
             updateColumn(conn, 3, ttlCol, true);
             actual = TestUtil.getRowCount(conn, tableName, true);
-            Assert.assertEquals(rowCount - 1, actual);
+            Assert.assertEquals(isStrictTTL ? rowCount - 1 : rowCount, actual);
             actual = TestUtil.getRowCountFromIndex(conn, tableName, indexName);
-            Assert.assertEquals(rowCount - 1, actual);
+            Assert.assertEquals(isStrictTTL ? rowCount - 1 : rowCount, actual);
 
             // read the row again, this time it should be masked
             rs = readRow(conn, 3);
-            assertFalse(rs.next());
+            assertNotEquals(isStrictTTL, rs.next());
 
             // expire 1 more row
             updateColumn(conn, 2, ttlCol, true);
             actual = TestUtil.getRowCount(conn, tableName, true);
-            Assert.assertEquals(rowCount - 2, actual);
+            Assert.assertEquals(isStrictTTL ? rowCount - 2 : rowCount, actual);
             actual = TestUtil.getRowCountFromIndex(conn, tableName, indexName);
-            Assert.assertEquals(rowCount - 2, actual);
+            Assert.assertEquals(isStrictTTL ? rowCount - 2 : rowCount, actual);
 
             // refresh the row again, this update should behave like a new row
             updateColumn(conn, 3, ttlCol, false);
@@ -229,15 +242,17 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             assertTrue(rs.next());
             for (String col : COLUMNS) {
                 if (!col.equals(ttlCol)) {
-                    assertNull(rs.getObject(col));
+                    if (isStrictTTL) {
+                        assertNull(rs.getObject(col));
+                    }
                 } else {
                     assertFalse(rs.getBoolean(ttlCol));
                 }
             }
             actual = TestUtil.getRowCount(conn, tableName, true);
-            Assert.assertEquals(rowCount - 1, actual);
+            Assert.assertEquals(isStrictTTL ? rowCount - 1 : rowCount, actual);
             actual = TestUtil.getRowCountFromIndex(conn, tableName, indexName);
-            Assert.assertEquals(rowCount - 1, actual);
+            Assert.assertEquals(isStrictTTL ? rowCount - 1 : rowCount, actual);
 
             // expire the row again
             updateColumn(conn, 3, ttlCol, true);
@@ -270,9 +285,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testEverythingRetainedWithinMaxLookBack() throws Exception {
-        if (tableLevelMaxLookback == 0) {
-            return;
-        }
+        Assume.assumeTrue(tableLevelMaxLookback > 0 && isStrictTTL);
         String ttlCol = "VAL5";
         String ttlExpression = String.format("%s=TRUE", ttlCol);
         createTable(ttlExpression);
@@ -331,9 +344,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testPartialRowRetainedInMaxLookBack() throws Exception {
-        if (tableLevelMaxLookback == 0) {
-            return;
-        }
+        Assume.assumeTrue(tableLevelMaxLookback > 0 && isStrictTTL);
         String ttlCol = "VAL5";
         String ttlExpression = String.format("%s=TRUE", ttlCol, ttlCol);
         createTable(ttlExpression);
@@ -398,19 +409,21 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             // bump the time so that the ttl expression evaluates to true
             injectEdge.incrementValue(ttl);
             actual = TestUtil.getRowCount(conn, tableName, true);
-            assertEquals(0, actual);
+            assertEquals(isStrictTTL ? 0 : 5, actual);
 
             // update VAL4 column of row 1
             // This is an update on an expired row so only 2 columns should be visible
             long currentTime = injectEdge.currentTime();
             updateColumn(conn, 1, "VAL4", currentTime);
             actual = TestUtil.getRowCount(conn, tableName, true);
-            assertEquals(1, actual);
+            assertEquals(isStrictTTL ? 1 : 5, actual);
             try (ResultSet rs = readRow(conn, 1)) {
                 assertTrue(rs.next());
                 for (String col : COLUMNS) {
                     if (!col.equals("VAL4")) {
-                        assertNull(rs.getObject(col));
+                        if (isStrictTTL) {
+                            assertNull(rs.getObject(col));
+                        }
                     } else {
                         assertEquals(currentTime, rs.getTimestamp("VAL4").getTime());
                     }
@@ -421,7 +434,14 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             injectEdge.incrementValue(tableLevelMaxLookback * 1000L + 2);
             doMajorCompaction(tableName);
             CellCount expectedCellCount = new CellCount();
-            expectedCellCount.insertRow(dataRowPosToKey.get(1), 2);
+            expectedCellCount.insertRow(dataRowPosToKey.get(1),
+                    isStrictTTL ? 2 : COLUMNS.length + 1);
+            validateTable(conn, tableName, expectedCellCount, dataRowPosToKey.values());
+
+            // advance the time by more than TTL
+            injectEdge.incrementValue(ttl + 2);
+            doMajorCompaction(tableName);
+            expectedCellCount = new CellCount();
             validateTable(conn, tableName, expectedCellCount, dataRowPosToKey.values());
         }
     }
@@ -661,7 +681,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             updateColumn(conn, 1, ttlCol, true);
             actual = TestUtil.getRowCount(conn, tableName, true);
             // 1 row expired, 2 deleted
-            assertEquals(2, actual);
+            assertEquals(isStrictTTL ? 2 : 3, actual);
             if (tableLevelMaxLookback == 0) {
                 // increment so that all updates are outside of max lookback
                 injectEdge.incrementValue(2);
@@ -714,7 +734,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             // bump the time so that the ttl expression evaluates to true
             injectEdge.incrementValue(QueryConstants.MILLIS_IN_DAY + 1200);
             actual = TestUtil.getRowCount(conn, tableName, true);
-            assertEquals(0, actual);
+            assertEquals(isStrictTTL ? 0 : 5, actual);
 
             // update column of row 2
             // This is an update on an expired row so only the updated columns should be visible
@@ -724,7 +744,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             List<Object> newVals = Lists.newArrayList(newVal, d);
             updateColumns(conn, 2, updatedCols, newVals);
             actual = TestUtil.getRowCount(conn, tableName, true);
-            assertEquals(1, actual);
+            assertEquals(isStrictTTL ? 1 : 5, actual);
             try (ResultSet rs = readRow(conn, 2)) {
                 assertTrue(rs.next());
                 for (String col : COLUMNS) {
@@ -733,7 +753,9 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
                     } else if (col.equals(ttlCol)) {
                         assertEquals(d, rs.getDate(ttlCol));
                     } else {
-                        assertNull(rs.getObject(col));
+                        if (isStrictTTL) {
+                            assertNull(rs.getObject(col));
+                        }
                     }
                 }
             }
@@ -742,7 +764,14 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             injectEdge.incrementValue(tableLevelMaxLookback * 1000L + 2);
             doMajorCompaction(tableName);
             CellCount expectedCellCount = new CellCount();
-            expectedCellCount.insertRow(dataRowPosToKey.get(2), updatedCols.size() + 1);
+            expectedCellCount.insertRow(dataRowPosToKey.get(2),
+                    isStrictTTL ? updatedCols.size() + 1 : COLUMNS.length + 1);
+            validateTable(conn, tableName, expectedCellCount, dataRowPosToKey.values());
+
+            // advance the time by more than TTL
+            injectEdge.incrementValue(QueryConstants.MILLIS_IN_DAY + 1400);
+            doMajorCompaction(tableName);
+            expectedCellCount = new CellCount();
             validateTable(conn, tableName, expectedCellCount, dataRowPosToKey.values());
         }
     }
@@ -817,9 +846,9 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
                     null, 0, IndexTool.IndexVerifyType.BEFORE);
             CounterGroup mrJobCounters = IndexToolIT.getMRJobCounters(it);
             try {
-                assertEquals(rowCount - 2, // only the expired rows are masked but not deleted rows
+                assertEquals(isStrictTTL ? rowCount - 2 : rowCount, // only the expired rows are masked but not deleted rows
                         mrJobCounters.findCounter(SCANNED_DATA_ROW_COUNT.name()).getValue());
-                assertEquals(rowCount - 2,
+                assertEquals(isStrictTTL ? rowCount - 2 : rowCount,
                         mrJobCounters.findCounter(REBUILT_INDEX_ROW_COUNT.name()).getValue());
                 assertEquals(0,
                         mrJobCounters.findCounter(
@@ -833,7 +862,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
                 String missingIndexRowCounter = tableLevelMaxLookback != 0 ?
                         BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT.name() :
                         BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT.name();
-                assertEquals(rowCount - 2,
+                assertEquals(isStrictTTL ? rowCount - 2 : rowCount,
                             mrJobCounters.findCounter(missingIndexRowCounter).getValue());
             } catch (AssertionError e) {
                 IndexToolIT.dumpMRJobCounters(mrJobCounters);
@@ -843,7 +872,8 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
 
             // Both the tables should have the same row count from Phoenix
             actual = TestUtil.getRowCount(conn, fullDataTableName, true);
-            assertEquals(rowCount -(2+1), actual); // 2 expired, 1 deleted
+            // 2 expired, 1 deleted
+            assertEquals(isStrictTTL ? rowCount - (2 + 1) : rowCount - 1, actual);
             actual = TestUtil.getRowCountFromIndex(conn, fullDataTableName, fullIndexName);
             assertEquals(rowCount -(2+1), actual);
 
@@ -905,9 +935,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testNullPKColumn() throws Exception {
-        if (tableLevelMaxLookback != 0) {
-            return;
-        }
+        Assume.assumeTrue(tableLevelMaxLookback == 0);
         String tableName = "T_" + generateUniqueName();
         String indexName = "I_" + generateUniqueName();
         String ddlTemplate = "create table %s (id1 varchar, id2 varchar, col1 varchar, " +
@@ -922,8 +950,8 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
         String ddl = String.format(ddlTemplate, tableName,
                 String.format(tableDDLOptions, retainSingleQuotes(ttlExpression)));
         String indexDDL = String.format("create index %s ON %s (col1) INCLUDE(col2) " +
-                "\"phoenix.max.lookback.age.seconds\" = %d", indexName, tableName,
-                tableLevelMaxLookback);
+                "\"phoenix.max.lookback.age.seconds\" = %d, \"phoenix.ttl.strict\" = %b", 
+                indexName, tableName, tableLevelMaxLookback, isStrictTTL);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute(ddl);
             conn.createStatement().execute(indexDDL);
@@ -940,9 +968,9 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
                     " values(null, '0', 'col1', 'col2')");
             conn.commit();
             long actual = TestUtil.getRowCount(conn, tableName, true);
-            assertEquals(3, actual);
+            assertEquals(isStrictTTL ? 3 : 5, actual);
             actual = TestUtil.getRowCountFromIndex(conn, tableName, indexName);
-            assertEquals(3, actual);
+            assertEquals(isStrictTTL ? 3 : 5, actual);
 
             // alter the ttl
             ttlExpression = "id1 is null";
@@ -950,13 +978,13 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(String.format(ddl, tableName, ttlExpression));
             conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
             actual = TestUtil.getRowCount(conn, tableName, true);
-            assertEquals(4, actual);
+            assertEquals(isStrictTTL ? 4 : 5, actual);
             PTable table = PhoenixRuntime.getTableNoCache(conn, tableName);
             assertEquals(TTLExpressionFactory.create(ttlExpression), table.getTTLExpression());
             PTable index = PhoenixRuntime.getTableNoCache(conn, indexName);
             assertEquals(TTLExpressionFactory.create(ttlExpression), index.getTTLExpression());
             actual = TestUtil.getRowCountFromIndex(conn, tableName, indexName);
-            assertEquals(4, actual);
+            assertEquals(isStrictTTL ? 4 : 5, actual);
 
             // alter the ttl
             ttlExpression = "col1='col1'";
@@ -965,21 +993,19 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
                     retainSingleQuotes(ttlExpression)));
             conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
             actual = TestUtil.getRowCount(conn, tableName, true);
-            assertEquals(2, actual);
+            assertEquals(isStrictTTL ? 2 : 5, actual);
             table = PhoenixRuntime.getTableNoCache(conn, tableName);
             assertEquals(TTLExpressionFactory.create(ttlExpression), table.getTTLExpression());
             index = PhoenixRuntime.getTableNoCache(conn, indexName);
             assertEquals(TTLExpressionFactory.create(ttlExpression), index.getTTLExpression());
             actual = TestUtil.getRowCountFromIndex(conn, tableName, indexName);
-            assertEquals(2, actual);
+            assertEquals(isStrictTTL ? 2 : 5, actual);
         }
     }
 
     @Test
     public void testUnverifiedRows() throws Exception {
-        if (tableLevelMaxLookback != 0) {
-            return;
-        }
+        Assume.assumeTrue(tableLevelMaxLookback == 0);
         String ttlCol = "VAL5";
         String ttlExpression = String.format("%s=TRUE", ttlCol);
         createTable(ttlExpression);
@@ -1041,7 +1067,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             // Read the unverified rows to trigger read repair
             actual = TestUtil.getRowCountFromIndex(conn, fullDataTableName, fullIndexName);
             TestUtil.dumpTable(conn, TableName.valueOf(fullIndexName));
-            assertEquals(rowCount - 1, actual);
+            assertEquals(isStrictTTL ? rowCount - 1 : rowCount, actual);
             // First read row 0 which is not expired
             String dql = String.format("select VAL2, VAL5 from %s where VAL1='%s' AND ID2=0",
                     fullDataTableName, val1_0);
@@ -1060,18 +1086,19 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
                 PhoenixResultSet prs = rs1.unwrap(PhoenixResultSet.class);
                 String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
                 assertTrue(explainPlan.contains(fullIndexName));
-                assertFalse(rs1.next());
+                assertNotEquals(isStrictTTL, rs1.next());
             }
             // run the reverse index verification tool
             IndexTool it = IndexToolIT.runIndexTool(false, schemaName, tableName, indexName,
                     null, 0, IndexTool.IndexVerifyType.ONLY, "-fi");
             CounterGroup mrJobCounters = IndexToolIT.getMRJobCounters(it);
             try {
-                assertEquals(1, // 1 row is expired
+                // 1 row is expired for strict TTL
+                assertEquals(isStrictTTL ? 1 : 2,
                         mrJobCounters.findCounter(SCANNED_DATA_ROW_COUNT.name()).getValue());
                 assertEquals(0,
                         mrJobCounters.findCounter(REBUILT_INDEX_ROW_COUNT.name()).getValue());
-                assertEquals(1,
+                assertEquals(isStrictTTL ? 1 : 2,
                         mrJobCounters.findCounter(
                                 BEFORE_REBUILD_VALID_INDEX_ROW_COUNT.name()).getValue());
                 assertEquals(0,
@@ -1099,6 +1126,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testLocalIndex() throws Exception {
+        Assume.assumeTrue(isStrictTTL);
         String ttlCol = "VAL5";
         String ttlExpression = String.format("%s=TRUE", ttlCol);
         createTable(ttlExpression);
@@ -1158,9 +1186,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testNulls() throws Exception {
-        if (tableLevelMaxLookback != 0) {
-            return;
-        }
+        Assume.assumeTrue(tableLevelMaxLookback == 0);
         String ttlExpression = "VAL2 = -1 AND VAL6 IS NULL";
         createTable(ttlExpression);
         List<String> indexedColumns = Lists.newArrayList("VAL1");
@@ -1190,35 +1216,35 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             }
             // odd rows should be expired
             actual = TestUtil.getRowCount(conn, tableName, true);
-            assertEquals(rowCount/2, actual);
+            assertEquals(isStrictTTL ? rowCount / 2 : rowCount, actual);
             actual = TestUtil.getRowCountFromIndex(conn, tableName, indexName);
-            assertEquals(rowCount/2, actual);
+            assertEquals(isStrictTTL ? rowCount / 2 : rowCount, actual);
 
             // partial update on a row which is expired is treated like a new row
             updateColumn(conn, 3, "VAL4", null);
             actual = TestUtil.getRowCount(conn, tableName, true);
-            assertEquals(rowCount/2 + 1, actual);
+            assertEquals(isStrictTTL ? rowCount / 2 + 1 : rowCount, actual);
 
             // Delete an expired row
             deleteRow(conn, 5);
             actual = TestUtil.getRowCount(conn, tableName, true);
-            assertEquals(rowCount/2 + 1, actual);
+            assertEquals(isStrictTTL ? rowCount / 2 + 1 : rowCount - 1, actual);
 
             injectEdge.incrementValue(2);
             doMajorCompaction(tableName);
             actual = TestUtil.getRowCount(conn, tableName, true);
-            assertEquals(rowCount/2 + 1, actual);
+            // Strict TTL : 5 rows masked and expired, 5 visible, 1 new row
+            // Relaxed TTL: 5 rows expired, no new row
+            assertEquals(isStrictTTL ? rowCount / 2 + 1 : rowCount / 2, actual);
             doMajorCompaction(indexName);
             actual = TestUtil.getRowCountFromIndex(conn, tableName, indexName);
-            assertEquals(rowCount/2 + 1, actual);
+            assertEquals(isStrictTTL ? rowCount / 2 + 1 : rowCount / 2, actual);
         }
     }
 
     @Test
     public void testNulls2() throws Exception {
-        if (tableLevelMaxLookback != 0) {
-            return;
-        }
+        Assume.assumeTrue(tableLevelMaxLookback == 0);
         String ttlExpression = "VAL2 IS NULL AND VAL4 IS NULL";
         createTable(ttlExpression);
         List<String> indexedColumns = Lists.newArrayList("VAL2"); // indexed column is null
@@ -1236,9 +1262,9 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             updateColumns(conn, 0,
                     Lists.newArrayList("VAL2", "VAL4"), Lists.newArrayList(null, null));
             actual = TestUtil.getRowCount(conn, tableName, true);
-            assertEquals(0, actual);
+            assertEquals(isStrictTTL ? 0 : 1, actual);
             actual = TestUtil.getRowCountFromIndex(conn, tableName, indexName);
-            assertEquals(0, actual);
+            assertEquals(isStrictTTL ? 0 : 1, actual);
             // now do a partial update over the expired row,
             int newVal =123;
             updateColumn(conn, 0, "VAL2", newVal);
@@ -1246,7 +1272,9 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
                 assertTrue(rs.next());
                 for (String col : COLUMNS) {
                     if (!col.equals("VAL2")) {
-                        assertNull(rs.getObject(col));
+                        if (isStrictTTL) {
+                            assertNull(rs.getObject(col));
+                        }
                     } else {
                         assertEquals(newVal, rs.getInt("VAL2"));
                     }
@@ -1276,8 +1304,8 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
                         "EVENT_TYPE CHAR(15), CREATED_TS TIMESTAMP) %s", tableName,
                 String.format(tableDDLOptions, ttlExpression));
         String indexDDL = String.format("CREATE INDEX %s ON %s (EVENT_TYPE) INCLUDE(CREATED_TS) "
-                        + "\"phoenix.max.lookback.age.seconds\" = %d",
-                indexName, tableName, tableLevelMaxLookback);
+                        + "\"phoenix.max.lookback.age.seconds\" = %d ,\"phoenix.ttl.strict\" = %b",
+                indexName, tableName, tableLevelMaxLookback, isStrictTTL);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute(ddl);
             conn.createStatement().execute(indexDDL);
@@ -1298,15 +1326,15 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
 
                 injectEdge.incrementValue(QueryConstants.MILLIS_IN_DAY);
                 actual = TestUtil.getRowCount(conn, tableName, true);
-                assertEquals(rowCount/2, actual);
+                assertEquals(isStrictTTL ? rowCount/2 : rowCount, actual);
                 actual = TestUtil.getRowCountFromIndex(conn, tableName, indexName);
-                assertEquals(rowCount/2, actual);
+                assertEquals(isStrictTTL ? rowCount / 2 : rowCount, actual);
 
                 injectEdge.incrementValue(QueryConstants.MILLIS_IN_DAY*6);
                 actual = TestUtil.getRowCount(conn, tableName, true);
-                assertEquals(0, actual);
+                assertEquals(isStrictTTL ? 0 : rowCount, actual);
                 actual = TestUtil.getRowCountFromIndex(conn, tableName, indexName);
-                assertEquals(0, actual);
+                assertEquals(isStrictTTL ? 0 : rowCount, actual);
 
                 injectEdge.incrementValue(1);
                 doMajorCompaction(tableName);
@@ -1322,9 +1350,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testConcurrentUpserts() throws Exception {
-        if (tableLevelMaxLookback != 0) {
-            return;
-        }
+        Assume.assumeTrue(tableLevelMaxLookback == 0);
         final int nThreads = 10;
         final int batchSize = 100;
         final int nRows = 499;
@@ -1405,7 +1431,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             populateTable(conn, rowCount);
             actual = TestUtil.getRowCount(conn, tableName, true);
             // only odd rows (1,3) have non null attribute value
-            assertEquals(2, actual);
+            assertEquals(isStrictTTL ? 2 : 5, actual);
 
             // increment by at least 2*maxlookback so that there are no updates within the
             // maxlookback window and no updates visible through the maxlookback window
@@ -1485,7 +1511,9 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
 
         CellCount actualCellCount = TestUtil.getRawCellCount(conn, TableName.valueOf(tableName));
         try {
-            assertEquals(expectedCellCount, actualCellCount);
+            assertEquals(
+                    "Expected cellCount: " + expectedCellCount + " , actual: " + actualCellCount,
+                    expectedCellCount, actualCellCount);
         } catch (AssertionError e) {
             try {
                 TestUtil.dumpTable(conn, TableName.valueOf(tableName));
@@ -1526,10 +1554,10 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
         String tableName = schemaBuilder.getEntityTableName();
         String schema = SchemaUtil.getSchemaNameFromFullName(tableName);
         String indexDDL = String.format("create index %s on %s (%s) include (%s) "
-                        + "\"phoenix.max.lookback.age.seconds\" = %d",
+                        + "\"phoenix.max.lookback.age.seconds\" = %d, \"phoenix.ttl.strict\" = %b",
                 indexName, tableName,
                 Joiner.on(",").join(indexedColumns),
-                Joiner.on(",").join(includedColumns), tableLevelMaxLookback);
+                Joiner.on(",").join(includedColumns), tableLevelMaxLookback, isStrictTTL);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute(indexDDL);
         }

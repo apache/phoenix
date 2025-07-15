@@ -42,6 +42,8 @@ import org.slf4j.LoggerFactory;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.isPhoenixCompactionEnabled;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_TTL_STRICT;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_TTL_STRICT;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
 
@@ -104,7 +106,9 @@ public class TTLRegionScanner extends BaseRegionScanner {
         // be done here. We also disable masking when TTL is HConstants.FOREVER.
         isMaskingEnabled = emptyCF != null && emptyCQ != null
                 && !ttlExpression.equals(TTL_EXPRESSION_FOREVER)
-                && (isPhoenixCompactionEnabled(env.getConfiguration()));
+                && (isPhoenixCompactionEnabled(env.getConfiguration()))
+                && env.getConfiguration().getBoolean(
+                        PHOENIX_TTL_STRICT, DEFAULT_PHOENIX_TTL_STRICT);
     }
 
     private void init() throws IOException {

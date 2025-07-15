@@ -383,6 +383,8 @@ public interface QueryServices extends SQLCloseable {
     public static final String WAL_EDIT_CODEC_ATTRIB = "hbase.regionserver.wal.codec";
     //Property to know whether TTL at View Level is enabled
     public static final String PHOENIX_VIEW_TTL_ENABLED = "phoenix.view.ttl.enabled";
+    // TTL strict mode - when false, TTL is considered relaxed
+    public static final String PHOENIX_TTL_STRICT = "phoenix.ttl.strict";
 
     public static final String PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT = "phoenix.view.ttl.tenant_views_per_scan.limit";
     // Block mutations based on cluster role record

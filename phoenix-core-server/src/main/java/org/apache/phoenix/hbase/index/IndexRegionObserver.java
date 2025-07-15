@@ -147,6 +147,8 @@ import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverCons
 import static org.apache.phoenix.hbase.index.util.IndexManagementUtil.rethrowIndexingException;
 import static org.apache.phoenix.index.PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB;
 import static org.apache.phoenix.index.PhoenixIndexBuilderHelper.RETURN_RESULT;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_TTL_STRICT;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_TTL_STRICT;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
 /**
@@ -400,6 +402,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private static final int DEFAULT_ROWLOCK_WAIT_DURATION = 30000;
   private static final int DEFAULT_CONCURRENT_MUTATION_WAIT_DURATION_IN_MS = 100;
   private byte[] encodedRegionName;
+  private boolean isTTLStrict;
 
   @Override
   public Optional<RegionObserver> getRegionObserver() {
@@ -410,6 +413,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   public void start(CoprocessorEnvironment e) throws IOException {
       try {
         final RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) e;
+        this.isTTLStrict = env.getConfiguration().getBoolean(PHOENIX_TTL_STRICT,
+                DEFAULT_PHOENIX_TTL_STRICT);
         encodedRegionName = env.getRegion().getRegionInfo().getEncodedNameAsBytes();
         String serverName = env.getServerName().getServerName();
         if (env.getConfiguration().getBoolean(CHECK_VERSION_CONF_KEY, true)) {
@@ -563,7 +568,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       for (int i = 0; i < miniBatchOp.size(); i++) {
           Mutation m = miniBatchOp.getOperation(i);
           if (this.builder.isAtomicOp(m) || context.returnResult
-                  || this.builder.isEnabled(m) || this.builder.hasConditionalTTL(m)) {
+                  || this.builder.isEnabled(m)
+                  || (this.builder.hasConditionalTTL(m) && isTTLStrict)) {
               ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
               context.rowsToLock.add(row);
           }
@@ -659,6 +665,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     private void updateMutationsForConditionalTTL(
             MiniBatchOperationInProgress<Mutation> miniBatchOp,
             BatchMutateContext context) throws IOException {
+        // If TTL is not strict, skip conditional TTL processing
+        if (!isTTLStrict) {
+            return;
+        }
         // mapping from row key to indices in mini batch
         Map<ImmutableBytesPtr, List<Integer>> expiredVersions = Maps.newHashMap();
         Set<ImmutableBytesPtr> notExpiredVersions = Sets.newHashSet();
@@ -792,7 +802,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
 
     public static void setTimestamps(MiniBatchOperationInProgress<Mutation> miniBatchOp,
-                                     IndexBuildManager builder, long ts) throws IOException {
+                                     IndexBuildManager builder, long ts, boolean isTTLStrict)
+            throws IOException {
         for (Integer i = 0; i < miniBatchOp.size(); i++) {
             if (isAtomicOperationComplete(miniBatchOp.getOperationStatus(i))) {
                 continue;
@@ -801,7 +812,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             // skip this mutation if we aren't enabling indexing or Conditional TTL
             // or not an atomic op or if it is an atomic op
             // and its timestamp is already set(not LATEST)
-            if (!builder.isEnabled(m) && !builder.hasConditionalTTL(m)
+            // Also, skip conditional TTL if TTL is not strict
+            if (!builder.isEnabled(m) && (!builder.hasConditionalTTL(m) || !isTTLStrict)
                     && !((builder.isAtomicOp(m) || builder.returnResult(m))
                     && IndexUtil.getMaxTimestamp(m) == HConstants.LATEST_TIMESTAMP)) {
                 continue;
@@ -1328,7 +1340,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                     context.returnOldRow = true;
                 }
             }
-            if (this.builder.hasConditionalTTL(m)) {
+            if (this.builder.hasConditionalTTL(m) && isTTLStrict) {
                 context.hasConditionalTTL = true;
             }
             if (this.builder.isAtomicOp(m) || this.builder.returnResult(m)) {
@@ -1500,7 +1512,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             onDupCheckTime += (EnvironmentEdgeManager.currentTimeMillis() - start);
         }
 
-        if (context.hasConditionalTTL) {
+        if (context.hasConditionalTTL && isTTLStrict) {
             // If the table has conditional TTL, then before making any update to a row
             // we need to evaluate the ttl expression to check if the current row version has
             // expired. If the current row version has expired then the incoming mutation has to
@@ -1530,7 +1542,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         long batchTimestamp = getBatchTimestamp(context, table);
         // Update the timestamps of the data table mutations to prevent overlapping timestamps
         // (which prevents index inconsistencies as this case is not handled).
-        setTimestamps(miniBatchOp, builder, batchTimestamp);
+        setTimestamps(miniBatchOp, builder, batchTimestamp, isTTLStrict);
         if (context.hasGlobalIndex || context.hasUncoveredIndex || context.hasTransform) {
             // Prepare next data rows states for pending mutations (for global indexes)
             prepareDataRowStates(c, miniBatchOp, context, batchTimestamp);
