@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,21 +20,18 @@ package org.apache.phoenix.cache;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.List;
-
 import net.jcip.annotations.Immutable;
-
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.schema.tuple.Tuple;
 
-
 /**
- * Encapsulate deserialized hash cache from bytes into Map.
- * The Map uses the row key as the key and the row as the value.
- * 
+ * Encapsulate deserialized hash cache from bytes into Map. The Map uses the row key as the key and
+ * the row as the value.
  * @since 0.1
  */
 @Immutable
 public interface HashCache extends Closeable {
-    public int getClientVersion();
-    public List<Tuple> get(ImmutableBytesPtr hashKey) throws IOException;
+  public int getClientVersion();
+
+  public List<Tuple> get(ImmutableBytesPtr hashKey) throws IOException;
 }

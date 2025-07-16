@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,8 +18,6 @@
 package org.apache.phoenix.expression;
 
 import java.util.List;
-import java.util.regex.Pattern;
-
 import org.apache.phoenix.expression.util.regex.AbstractBasePattern;
 import org.apache.phoenix.expression.util.regex.JONIPattern;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
@@ -27,24 +25,24 @@ import org.joni.Option;
 
 public class ByteBasedLikeExpression extends LikeExpression {
 
-    public ByteBasedLikeExpression() {
-    }
+  public ByteBasedLikeExpression() {
+  }
 
-    public ByteBasedLikeExpression(List<Expression> children) {
-        super(children);
-    }
+  public ByteBasedLikeExpression(List<Expression> children) {
+    super(children);
+  }
 
-    @Override
-    protected AbstractBasePattern compilePatternSpec(String value) {
-        return new JONIPattern(value, Option.MULTILINE);
-    }
+  @Override
+  protected AbstractBasePattern compilePatternSpec(String value) {
+    return new JONIPattern(value, Option.MULTILINE);
+  }
 
-    public static LikeExpression create(List<Expression> children, LikeType likeType) {
-        return new ByteBasedLikeExpression(addLikeTypeChild(children, likeType));
-    }
+  public static LikeExpression create(List<Expression> children, LikeType likeType) {
+    return new ByteBasedLikeExpression(addLikeTypeChild(children, likeType));
+  }
 
-    @Override
-    public LikeExpression clone(List<Expression> children) {
-        return new ByteBasedLikeExpression(children);
-    }
+  @Override
+  public LikeExpression clone(List<Expression> children) {
+    return new ByteBasedLikeExpression(children);
+  }
 }

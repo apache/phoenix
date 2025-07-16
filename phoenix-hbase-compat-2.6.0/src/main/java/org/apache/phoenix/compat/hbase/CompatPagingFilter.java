@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,24 +18,23 @@
 package org.apache.phoenix.compat.hbase;
 
 import java.io.IOException;
-
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterBase;
 
 public abstract class CompatPagingFilter extends FilterBase {
-    protected Filter delegate = null;
+  protected Filter delegate = null;
 
-    public CompatPagingFilter(Filter delegate) {
-        this.delegate = delegate;
+  public CompatPagingFilter(Filter delegate) {
+    this.delegate = delegate;
+  }
+
+  @Override
+  public ReturnCode filterKeyValue(Cell v) throws IOException {
+
+    if (delegate != null) {
+      return delegate.filterKeyValue(v);
     }
-
-    @Override
-    public ReturnCode filterKeyValue(Cell v) throws IOException {
-
-        if (delegate != null) {
-            return delegate.filterKeyValue(v);
-        }
-        return super.filterKeyValue(v);
-    }
+    return super.filterKeyValue(v);
+  }
 }

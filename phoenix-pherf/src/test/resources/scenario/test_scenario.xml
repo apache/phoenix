@@ -211,7 +211,7 @@
                 <datavalue distribution="20">
                     <value>LMN</value>
                 </datavalue>
-            </valuelist>            
+            </valuelist>
         </column>
         <column>
             <type>CHAR</type>
@@ -298,8 +298,8 @@
                     <name>FIELD</name>
                 </column>
             </dataOverride>
-            
-            <!--Note: 1. Minimum of executionDurationInMs or numberOfExecutions. Which ever is reached first 
+
+            <!--Note: 1. Minimum of executionDurationInMs or numberOfExecutions. Which ever is reached first
                       2. DDL included in query are executed only once on start of querySet execution.
             -->
             <querySet concurrency="1-3" executionType="SERIAL" executionDurationInMs="5000"
@@ -318,30 +318,30 @@
                 <query id="q4" statement="select sum(SOME_INT) from PHERF.TEST_TABLE"/>
             </querySet>
         </scenario>
-        
+
         <scenario tableName="PHERF.TEST_TABLE" rowCount="99" name="testPreAndPostDdls">
             <preScenarioDdls>
                  <ddl statement="CREATE INDEX IDX_DIVISION ON ? (DIVISION)" tableName="PHERF.TEST_TABLE"/>
             </preScenarioDdls>
- 
+
             <postScenarioDdls>
                  <ddl statement="CREATE INDEX IDX_OLDVAL_STRING ON ? (OLDVAL_STRING)" tableName="PHERF.TEST_TABLE"/>
                  <ddl statement="CREATE INDEX IDX_CONNECTION_ID ON ? (CONNECTION_ID)" tableName="PHERF.TEST_TABLE"/>
             </postScenarioDdls>
-            
+
             <querySet concurrency="1" executionType="SERIAL" executionDurationInMs="5000"
                       numberOfExecutions="1">
                 <query id="q1" expectedAggregateRowCount="99" statement="select count(*) from PHERF.TEST_TABLE"/>
             </querySet>
         </scenario>
-        
+
         <!-- To configure a Write Workload to write to a tenant specific view users need to
-             specify the tenantId attribute on the scenario, specifying the tenant they 
-             want to write data for as the attribute value. This tells Pherf to take out a 
-             tenant-specific connection for executing the write workload. 
+             specify the tenantId attribute on the scenario, specifying the tenant they
+             want to write data for as the attribute value. This tells Pherf to take out a
+             tenant-specific connection for executing the write workload.
              The name of the tenant specific view to write to can then be specified as the value of
-             the tablename attribute. This assumes the tenant specific view has been created. To 
-             dynamically create the view see comments below with regard to the ddl attribute. 
+             the tablename attribute. This assumes the tenant specific view has been created. To
+             dynamically create the view see comments below with regard to the ddl attribute.
         -->
         <scenario tableName="PHERF.TEST_VIEW" tenantId="xyzdefghijklmno"
                     rowCount="100" name="testMTWriteScenario">
@@ -354,14 +354,14 @@
               tightly bound to the scenario. In such cases you can't create the view through the data model flow.
               The value of the tableName attribute is name of the view that is dynamically created based on the DDL
               in the ddl attribute. Queries accessing the View will need to manually make sure Pherf was run with the -l option at
-              least once. 
+              least once.
          -->
-        <scenario tableName="PHERF.TEST_MT_VIEW" tenantId="abcdefghijklmno" 
+        <scenario tableName="PHERF.TEST_MT_VIEW" tenantId="abcdefghijklmno"
                     rowCount="100" name="testMTDdlWriteScenario">
             <preScenarioDdls>
                 <ddl statement="CREATE VIEW IF NOT EXISTS PHERF.TEST_MT_VIEW (field1 VARCHAR) AS SELECT * FROM PHERF.TEST_TABLE" />
             </preScenarioDdls>
         </scenario>
-        
+
     </scenarios>
 </datamodel>

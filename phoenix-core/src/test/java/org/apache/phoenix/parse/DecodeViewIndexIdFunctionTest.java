@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,43 +17,45 @@
  */
 package org.apache.phoenix.parse;
 
-import org.junit.Test;
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import org.junit.Test;
+
 public class DecodeViewIndexIdFunctionTest {
 
-    @Test
-    public void testExpressionWithDecodeViewIndexIdFunction() throws Exception {
-        ParseNode parseNode = SQLParser.parseCondition("DECODE_VIEW_INDEX_ID(VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE) = 32768");
-        boolean hasGetViewIndexIdParseNode = false;
-        for (ParseNode childNode : parseNode.getChildren()) {
-            if (childNode.getClass().isAssignableFrom(DecodeViewIndexIdParseNode.class)) {
-                assertEquals(2, childNode.getChildren().size());
-                hasGetViewIndexIdParseNode = true;
-            }
-        }
-        assertTrue(hasGetViewIndexIdParseNode);
+  @Test
+  public void testExpressionWithDecodeViewIndexIdFunction() throws Exception {
+    ParseNode parseNode = SQLParser
+      .parseCondition("DECODE_VIEW_INDEX_ID(VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE) = 32768");
+    boolean hasGetViewIndexIdParseNode = false;
+    for (ParseNode childNode : parseNode.getChildren()) {
+      if (childNode.getClass().isAssignableFrom(DecodeViewIndexIdParseNode.class)) {
+        assertEquals(2, childNode.getChildren().size());
+        hasGetViewIndexIdParseNode = true;
+      }
     }
+    assertTrue(hasGetViewIndexIdParseNode);
+  }
 
-    @Test
-    public void testValidationForDecodeViewIndexIdFunction() throws Exception {
-        boolean hasGetViewIndexIdParseNode = false;
-        try {
-            ParseNode parseNode = SQLParser.parseCondition("DECODE_VIEW_INDEX_ID(VIEW_INDEX_ID, b) = 32768");
-            for (ParseNode childNode : parseNode.getChildren()) {
-                if (childNode.getClass().isAssignableFrom(DecodeViewIndexIdParseNode.class)) {
-                    assertEquals(2, childNode.getChildren().size());
-                    hasGetViewIndexIdParseNode = true;
-                }
-            }
-        } catch (Exception e) {
-            hasGetViewIndexIdParseNode = false;
-
+  @Test
+  public void testValidationForDecodeViewIndexIdFunction() throws Exception {
+    boolean hasGetViewIndexIdParseNode = false;
+    try {
+      ParseNode parseNode =
+        SQLParser.parseCondition("DECODE_VIEW_INDEX_ID(VIEW_INDEX_ID, b) = 32768");
+      for (ParseNode childNode : parseNode.getChildren()) {
+        if (childNode.getClass().isAssignableFrom(DecodeViewIndexIdParseNode.class)) {
+          assertEquals(2, childNode.getChildren().size());
+          hasGetViewIndexIdParseNode = true;
         }
-        assertFalse(hasGetViewIndexIdParseNode);
+      }
+    } catch (Exception e) {
+      hasGetViewIndexIdParseNode = false;
+
     }
+    assertFalse(hasGetViewIndexIdParseNode);
+  }
 
 }
