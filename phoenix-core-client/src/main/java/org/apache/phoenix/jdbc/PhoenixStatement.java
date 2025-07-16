@@ -124,6 +124,7 @@ import org.apache.phoenix.log.QueryLogger;
 import org.apache.phoenix.log.QueryLoggerUtil;
 import org.apache.phoenix.log.QueryStatus;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
+import org.apache.phoenix.monitoring.OverAllQueryMetrics;
 import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.AddColumnStatement;
@@ -359,6 +360,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                             clearResultSet();
                             PhoenixResultSet rs = null;
                             QueryPlan plan = null;
+                            OverAllQueryMetrics overallQuerymetrics;
                             try {
                                 PhoenixConnection conn = getConnection();
                                 conn.checkOpen();
@@ -373,7 +375,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 plan = stmt.compilePlan(PhoenixStatement.this,
                                                 Sequence.ValueOp.VALIDATE_SEQUENCE);
                                 StatementContext context = plan.getContext();
-                                context.getOverallQueryMetrics().setQueryCompilerTimeMS(
+                                overallQuerymetrics = context.getOverallQueryMetrics();
+                                overallQuerymetrics.setQueryCompilerTimeMS(
                                     EnvironmentEdgeManager.currentTimeMillis()
                                         - queryPlanCreationStartTime);
                                 // Send mutations to hbase, so they are visible to subsequent reads.
@@ -390,7 +393,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 plan =
                                         connection.getQueryServices().getOptimizer()
                                                 .optimize(PhoenixStatement.this, plan);
-                                context.getOverallQueryMetrics().setQueryOptimizerTimeMS(
+                                overallQuerymetrics.setQueryOptimizerTimeMS(
                                     EnvironmentEdgeManager.currentTimeMillis()
                                         - queryOptimizerStartTime);
                                 setLastQueryPlan(plan);
@@ -415,7 +418,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 // this will create its own trace internally, so we don't wrap this
                                 // whole thing in tracing
                                 ResultIterator resultIterator = plan.iterator();
-                                context.getOverallQueryMetrics().setQueryResultItrTimeMS(
+                                overallQuerymetrics.setQueryResultItrTimeMS(
                                     EnvironmentEdgeManager.currentTimeMillis()
                                         - queryResultItrSetStartTime);
                                 if (LOGGER.isDebugEnabled()) {
@@ -432,7 +435,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                                     context.getScan().toString() :
                                                     null);
                                 }
-                                context.getOverallQueryMetrics().startQuery();
+                                overallQuerymetrics.startQuery();
                                 rs =
                                         newResultSet(resultIterator, plan.getProjector(),
                                                 plan.getContext());
