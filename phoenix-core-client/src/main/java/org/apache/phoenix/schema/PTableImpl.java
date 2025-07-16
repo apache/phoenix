@@ -29,6 +29,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ENCODING_SCHEME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_SCHEME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_STRICT_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME;
@@ -212,6 +213,7 @@ public class PTableImpl implements PTable {
     private final BitSet viewModifiedPropSet;
     private final Long lastDDLTimestamp;
     private final boolean isChangeDetectionEnabled;
+    private final boolean isStrictTTL;
     private Map<String, String> propertyValues;
     private String schemaVersion;
     private String externalSchemaId;
@@ -281,6 +283,7 @@ public class PTableImpl implements PTable {
         private Boolean useStatsForParallelization;
         private Long lastDDLTimestamp;
         private boolean isChangeDetectionEnabled = false;
+        private boolean isStrictTTL = DEFAULT_IS_STRICT_TTL;
         private Map<String, String> propertyValues = new HashMap<>();
         private String schemaVersion;
         private String externalSchemaId;
@@ -728,6 +731,13 @@ public class PTableImpl implements PTable {
             return this;
         }
 
+        public Builder setIsStrictTTL(Boolean isStrictTTL) {
+            if (isStrictTTL != null) {
+                this.isStrictTTL = isStrictTTL;
+            }
+            return this;
+        }
+
         /**
          * Populate derivable attributes of the PTable
          * @return PTableImpl.Builder object
@@ -1014,6 +1024,7 @@ public class PTableImpl implements PTable {
         this.propertyValues = builder.propertyValues;
         this.lastDDLTimestamp = builder.lastDDLTimestamp;
         this.isChangeDetectionEnabled = builder.isChangeDetectionEnabled;
+        this.isStrictTTL = builder.isStrictTTL;
         this.schemaVersion = builder.schemaVersion;
         this.externalSchemaId = builder.externalSchemaId;
         this.streamingTopicName = builder.streamingTopicName;
@@ -1095,6 +1106,7 @@ public class PTableImpl implements PTable {
                 .setViewModifiedUpdateCacheFrequency(table.hasViewModifiedUpdateCacheFrequency())
                 .setLastDDLTimestamp(table.getLastDDLTimestamp())
                 .setIsChangeDetectionEnabled(table.isChangeDetectionEnabled())
+                .setIsStrictTTL(table.isStrictTTL())
                 .setSchemaVersion(table.getSchemaVersion())
                 .setExternalSchemaId(table.getExternalSchemaId())
                 .setStreamingTopicName(table.getStreamingTopicName())
@@ -2039,6 +2051,10 @@ public class PTableImpl implements PTable {
         if (table.hasChangeDetectionEnabled()) {
             isChangeDetectionEnabled = table.getChangeDetectionEnabled();
         }
+        boolean isStrictTTL = DEFAULT_IS_STRICT_TTL;
+        if (table.hasIsStrictTTL()) {
+            isStrictTTL = table.getIsStrictTTL();
+        }
         String schemaVersion = null;
         if (table.hasSchemaVersion()) {
             schemaVersion = (String) PVarchar.INSTANCE.toObject(table.getSchemaVersion().toByteArray());
@@ -2125,6 +2141,7 @@ public class PTableImpl implements PTable {
                     .setViewModifiedUseStatsForParallelization(viewModifiedUseStatsForParallelization)
                     .setLastDDLTimestamp(lastDDLTimestamp)
                     .setIsChangeDetectionEnabled(isChangeDetectionEnabled)
+                    .setIsStrictTTL(isStrictTTL)
                     .setSchemaVersion(schemaVersion)
                     .setExternalSchemaId(externalSchemaId)
                     .setStreamingTopicName(streamingTopicName)
@@ -2279,6 +2296,7 @@ public class PTableImpl implements PTable {
             builder.setLastDDLTimestamp(table.getLastDDLTimestamp());
         }
         builder.setChangeDetectionEnabled(table.isChangeDetectionEnabled());
+        builder.setIsStrictTTL(table.isStrictTTL());
         if (table.getSchemaVersion() != null) {
             builder.setSchemaVersion(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getSchemaVersion())));
         }
@@ -2457,6 +2475,11 @@ public class PTableImpl implements PTable {
     }
 
     @Override
+    public boolean isStrictTTL() {
+        return isStrictTTL;
+    }
+
+    @Override
     public Map<PTableKey, Long> getAncestorLastDDLTimestampMap() {
         return ancestorLastDDLTimestampMap;
     }
@@ -2586,6 +2609,7 @@ public class PTableImpl implements PTable {
         Map<String, String> map = new HashMap<>();
         map.put(DISABLE_WAL, String.valueOf(DEFAULT_DISABLE_WAL));
         map.put(IMMUTABLE_ROWS, String.valueOf(DEFAULT_IMMUTABLE_ROWS));
+        map.put(IS_STRICT_TTL, String.valueOf(DEFAULT_IS_STRICT_TTL));
         map.put(TRANSACTION_PROVIDER, DEFAULT_TRANSACTION_PROVIDER);
         map.put(IMMUTABLE_STORAGE_SCHEME, DEFAULT_IMMUTABLE_STORAGE_SCHEME);
         map.put(COLUMN_ENCODED_BYTES, String.valueOf(DEFAULT_COLUMN_ENCODED_BYTES));

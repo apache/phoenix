@@ -104,7 +104,8 @@ public class TTLRegionScanner extends BaseRegionScanner {
         // be done here. We also disable masking when TTL is HConstants.FOREVER.
         isMaskingEnabled = emptyCF != null && emptyCQ != null
                 && !ttlExpression.equals(TTL_EXPRESSION_FOREVER)
-                && (isPhoenixCompactionEnabled(env.getConfiguration()));
+                && (isPhoenixCompactionEnabled(env.getConfiguration()))
+                && ScanUtil.isStrictTTL(scan);
     }
 
     private void init() throws IOException {

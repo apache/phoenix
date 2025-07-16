@@ -407,6 +407,11 @@ public class DelegateTable implements PTable {
     }
 
     @Override
+    public boolean isStrictTTL() {
+        return delegate.isStrictTTL();
+    }
+
+    @Override
     public String getSchemaVersion() {
         return delegate.getSchemaVersion();
     }

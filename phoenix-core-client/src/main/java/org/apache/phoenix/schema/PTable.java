@@ -64,6 +64,7 @@ public interface PTable extends PMetaDataEntity {
     public static final boolean DEFAULT_DISABLE_WAL = false;
     public static final boolean DEFAULT_IMMUTABLE_ROWS = false;
     static final Integer NO_SALTING = -1;
+    boolean DEFAULT_IS_STRICT_TTL = true;
 
     public enum ViewType {
         MAPPED((byte)1),
@@ -964,6 +965,12 @@ public interface PTable extends PMetaDataEntity {
      * annotate write-ahead logs with additional metadata
      */
     boolean isChangeDetectionEnabled();
+
+    /**
+     * @return Whether strict TTL mode is enabled on a given table. True if the TTL is strict,
+     * false if relaxed.
+     */
+    boolean isStrictTTL();
 
     /**
      * @return User-provided string identifying the application version that last created or modified this schema

@@ -412,6 +412,9 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final byte[] CHANGE_DETECTION_ENABLED_BYTES =
         Bytes.toBytes(CHANGE_DETECTION_ENABLED);
 
+    public static final String IS_STRICT_TTL = "IS_STRICT_TTL";
+    public static final byte[] IS_STRICT_TTL_BYTES = Bytes.toBytes(IS_STRICT_TTL);
+
     public static final String SCHEMA_VERSION = "SCHEMA_VERSION";
     public static final byte[] SCHEMA_VERSION_BYTES = Bytes.toBytes(SCHEMA_VERSION);
 

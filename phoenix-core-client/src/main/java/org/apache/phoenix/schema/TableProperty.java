@@ -330,6 +330,26 @@ public enum TableProperty {
         public Object getPTableValue(PTable table) {
             return table.getCDCIncludeScopes();
         }
+    },
+
+    IS_STRICT_TTL(PhoenixDatabaseMetaData.IS_STRICT_TTL, true, true, true) {
+
+        @Override
+        public Object getValue(Object value) {
+            if (value == null) {
+                return null;
+            } else if (value instanceof Boolean) {
+                return value;
+            } else {
+                throw new IllegalArgumentException("IS_STRICT_TTL property can only be"
+                        + " of type Boolean");
+            }
+        }
+
+        @Override
+        public Object getPTableValue(PTable table) {
+            return table.isStrictTTL();
+        }
     };
 
     private final String propertyName;
