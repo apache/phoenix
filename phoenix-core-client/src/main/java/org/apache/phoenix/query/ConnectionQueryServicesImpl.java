@@ -4575,10 +4575,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     PhoenixDatabaseMetaData.INDEX_WHERE + " "
                         + PVarchar.INSTANCE.getSqlTypeName());
             metaConnection =
-		addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-		    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 3,
-                    PhoenixDatabaseMetaData.CDC_INCLUDE_TABLE + " "
-			+ PVarchar.INSTANCE.getSqlTypeName());
+                    addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                            MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 3,
+                            PhoenixDatabaseMetaData.CDC_INCLUDE_TABLE + " "
+                                    + PVarchar.INSTANCE.getSqlTypeName());
 
             /**
              * TODO: Provide a path to copy existing data from PHOENIX_TTL to TTL column and then

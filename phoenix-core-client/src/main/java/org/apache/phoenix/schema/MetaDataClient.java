@@ -381,9 +381,9 @@ public class MetaDataClient {
                     INDEX_WHERE + "," +
                     CDC_INCLUDE_TABLE + "," +
                     TTL + "," +
-                    ROW_KEY_MATCHER + "," +
-                    IS_STRICT_TTL +
-                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                    ROW_KEY_MATCHER + ","
+                    + IS_STRICT_TTL
+                    + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
                     + "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     private static final String CREATE_SCHEMA = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE
@@ -3681,11 +3681,7 @@ public class MetaDataClient {
                 tableUpsert.setBytes(37, rowKeyMatcher);
             }
 
-            if (isStrictTTLProp == null) {
-                tableUpsert.setNull(38, Types.BOOLEAN);
-            } else {
-                tableUpsert.setBoolean(38, isStrictTTLProp);
-            }
+            tableUpsert.setBoolean(38, isStrictTTL);
 
             tableUpsert.execute();
 
@@ -4367,7 +4363,8 @@ public class MetaDataClient {
             Long updateCacheFrequency, Boolean isImmutableRows, Boolean disableWAL,
             Boolean isMultiTenant, Boolean storeNulls, Long guidePostWidth, Boolean appendOnlySchema,
             ImmutableStorageScheme immutableStorageScheme, Boolean useStatsForParallelization,
-            TTLExpression ttl, Boolean isChangeDetectionEnabled, Boolean isStrictTTL, String physicalTableName,
+            TTLExpression ttl, Boolean isChangeDetectionEnabled, Boolean isStrictTTL,
+            String physicalTableName,
             String schemaVersion, QualifierEncodingScheme columnEncodedBytes,
             String streamingTopicName)
             throws SQLException {

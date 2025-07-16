@@ -1510,8 +1510,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(isStrictTTLKv.getValueArray(),
             isStrictTTLKv.getValueOffset(),
             isStrictTTLKv.getValueLength()));
-        builder.setIsStrictTTL(isStrictTTLKv != null ?
-            isStrictTTL : oldTable == null || oldTable.isStrictTTL());
+        builder.setIsStrictTTL(isStrictTTLKv != null ? isStrictTTL
+                : oldTable == null || oldTable.isStrictTTL());
 
         // Check the cell tag to see whether the view has modified this property
         final byte[] tagUseStatsForParallelization = (useStatsForParallelizationKv == null) ?

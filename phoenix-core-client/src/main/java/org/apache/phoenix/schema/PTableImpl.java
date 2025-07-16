@@ -2051,7 +2051,7 @@ public class PTableImpl implements PTable {
         if (table.hasChangeDetectionEnabled()) {
             isChangeDetectionEnabled = table.getChangeDetectionEnabled();
         }
-        boolean isStrictTTL = true;
+        boolean isStrictTTL = DEFAULT_IS_STRICT_TTL;
         if (table.hasIsStrictTTL()) {
             isStrictTTL = table.getIsStrictTTL();
         }

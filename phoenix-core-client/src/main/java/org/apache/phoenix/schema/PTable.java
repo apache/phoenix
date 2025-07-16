@@ -63,8 +63,8 @@ public interface PTable extends PMetaDataEntity {
     public static final String IS_IMMUTABLE_ROWS_PROP_NAME = "IMMUTABLE_ROWS";
     public static final boolean DEFAULT_DISABLE_WAL = false;
     public static final boolean DEFAULT_IMMUTABLE_ROWS = false;
-    public static final boolean DEFAULT_IS_STRICT_TTL = true;
     static final Integer NO_SALTING = -1;
+    boolean DEFAULT_IS_STRICT_TTL = true;
 
     public enum ViewType {
         MAPPED((byte)1),

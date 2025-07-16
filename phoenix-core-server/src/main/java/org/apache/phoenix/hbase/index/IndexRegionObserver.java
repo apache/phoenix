@@ -1528,7 +1528,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             onDupCheckTime += (EnvironmentEdgeManager.currentTimeMillis() - start);
         }
 
-        if (context.hasConditionalTTL && isStrictTTLEnabled(miniBatchOp)) {
+        if (context.hasConditionalTTL) {
             // If the table has conditional TTL, then before making any update to a row
             // we need to evaluate the ttl expression to check if the current row version has
             // expired. If the current row version has expired then the incoming mutation has to

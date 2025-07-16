@@ -341,8 +341,8 @@ public enum TableProperty {
             } else if (value instanceof Boolean) {
                 return value;
             } else {
-                throw new IllegalArgumentException("IS_STRICT_TTL property can only be" +
-                        " of type Boolean");
+                throw new IllegalArgumentException("IS_STRICT_TTL property can only be"
+                        + " of type Boolean");
             }
         }
 
