@@ -805,6 +805,12 @@ public class QueryParserTest {
     }
 
     @Test
+    public void testPlainUpsertReturningRow() throws Exception {
+        String sql = "upsert into t (k, v) values ( 1, 2 ) RETURNING *";
+        parseQuery(sql);
+    }
+
+    @Test
     public void testUpsertWithOnDuplicateKey() throws Exception {
         String sql = "upsert into t (k, v) values ( 1, 2 ) "
                 + "ON DUPLICATE KEY UPDATE k = k + 1";
@@ -820,17 +826,6 @@ public class QueryParserTest {
             fail();
         } catch (PhoenixParserException e) {
             assertEquals(SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode(), e.getErrorCode());
-        }
-    }
-
-    @Test
-    public void testUpsertReturningWithoutOnDuplicateKey() throws Exception {
-        String sql = "upsert into t (k, v) values ( 1, 2 ) RETURNING *";
-        try {
-            parseQuery(sql);
-            fail();
-        } catch (PhoenixParserException e) {
-            assertEquals(SQLExceptionCode.MISSING_TOKEN.getErrorCode(), e.getErrorCode());
         }
     }
 

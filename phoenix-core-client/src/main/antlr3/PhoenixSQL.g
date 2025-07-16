@@ -872,8 +872,8 @@ upsert_node returns [UpsertStatement ret]
                 ig=IGNORE
               | ( upd=UPDATE pairs=update_column_pairs )
               | ( updo=UPDATE_ONLY upopairs=update_column_pairs )
-            ) rc=( RETURNING ASTERISK )? )? )
-          | s=select_node)
+            ) )? )
+          | s=select_node) rc=( RETURNING ASTERISK )?
         {ret = factory.upsert(
             factory.namedTable(null,t,p == null ? null : p.getFirst()),
             hint, p == null ? null : p.getSecond(),
