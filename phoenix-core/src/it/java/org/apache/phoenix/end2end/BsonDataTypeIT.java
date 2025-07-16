@@ -382,21 +382,18 @@ public class BsonDataTypeIT extends ParallelStatsDisabledIT {
       stmt.executeUpdate();
       conn.commit();
 
-      // Test 1: Null field path
       ResultSet rs = conn.createStatement().executeQuery(
           "SELECT BSON_DATA_TYPE(COL, NULL) FROM " + tableName + " WHERE PK1 = 'pk1'");
       assertTrue(rs.next());
       assertNull(rs.getString(1));
       assertFalse(rs.next());
 
-      // Test 2: Empty field path
       rs = conn.createStatement()
           .executeQuery("SELECT BSON_DATA_TYPE(COL, '') FROM " + tableName + " WHERE PK1 = 'pk1'");
       assertTrue(rs.next());
       assertNull(rs.getString(1));
       assertFalse(rs.next());
 
-      // Test 3: Non-existent field (this works because it returns null)
       rs = conn.createStatement().executeQuery(
           "SELECT BSON_DATA_TYPE(COL, 'non_existent_field') FROM " + tableName
               + " WHERE PK1 = 'pk1'");
@@ -404,7 +401,6 @@ public class BsonDataTypeIT extends ParallelStatsDisabledIT {
       assertEquals("NULL", rs.getString(1));
       assertFalse(rs.next());
 
-      // Test 4: Invalid nested path (deeply nested non-existent field)
       rs = conn.createStatement().executeQuery(
           "SELECT BSON_DATA_TYPE(COL, 'track[0].nonexistent.deeply.nested.field') FROM " + tableName
               + " WHERE PK1 = 'pk1'");
