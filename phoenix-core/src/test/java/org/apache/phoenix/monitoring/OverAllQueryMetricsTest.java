@@ -33,6 +33,9 @@ import static org.apache.phoenix.monitoring.MetricType.QUERY_FAILED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_TIMEOUT_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.RESULT_SET_TIME_MS;
 import static org.apache.phoenix.monitoring.MetricType.WALL_CLOCK_TIME_MS;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_COMPILER_TIME_NS;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_OPTIMIZER_TIME_NS;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_RESULT_ITR_SET_TIME_NS;
 import static org.junit.Assert.assertEquals;
 
 public class OverAllQueryMetricsTest {
@@ -105,20 +108,20 @@ public class OverAllQueryMetricsTest {
         overAllQueryMetrics.startQuery();
         overAllQueryMetrics.startResultSetWatch();
         assertPublishedMetrics(overAllQueryMetrics.publish(), numParallelScans, queryTimeouts,
-                queryFailures, cacheRefreshesDueToSplits, 0L);
+                queryFailures, cacheRefreshesDueToSplits, 0L, delta, delta, delta);
         overAllQueryMetrics.endQuery();
         overAllQueryMetrics.stopResultSetWatch();
         // expect 2 * delta since we call both endQuery() and stopResultSetWatch()
         assertPublishedMetrics(overAllQueryMetrics.publish(), numParallelScans, queryTimeouts,
-                queryFailures, cacheRefreshesDueToSplits, 2*delta);
+                queryFailures, cacheRefreshesDueToSplits, 2*delta, delta, delta, delta);
     }
 
     @Test
     public void testReset() {
         assertPublishedMetrics(overAllQueryMetrics.publish(), numParallelScans, queryTimeouts,
-                queryFailures, cacheRefreshesDueToSplits, 0L);
+                queryFailures, cacheRefreshesDueToSplits, 0L, delta, delta, delta);
         overAllQueryMetrics.reset();
-        assertPublishedMetrics(overAllQueryMetrics.publish(), 0L, 0L, 0L, 0L, 0L);
+        assertPublishedMetrics(overAllQueryMetrics.publish(), 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
     }
 
     @Test
@@ -133,7 +136,7 @@ public class OverAllQueryMetricsTest {
         OverAllQueryMetrics finalMetricObj = this.overAllQueryMetrics.combine(otherMetrics);
         assertPublishedMetrics(finalMetricObj.publish(), numParallelScans + otherNumParallelScans,
                 queryTimeouts + otherQueryTimeouts, queryFailures + otherQueryFailures,
-                cacheRefreshesDueToSplits + otherCacheRefreshes, 0L);
+                cacheRefreshesDueToSplits + otherCacheRefreshes, 0L, 2*delta, 2*delta, 2*delta);
     }
 
     @Test
@@ -159,6 +162,9 @@ public class OverAllQueryMetricsTest {
         for (int i = 0; i < cacheRefreshesDueToSplitsSetting; i++) {
             metricsObj.cacheRefreshedDueToSplits();
         }
+        metricsObj.setQueryCompilerTimeNS(delta);
+        metricsObj.setQueryOptimizerTimeNS(delta);
+        metricsObj.setQueryResultItrSetTimeNs(delta);
     }
 
     private void assertPublishedMetrics(
@@ -167,13 +173,19 @@ public class OverAllQueryMetricsTest {
             final long expectedQueryTimeouts,
             final long expectedQueryFailures,
             final long expectedCacheRefreshes,
-            final long expectedElapsedTime) {
+            final long expectedElapsedTime,
+            final long expectedQueryCompilerTimeNs,
+            final long expectedQueryOptimizerTimeNs,
+            final long expectedQueryResultItrSetTimeNs) {
         assertEquals(expectedNumParallelScans, (long)metrics.get(NUM_PARALLEL_SCANS));
         assertEquals(expectedQueryTimeouts, (long)metrics.get(QUERY_TIMEOUT_COUNTER));
         assertEquals(expectedQueryFailures, (long)metrics.get(QUERY_FAILED_COUNTER));
         assertEquals(expectedCacheRefreshes, (long)metrics.get(CACHE_REFRESH_SPLITS_COUNTER));
         assertEquals(expectedElapsedTime, (long)metrics.get(WALL_CLOCK_TIME_MS));
         assertEquals(expectedElapsedTime, (long)metrics.get(RESULT_SET_TIME_MS));
+        assertEquals(expectedQueryCompilerTimeNs, (long)metrics.get(QUERY_COMPILER_TIME_NS));
+        assertEquals(expectedQueryOptimizerTimeNs, (long)metrics.get(QUERY_OPTIMIZER_TIME_NS));
+        assertEquals(expectedQueryResultItrSetTimeNs, (long)metrics.get(QUERY_RESULT_ITR_SET_TIME_NS));
     }
 
 }
