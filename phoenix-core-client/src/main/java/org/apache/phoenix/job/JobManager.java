@@ -26,6 +26,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_TASK_QUEU
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.RejectedExecutionHandler;
@@ -125,7 +126,9 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
     static class JobFutureTask<T> extends FutureTask<T> {
         private final Object jobId;
         @Nullable
-        private final TaskExecutionMetricsHolder taskMetric;
+        // TODO: Shift this instance variable to InstrumentedJobFutureTask as task metric
+        //  instrumentation happens only for InstrumentedJobFutureTask.
+        protected final TaskExecutionMetricsHolder taskMetric;
         
         public JobFutureTask(Runnable r, T t) {
             super(r, t);
@@ -193,6 +196,9 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
             return taskExecutionStartTime;
         }
 
+        public TaskExecutionMetricsHolder getTaskMetric() {
+            return taskMetric;
+        }
     }
     
     /**
@@ -299,6 +305,16 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
         private static TaskExecutionMetricsHolder getRequestMetric(Runnable task) {
             return ((JobFutureTask)task).taskMetric;
         }
+    }
+
+    public static <V> TaskExecutionMetricsHolder getTaskMetrics(
+            Future<V> futureTask) {
+        if (futureTask instanceof InstrumentedJobFutureTask) {
+            TaskExecutionMetricsHolder taskMetrics =
+                    ((InstrumentedJobFutureTask<V>) futureTask).getTaskMetric();
+            return taskMetrics;
+        }
+        return TaskExecutionMetricsHolder.NO_OP_INSTANCE;
     }
 }
 

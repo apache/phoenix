@@ -141,6 +141,12 @@ public enum MetricType {
     CACHE_REFRESH_SPLITS_COUNTER("cr", "Number of times cache was refreshed because of splits",LogLevel.DEBUG, PLong.INSTANCE),
     WALL_CLOCK_TIME_MS("tq", "Wall clock time elapsed for the overall query execution",LogLevel.INFO, PLong.INSTANCE),
     RESULT_SET_TIME_MS("tn", "Wall clock time elapsed for reading all records using resultSet.next()",LogLevel.INFO, PLong.INSTANCE),
+    WALL_CLOCK_QUERY_WAIT_TIME("qwt", "Total wall clock time spent by a "
+            + "query waiting in the Phoenix client thread pool queue",
+            LogLevel.OFF, PLong.INSTANCE),
+    WALL_CLOCK_QUERY_TASK_END_TO_END_TIME("qeet", "Total wall clock time "
+            + "spent by a query in task execution in the Phoenix client thread pool"
+            + "including the queue wait time", LogLevel.OFF, PLong.INSTANCE),
     OPEN_PHOENIX_CONNECTIONS_COUNTER("o", "Number of open phoenix connections",LogLevel.OFF, PLong.INSTANCE),
     OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER("io", "Number of open internal phoenix connections",LogLevel.OFF, PLong.INSTANCE),
     QUERY_SERVICES_COUNTER("cqs", "Number of ConnectionQueryServicesImpl instantiated",LogLevel.OFF, PLong.INSTANCE),
