@@ -190,6 +190,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_STRICT_TTL;
 
 /**
  *
@@ -410,6 +411,7 @@ public interface QueryConstants {
             CDC_INCLUDE_TABLE + " VARCHAR, \n" +
             TTL + " VARCHAR, \n" +
             ROW_KEY_MATCHER + " VARBINARY_ENCODED, \n" +
+            IS_STRICT_TTL + " BOOLEAN, \n" +
             // Column metadata (will be null for table row)
             DATA_TYPE + " INTEGER," +
             COLUMN_SIZE + " INTEGER," +

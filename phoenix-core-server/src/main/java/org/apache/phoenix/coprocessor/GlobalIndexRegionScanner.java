@@ -103,8 +103,6 @@ import static org.apache.phoenix.query.QueryConstants.VERIFIED_BYTES;
 import static org.apache.phoenix.query.QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.PHOENIX_TTL_STRICT;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_TTL_STRICT;
 import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 /**
@@ -222,7 +220,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         lastDdlTimestamp = scan.getAttribute(
                 MutationState.MutationMetadataType.TIMESTAMP.toString());
         ttlExpression = ScanUtil.getTTLExpression(scan);
-        isTTLStrict = config.getBoolean(PHOENIX_TTL_STRICT, DEFAULT_PHOENIX_TTL_STRICT);
+        isTTLStrict = ScanUtil.isStrictTTL(scan);
         byte[] transforming = scan.getAttribute(BaseScannerRegionObserverConstants.DO_TRANSFORMING);
         List<IndexMaintainer> maintainers = null;
         if (transforming == null) {

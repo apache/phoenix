@@ -4551,32 +4551,32 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0) {
             metaConnection =
                 addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 7,
+                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 8,
                     PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME + " "
                         + PVarchar.INSTANCE.getSqlTypeName());
             metaConnection =
                 addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 6,
+                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 7,
                     PhoenixDatabaseMetaData.SCHEMA_VERSION + " "
                         + PVarchar.INSTANCE.getSqlTypeName());
             metaConnection =
                 addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 5,
+                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 6,
                     PhoenixDatabaseMetaData.EXTERNAL_SCHEMA_ID + " "
                         + PVarchar.INSTANCE.getSqlTypeName());
             metaConnection =
                 addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 4,
+                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 5,
                     PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME + " "
                         + PVarchar.INSTANCE.getSqlTypeName());
             metaConnection =
                 addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 3,
+                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 4,
                     PhoenixDatabaseMetaData.INDEX_WHERE + " "
                         + PVarchar.INSTANCE.getSqlTypeName());
             metaConnection =
 		addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-		    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 2,
+		    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 3,
                     PhoenixDatabaseMetaData.CDC_INCLUDE_TABLE + " "
 			+ PVarchar.INSTANCE.getSqlTypeName());
 
@@ -4585,12 +4585,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
              * to DROP PHOENIX_TTL Column. See PHOENIX-7023
              */
             metaConnection = addColumnsIfNotExists(metaConnection,
-                    PhoenixDatabaseMetaData.SYSTEM_CATALOG, MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 1,
+                    PhoenixDatabaseMetaData.SYSTEM_CATALOG, MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 2,
                     PhoenixDatabaseMetaData.TTL + " " + PVarchar.INSTANCE.getSqlTypeName());
             metaConnection = addColumnsIfNotExists(metaConnection,
-                    PhoenixDatabaseMetaData.SYSTEM_CATALOG, MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0,
+                    PhoenixDatabaseMetaData.SYSTEM_CATALOG, MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 1,
                     PhoenixDatabaseMetaData.ROW_KEY_MATCHER + " "
                             + PVarbinary.INSTANCE.getSqlTypeName());
+            metaConnection = addColumnsIfNotExists(metaConnection,
+                    PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0,
+                    PhoenixDatabaseMetaData.IS_STRICT_TTL + " "
+                            + PBoolean.INSTANCE.getSqlTypeName());
             //Values in PHOENIX_TTL column will not be used for further release as PHOENIX_TTL column is being deprecated
             //and will be removed in later release. To copy copyDataFromPhoenixTTLtoTTL(metaConnection) can be used but
             //as that feature was not fully built we are not moving old value to new column

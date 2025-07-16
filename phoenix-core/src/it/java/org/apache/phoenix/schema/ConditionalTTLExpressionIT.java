@@ -184,9 +184,9 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             optionBuilder.append(", COLUMN_ENCODED_BYTES=0");
         }
         if (!isStrictTTL) {
-            optionBuilder.append(", \"phoenix.ttl.strict\" = false");
+            optionBuilder.append(", IS_STRICT_TTL = false");
         } else {
-            optionBuilder.append(", \"phoenix.ttl.strict\" = true");
+            optionBuilder.append(", IS_STRICT_TTL = true");
         }
         this.tableDDLOptions = optionBuilder.toString();
         EnvironmentEdgeManager.reset();
@@ -875,7 +875,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             // 2 expired, 1 deleted
             assertEquals(isStrictTTL ? rowCount - (2 + 1) : rowCount - 1, actual);
             actual = TestUtil.getRowCountFromIndex(conn, fullDataTableName, fullIndexName);
-            assertEquals(rowCount -(2+1), actual);
+            assertEquals(isStrictTTL ? rowCount - (2 + 1) : rowCount - 1, actual);
 
             injectEdge.incrementValue(2 * tableLevelMaxLookback * 1000L + 5);
             doMajorCompaction(fullDataTableName);
@@ -950,7 +950,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
         String ddl = String.format(ddlTemplate, tableName,
                 String.format(tableDDLOptions, retainSingleQuotes(ttlExpression)));
         String indexDDL = String.format("create index %s ON %s (col1) INCLUDE(col2) " +
-                "\"phoenix.max.lookback.age.seconds\" = %d, \"phoenix.ttl.strict\" = %b", 
+                "\"phoenix.max.lookback.age.seconds\" = %d",
                 indexName, tableName, tableLevelMaxLookback, isStrictTTL);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute(ddl);
@@ -1304,8 +1304,8 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
                         "EVENT_TYPE CHAR(15), CREATED_TS TIMESTAMP) %s", tableName,
                 String.format(tableDDLOptions, ttlExpression));
         String indexDDL = String.format("CREATE INDEX %s ON %s (EVENT_TYPE) INCLUDE(CREATED_TS) "
-                        + "\"phoenix.max.lookback.age.seconds\" = %d ,\"phoenix.ttl.strict\" = %b",
-                indexName, tableName, tableLevelMaxLookback, isStrictTTL);
+                        + "\"phoenix.max.lookback.age.seconds\" = %d",
+                indexName, tableName, tableLevelMaxLookback);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute(ddl);
             conn.createStatement().execute(indexDDL);
@@ -1554,10 +1554,10 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
         String tableName = schemaBuilder.getEntityTableName();
         String schema = SchemaUtil.getSchemaNameFromFullName(tableName);
         String indexDDL = String.format("create index %s on %s (%s) include (%s) "
-                        + "\"phoenix.max.lookback.age.seconds\" = %d, \"phoenix.ttl.strict\" = %b",
+                        + "\"phoenix.max.lookback.age.seconds\" = %d",
                 indexName, tableName,
                 Joiner.on(",").join(indexedColumns),
-                Joiner.on(",").join(includedColumns), tableLevelMaxLookback, isStrictTTL);
+                Joiner.on(",").join(includedColumns), tableLevelMaxLookback);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute(indexDDL);
         }

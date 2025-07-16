@@ -112,6 +112,7 @@ import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.transform.TransformClient;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.slf4j.Logger;
@@ -1230,6 +1231,22 @@ public class ScanUtil {
                 && scan.getAttribute(BaseScannerRegionObserverConstants.TTL) != null;
     }
 
+    public static boolean isStrictTTL(Scan scan) {
+        byte[] isStrictTTLBytes =
+                scan.getAttribute(BaseScannerRegionObserverConstants.IS_STRICT_TTL);
+        if (isStrictTTLBytes != null) {
+            try {
+                return (Boolean) PBoolean.INSTANCE.toObject(isStrictTTLBytes);
+            } catch (Exception e) {
+                LOGGER.error(
+                        "Unable to parse isStrictTTL bytes, use default value for strict TTL {}",
+                        PTable.DEFAULT_IS_STRICT_TTL, e);
+                return PTable.DEFAULT_IS_STRICT_TTL;
+            }
+        }
+        return PTable.DEFAULT_IS_STRICT_TTL;
+    }
+
     public static boolean isEmptyColumn(Cell cell, byte[] emptyCF, byte[] emptyCQ) {
         return CellUtil.matchingFamily(cell, emptyCF, 0, emptyCF.length) &&
                CellUtil.matchingQualifier(cell, emptyCQ, 0, emptyCQ.length);
@@ -1436,6 +1453,11 @@ public class ScanUtil {
     public static void setScanAttributesForPhoenixTTL(Scan scan, PTable table,
             PhoenixConnection phoenixConnection) throws SQLException {
 
+        if (!table.isStrictTTL()) {
+            scan.setAttribute(BaseScannerRegionObserverConstants.IS_STRICT_TTL,
+                    PBoolean.INSTANCE.toBytes(table.isStrictTTL()));
+        }
+
         //If entity is a view and phoenix.view.ttl.enabled is false then don't set TTL scan attribute.
         if ((table.getType() == PTableType.VIEW) && !phoenixConnection.getQueryServices().getConfiguration().getBoolean(
                 QueryServices.PHOENIX_VIEW_TTL_ENABLED,
@@ -1481,6 +1503,12 @@ public class ScanUtil {
                 return;
             }
         }
+
+        if (!dataTable.isStrictTTL()) {
+            scan.setAttribute(BaseScannerRegionObserverConstants.IS_STRICT_TTL,
+                    PBoolean.INSTANCE.toBytes(dataTable.isStrictTTL()));
+        }
+
         // we want to compile the expression every time we pass it as a scan attribute. This is
         // needed so that any stateless expressions like CURRENT_TIME() are always evaluated.
         // Otherwise, we can cache stale values and keep reusing the stale values which can give
@@ -1788,6 +1816,10 @@ public class ScanUtil {
         byte[] ttl = ttlExpr.serialize();
         for (Mutation mutation : mutations) {
             mutation.setAttribute(BaseScannerRegionObserverConstants.TTL, ttl);
+            if (!table.isStrictTTL()) {
+                mutation.setAttribute(BaseScannerRegionObserverConstants.IS_STRICT_TTL,
+                        PBoolean.INSTANCE.toBytes(table.isStrictTTL()));
+            }
         }
     }
 

@@ -23,6 +23,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.AUTO_PARTITION_SEQ_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHANGE_DETECTION_ENABLED_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_STRICT_TTL_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLASS_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_DEF_BYTES;
@@ -399,6 +400,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             TABLE_FAMILY_BYTES, TTL_BYTES);
     private static final Cell ROW_KEY_MATCHER_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
             TABLE_FAMILY_BYTES, ROW_KEY_MATCHER_BYTES);
+    private static final Cell IS_STRICT_TTL_KV =
+            createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, IS_STRICT_TTL_BYTES);
 
     private static final List<Cell> TABLE_KV_COLUMNS = Lists.newArrayList(
             EMPTY_KEYVALUE_KV,
@@ -440,7 +443,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             INDEX_WHERE_KV,
             CDC_INCLUDE_KV,
             TTL_KV,
-            ROW_KEY_MATCHER_KV
+            ROW_KEY_MATCHER_KV,
+            IS_STRICT_TTL_KV
     );
 
     static {
@@ -491,6 +495,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             TABLE_KV_COLUMNS.indexOf(INDEX_WHERE_KV);
     private static final int TTL_INDEX = TABLE_KV_COLUMNS.indexOf(TTL_KV);
     private static final int ROW_KEY_MATCHER_INDEX = TABLE_KV_COLUMNS.indexOf(ROW_KEY_MATCHER_KV);
+    private static final int IS_STRICT_TTL_INDEX = TABLE_KV_COLUMNS.indexOf(IS_STRICT_TTL_KV);
     // KeyValues for Column
     private static final KeyValue DECIMAL_DIGITS_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES);
     private static final KeyValue COLUMN_SIZE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, COLUMN_SIZE_BYTES);
@@ -1500,6 +1505,13 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         builder.setRowKeyMatcher(rowKeyMatcher != null ? rowKeyMatcher
                 : oldTable != null ? oldTable.getRowKeyMatcher() : HConstants.EMPTY_BYTE_ARRAY);
 
+        Cell isStrictTTLKv = tableKeyValues[IS_STRICT_TTL_INDEX];
+        boolean isStrictTTL = isStrictTTLKv != null
+            && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(isStrictTTLKv.getValueArray(),
+            isStrictTTLKv.getValueOffset(),
+            isStrictTTLKv.getValueLength()));
+        builder.setIsStrictTTL(isStrictTTLKv != null ?
+            isStrictTTL : oldTable == null || oldTable.isStrictTTL());
 
         // Check the cell tag to see whether the view has modified this property
         final byte[] tagUseStatsForParallelization = (useStatsForParallelizationKv == null) ?

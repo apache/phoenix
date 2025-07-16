@@ -269,6 +269,7 @@ public class TransformClient {
                 .setUseStatsForParallelization(table.useStatsForParallelization())
                 .setSchemaVersion(table.getSchemaVersion())
                 .setIsChangeDetectionEnabled(table.isChangeDetectionEnabled())
+                .setIsStrictTTL(table.isStrictTTL())
                 .setStreamingTopicName(table.getStreamingTopicName())
                 // Transformables
                 .setImmutableStorageScheme(

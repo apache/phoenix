@@ -22,8 +22,6 @@ import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.UNGROUPED_AGG_ROW_KEY;
-import static org.apache.phoenix.query.QueryServices.PHOENIX_TTL_STRICT;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_TTL_STRICT;
 import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 import java.io.IOException;
@@ -113,7 +111,7 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
                      QueryUtil.getConnectionOnServer(config).unwrap(PhoenixConnection.class)) {
             PTable dataTable = conn.getTableNoCache(tenant, tableName);
             dataTableTTLExpr = dataTable.getCompiledTTLExpression(conn);
-            isTTLStrict = config.getBoolean(PHOENIX_TTL_STRICT, DEFAULT_PHOENIX_TTL_STRICT);
+            isTTLStrict = ScanUtil.isStrictTTL(scan);
         } catch (SQLException e) {
             LOGGER.error(
                     "Unable to get PTable for the data table {}:{}", tenant, tableName, e);
