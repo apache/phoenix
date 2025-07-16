@@ -1306,9 +1306,8 @@ public class UpsertCompiler {
             Tuple tuple = sequenceManager.getSequenceCount() == 0 ? null :
                 sequenceManager.newSequenceTuple(null);
 
-            int index = -1;
-            for (byte[][] valuesListIem : valuesList) {
-                index = index + 1;
+            for(int index=0; index < valuesList.size(); index++) {
+                byte[][] valuesListItem =  valuesList.get(index);
                 int nodeIndex = nodeIndexOffset;
                 for (Expression constantExpression : constantExpressionsList.get(index)) { // we overwrite these
                     if (!constantExpression.isStateless()) {
@@ -1343,13 +1342,13 @@ public class UpsertCompiler {
                                 .setColumnName(column.getName().getString())
                                 .setMessage("value=" + constantExpression.toString()).build().buildException();
                     }
-                    valuesListIem[nodeIndex] = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                    valuesListItem[nodeIndex] = ByteUtil.copyKeyBytesIfNecessary(ptr);
                     nodeIndex++;
                 }
                 // Add columns based on view
                 for (PColumn column : addViewColumns) {
                     if (IndexUtil.getViewConstantValue(column, ptr)) {
-                        valuesListIem[nodeIndex++] = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                        valuesListItem[nodeIndex++] = ByteUtil.copyKeyBytesIfNecessary(ptr);
                     } else {
                         throw new IllegalStateException();
                     }

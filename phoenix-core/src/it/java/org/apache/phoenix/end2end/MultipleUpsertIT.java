@@ -31,6 +31,7 @@ import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
 
 @Category(ParallelStatsDisabledTest.class)
 public class MultipleUpsertIT extends ParallelStatsDisabledIT {
@@ -89,5 +90,35 @@ public class MultipleUpsertIT extends ParallelStatsDisabledIT {
         rs.next();
         assertEquals(rs.getString(1), "I");
         assertEquals(rs.getInt(2), 10);
+    }
+
+    @Test
+    public void testUpsertMultiple2() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE " + tableName + "(K VARCHAR NOT NULL PRIMARY KEY, INT INTEGER)";
+        conn.createStatement().execute(ddl);
+
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('A', 1),(SUBSTR('APPLE',0,2), 2*2)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES (SUBSTR('DELTA',0,1), 5),('C', 2*3)");
+        conn.commit();
+
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName + " ORDER BY K");
+        rs.next();
+        assertEquals(rs.getString(1), "A");
+        assertEquals(rs.getInt(2), 1);
+        rs.next();
+        assertEquals(rs.getString(1), "AP");
+        assertEquals(rs.getInt(2), 4);
+        rs.next();
+        assertEquals(rs.getString(1), "C");
+        assertEquals(rs.getInt(2), 6);
+        rs.next();
+        assertEquals(rs.getString(1), "D");
+        assertEquals(rs.getInt(2), 5);
+        assertFalse(rs.next());
+
     }
 }
