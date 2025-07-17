@@ -55,6 +55,7 @@ import org.apache.phoenix.util.MetaDataUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHANGE_DETECTION_ENABLED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL;
@@ -398,6 +399,8 @@ public enum SQLExceptionCode {
 
     CDC_ALREADY_ENABLED(10963, "44A45",
             "CDC on this table is either enabled or is in the process of being enabled."),
+    CANNOT_SET_OR_ALTER_MAX_LOOKBACK_FOR_INDEX(10964, "44A46",
+            "Cannot set or alter " + PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY + " on an index"),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {

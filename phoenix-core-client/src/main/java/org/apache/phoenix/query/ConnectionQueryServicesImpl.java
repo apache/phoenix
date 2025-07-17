@@ -3208,6 +3208,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             .buildException();
                         }
                         if (PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY.equals(propName)) {
+                            if (table.getType() == PTableType.INDEX) {
+                                throw new SQLExceptionInfo.Builder(
+                                        SQLExceptionCode.CANNOT_SET_OR_ALTER_MAX_LOOKBACK_FOR_INDEX)
+                                        .setMessage("Property: " + propName)
+                                        .build().buildException();
+                            }
                             newMaxLookback = (Integer) propValue;
                         }
                         tableProps.put(propName, propValue);
