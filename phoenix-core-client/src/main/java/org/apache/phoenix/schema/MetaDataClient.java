@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.schema;
 
-import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_SET_CONDITIONAL_TTL_ON_TABLE_WITH_MULTIPLE_COLUMN_FAMILIES;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_TRANSACTIONAL_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.CDC_ALREADY_ENABLED;
@@ -2013,10 +2012,6 @@ public class MetaDataClient {
         Object columnEncodedBytes = TableProperty.COLUMN_ENCODED_BYTES.getValue(tableProps);
         if (columnEncodedBytes != null) {
             indexProps.add("COLUMN_ENCODED_BYTES=" + columnEncodedBytes);
-        }
-        if (tableProps.containsKey(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY)) {
-            indexProps.add("\"" + PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY + "\"="
-                    + tableProps.get(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY));
         }
         createIndexSql = createIndexSql + " " + String.join(", ", indexProps);
         try (Connection internalConnection = QueryUtil.getConnection(props, connection.getQueryServices().getConfiguration())) {

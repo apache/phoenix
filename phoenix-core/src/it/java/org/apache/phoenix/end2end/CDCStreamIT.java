@@ -107,14 +107,14 @@ public class CDCStreamIT extends CDCBaseIT {
         Connection conn = newConnection();
         String tableName = generateUniqueName();
         String cdcName = generateUniqueName();
+        String cdcDdl = "CREATE CDC " + cdcName + " ON " + tableName;
         // maxLookback 27 hr
-        String cdcDdl = "CREATE CDC " + cdcName + " ON " + tableName
-                + "\"phoenix.max.lookback.age.seconds\"=97200";
         conn.createStatement().execute(
                 "CREATE TABLE  " + tableName + " ( k VARCHAR NOT NULL,"
                         + " v1 VARCHAR, v2 BIGINT CONSTRAINT PK PRIMARY KEY(k))"
                         + " \"phoenix.max.lookback.age.seconds\"=97200,"
                         + "TTL='TO_NUMBER(CURRENT_TIME()) > v2', IS_STRICT_TTL=false");
+        // cdc index should get 27 hr maxLookback (for cdc index, maxLookback = TTL)
         createCDC(conn, cdcDdl, null);
 
         long expiry = (System.currentTimeMillis() + TimeUnit.DAYS.toMillis(3)) / 1000;

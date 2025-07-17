@@ -23,6 +23,7 @@ import static org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder.REPLI
 import static org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder.TTL;
 import static org.apache.hadoop.hbase.client.MetricsConnection.CLIENT_SIDE_METRICS_ENABLED_KEY;
 import static org.apache.hadoop.hbase.ipc.RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY;
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP;
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0;
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0;
@@ -1317,6 +1318,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 // In case this a local index created on a view of a multi-tenant table, the
                 // PHYSICAL_DATA_TABLE_NAME points to the name of the view instead of the physical base table
                 baseTableDesc = existingDesc;
+            }
+            String baseTableMaxLookbackVal =
+                    baseTableDesc.getValue(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY);
+            if (baseTableMaxLookbackVal != null) {
+                tableProps.put(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, baseTableMaxLookbackVal);
             }
             dataTableColDescForIndexTablePropSyncing = baseTableDesc.getColumnFamily(defaultFamilyBytes);
             // It's possible that the table has specific column families and none of them are declared
