@@ -69,7 +69,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_TABLE_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_FOR_MUTEX;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME;
@@ -1288,6 +1287,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             String propName = entry.getKey();
             Object value = entry.getValue();
             setHColumnDescriptorValue(hcd, propName, value);
+        }
+    }
+
+    private void modifyTableDescriptor(TableDescriptorBuilder td, Map<String, Object> props) {
+        if (props != null) {
+            for (Entry<String, Object> entry : props.entrySet()) {
+                String propName = entry.getKey();
+                Object value = entry.getValue();
+                td.setValue(propName, value == null ? null : value.toString());
+            }
         }
     }
 
@@ -3171,6 +3180,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         Integer newReplicationScope = null;
         KeepDeletedCells newKeepDeletedCells = null;
         TransactionFactory.Provider txProvider = null;
+        Integer newMaxLookback = null;
         for (String family : properties.keySet()) {
             List<Pair<String, Object>> propsList = properties.get(family);
             if (propsList != null && propsList.size() > 0) {
@@ -3196,6 +3206,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             .setTableName(table.getTableName().getString())
                             .build()
                             .buildException();
+                        }
+                        if (PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY.equals(propName)) {
+                            newMaxLookback = (Integer) propValue;
                         }
                         tableProps.put(propName, propValue);
                     } else {
@@ -3483,7 +3496,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // Copy properties that need to be synced from the default column family of the base table to
         // the column families of each of its indexes (including indexes on this base table's views)
         // and store those table descriptor mappings as well
-        setSyncedPropertiesForTableIndexes(table, tableAndIndexDescriptorMappings, applyPropsToAllIndexColFams);
+        setSyncedPropertiesForTableIndexes(table, tableAndIndexDescriptorMappings,
+                applyPropsToAllIndexColFams,
+                getNewSyncedPropsMapForTableDescriptor(newMaxLookback));
         return tableAndIndexDescriptorMappings;
     }
 
@@ -3581,6 +3596,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return newSyncedProps;
     }
 
+    private Map<String, Object> getNewSyncedPropsMapForTableDescriptor(Integer newMaxLookback) {
+        if (newMaxLookback == null) {
+            return null;
+        }
+        Map<String, Object> newSyncedProps = new HashMap<>(1);
+        setPropIfNotNull(newSyncedProps, PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, newMaxLookback);
+        return newSyncedProps;
+    }
+
     /**
      * Set the new values for properties that are to be kept in sync amongst those column families of the table which are
      * not referenced in the context of our alter table command, including the local index column family if it exists
@@ -3609,12 +3633,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * @param table base table
      * @param tableAndIndexDescriptorMappings old to new table descriptor mappings
      * @param applyPropsToAllIndexesDefaultCF new properties to apply to all index column families
+     * @param applyPropsToAllIndexesTd new properties to apply to all index table descriptors
      * @throws SQLException
      */
     private void setSyncedPropertiesForTableIndexes(PTable table,
-            Map<TableDescriptor, TableDescriptor> tableAndIndexDescriptorMappings,
-            Map<String, Object> applyPropsToAllIndexesDefaultCF) throws SQLException {
-        if (applyPropsToAllIndexesDefaultCF == null || applyPropsToAllIndexesDefaultCF.isEmpty()) {
+                                                    Map<TableDescriptor, TableDescriptor> tableAndIndexDescriptorMappings,
+                                                    Map<String, Object> applyPropsToAllIndexesDefaultCF,
+                                                    Map<String, Object> applyPropsToAllIndexesTd)
+            throws SQLException {
+        if ((applyPropsToAllIndexesDefaultCF == null || applyPropsToAllIndexesDefaultCF.isEmpty())
+                && (applyPropsToAllIndexesTd == null || applyPropsToAllIndexesTd.isEmpty())) {
             return;
         }
 
@@ -3625,6 +3653,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
             TableDescriptor origIndexDescriptor = this.getTableDescriptor(indexTable.getPhysicalName().getBytes());
             TableDescriptorBuilder newIndexDescriptorBuilder = TableDescriptorBuilder.newBuilder(origIndexDescriptor);
+            modifyTableDescriptor(newIndexDescriptorBuilder, applyPropsToAllIndexesTd);
 
             byte[] defaultIndexColFam = SchemaUtil.getEmptyColumnFamily(indexTable);
             ColumnFamilyDescriptorBuilder indexDefaultColDescriptorBuilder =
