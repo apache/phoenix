@@ -22,10 +22,19 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.util.bson.CommonComparisonExpressionUtils;
-import org.apache.phoenix.parse.BsonDataTypeParseNode;
+import org.apache.phoenix.parse.BsonValueTypeParseNode;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.schema.types.*;
+import org.apache.phoenix.schema.types.PBson;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PJson;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.bson.BsonArray;
 import org.bson.BsonBinary;
@@ -42,7 +51,7 @@ import org.bson.BsonValue;
 import org.bson.RawBsonDocument;
 
 /**
- * BSON_DATA_TYPE function to retrieve the Phoenix data type of any field in BSON. This can be used for any
+ * BSON_VALUE_TYPE function to retrieve the SQL data type name of any field in BSON. This can be used for any
  * top-level or nested Bson fields.
  * 1. The first argument represents BSON Object on which the function performs scan.
  * 2. The second argument represents the field key. The field key can represent any top level or
@@ -50,23 +59,19 @@ import org.bson.RawBsonDocument;
  * document elements and "[n]" notation for accessing nested array elements.
  * Top level fields do not require any additional character.
  */
-@FunctionParseNode.BuiltInFunction(
-    name = BsonDataTypeFunction.NAME,
-    nodeClass = BsonDataTypeParseNode.class,
-    args = {
-        @FunctionParseNode.Argument(allowedTypes = {PJson .class, PBson.class, PVarbinary.class}),
-        @FunctionParseNode.Argument(allowedTypes = {PVarchar.class}, isConstant = true)
-    }
-)
-public class BsonDataTypeFunction extends ScalarFunction {
+@FunctionParseNode.BuiltInFunction(name = BsonValueTypeFunction.NAME,
+    nodeClass = BsonValueTypeParseNode.class, args = {
+    @FunctionParseNode.Argument(allowedTypes = { PJson.class, PBson.class, PVarbinary.class }),
+    @FunctionParseNode.Argument(allowedTypes = { PVarchar.class }, isConstant = true), })
+public class BsonValueTypeFunction extends ScalarFunction {
 
-    public static final String NAME = "BSON_DATA_TYPE";
+    public static final String NAME = "BSON_VALUE_TYPE";
 
-    public BsonDataTypeFunction() {
+    public BsonValueTypeFunction() {
         // no-op
     }
 
-    public BsonDataTypeFunction(List<Expression> children) {
+    public BsonValueTypeFunction(List<Expression> children) {
         super(children);
         Preconditions.checkNotNull(getChildren().get(1));
     }
@@ -96,47 +101,42 @@ public class BsonDataTypeFunction extends ScalarFunction {
         }
 
         String documentFieldKey =
-                (String) PVarchar.INSTANCE.toObject(ptr, getChildren().get(1).getSortOrder());
+            (String) PVarchar.INSTANCE.toObject(ptr, getChildren().get(1).getSortOrder());
         if (documentFieldKey == null) {
             return false;
         }
 
         BsonValue bsonValue =
             CommonComparisonExpressionUtils.getFieldFromDocument(documentFieldKey, rawBsonDocument);
-        
-        String dataTypeName = getPhoenixDataTypeName(bsonValue);
-        ptr.set(PVarchar.INSTANCE.toBytes(dataTypeName));
+        if (bsonValue == null) {
+            ptr.set(PVarchar.INSTANCE.toBytes("NULL"));
+            return true;
+        }
+
+        String sqlTypeName = getSqlTypeName(bsonValue);
+        ptr.set(PVarchar.INSTANCE.toBytes(sqlTypeName));
         return true;
     }
 
-    /**
-     * Maps BSON value types to Phoenix data type names
-     */
-    private String getPhoenixDataTypeName(BsonValue bsonValue) {
-        if (bsonValue == null) {
-            return "NULL";
-        } else if (bsonValue instanceof BsonNull) {
-            return "NULL";
-        } else if (bsonValue instanceof BsonString) {
+    private String getSqlTypeName(BsonValue bsonValue) {
+        if (bsonValue instanceof BsonString) {
             return PVarchar.INSTANCE.getSqlTypeName();
         } else if (bsonValue instanceof BsonInt32) {
             return PInteger.INSTANCE.getSqlTypeName();
         } else if (bsonValue instanceof BsonInt64) {
             return PLong.INSTANCE.getSqlTypeName();
-        } else if (bsonValue instanceof BsonDouble) {
+        } else if (bsonValue instanceof BsonDouble || bsonValue instanceof BsonDecimal128) {
             return PDouble.INSTANCE.getSqlTypeName();
-        } else if (bsonValue instanceof BsonDecimal128) {
-            return PDecimal.INSTANCE.getSqlTypeName();
         } else if (bsonValue instanceof BsonBoolean) {
             return PBoolean.INSTANCE.getSqlTypeName();
         } else if (bsonValue instanceof BsonBinary) {
             return PVarbinary.INSTANCE.getSqlTypeName();
         } else if (bsonValue instanceof BsonDateTime) {
-            return PTimestamp.INSTANCE.getSqlTypeName();
-        } else if (bsonValue instanceof BsonDocument) {
+            return PDate.INSTANCE.getSqlTypeName();
+        } else if (bsonValue instanceof BsonDocument || bsonValue instanceof BsonArray) {
             return PBson.INSTANCE.getSqlTypeName();
-        } else if (bsonValue instanceof BsonArray) {
-            return PBson.INSTANCE.getSqlTypeName();
+        } else if (bsonValue instanceof BsonNull) {
+            return "NULL";
         } else {
             return PVarchar.INSTANCE.getSqlTypeName();
         }
@@ -146,4 +146,4 @@ public class BsonDataTypeFunction extends ScalarFunction {
     public PDataType<?> getDataType() {
         return PVarchar.INSTANCE;
     }
-}
+} 

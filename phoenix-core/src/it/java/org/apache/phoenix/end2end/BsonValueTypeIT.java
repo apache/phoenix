@@ -65,27 +65,27 @@ import static org.junit.Assert.fail;
 
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
-public class BsonDataTypeIT extends ParallelStatsDisabledIT {
+public class BsonValueTypeIT extends ParallelStatsDisabledIT {
 
   private final boolean columnEncoded;
 
-  public BsonDataTypeIT(boolean columnEncoded) {
+  public BsonValueTypeIT(boolean columnEncoded) {
     this.columnEncoded = columnEncoded;
   }
 
-  @Parameterized.Parameters(name = "BsonDataTypeIT_columnEncoded={0}")
+  @Parameterized.Parameters(name = "BsonValueTypeIT_columnEncoded={0}")
   public static synchronized Collection<Object[]> data() {
     return Arrays.asList(new Object[][] { { false }, { true } });
   }
 
   private static String getJsonString(String jsonFilePath) throws IOException {
-    URL fileUrl = BsonDataTypeIT.class.getClassLoader().getResource(jsonFilePath);
+    URL fileUrl = BsonValueTypeIT.class.getClassLoader().getResource(jsonFilePath);
     Preconditions.checkArgument(fileUrl != null, "File path " + jsonFilePath + " seems invalid");
     return FileUtils.readFileToString(new File(fileUrl.getFile()), Charset.defaultCharset());
   }
 
   @Test
-  public void testBsonDataTypeFunction() throws Exception {
+  public void testBsonValueTypeFunction() throws Exception {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     String tableName = generateUniqueName();
 
@@ -122,137 +122,137 @@ public class BsonDataTypeIT extends ParallelStatsDisabledIT {
       conn.commit();
 
       ResultSet rs = conn.createStatement().executeQuery(
-          "SELECT BSON_DATA_TYPE(COL, 'press') FROM " + tableName + " WHERE PK1 = 'pk1'");
+          "SELECT BSON_VALUE_TYPE(COL, 'press') FROM " + tableName + " WHERE PK1 = 'pk1'");
       assertTrue(rs.next());
       assertEquals(PVarchar.INSTANCE.getSqlTypeName(), rs.getString(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT BSON_DATA_TYPE(COL, 'hurry') FROM " + tableName + " WHERE PK1 = 'pk1'");
+          "SELECT BSON_VALUE_TYPE(COL, 'hurry') FROM " + tableName + " WHERE PK1 = 'pk1'");
       assertTrue(rs.next());
       assertEquals(PDouble.INSTANCE.getSqlTypeName(), rs.getString(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT BSON_DATA_TYPE(COL, 'track') FROM " + tableName + " WHERE PK1 = 'pk1'");
+          "SELECT BSON_VALUE_TYPE(COL, 'track') FROM " + tableName + " WHERE PK1 = 'pk1'");
       assertTrue(rs.next());
       assertEquals(PBson.INSTANCE.getSqlTypeName(), rs.getString(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT BSON_DATA_TYPE(COL, 'gpu_name') FROM " + tableName + " WHERE PK1 = 'pk2'");
+          "SELECT BSON_VALUE_TYPE(COL, 'gpu_name') FROM " + tableName + " WHERE PK1 = 'pk2'");
       assertTrue(rs.next());
       assertEquals(PVarchar.INSTANCE.getSqlTypeName(), rs.getString(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT BSON_DATA_TYPE(COL, 'answer') FROM " + tableName + " WHERE PK1 = 'pk2'");
+          "SELECT BSON_VALUE_TYPE(COL, 'answer') FROM " + tableName + " WHERE PK1 = 'pk2'");
       assertTrue(rs.next());
       assertEquals(PDouble.INSTANCE.getSqlTypeName(), rs.getString(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT BSON_DATA_TYPE(COL, 'result') FROM " + tableName + " WHERE PK1 = 'pk3'");
+          "SELECT BSON_VALUE_TYPE(COL, 'result') FROM " + tableName + " WHERE PK1 = 'pk3'");
       assertTrue(rs.next());
       assertEquals(PBson.INSTANCE.getSqlTypeName(), rs.getString(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT BSON_DATA_TYPE(COL, 'result[0]') FROM " + tableName + " WHERE PK1 = 'pk3'");
+          "SELECT BSON_VALUE_TYPE(COL, 'result[0]') FROM " + tableName + " WHERE PK1 = 'pk3'");
       assertTrue(rs.next());
       assertEquals(PBson.INSTANCE.getSqlTypeName(), rs.getString(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT BSON_DATA_TYPE(COL, 'result[0].status') FROM " + tableName
+          "SELECT BSON_VALUE_TYPE(COL, 'result[0].status') FROM " + tableName
               + " WHERE PK1 = 'pk3'");
       assertTrue(rs.next());
       assertEquals(PVarchar.INSTANCE.getSqlTypeName(), rs.getString(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT BSON_DATA_TYPE(COL, 'track[0].shot[2][0].city.standard[5]') FROM " + tableName
+          "SELECT BSON_VALUE_TYPE(COL, 'track[0].shot[2][0].city.standard[5]') FROM " + tableName
               + " WHERE PK1 = 'pk1'");
       assertTrue(rs.next());
       assertEquals(PVarchar.INSTANCE.getSqlTypeName(), rs.getString(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT BSON_DATA_TYPE(COL, 'track[0].shot[2][0].city.problem[2]') FROM " + tableName
+          "SELECT BSON_VALUE_TYPE(COL, 'track[0].shot[2][0].city.problem[2]') FROM " + tableName
               + " WHERE PK1 = 'pk1'");
       assertTrue(rs.next());
       assertEquals(PDouble.INSTANCE.getSqlTypeName(), rs.getString(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT BSON_DATA_TYPE(COL, 'track[0].shot[2][0].city.problem[3]') FROM " + tableName
+          "SELECT BSON_VALUE_TYPE(COL, 'track[0].shot[2][0].city.problem[3]') FROM " + tableName
               + " WHERE PK1 = 'pk1'");
       assertTrue(rs.next());
       assertEquals(PBson.INSTANCE.getSqlTypeName(), rs.getString(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT BSON_DATA_TYPE(COL, 'track[0].shot[2][0].city.problem[3].scene') FROM "
+          "SELECT BSON_VALUE_TYPE(COL, 'track[0].shot[2][0].city.problem[3].scene') FROM "
               + tableName + " WHERE PK1 = 'pk1'");
       assertTrue(rs.next());
       assertEquals(PBoolean.INSTANCE.getSqlTypeName(), rs.getString(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT BSON_DATA_TYPE(COL, 'track[0].shot[2][0].character') FROM " + tableName
+          "SELECT BSON_VALUE_TYPE(COL, 'track[0].shot[2][0].character') FROM " + tableName
               + " WHERE PK1 = 'pk1'");
       assertTrue(rs.next());
       assertEquals(PInteger.INSTANCE.getSqlTypeName(), rs.getString(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT BSON_DATA_TYPE(COL, 'attention') FROM " + tableName + " WHERE PK1 = 'pk1'");
+          "SELECT BSON_VALUE_TYPE(COL, 'attention') FROM " + tableName + " WHERE PK1 = 'pk1'");
       assertTrue(rs.next());
       assertEquals(PInteger.INSTANCE.getSqlTypeName(), rs.getString(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT BSON_DATA_TYPE(COL, 'track[0]') FROM " + tableName + " WHERE PK1 = 'pk1'");
+          "SELECT BSON_VALUE_TYPE(COL, 'track[0]') FROM " + tableName + " WHERE PK1 = 'pk1'");
       assertTrue(rs.next());
       assertEquals(PBson.INSTANCE.getSqlTypeName(), rs.getString(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT BSON_DATA_TYPE(COL, 'track[1]') FROM " + tableName + " WHERE PK1 = 'pk1'");
+          "SELECT BSON_VALUE_TYPE(COL, 'track[1]') FROM " + tableName + " WHERE PK1 = 'pk1'");
       assertTrue(rs.next());
       assertEquals(PVarchar.INSTANCE.getSqlTypeName(), rs.getString(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT BSON_DATA_TYPE(COL, 'non_existent_field') FROM " + tableName
+          "SELECT BSON_VALUE_TYPE(COL, 'non_existent_field') FROM " + tableName
               + " WHERE PK1 = 'pk1'");
       assertTrue(rs.next());
       assertEquals("NULL", rs.getString(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT BSON_DATA_TYPE(COL, 'track[0].shot[2][0].city') FROM " + tableName
+          "SELECT BSON_VALUE_TYPE(COL, 'track[0].shot[2][0].city') FROM " + tableName
               + " WHERE PK1 = 'pk1'");
       assertTrue(rs.next());
       assertEquals(PBson.INSTANCE.getSqlTypeName(), rs.getString(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT BSON_DATA_TYPE(COL, 'track[0].shot[2][0].city.standard') FROM " + tableName
+          "SELECT BSON_VALUE_TYPE(COL, 'track[0].shot[2][0].city.standard') FROM " + tableName
               + " WHERE PK1 = 'pk1'");
       assertTrue(rs.next());
       assertEquals(PBson.INSTANCE.getSqlTypeName(), rs.getString(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT BSON_DATA_TYPE(COL, 'rather[3].outline') FROM " + tableName
+          "SELECT BSON_VALUE_TYPE(COL, 'rather[3].outline') FROM " + tableName
               + " WHERE PK1 = 'pk2'");
       assertTrue(rs.next());
       assertEquals(PBson.INSTANCE.getSqlTypeName(), rs.getString(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT BSON_DATA_TYPE(COL, 'rather[3].outline.halfway') FROM " + tableName
+          "SELECT BSON_VALUE_TYPE(COL, 'rather[3].outline.halfway') FROM " + tableName
               + " WHERE PK1 = 'pk2'");
       assertTrue(rs.next());
       assertEquals(PBson.INSTANCE.getSqlTypeName(), rs.getString(1));
@@ -261,7 +261,7 @@ public class BsonDataTypeIT extends ParallelStatsDisabledIT {
   }
 
   @Test
-  public void testBsonValueWithBsonDataType() throws Exception {
+  public void testBsonValueWithBsonValueType() throws Exception {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     String tableName = generateUniqueName();
 
@@ -291,7 +291,7 @@ public class BsonDataTypeIT extends ParallelStatsDisabledIT {
       conn.commit();
 
       ResultSet rs = conn.createStatement().executeQuery(
-          "SELECT PK1, BSON_DATA_TYPE(COL, 'track[0].shot[2][0].city.standard[5]') FROM "
+          "SELECT PK1, BSON_VALUE_TYPE(COL, 'track[0].shot[2][0].city.standard[5]') FROM "
               + tableName + " WHERE PK1 = 'pk1'");
       assertTrue(rs.next());
       assertEquals("pk1", rs.getString(1));
@@ -307,7 +307,7 @@ public class BsonDataTypeIT extends ParallelStatsDisabledIT {
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT PK1, BSON_DATA_TYPE(COL, 'track[0].shot[2][0].city.problem[2]') FROM " + tableName
+          "SELECT PK1, BSON_VALUE_TYPE(COL, 'track[0].shot[2][0].city.problem[2]') FROM " + tableName
               + " WHERE PK1 = 'pk1'");
       assertTrue(rs.next());
       assertEquals("pk1", rs.getString(1));
@@ -323,7 +323,7 @@ public class BsonDataTypeIT extends ParallelStatsDisabledIT {
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT PK1, BSON_DATA_TYPE(COL, 'track[0].shot[2][0].city.problem[3]') FROM " + tableName
+          "SELECT PK1, BSON_VALUE_TYPE(COL, 'track[0].shot[2][0].city.problem[3]') FROM " + tableName
               + " WHERE PK1 = 'pk1'");
       assertTrue(rs.next());
       assertEquals("pk1", rs.getString(1));
@@ -343,7 +343,7 @@ public class BsonDataTypeIT extends ParallelStatsDisabledIT {
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT PK1, BSON_DATA_TYPE(COL, 'rather[3].outline.clock') FROM " + tableName
+          "SELECT PK1, BSON_VALUE_TYPE(COL, 'rather[3].outline.clock') FROM " + tableName
               + " WHERE PK1 = 'pk2'");
       assertTrue(rs.next());
       assertEquals("pk2", rs.getString(1));
@@ -361,7 +361,7 @@ public class BsonDataTypeIT extends ParallelStatsDisabledIT {
   }
 
   @Test
-  public void testBsonDataTypeNegativeCases() throws Exception {
+  public void testBsonValueTypeNegativeCases() throws Exception {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     String tableName = generateUniqueName();
 
@@ -383,26 +383,26 @@ public class BsonDataTypeIT extends ParallelStatsDisabledIT {
       conn.commit();
 
       ResultSet rs = conn.createStatement().executeQuery(
-          "SELECT BSON_DATA_TYPE(COL, NULL) FROM " + tableName + " WHERE PK1 = 'pk1'");
+          "SELECT BSON_VALUE_TYPE(COL, NULL) FROM " + tableName + " WHERE PK1 = 'pk1'");
       assertTrue(rs.next());
       assertNull(rs.getString(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement()
-          .executeQuery("SELECT BSON_DATA_TYPE(COL, '') FROM " + tableName + " WHERE PK1 = 'pk1'");
+          .executeQuery("SELECT BSON_VALUE_TYPE(COL, '') FROM " + tableName + " WHERE PK1 = 'pk1'");
       assertTrue(rs.next());
       assertNull(rs.getString(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT BSON_DATA_TYPE(COL, 'non_existent_field') FROM " + tableName
+          "SELECT BSON_VALUE_TYPE(COL, 'non_existent_field') FROM " + tableName
               + " WHERE PK1 = 'pk1'");
       assertTrue(rs.next());
       assertEquals("NULL", rs.getString(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT BSON_DATA_TYPE(COL, 'track[0].nonexistent.deeply.nested.field') FROM " + tableName
+          "SELECT BSON_VALUE_TYPE(COL, 'track[0].nonexistent.deeply.nested.field') FROM " + tableName
               + " WHERE PK1 = 'pk1'");
       assertTrue(rs.next());
       assertEquals("NULL", rs.getString(1));
