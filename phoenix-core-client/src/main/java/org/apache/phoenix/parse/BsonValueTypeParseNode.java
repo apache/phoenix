@@ -36,11 +36,11 @@ public class BsonValueTypeParseNode extends FunctionParseNode {
 
     @Override
     public FunctionExpression create(List<Expression> children, StatementContext context)
-            throws SQLException {
+        throws SQLException {
         PDataType<?> dataType = children.get(0).getDataType();
         if (!dataType.isCoercibleTo(PJson.INSTANCE) && !dataType.isCoercibleTo(PBson.INSTANCE)) {
             throw new SQLException(dataType + " type is unsupported for BSON_VALUE_TYPE().");
         }
         return new BsonValueTypeFunction(children);
     }
-} 
+}
