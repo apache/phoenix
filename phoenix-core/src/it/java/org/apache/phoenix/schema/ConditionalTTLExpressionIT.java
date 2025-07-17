@@ -1465,10 +1465,6 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             String cdcIndexName = CDCUtil.getCDCIndexName(cdcName);
             String fullCdcIndexName = SchemaUtil.getTableName(schemaName,
                     CDCUtil.getCDCIndexName(cdcName));
-            // Explicitly set table level max lookback on CDC index
-            String cdcIndexSetMaxLookbackDdl = String.format("ALTER INDEX %s ON %s ACTIVE SET ",
-                    cdcIndexName, tableName);
-            conn.createStatement().execute(cdcIndexSetMaxLookbackDdl);
             PTable cdcIndex = ((PhoenixConnection) conn).getTableNoCache(fullCdcIndexName);
             assertEquals(cdcIndex.getTTLExpression(), TTL_EXPRESSION_FOREVER);
 
