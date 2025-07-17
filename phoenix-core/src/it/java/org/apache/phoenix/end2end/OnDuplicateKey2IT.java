@@ -548,6 +548,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             return;
         }
         if (!atomicDeleteSuccessful) {
+            assertTrue(resultSet.next());
             assertTrue(resultSet == null || resultSet.getObject(4) == null);
             return;
         }
@@ -597,6 +598,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
         }
         boolean isReturningRow = upsertSql.toUpperCase().contains("RETURNING *");
         if (conn.getAutoCommit() && isReturningRow) {
+            assertTrue(resultSet.next());
             assertEquals(success ? 1 : 0, updateCount);
             assertEquals("pk000", resultSet.getString(1));
             assertEquals(-123.98, resultSet.getDouble(2), 0.0);

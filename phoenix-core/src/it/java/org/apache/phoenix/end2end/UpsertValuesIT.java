@@ -120,6 +120,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
         stmt.execute();
         ResultSet rs = stmt.getResultSet();
         assertNotNull(rs);
+        assertTrue(rs.next());
         assertEquals(1, stmt.getUpdateCount());
         assertEquals("a", rs.getString(1));
         assertEquals("b", rs.getString(2));
@@ -982,9 +983,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
                 rs = executeUpdateStatement.executeQuery("select * from " + tableName);
             }
             assertNotNull(rs);
-            if (!withReturningRow) {
-                assertTrue(rs.next());
-            }
+            assertTrue(rs.next());
             assertEquals("1", rs.getString(1));
             assertFalse(rs.next());
 

@@ -576,7 +576,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         return target;
     }
 
-    private boolean isResultSetExpected(final CompilableStatement stmt) {
+    private boolean isReturningRowStatement(final CompilableStatement stmt) {
         return stmt instanceof RowReturningDMLStatement &&
                 ((RowReturningDMLStatement) stmt).isReturningRow();
     }
@@ -584,7 +584,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     protected int executeMutation(final CompilableStatement stmt,
                                   final AuditQueryLogger queryLogger) throws SQLException {
         return executeMutation(stmt, true, queryLogger,
-                isResultSetExpected(stmt) ? ReturnResult.NEW_ROW_ON_SUCCESS : null).getFirst();
+                isReturningRowStatement(stmt) ? ReturnResult.NEW_ROW_ON_SUCCESS : null).getFirst();
     }
 
     Pair<Integer, ResultSet> executeMutation(final CompilableStatement stmt,
@@ -692,7 +692,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                                 .getTable().getName() : null);
                                 ResultSet rs = result == null || result.isEmpty() ?
                                         null : TupleUtil.getResultSet(new ResultTuple(result),
-                                        tableNameVal, connection);
+                                        tableNameVal, connection, ! isReturningRowStatement(stmt));
                                 setLastResultSet(rs);
                                 return new Pair<>(lastUpdateCount, rs);
                             }
@@ -2581,7 +2581,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             }
             executeMutation(stmt, createAuditQueryLogger(stmt, sql));
             flushIfNecessary();
-            return isResultSetExpected(stmt);
+            return isReturningRowStatement(stmt);
         }
 
         executeQuery(stmt, createQueryLogger(stmt, sql));

@@ -1187,6 +1187,7 @@ public class Bson4IT extends ParallelStatsDisabledIT {
     stmt.execute();
     assertEquals(success ? 1 : 0, stmt.getUpdateCount());
     ResultSet resultSet = stmt.getResultSet();
+    assertTrue(resultSet.next());
     assertEquals(jsonPath == null ? null : RawBsonDocument.parse(getJsonString(jsonPath)),
             resultSet.getObject(3));
   }

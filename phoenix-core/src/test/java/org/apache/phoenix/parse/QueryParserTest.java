@@ -18,6 +18,7 @@
 package org.apache.phoenix.parse;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -807,7 +808,15 @@ public class QueryParserTest {
     @Test
     public void testPlainUpsertReturningRow() throws Exception {
         String sql = "upsert into t (k, v) values ( 1, 2 ) RETURNING *";
-        parseQuery(sql);
+        UpsertStatement stmt = parseQuery(sql, UpsertStatement.class);
+        assertTrue(stmt.isReturningRow());
+    }
+
+    @Test
+    public void testPlainUpsertNotReturningRow() throws Exception {
+        String sql = "upsert into t (k, v) values ( 1, 2 )";
+        UpsertStatement stmt = parseQuery(sql, UpsertStatement.class);
+        assertFalse(stmt.isReturningRow());
     }
 
     @Test
@@ -833,7 +842,8 @@ public class QueryParserTest {
     public void testUpsertReturningRow() throws Exception {
         String sql = "upsert into t (k, v) values ( 1, 2 ) "
                 + "ON DUPLICATE KEY UPDATE k = k + 1 RETURNING *";
-        parseQuery(sql);
+        UpsertStatement stmt = parseQuery(sql, UpsertStatement.class);
+        assertTrue(stmt.isReturningRow());
     }
 
     @Test
