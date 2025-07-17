@@ -45,6 +45,7 @@ public class LogFileReaderContext {
     private long blocksRead;
     private long recordsRead;
     private long corruptBlocksSkipped;
+    private boolean validateTrailer = true;
 
     public LogFileReaderContext(Configuration conf) {
         this.conf = conf;
@@ -146,12 +147,21 @@ public class LogFileReaderContext {
         return this;
     }
 
+    public boolean isValidateTrailer() {
+        return validateTrailer;
+    }
+
+    public LogFileReaderContext setValidateTrailer(boolean validateTrailer) {
+        this.validateTrailer = validateTrailer;
+        return this;
+    }
+
     @Override
     public String toString() {
         return "LogFileReaderContext [filePath=" + path + ", fileSize=" + fileSize
             + ", isSkipCorruptBlocks=" + isSkipCorruptBlocks + ", codec=" + codec + ", blocksRead="
             + blocksRead + ", recordsRead=" + recordsRead + ", corruptBlocksSkipped="
-            + corruptBlocksSkipped + "]";
+            + corruptBlocksSkipped + ", validateTrailer=" + validateTrailer + "]";
     }
 
 }

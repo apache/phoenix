@@ -137,6 +137,16 @@ public class LogFileWriterTest {
         reader.close();
     }
 
+    @Test
+    public void testHeaderWrittenImmediately() throws IOException {
+        // This should write header immediately
+        initLogFileWriter();
+        // Verify file exists and has content (header should be written)
+        assertTrue("File should exist after init", localFs.exists(filePath));
+        assertEquals("File should have header written", LogFileHeader.HEADERSIZE,writer.getLength());
+        writer.close();
+    }
+
     private void initLogFileReader() throws IOException {
         readerContext = new LogFileReaderContext(conf).setFileSystem(localFs)
             .setFilePath(filePath);
