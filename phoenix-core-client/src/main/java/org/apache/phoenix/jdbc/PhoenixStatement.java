@@ -124,6 +124,7 @@ import org.apache.phoenix.log.QueryLogger;
 import org.apache.phoenix.log.QueryLoggerUtil;
 import org.apache.phoenix.log.QueryStatus;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
+import org.apache.phoenix.monitoring.OverAllQueryMetrics;
 import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.AddColumnStatement;
@@ -359,6 +360,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                             clearResultSet();
                             PhoenixResultSet rs = null;
                             QueryPlan plan = null;
+                            OverAllQueryMetrics overallQuerymetrics;
                             try {
                                 PhoenixConnection conn = getConnection();
                                 conn.checkOpen();
@@ -368,8 +370,15 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                         && stmt.getOperation() != Operation.UPGRADE) {
                                     throw new UpgradeRequiredException();
                                 }
+                                final long queryPlanCreationStartTime =
+                                    EnvironmentEdgeManager.currentTimeMillis();
                                 plan = stmt.compilePlan(PhoenixStatement.this,
                                                 Sequence.ValueOp.VALIDATE_SEQUENCE);
+                                StatementContext context = plan.getContext();
+                                overallQuerymetrics = context.getOverallQueryMetrics();
+                                overallQuerymetrics.setQueryCompilerTimeMS(
+                                    EnvironmentEdgeManager.currentTimeMillis()
+                                        - queryPlanCreationStartTime);
                                 // Send mutations to hbase, so they are visible to subsequent reads.
                                 // Use original plan for data table so that data and immutable indexes will be sent
                                 // TODO: for joins, we need to iterate through all tables, but we need the original table,
@@ -379,9 +388,14 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 }
                                 Iterator<TableRef> tableRefs = plan.getSourceRefs().iterator();
                                 connection.getMutationState().sendUncommitted(tableRefs);
+                                final long queryOptimizerStartTime =
+                                    EnvironmentEdgeManager.currentTimeMillis();
                                 plan =
                                         connection.getQueryServices().getOptimizer()
                                                 .optimize(PhoenixStatement.this, plan);
+                                overallQuerymetrics.setQueryOptimizerTimeMS(
+                                    EnvironmentEdgeManager.currentTimeMillis()
+                                        - queryOptimizerStartTime);
                                 setLastQueryPlan(plan);
 
                                 //verify metadata for the table/view/index in the query plan
@@ -399,15 +413,19 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                     tableName = plan.getTableRef().getTable().getPhysicalName()
                                             .toString();
                                 }
+                                final long queryResultItrSetStartTime =
+                                    EnvironmentEdgeManager.currentTimeMillis();
                                 // this will create its own trace internally, so we don't wrap this
                                 // whole thing in tracing
                                 ResultIterator resultIterator = plan.iterator();
+                                overallQuerymetrics.setQueryResultItrTimeMS(
+                                    EnvironmentEdgeManager.currentTimeMillis()
+                                        - queryResultItrSetStartTime);
                                 if (LOGGER.isDebugEnabled()) {
                                     String explainPlan = QueryUtil.getExplainPlan(resultIterator);
                                     LOGGER.debug(LogUtil.addCustomAnnotations(
                                             "Explain plan: " + explainPlan, connection));
                                 }
-                                StatementContext context = plan.getContext();
                                 context.setQueryLogger(queryLogger);
                                 if (queryLogger.isDebugEnabled()) {
                                     queryLogger.log(QueryLogInfo.EXPLAIN_PLAN_I,
@@ -417,7 +435,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                                     context.getScan().toString() :
                                                     null);
                                 }
-                                context.getOverallQueryMetrics().startQuery();
+                                overallQuerymetrics.startQuery();
                                 rs =
                                         newResultSet(resultIterator, plan.getProjector(),
                                                 plan.getContext());
