@@ -2160,6 +2160,46 @@ public class ComparisonExpressionUtilsTest {
     assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
             "field_type(EmptyStringSet, :TypeSS) AND field_type(StringSetField, :TypeSS)", 
             rawBsonDocument, compareValues));
+
+    // Test array element access at specific indices
+    // ArrayField contains: [ "item1", "item2", 123 ]
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "field_type(ArrayField[0], :TypeS)", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "field_type(ArrayField[1], :TypeS)", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "field_type(ArrayField[2], :TypeN)", rawBsonDocument, compareValues));
+
+    // Test negative cases for array element types
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "field_type(ArrayField[0], :TypeN)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "field_type(ArrayField[2], :TypeS)", rawBsonDocument, compareValues));
+
+    // Test array element access with attribute_type
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "attribute_type(ArrayField[0], :TypeS)", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "attribute_type(ArrayField[2], :TypeN)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "attribute_type(ArrayField[1], :TypeN)", rawBsonDocument, compareValues));
+
+    // Test nested array element access
+    // NestedDoc.NestedArray contains: [ 1, 2, 3 ]
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "field_type(NestedDoc.NestedArray[0], :TypeN)", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "field_type(NestedDoc.NestedArray[1], :TypeN)", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "field_type(NestedDoc.NestedArray[2], :TypeN)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "field_type(NestedDoc.NestedArray[0], :TypeS)", rawBsonDocument, compareValues));
+
+    // Test non-existent array indices
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "field_type(ArrayField[5], :TypeS)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "field_type(NestedDoc.NestedArray[10], :TypeN)", rawBsonDocument, compareValues));
   }
 
   private static RawBsonDocument getFieldTypeTestDocument() {
