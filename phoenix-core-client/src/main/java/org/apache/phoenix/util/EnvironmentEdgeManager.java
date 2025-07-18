@@ -75,4 +75,14 @@ public class EnvironmentEdgeManager {
   public static long currentTimeMillis() {
     return getDelegate().currentTime();
   }
+
+  /**
+   * Defers to the delegate and calls the {@link EnvironmentEdge#nanoTime()} method.
+   * Subtracting two markers will give you the elapsed time in nanos.
+   *
+   * @return marker in nano seconds
+   */
+  public static long timeMarkerInNanos() {
+    return getDelegate().nanoTime();
+  }
 }

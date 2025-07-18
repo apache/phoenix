@@ -43,6 +43,7 @@ import static org.apache.phoenix.monitoring.MetricType.UPSERT_FAILED_SQL_COUNTER
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_SQL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_SUCCESS_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MutationMetricQueue.MutationMetric;
 
 import java.io.File;
 import java.io.IOException;
@@ -222,6 +223,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.CursorUtil;
+import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.LogUtil;
@@ -625,6 +627,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                            new CallRunner.CallableThrowable<Pair<Integer, ResultSet>, SQLException>() {
                         @Override
                             public Pair<Integer, ResultSet> call() throws SQLException {
+                            final long startExecuteMutationTime = EnvironmentEdgeManager.timeMarkerInNanos();
                             boolean success = false;
                             String tableName = null;
                             boolean isUpsert = false;
@@ -632,8 +635,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                             boolean isDelete = false;
                             MutationState state = null;
                             MutationPlan plan = null;
-                            final long startExecuteMutationTime = EnvironmentEdgeManager.currentTimeMillis();
                             clearResultSet();
+                            long mutationPlanCreationTimeInNs = 0;
+                            long mutationPlanExecutionTimeInNs = 0;
                             try {
                                 PhoenixConnection conn = getConnection();
                                 if (conn.getQueryServices().isUpgradeRequired() && !conn.isRunningUpgrade()
@@ -643,6 +647,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 state = connection.getMutationState();
                                 isUpsert = stmt instanceof ExecutableUpsertStatement;
                                 isDelete = stmt instanceof ExecutableDeleteStatement;
+                                long mutationPlanCreationStartTimeMarker = EnvironmentEdgeManager.timeMarkerInNanos();
                                 if (isDelete && connection.getAutoCommit() &&
                                         (returnResult == ReturnResult.NEW_ROW_ON_SUCCESS ||
                                                 returnResult == ReturnResult.OLD_ROW_ALWAYS)) {
@@ -655,6 +660,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                     plan = stmt.compilePlan(PhoenixStatement.this,
                                             Sequence.ValueOp.VALIDATE_SEQUENCE);
                                 }
+                                mutationPlanCreationTimeInNs = EnvironmentEdgeManager.timeMarkerInNanos() -
+                                        mutationPlanCreationStartTimeMarker;
                                 isAtomicUpsert = isUpsert && ((ExecutableUpsertStatement)stmt).getOnDupKeyPairs() != null;
                                 if (plan.getTargetRef() != null && plan.getTargetRef().getTable() != null) {
                                     if (!Strings.isNullOrEmpty(plan.getTargetRef().getTable().getPhysicalName().toString())) {
@@ -668,7 +675,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 state.sendUncommitted(tableRefs);
                                 state.checkpointIfNeccessary(plan);
                                 checkIfDDLStatementandMutationState(stmt, state);
+                                long mutationPlanExecutionStartTimeMarker = EnvironmentEdgeManager.timeMarkerInNanos();
                                 MutationState lastState = plan.execute();
+                                mutationPlanExecutionTimeInNs = EnvironmentEdgeManager.timeMarkerInNanos() -
+                                        mutationPlanExecutionStartTimeMarker;
                                 state.join(lastState);
                                 // Unfortunately, JDBC uses an int for update count, so we
                                 // just max out at Integer.MAX_VALUE
@@ -743,8 +753,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                             MUTATION_SQL_COUNTER, 1);
                                     // Only count dml operations
                                     if (isUpsert || isDelete) {
-                                        long executeMutationTimeSpent =
-                                                EnvironmentEdgeManager.currentTimeMillis() - startExecuteMutationTime;
+                                        long executeMutationTimeSpentInNs =
+                                                EnvironmentEdgeManager.timeMarkerInNanos() - startExecuteMutationTime;
+                                        // This will ensure existing use cases of metrics are not broken.
+                                        long executeMutationTimeSpent = EnvironmentEdge.convertTimeInNsToMs(executeMutationTimeSpentInNs);
 
                                         TableMetricsManager.updateMetricsMethod(tableName, isUpsert ?
                                                 UPSERT_SQL_COUNTER : DELETE_SQL_COUNTER, 1);
@@ -756,6 +768,22 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                             TableMetricsManager.updateMetricsMethod(tableName,
                                                 ATOMIC_UPSERT_SQL_QUERY_TIME, executeMutationTimeSpent);
                                         }
+                                        MutationMetric stagedMutationMetric;
+                                        if (isUpsert) {
+                                            stagedMutationMetric = getUncommittedMutationMetric(
+                                                    mutationPlanCreationTimeInNs,
+                                                    mutationPlanExecutionTimeInNs, 0, 0,
+                                                    executeMutationTimeSpentInNs, 0);
+                                        }
+                                        else {
+                                            stagedMutationMetric = getUncommittedMutationMetric(
+                                                    0, 0,
+                                                    mutationPlanCreationTimeInNs,
+                                                    mutationPlanExecutionTimeInNs, 0,
+                                                    executeMutationTimeSpentInNs);
+                                        }
+                                        state.getMutationMetricQueue().addMetricsForTable(
+                                                tableName, stagedMutationMetric);
 
                                         if (success) {
                                             TableMetricsManager.updateMetricsMethod(tableName, isUpsert ?
@@ -778,6 +806,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                             state.addExecuteMutationTime(
                                                     executeMutationTimeSpent, tableName);
                                         }
+
                                     }
                                 }
 
@@ -796,6 +825,26 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             Throwables.propagate(e);
             throw new IllegalStateException(); // Can't happen as Throwables.propagate() always throws
         }
+    }
+
+    /**
+     * Get mutation metrics for executeMutation call i.e. before the mutation are committed.
+     * All the times are in nano seconds.
+     * @param upsertMutationPlanCreationTime Time taken to create the upsert mutation plan.
+     * @param upsertMutationPlanExecutionTime Time taken to execute the upsert mutation plan.
+     * @param deleteMutationPlanCreationTime Time taken to create the delete mutation plan.
+     * @param deleteMutationPlanExecutionTime Time taken to execute the delete mutation plan.
+     * @param upsertExecuteMutationTime Time taken by upsert in executeMutation call.
+     * @param deleteExecuteMutationTime Time taken by delete in executeMutation call.
+     * @return MutationMetric object.
+     */
+    private MutationMetric getUncommittedMutationMetric(long upsertMutationPlanCreationTime, long upsertMutationPlanExecutionTime,
+                                                        long deleteMutationPlanCreationTime, long deleteMutationPlanExecutionTime,
+                                                        long upsertExecuteMutationTime, long deleteExecuteMutationTime) {
+        return new MutationMetric(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                upsertMutationPlanCreationTime, upsertMutationPlanExecutionTime,
+                deleteMutationPlanCreationTime, deleteMutationPlanExecutionTime,
+                upsertExecuteMutationTime, deleteExecuteMutationTime);
     }
 
     /**

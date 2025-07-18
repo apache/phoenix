@@ -1744,7 +1744,7 @@ public class MutationState implements SQLCloseable {
                 numUpsertMutationsInBatch,
                 allUpsertsMutations ? 1 : 0,
                 numDeleteMutationsInBatch,
-                allDeletesMutations ? 1 : 0, 0);
+                allDeletesMutations ? 1 : 0, 0, 0, 0, 0, 0, 0, 0);
     }
 
     /**
@@ -1827,7 +1827,7 @@ public class MutationState implements SQLCloseable {
                 committedDeleteMutationCounter,
                 committedTotalMutationBytes,
                 numFailedPhase3Mutations,
-                0, 0, 0, 0, mutationBatchCounter);
+                0, 0, 0, 0, mutationBatchCounter, 0, 0, 0, 0, 0, 0);
     }
 
     private void filterIndexCheckerMutations(Map<TableInfo, List<Mutation>> mutationMap,

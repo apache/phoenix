@@ -40,6 +40,9 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_TASK_END_
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_TASK_EXECUTION_TIME;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_MILLS_BETWEEN_NEXTS;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_COMMIT_TIME;
+import static org.apache.phoenix.monitoring.MetricType.DELETE_EXECUTE_MUTATION_TIME;
+import static org.apache.phoenix.monitoring.MetricType.DELETE_PLAN_CREATION_TIME;
+import static org.apache.phoenix.monitoring.MetricType.DELETE_PLAN_EXECUTION_TIME;
 import static org.apache.phoenix.monitoring.MetricType.MEMORY_CHUNK_BYTES;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_COMMIT_TIME;
@@ -52,6 +55,9 @@ import static org.apache.phoenix.monitoring.MetricType.TASK_EXECUTED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.TASK_EXECUTION_TIME;
 import static org.apache.phoenix.monitoring.MetricType.TASK_QUEUE_WAIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_COMMIT_TIME;
+import static org.apache.phoenix.monitoring.MetricType.UPSERT_EXECUTE_MUTATION_TIME;
+import static org.apache.phoenix.monitoring.MetricType.UPSERT_PLAN_CREATION_TIME;
+import static org.apache.phoenix.monitoring.MetricType.UPSERT_PLAN_EXECUTION_TIME;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.UPSERT_BATCH_SIZE_ATTRIB;
 import static org.junit.Assert.assertEquals;
@@ -137,6 +143,9 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
 
     private static final List<MetricType> mutationMetricsToSkip =
             Lists.newArrayList(MUTATION_COMMIT_TIME, UPSERT_COMMIT_TIME, DELETE_COMMIT_TIME,
+                    UPSERT_PLAN_CREATION_TIME, UPSERT_PLAN_EXECUTION_TIME,
+                    UPSERT_EXECUTE_MUTATION_TIME, DELETE_PLAN_CREATION_TIME,
+                    DELETE_PLAN_EXECUTION_TIME, DELETE_EXECUTE_MUTATION_TIME,
                     MUTATION_BATCH_COUNTER);
     private static final List<MetricType> readMetricsToSkip =
             Lists.newArrayList(TASK_QUEUE_WAIT_TIME, TASK_EXECUTION_TIME, TASK_END_TO_END_TIME,
@@ -397,7 +406,9 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
             PhoenixRuntime.clearTableLevelMetrics();
         }
         try (Statement stmt = conn.createStatement()) {
+            System.out.println("Start test");
             stmt.executeUpdate(String.format(UPSERT_SELECT_DML, destTableName, sourceTableName));
+            System.out.println("End test");
         }
         if (commit) {
             conn.commit();
@@ -586,7 +597,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
             String t = entry.getKey();
             assertEquals("Table names didn't match!", tableName, t);
             Map<MetricType, Long> p = entry.getValue();
-            assertEquals("There should have been seventeen metrics", 17, p.size());
+            assertEquals("There should have been 23 metrics", 23, p.size());
             boolean mutationBatchSizePresent = false;
             boolean mutationCommitTimePresent = false;
             boolean mutationBytesPresent = false;
