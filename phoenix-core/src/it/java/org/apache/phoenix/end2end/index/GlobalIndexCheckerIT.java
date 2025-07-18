@@ -1291,6 +1291,74 @@ public class GlobalIndexCheckerIT extends BaseTest {
   }
 
   @Test
+  public void testUnverifiedIndexRowWithSkipScanFilter2() throws Exception {
+    if (async) {
+      // ignoring running this test with async = true
+      return;
+    }
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String dataTableName = generateUniqueName();
+      String indexName = generateUniqueName();
+      conn.createStatement().execute("create table " + dataTableName +
+              " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10), " +
+              "val3 varchar(10))" + tableDDLOptions);
+      conn.createStatement().execute("CREATE INDEX " + indexName + " on " +
+              dataTableName + " (val1, val2) include (val3)" + this.indexDDLOptions);
+      IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
+      conn.createStatement().execute("upsert into " + dataTableName + " " +
+              "values ('a', 'val1', 'val2a', 'val3')");
+      conn.createStatement().execute("upsert into " + dataTableName + " " +
+              "values ('b', 'val1', 'val2a', 'val31')");
+      conn.createStatement().execute("upsert into " + dataTableName + " " +
+              "values ('c', 'val1', 'val2c', 'val3')");
+      conn.createStatement().execute("upsert into " + dataTableName + " " +
+              "values ('d', 'val1', 'val2d', 'val3')");
+      conn.createStatement().execute("upsert into " + dataTableName + " " +
+              "values ('e', 'val1', 'val2e', null)");
+      conn.createStatement().execute("upsert into " + dataTableName + " " +
+              "values ('f', 'val1', 'val2f', null)");
+      conn.createStatement().execute("upsert into " + dataTableName + " " +
+              "values ('g', 'val1', 'val2g', null)");
+      conn.commit();
+      // Fail phase 3
+      IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+      String selectSql = "SELECT id from " + dataTableName +
+              " WHERE val1 = 'val1' AND val2 IN ('val2a', 'val2d') AND val3 = 'val3'";
+      List<String> expectedIDs = Lists.newArrayList("a", "d");
+      List<String> actualIDs = Lists.newArrayList();
+      try (ResultSet rs = conn.createStatement().executeQuery(selectSql)) {
+        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
+        String actualExplainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
+        assertTrue(actualExplainPlan.contains(indexName));
+        while(rs.next()) {
+          actualIDs.add(rs.getString("id"));
+        }
+        assertEquals(expectedIDs, actualIDs);
+      } catch (AssertionError e) {
+        TestUtil.dumpTable(conn, TableName.valueOf(indexName));
+        throw e;
+      }
+      selectSql = "SELECT id from " + dataTableName +
+              " WHERE val1 = 'val1' AND val2 IN ('val2e', 'val2g') AND val3 is null";
+      expectedIDs = Lists.newArrayList("e", "g");
+      actualIDs = Lists.newArrayList();
+      try (ResultSet rs = conn.createStatement().executeQuery(selectSql)) {
+        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
+        String actualExplainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
+        assertTrue(actualExplainPlan.contains(indexName));
+        while(rs.next()) {
+          actualIDs.add(rs.getString("id"));
+        }
+        assertEquals(expectedIDs, actualIDs);
+      } catch (AssertionError e) {
+        TestUtil.dumpTable(conn, TableName.valueOf(indexName));
+        throw e;
+      }
+    }
+  }
+
+  @Test
   public void testUnverifiedIndexRowWithFirstKeyOnlyFilter() throws Exception {
     if (async) {
       // No need to run the same test twice one for async = true and the other for async = false
