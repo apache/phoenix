@@ -57,6 +57,30 @@ public class CommonComparisonExpressionUtils {
     return false;
   }
 
+  public static boolean isBsonNumberSet(final BsonValue bsonValue) {
+    if (!isBsonSet(bsonValue)) {
+      return false;
+    }
+    BsonArray bsonArray = ((BsonDocument) bsonValue).get("$set").asArray();
+    return !bsonArray.isEmpty() && bsonArray.get(0).isNumber();
+  }
+
+  public static boolean isBsonBinarySet(final BsonValue bsonValue) {
+    if (!isBsonSet(bsonValue)) {
+      return false;
+    }
+    BsonArray bsonArray = ((BsonDocument) bsonValue).get("$set").asArray();
+    return !bsonArray.isEmpty() && bsonArray.get(0).isBinary();
+  }
+
+  public static boolean isBsonStringSet(final BsonValue bsonValue) {
+    if (!isBsonSet(bsonValue)) {
+      return false;
+    }
+    BsonArray bsonArray = ((BsonDocument) bsonValue).get("$set").asArray();
+    return !bsonArray.isEmpty() && bsonArray.get(0).isString();
+  }
+
   /**
    * Comparison operators supported for the Document value comparisons.
    */

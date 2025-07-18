@@ -2135,6 +2135,31 @@ public class ComparisonExpressionUtilsTest {
     assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
             "attribute_type(NonExistentField, :TypeS) AND attribute_not_exists(NonExistentField)", 
             rawBsonDocument, compareValues));
+
+    // Test empty sets - should return false for type checking
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "field_type(EmptyStringSet, :TypeSS)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "field_type(EmptyNumberSet, :TypeNS)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "field_type(EmptyBinarySet, :TypeBS)", rawBsonDocument, compareValues));
+
+    // Test empty sets with attribute_type syntax
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "attribute_type(EmptyStringSet, :TypeSS)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "attribute_type(EmptyNumberSet, :TypeNS)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "attribute_type(EmptyBinarySet, :TypeBS)", rawBsonDocument, compareValues));
+
+    // Test empty sets in complex expressions
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "field_type(StringSetField, :TypeSS) AND NOT field_type(EmptyStringSet, :TypeSS)", 
+            rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+            "field_type(EmptyStringSet, :TypeSS) AND field_type(StringSetField, :TypeSS)", 
+            rawBsonDocument, compareValues));
   }
 
   private static RawBsonDocument getFieldTypeTestDocument() {
@@ -2169,6 +2194,9 @@ public class ComparisonExpressionUtilsTest {
             "      \"subType\" : \"00\"\n" +
             "    }\n" +
             "  } ] },\n" +
+            "  \"EmptyStringSet\" : { \"$set\" : [ ] },\n" +
+            "  \"EmptyNumberSet\" : { \"$set\" : [ ] },\n" +
+            "  \"EmptyBinarySet\" : { \"$set\" : [ ] },\n" +
             "  \"NestedDoc\" : {\n" +
             "    \"NestedString\" : \"nested value\",\n" +
             "    \"NestedNumber\" : 777,\n" +

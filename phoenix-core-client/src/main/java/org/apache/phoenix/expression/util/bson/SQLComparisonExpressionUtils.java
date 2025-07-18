@@ -650,17 +650,8 @@ public final class SQLComparisonExpressionUtils {
 
   /**
    * Returns true if the type of the value of the field key is same as the provided type.
-   * The provided type should be one of the following:
-   * S – String
-   * SS – String set
-   * N – Number
-   * NS – Number set
-   * B – Binary
-   * BS – Binary set
-   * BOOL – Boolean
-   * NULL – Null
-   * L – List
-   * M – Map
+   * The provided type should be one of the following: {N,BS,L,B,NULL,M,S,SS,NS,BOOL}.
+   *
    * @param fieldKey The field key for which value is checked for field_type.
    * @param type The type to check against the type of the field value.
    * @param rawBsonDocument Bson Document representing the cell value on which the comparison is
@@ -680,7 +671,7 @@ public final class SQLComparisonExpressionUtils {
     }
     BsonValue typeBsonVal = comparisonValuesDocument.get(type);
     if (typeBsonVal == null) {
-      throw new IllegalArgumentException("Value for type was not found in the comparison values document.");
+      throw new BsonConditionInvalidArgumentException("Value for type was not found in the comparison values document.");
     }
     switch (((BsonString) typeBsonVal).getValue()) {
       case "S":
@@ -698,16 +689,14 @@ public final class SQLComparisonExpressionUtils {
       case "M":
         return fieldValue.isDocument();
       case "SS":
-        return CommonComparisonExpressionUtils.isBsonSet(fieldValue)
-                && ((BsonArray) ((BsonDocument) fieldValue).get("$set")).get(0).isString();
+        return CommonComparisonExpressionUtils.isBsonStringSet(fieldValue);
       case "NS":
-        return CommonComparisonExpressionUtils.isBsonSet(fieldValue)
-                && ((BsonArray) ((BsonDocument) fieldValue).get("$set")).get(0).isNumber();
+        return CommonComparisonExpressionUtils.isBsonNumberSet(fieldValue);
       case "BS":
-        return CommonComparisonExpressionUtils.isBsonSet(fieldValue)
-                && ((BsonArray) ((BsonDocument) fieldValue).get("$set")).get(0).isBinary();
+        return CommonComparisonExpressionUtils.isBsonBinarySet(fieldValue);
       default:
-        throw new IllegalArgumentException("Unsupported type in field_type() for BsonConditionExpression: " + type);
+        throw new BsonConditionInvalidArgumentException("Unsupported type in field_type() for BsonConditionExpression: " + type
+                + ", valid types: valid types: {N,BS,L,B,NULL,M,S,SS,NS,BOOL}");
     }
   }
 
