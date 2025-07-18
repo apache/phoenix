@@ -457,15 +457,17 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
         Bytes.compareTo(row.get(0).getRowArray(), row.get(0).getRowOffset(),
           row.get(0).getRowLength(), indexRowKey, 0, indexRowKey.length) != 0
       ) {
-        // This means the index row has been deleted before opening the new scanner. We got a
-        // different row
-        // If this row is "verified" (or empty) then we are good to go.
+        // We got a different index row. This means either the unverified index row has
+        // been deleted by the single row rebuild as part of the read repair process,
+        // or the filters on the scan object skip the rebuilt index row.
+        // If this new row is "verified" (or empty) then we are good to go.
         if (verifyRowAndRemoveEmptyColumn(row)) {
           return;
         }
         // The row is "unverified". Rewind the scanner and let the row be scanned again
         // so that it can be repaired
         scanner.close();
+        indexScan.withStartRow(CellUtil.cloneRow(row.get(0)), true);
         scanner = ((DelegateRegionScanner) delegate).getNewRegionScanner(indexScan);
         hasMore = true;
         row.clear();
@@ -619,8 +621,8 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
           metricsSource.updateIndexRepairTime(indexName,
             EnvironmentEdgeManager.currentTimeMillis() - repairStart);
           if (shouldLog()) {
-            LOG.info("Index row repair on region {} took {} ms.",
-              env.getRegionInfo().getRegionNameAsString(), repairTime);
+            LOG.info("Index row repair on region {} row ts {} took {} ms.",
+              env.getRegionInfo().getRegionNameAsString(), ts, repairTime);
           }
         } catch (IOException e) {
           repairTime = EnvironmentEdgeManager.currentTimeMillis() - repairStart;
@@ -628,8 +630,8 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
           metricsSource.updateIndexRepairFailureTime(indexName,
             EnvironmentEdgeManager.currentTimeMillis() - repairStart);
           if (shouldLog()) {
-            LOG.warn("Index row repair failure on region {} took {} ms.",
-              env.getRegionInfo().getRegionNameAsString(), repairTime);
+            LOG.warn("Index row repair failure on region {} row ts {} took {} ms.",
+              env.getRegionInfo().getRegionNameAsString(), ts, repairTime);
           }
           throw e;
         }
