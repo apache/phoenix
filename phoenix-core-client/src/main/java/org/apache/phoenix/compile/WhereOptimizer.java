@@ -2019,7 +2019,10 @@ public class WhereOptimizer {
                         column.getDataType().getSqlTypeName()), e);
                     return super.visitLeave(node, childParts);
                 }
-                if (keyRange == null || keyRange == KeyRange.EMPTY_RANGE) {
+                if (
+                    keyRange == null || keyRange == KeyRange.EMPTY_RANGE
+                        || keyRange == KeyRange.IS_NULL_RANGE
+                ) {
                     continue;
                 }
                 keyRanges.add(keyRange);
