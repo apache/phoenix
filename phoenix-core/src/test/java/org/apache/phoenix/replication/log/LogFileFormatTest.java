@@ -411,7 +411,7 @@ public class LogFileFormatTest {
         assertEquals("Records read count mismatch", totalRecords, readerContext.getRecordsRead());
     }
 
-    @Test(expected=InvalidLogHeaderException.class)
+    @Test
     public void testFailIfMissingHeader() throws IOException {
         // Zero length file
         byte[] data = new byte[0];
@@ -419,11 +419,16 @@ public class LogFileFormatTest {
             new LogFileTestUtil.SeekableByteArrayInputStream(data);
         readerContext.setFileSize(data.length);
         readerContext.setValidateTrailer(false);
-        reader.init(readerContext, input);
-        fail("Expected InvalidLogHeaderException for zero length file");
+        try {
+            reader.init(readerContext, input);
+            fail("Expected InvalidLogHeaderException for zero length file");
+        } catch (InvalidLogHeaderException e) {
+            assertTrue("Exception message should contain 'Short magic'",
+                e.getMessage().contains("Short magic"));
+        }
     }
 
-    @Test(expected=InvalidLogHeaderException.class)
+    @Test
     public void testFailIfInvalidHeader() throws IOException {
         initLogFileWriter();
         writer.close(); // Writes valid trailer
@@ -433,11 +438,16 @@ public class LogFileFormatTest {
         readerContext.setFileSize(data.length);
         readerContext.setValidateTrailer(true);
         data[0] = (byte) 'X'; // Corrupt the first magic byte
-        reader.init(readerContext, input);
-        fail("Expected InvalidLogHeaderException for file with corrupted header magic");
+        try {
+            reader.init(readerContext, input);
+            fail("Expected InvalidLogHeaderException for file with corrupted header magic");
+        } catch (InvalidLogHeaderException e) {
+            assertTrue("Exception message should contain 'Bad magic'",
+                e.getMessage().contains("Bad magic"));
+        }
     }
 
-    @Test(expected=InvalidLogTrailerException.class)
+    @Test
     public void testFailIfMissingTrailer() throws IOException {
         initLogFileWriter();
         writeBlock(writer, "B1", 0, 5);
@@ -449,11 +459,16 @@ public class LogFileFormatTest {
         readerContext.setFileSize(data.length);
         // Enable trailer validation
         readerContext.setValidateTrailer(true);
-        reader.init(readerContext, input);
-        fail("Expected InvalidLogTrailerException when trailer is missing");
+        try {
+            reader.init(readerContext, input);
+            fail("Expected InvalidLogTrailerException when trailer is missing");
+        } catch (InvalidLogTrailerException e) {
+            assertTrue("Exception message should contain 'Unsupported version'",
+                e.getMessage().contains("Unsupported version"));
+        }
     }
 
-    @Test(expected=InvalidLogTrailerException.class)
+    @Test
     public void testFailIfInvalidTrailer() throws IOException {
         initLogFileWriter();
         writeBlock(writer, "B1", 0, 5);
@@ -469,8 +484,13 @@ public class LogFileFormatTest {
             new LogFileTestUtil.SeekableByteArrayInputStream(data);
         readerContext.setFileSize(data.length);
         readerContext.setValidateTrailer(true);
-        reader.init(readerContext, input);
-        fail("Expected InvalidLogTrailerException when trailer magic is corrupt");
+        try {
+            reader.init(readerContext, input);
+            fail("Expected InvalidLogTrailerException when trailer magic is corrupt");
+        } catch (InvalidLogTrailerException e) {
+            assertTrue("Exception message should contain 'Bad magic'",
+                e.getMessage().contains("Bad magic"));
+        }
     }
 
     @Test

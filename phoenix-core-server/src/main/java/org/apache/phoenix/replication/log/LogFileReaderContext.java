@@ -36,21 +36,27 @@ public class LogFileReaderContext {
     /** Default for skipping corrupt blocks */
     public static final boolean DEFAULT_LOGFILE_SKIP_CORRUPT_BLOCKS = true;
 
+    public static final String LOGFILE_VALIDATE_TRAILER =
+        "phoenix.replication.logfile.validate.trailer";
+    public static final boolean DEFAULT_LOGFILE_VALIDATE_TRAILER = true;
+
     private final Configuration conf;
     private FileSystem fs;
     private Path path;
     private LogFileCodec codec;
     private long fileSize = -1;
     private boolean isSkipCorruptBlocks;
+    private boolean isValidateTrailer;
     private long blocksRead;
     private long recordsRead;
     private long corruptBlocksSkipped;
-    private boolean validateTrailer = true;
 
     public LogFileReaderContext(Configuration conf) {
         this.conf = conf;
         this.isSkipCorruptBlocks = conf.getBoolean(LOGFILE_SKIP_CORRUPT_BLOCKS,
             DEFAULT_LOGFILE_SKIP_CORRUPT_BLOCKS);
+        this.isValidateTrailer = conf.getBoolean(LOGFILE_VALIDATE_TRAILER,
+            DEFAULT_LOGFILE_VALIDATE_TRAILER);
         // Note: When we have multiple codec types, instantiate the appropriate type based on
         // configuration;
         this.codec = new LogFileCodec();
@@ -148,20 +154,21 @@ public class LogFileReaderContext {
     }
 
     public boolean isValidateTrailer() {
-        return validateTrailer;
+        return isValidateTrailer;
     }
 
     public LogFileReaderContext setValidateTrailer(boolean validateTrailer) {
-        this.validateTrailer = validateTrailer;
+        this.isValidateTrailer = validateTrailer;
         return this;
     }
 
     @Override
     public String toString() {
         return "LogFileReaderContext [filePath=" + path + ", fileSize=" + fileSize
-            + ", isSkipCorruptBlocks=" + isSkipCorruptBlocks + ", codec=" + codec + ", blocksRead="
-            + blocksRead + ", recordsRead=" + recordsRead + ", corruptBlocksSkipped="
-            + corruptBlocksSkipped + ", validateTrailer=" + validateTrailer + "]";
+            + ", isSkipCorruptBlocks=" + isSkipCorruptBlocks + ", isValidateTrailer="
+            + isValidateTrailer + ", codec=" + codec + ", blocksRead=" + blocksRead
+            + ", recordsRead=" + recordsRead + ", corruptBlocksSkipped="
+            + corruptBlocksSkipped + "]";
     }
 
 }
