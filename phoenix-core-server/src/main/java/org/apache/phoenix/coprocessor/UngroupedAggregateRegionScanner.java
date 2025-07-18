@@ -793,9 +793,14 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                 scan.getAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString());
         byte[] ddlTimestamp =
                 scan.getAttribute(MutationState.MutationMetadataType.TIMESTAMP.toString());
+        byte[] emptyCF =
+                scan.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME);
+        byte[] emptyCQ =
+                scan.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME);
 
         for (Mutation m : mutationsList) {
-            annotateMutation(m, tenantId, schemaName, logicalTableName, tableType, ddlTimestamp);
+            annotateMutation(m, tenantId, schemaName, logicalTableName, tableType, ddlTimestamp,
+                    emptyCF, emptyCQ);
         }
     }
 

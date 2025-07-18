@@ -31,10 +31,14 @@ import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 import javax.annotation.concurrent.GuardedBy;
 
@@ -60,6 +64,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControllerFactory;
+import org.apache.hadoop.hbase.regionserver.FlushLifeCycleTracker;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -178,6 +183,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     private Configuration compactionConfig;
     private Configuration indexWriteConfig;
     private ReadOnlyProps indexWriteProps;
+    private boolean isEmptyColumnNameCached;
+
+    private static final ConcurrentMap<TableName, Map<String, byte[]>> TABLE_ATTRIBUTES =
+            new ConcurrentHashMap<>();
 
     @Override
     public Optional<RegionObserver> getRegionObserver() {
@@ -186,6 +195,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
 
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {
+        this.isEmptyColumnNameCached = false;
         /*
          * We need to create a copy of region's configuration since we don't want any side effect of
          * setting the RpcControllerFactory.
@@ -612,6 +622,47 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     }
 
     @Override
+    public InternalScanner preFlush(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
+                                    InternalScanner scanner, FlushLifeCycleTracker tracker) {
+        try {
+            if (!isPhoenixTableTTLEnabled(c.getEnvironment().getConfiguration())) {
+                return scanner;
+            } else {
+                TableName tableName =
+                        c.getEnvironment().getRegion().getTableDescriptor().getTableName();
+                Map<String, byte[]> tableAttributes = TABLE_ATTRIBUTES.get(tableName);
+                if (tableAttributes == null) {
+                    LOGGER.warn("Table {} has no table attributes for empty CF and empty CQ. "
+                            + "UngroupedAggregateRegionObserver has not received any "
+                            + "mutations yet? Do not perform Compaction now.", tableName);
+                    return scanner;
+                }
+                byte[] emptyCF = tableAttributes
+                        .get(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME);
+                byte[] emptyCQ = tableAttributes
+                        .get(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME);
+                if (emptyCF == null || emptyCQ == null) {
+                    LOGGER.warn(
+                            "Table {} has no empty CF and empty CQ attributes updated in cache. "
+                                    + "Do not perform Compaction now.",
+                            tableName);
+                    return scanner;
+                }
+                return User.runAsLoginUser(
+                        (PrivilegedExceptionAction<InternalScanner>) () -> new CompactionScanner(
+                                c.getEnvironment(), store, scanner,
+                                BaseScannerRegionObserverConstants.getMaxLookbackInMillis(
+                                        c.getEnvironment().getConfiguration()),
+                                false, true, null, emptyCF, emptyCQ));
+            }
+        } catch (Exception e) {
+            // this is not normal
+            LOGGER.error("Error in preFlush. Do not perform Compaction for now.", e);
+            return scanner;
+        }
+    }
+
+    @Override
     public InternalScanner preCompact(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
                                       InternalScanner scanner, ScanType scanType, CompactionLifeCycleTracker tracker,
                                       CompactionRequest request) throws IOException {
@@ -682,7 +733,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     BaseScannerRegionObserverConstants.getMaxLookbackInMillis(
                                             c.getEnvironment().getConfiguration()),
                                     request.isMajor() || request.isAllFiles(),
-                                    keepDeleted, table
+                                    keepDeleted, table, null, null
                             );
                 }
                 else if (isPhoenixCompactionEnabled(c.getEnvironment().getConfiguration())) {
@@ -1062,6 +1113,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             throws IOException {
         final Configuration conf = c.getEnvironment().getConfiguration();
         try {
+            updateEmptyCfCqValuesToStaticCache(c, miniBatchOp);
             final HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(conf);
             if (haGroupStoreManager.isMutationBlocked()) {
                 throw new IOException("Blocking Mutation as Some CRRs are in ACTIVE_TO_STANDBY "
@@ -1071,4 +1123,36 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             throw new IOException(e);
         }
     }
+
+    private void updateEmptyCfCqValuesToStaticCache(ObserverContext<RegionCoprocessorEnvironment> c,
+                                                    MiniBatchOperationInProgress<Mutation> miniBatchOp) {
+        if (!isEmptyColumnNameCached) {
+            byte[] emptyCF = miniBatchOp.getOperation(0)
+                    .getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME);
+            byte[] emptyCQ = miniBatchOp.getOperation(0)
+                    .getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME);
+            if (emptyCF != null && emptyCQ != null) {
+                updateEmptyColNamesToStaticCache(
+                        c.getEnvironment().getRegion().getTableDescriptor().getTableName(), emptyCF,
+                        emptyCQ);
+                isEmptyColumnNameCached = true;
+            }
+        }
+    }
+
+    private static void updateEmptyColNamesToStaticCache(TableName table, byte[] emptyCF,
+                                                         byte[] emptyCQ) {
+        TABLE_ATTRIBUTES.computeIfAbsent(
+                table, tableName -> {
+                    Map<String, byte[]> tableAttributes = new HashMap<>();
+                    tableAttributes.put(
+                            BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME,
+                            emptyCF);
+                    tableAttributes.put(
+                            BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME,
+                            emptyCQ);
+                    return tableAttributes;
+                });
+    }
+
 }

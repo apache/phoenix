@@ -1271,6 +1271,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                     Mutation m = update.getFirst();
                     if (m instanceof Put) {
                         // This will be done before the data table row is updated (i.e., in the first write phase)
+                        m.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME,
+                                emptyCF);
+                        m.setAttribute(
+                                BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME,
+                                emptyCQ);
                         context.preIndexUpdates.put(hTableInterfaceReference, m);
                     } else if (IndexUtil.isDeleteFamily(m)) {
                         // DeleteColumn is always accompanied by a Put so no need to make the index
@@ -1279,6 +1284,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                         Put unverifiedPut = new Put(m.getRow());
                         unverifiedPut.addColumn(
                             emptyCF, emptyCQ, batchTimestamp, QueryConstants.UNVERIFIED_BYTES);
+                        unverifiedPut.setAttribute(
+                                BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME,
+                                emptyCF);
+                        unverifiedPut.setAttribute(
+                                BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME,
+                                emptyCQ);
                         // This will be done before the data table row is updated (i.e., in the first write phase)
                         context.preIndexUpdates.put(hTableInterfaceReference, unverifiedPut);
                     }

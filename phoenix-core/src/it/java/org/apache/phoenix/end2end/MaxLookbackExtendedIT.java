@@ -617,6 +617,44 @@ public class MaxLookbackExtendedIT extends BaseTest {
         }
     }
 
+    @Test(timeout = 60000)
+    public void testRetainingLastRowVersionForFlushes() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            createTable(tableName);
+            long timeIntervalBetweenTwoUpserts = (ttl / 2) + 1;
+            injectEdge.setValue(System.currentTimeMillis());
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            TableName dataTableName = TableName.valueOf(tableName);
+            injectEdge.incrementValue(1);
+            Statement stmt = conn.createStatement();
+            stmt.execute("upsert into " + tableName + " values ('a', 'ab', 'abc', 'abcd')");
+            conn.commit();
+            injectEdge.incrementValue(timeIntervalBetweenTwoUpserts * 1000);
+            stmt.execute("upsert into " + tableName + " values ('a', 'ab1')");
+            conn.commit();
+            injectEdge.incrementValue(timeIntervalBetweenTwoUpserts * 1000);
+            stmt.execute("upsert into " + tableName + " values ('a', 'ab2')");
+            conn.commit();
+            injectEdge.incrementValue(timeIntervalBetweenTwoUpserts * 1000);
+            stmt.execute("upsert into " + tableName + " values ('a', 'ab3')");
+            conn.commit();
+            injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000);
+            TestUtil.dumpTable(conn, dataTableName);
+            TestUtil.flush(utility, dataTableName);
+            injectEdge.incrementValue(1);
+            TestUtil.dumpTable(conn, dataTableName);
+            majorCompact(dataTableName);
+            injectEdge.incrementValue(1);
+            TestUtil.dumpTable(conn, dataTableName);
+            ResultSet rs = stmt.executeQuery("select * from " + dataTableName + " where id = 'a'");
+            while (rs.next()) {
+                assertNotNull(rs.getString(3));
+                assertNotNull(rs.getString(4));
+            }
+        }
+    }
+
     private void flush(TableName table) throws IOException {
         Admin admin = getUtility().getAdmin();
         admin.flush(table);
