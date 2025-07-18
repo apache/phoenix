@@ -281,7 +281,8 @@ public class Bson1IT extends ParallelStatsDisabledIT {
         + "  \":Ids1\" : \"12\",\n" + "  \":NMap1_NList1\" : \"NListVal01\",\n"
         + "  \":InPublication\" : false,\n" + "  \":NestedList1_xyz0123\" : \"xyz0123\",\n"
         + "  \":Attr5Value\" : \"str001\",\n" + "  \":NestedList1String\" : \"1234abcd\",\n"
-        + "  \":NonExistentValue\" : \"does_not_exist\"\n" + "}";
+        + "  \":NonExistentValue\" : \"does_not_exist\"\n" + "  \":L\" : \"L\"\n"
+        + "  \":NS\" : \"NS\"\n" + "}";
     return RawBsonDocument.parse(json);
   }
 
