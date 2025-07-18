@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,7 +20,6 @@ package org.apache.phoenix.schema.tuple;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
 
 import java.util.List;
-
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
@@ -30,73 +29,73 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
  * a MultiKeyValueTuple where we have to do a binary search in the List.
  */
 public class PositionBasedMultiKeyValueTuple extends BaseTuple {
-    private EncodedColumnQualiferCellsList values;
+  private EncodedColumnQualiferCellsList values;
 
-    public PositionBasedMultiKeyValueTuple() {
-    }
+  public PositionBasedMultiKeyValueTuple() {
+  }
 
-    public PositionBasedMultiKeyValueTuple(List<Cell> values) {
-        checkArgument(values instanceof EncodedColumnQualiferCellsList,
-            "PositionBasedMultiKeyValueTuple only works with lists of type EncodedColumnQualiferCellsList");
-        this.values = (EncodedColumnQualiferCellsList) values;
-    }
+  public PositionBasedMultiKeyValueTuple(List<Cell> values) {
+    checkArgument(values instanceof EncodedColumnQualiferCellsList,
+      "PositionBasedMultiKeyValueTuple only works with lists of type EncodedColumnQualiferCellsList");
+    this.values = (EncodedColumnQualiferCellsList) values;
+  }
 
-    /** Caller must not modify the list that is passed here */
-    @Override
-    public void setKeyValues(List<Cell> values) {
-        checkArgument(values instanceof EncodedColumnQualiferCellsList,
-            "PositionBasedMultiKeyValueTuple only works with lists of type EncodedColumnQualiferCellsList");
-        this.values = (EncodedColumnQualiferCellsList) values;
-    }
+  /** Caller must not modify the list that is passed here */
+  @Override
+  public void setKeyValues(List<Cell> values) {
+    checkArgument(values instanceof EncodedColumnQualiferCellsList,
+      "PositionBasedMultiKeyValueTuple only works with lists of type EncodedColumnQualiferCellsList");
+    this.values = (EncodedColumnQualiferCellsList) values;
+  }
 
-    @Override
-    public void getKey(ImmutableBytesWritable ptr) {
-        Cell value = values.getFirstCell();
-        ptr.set(value.getRowArray(), value.getRowOffset(), value.getRowLength());
-    }
+  @Override
+  public void getKey(ImmutableBytesWritable ptr) {
+    Cell value = values.getFirstCell();
+    ptr.set(value.getRowArray(), value.getRowOffset(), value.getRowLength());
+  }
 
-    @Override
-    public boolean isImmutable() {
-        return true;
-    }
+  @Override
+  public boolean isImmutable() {
+    return true;
+  }
 
-    @Override
-    public Cell getValue(byte[] family, byte[] qualifier) {
-        return values.getCellForColumnQualifier(qualifier);
-    }
+  @Override
+  public Cell getValue(byte[] family, byte[] qualifier) {
+    return values.getCellForColumnQualifier(qualifier);
+  }
 
-    @Override
-    public String toString() {
-        return values.toString();
-    }
+  @Override
+  public String toString() {
+    return values.toString();
+  }
 
-    @Override
-    public int size() {
-        return values.size();
-    }
+  @Override
+  public int size() {
+    return values.size();
+  }
 
-    @Override
-    public Cell getValue(int index) {
-        return values.get(index);
-    }
+  @Override
+  public Cell getValue(int index) {
+    return values.get(index);
+  }
 
-    @Override
-    public boolean getValue(byte[] family, byte[] qualifier, ImmutableBytesWritable ptr) {
-        Cell kv = getValue(family, qualifier);
-        if (kv == null) return false;
-        ptr.set(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
-        return true;
-    }
+  @Override
+  public boolean getValue(byte[] family, byte[] qualifier, ImmutableBytesWritable ptr) {
+    Cell kv = getValue(family, qualifier);
+    if (kv == null) return false;
+    ptr.set(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
+    return true;
+  }
 
-    @Override
-    public long getSerializedSize() {
-        if (values == null || values.isEmpty()) {
-            return 0;
-        }
-        long totalSize = 0;
-        for (Cell cell : values) {
-            totalSize += cell.getSerializedSize();
-        }
-        return totalSize;
+  @Override
+  public long getSerializedSize() {
+    if (values == null || values.isEmpty()) {
+      return 0;
     }
+    long totalSize = 0;
+    for (Cell cell : values) {
+      totalSize += cell.getSerializedSize();
+    }
+    return totalSize;
+  }
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,6 @@ package org.apache.phoenix.end2end.index;
 
 import java.util.Arrays;
 import java.util.Collection;
-
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
@@ -27,17 +26,16 @@ import org.junit.runners.Parameterized.Parameters;
 @Category(ParallelStatsDisabledTest.class)
 public class GlobalMutableTxIndexIT extends BaseIndexIT {
 
-    public GlobalMutableTxIndexIT(String transactionProvider, boolean columnEncoded) {
-        super(false, false, true, transactionProvider, columnEncoded);
-    }
+  public GlobalMutableTxIndexIT(String transactionProvider, boolean columnEncoded) {
+    super(false, false, true, transactionProvider, columnEncoded);
+  }
 
-    // name is used by failsafe as file name in reports
-    @Parameters(name="GlobalMutableTxIndexIT_transactionProvider={0},columnEncoded={1}")
-    public static synchronized Collection<Object[]> data() {
-        return Arrays.asList(new Object[][] {
-            // OMID does not support local indexes or column encoding
-            { "OMID", false },
-        });
-    }
+  // name is used by failsafe as file name in reports
+  @Parameters(name = "GlobalMutableTxIndexIT_transactionProvider={0},columnEncoded={1}")
+  public static synchronized Collection<Object[]> data() {
+    return Arrays.asList(new Object[][] {
+      // OMID does not support local indexes or column encoding
+      { "OMID", false }, });
+  }
 
 }

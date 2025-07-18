@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,22 +22,22 @@ import java.util.Map;
 import org.apache.hbase.thirdparty.com.google.common.collect.ImmutableMap;
 
 public interface HistogramDistribution {
-    public long getMin();
+  public long getMin();
 
-    public long getMax();
+  public long getMax();
 
-    public long getCount();
+  public long getCount();
 
-    public String getHistoName();
+  public String getHistoName();
 
-    public Map<String, Long> getRangeDistributionMap();
+  public Map<String, Long> getRangeDistributionMap();
 
-    default ImmutableMap<String, Long> getPercentileDistributionMap() {
-        throw new UnsupportedOperationException("Percentile Histogram Distribution is not "
-                + "supported!!");
-    }
+  default ImmutableMap<String, Long> getPercentileDistributionMap() {
+    throw new UnsupportedOperationException(
+      "Percentile Histogram Distribution is not " + "supported!!");
+  }
 
-    default ImmutableMap<String, String> getTags() {
-        return ImmutableMap.of();
-    }
+  default ImmutableMap<String, String> getTags() {
+    return ImmutableMap.of();
+  }
 }

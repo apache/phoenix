@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,25 +20,26 @@ package org.apache.phoenix.parse;
 import org.apache.phoenix.schema.SortOrder;
 
 public class ColumnDefInPkConstraint {
-    private final ColumnName columnDefName;
-    private final SortOrder sortOrder;
-    private final boolean isRowTimestamp;
-    
-    public ColumnDefInPkConstraint(ColumnName columnDefName, SortOrder sortOrder, boolean isRowTimestamp) {
-        this.columnDefName = columnDefName;
-        this.sortOrder = sortOrder;
-        this.isRowTimestamp = isRowTimestamp;
-    }
+  private final ColumnName columnDefName;
+  private final SortOrder sortOrder;
+  private final boolean isRowTimestamp;
 
-    public ColumnName getColumnName() {
-        return columnDefName;
-    }
+  public ColumnDefInPkConstraint(ColumnName columnDefName, SortOrder sortOrder,
+    boolean isRowTimestamp) {
+    this.columnDefName = columnDefName;
+    this.sortOrder = sortOrder;
+    this.isRowTimestamp = isRowTimestamp;
+  }
 
-    public SortOrder getSortOrder() {
-        return sortOrder;
-    }
+  public ColumnName getColumnName() {
+    return columnDefName;
+  }
 
-    public boolean isRowTimestamp() {
-        return isRowTimestamp;
-    }
+  public SortOrder getSortOrder() {
+    return sortOrder;
+  }
+
+  public boolean isRowTimestamp() {
+    return isRowTimestamp;
+  }
 }

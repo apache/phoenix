@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,126 +28,124 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Properties;
-
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 @Category(ParallelStatsDisabledTest.class)
 public class ImmutableTablePropertiesIT extends ParallelStatsDisabledIT {
 
-    @Test
-    public void testImmutableKeyword() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        String immutableDataTableFullName = SchemaUtil.getTableName("", generateUniqueName());
-        String mutableDataTableFullName = SchemaUtil.getTableName("", generateUniqueName());
-        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
-            Statement stmt = conn.createStatement();
-            // create table with immutable keyword
-            String ddl = "CREATE IMMUTABLE TABLE  " + immutableDataTableFullName +
-                    "  (a_string varchar not null, col1 integer" +
-                    "  CONSTRAINT pk PRIMARY KEY (a_string)) STORE_NULLS=true";
-            stmt.execute(ddl);
-            
-            // create table without immutable keyword
-            ddl = "CREATE TABLE  " + mutableDataTableFullName +
-                    "  (a_string varchar not null, col1 integer" +
-                    "  CONSTRAINT pk PRIMARY KEY (a_string)) STORE_NULLS=true";
-            stmt.execute(ddl);
-            
-            PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
-            PTable immutableTable = phxConn.getTable(new PTableKey(null, immutableDataTableFullName));
-            assertTrue("IMMUTABLE_ROWS should be set to true", immutableTable.isImmutableRows());
-            PTable mutableTable = phxConn.getTable(new PTableKey(null, mutableDataTableFullName));
-            assertFalse("IMMUTABLE_ROWS should be set to false", mutableTable.isImmutableRows());
-        } 
+  @Test
+  public void testImmutableKeyword() throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    String immutableDataTableFullName = SchemaUtil.getTableName("", generateUniqueName());
+    String mutableDataTableFullName = SchemaUtil.getTableName("", generateUniqueName());
+    try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+      Statement stmt = conn.createStatement();
+      // create table with immutable keyword
+      String ddl = "CREATE IMMUTABLE TABLE  " + immutableDataTableFullName
+        + "  (a_string varchar not null, col1 integer"
+        + "  CONSTRAINT pk PRIMARY KEY (a_string)) STORE_NULLS=true";
+      stmt.execute(ddl);
+
+      // create table without immutable keyword
+      ddl =
+        "CREATE TABLE  " + mutableDataTableFullName + "  (a_string varchar not null, col1 integer"
+          + "  CONSTRAINT pk PRIMARY KEY (a_string)) STORE_NULLS=true";
+      stmt.execute(ddl);
+
+      PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+      PTable immutableTable = phxConn.getTable(new PTableKey(null, immutableDataTableFullName));
+      assertTrue("IMMUTABLE_ROWS should be set to true", immutableTable.isImmutableRows());
+      PTable mutableTable = phxConn.getTable(new PTableKey(null, mutableDataTableFullName));
+      assertFalse("IMMUTABLE_ROWS should be set to false", mutableTable.isImmutableRows());
     }
-    
-    @Test
-    public void testImmutableProperty() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        String immutableDataTableFullName = SchemaUtil.getTableName("", generateUniqueName());
-        String mutableDataTableFullName = SchemaUtil.getTableName("", generateUniqueName());
-        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
-            Statement stmt = conn.createStatement();
-            // create table with immutable table property set to true
-            String ddl = "CREATE TABLE  " + immutableDataTableFullName +
-                    "  (a_string varchar not null, col1 integer" +
-                    "  CONSTRAINT pk PRIMARY KEY (a_string)) IMMUTABLE_ROWS=true";
-            stmt.execute(ddl);
-            
-            // create table with immutable table property set to false
-            ddl = "CREATE TABLE  " + mutableDataTableFullName +
-                    "  (a_string varchar not null, col1 integer" +
-                    "  CONSTRAINT pk PRIMARY KEY (a_string))  IMMUTABLE_ROWS=false";
-            stmt.execute(ddl);
-            
-            PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
-            PTable immutableTable = phxConn.getTable(new PTableKey(null, immutableDataTableFullName));
-            assertTrue("IMMUTABLE_ROWS should be set to true", immutableTable.isImmutableRows());
-            PTable mutableTable = phxConn.getTable(new PTableKey(null, mutableDataTableFullName));
-            assertFalse("IMMUTABLE_ROWS should be set to false", mutableTable.isImmutableRows());
-        } 
+  }
+
+  @Test
+  public void testImmutableProperty() throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    String immutableDataTableFullName = SchemaUtil.getTableName("", generateUniqueName());
+    String mutableDataTableFullName = SchemaUtil.getTableName("", generateUniqueName());
+    try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+      Statement stmt = conn.createStatement();
+      // create table with immutable table property set to true
+      String ddl =
+        "CREATE TABLE  " + immutableDataTableFullName + "  (a_string varchar not null, col1 integer"
+          + "  CONSTRAINT pk PRIMARY KEY (a_string)) IMMUTABLE_ROWS=true";
+      stmt.execute(ddl);
+
+      // create table with immutable table property set to false
+      ddl =
+        "CREATE TABLE  " + mutableDataTableFullName + "  (a_string varchar not null, col1 integer"
+          + "  CONSTRAINT pk PRIMARY KEY (a_string))  IMMUTABLE_ROWS=false";
+      stmt.execute(ddl);
+
+      PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+      PTable immutableTable = phxConn.getTable(new PTableKey(null, immutableDataTableFullName));
+      assertTrue("IMMUTABLE_ROWS should be set to true", immutableTable.isImmutableRows());
+      PTable mutableTable = phxConn.getTable(new PTableKey(null, mutableDataTableFullName));
+      assertFalse("IMMUTABLE_ROWS should be set to false", mutableTable.isImmutableRows());
     }
-    
-    @Test
-    public void testImmutableKeywordAndProperty() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        String immutableDataTableFullName = SchemaUtil.getTableName("", generateUniqueName());
-        String mutableDataTableFullName = SchemaUtil.getTableName("", generateUniqueName());
-        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
-            Statement stmt = conn.createStatement();
-            try {
-                // create immutable table with immutable table property set to true 
-                String ddl = "CREATE IMMUTABLE TABLE  " + immutableDataTableFullName +
-                        "  (a_string varchar not null, col1 integer" +
-                        "  CONSTRAINT pk PRIMARY KEY (a_string)) IMMUTABLE_ROWS=true";
-                stmt.execute(ddl);
-                fail();
-            }
-            catch (SQLException e) {
-                assertEquals(SQLExceptionCode.IMMUTABLE_TABLE_PROPERTY_INVALID.getErrorCode(), e.getErrorCode());
-            }
-            
-            try {
-                // create immutable table with immutable table property set to false
-                String ddl = "CREATE IMMUTABLE TABLE  " + mutableDataTableFullName +
-                        "  (a_string varchar not null, col1 integer" +
-                        "  CONSTRAINT pk PRIMARY KEY (a_string))  IMMUTABLE_ROWS=false";
-                stmt.execute(ddl);
-                fail();
-            }
-            catch (SQLException e) {
-                assertEquals(SQLExceptionCode.IMMUTABLE_TABLE_PROPERTY_INVALID.getErrorCode(), e.getErrorCode());
-            }
-            
-        } 
+  }
+
+  @Test
+  public void testImmutableKeywordAndProperty() throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    String immutableDataTableFullName = SchemaUtil.getTableName("", generateUniqueName());
+    String mutableDataTableFullName = SchemaUtil.getTableName("", generateUniqueName());
+    try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+      Statement stmt = conn.createStatement();
+      try {
+        // create immutable table with immutable table property set to true
+        String ddl = "CREATE IMMUTABLE TABLE  " + immutableDataTableFullName
+          + "  (a_string varchar not null, col1 integer"
+          + "  CONSTRAINT pk PRIMARY KEY (a_string)) IMMUTABLE_ROWS=true";
+        stmt.execute(ddl);
+        fail();
+      } catch (SQLException e) {
+        assertEquals(SQLExceptionCode.IMMUTABLE_TABLE_PROPERTY_INVALID.getErrorCode(),
+          e.getErrorCode());
+      }
+
+      try {
+        // create immutable table with immutable table property set to false
+        String ddl = "CREATE IMMUTABLE TABLE  " + mutableDataTableFullName
+          + "  (a_string varchar not null, col1 integer"
+          + "  CONSTRAINT pk PRIMARY KEY (a_string))  IMMUTABLE_ROWS=false";
+        stmt.execute(ddl);
+        fail();
+      } catch (SQLException e) {
+        assertEquals(SQLExceptionCode.IMMUTABLE_TABLE_PROPERTY_INVALID.getErrorCode(),
+          e.getErrorCode());
+      }
+
     }
-    
-    @Test
-    public void testImmutableTableWithStorageSchemeAndColumnEncodingProps() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        String immutableDataTableFullName = SchemaUtil.getTableName("", generateUniqueName());
-        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
-            Statement stmt = conn.createStatement();
-            try {
-                // create immutable table with immutable table property set to true 
-                String ddl = "CREATE IMMUTABLE TABLE  " + immutableDataTableFullName +
-                        "  (a_string varchar not null, col1 integer" +
-                        "  CONSTRAINT pk PRIMARY KEY (a_string)) COLUMN_ENCODED_BYTES=0, IMMUTABLE_STORAGE_SCHEME="
-                        + PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
-                stmt.execute(ddl);
-                fail();
-            }
-            catch (SQLException e) {
-                assertEquals(SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_AND_COLUMN_QUALIFIER_BYTES.getErrorCode(), e.getErrorCode());
-            }
-        } 
+  }
+
+  @Test
+  public void testImmutableTableWithStorageSchemeAndColumnEncodingProps() throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    String immutableDataTableFullName = SchemaUtil.getTableName("", generateUniqueName());
+    try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+      Statement stmt = conn.createStatement();
+      try {
+        // create immutable table with immutable table property set to true
+        String ddl = "CREATE IMMUTABLE TABLE  " + immutableDataTableFullName
+          + "  (a_string varchar not null, col1 integer"
+          + "  CONSTRAINT pk PRIMARY KEY (a_string)) COLUMN_ENCODED_BYTES=0, IMMUTABLE_STORAGE_SCHEME="
+          + PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
+        stmt.execute(ddl);
+        fail();
+      } catch (SQLException e) {
+        assertEquals(SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_AND_COLUMN_QUALIFIER_BYTES
+          .getErrorCode(), e.getErrorCode());
+      }
     }
+  }
 }

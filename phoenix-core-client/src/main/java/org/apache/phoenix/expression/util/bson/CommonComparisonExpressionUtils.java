@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,10 +15,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.expression.util.bson;
 
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.bson.BsonArray;
 import org.bson.BsonBinary;
 import org.bson.BsonDateTime;
@@ -29,7 +28,7 @@ import org.bson.BsonValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
  * Common Util functions to help retrieve BSON Document values based on the given field expressions.
@@ -37,11 +36,10 @@ import org.apache.hadoop.hbase.util.Bytes;
 public class CommonComparisonExpressionUtils {
 
   private static final Logger LOGGER =
-      LoggerFactory.getLogger(CommonComparisonExpressionUtils.class);
+    LoggerFactory.getLogger(CommonComparisonExpressionUtils.class);
 
   /**
    * Returns true if the given BsonValue represents Set data structure.
-   *
    * @param bsonValue The value.
    * @return True if the given BsonValue represents Set data structure.
    */
@@ -94,18 +92,17 @@ public class CommonComparisonExpressionUtils {
   }
 
   /**
-   * Retrieve the value associated with the document field key. The field key can represent
-   * any top level or nested fields within the document. The caller should use "." notation for
-   * accessing nested document elements and "[n]" notation for accessing nested array elements. Top
-   * level fields do not require any additional character.
-   *
+   * Retrieve the value associated with the document field key. The field key can represent any top
+   * level or nested fields within the document. The caller should use "." notation for accessing
+   * nested document elements and "[n]" notation for accessing nested array elements. Top level
+   * fields do not require any additional character.
    * @param documentFieldKey The document field key for which the value is returned.
-   * @param rawBsonDocument The document from which to find the value.
-   * @return If the field key exists in the document, return the corresponding value. Else
-   * return null.
+   * @param rawBsonDocument  The document from which to find the value.
+   * @return If the field key exists in the document, return the corresponding value. Else return
+   *         null.
    */
   public static BsonValue getFieldFromDocument(final String documentFieldKey,
-                                               final BsonDocument rawBsonDocument) {
+    final BsonDocument rawBsonDocument) {
     if (documentFieldKey.contains(".") || documentFieldKey.contains("[")) {
       StringBuilder sb = new StringBuilder();
       for (int i = 0; i < documentFieldKey.length(); i++) {
@@ -133,23 +130,23 @@ public class CommonComparisonExpressionUtils {
 
   /**
    * Retrieve the value associated with the nested field key within the document.
-   *
-   * @param value Value of the parent data structure (document or array) which is used to search
-   * nested elements from.
-   * @param idx Index used to track which part of the field key has been covered so far.
+   * @param value            Value of the parent data structure (document or array) which is used to
+   *                         search nested elements from.
+   * @param idx              Index used to track which part of the field key has been covered so
+   *                         far.
    * @param documentFieldKey The document field key for which the value is returned.
-   * @return If the field key exists in the document, return the corresponding value. Else
-   * return null.
+   * @return If the field key exists in the document, return the corresponding value. Else return
+   *         null.
    */
   public static BsonValue getNestedFieldVal(BsonValue value, int idx,
-                                            final String documentFieldKey) {
+    final String documentFieldKey) {
     if (idx == documentFieldKey.length()) {
       return value;
     }
     int curIdx = idx;
     if (documentFieldKey.charAt(curIdx) == '.') {
       BsonDocument nestedDocument =
-          value != null && value.isDocument() ? (BsonDocument) value : null;
+        value != null && value.isDocument() ? (BsonDocument) value : null;
       if (nestedDocument == null) {
         LOGGER.warn("Incorrect access. Should have found nested map for value: {}", value);
         return null;
@@ -184,8 +181,8 @@ public class CommonComparisonExpressionUtils {
       }
       if (arrayIdx >= nestedArray.size()) {
         LOGGER.warn(
-            "Incorrect access. Nested list size {} is less than attempted index access at {}",
-            nestedArray.size(), arrayIdx);
+          "Incorrect access. Nested list size {} is less than attempted index access at {}",
+          nestedArray.size(), arrayIdx);
         return null;
       }
       BsonValue valueAtIdx = nestedArray.get(arrayIdx);
@@ -195,25 +192,24 @@ public class CommonComparisonExpressionUtils {
       return getNestedFieldVal(valueAtIdx, curIdx, documentFieldKey);
     }
     LOGGER.warn("This is erroneous case. getNestedFieldVal should not be used for "
-        + "top level document fields");
+      + "top level document fields");
     return null;
   }
 
   /**
-   * Compare the given Bson values. All values of the CompareOp enum are supported as
-   * comparison operators. For the comparison to be successful, both the value and the
-   * data type of the LHS and RHS operands must be considered.
-   *
+   * Compare the given Bson values. All values of the CompareOp enum are supported as comparison
+   * operators. For the comparison to be successful, both the value and the data type of the LHS and
+   * RHS operands must be considered.
    * @param lhsOperand LHS operand to be compared with RHS operand.
    * @param rhsOperand RHS operand.
-   * @param operator Comparison operator used to compare LHS and RHS operands.
+   * @param operator   Comparison operator used to compare LHS and RHS operands.
    * @return True if the comparison of LHS with RHS is successful.
    */
   public static boolean compareValues(final BsonValue lhsOperand, final BsonValue rhsOperand,
-      final CompareOp operator) {
+    final CompareOp operator) {
     Preconditions.checkNotNull(operator, "Comparison operator should not be null");
     Preconditions.checkNotNull(lhsOperand,
-        "LHS operand for the Comparison operation should not be null");
+      "LHS operand for the Comparison operation should not be null");
 
     if (operator == CompareOp.EQUALS) {
       return lhsOperand.equals(rhsOperand);
@@ -222,11 +218,11 @@ public class CommonComparisonExpressionUtils {
     }
 
     Preconditions.checkNotNull(rhsOperand,
-        "RHS operand for the Comparison operation should not be null");
+      "RHS operand for the Comparison operation should not be null");
 
     if (lhsOperand.isString() && rhsOperand.isString()) {
       int compare =
-          ((BsonString) lhsOperand).getValue().compareTo(((BsonString) rhsOperand).getValue());
+        ((BsonString) lhsOperand).getValue().compareTo(((BsonString) rhsOperand).getValue());
       switch (operator) {
         case LESS:
           return compare < 0;
@@ -238,25 +234,25 @@ public class CommonComparisonExpressionUtils {
           return compare >= 0;
       }
     }
-    if ((lhsOperand.isNumber() || lhsOperand.isDecimal128()) && (rhsOperand.isNumber()
-        || rhsOperand.isDecimal128())) {
+    if (
+      (lhsOperand.isNumber() || lhsOperand.isDecimal128())
+        && (rhsOperand.isNumber() || rhsOperand.isDecimal128())
+    ) {
       switch (operator) {
         case LESS:
-          return ((BsonNumber) lhsOperand).doubleValue() < ((BsonNumber) rhsOperand)
-              .doubleValue();
+          return ((BsonNumber) lhsOperand).doubleValue() < ((BsonNumber) rhsOperand).doubleValue();
         case LESS_OR_EQUAL:
-          return ((BsonNumber) lhsOperand).doubleValue() <= ((BsonNumber) rhsOperand)
-              .doubleValue();
+          return ((BsonNumber) lhsOperand).doubleValue() <= ((BsonNumber) rhsOperand).doubleValue();
         case GREATER:
-          return ((BsonNumber) lhsOperand).doubleValue() > ((BsonNumber) rhsOperand)
-              .doubleValue();
+          return ((BsonNumber) lhsOperand).doubleValue() > ((BsonNumber) rhsOperand).doubleValue();
         case GREATER_OR_EQUAL:
-          return ((BsonNumber) lhsOperand).doubleValue() >= ((BsonNumber) rhsOperand)
-              .doubleValue();
+          return ((BsonNumber) lhsOperand).doubleValue() >= ((BsonNumber) rhsOperand).doubleValue();
       }
     }
-    if (lhsOperand.isBinary() && rhsOperand.isBinary()
-        && ((BsonBinary) lhsOperand).getType() == ((BsonBinary) rhsOperand).getType()) {
+    if (
+      lhsOperand.isBinary() && rhsOperand.isBinary()
+        && ((BsonBinary) lhsOperand).getType() == ((BsonBinary) rhsOperand).getType()
+    ) {
       byte[] b1 = ((BsonBinary) lhsOperand).getData();
       byte[] b2 = ((BsonBinary) rhsOperand).getData();
       switch (operator) {
@@ -273,22 +269,17 @@ public class CommonComparisonExpressionUtils {
     if (lhsOperand.isDateTime() && rhsOperand.isDateTime()) {
       switch (operator) {
         case LESS:
-          return ((BsonDateTime) lhsOperand).getValue() < ((BsonDateTime) rhsOperand)
-              .getValue();
+          return ((BsonDateTime) lhsOperand).getValue() < ((BsonDateTime) rhsOperand).getValue();
         case LESS_OR_EQUAL:
-          return ((BsonDateTime) lhsOperand).getValue() <= ((BsonDateTime) rhsOperand)
-              .getValue();
+          return ((BsonDateTime) lhsOperand).getValue() <= ((BsonDateTime) rhsOperand).getValue();
         case GREATER:
-          return ((BsonDateTime) lhsOperand).getValue() > ((BsonDateTime) rhsOperand)
-              .getValue();
+          return ((BsonDateTime) lhsOperand).getValue() > ((BsonDateTime) rhsOperand).getValue();
         case GREATER_OR_EQUAL:
-          return ((BsonDateTime) lhsOperand).getValue() >= ((BsonDateTime) rhsOperand)
-              .getValue();
+          return ((BsonDateTime) lhsOperand).getValue() >= ((BsonDateTime) rhsOperand).getValue();
       }
     }
     LOGGER.error("Expected comparison for {} is not of type String, Number, Binary"
-            + " or DateTime. LhsOperand: {} , RhsOperand: {}", operator, lhsOperand,
-        rhsOperand);
+      + " or DateTime. LhsOperand: {} , RhsOperand: {}", operator, lhsOperand, rhsOperand);
     return false;
   }
 }

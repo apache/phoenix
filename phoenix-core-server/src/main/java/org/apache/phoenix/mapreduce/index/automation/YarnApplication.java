@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,190 +19,197 @@ package org.apache.phoenix.mapreduce.index.automation;
 
 public class YarnApplication {
 
-    public static final String APP_ELEMENT = "app";
-    public static final String APPS_ELEMENT = "apps";
-    public static final String APP_STATES_ELEMENT = "states";
+  public static final String APP_ELEMENT = "app";
+  public static final String APPS_ELEMENT = "apps";
+  public static final String APP_STATES_ELEMENT = "states";
 
-    private long finishedTime;
-    private String amContainerLogs;
-    private String trackingUI;
+  private long finishedTime;
+  private String amContainerLogs;
+  private String trackingUI;
 
-    public enum state {
-        NEW, ACCEPTED, SUBMITTED, RUNNING, FINISHED
-    }
+  public enum state {
+    NEW,
+    ACCEPTED,
+    SUBMITTED,
+    RUNNING,
+    FINISHED
+  }
 
-    private String user;
-    private String id;
-    private String clusterId;
+  private String user;
+  private String id;
+  private String clusterId;
 
-    public enum finalStatus {
-        SUCCEEDED, FAILED, KILLED, UNDEFINED
-    }
+  public enum finalStatus {
+    SUCCEEDED,
+    FAILED,
+    KILLED,
+    UNDEFINED
+  }
 
-    private String amHostHttpAddress;
-    private double progress;
-    private String name;
-    private long startedTime;
-    private long elapsedTime;
-    private String diagnostics;
-    private String trackingUrl;
-    private String queue;
-    private int allocatedMB;
-    private int allocatedVCores;
-    private int runningContainers;
-    private int memorySeconds;
-    private int vcoreSeconds;
+  private String amHostHttpAddress;
+  private double progress;
+  private String name;
+  private long startedTime;
+  private long elapsedTime;
+  private String diagnostics;
+  private String trackingUrl;
+  private String queue;
+  private int allocatedMB;
+  private int allocatedVCores;
+  private int runningContainers;
+  private int memorySeconds;
+  private int vcoreSeconds;
 
-    public long getFinishedTime() {
-        return finishedTime;
-    }
+  public long getFinishedTime() {
+    return finishedTime;
+  }
 
-    public void setFinishedTime(long finishedTime) {
-        this.finishedTime = finishedTime;
-    }
+  public void setFinishedTime(long finishedTime) {
+    this.finishedTime = finishedTime;
+  }
 
-    public String getAmContainerLogs() {
-        return amContainerLogs;
-    }
+  public String getAmContainerLogs() {
+    return amContainerLogs;
+  }
 
-    public void setAmContainerLogs(String amContainerLogs) {
-        this.amContainerLogs = amContainerLogs;
-    }
+  public void setAmContainerLogs(String amContainerLogs) {
+    this.amContainerLogs = amContainerLogs;
+  }
 
-    public String getTrackingUI() {
-        return trackingUI;
-    }
+  public String getTrackingUI() {
+    return trackingUI;
+  }
 
-    public void setTrackingUI(String trackingUI) {
-        this.trackingUI = trackingUI;
-    }
+  public void setTrackingUI(String trackingUI) {
+    this.trackingUI = trackingUI;
+  }
 
-    public String getUser() {
-        return user;
-    }
+  public String getUser() {
+    return user;
+  }
 
-    public void setUser(String user) {
-        this.user = user;
-    }
+  public void setUser(String user) {
+    this.user = user;
+  }
 
-    public String getId() {
-        return id;
-    }
+  public String getId() {
+    return id;
+  }
 
-    public void setId(String id) {
-        this.id = id;
-    }
+  public void setId(String id) {
+    this.id = id;
+  }
 
-    public String getClusterId() {
-        return clusterId;
-    }
+  public String getClusterId() {
+    return clusterId;
+  }
 
-    public void setClusterId(String clusterId) {
-        this.clusterId = clusterId;
-    }
+  public void setClusterId(String clusterId) {
+    this.clusterId = clusterId;
+  }
 
-    public String getAmHostHttpAddress() {
-        return amHostHttpAddress;
-    }
+  public String getAmHostHttpAddress() {
+    return amHostHttpAddress;
+  }
 
-    public void setAmHostHttpAddress(String amHostHttpAddress) {
-        this.amHostHttpAddress = amHostHttpAddress;
-    }
+  public void setAmHostHttpAddress(String amHostHttpAddress) {
+    this.amHostHttpAddress = amHostHttpAddress;
+  }
 
-    public double getProgress() {
-        return progress;
-    }
+  public double getProgress() {
+    return progress;
+  }
 
-    public void setProgress(double progress) {
-        this.progress = progress;
-    }
+  public void setProgress(double progress) {
+    this.progress = progress;
+  }
 
-    public String getName() {
-        return name;
-    }
+  public String getName() {
+    return name;
+  }
 
-    public void setName(String name) {
-        this.name = name;
-    }
+  public void setName(String name) {
+    this.name = name;
+  }
 
-    public long getStartedTime() {
-        return startedTime;
-    }
+  public long getStartedTime() {
+    return startedTime;
+  }
 
-    public void setStartedTime(long startedTime) {
-        this.startedTime = startedTime;
-    }
+  public void setStartedTime(long startedTime) {
+    this.startedTime = startedTime;
+  }
 
-    public long getElapsedTime() {
-        return elapsedTime;
-    }
+  public long getElapsedTime() {
+    return elapsedTime;
+  }
 
-    public void setElapsedTime(long elapsedTime) {
-        this.elapsedTime = elapsedTime;
-    }
+  public void setElapsedTime(long elapsedTime) {
+    this.elapsedTime = elapsedTime;
+  }
 
-    public String getDiagnostics() {
-        return diagnostics;
-    }
+  public String getDiagnostics() {
+    return diagnostics;
+  }
 
-    public void setDiagnostics(String diagnostics) {
-        this.diagnostics = diagnostics;
-    }
+  public void setDiagnostics(String diagnostics) {
+    this.diagnostics = diagnostics;
+  }
 
-    public String getTrackingUrl() {
-        return trackingUrl;
-    }
+  public String getTrackingUrl() {
+    return trackingUrl;
+  }
 
-    public void setTrackingUrl(String trackingUrl) {
-        this.trackingUrl = trackingUrl;
-    }
+  public void setTrackingUrl(String trackingUrl) {
+    this.trackingUrl = trackingUrl;
+  }
 
-    public String getQueue() {
-        return queue;
-    }
+  public String getQueue() {
+    return queue;
+  }
 
-    public void setQueue(String queue) {
-        this.queue = queue;
-    }
+  public void setQueue(String queue) {
+    this.queue = queue;
+  }
 
-    public int getAllocatedMB() {
-        return allocatedMB;
-    }
+  public int getAllocatedMB() {
+    return allocatedMB;
+  }
 
-    public void setAllocatedMB(int allocatedMB) {
-        this.allocatedMB = allocatedMB;
-    }
+  public void setAllocatedMB(int allocatedMB) {
+    this.allocatedMB = allocatedMB;
+  }
 
-    public int getAllocatedVCores() {
-        return allocatedVCores;
-    }
+  public int getAllocatedVCores() {
+    return allocatedVCores;
+  }
 
-    public void setAllocatedVCores(int allocatedVCores) {
-        this.allocatedVCores = allocatedVCores;
-    }
+  public void setAllocatedVCores(int allocatedVCores) {
+    this.allocatedVCores = allocatedVCores;
+  }
 
-    public int getRunningContainers() {
-        return runningContainers;
-    }
+  public int getRunningContainers() {
+    return runningContainers;
+  }
 
-    public void setRunningContainers(int runningContainers) {
-        this.runningContainers = runningContainers;
-    }
+  public void setRunningContainers(int runningContainers) {
+    this.runningContainers = runningContainers;
+  }
 
-    public int getMemorySeconds() {
-        return memorySeconds;
-    }
+  public int getMemorySeconds() {
+    return memorySeconds;
+  }
 
-    public void setMemorySeconds(int memorySeconds) {
-        this.memorySeconds = memorySeconds;
-    }
+  public void setMemorySeconds(int memorySeconds) {
+    this.memorySeconds = memorySeconds;
+  }
 
-    public int getVcoreSeconds() {
-        return vcoreSeconds;
-    }
+  public int getVcoreSeconds() {
+    return vcoreSeconds;
+  }
 
-    public void setVcoreSeconds(int vcoreSeconds) {
-        this.vcoreSeconds = vcoreSeconds;
-    }
+  public void setVcoreSeconds(int vcoreSeconds) {
+    this.vcoreSeconds = vcoreSeconds;
+  }
 
 }

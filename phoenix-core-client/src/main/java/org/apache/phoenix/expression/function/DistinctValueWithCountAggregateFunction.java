@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,10 +18,8 @@
 package org.apache.phoenix.expression.function;
 
 import java.util.List;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.DistinctValueWithCountClientAggregator;
@@ -29,20 +27,20 @@ import org.apache.phoenix.expression.aggregator.DistinctValueWithCountServerAggr
 
 public abstract class DistinctValueWithCountAggregateFunction extends SingleAggregateFunction {
 
-    public DistinctValueWithCountAggregateFunction() {
-    }
+  public DistinctValueWithCountAggregateFunction() {
+  }
 
-    public DistinctValueWithCountAggregateFunction(List<Expression> children) {
-        super(children);
-    }
+  public DistinctValueWithCountAggregateFunction(List<Expression> children) {
+    super(children);
+  }
 
-    @Override
-    abstract public DistinctValueWithCountClientAggregator newClientAggregator();
-    
-    @Override
-    public Aggregator newServerAggregator(Configuration config, ImmutableBytesWritable ptr) {
-        DistinctValueWithCountClientAggregator clientAgg = newClientAggregator();
-        clientAgg.aggregate(null, ptr);
-        return new DistinctValueWithCountServerAggregator(config, clientAgg);
-    }
+  @Override
+  abstract public DistinctValueWithCountClientAggregator newClientAggregator();
+
+  @Override
+  public Aggregator newServerAggregator(Configuration config, ImmutableBytesWritable ptr) {
+    DistinctValueWithCountClientAggregator clientAgg = newClientAggregator();
+    clientAgg.aggregate(null, ptr);
+    return new DistinctValueWithCountServerAggregator(config, clientAgg);
+  }
 }

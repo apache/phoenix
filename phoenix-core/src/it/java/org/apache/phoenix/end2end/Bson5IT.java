@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,29 +15,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.end2end;
+
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.commons.io.FileUtils;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.types.PDouble;
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
-import org.apache.phoenix.util.CDCUtil;
-import org.apache.phoenix.util.PropertiesUtil;
-import org.bson.BsonArray;
-import org.bson.BsonBinary;
-import org.bson.BsonDocument;
-import org.bson.BsonDouble;
-import org.bson.BsonNull;
-import org.bson.BsonString;
-import org.bson.RawBsonDocument;
-import org.junit.Assert;
-import org.junit.Test;
-import org.junit.experimental.categories.Category;
-
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
@@ -52,11 +38,24 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Map;
 import java.util.Properties;
+import org.apache.commons.io.FileUtils;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.util.CDCUtil;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.bson.BsonArray;
+import org.bson.BsonBinary;
+import org.bson.BsonDocument;
+import org.bson.BsonDouble;
+import org.bson.BsonNull;
+import org.bson.BsonString;
+import org.bson.RawBsonDocument;
+import org.junit.Assert;
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
  * Tests for BSON with expression field key alias.
@@ -81,14 +80,13 @@ public class Bson5IT extends ParallelStatsDisabledIT {
     String tableName = generateUniqueName();
     String cdcName = generateUniqueName();
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-      String ddl = "CREATE TABLE " + tableName
-          + " (PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON"
-          + " CONSTRAINT pk PRIMARY KEY(PK1))";
+      String ddl = "CREATE TABLE " + tableName + " (PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON"
+        + " CONSTRAINT pk PRIMARY KEY(PK1))";
       String cdcDdl = "CREATE CDC " + cdcName + " ON " + tableName;
       conn.createStatement().execute(ddl);
       conn.createStatement().execute(cdcDdl);
       IndexToolIT.runIndexTool(false, "", tableName,
-              "\"" + CDCUtil.getCDCIndexName(cdcName) + "\"");
+        "\"" + CDCUtil.getCDCIndexName(cdcName) + "\"");
       Timestamp ts1 = new Timestamp(System.currentTimeMillis());
       Thread.sleep(100);
 
@@ -100,7 +98,7 @@ public class Bson5IT extends ParallelStatsDisabledIT {
       BsonDocument bsonDocument3 = RawBsonDocument.parse(sample3);
 
       PreparedStatement stmt =
-              conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
+        conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
       stmt.setString(1, "pk0001");
       stmt.setString(2, "0002");
       stmt.setObject(3, bsonDocument1);
@@ -126,37 +124,34 @@ public class Bson5IT extends ParallelStatsDisabledIT {
       Thread.sleep(100);
 
       String conditionExpression =
-              "#press = :press AND #track[0].#shot[2][0].#city.#standard[50] = :softly";
+        "#press = :press AND #track[0].#shot[2][0].#city.#standard[50] = :softly";
 
-      //{
-      //  "$EXPR": "#press = :press AND #track[0].#shot[2][0].#city.#standard[50] = :softly",
-      //  "$VAL": {
-      //    ":press": "beat",
-      //    ":softly": "softly"
-      //  },
-      //  "$KEYS": {
-      //    "#press": "press",
-      //    "#track": "track",
-      //    "#shot": "shot",
-      //    "#city": "city",
-      //    "#standard": "standard"
-      //  }
-      //}
+      // {
+      // "$EXPR": "#press = :press AND #track[0].#shot[2][0].#city.#standard[50] = :softly",
+      // "$VAL": {
+      // ":press": "beat",
+      // ":softly": "softly"
+      // },
+      // "$KEYS": {
+      // "#press": "press",
+      // "#track": "track",
+      // "#shot": "shot",
+      // "#city": "city",
+      // "#standard": "standard"
+      // }
+      // }
       BsonDocument conditionDoc = new BsonDocument();
       conditionDoc.put("$EXPR", new BsonString(conditionExpression));
-      conditionDoc.put("$VAL", new BsonDocument()
-              .append(":press", new BsonString("beat"))
-              .append(":softly", new BsonString("softly")));
-      conditionDoc.put("$KEYS", new BsonDocument()
-              .append("#press", new BsonString("press"))
-              .append("#track", new BsonString("track"))
-              .append("#shot", new BsonString("shot"))
-              .append("#city", new BsonString("city"))
-              .append("#standard", new BsonString("standard")));
+      conditionDoc.put("$VAL", new BsonDocument().append(":press", new BsonString("beat"))
+        .append(":softly", new BsonString("softly")));
+      conditionDoc.put("$KEYS",
+        new BsonDocument().append("#press", new BsonString("press"))
+          .append("#track", new BsonString("track")).append("#shot", new BsonString("shot"))
+          .append("#city", new BsonString("city")).append("#standard", new BsonString("standard")));
 
-      String query = "SELECT * FROM " + tableName +
-              " WHERE PK1 = 'pk0001' AND C1 = '0002' AND NOT BSON_CONDITION_EXPRESSION(COL, '"
-              + conditionDoc.toJson() + "')";
+      String query = "SELECT * FROM " + tableName
+        + " WHERE PK1 = 'pk0001' AND C1 = '0002' AND NOT BSON_CONDITION_EXPRESSION(COL, '"
+        + conditionDoc.toJson() + "')";
       ResultSet rs = conn.createStatement().executeQuery(query);
 
       assertTrue(rs.next());
@@ -168,22 +163,19 @@ public class Bson5IT extends ParallelStatsDisabledIT {
       assertFalse(rs.next());
 
       conditionExpression =
-              "#press = :press AND #track[0].#shot[2][0].#city.#standard[5] = :softly";
+        "#press = :press AND #track[0].#shot[2][0].#city.#standard[5] = :softly";
 
       conditionDoc = new BsonDocument();
       conditionDoc.put("$EXPR", new BsonString(conditionExpression));
-      conditionDoc.put("$VAL", new BsonDocument()
-              .append(":press", new BsonString("beat"))
-              .append(":softly", new BsonString("softly")));
-      conditionDoc.put("$KEYS", new BsonDocument()
-              .append("#press", new BsonString("press"))
-              .append("#track", new BsonString("track"))
-              .append("#shot", new BsonString("shot"))
-              .append("#city", new BsonString("city"))
-              .append("#standard", new BsonString("standard")));
+      conditionDoc.put("$VAL", new BsonDocument().append(":press", new BsonString("beat"))
+        .append(":softly", new BsonString("softly")));
+      conditionDoc.put("$KEYS",
+        new BsonDocument().append("#press", new BsonString("press"))
+          .append("#track", new BsonString("track")).append("#shot", new BsonString("shot"))
+          .append("#city", new BsonString("city")).append("#standard", new BsonString("standard")));
 
-      query = "SELECT * FROM " + tableName +
-              " WHERE PK1 = ? AND C1 = ? AND BSON_CONDITION_EXPRESSION(COL, ?)";
+      query = "SELECT * FROM " + tableName
+        + " WHERE PK1 = ? AND C1 = ? AND BSON_CONDITION_EXPRESSION(COL, ?)";
       PreparedStatement ps = conn.prepareStatement(query);
       ps.setString(1, "pk0001");
       ps.setString(2, "0002");
@@ -199,95 +191,81 @@ public class Bson5IT extends ParallelStatsDisabledIT {
 
       assertFalse(rs.next());
 
-      BsonDocument updateExp = new BsonDocument()
-              .append("$SET", new BsonDocument()
-                      .append("browserling",
-                              new BsonBinary(PDouble.INSTANCE.toBytes(-505169340.54880095)))
-                      .append("track[0].shot[2][0].city.standard[5]", new BsonString("soft"))
-                      .append("track[0].shot[2][0].city.problem[2]",
-                              new BsonString("track[0].shot[2][0].city.problem[2] + 529.435")))
-              .append("$UNSET", new BsonDocument()
-                      .append("track[0].shot[2][0].city.flame", new BsonNull()));
+      BsonDocument updateExp = new BsonDocument().append("$SET",
+        new BsonDocument()
+          .append("browserling", new BsonBinary(PDouble.INSTANCE.toBytes(-505169340.54880095)))
+          .append("track[0].shot[2][0].city.standard[5]", new BsonString("soft"))
+          .append("track[0].shot[2][0].city.problem[2]",
+            new BsonString("track[0].shot[2][0].city.problem[2] + 529.435")))
+        .append("$UNSET",
+          new BsonDocument().append("track[0].shot[2][0].city.flame", new BsonNull()));
 
-      stmt = conn.prepareStatement("UPSERT INTO " + tableName
-              + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
-              + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
-              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END,"
-              + " C1 = ?");
+      stmt = conn.prepareStatement(
+        "UPSERT INTO " + tableName + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
+          + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
+          + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END," + " C1 = ?");
       stmt.setString(1, "pk0001");
       stmt.setString(2, "0003");
       stmt.executeUpdate();
 
       updateExp = new BsonDocument()
-              .append("$ADD", new BsonDocument()
-                      .append("new_samples",
-                              new BsonDocument().append("$set",
-                                      new BsonArray(Arrays.asList(
-                                              new BsonBinary(Bytes.toBytes("Sample10")),
-                                              new BsonBinary(Bytes.toBytes("Sample12")),
-                                              new BsonBinary(Bytes.toBytes("Sample13")),
-                                              new BsonBinary(Bytes.toBytes("Sample14"))
-                                      )))))
-              .append("$DELETE_FROM_SET", new BsonDocument()
-                      .append("new_samples",
-                              new BsonDocument().append("$set",
-                                      new BsonArray(Arrays.asList(
-                                              new BsonBinary(Bytes.toBytes("Sample02")),
-                                              new BsonBinary(Bytes.toBytes("Sample03"))
-                                      )))))
-              .append("$SET", new BsonDocument()
-                      .append("newrecord", ((BsonArray) (document1.get("track"))).get(0)))
-              .append("$UNSET", new BsonDocument()
-                      .append("rather[3].outline.halfway.so[2][2]", new BsonNull()));
+        .append("$ADD",
+          new BsonDocument().append("new_samples", new BsonDocument().append("$set",
+            new BsonArray(Arrays.asList(new BsonBinary(Bytes.toBytes("Sample10")),
+              new BsonBinary(Bytes.toBytes("Sample12")), new BsonBinary(Bytes.toBytes("Sample13")),
+              new BsonBinary(Bytes.toBytes("Sample14")))))))
+        .append("$DELETE_FROM_SET",
+          new BsonDocument().append("new_samples",
+            new BsonDocument().append("$set",
+              new BsonArray(Arrays.asList(new BsonBinary(Bytes.toBytes("Sample02")),
+                new BsonBinary(Bytes.toBytes("Sample03")))))))
+        .append("$SET",
+          new BsonDocument().append("newrecord", ((BsonArray) (document1.get("track"))).get(0)))
+        .append("$UNSET",
+          new BsonDocument().append("rather[3].outline.halfway.so[2][2]", new BsonNull()));
 
       conditionExpression =
-              "field_not_exists(newrecord) AND field_exists(#rather[3].#outline.#halfway.#so[2][2])";
+        "field_not_exists(newrecord) AND field_exists(#rather[3].#outline.#halfway.#so[2][2])";
 
       conditionDoc = new BsonDocument();
       conditionDoc.put("$EXPR", new BsonString(conditionExpression));
       conditionDoc.put("$VAL", new BsonDocument());
-      conditionDoc.put("$KEYS", new BsonDocument()
-              .append("#rather", new BsonString("rather"))
-              .append("#outline", new BsonString("outline"))
-              .append("#halfway", new BsonString("halfway"))
-              .append("#so", new BsonString("so")));
+      conditionDoc.put("$KEYS",
+        new BsonDocument().append("#rather", new BsonString("rather"))
+          .append("#outline", new BsonString("outline"))
+          .append("#halfway", new BsonString("halfway")).append("#so", new BsonString("so")));
 
-      stmt = conn.prepareStatement("UPSERT INTO " + tableName
-              + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
-              + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
-              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END");
+      stmt = conn.prepareStatement(
+        "UPSERT INTO " + tableName + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
+          + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
+          + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END");
 
       stmt.setString(1, "pk1010");
       stmt.executeUpdate();
 
       updateExp = new BsonDocument()
-              .append("$SET", new BsonDocument()
-                      .append("result[1].location.state", new BsonString("AK")))
-              .append("$UNSET", new BsonDocument()
-                      .append("result[4].emails[1]", new BsonNull()));
+        .append("$SET", new BsonDocument().append("result[1].location.state", new BsonString("AK")))
+        .append("$UNSET", new BsonDocument().append("result[4].emails[1]", new BsonNull()));
 
-      conditionExpression =
-              "#result[2].#location.#coordinates.#latitude > :latitude OR "
-                      + "(field_exists(#result[1].#location) AND #result[1].#location.#state != :state" +
-                      " AND field_exists(#result[4].#emails[1]))";
+      conditionExpression = "#result[2].#location.#coordinates.#latitude > :latitude OR "
+        + "(field_exists(#result[1].#location) AND #result[1].#location.#state != :state"
+        + " AND field_exists(#result[4].#emails[1]))";
 
       conditionDoc = new BsonDocument();
       conditionDoc.put("$EXPR", new BsonString(conditionExpression));
-      conditionDoc.put("$VAL", new BsonDocument()
-              .append(":latitude", new BsonDouble(0))
-              .append(":state", new BsonString("AK")));
-      conditionDoc.put("$KEYS", new BsonDocument()
-              .append("#result", new BsonString("result"))
-              .append("#location", new BsonString("location"))
-              .append("#coordinates", new BsonString("coordinates"))
-              .append("#latitude", new BsonString("latitude"))
-              .append("#state", new BsonString("state"))
-              .append("#emails", new BsonString("emails")));
+      conditionDoc.put("$VAL", new BsonDocument().append(":latitude", new BsonDouble(0))
+        .append(":state", new BsonString("AK")));
+      conditionDoc.put("$KEYS",
+        new BsonDocument().append("#result", new BsonString("result"))
+          .append("#location", new BsonString("location"))
+          .append("#coordinates", new BsonString("coordinates"))
+          .append("#latitude", new BsonString("latitude")).append("#state", new BsonString("state"))
+          .append("#emails", new BsonString("emails")));
 
-      stmt = conn.prepareStatement("UPSERT INTO " + tableName
-              + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
-              + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
-              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END");
+      stmt = conn.prepareStatement(
+        "UPSERT INTO " + tableName + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
+          + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
+          + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END");
 
       stmt.setString(1, "pk1011");
       stmt.executeUpdate();
@@ -335,14 +313,13 @@ public class Bson5IT extends ParallelStatsDisabledIT {
     String tableName = generateUniqueName();
     String cdcName = generateUniqueName();
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-      String ddl = "CREATE TABLE " + tableName
-              + " (PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON"
-              + " CONSTRAINT pk PRIMARY KEY(PK1))";
+      String ddl = "CREATE TABLE " + tableName + " (PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON"
+        + " CONSTRAINT pk PRIMARY KEY(PK1))";
       String cdcDdl = "CREATE CDC " + cdcName + " ON " + tableName;
       conn.createStatement().execute(ddl);
       conn.createStatement().execute(cdcDdl);
       IndexToolIT.runIndexTool(false, "", tableName,
-              "\"" + CDCUtil.getCDCIndexName(cdcName) + "\"");
+        "\"" + CDCUtil.getCDCIndexName(cdcName) + "\"");
       Timestamp ts1 = new Timestamp(System.currentTimeMillis());
       Thread.sleep(100);
 
@@ -354,7 +331,7 @@ public class Bson5IT extends ParallelStatsDisabledIT {
       BsonDocument bsonDocument3 = RawBsonDocument.parse(sample3);
 
       PreparedStatement stmt =
-              conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
+        conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
       stmt.setString(1, "pk0001");
       stmt.setString(2, "0002");
       stmt.setObject(3, bsonDocument1);
@@ -382,23 +359,20 @@ public class Bson5IT extends ParallelStatsDisabledIT {
       Thread.sleep(100);
 
       String conditionExpression =
-              "#press = :press AND #track[0].#shot[2][0].#city.#standard[50] = :softly";
+        "#press = :press AND #track[0].#shot[2][0].#city.#standard[50] = :softly";
 
       BsonDocument conditionDoc = new BsonDocument();
       conditionDoc.put("$EXPR", new BsonString(conditionExpression));
-      conditionDoc.put("$VAL", new BsonDocument()
-              .append(":press", new BsonString("beat"))
-              .append(":softly", new BsonString("softly")));
-      conditionDoc.put("$KEYS", new BsonDocument()
-              .append("#press", new BsonString("press"))
-              .append("#track", new BsonString("track"))
-              .append("#shot", new BsonString("shot"))
-              .append("#city", new BsonString("city"))
-              .append("#standard", new BsonString("standard")));
+      conditionDoc.put("$VAL", new BsonDocument().append(":press", new BsonString("beat"))
+        .append(":softly", new BsonString("softly")));
+      conditionDoc.put("$KEYS",
+        new BsonDocument().append("#press", new BsonString("press"))
+          .append("#track", new BsonString("track")).append("#shot", new BsonString("shot"))
+          .append("#city", new BsonString("city")).append("#standard", new BsonString("standard")));
 
-      String query = "SELECT * FROM " + tableName +
-              " WHERE PK1 = 'pk0001' AND C1 = '0002' AND NOT BSON_CONDITION_EXPRESSION(COL, '"
-              + conditionDoc.toJson() + "')";
+      String query = "SELECT * FROM " + tableName
+        + " WHERE PK1 = 'pk0001' AND C1 = '0002' AND NOT BSON_CONDITION_EXPRESSION(COL, '"
+        + conditionDoc.toJson() + "')";
       ResultSet rs = conn.createStatement().executeQuery(query);
 
       assertTrue(rs.next());
@@ -410,109 +384,92 @@ public class Bson5IT extends ParallelStatsDisabledIT {
       assertFalse(rs.next());
 
       conditionExpression =
-              "#press = :press AND #track[0].#shot[2][0].#city.#standard[5] <> :softly";
+        "#press = :press AND #track[0].#shot[2][0].#city.#standard[5] <> :softly";
 
       conditionDoc = new BsonDocument();
       conditionDoc.put("$EXPR", new BsonString(conditionExpression));
-      conditionDoc.put("$VAL", new BsonDocument()
-              .append(":press", new BsonString("beat"))
-              .append(":softly", new BsonString("softly")));
-      conditionDoc.put("$KEYS", new BsonDocument()
-              .append("#press", new BsonString("press"))
-              .append("#track", new BsonString("track"))
-              .append("#shot", new BsonString("shot"))
-              .append("#city", new BsonString("city"))
-              .append("#standard", new BsonString("standard")));
+      conditionDoc.put("$VAL", new BsonDocument().append(":press", new BsonString("beat"))
+        .append(":softly", new BsonString("softly")));
+      conditionDoc.put("$KEYS",
+        new BsonDocument().append("#press", new BsonString("press"))
+          .append("#track", new BsonString("track")).append("#shot", new BsonString("shot"))
+          .append("#city", new BsonString("city")).append("#standard", new BsonString("standard")));
 
-      BsonDocument updateExp = new BsonDocument()
-              .append("$SET", new BsonDocument()
-                      .append("browserling",
-                              new BsonBinary(PDouble.INSTANCE.toBytes(-505169340.54880095)))
-                      .append("track[0].shot[2][0].city.standard[5]", new BsonString("soft"))
-                      .append("track[0].shot[2][0].city.problem[2]",
-                              new BsonString("track[0].shot[2][0].city.problem[2] + 529.435")))
-              .append("$UNSET", new BsonDocument()
-                      .append("track[0].shot[2][0].city.flame", new BsonNull()));
+      BsonDocument updateExp = new BsonDocument().append("$SET",
+        new BsonDocument()
+          .append("browserling", new BsonBinary(PDouble.INSTANCE.toBytes(-505169340.54880095)))
+          .append("track[0].shot[2][0].city.standard[5]", new BsonString("soft"))
+          .append("track[0].shot[2][0].city.problem[2]",
+            new BsonString("track[0].shot[2][0].city.problem[2] + 529.435")))
+        .append("$UNSET",
+          new BsonDocument().append("track[0].shot[2][0].city.flame", new BsonNull()));
 
-      stmt = conn.prepareStatement("UPSERT INTO " + tableName
-              + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
-              + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
-              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END,"
-              + " C1 = ?");
+      stmt = conn.prepareStatement(
+        "UPSERT INTO " + tableName + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
+          + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
+          + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END," + " C1 = ?");
       stmt.setString(1, "pk0001");
       stmt.setString(2, "0003");
       stmt.executeUpdate();
 
       updateExp = new BsonDocument()
-              .append("$ADD", new BsonDocument()
-                      .append("new_samples",
-                              new BsonDocument().append("$set",
-                                      new BsonArray(Arrays.asList(
-                                              new BsonBinary(Bytes.toBytes("Sample10")),
-                                              new BsonBinary(Bytes.toBytes("Sample12")),
-                                              new BsonBinary(Bytes.toBytes("Sample13")),
-                                              new BsonBinary(Bytes.toBytes("Sample14"))
-                                      )))))
-              .append("$DELETE_FROM_SET", new BsonDocument()
-                      .append("new_samples",
-                              new BsonDocument().append("$set",
-                                      new BsonArray(Arrays.asList(
-                                              new BsonBinary(Bytes.toBytes("Sample02")),
-                                              new BsonBinary(Bytes.toBytes("Sample03"))
-                                      )))))
-              .append("$SET", new BsonDocument()
-                      .append("newrecord", ((BsonArray) (document1.get("track"))).get(0)))
-              .append("$UNSET", new BsonDocument()
-                      .append("rather[3].outline.halfway.so[2][2]", new BsonNull()));
+        .append("$ADD",
+          new BsonDocument().append("new_samples", new BsonDocument().append("$set",
+            new BsonArray(Arrays.asList(new BsonBinary(Bytes.toBytes("Sample10")),
+              new BsonBinary(Bytes.toBytes("Sample12")), new BsonBinary(Bytes.toBytes("Sample13")),
+              new BsonBinary(Bytes.toBytes("Sample14")))))))
+        .append("$DELETE_FROM_SET",
+          new BsonDocument().append("new_samples",
+            new BsonDocument().append("$set",
+              new BsonArray(Arrays.asList(new BsonBinary(Bytes.toBytes("Sample02")),
+                new BsonBinary(Bytes.toBytes("Sample03")))))))
+        .append("$SET",
+          new BsonDocument().append("newrecord", ((BsonArray) (document1.get("track"))).get(0)))
+        .append("$UNSET",
+          new BsonDocument().append("rather[3].outline.halfway.so[2][2]", new BsonNull()));
 
       conditionExpression =
-              "field_not_exists(newrecord) AND field_exists(#rather[3].#outline.#halfway.#so[2][20])";
+        "field_not_exists(newrecord) AND field_exists(#rather[3].#outline.#halfway.#so[2][20])";
 
       conditionDoc = new BsonDocument();
       conditionDoc.put("$EXPR", new BsonString(conditionExpression));
       conditionDoc.put("$VAL", new BsonDocument());
-      conditionDoc.put("$KEYS", new BsonDocument()
-              .append("#rather", new BsonString("rather"))
-              .append("#outline", new BsonString("outline"))
-              .append("#halfway", new BsonString("halfway"))
-              .append("#so", new BsonString("so")));
+      conditionDoc.put("$KEYS",
+        new BsonDocument().append("#rather", new BsonString("rather"))
+          .append("#outline", new BsonString("outline"))
+          .append("#halfway", new BsonString("halfway")).append("#so", new BsonString("so")));
 
-      stmt = conn.prepareStatement("UPSERT INTO " + tableName
-              + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
-              + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
-              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END");
+      stmt = conn.prepareStatement(
+        "UPSERT INTO " + tableName + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
+          + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
+          + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END");
 
       stmt.setString(1, "pk1010");
       stmt.executeUpdate();
 
       updateExp = new BsonDocument()
-              .append("$SET", new BsonDocument()
-                      .append("result[1].location.state", new BsonString("AK")))
-              .append("$UNSET", new BsonDocument()
-                      .append("result[4].emails[1]", new BsonNull()));
+        .append("$SET", new BsonDocument().append("result[1].location.state", new BsonString("AK")))
+        .append("$UNSET", new BsonDocument().append("result[4].emails[1]", new BsonNull()));
 
-      conditionExpression =
-              "#result[2].#location.#coordinates.#latitude > :latitude OR "
-                      + "(field_exists(#result[1].#location) AND #result[1].#location.#state != :state" +
-                      " AND field_not_exists(#result[4].#emails[1]))";
+      conditionExpression = "#result[2].#location.#coordinates.#latitude > :latitude OR "
+        + "(field_exists(#result[1].#location) AND #result[1].#location.#state != :state"
+        + " AND field_not_exists(#result[4].#emails[1]))";
 
       conditionDoc = new BsonDocument();
       conditionDoc.put("$EXPR", new BsonString(conditionExpression));
-      conditionDoc.put("$VAL", new BsonDocument()
-              .append(":latitude", new BsonDouble(0))
-              .append(":state", new BsonString("AK")));
-      conditionDoc.put("$KEYS", new BsonDocument()
-              .append("#result", new BsonString("result"))
-              .append("#location", new BsonString("location"))
-              .append("#coordinates", new BsonString("coordinates"))
-              .append("#latitude", new BsonString("latitude"))
-              .append("#state", new BsonString("state"))
-              .append("#emails", new BsonString("emails")));
+      conditionDoc.put("$VAL", new BsonDocument().append(":latitude", new BsonDouble(0))
+        .append(":state", new BsonString("AK")));
+      conditionDoc.put("$KEYS",
+        new BsonDocument().append("#result", new BsonString("result"))
+          .append("#location", new BsonString("location"))
+          .append("#coordinates", new BsonString("coordinates"))
+          .append("#latitude", new BsonString("latitude")).append("#state", new BsonString("state"))
+          .append("#emails", new BsonString("emails")));
 
-      stmt = conn.prepareStatement("UPSERT INTO " + tableName
-              + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
-              + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
-              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END");
+      stmt = conn.prepareStatement(
+        "UPSERT INTO " + tableName + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
+          + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
+          + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END");
 
       stmt.setString(1, "pk1011");
       stmt.executeUpdate();
@@ -553,14 +510,11 @@ public class Bson5IT extends ParallelStatsDisabledIT {
   }
 
   private static void testCDCAfterFirstUpsert(Connection conn, String cdcName, Timestamp ts1,
-                                              Timestamp ts2,
-                                              BsonDocument bsonDocument1,
-                                              BsonDocument bsonDocument2,
-                                              BsonDocument bsonDocument3)
-          throws SQLException, JsonProcessingException {
-    try (PreparedStatement pst = conn.prepareStatement(
-            "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcName +
-                    " WHERE PHOENIX_ROW_TIMESTAMP() >= ? AND PHOENIX_ROW_TIMESTAMP() <= ?")) {
+    Timestamp ts2, BsonDocument bsonDocument1, BsonDocument bsonDocument2,
+    BsonDocument bsonDocument3) throws SQLException, JsonProcessingException {
+    try (
+      PreparedStatement pst = conn.prepareStatement("SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM "
+        + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() >= ? AND PHOENIX_ROW_TIMESTAMP() <= ?")) {
       pst.setTimestamp(1, ts1);
       pst.setTimestamp(2, ts2);
 
@@ -571,8 +525,7 @@ public class Bson5IT extends ParallelStatsDisabledIT {
       Map<String, Object> map = OBJECT_MAPPER.readValue(cdcVal, Map.class);
       Map<String, Object> preImage = (Map<String, Object>) map.get(QueryConstants.CDC_PRE_IMAGE);
       Assert.assertNull(preImage.get("COL"));
-      Map<String, Object> postImage =
-              (Map<String, Object>) map.get(QueryConstants.CDC_POST_IMAGE);
+      Map<String, Object> postImage = (Map<String, Object>) map.get(QueryConstants.CDC_POST_IMAGE);
       String encodedBytes = (String) postImage.get("COL");
       byte[] bytes = Base64.getDecoder().decode(encodedBytes);
       RawBsonDocument r1 = new RawBsonDocument(bytes, 0, bytes.length);
@@ -607,14 +560,12 @@ public class Bson5IT extends ParallelStatsDisabledIT {
   }
 
   private static void testCDCPostUpdate(Connection conn, String cdcName, Timestamp ts1,
-                                        Timestamp ts2, BsonDocument bsonDocument1,
-                                        BsonDocument bsonDocument2,
-                                        BsonDocument bsonDocument3)
-          throws SQLException, IOException {
+    Timestamp ts2, BsonDocument bsonDocument1, BsonDocument bsonDocument2,
+    BsonDocument bsonDocument3) throws SQLException, IOException {
     ResultSet rs;
-    try (PreparedStatement pst = conn.prepareStatement(
-            "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcName +
-                    " WHERE PHOENIX_ROW_TIMESTAMP() >= ? AND PHOENIX_ROW_TIMESTAMP() <= ?")) {
+    try (
+      PreparedStatement pst = conn.prepareStatement("SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM "
+        + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() >= ? AND PHOENIX_ROW_TIMESTAMP() <= ?")) {
       pst.setTimestamp(1, ts1);
       pst.setTimestamp(2, ts2);
 
@@ -629,13 +580,12 @@ public class Bson5IT extends ParallelStatsDisabledIT {
       RawBsonDocument preDoc = new RawBsonDocument(bytes, 0, bytes.length);
       Assert.assertEquals(bsonDocument1, preDoc);
 
-      Map<String, Object> postImage =
-              (Map<String, Object>) map.get(QueryConstants.CDC_POST_IMAGE);
+      Map<String, Object> postImage = (Map<String, Object>) map.get(QueryConstants.CDC_POST_IMAGE);
       encodedBytes = (String) postImage.get("COL");
       bytes = Base64.getDecoder().decode(encodedBytes);
       RawBsonDocument postDoc = new RawBsonDocument(bytes, 0, bytes.length);
       Assert.assertEquals(RawBsonDocument.parse(getJsonString("json/sample_updated_01.json")),
-              postDoc);
+        postDoc);
 
       Assert.assertTrue(rs.next());
 
@@ -652,7 +602,7 @@ public class Bson5IT extends ParallelStatsDisabledIT {
       bytes = Base64.getDecoder().decode(encodedBytes);
       postDoc = new RawBsonDocument(bytes, 0, bytes.length);
       Assert.assertEquals(RawBsonDocument.parse(getJsonString("json/sample_updated_02.json")),
-              postDoc);
+        postDoc);
 
       Assert.assertTrue(rs.next());
 
@@ -669,18 +619,17 @@ public class Bson5IT extends ParallelStatsDisabledIT {
       bytes = Base64.getDecoder().decode(encodedBytes);
       postDoc = new RawBsonDocument(bytes, 0, bytes.length);
       Assert.assertEquals(RawBsonDocument.parse(getJsonString("json/sample_updated_03.json")),
-              postDoc);
+        postDoc);
 
       Assert.assertFalse(rs.next());
     }
   }
 
   private static void testCDCUpdateOneRowChange(Connection conn, String cdcName, Timestamp ts1,
-                                                Timestamp ts2, BsonDocument bsonDocument1)
-          throws SQLException, IOException {
-    try (PreparedStatement pst = conn.prepareStatement(
-            "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcName +
-                    " WHERE PHOENIX_ROW_TIMESTAMP() >= ? AND PHOENIX_ROW_TIMESTAMP() <= ?")) {
+    Timestamp ts2, BsonDocument bsonDocument1) throws SQLException, IOException {
+    try (
+      PreparedStatement pst = conn.prepareStatement("SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM "
+        + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() >= ? AND PHOENIX_ROW_TIMESTAMP() <= ?")) {
       pst.setTimestamp(1, ts1);
       pst.setTimestamp(2, ts2);
 
@@ -695,8 +644,7 @@ public class Bson5IT extends ParallelStatsDisabledIT {
       RawBsonDocument preDoc = new RawBsonDocument(bytes, 0, bytes.length);
       Assert.assertEquals(bsonDocument1, preDoc);
 
-      Map<String, Object> postImage =
-              (Map<String, Object>) map.get(QueryConstants.CDC_POST_IMAGE);
+      Map<String, Object> postImage = (Map<String, Object>) map.get(QueryConstants.CDC_POST_IMAGE);
       encodedBytes = (String) postImage.get("COL");
       bytes = Base64.getDecoder().decode(encodedBytes);
       RawBsonDocument postDoc = new RawBsonDocument(bytes, 0, bytes.length);
@@ -706,4 +654,4 @@ public class Bson5IT extends ParallelStatsDisabledIT {
     }
   }
 
-} 
+}

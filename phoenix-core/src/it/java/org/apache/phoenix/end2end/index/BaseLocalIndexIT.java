@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,7 +24,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Properties;
-
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -40,62 +39,65 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
 public abstract class BaseLocalIndexIT extends BaseTest {
-    protected boolean isNamespaceMapped;
-    protected String schemaName;
+  protected boolean isNamespaceMapped;
+  protected String schemaName;
 
-    public BaseLocalIndexIT(boolean isNamespaceMapped) {
-        this.isNamespaceMapped = isNamespaceMapped;
-    }
-    
-    @Before
-    public void setup() {
-        schemaName = BaseTest.generateUniqueName();
-    }
-    
-    @BeforeClass
-    public static synchronized void doSetup() throws Exception {
-        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(7);
-        serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
-        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
-        clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
-        // setting update frequency to a large value to test out that we are
-        // generating stats for local indexes
-        clientProps.put(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB, "120000");
-        clientProps.put(QueryServices.MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN, "2");
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
-    }
+  public BaseLocalIndexIT(boolean isNamespaceMapped) {
+    this.isNamespaceMapped = isNamespaceMapped;
+  }
 
-    protected Connection getConnection() throws SQLException{
-        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
-        return DriverManager.getConnection(getUrl(),props);
-    }
+  @Before
+  public void setup() {
+    schemaName = BaseTest.generateUniqueName();
+  }
 
-    protected void createBaseTable(String tableName, Integer saltBuckets, String splits) throws SQLException {
-        createBaseTable(tableName, saltBuckets, splits, null);
-    }
+  @BeforeClass
+  public static synchronized void doSetup() throws Exception {
+    Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(7);
+    serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
+    Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
+    clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
+    // setting update frequency to a large value to test out that we are
+    // generating stats for local indexes
+    clientProps.put(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB, "120000");
+    clientProps.put(QueryServices.MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN, "2");
+    setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
+      new ReadOnlyProps(clientProps.entrySet().iterator()));
+  }
 
-    protected void createBaseTable(String tableName, Integer saltBuckets, String splits, String cf) throws SQLException {
-        Connection conn = getConnection();
-        if (isNamespaceMapped) {
-            conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
-        }
-        String ddl = "CREATE TABLE " + tableName + " (t_id VARCHAR NOT NULL,\n" +
-                "k1 INTEGER NOT NULL,\n" +
-                "k2 INTEGER NOT NULL,\n" +
-                "k3 INTEGER,\n" +
-                (cf != null ? (cf+'.') : "") + "v1 VARCHAR,\n" +
-                "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2))\n"
-                        + (saltBuckets != null && splits == null ? (" salt_buckets=" + saltBuckets) : ""
-                        + (saltBuckets == null && splits != null ? (" split on " + splits) : ""));
-        conn.createStatement().execute(ddl);
-        conn.close();
-    }
+  protected Connection getConnection() throws SQLException {
+    Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+    props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED,
+      Boolean.toString(isNamespaceMapped));
+    return DriverManager.getConnection(getUrl(), props);
+  }
 
-    @Parameters(name = "LocalIndexIT_isNamespaceMapped={0}") // name is used by failsafe as file name in reports
-    public static synchronized Collection<Boolean> data() {
-        return Arrays.asList(true, false);
-    }
+  protected void createBaseTable(String tableName, Integer saltBuckets, String splits)
+    throws SQLException {
+    createBaseTable(tableName, saltBuckets, splits, null);
+  }
 
+  protected void createBaseTable(String tableName, Integer saltBuckets, String splits, String cf)
+    throws SQLException {
+    Connection conn = getConnection();
+    if (isNamespaceMapped) {
+      conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
+    }
+    String ddl =
+      "CREATE TABLE " + tableName + " (t_id VARCHAR NOT NULL,\n" + "k1 INTEGER NOT NULL,\n"
+        + "k2 INTEGER NOT NULL,\n" + "k3 INTEGER,\n" + (cf != null ? (cf + '.') : "")
+        + "v1 VARCHAR,\n" + "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2))\n"
+        + (saltBuckets != null && splits == null
+          ? (" salt_buckets=" + saltBuckets)
+          : "" + (saltBuckets == null && splits != null ? (" split on " + splits) : ""));
+    conn.createStatement().execute(ddl);
+    conn.close();
+  }
+
+  @Parameters(name = "LocalIndexIT_isNamespaceMapped={0}") // name is used by failsafe as file name
+                                                           // in reports
+  public static synchronized Collection<Boolean> data() {
+    return Arrays.asList(true, false);
+  }
 
 }

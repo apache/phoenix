@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,18 +21,18 @@ import java.util.Map;
 
 public class AlterSessionStatement extends MutableStatement {
 
-    private final Map<String,Object> props;
+  private final Map<String, Object> props;
 
-    public AlterSessionStatement(Map<String,Object> props) {
-        this.props = props;
-    }
+  public AlterSessionStatement(Map<String, Object> props) {
+    this.props = props;
+  }
 
-    @Override
-    public int getBindCount() {
-        return 0;
-    }
+  @Override
+  public int getBindCount() {
+    return 0;
+  }
 
-    public Map<String, Object> getProps(){
-        return props;
-    }
+  public Map<String, Object> getProps() {
+    return props;
+  }
 }

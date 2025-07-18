@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,21 +17,20 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.monitoring.MetricType.DELETE_BATCH_FAILED_SIZE;
-import static org.apache.phoenix.monitoring.MetricType.UPSERT_BATCH_FAILED_SIZE;
-import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_FAILED_SIZE;
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_FAILED_COUNT;
+import static org.apache.phoenix.monitoring.MetricType.DELETE_BATCH_FAILED_SIZE;
+import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_FAILED_SIZE;
+import static org.apache.phoenix.monitoring.MetricType.UPSERT_BATCH_FAILED_SIZE;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.sql.ResultSet;
 import java.util.Map;
 import java.util.Properties;
-
 import org.apache.phoenix.end2end.index.ImmutableIndexIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.monitoring.MetricType;
@@ -43,76 +42,76 @@ import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
-public class MutationBatchFailedStateMetricWithDeleteAndUpsertIT extends BaseMutationBatchFailedStateMetricIT {
-    String transactionProvider;
-    public MutationBatchFailedStateMetricWithDeleteAndUpsertIT(String transactionProvider) {
-        super(transactionProvider);
-        this.transactionProvider = transactionProvider;
+public class MutationBatchFailedStateMetricWithDeleteAndUpsertIT
+  extends BaseMutationBatchFailedStateMetricIT {
+  String transactionProvider;
+
+  public MutationBatchFailedStateMetricWithDeleteAndUpsertIT(String transactionProvider) {
+    super(transactionProvider);
+    this.transactionProvider = transactionProvider;
+  }
+
+  @Test
+  public void testFailedUpsertAndDelete() throws Exception {
+    int numUpsertCount = 1;
+    int numDeleteCount = 0;
+
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    Connection conn = null;
+
+    try {
+      conn = DriverManager.getConnection(getUrl(), props);
+
+      Statement stmt = conn.createStatement();
+      // adding coprocessor which basically overrides pre batch mutate which is called for all the
+      // mutations
+      // Note :- it is called before applying mutation to region
+      TestUtil.addCoprocessor(conn, deleteTableName,
+        ImmutableIndexIT.DeleteFailingRegionObserver.class);
+      // trying to delete 4 rows with this single delete statement
+      ResultSet rs =
+        stmt.executeQuery("SELECT COUNT(*) FROM " + deleteTableName + " where val1 > 1");
+      rs.next();
+      numDeleteCount = rs.getInt(1);
+
+      String dml = String.format("DELETE FROM %s where val1 >  1", deleteTableName);
+      stmt.execute(dml);
+
+      for (int i = 0; i < numUpsertCount; i++) {
+        String upsertSQL = String.format(upsertStatement, deleteTableName);
+        PreparedStatement preparedStatement = conn.prepareStatement(upsertSQL);
+        preparedStatement.setString(1, "ROW_" + i);
+        preparedStatement.setInt(2, i);
+        preparedStatement.setInt(3, i);
+        preparedStatement.execute();
+      }
+      conn.commit();
+
+      Assert.fail("Commit should not have succeeded");
+    } catch (SQLException e) {
+      Map<String, Map<MetricType, Long>> mutationMetrics =
+        conn.unwrap(PhoenixConnection.class).getMutationMetrics();
+      int dbfs = mutationMetrics.get(deleteTableName).get(DELETE_BATCH_FAILED_SIZE).intValue();
+      int upfs = mutationMetrics.get(deleteTableName).get(UPSERT_BATCH_FAILED_SIZE).intValue();
+      int mfs = mutationMetrics.get(deleteTableName).get(MUTATION_BATCH_FAILED_SIZE).intValue();
+      long gfs = GLOBAL_MUTATION_BATCH_FAILED_COUNT.getMetric().getValue();
+
+      int totalCount = numDeleteCount + numUpsertCount;
+
+      Assert.assertEquals(numDeleteCount, dbfs);
+      Assert.assertEquals(1, upfs);
+      Assert.assertEquals(totalCount, mfs);
+      // for the second parameter the global mutation batch failed count is double the original
+      // parameter because
+      // global metrics do not reset to 0 for each parameter
+      if (this.transactionProvider == null) {
+        Assert.assertEquals(2 * totalCount, gfs);
+      } else if (this.transactionProvider.equals("OMID")) {
+        Assert.assertEquals(totalCount, gfs);
+      }
     }
 
-    @Test
-    public void testFailedUpsertAndDelete() throws Exception {
-        int numUpsertCount = 1;
-        int numDeleteCount = 0;
-
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = null;
-
-        try {
-            conn = DriverManager.getConnection(getUrl(), props);
-
-            Statement stmt = conn.createStatement();
-            // adding coprocessor which basically overrides pre batch mutate which is called for all the mutations
-            // Note :- it is called before applying mutation to region
-            TestUtil.addCoprocessor(conn, deleteTableName,
-                    ImmutableIndexIT.DeleteFailingRegionObserver.class);
-            // trying to delete 4 rows with this single delete statement
-            ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM "+ deleteTableName + " where val1 > 1");
-            rs.next();
-            numDeleteCount = rs.getInt(1);
-
-            String dml = String.format("DELETE FROM %s where val1 >  1", deleteTableName);
-            stmt.execute(dml);
-
-            for(int i = 0; i < numUpsertCount; i++){
-                String upsertSQL = String.format(upsertStatement, deleteTableName);
-                PreparedStatement preparedStatement = conn.prepareStatement(upsertSQL);
-                preparedStatement.setString(1, "ROW_"+i);
-                preparedStatement.setInt(2, i);
-                preparedStatement.setInt(3, i);
-                preparedStatement.execute();
-            }
-            conn.commit();
-
-            Assert.fail("Commit should not have succeeded");
-        } catch (SQLException e) {
-            Map<String, Map<MetricType, Long>> mutationMetrics =
-                    conn.unwrap(PhoenixConnection.class).getMutationMetrics();
-            int dbfs =
-                    mutationMetrics.get(deleteTableName).get(DELETE_BATCH_FAILED_SIZE).intValue();
-            int upfs =
-                    mutationMetrics.get(deleteTableName).get(UPSERT_BATCH_FAILED_SIZE).intValue();
-            int mfs =
-                    mutationMetrics.get(deleteTableName).get(MUTATION_BATCH_FAILED_SIZE).intValue();
-            long gfs =
-                    GLOBAL_MUTATION_BATCH_FAILED_COUNT.getMetric().getValue();
-
-            int totalCount = numDeleteCount + numUpsertCount;
-
-            Assert.assertEquals(numDeleteCount, dbfs);
-            Assert.assertEquals(1, upfs);
-            Assert.assertEquals(totalCount, mfs);
-            //for the second parameter the global mutation batch failed count is double the original parameter because
-            //global metrics do not reset to 0 for each parameter
-            if(this.transactionProvider == null){
-                Assert.assertEquals(2*totalCount, gfs);
-            } else if(this.transactionProvider.equals("OMID")){
-                Assert.assertEquals(totalCount, gfs);
-            }
-        }
-
-    }
+  }
 }

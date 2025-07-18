@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -33,15 +33,15 @@ import org.junit.Test;
 public class TraceSpanReceiverTest {
 
   @BeforeClass
-  public static synchronized void setup() throws Exception{
+  public static synchronized void setup() throws Exception {
   }
 
   /**
-   * For PHOENIX-1126, Phoenix originally assumed all the annotation values were integers,
-   * but HBase writes some strings as well, so we need to be able to handle that too
+   * For PHOENIX-1126, Phoenix originally assumed all the annotation values were integers, but HBase
+   * writes some strings as well, so we need to be able to handle that too
    */
   @Test
-  public void testNonIntegerAnnotations(){
+  public void testNonIntegerAnnotations() {
     Span span = getSpan();
     // make sure its less than the length of an integer
 
@@ -62,7 +62,7 @@ public class TraceSpanReceiverTest {
   }
 
   @Test
-  public void testIntegerAnnotations(){
+  public void testIntegerAnnotations() {
     Span span = getSpan();
 
     // add annotation through the phoenix interfaces
@@ -75,8 +75,8 @@ public class TraceSpanReceiverTest {
     assertTrue(source.getNumSpans() == 1);
   }
 
-  private Span getSpan(){
+  private Span getSpan() {
     // Spans with Trace Id as 0 will be rejected (See PHOENIX-3767 for details)
-    return new MilliSpan("test span", 1, 1 , 2, "pid");
+    return new MilliSpan("test span", 1, 1, 2, "pid");
   }
 }

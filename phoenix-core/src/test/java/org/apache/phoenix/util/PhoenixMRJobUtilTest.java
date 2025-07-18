@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,32 +17,32 @@
  */
 package org.apache.phoenix.util;
 
+import static org.junit.Assert.assertEquals;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-
 public class PhoenixMRJobUtilTest {
-    @Test
-    public void testGetRMHostName(){
-        Configuration config = HBaseConfiguration.create();
-        String testRMAddress = "testRMhostName:portnumber";
+  @Test
+  public void testGetRMHostName() {
+    Configuration config = HBaseConfiguration.create();
+    String testRMAddress = "testRMhostName:portnumber";
 
-        String address = PhoenixMRJobUtil.getRMWebAddress(config);
-        assertEquals(YarnConfiguration.DEFAULT_RM_WEBAPP_ADDRESS, address);
+    String address = PhoenixMRJobUtil.getRMWebAddress(config);
+    assertEquals(YarnConfiguration.DEFAULT_RM_WEBAPP_ADDRESS, address);
 
-        config.set(YarnConfiguration.RM_WEBAPP_ADDRESS, testRMAddress);
-        address = PhoenixMRJobUtil.getRMWebAddress(config);
-        assertEquals(testRMAddress, address);
+    config.set(YarnConfiguration.RM_WEBAPP_ADDRESS, testRMAddress);
+    address = PhoenixMRJobUtil.getRMWebAddress(config);
+    assertEquals(testRMAddress, address);
 
-        //HA mode
-        address = PhoenixMRJobUtil.getRMWebAddress(config, "rm11");
-        assertEquals(YarnConfiguration.DEFAULT_RM_WEBAPP_ADDRESS, address);
+    // HA mode
+    address = PhoenixMRJobUtil.getRMWebAddress(config, "rm11");
+    assertEquals(YarnConfiguration.DEFAULT_RM_WEBAPP_ADDRESS, address);
 
-        config.set(YarnConfiguration.RM_WEBAPP_ADDRESS + ".rm11", testRMAddress);
-        address = PhoenixMRJobUtil.getRMWebAddress(config, "rm11");
-        assertEquals(testRMAddress, address);
-    }
+    config.set(YarnConfiguration.RM_WEBAPP_ADDRESS + ".rm11", testRMAddress);
+    address = PhoenixMRJobUtil.getRMWebAddress(config, "rm11");
+    assertEquals(testRMAddress, address);
+  }
 }

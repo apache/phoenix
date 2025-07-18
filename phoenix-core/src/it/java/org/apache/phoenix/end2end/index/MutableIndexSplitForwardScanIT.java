@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,13 +24,13 @@ import org.junit.experimental.categories.Category;
 @Category(ParallelStatsDisabledTest.class)
 public class MutableIndexSplitForwardScanIT extends MutableIndexSplitIT {
 
-    public MutableIndexSplitForwardScanIT(boolean localIndex, boolean multiTenant) {
-        super(localIndex, multiTenant);
-    }
+  public MutableIndexSplitForwardScanIT(boolean localIndex, boolean multiTenant) {
+    super(localIndex, multiTenant);
+  }
 
-    @Test
-    public void testSplitDuringIndexScan() throws Exception {
-        testSplitDuringIndexScan(false);
-    }
-    
+  @Test
+  public void testSplitDuringIndexScan() throws Exception {
+    testSplitDuringIndexScan(false);
+  }
+
 }

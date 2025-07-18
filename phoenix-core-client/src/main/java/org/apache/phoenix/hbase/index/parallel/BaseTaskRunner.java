@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,7 +24,6 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
-
 import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.util.Pair;
 import org.slf4j.Logger;
@@ -53,8 +52,8 @@ public abstract class BaseTaskRunner implements TaskRunner {
   }
 
   @Override
-  public <R> Pair<List<R>, List<Future<R>>> submit(TaskBatch<R> tasks) throws CancellationException, ExecutionException,
-      InterruptedException {
+  public <R> Pair<List<R>, List<Future<R>>> submit(TaskBatch<R> tasks)
+    throws CancellationException, ExecutionException, InterruptedException {
     // submit each task to the pool and queue it up to be watched
     List<ListenableFuture<R>> futures = new ArrayList<ListenableFuture<R>>(tasks.size());
     for (Task<R> task : tasks.getTasks()) {
@@ -66,7 +65,8 @@ public abstract class BaseTaskRunner implements TaskRunner {
       // advantage of being (1) less code, and (2) supported as part of a library, it is just that
       // little bit slower. If push comes to shove, we can revert back to the previous
       // implementation, but for right now, this works just fine.
-      return Pair.newPair(submitTasks(futures).get(), Collections.unmodifiableList(((List<Future<R>>)(List<?>)futures)));
+      return Pair.newPair(submitTasks(futures).get(),
+        Collections.unmodifiableList(((List<Future<R>>) (List<?>) futures)));
     } catch (CancellationException e) {
       // propagate the failure back out
       logAndNotifyAbort(e, tasks);
@@ -93,8 +93,8 @@ public abstract class BaseTaskRunner implements TaskRunner {
   protected abstract <R> ListenableFuture<List<R>> submitTasks(List<ListenableFuture<R>> futures);
 
   @Override
-  public <R> Pair<List<R>, List<Future<R>>> submitUninterruptible(TaskBatch<R> tasks) throws EarlyExitFailure,
-      ExecutionException {
+  public <R> Pair<List<R>, List<Future<R>>> submitUninterruptible(TaskBatch<R> tasks)
+    throws EarlyExitFailure, ExecutionException {
     boolean interrupted = false;
     try {
       while (!this.isStopped()) {

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,42 +18,38 @@
 package org.apache.phoenix.memory;
 
 /**
- * 
  * Memory manager that delegates through to another memory manager.
- * 
- * 
  * @since 0.1
  */
 public class DelegatingMemoryManager implements MemoryManager {
-    private final MemoryManager parent;
-    
-    public DelegatingMemoryManager(MemoryManager globalMemoryManager){
-        this.parent = globalMemoryManager;
-    }
-    
-    @Override
-    public long getAvailableMemory() {
-        return parent.getAvailableMemory();
-    }
+  private final MemoryManager parent;
 
-    @Override
-    public long getMaxMemory() {
-        return parent.getMaxMemory();
-    }
+  public DelegatingMemoryManager(MemoryManager globalMemoryManager) {
+    this.parent = globalMemoryManager;
+  }
 
-    @Override
-    public MemoryChunk allocate(long minBytes, long reqBytes) {
-        return parent.allocate(minBytes, reqBytes);
-    }
+  @Override
+  public long getAvailableMemory() {
+    return parent.getAvailableMemory();
+  }
 
+  @Override
+  public long getMaxMemory() {
+    return parent.getMaxMemory();
+  }
 
-    @Override
-    public MemoryChunk allocate(long nBytes) {
-        return allocate(nBytes, nBytes);
-    }
+  @Override
+  public MemoryChunk allocate(long minBytes, long reqBytes) {
+    return parent.allocate(minBytes, reqBytes);
+  }
 
-    public MemoryManager getParent() {
-        return parent;
-    }
+  @Override
+  public MemoryChunk allocate(long nBytes) {
+    return allocate(nBytes, nBytes);
+  }
+
+  public MemoryManager getParent() {
+    return parent;
+  }
 
 }
