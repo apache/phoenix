@@ -143,7 +143,7 @@ public class LogFileWriterTest {
         initLogFileWriter();
         // Verify file exists and has content (header should be written)
         assertTrue("File should exist after init", localFs.exists(filePath));
-        assertEquals("File should have header written", LogFileHeader.HEADERSIZE,writer.getLength());
+        assertEquals("File should have header written", LogFileHeader.HEADERSIZE, writer.getLength());
         writer.close();
     }
 
