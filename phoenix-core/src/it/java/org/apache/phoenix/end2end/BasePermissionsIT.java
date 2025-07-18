@@ -1265,7 +1265,7 @@ public abstract class BasePermissionsIT extends BaseTest {
 
         // Revoke READ permissions to RegularUser2 on the table
         // Permissions should propagate automatically to relevant physical tables such as global index and view index.
-        verifyAllowed(revokePermissions(regularUser2, fullTableName, false), regularUser1);
+        verifyAllowed(revokePermissions(regularUser2, fullTableName, false), superUser1);
         // READ query should fail now
         verifyDenied(readTable(fullTableName), AccessDeniedException.class, regularUser2);
         verifyDenied(readTableWithoutVerification(schemaName + "." + idx1TableName), AccessDeniedException.class, regularUser2);
