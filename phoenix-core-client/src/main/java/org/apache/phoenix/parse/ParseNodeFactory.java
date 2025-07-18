@@ -65,10 +65,10 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 
 /**
- * 
+ *
  * Factory used by parser to construct object model while parsing a SQL statement
- * 
- * 
+ *
+ *
  * @since 0.1
  */
 public class ParseNodeFactory {
@@ -90,7 +90,7 @@ public class ParseNodeFactory {
      * the lowercase name and the number of arguments. This disambiguates
      * the aggregate {@code MAX(<col>) } from the non aggregate {@code MAX(<col1>,<col2>) }.
      *
-     * 
+     *
      * @since 0.1
      */
     public static class BuiltInFunctionKey {
@@ -201,7 +201,7 @@ public class ParseNodeFactory {
 
     public ParseNodeFactory() {
     }
-    
+
     private static AtomicInteger tempAliasCounter = new AtomicInteger(0);
 
     @VisibleForTesting
@@ -213,7 +213,7 @@ public class ParseNodeFactory {
     public static void setTempAliasCounterValue(int newValue) {
         tempAliasCounter.set(newValue);
     }
-    
+
     public static String createTempAlias() {
         return "$" + tempAliasCounter.incrementAndGet();
     }
@@ -273,7 +273,7 @@ public class ParseNodeFactory {
     public ColumnParseNode column(TableName tableName, String columnName, String alias) {
         return new ColumnParseNode(tableName, columnName, alias);
     }
-    
+
     public ColumnName columnName(String columnName) {
         return new ColumnName(columnName);
     }
@@ -334,15 +334,15 @@ public class ParseNodeFactory {
             SortOrder sortOrder, boolean isRowTimestamp) {
         return new ColumnDef(columnDefName, sqlTypeName, isArray, arrSize, isNull, maxLength, scale, isPK, sortOrder, null, null, isRowTimestamp);
     }
-    
+
     public ColumnDefInPkConstraint columnDefInPkConstraint(ColumnName columnDefName, SortOrder sortOrder, boolean isRowTimestamp) {
         return new ColumnDefInPkConstraint(columnDefName, sortOrder, isRowTimestamp);
     }
-    
+
     public PrimaryKeyConstraint primaryKey(String name, List<ColumnDefInPkConstraint> columnDefs) {
         return new PrimaryKeyConstraint(name, columnDefs);
     }
-    
+
     public IndexKeyConstraint indexKey( List<Pair<ParseNode, SortOrder>> parseNodeAndSortOrder) {
         return new IndexKeyConstraint(parseNodeAndSortOrder);
     }
@@ -489,20 +489,20 @@ public class ParseNodeFactory {
     public NamedTableNode namedTable(String alias, TableName name) {
         return new NamedTableNode(alias, name);
     }
-    
+
     @Deprecated
     public NamedTableNode namedTable(String alias, TableName name, List<ColumnDef> dyn_columns) {
         return new NamedTableNode(alias, name,dyn_columns);
     }
-    
+
     public NamedTableNode namedTable(String alias, TableName name, Double tableSamplingRate) {
         return new NamedTableNode(alias, name, tableSamplingRate);
     }
-    
+
     public NamedTableNode namedTable(String alias, TableName name, List<ColumnDef> dyn_columns, Double tableSamplingRate) {
     	return new NamedTableNode(alias, name,dyn_columns, tableSamplingRate);
     }
-    
+
     public NamedTableNode namedTable(String alias, TableName name, List<ColumnDef> dyn_columns, LiteralParseNode tableSampleNode) {
         Double tableSamplingRate;
         if (tableSampleNode == null || tableSampleNode.getValue() == null) {
@@ -530,7 +530,7 @@ public class ParseNodeFactory {
     public UpdateStatisticsStatement updateStatistics(NamedTableNode table, StatisticsCollectionScope scope, Map<String,Object> props) {
       return new UpdateStatisticsStatement(table, scope, props);
     }
-    
+
     public ExecuteUpgradeStatement executeUpgrade() {
         return new ExecuteUpgradeStatement();
     }
@@ -779,11 +779,11 @@ public class ParseNodeFactory {
             throw new IllegalArgumentException("Unexpcted CompareOp of " + op);
         }
     }
-    
+
     public ArrayAnyComparisonNode arrayAny(ParseNode rhs, ComparisonParseNode compareNode) {
         return new ArrayAnyComparisonNode(rhs, compareNode);
     }
-    
+
     public ArrayAllComparisonNode arrayAll(ParseNode rhs, ComparisonParseNode compareNode) {
         return new ArrayAllComparisonNode(rhs, compareNode);
     }
@@ -849,7 +849,7 @@ public class ParseNodeFactory {
         if (child instanceof ExistsParseNode) {
             return exists(child.getChildren().get(0), !((ExistsParseNode) child).isNegate());
         }
-        
+
         return new NotParseNode(child);
     }
 
@@ -864,20 +864,21 @@ public class ParseNodeFactory {
     }
 
     public SelectStatement select(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
-            List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, OffsetNode offset, int bindCount, boolean isAggregate, 
+            List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, OffsetNode offset, int bindCount, boolean isAggregate,
             boolean hasSequence, List<SelectStatement> selects, Map<String, UDFParseNode> udfParseNodes) {
 
         return new SelectStatement(from, hint, isDistinct, select, where, groupBy == null ? Collections.<ParseNode>emptyList() : groupBy, having,
                 orderBy == null ? Collections.<OrderByNode>emptyList() : orderBy, limit, offset, bindCount, isAggregate, hasSequence, selects == null ? Collections.<SelectStatement>emptyList() : selects, udfParseNodes);
-    } 
-    
+    }
+
     public UpsertStatement upsert(NamedTableNode table, HintNode hint, List<ColumnName> columns,
                                   List<ParseNode> values, SelectStatement select,
                                   int bindCount, Map<String, UDFParseNode> udfParseNodes,
                                   List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
-                                  UpsertStatement.OnDuplicateKeyType onDupKeyType) {
+                                  UpsertStatement.OnDuplicateKeyType onDupKeyType,
+                                  boolean returningRow) {
         return new UpsertStatement(table, hint, columns, values, select, bindCount, udfParseNodes,
-                onDupKeyPairs, onDupKeyType);
+                onDupKeyPairs, onDupKeyType, returningRow);
     }
 
     public CursorName cursorName(String name){
@@ -900,8 +901,11 @@ public class ParseNodeFactory {
         return new CloseStatement(cursor);
     }
 
-    public DeleteStatement delete(NamedTableNode table, HintNode hint, ParseNode node, List<OrderByNode> orderBy, LimitNode limit, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
-        return new DeleteStatement(table, hint, node, orderBy, limit, bindCount, udfParseNodes);
+    public DeleteStatement delete(NamedTableNode table, HintNode hint, ParseNode node,
+                                  List<OrderByNode> orderBy, LimitNode limit, int bindCount,
+                                  Map<String, UDFParseNode> udfParseNodes, boolean returningRow) {
+        return new DeleteStatement(table, hint, node, orderBy, limit, bindCount, udfParseNodes,
+                returningRow);
     }
 
     public SelectStatement select(SelectStatement statement, ParseNode where) {
@@ -913,12 +917,12 @@ public class ParseNodeFactory {
         return select(statement.getFrom(), statement.getHint(), statement.isDistinct(), statement.getSelect(), where, statement.getGroupBy(), having,
                 statement.getOrderBy(), statement.getLimit(), statement.getOffset(), statement.getBindCount(), statement.isAggregate(), statement.hasSequence(), statement.getSelects(), statement.getUdfParseNodes());
     }
-    
+
     public SelectStatement select(SelectStatement statement, List<AliasedNode> select, ParseNode where, List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy) {
-        return select(statement.getFrom(), statement.getHint(), statement.isDistinct(), 
+        return select(statement.getFrom(), statement.getHint(), statement.isDistinct(),
                 select, where, groupBy, having, orderBy, statement.getLimit(), statement.getOffset(), statement.getBindCount(), statement.isAggregate(), statement.hasSequence(), statement.getSelects(), statement.getUdfParseNodes());
     }
-    
+
     public SelectStatement select(SelectStatement statement, TableNode table) {
         return select(table, statement.getHint(), statement.isDistinct(), statement.getSelect(), statement.getWhere(), statement.getGroupBy(),
                 statement.getHaving(), statement.getOrderBy(), statement.getLimit(), statement.getOffset(), statement.getBindCount(), statement.isAggregate(),
@@ -957,7 +961,7 @@ public class ParseNodeFactory {
 
     public SelectStatement select(SelectStatement statement, HintNode hint) {
         return hint == null || hint.isEmpty() ? statement : select(statement.getFrom(), hint, statement.isDistinct(), statement.getSelect(),
-                statement.getWhere(), statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(), statement.getLimit(), statement.getOffset(), 
+                statement.getWhere(), statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(), statement.getLimit(), statement.getOffset(),
                 statement.getBindCount(), statement.isAggregate(), statement.hasSequence(), statement.getSelects(), statement.getUdfParseNodes());
     }
 
@@ -989,11 +993,11 @@ public class ParseNodeFactory {
 
     public SelectStatement select(List<SelectStatement> statements, List<OrderByNode> orderBy, LimitNode limit,
             OffsetNode offset, int bindCount, boolean isAggregate) {
-        if (statements.size() == 1) return select(statements.get(0), orderBy, limit, offset, bindCount, isAggregate);        
+        if (statements.size() == 1) return select(statements.get(0), orderBy, limit, offset, bindCount, isAggregate);
 
-        // Get a list of adjusted aliases from a non-wildcard sub-select if any. 
-        // We do not check the number of select nodes among all sub-selects, as 
-        // it will be done later at compile stage. Empty or different aliases 
+        // Get a list of adjusted aliases from a non-wildcard sub-select if any.
+        // We do not check the number of select nodes among all sub-selects, as
+        // it will be done later at compile stage. Empty or different aliases
         // are ignored, since they cannot be referred by outer queries.
         List<String> aliases = Lists.<String> newArrayList();
         Map<String, UDFParseNode> udfParseNodes = new HashMap<String, UDFParseNode>(1);
@@ -1020,8 +1024,8 @@ public class ParseNodeFactory {
                 aliasedNodes.add(aliasedNode(alias, column(null, alias, alias)));
             }
         }
-        
-        return select(null, HintNode.EMPTY_HINT_NODE, false, aliasedNodes, 
+
+        return select(null, HintNode.EMPTY_HINT_NODE, false, aliasedNodes,
                 null, null, null, orderBy, limit,offset, bindCount, false, false, statements, udfParseNodes);
     }
 

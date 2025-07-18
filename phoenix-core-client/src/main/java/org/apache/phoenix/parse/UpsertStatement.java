@@ -23,7 +23,7 @@ import java.util.Map;
 
 import org.apache.hadoop.hbase.util.Pair;
 
-public class UpsertStatement extends DMLStatement {
+public class UpsertStatement extends DMLStatement implements RowReturningDMLStatement {
 
     public enum OnDuplicateKeyType {
         NONE,
@@ -38,30 +38,14 @@ public class UpsertStatement extends DMLStatement {
     private final HintNode hint;
     private final List<Pair<ColumnName,ParseNode>> onDupKeyPairs;
     private final OnDuplicateKeyType onDupKeyType;
-
-    public UpsertStatement(NamedTableNode table, HintNode hint, List<ColumnName> columns,
-            List<ParseNode> values, SelectStatement select, int bindCount,
-            Map<String, UDFParseNode> udfParseNodes, List<Pair<ColumnName,ParseNode>> onDupKeyPairs) {
-        super(table, bindCount, udfParseNodes);
-        this.columns = columns == null ? Collections.<ColumnName>emptyList() : columns;
-        this.values = values;
-        this.select = select;
-        this.hint = hint == null ? HintNode.EMPTY_HINT_NODE : hint;
-        this.onDupKeyPairs = onDupKeyPairs;
-        if (onDupKeyPairs == null) {
-            this.onDupKeyType = OnDuplicateKeyType.NONE;
-        } else if (onDupKeyPairs.isEmpty()) {
-            this.onDupKeyType = OnDuplicateKeyType.IGNORE;
-        } else {
-            this.onDupKeyType = OnDuplicateKeyType.UPDATE;
-        }
-    }
+    private final boolean returningRow;
 
     public UpsertStatement(NamedTableNode table, HintNode hint, List<ColumnName> columns,
                            List<ParseNode> values, SelectStatement select, int bindCount,
                            Map<String, UDFParseNode> udfParseNodes,
                            List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
-                           OnDuplicateKeyType onDupKeyType) {
+                           OnDuplicateKeyType onDupKeyType,
+                           boolean returningRow) {
         super(table, bindCount, udfParseNodes);
         this.columns = columns == null ? Collections.emptyList() : columns;
         this.values = values;
@@ -69,6 +53,7 @@ public class UpsertStatement extends DMLStatement {
         this.hint = hint == null ? HintNode.EMPTY_HINT_NODE : hint;
         this.onDupKeyPairs = onDupKeyPairs;
         this.onDupKeyType = onDupKeyType;
+        this.returningRow = returningRow;
     }
 
     public List<ColumnName> getColumns() {
@@ -93,5 +78,9 @@ public class UpsertStatement extends DMLStatement {
 
     public OnDuplicateKeyType getOnDupKeyType() {
         return onDupKeyType;
+    }
+
+    public boolean isReturningRow() {
+        return returningRow;
     }
 }

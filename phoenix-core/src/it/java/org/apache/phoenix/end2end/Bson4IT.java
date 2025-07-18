@@ -634,7 +634,7 @@ public class Bson4IT extends ParallelStatsDisabledIT {
               + " VALUES (?) ON DUPLICATE KEY UPDATE_ONLY COL = CASE WHEN"
               + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
               + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END,"
-              + " C1 = ?");
+              + " C1 = ? RETURNING *");
       stmt.setString(1, "pk0001");
       stmt.setString(2, "0003");
 
@@ -673,7 +673,7 @@ public class Bson4IT extends ParallelStatsDisabledIT {
       stmt = conn.prepareStatement("UPSERT INTO " + tableName
               + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
               + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
-              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END");
+              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END RETURNING *");
 
       stmt.setString(1, "pk1010");
 
@@ -700,7 +700,7 @@ public class Bson4IT extends ParallelStatsDisabledIT {
       stmt = conn.prepareStatement("UPSERT INTO " + tableName
               + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
               + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
-              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END");
+              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END RETURNING *");
 
       stmt.setString(1, "pk1011");
 
@@ -728,7 +728,7 @@ public class Bson4IT extends ParallelStatsDisabledIT {
       stmt = conn.prepareStatement("UPSERT INTO " + tableName
               + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
               + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
-              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END");
+              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END RETURNING *");
       stmt.setString(1, "pk0001");
 
       // Conditional Upsert not successful
@@ -737,7 +737,7 @@ public class Bson4IT extends ParallelStatsDisabledIT {
       stmt = conn.prepareStatement("UPSERT INTO " + tableName
               + " VALUES (?) ON DUPLICATE KEY UPDATE_ONLY COL = CASE WHEN"
               + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
-              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END");
+              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END RETURNING *");
       // the row does not exist already
       stmt.setString(1, "pk000111");
 
@@ -749,7 +749,7 @@ public class Bson4IT extends ParallelStatsDisabledIT {
       stmt = conn.prepareStatement("UPSERT INTO " + tableName
               + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
               + " BSON_CONDITION_EXPRESSION(COL, '" + conditionDoc.toJson() + "')"
-              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END");
+              + " THEN BSON_UPDATE_EXPRESSION(COL, '" + updateExp + "') ELSE COL END RETURNING *");
       // the row does not exist already
       stmt.setString(1, "pk000123456");
 
@@ -1187,6 +1187,7 @@ public class Bson4IT extends ParallelStatsDisabledIT {
     stmt.execute();
     assertEquals(success ? 1 : 0, stmt.getUpdateCount());
     ResultSet resultSet = stmt.getResultSet();
+    assertTrue(resultSet.next());
     assertEquals(jsonPath == null ? null : RawBsonDocument.parse(getJsonString(jsonPath)),
             resultSet.getObject(3));
   }
