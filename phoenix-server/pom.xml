@@ -178,7 +178,10 @@
                   <!-- See PHOENIX-7118
                  We expect this to come from the unshaded hadoop on the classpath.
                  That is always true for the HBase server classpath -->
-                <exclude>org/apache/commons/configuration2/**</exclude>
+                  <exclude>org/apache/commons/configuration2/**</exclude>
+                  <!-- Xerial Snappy has a JNI component so cannot be shaded or
+                       else native symbols won't link -->
+                  <exclude>org/xerial/snappy/**</exclude>
                 </excludes>
               </relocation>
               <!-- We use the relocate-by default settings from -client, instead of relocating
