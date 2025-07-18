@@ -308,6 +308,10 @@ public class ParseNodeFactory {
         return new DocumentFieldContainsParseNode(fieldKey, value);
     }
 
+    public DocumentFieldTypeParseNode documentFieldType(ParseNode fieldKey, ParseNode value) {
+        return new DocumentFieldTypeParseNode(fieldKey, value);
+    }
+
     public ColumnDef columnDef(ColumnName columnDefName, String sqlTypeName,
                                boolean isArray, Integer arrSize, Boolean isNull,
                                Integer maxLength, Integer scale, boolean isPK,

@@ -250,6 +250,28 @@ public class Bson1IT extends ParallelStatsDisabledIT {
       assertEquals(bsonDocument2, document2);
 
       assertFalse(rs.next());
+
+      conditionExpression = "field_type(#attr_5, :L)";
+      conditionDoc = new BsonDocument();
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", compareValuesDocument);
+      keyDoc = new BsonDocument();
+      keyDoc.put("#attr_5", new BsonString("attr_5"));
+      conditionDoc.put("$KEYS", keyDoc);
+      query = "SELECT * FROM " + tableName + " WHERE BSON_CONDITION_EXPRESSION(COL, '"
+              + conditionDoc.toJson() + "')";
+      rs = conn.createStatement().executeQuery(query);
+      assertTrue(rs.next());
+      assertTrue(rs.next());
+
+      conditionExpression = "attribute_type(attr_5, :NS)";
+      conditionDoc = new BsonDocument();
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", compareValuesDocument);
+      query = "SELECT * FROM " + tableName + " WHERE BSON_CONDITION_EXPRESSION(COL, '"
+              + conditionDoc.toJson() + "')";
+      rs = conn.createStatement().executeQuery(query);
+      assertFalse(rs.next());
     }
   }
 
@@ -269,6 +291,9 @@ public class Bson1IT extends ParallelStatsDisabledIT {
             "  \":Attr5Value\" : \"str001\",\n" +
             "  \":NestedList1String\" : \"1234abcd\",\n" +
             "  \":NonExistentValue\" : \"does_not_exist\"\n" +
+            "  \":NonExistentValue\" : \"does_not_exist\"\n" +
+            "  \":L\" : \"L\"\n" +
+            "  \":NS\" : \"NS\"\n" +
             "}";
     return RawBsonDocument.parse(json);
   }
