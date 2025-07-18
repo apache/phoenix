@@ -38,7 +38,6 @@ import static org.apache.phoenix.monitoring.MetricType.SELECT_SCAN_SUCCESS_SQL_C
 import static org.apache.phoenix.monitoring.MetricType.SELECT_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.SELECT_SQL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.MetricType.SELECT_SUCCESS_SQL_COUNTER;
-import static org.apache.phoenix.monitoring.MetricType.SQL_QUERY_PARSING_TIME_MS;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_AGGREGATE_FAILURE_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_FAILED_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_SQL_COUNTER;
@@ -442,9 +441,11 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                                     null);
                                 }
                                 overallQuerymetrics.startQuery();
-                                OverAllQueryMetrics overallQueryMetrics = context.getOverallQueryMetrics();
+                                OverAllQueryMetrics overallQueryMetrics =
+                                    context.getOverallQueryMetrics();
                                 overallQueryMetrics.startQuery();
-                                overallQueryMetrics.setQueryParsingTimeMS(PhoenixStatement.this.sqlQueryParsingTime);
+                                overallQueryMetrics.setQueryParsingTimeMS(
+                                    PhoenixStatement.this.sqlQueryParsingTime);
                                 rs =
                                         newResultSet(resultIterator, plan.getProjector(),
                                                 plan.getContext());
@@ -650,7 +651,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                     throw new UpgradeRequiredException();
                                 }
                                 state = connection.getMutationState();
-                                state.setMutationQueryParsingtime(PhoenixStatement.this.sqlQueryParsingTime);
+                                state.setMutationQueryParsingtime(
+                                    PhoenixStatement.this.sqlQueryParsingTime);
                                 isUpsert = stmt instanceof ExecutableUpsertStatement;
                                 isDelete = stmt instanceof ExecutableDeleteStatement;
                                 if (isDelete && connection.getAutoCommit() &&
@@ -2414,7 +2416,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             throw ClientUtil.parseServerException(e);
         }
         CompilableStatement statement = parser.parseStatement();
-        setSqlQueryParsingTime(EnvironmentEdgeManager.currentTimeMillis()- startQueryParsingTime);
+        setSqlQueryParsingTime(EnvironmentEdgeManager.currentTimeMillis() - startQueryParsingTime);
         return statement;
     }
     

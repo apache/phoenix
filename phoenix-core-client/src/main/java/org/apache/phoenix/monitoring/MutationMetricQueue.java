@@ -95,7 +95,8 @@ public class MutationMetricQueue {
             publishedMetricsForTable.put(metric.getUpsertBatchFailedCounter().getMetricType(), metric.getUpsertBatchFailedCounter().getValue());
             publishedMetricsForTable.put(metric.getDeleteBatchFailedSize().getMetricType(), metric.getDeleteBatchFailedSize().getValue());
             publishedMetricsForTable.put(metric.getDeleteBatchFailedCounter().getMetricType(), metric.getDeleteBatchFailedCounter().getValue());
-            publishedMetricsForTable.put(metric.getMutationQueryParsingTimeMS().getMetricType(), metric.getMutationQueryParsingTimeMS().getValue());
+            publishedMetricsForTable.put(metric.getMutationQueryParsingTimeMS().getMetricType(),
+                metric.getMutationQueryParsingTimeMS().getValue());
             publishedMetricsForTable.put(metric.getMutationBatchCounter().getMetricType(),
                     metric.getMutationBatchCounter().getValue());
         }
@@ -125,7 +126,8 @@ public class MutationMetricQueue {
         private final CombinableMetric upsertBatchFailedCounter = new CombinableMetricImpl(UPSERT_BATCH_FAILED_COUNTER);
         private final CombinableMetric deleteBatchFailedSize = new CombinableMetricImpl(DELETE_BATCH_FAILED_SIZE);
         private final CombinableMetric deleteBatchFailedCounter = new CombinableMetricImpl(DELETE_BATCH_FAILED_COUNTER);
-        private final CombinableMetric mutationQueryParsingTimeMS = new CombinableMetricImpl(SQL_QUERY_PARSING_TIME_MS);
+        private final CombinableMetric mutationQueryParsingTimeMS =
+            new CombinableMetricImpl(SQL_QUERY_PARSING_TIME_MS);
 
         private final CombinableMetric numOfIndexCommitFailMutations = new CombinableMetricImpl(
                 INDEX_COMMIT_FAILURE_SIZE);
