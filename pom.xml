@@ -722,6 +722,13 @@
               <exclude>**/generated/*</exclude>
               <exclude>**/package-info.java</exclude>
             </excludes>
+            <!-- We need to explicitly set includes as we have src/it which is not standard java
+            src path and spotless does not identify it otherwise -->
+            <includes>
+              <include>src/main/java/**/*.java</include>
+              <include>src/test/java/**/*.java</include>
+              <include>src/it/java/**/*.java</include>
+            </includes>
             <!--
               e.g., remove the following lines:
               "* @param paramName"
