@@ -310,6 +310,10 @@ public class ParseNodeFactory {
     return new DocumentFieldContainsParseNode(fieldKey, value);
   }
 
+  public DocumentFieldSizeParseNode documentFieldSize(ParseNode fieldKey) {
+    return new DocumentFieldSizeParseNode(fieldKey);
+  }
+
   public ColumnDef columnDef(ColumnName columnDefName, String sqlTypeName, boolean isArray,
     Integer arrSize, Boolean isNull, Integer maxLength, Integer scale, boolean isPK,
     SortOrder sortOrder, String expressionStr, Integer encodedQualifier, boolean isRowTimestamp) {

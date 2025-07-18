@@ -28,6 +28,7 @@ import org.apache.phoenix.parse.BsonExpressionParser;
 import org.apache.phoenix.parse.DocumentFieldBeginsWithParseNode;
 import org.apache.phoenix.parse.DocumentFieldContainsParseNode;
 import org.apache.phoenix.parse.DocumentFieldExistsParseNode;
+import org.apache.phoenix.parse.DocumentFieldSizeParseNode;
 import org.apache.phoenix.parse.EqualParseNode;
 import org.apache.phoenix.parse.GreaterThanOrEqualParseNode;
 import org.apache.phoenix.parse.GreaterThanParseNode;
@@ -40,7 +41,10 @@ import org.apache.phoenix.parse.NotParseNode;
 import org.apache.phoenix.parse.OrParseNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.bson.BsonArray;
+import org.bson.BsonBinary;
 import org.bson.BsonDocument;
+import org.bson.BsonInt32;
+import org.bson.BsonNumber;
 import org.bson.BsonString;
 import org.bson.BsonValue;
 import org.bson.RawBsonDocument;
@@ -180,12 +184,11 @@ public final class SQLComparisonExpressionUtils {
       return contains(fieldName, containsValue, rawBsonDocument, comparisonValuesDocument);
     } else if (parseNode instanceof EqualParseNode) {
       final EqualParseNode equalParseNode = (EqualParseNode) parseNode;
-      final LiteralParseNode lhs = (LiteralParseNode) equalParseNode.getLHS();
+      Object lhs =
+        getLHS(rawBsonDocument, keyAliasDocument, sortedKeyNames, equalParseNode.getLHS());
       final LiteralParseNode rhs = (LiteralParseNode) equalParseNode.getRHS();
-      String fieldKey = (String) lhs.getValue();
-      fieldKey = replaceExpressionFieldNames(fieldKey, keyAliasDocument, sortedKeyNames);
       final String expectedFieldValue = (String) rhs.getValue();
-      return isEquals(fieldKey, expectedFieldValue, rawBsonDocument, comparisonValuesDocument);
+      return isEquals(lhs, expectedFieldValue, rawBsonDocument, comparisonValuesDocument);
     } else if (parseNode instanceof NotEqualParseNode) {
       final NotEqualParseNode notEqualParseNode = (NotEqualParseNode) parseNode;
       final LiteralParseNode lhs = (LiteralParseNode) notEqualParseNode.getLHS();
@@ -289,6 +292,65 @@ public final class SQLComparisonExpressionUtils {
   }
 
   /**
+   * Return the value for the given LHS ParseNode and replace any alias using the provided
+   * keyAliasDocument. The value can either be a literal or the size() function on a fieldKey in the
+   * provided document.
+   * @param doc              BSON Document value of the Cell.
+   * @param keyAliasDocument The BSON Document consisting of place-holder for keys.
+   * @param sortedKeyNames   The document key names in the descending sorted order of their string
+   *                         length.
+   * @param parseNode        ParseNode for either literal expression or size() function.
+   * @return Literal value if parseNode is LiteralParseNode or evaluate size() function if parseNode
+   *         is DocumentFieldSizeParseNode.
+   */
+  private static Object getLHS(final RawBsonDocument doc, final BsonDocument keyAliasDocument,
+    final List<String> sortedKeyNames, ParseNode parseNode) {
+    if (parseNode instanceof LiteralParseNode) {
+      String fieldKey = (String) ((LiteralParseNode) parseNode).getValue();
+      return replaceExpressionFieldNames(fieldKey, keyAliasDocument, sortedKeyNames);
+    } else if (parseNode instanceof DocumentFieldSizeParseNode) {
+      String fieldKey = ((DocumentFieldSizeParseNode) parseNode).getValue();
+      fieldKey = replaceExpressionFieldNames(fieldKey, keyAliasDocument, sortedKeyNames);
+      return new BsonInt32(getSizeOfBsonValue(fieldKey, doc));
+    }
+    return null;
+  }
+
+  /**
+   * Returns the size of the field of the BsonDocument at the given key. If the field is not present
+   * in the document, returns 0. If the field is String, returns the length of the string. If the
+   * field is Binary, returns the length of the binary data. If the field is Set/Array/Document,
+   * returns the number of elements.
+   * @param fieldKey        The field key for which size has to be returned.
+   * @param rawBsonDocument Bson Document representing the cell value from which the field is to be
+   *                        retrieved.
+   */
+  private static Integer getSizeOfBsonValue(final String fieldKey,
+    final RawBsonDocument rawBsonDocument) {
+    BsonValue topLevelValue = rawBsonDocument.get(fieldKey);
+    BsonValue fieldValue = topLevelValue != null
+      ? topLevelValue
+      : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, rawBsonDocument);
+    if (fieldValue == null) {
+      return 0;
+    }
+    if (fieldValue instanceof BsonString) {
+      return ((BsonString) fieldValue).getValue().length();
+    } else if (fieldValue instanceof BsonBinary) {
+      return ((BsonBinary) fieldValue).getData().length;
+    } else if (fieldValue instanceof BsonArray) {
+      return ((BsonArray) fieldValue).size();
+    } else if (CommonComparisonExpressionUtils.isBsonSet(fieldValue)) {
+      return ((BsonArray) ((BsonDocument) fieldValue).get("$set")).size();
+    } else if (fieldValue instanceof BsonDocument) {
+      return ((BsonDocument) fieldValue).size();
+    } else {
+      throw new BsonConditionInvalidArgumentException("Unsupported type for size() function. "
+        + fieldValue.getClass() + ", supported types: String, Binary, Set, Array, Document.");
+    }
+  }
+
+  /**
    * Replaces expression field names with their corresponding actual field names. This method
    * supports field name aliasing by replacing placeholder expressions with actual field names from
    * the provided key alias document.
@@ -337,13 +399,18 @@ public final class SQLComparisonExpressionUtils {
    * @param comparisonValuesDocument Bson Document with values placeholder.
    * @return True if the comparison is successful, False otherwise.
    */
-  private static boolean compare(final String fieldKey, final String expectedFieldValue,
+  private static boolean compare(final Object fieldKey, final String expectedFieldValue,
     final CommonComparisonExpressionUtils.CompareOp compareOp,
     final RawBsonDocument rawBsonDocument, final BsonDocument comparisonValuesDocument) {
-    BsonValue topLevelValue = rawBsonDocument.get(fieldKey);
-    BsonValue value = topLevelValue != null
-      ? topLevelValue
-      : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, rawBsonDocument);
+    BsonValue value;
+    if (fieldKey instanceof BsonNumber) {
+      value = (BsonNumber) fieldKey;
+    } else {
+      BsonValue topLevelValue = rawBsonDocument.get((String) fieldKey);
+      value = topLevelValue != null
+        ? topLevelValue
+        : CommonComparisonExpressionUtils.getFieldFromDocument((String) fieldKey, rawBsonDocument);
+    }
     if (value != null) {
       BsonValue compareValue = comparisonValuesDocument.get(expectedFieldValue);
       return CommonComparisonExpressionUtils.compareValues(value, compareValue, compareOp);
@@ -505,7 +572,7 @@ public final class SQLComparisonExpressionUtils {
    * @param comparisonValuesDocument Bson Document with values placeholder.
    * @return True if the value of the field is equal to expectedFieldValue.
    */
-  private static boolean isEquals(final String fieldKey, final String expectedFieldValue,
+  private static boolean isEquals(final Object fieldKey, final String expectedFieldValue,
     final RawBsonDocument rawBsonDocument, final BsonDocument comparisonValuesDocument) {
     return compare(fieldKey, expectedFieldValue, CommonComparisonExpressionUtils.CompareOp.EQUALS,
       rawBsonDocument, comparisonValuesDocument);
