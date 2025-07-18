@@ -38,6 +38,7 @@ import static org.apache.phoenix.monitoring.MetricType.SELECT_SCAN_SUCCESS_SQL_C
 import static org.apache.phoenix.monitoring.MetricType.SELECT_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.SELECT_SQL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.MetricType.SELECT_SUCCESS_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.SQL_QUERY_PARSING_TIME_MS;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_AGGREGATE_FAILURE_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_FAILED_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_SQL_COUNTER;
@@ -304,6 +305,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     // Caching per Statement
     protected final Calendar localCalendar = Calendar.getInstance();
     private boolean validateLastDdlTimestamp;
+    private long sqlQueryParsingTime = 0;
 
     public PhoenixStatement(PhoenixConnection connection) {
         this.connection = connection;
@@ -319,6 +321,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     private int getDefaultQueryTimeoutMillis() {
         return connection.getQueryServices().getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, 
             QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
+    }
+
+    private void setSqlQueryParsingTime(long time) {
+        this.sqlQueryParsingTime = time;
     }
 
     public PhoenixResultSet newResultSet(ResultIterator iterator, RowProjector projector, StatementContext context) throws SQLException {
@@ -436,6 +442,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                                     null);
                                 }
                                 overallQuerymetrics.startQuery();
+                                OverAllQueryMetrics overallQueryMetrics = context.getOverallQueryMetrics();
+                                overallQueryMetrics.startQuery();
+                                overallQueryMetrics.setQueryParsingTimeMS(PhoenixStatement.this.sqlQueryParsingTime);
                                 rs =
                                         newResultSet(resultIterator, plan.getProjector(),
                                                 plan.getContext());
@@ -641,6 +650,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                     throw new UpgradeRequiredException();
                                 }
                                 state = connection.getMutationState();
+                                state.setMutationQueryParsingtime(PhoenixStatement.this.sqlQueryParsingTime);
                                 isUpsert = stmt instanceof ExecutableUpsertStatement;
                                 isDelete = stmt instanceof ExecutableDeleteStatement;
                                 if (isDelete && connection.getAutoCommit() &&
@@ -2396,6 +2406,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     }
     
     protected CompilableStatement parseStatement(String sql) throws SQLException {
+        long startQueryParsingTime = EnvironmentEdgeManager.currentTimeMillis();
         PhoenixStatementParser parser = null;
         try {
             parser = new PhoenixStatementParser(sql, new ExecutableNodeFactory());
@@ -2403,6 +2414,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             throw ClientUtil.parseServerException(e);
         }
         CompilableStatement statement = parser.parseStatement();
+        setSqlQueryParsingTime(EnvironmentEdgeManager.currentTimeMillis()- startQueryParsingTime);
         return statement;
     }
     

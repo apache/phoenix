@@ -182,6 +182,7 @@ public class MutationState implements SQLCloseable {
     private Map<String, Long> timeInExecuteMutationMap = new HashMap<>();
     private static boolean allUpsertsMutations = true;
     private static boolean allDeletesMutations = true;
+    private static long mutationQueryParsingTimeMS = 0;
 
     private final boolean indexRegionObserverEnabledAllTables;
 
@@ -1744,7 +1745,7 @@ public class MutationState implements SQLCloseable {
                 numUpsertMutationsInBatch,
                 allUpsertsMutations ? 1 : 0,
                 numDeleteMutationsInBatch,
-                allDeletesMutations ? 1 : 0, 0);
+                allDeletesMutations ? 1 : 0, 0, mutationQueryParsingTimeMS);
     }
 
     /**
@@ -1827,7 +1828,7 @@ public class MutationState implements SQLCloseable {
                 committedDeleteMutationCounter,
                 committedTotalMutationBytes,
                 numFailedPhase3Mutations,
-                0, 0, 0, 0, mutationBatchCounter);
+                0, 0, 0, 0, mutationBatchCounter, mutationQueryParsingTimeMS);
     }
 
     private void filterIndexCheckerMutations(Map<TableInfo, List<Mutation>> mutationMap,
@@ -2415,6 +2416,10 @@ public class MutationState implements SQLCloseable {
         }
         timeSpent += time;
         timeInExecuteMutationMap.put(tableName, timeSpent);
+    }
+
+    public void setMutationQueryParsingtime(long time) {
+        mutationQueryParsingTimeMS = time;
     }
 
     public void resetExecuteMutationTimeMap() {

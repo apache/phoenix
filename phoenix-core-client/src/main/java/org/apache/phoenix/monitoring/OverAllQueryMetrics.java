@@ -29,6 +29,7 @@ import static org.apache.phoenix.monitoring.MetricType.QUERY_SCAN_FAILED_COUNTER
 import static org.apache.phoenix.monitoring.MetricType.QUERY_SCAN_TIMEOUT_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_TIMEOUT_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.RESULT_SET_TIME_MS;
+import static org.apache.phoenix.monitoring.MetricType.SQL_QUERY_PARSING_TIME_MS;
 import static org.apache.phoenix.monitoring.MetricType.WALL_CLOCK_TIME_MS;
 
 import java.util.HashMap;
@@ -56,6 +57,7 @@ public class OverAllQueryMetrics {
     private final CombinableMetric queryPointLookupFailed;
     private final CombinableMetric queryScanFailed;
     private final CombinableMetric cacheRefreshedDueToSplits;
+    private final CombinableMetric queryParsingTimeMS;
 
     public OverAllQueryMetrics(boolean isRequestMetricsEnabled, LogLevel connectionLogLevel) {
         queryWatch = MetricUtil.getMetricsStopWatch(isRequestMetricsEnabled, connectionLogLevel,
@@ -84,6 +86,8 @@ public class OverAllQueryMetrics {
         queryScanFailed = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,connectionLogLevel, QUERY_SCAN_FAILED_COUNTER);
         cacheRefreshedDueToSplits = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,
                 connectionLogLevel, CACHE_REFRESH_SPLITS_COUNTER);
+        queryParsingTimeMS = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,
+            connectionLogLevel, SQL_QUERY_PARSING_TIME_MS);
     }
 
     public void updateNumParallelScans(long numParallelScans) {
@@ -166,6 +170,10 @@ public class OverAllQueryMetrics {
         return resultSetTimeMS.getValue();
     }
 
+    public void setQueryParsingTimeMS(long time) {
+        queryParsingTimeMS.set(time);
+    }
+
     public Map<MetricType, Long> publish() {
         Map<MetricType, Long> metricsForPublish = new HashMap<>();
         metricsForPublish.put(numParallelScans.getMetricType(), numParallelScans.getValue());
@@ -183,6 +191,7 @@ public class OverAllQueryMetrics {
         metricsForPublish.put(queryPointLookupFailed.getMetricType(), queryPointLookupFailed.getValue());
         metricsForPublish.put(queryScanFailed.getMetricType(), queryScanFailed.getValue());
         metricsForPublish.put(cacheRefreshedDueToSplits.getMetricType(), cacheRefreshedDueToSplits.getValue());
+        metricsForPublish.put(queryParsingTimeMS.getMetricType(), queryParsingTimeMS.getValue());
         return metricsForPublish;
     }
 
@@ -202,6 +211,7 @@ public class OverAllQueryMetrics {
         cacheRefreshedDueToSplits.reset();
         queryWatch.stop();
         resultSetWatch.stop();
+        queryParsingTimeMS.reset();
     }
 
     public OverAllQueryMetrics combine(OverAllQueryMetrics metric) {
@@ -218,6 +228,7 @@ public class OverAllQueryMetrics {
         queryCompilerTimeMS.combine(queryCompilerTimeMS);
         queryOptimizerTimeMS.combine(queryOptimizerTimeMS);
         queryResultItrSetTimeMS.combine(queryResultItrSetTimeMS);
+        queryParsingTimeMS.combine(metric.queryParsingTimeMS);
         return this;
     }
 

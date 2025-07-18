@@ -47,6 +47,7 @@ import static org.apache.phoenix.monitoring.MetricType.QUERY_COMPILER_TIME_MS;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_OPTIMIZER_TIME_MS;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_RESULT_ITR_TIME_MS;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_TIMEOUT_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.SQL_QUERY_PARSING_TIME_MS;
 import static org.apache.phoenix.monitoring.MetricType.TASK_END_TO_END_TIME;
 import static org.apache.phoenix.monitoring.MetricType.TASK_EXECUTED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.TASK_EXECUTION_TIME;
@@ -137,7 +138,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
 
     private static final List<MetricType> mutationMetricsToSkip =
             Lists.newArrayList(MUTATION_COMMIT_TIME, UPSERT_COMMIT_TIME, DELETE_COMMIT_TIME,
-                    MUTATION_BATCH_COUNTER);
+                    MUTATION_BATCH_COUNTER, MetricType.SQL_QUERY_PARSING_TIME_MS);
     private static final List<MetricType> readMetricsToSkip =
             Lists.newArrayList(TASK_QUEUE_WAIT_TIME, TASK_EXECUTION_TIME, TASK_END_TO_END_TIME,
                     COUNT_MILLS_BETWEEN_NEXTS);
@@ -586,7 +587,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
             String t = entry.getKey();
             assertEquals("Table names didn't match!", tableName, t);
             Map<MetricType, Long> p = entry.getValue();
-            assertEquals("There should have been seventeen metrics", 17, p.size());
+            assertEquals("There should have been eighteen metrics", 18, p.size());
             boolean mutationBatchSizePresent = false;
             boolean mutationCommitTimePresent = false;
             boolean mutationBytesPresent = false;
@@ -1354,6 +1355,84 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
                 } catch (Exception ignore) {}
             }
         }
+    }
+
+    @Test
+    public void testQueryParsingTimeForUpsertAndSelect() throws Exception {
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
+        int sourceNumRows = 1;
+
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl1 =
+            "CREATE TABLE " + tableName1 + " (" +
+                "ID INTEGER NOT NULL PRIMARY KEY, " +
+                "CATEGORY VARCHAR(30), " +
+                "REGION VARCHAR(30), " +
+                "DISTRICT VARCHAR(30)" +
+                ")";
+        conn.createStatement().execute(ddl1);
+
+        String ddl2 =
+            "CREATE TABLE " + tableName2 + " (" +
+                "ID INTEGER NOT NULL PRIMARY KEY, " +
+                "CATEGORY VARCHAR(30), " +
+                "REGION VARCHAR(30), " +
+                "DISTRICT VARCHAR(30)" +
+                ")";
+        conn.createStatement().execute(ddl2);
+
+        String upsert1 = "UPSERT INTO " + tableName1 +
+            " (ID, CATEGORY, REGION, DISTRICT) " +
+            "VALUES (?, ?, ?, ?)";
+
+        PreparedStatement pstmt1 = conn.prepareStatement(upsert1);
+        // Need to upsert atleast 1 row to intialize Mutation metrics
+        // which further gets used in QueryParsingTime metrics.
+        for (int i = 0; i < sourceNumRows; i++) {
+            pstmt1.setInt(1, i);
+            pstmt1.setString(2, "CATEGORY_" + (i % 1));
+            pstmt1.setString(3, "REGION_" + (i % 1));
+            pstmt1.setString(4, "DISTRICT_" + (i % 1));
+            pstmt1.execute();
+        }
+        conn.commit();
+
+        // Creating a query with lots of IN CLAUSE to increase query parsing time
+        String whereStr =
+            "   REGION IN ('REGION_0', 'REGION_1', 'REGION_2', 'REGION_3', 'REGION_4', 'REGION_5') " +
+                "   AND CATEGORY IN ('CATEGORY_0', 'CATEGORY_1', 'CATEGORY_2', 'CATEGORY_3') " +
+                "   AND DISTRICT IN ('DISTRICT_0', 'DISTRICT_1', 'DISTRICT_2', 'DISTRICT_3') ";
+
+        String whereCaluse = whereStr;
+        for (int i = 0; i < 50; i++) {
+            whereCaluse += "AND " + whereStr;
+        }
+
+        String queryStr =
+            " SELECT " +
+                "   ID, REGION" +
+                " FROM " + tableName1 +
+                " WHERE " + whereCaluse;
+
+        PhoenixRuntime.resetMetrics(conn);
+        String upsertSelectQuery = "UPSERT INTO " + tableName2 + " " + queryStr;
+        conn = DriverManager.getConnection(getUrl());
+        PreparedStatement Sstmt = conn.prepareStatement(upsertSelectQuery);
+        Sstmt.executeUpdate();
+        conn.commit();
+
+        Map<String, Map<MetricType, Long>> mutationMetrics =
+            PhoenixRuntime.getWriteMetricInfoForMutationsSinceLastReset(conn);
+        long parsingTime = mutationMetrics.get(tableName2).get(SQL_QUERY_PARSING_TIME_MS);
+        assertTrue("parsing time should be greater than zero",
+            parsingTime > 0);
+        ResultSet rs = conn.createStatement().executeQuery(queryStr);
+        Map<MetricType, Long> overallReadMetrics =
+            PhoenixRuntime.getOverAllReadRequestMetricInfo(rs);
+        assertTrue("Query parsing time should be greater than zero",
+            overallReadMetrics.get(SQL_QUERY_PARSING_TIME_MS) > 0);
+        conn.close();
     }
 
     private static class GetConnectionCallable implements Callable<Connection> {

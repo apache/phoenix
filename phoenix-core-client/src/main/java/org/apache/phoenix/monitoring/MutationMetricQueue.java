@@ -29,6 +29,7 @@ import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BYTES;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_COMMIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.INDEX_COMMIT_FAILURE_SIZE;
+import static org.apache.phoenix.monitoring.MetricType.SQL_QUERY_PARSING_TIME_MS;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_BATCH_FAILED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_BATCH_FAILED_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_COMMIT_TIME;
@@ -94,6 +95,7 @@ public class MutationMetricQueue {
             publishedMetricsForTable.put(metric.getUpsertBatchFailedCounter().getMetricType(), metric.getUpsertBatchFailedCounter().getValue());
             publishedMetricsForTable.put(metric.getDeleteBatchFailedSize().getMetricType(), metric.getDeleteBatchFailedSize().getValue());
             publishedMetricsForTable.put(metric.getDeleteBatchFailedCounter().getMetricType(), metric.getDeleteBatchFailedCounter().getValue());
+            publishedMetricsForTable.put(metric.getMutationQueryParsingTimeMS().getMetricType(), metric.getMutationQueryParsingTimeMS().getValue());
             publishedMetricsForTable.put(metric.getMutationBatchCounter().getMetricType(),
                     metric.getMutationBatchCounter().getValue());
         }
@@ -123,6 +125,7 @@ public class MutationMetricQueue {
         private final CombinableMetric upsertBatchFailedCounter = new CombinableMetricImpl(UPSERT_BATCH_FAILED_COUNTER);
         private final CombinableMetric deleteBatchFailedSize = new CombinableMetricImpl(DELETE_BATCH_FAILED_SIZE);
         private final CombinableMetric deleteBatchFailedCounter = new CombinableMetricImpl(DELETE_BATCH_FAILED_COUNTER);
+        private final CombinableMetric mutationQueryParsingTimeMS = new CombinableMetricImpl(SQL_QUERY_PARSING_TIME_MS);
 
         private final CombinableMetric numOfIndexCommitFailMutations = new CombinableMetricImpl(
                 INDEX_COMMIT_FAILURE_SIZE);
@@ -131,7 +134,7 @@ public class MutationMetricQueue {
                 new CombinableMetricImpl(MUTATION_BATCH_COUNTER);
 
         public static final MutationMetric EMPTY_METRIC =
-                new MutationMetric(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+                new MutationMetric(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
         public MutationMetric(long numMutations, long upsertMutationsSizeBytes,
                 long deleteMutationsSizeBytes, long commitTimeForUpserts, long commitTimeForAtomicUpserts,
@@ -139,7 +142,8 @@ public class MutationMetricQueue {
                 long deleteMutationSqlCounterSuccess, long totalMutationBytes,
                 long numOfPhase3Failed, long upsertBatchFailedSize,
                 long upsertBatchFailedCounter, long deleteBatchFailedSize,
-                long deleteBatchFailedCounter, long mutationBatchCounter) {
+                long deleteBatchFailedCounter, long mutationBatchCounter,
+                long mutationParsingTimeMS) {
             this.numMutations.change(numMutations);
             this.totalCommitTimeForUpserts.change(commitTimeForUpserts);
             this.totalCommitTimeForAtomicUpserts.change(commitTimeForAtomicUpserts);
@@ -156,6 +160,7 @@ public class MutationMetricQueue {
             this.upsertBatchFailedCounter.change(upsertBatchFailedCounter);
             this.deleteBatchFailedSize.change(deleteBatchFailedSize);
             this.deleteBatchFailedCounter.change(deleteBatchFailedCounter);
+            this.mutationQueryParsingTimeMS.change(mutationParsingTimeMS);
             this.mutationBatchCounter.change(mutationBatchCounter);
         }
 
@@ -221,6 +226,10 @@ public class MutationMetricQueue {
             return deleteBatchFailedCounter;
         }
 
+        public CombinableMetric getMutationQueryParsingTimeMS() {
+            return mutationQueryParsingTimeMS;
+        }
+
         public CombinableMetric getMutationBatchCounter() {
             return mutationBatchCounter;
         }
@@ -242,6 +251,7 @@ public class MutationMetricQueue {
             this.upsertBatchFailedCounter.combine(other.upsertBatchFailedCounter);
             this.deleteBatchFailedSize.combine(other.deleteBatchFailedSize);
             this.deleteBatchFailedCounter.combine(other.deleteBatchFailedCounter);
+            this.mutationQueryParsingTimeMS.combine(other.mutationQueryParsingTimeMS);
             this.mutationBatchCounter.combine(other.mutationBatchCounter);
         }
 
