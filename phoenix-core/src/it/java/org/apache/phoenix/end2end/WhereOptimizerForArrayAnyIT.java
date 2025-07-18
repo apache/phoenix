@@ -48,7 +48,7 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
     }
 
     @Test
-    public void testArrayAnyComparisonWithNonPkColumn() throws Exception {
+    public void testArrayAnyComparisonForNonPkColumn() throws Exception {
         String tableName = generateUniqueName();
         createTableASCPkColumns(tableName);
         insertData(tableName, 1, "x", "a");
@@ -88,9 +88,9 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
             assertPointLookupsAreNotGenerated(selectSql, conn, arr);
         }
     }
-    
+
     @Test
-    public void testArrayAnyComparsionForBindVariable() throws Exception {
+    public void testArrayAnyComparsionWithBindVariable() throws Exception {
         String tableName = generateUniqueName();
         createTableASCPkColumns(tableName);
         insertData(tableName, 1, "x", "a");
@@ -111,7 +111,7 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
     }
 
     @Test
-    public void testArrayAnyComparisonForLiteralArray() throws Exception {
+    public void testArrayAnyComparisonWithLiteralArray() throws Exception {
         String tableName = generateUniqueName();
         createTableASCPkColumns(tableName);
         insertData(tableName, 1, "x", "a");
@@ -129,7 +129,7 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
             assertPointLookupsAreGenerated(selectSql, conn, null);
         }
     }
-    
+
     @Test
     public void testArrayAnyComparisonWithDoubleToFloatConversion() throws Exception {
         String tableName = generateUniqueName();
@@ -148,7 +148,6 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
                 conn.commit();
             }
         }
-
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String selectSql = "SELECT * FROM " + tableName + " WHERE pk1 = ANY(?) AND pk2 = 'y'";
             Array arr = conn.createArrayOf("DOUBLE", new Double[] { 4.4d, 2.2d, 0d });
@@ -164,7 +163,30 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
             assertPointLookupsAreGenerated(selectSql, conn, arr);
         }
     }
-    
+
+    @Test
+    public void testArrayAnyComparisonWithLongToIntegerConversion() throws Exception {
+        String tableName = generateUniqueName();
+        createTableASCPkColumns(tableName);
+        insertData(tableName, 1, "x", "a");
+        insertData(tableName, 2, "y", "b");
+        insertData(tableName, 3, "z", "c");
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String selectSql = "SELECT * FROM " + tableName + " WHERE pk1 = ANY(?) AND pk2 = 'y'";
+            Array arr = conn.createArrayOf("BIGINT", new Long[] { 4L, 2L, 0L });
+            try (PreparedStatement stmt = conn.prepareStatement(selectSql)) {
+                stmt.setArray(1, arr);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    assertTrue(rs.next());
+                    assertEquals(2, rs.getInt(1));
+                    assertEquals("y", rs.getString(2));
+                    assertEquals("b", rs.getString(3));
+                }
+            }
+            assertPointLookupsAreGenerated(selectSql, conn, arr);
+        }
+    }
+
     @Test
     public void testArrayAnyComparisonWithNullInArray() throws Exception {
         String tableName = generateUniqueName();
@@ -196,7 +218,7 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
             assertPointLookupsAreGenerated(selectSql, conn, arr);
         }
     }
-    
+
     @Test
     public void testArrayAnyComparisonWithDescPKAndNullInArray() throws Exception {
         String tableName = generateUniqueName();
@@ -235,9 +257,9 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
             assertPointLookupsAreGenerated(selectSql, conn, arr);
         }
     }
-    
+
     @Test
-    public void testDescCharPKWithPadding() throws Exception {
+    public void testArrayAnyComparisonForDescCharPKWithPadding() throws Exception {
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " (pk1 CHAR(3) NOT NULL, " + "pk2 VARCHAR(3), "
             + "col1 VARCHAR, " + "CONSTRAINT pk PRIMARY KEY (pk1 DESC, pk2))";
@@ -272,9 +294,9 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
             assertPointLookupsAreGenerated(selectSql, conn, arr);
         }
     }
-    
+
     @Test
-    public void testArrayAnyWithDecimalArray() throws Exception {
+    public void testArrayAnyComparisonWithDecimalArray() throws Exception {
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " (pk1 DECIMAL(10, 2) NOT NULL, "
             + "pk2 VARCHAR(3), " + "col1 VARCHAR, " + "CONSTRAINT pk PRIMARY KEY (pk1, pk2))";
@@ -310,9 +332,10 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
             assertPointLookupsAreGenerated(selectSql, conn, arr);
         }
     }
-    
+
     @Test
-    public void testArrayAnyWithDataTypeAndSortOrderCoercionForDecimalColumn() throws Exception {
+    public void testArrayAnyComparisonWithDataTypeAndSortOrderCoercionForDecimalColumn()
+        throws Exception {
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " (pk1 DECIMAL(10, 2) NOT NULL, "
             + "pk2 VARCHAR(3), " + "col1 VARCHAR, " + "CONSTRAINT pk PRIMARY KEY (pk1 DESC, pk2))";
@@ -324,7 +347,7 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
         }
         String upsertStmt = "UPSERT INTO " + tableName + " VALUES (?, ?, ?)";
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            try (PreparedStatement stmt = conn.prepareStatement(upsertStmt)) {  
+            try (PreparedStatement stmt = conn.prepareStatement(upsertStmt)) {
                 stmt.setBigDecimal(1, new BigDecimal("1.23"));
                 stmt.setString(2, "x");
                 stmt.setString(3, "a");
@@ -376,8 +399,8 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
     }
 
     private void createTableASCPkColumns(String tableName) throws SQLException {
-        String ddl = "CREATE TABLE " + tableName + " (pk1 INTEGER NOT NULL, "
-            + "pk2 VARCHAR(3), " + "col1 VARCHAR, " + "CONSTRAINT pk PRIMARY KEY (pk1, pk2))";
+        String ddl = "CREATE TABLE " + tableName + " (pk1 INTEGER NOT NULL, " + "pk2 VARCHAR(3), "
+            + "col1 VARCHAR, " + "CONSTRAINT pk PRIMARY KEY (pk1, pk2))";
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             try (Statement stmt = conn.createStatement()) {
                 stmt.execute(ddl);
@@ -385,8 +408,9 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
             }
         }
     }
-    
-    private void insertData(String tableName, int pk1, String pk2, String col1) throws SQLException {
+
+    private void insertData(String tableName, int pk1, String pk2, String col1)
+        throws SQLException {
         String ddl = "UPSERT INTO " + tableName + " VALUES (?, ?, ?)";
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             try (PreparedStatement stmt = conn.prepareStatement(ddl)) {
