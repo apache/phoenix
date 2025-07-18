@@ -27,8 +27,8 @@ import org.apache.phoenix.parse.BetweenParseNode;
 import org.apache.phoenix.parse.BsonExpressionParser;
 import org.apache.phoenix.parse.DocumentFieldBeginsWithParseNode;
 import org.apache.phoenix.parse.DocumentFieldContainsParseNode;
-import org.apache.phoenix.parse.DocumentFieldTypeParseNode;
 import org.apache.phoenix.parse.DocumentFieldExistsParseNode;
+import org.apache.phoenix.parse.DocumentFieldTypeParseNode;
 import org.apache.phoenix.parse.EqualParseNode;
 import org.apache.phoenix.parse.GreaterThanOrEqualParseNode;
 import org.apache.phoenix.parse.GreaterThanParseNode;
@@ -181,11 +181,9 @@ public final class SQLComparisonExpressionUtils {
       return contains(fieldName, containsValue, rawBsonDocument, comparisonValuesDocument);
     } else if (parseNode instanceof DocumentFieldTypeParseNode) {
       final DocumentFieldTypeParseNode documentFieldTypeParseNode =
-              (DocumentFieldTypeParseNode) parseNode;
-      final LiteralParseNode fieldKey =
-              (LiteralParseNode) documentFieldTypeParseNode.getFieldKey();
-      final LiteralParseNode value =
-              (LiteralParseNode) documentFieldTypeParseNode.getValue();
+        (DocumentFieldTypeParseNode) parseNode;
+      final LiteralParseNode fieldKey = (LiteralParseNode) documentFieldTypeParseNode.getFieldKey();
+      final LiteralParseNode value = (LiteralParseNode) documentFieldTypeParseNode.getValue();
       String fieldName = (String) fieldKey.getValue();
       fieldName = replaceExpressionFieldNames(fieldName, keyAliasDocument, sortedKeyNames);
       final String type = (String) value.getValue();
@@ -614,29 +612,28 @@ public final class SQLComparisonExpressionUtils {
   }
 
   /**
-   * Returns true if the type of the value of the field key is same as the provided type.
-   * The provided type should be one of the following: {N,BS,L,B,NULL,M,S,SS,NS,BOOL}.
-   *
-   * @param fieldKey The field key for which value is checked for field_type.
-   * @param type The type to check against the type of the field value.
-   * @param rawBsonDocument Bson Document representing the cell value on which the comparison is
-   * to be performed.
+   * Returns true if the type of the value of the field key is same as the provided type. The
+   * provided type should be one of the following: {N,BS,L,B,NULL,M,S,SS,NS,BOOL}.
+   * @param fieldKey                 The field key for which value is checked for field_type.
+   * @param type                     The type to check against the type of the field value.
+   * @param rawBsonDocument          Bson Document representing the cell value on which the
+   *                                 comparison is to be performed.
    * @param comparisonValuesDocument Bson Document with values placeholder.
    * @return True if the value of the field is of the given type, false otherwise
    */
   private static boolean isFieldOfType(final String fieldKey, final String type,
-                                  final RawBsonDocument rawBsonDocument,
-                                  final BsonDocument comparisonValuesDocument) {
+    final RawBsonDocument rawBsonDocument, final BsonDocument comparisonValuesDocument) {
     BsonValue topLevelValue = rawBsonDocument.get(fieldKey);
-    BsonValue fieldValue = topLevelValue != null ?
-            topLevelValue :
-            CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, rawBsonDocument);
+    BsonValue fieldValue = topLevelValue != null
+      ? topLevelValue
+      : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, rawBsonDocument);
     if (fieldValue == null) {
       return false;
     }
     BsonValue typeBsonVal = comparisonValuesDocument.get(type);
     if (typeBsonVal == null) {
-      throw new BsonConditionInvalidArgumentException("Value for type was not found in the comparison values document.");
+      throw new BsonConditionInvalidArgumentException(
+        "Value for type was not found in the comparison values document.");
     }
     switch (((BsonString) typeBsonVal).getValue()) {
       case "S":
@@ -660,8 +657,9 @@ public final class SQLComparisonExpressionUtils {
       case "BS":
         return CommonComparisonExpressionUtils.isBsonBinarySet(fieldValue);
       default:
-        throw new BsonConditionInvalidArgumentException("Unsupported type in field_type() for BsonConditionExpression: " + type
-                + ", valid types: valid types: {N,BS,L,B,NULL,M,S,SS,NS,BOOL}");
+        throw new BsonConditionInvalidArgumentException(
+          "Unsupported type in field_type() for BsonConditionExpression: " + type
+            + ", valid types: valid types: {N,BS,L,B,NULL,M,S,SS,NS,BOOL}");
     }
   }
 
