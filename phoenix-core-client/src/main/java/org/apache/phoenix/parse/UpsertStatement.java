@@ -33,14 +33,14 @@ public class UpsertStatement extends DMLStatement {
     }
 
     private final List<ColumnName> columns;
-    private final List<ParseNode> values;
+    private final List<List<ParseNode>> values;
     private final SelectStatement select;
     private final HintNode hint;
     private final List<Pair<ColumnName,ParseNode>> onDupKeyPairs;
     private final OnDuplicateKeyType onDupKeyType;
 
     public UpsertStatement(NamedTableNode table, HintNode hint, List<ColumnName> columns,
-            List<ParseNode> values, SelectStatement select, int bindCount,
+            List<List<ParseNode>> values, SelectStatement select, int bindCount,
             Map<String, UDFParseNode> udfParseNodes, List<Pair<ColumnName,ParseNode>> onDupKeyPairs) {
         super(table, bindCount, udfParseNodes);
         this.columns = columns == null ? Collections.<ColumnName>emptyList() : columns;
@@ -58,7 +58,7 @@ public class UpsertStatement extends DMLStatement {
     }
 
     public UpsertStatement(NamedTableNode table, HintNode hint, List<ColumnName> columns,
-                           List<ParseNode> values, SelectStatement select, int bindCount,
+                           List<List<ParseNode>> values, SelectStatement select, int bindCount,
                            Map<String, UDFParseNode> udfParseNodes,
                            List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
                            OnDuplicateKeyType onDupKeyType) {
@@ -75,7 +75,7 @@ public class UpsertStatement extends DMLStatement {
         return columns;
     }
 
-    public List<ParseNode> getValues() {
+    public List<List<ParseNode>> getValues() {
         return values;
     }
 

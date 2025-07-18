@@ -872,7 +872,7 @@ public class ParseNodeFactory {
     } 
     
     public UpsertStatement upsert(NamedTableNode table, HintNode hint, List<ColumnName> columns,
-                                  List<ParseNode> values, SelectStatement select,
+                                  List<List<ParseNode>> values, SelectStatement select,
                                   int bindCount, Map<String, UDFParseNode> udfParseNodes,
                                   List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
                                   UpsertStatement.OnDuplicateKeyType onDupKeyType) {
