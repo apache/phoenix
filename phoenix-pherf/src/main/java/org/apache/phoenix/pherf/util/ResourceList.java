@@ -53,7 +53,7 @@ public class ResourceList {
     private final String rootResourceDir;
     // Lists the directories to ignore meant for testing something else
     // when getting the resources from classpath
-    private List<String> dirsToIgnore = Lists.newArrayList("sql_files");
+    private List<String> dirsToIgnore = Lists.newArrayList("sql_files", "synthesis");
 
     public ResourceList(String rootResourceDir) {
         this.rootResourceDir = rootResourceDir;
