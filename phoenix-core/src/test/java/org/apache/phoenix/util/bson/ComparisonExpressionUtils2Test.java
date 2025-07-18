@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,8 +15,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.util.bson;
+
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.util.bson.SQLComparisonExpressionUtils;
@@ -28,9 +30,6 @@ import org.bson.BsonInt32;
 import org.bson.BsonString;
 import org.bson.RawBsonDocument;
 import org.junit.Test;
-
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
 
 /**
  * Tests for BSON Condition Expression Utility.
@@ -44,91 +43,93 @@ public class ComparisonExpressionUtils2Test {
     BsonDocument keyNames = getKeyNamesDocument();
 
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "(field_exists(#id) OR field_not_exists(#title))", rawBsonDocument, compareValues,
-            keyNames));
+      "(field_exists(#id) OR field_not_exists(#title))", rawBsonDocument, compareValues, keyNames));
 
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "((field_not_exists(#id) AND field_not_exists(#title1)) OR field_exists(#isbn2))"
-                    + " OR ((#id <> :title) AND ((#4 = :inpublication) OR ((#isbn = :isbn)"
-                    + " AND (#title = :title))))", rawBsonDocument, compareValues, keyNames));
+      "((field_not_exists(#id) AND field_not_exists(#title1)) OR field_exists(#isbn2))"
+        + " OR ((#id <> :title) AND ((#4 = :inpublication) OR ((#isbn = :isbn)"
+        + " AND (#title = :title))))",
+      rawBsonDocument, compareValues, keyNames));
 
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "((field_exists(#nestedmap1.#isbn) AND field_not_exists(#nestedmap1.#nlist1[3])))",
-            rawBsonDocument, compareValues, keyNames));
+      "((field_exists(#nestedmap1.#isbn) AND field_not_exists(#nestedmap1.#nlist1[3])))",
+      rawBsonDocument, compareValues, keyNames));
 
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "#nestedmap1.#id = :id AND (#nestedmap1.#4 = :inpublication)", rawBsonDocument,
-            compareValues, keyNames));
+      "#nestedmap1.#id = :id AND (#nestedmap1.#4 = :inpublication)", rawBsonDocument, compareValues,
+      keyNames));
+
+    assertTrue(
+      SQLComparisonExpressionUtils
+        .evaluateConditionExpression(
+          "((#nestedmap1.#id = :id) AND ((#nestedmap1.#4[0] = :inpublication) OR "
+            + "((#isbn[0] = :isbn) AND (#title = :title))) OR "
+            + "(#nestedmap1.#nlist1[0] = :nmap1_nlist1))",
+          rawBsonDocument, compareValues, keyNames));
 
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "((#nestedmap1.#id = :id) AND ((#nestedmap1.#4[0] = :inpublication) OR "
-                    + "((#isbn[0] = :isbn) AND (#title = :title))) OR "
-                    + "(#nestedmap1.#nlist1[0] = :nmap1_nlist1))", rawBsonDocument, compareValues,
-            keyNames));
+      "((field_not_exists(#id) AND field_not_exists(#title1)) OR field_exists(#isbn2))"
+        + " OR ((#nestedmap1.#id = :id) AND ((#nestedmap1.#4 = :inpublication)"
+        + " OR ((#isbn = :isbn) AND (#title = :title))))",
+      rawBsonDocument, compareValues, keyNames));
 
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "((field_not_exists(#id) AND field_not_exists(#title1)) OR field_exists(#isbn2))"
-                    + " OR ((#nestedmap1.#id = :id) AND ((#nestedmap1.#4 = :inpublication)"
-                    + " OR ((#isbn = :isbn) AND (#title = :title))))", rawBsonDocument,
-            compareValues, keyNames));
+      "#nestedlist1[0] <= :nestedlist1_485 AND #nestedlist1[1] > :nestedlist1_1 AND "
+        + "#nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
+        + "#nestedlist1[2][1].#id < :id1 AND #ids < :ids1 AND #id2 > :id2 AND #nestedmap1"
+        + ".#nlist1[2] > :nestedmap1_nlist1_3",
+      rawBsonDocument, compareValues, keyNames));
 
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "#nestedlist1[0] <= :nestedlist1_485 AND #nestedlist1[1] > :nestedlist1_1 AND "
-                    + "#nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
-                    +
-                    "#nestedlist1[2][1].#id < :id1 AND #ids < :ids1 AND #id2 > :id2 AND #nestedmap1"
-                    + ".#nlist1[2] > :nestedmap1_nlist1_3", rawBsonDocument, compareValues,
-            keyNames));
+      "#nestedlist1[0] <= :nestedlist1_485 AND #nestedlist1[1] >= :nestedlist1_1 AND "
+        + "#8 >= :nestedlist1_xyz0123 AND "
+        + "#nestedlist1[2][1].#id <= :id1 AND #ids <= :ids1 AND #id2 >= :id2 AND"
+        + " #nestedmap1.#nlist1[2] >= :nestedmap1_nlist1_3",
+      rawBsonDocument, compareValues, keyNames));
 
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "#nestedlist1[0] <= :nestedlist1_485 AND #nestedlist1[1] >= :nestedlist1_1 AND "
-                    + "#8 >= :nestedlist1_xyz0123 AND "
-                    + "#nestedlist1[2][1].#id <= :id1 AND #ids <= :ids1 AND #id2 >= :id2 AND"
-                    + " #nestedmap1.#nlist1[2] >= :nestedmap1_nlist1_3", rawBsonDocument,
-            compareValues, keyNames));
+      "#nestedlist1[0] >= :nestedlist1_4850 AND #nestedlist1[1] < :nestedlist1_10 AND"
+        + " #nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
+        + "#nestedlist1[2][1].#id > :id10 AND #ids > :ids10 AND #id2 < :id20 AND "
+        + "#nestedmap1.#nlist1[2] < :nestedmap1_nlist1_30",
+      rawBsonDocument, compareValues, keyNames));
 
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "#nestedlist1[0] >= :nestedlist1_4850 AND #nestedlist1[1] < :nestedlist1_10 AND"
-                    + " #nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
-                    + "#nestedlist1[2][1].#id > :id10 AND #ids > :ids10 AND #id2 < :id20 AND "
-                    + "#nestedmap1.#nlist1[2] < :nestedmap1_nlist1_30", rawBsonDocument,
-            compareValues, keyNames));
+      "#nestedlist1[0] >= :nestedlist1_4850 AND #nestedlist1[1] <= :nestedlist1_10 AND "
+        + "#nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
+        + "#nestedlist1[2][1].#id >= :id10 AND #ids >= :ids10 AND #id2 <= :id20 AND "
+        + "#nestedmap1.#nlist1[2] <= :nestedmap1_nlist1_30 AND "
+        + "#nestedmap1.#nlist1[2] <> :nestedmap1_nlist1_30",
+      rawBsonDocument, compareValues, keyNames));
 
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "#nestedlist1[0] >= :nestedlist1_4850 AND #nestedlist1[1] <= :nestedlist1_10 AND "
-                    + "#nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
-                    + "#nestedlist1[2][1].#id >= :id10 AND #ids >= :ids10 AND #id2 <= :id20 AND "
-                    + "#nestedmap1.#nlist1[2] <= :nestedmap1_nlist1_30 AND "
-                    + "#nestedmap1.#nlist1[2] <> :nestedmap1_nlist1_30", rawBsonDocument,
-            compareValues, keyNames));
+      "#nestedlist1[0] >= :nestedlist1_4850 AND #nestedlist1[1] <= :nestedlist1_10 AND "
+        + "#nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
+        + "#nestedlist1[2][1].#id >= :id10 AND #ids >= :ids10 AND #id2 <= :id20 AND "
+        + "#nestedmap1.#nlist1[2] <= :nestedmap1_nlist1_30 AND "
+        + "(#nestedmap1.#nlist1[2] = :nestedmap1_nlist1_30 OR #nestedlist1[0] BETWEEN "
+        + ":nestedlist1_4850 AND :id2)",
+      rawBsonDocument, compareValues, keyNames));
 
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "#nestedlist1[0] >= :nestedlist1_4850 AND #nestedlist1[1] <= :nestedlist1_10 AND "
-                    + "#nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
-                    + "#nestedlist1[2][1].#id >= :id10 AND #ids >= :ids10 AND #id2 <= :id20 AND "
-                    + "#nestedmap1.#nlist1[2] <= :nestedmap1_nlist1_30 AND "
-                    + "(#nestedmap1.#nlist1[2] = :nestedmap1_nlist1_30 OR #nestedlist1[0] BETWEEN "
-                    + ":nestedlist1_4850 AND :id2)", rawBsonDocument, compareValues, keyNames));
+      "#nestedlist1[0] >= :nestedlist1_4850 AND #nestedlist1[1] <= :nestedlist1_10 AND "
+        + "#nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
+        + "#nestedmap1.#nlist1[0] IN (:id, :id1, :id20, :nmap1_nlist1) AND "
+        + "#nestedmap1.#nlist1[2] <= :nestedmap1_nlist1_30 AND "
+        + "(#nestedmap1.#nlist1[2] = :nestedmap1_nlist1_30 OR #nestedlist1[0] BETWEEN "
+        + ":nestedlist1_4850 AND :id2)",
+      rawBsonDocument, compareValues, keyNames));
 
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "#nestedlist1[0] >= :nestedlist1_4850 AND #nestedlist1[1] <= :nestedlist1_10 AND "
-                    + "#nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
-                    + "#nestedmap1.#nlist1[0] IN (:id, :id1, :id20, :nmap1_nlist1) AND "
-                    + "#nestedmap1.#nlist1[2] <= :nestedmap1_nlist1_30 AND "
-                    + "(#nestedmap1.#nlist1[2] = :nestedmap1_nlist1_30 OR #nestedlist1[0] BETWEEN "
-                    + ":nestedlist1_4850 AND :id2)", rawBsonDocument, compareValues, keyNames));
-
-    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "#nestedlist1[0] >= :nestedlist1_4850 AND #nestedlist1[1] <= :nestedlist1_10 AND "
-                    + "#nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
-                    + "#nestedmap1.#nlist1[0] IN (:id,  :id1, :id20, :nmap1_nlist1) AND "
-                    + "#nestedmap1.#nlist1[2] <= :nestedmap1_nlist1_30 AND "
-                    + "(#nestedmap1.#nlist1[2] = :nestedmap1_nlist1_30 OR "
-                    + " #nestedlist1[0] BETWEEN :nestedlist1_4850 AND :id2)"
-                    + " AND NOT #nestedmap1.#4 IN (:id, :id1, :id20, :id21) AND #7 = :7 "
-                    + "AND #10 >= :id2 AND #11 <= :id2 AND #12 = :id2 AND #13 = :id2 AND "
-                    + "NOT #14 <> :id2",
-            rawBsonDocument, compareValues, keyNames));
+      "#nestedlist1[0] >= :nestedlist1_4850 AND #nestedlist1[1] <= :nestedlist1_10 AND "
+        + "#nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
+        + "#nestedmap1.#nlist1[0] IN (:id,  :id1, :id20, :nmap1_nlist1) AND "
+        + "#nestedmap1.#nlist1[2] <= :nestedmap1_nlist1_30 AND "
+        + "(#nestedmap1.#nlist1[2] = :nestedmap1_nlist1_30 OR "
+        + " #nestedlist1[0] BETWEEN :nestedlist1_4850 AND :id2)"
+        + " AND NOT #nestedmap1.#4 IN (:id, :id1, :id20, :id21) AND #7 = :7 "
+        + "AND #10 >= :id2 AND #11 <= :id2 AND #12 = :id2 AND #13 = :id2 AND " + "NOT #14 <> :id2",
+      rawBsonDocument, compareValues, keyNames));
   }
 
   /**
@@ -141,92 +142,91 @@ public class ComparisonExpressionUtils2Test {
     BsonDocument keyNames = getKeyNamesDocument();
 
     assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "(field_not_exists(#id) OR field_not_exists(#title))", rawBsonDocument, compareValues,
-            keyNames));
+      "(field_not_exists(#id) OR field_not_exists(#title))", rawBsonDocument, compareValues,
+      keyNames));
 
     assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "((field_not_exists(#id) AND field_not_exists(#title1)) OR field_exists(#isbn2))"
-                    + " OR ((#id = :title) AND ((#4 = #4) OR ((#isbn = :isbn)"
-                    + " AND (#title = :title))))", rawBsonDocument, compareValues, keyNames));
+      "((field_not_exists(#id) AND field_not_exists(#title1)) OR field_exists(#isbn2))"
+        + " OR ((#id = :title) AND ((#4 = #4) OR ((#isbn = :isbn)" + " AND (#title = :title))))",
+      rawBsonDocument, compareValues, keyNames));
 
     assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "((field_exists(#nestedmap1.#isbn) AND field_exists(#nestedmap1.#nlist1[3])))",
-            rawBsonDocument, compareValues, keyNames));
+      "((field_exists(#nestedmap1.#isbn) AND field_exists(#nestedmap1.#nlist1[3])))",
+      rawBsonDocument, compareValues, keyNames));
 
     assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "#nestedmap1.#id = :id AND (#nestedmap1.#4 <> :inpublication)", rawBsonDocument,
-            compareValues, keyNames));
+      "#nestedmap1.#id = :id AND (#nestedmap1.#4 <> :inpublication)", rawBsonDocument,
+      compareValues, keyNames));
+
+    assertFalse(
+      SQLComparisonExpressionUtils.evaluateConditionExpression(
+        "((#nestedmap1.#id = :id) AND ((#nestedmap1.#4[0] = :inpublication) OR "
+          + "((#isbn[0] = :isbn) AND (#title = :title))) OR "
+          + "(#nestedmap1.#nlist1[0] <> :nmap1_nlist1))",
+        rawBsonDocument, compareValues, keyNames));
 
     assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "((#nestedmap1.#id = :id) AND ((#nestedmap1.#4[0] = :inpublication) OR "
-                    + "((#isbn[0] = :isbn) AND (#title = :title))) OR "
-                    + "(#nestedmap1.#nlist1[0] <> :nmap1_nlist1))", rawBsonDocument, compareValues,
-            keyNames));
+      "((field_not_exists(#id) AND field_not_exists(#title1)) OR field_exists(#isbn2))"
+        + " OR ((#nestedmap1.#id = :id) AND ((#nestedmap1.#4 <> :inpublication)"
+        + " OR NOT ((#isbn = :isbn) AND (#title = :title))))",
+      rawBsonDocument, compareValues, keyNames));
 
     assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "((field_not_exists(#id) AND field_not_exists(#title1)) OR field_exists(#isbn2))"
-                    + " OR ((#nestedmap1.#id = :id) AND ((#nestedmap1.#4 <> :inpublication)"
-                    + " OR NOT ((#isbn = :isbn) AND (#title = :title))))", rawBsonDocument,
-            compareValues, keyNames));
+      "#nestedlist1[0] <= :nestedlist1_485 AND #nestedlist1[1] > :nestedlist1_1 AND "
+        + "#nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
+        + "#nestedlist1[2][1].#id < :id1 AND #ids < :ids1 AND #id2 > :id2 AND #nestedmap1"
+        + ".#nlist1[2] < :nestedmap1_nlist1_3",
+      rawBsonDocument, compareValues, keyNames));
 
     assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "#nestedlist1[0] <= :nestedlist1_485 AND #nestedlist1[1] > :nestedlist1_1 AND "
-                    + "#nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
-                    +
-                    "#nestedlist1[2][1].#id < :id1 AND #ids < :ids1 AND #id2 > :id2 AND #nestedmap1"
-                    + ".#nlist1[2] < :nestedmap1_nlist1_3", rawBsonDocument, compareValues,
-            keyNames));
+      "#nestedlist1[0] <= :nestedlist1_485 AND #nestedlist1[1] >= :nestedlist1_1 AND "
+        + "#nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
+        + "#nestedlist1[2][1].#id <= :id1 AND #ids <= :ids1 AND #id2 >= :id2 AND #nestedmap1"
+        + ".#nlist1[2] < :nestedmap1_nlist1_3",
+      rawBsonDocument, compareValues, keyNames));
 
     assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "#nestedlist1[0] <= :nestedlist1_485 AND #nestedlist1[1] >= :nestedlist1_1 AND "
-                    + "#nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
-                    +
-                    "#nestedlist1[2][1].#id <= :id1 AND #ids <= :ids1 AND #id2 >= :id2 AND #nestedmap1"
-                    + ".#nlist1[2] < :nestedmap1_nlist1_3", rawBsonDocument, compareValues,
-            keyNames));
+      "#nestedlist1[0] >= :nestedlist1_4850 AND #nestedlist1[1] < :nestedlist1_10 AND "
+        + "#nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
+        + "#nestedlist1[2][1].#id > :id10 AND #ids > :ids10 AND #id2 < :id20 AND #nestedmap1"
+        + ".#nlist1[2] >= :nestedmap1_nlist1_30",
+      rawBsonDocument, compareValues, keyNames));
 
     assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "#nestedlist1[0] >= :nestedlist1_4850 AND #nestedlist1[1] < :nestedlist1_10 AND "
-                    + "#nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
-                    +
-                    "#nestedlist1[2][1].#id > :id10 AND #ids > :ids10 AND #id2 < :id20 AND #nestedmap1"
-                    + ".#nlist1[2] >= :nestedmap1_nlist1_30", rawBsonDocument, compareValues,
-            keyNames));
+      "#nestedlist1[0] >= :nestedlist1_4850 AND #nestedlist1[1] <= :nestedlist1_10 AND "
+        + "#nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
+        + "#nestedlist1[2][1].#id >= :id10 AND #ids >= :ids10 AND #id2 <= :id20 AND "
+        + "#nestedmap1.#nlist1[2] > :nestedmap1_nlist1_30 AND "
+        + "#nestedmap1.#nlist1[2] <> :nestedmap1_nlist1_30",
+      rawBsonDocument, compareValues, keyNames));
 
     assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "#nestedlist1[0] >= :nestedlist1_4850 AND #nestedlist1[1] <= :nestedlist1_10 AND "
-                    + "#nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
-                    + "#nestedlist1[2][1].#id >= :id10 AND #ids >= :ids10 AND #id2 <= :id20 AND "
-                    + "#nestedmap1.#nlist1[2] > :nestedmap1_nlist1_30 AND "
-                    + "#nestedmap1.#nlist1[2] <> :nestedmap1_nlist1_30", rawBsonDocument,
-            compareValues, keyNames));
+      "#nestedlist1[0] >= :nestedlist1_4850 AND #nestedlist1[1] <= :nestedlist1_10 AND "
+        + "#nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
+        + "#nestedlist1[2][1].#id >= :id10 AND #ids >= :ids10 AND #id2 <= :id20 AND "
+        + "#nestedmap1.#nlist1[2] <= :nestedmap1_nlist1_30 AND "
+        + "(#nestedmap1.#nlist1[2] = :nestedmap1_nlist1_30 OR NOT #nestedlist1[0] BETWEEN "
+        + ":nestedlist1_4850 AND :id2)",
+      rawBsonDocument, compareValues, keyNames));
 
     assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "#nestedlist1[0] >= :nestedlist1_4850 AND #nestedlist1[1] <= :nestedlist1_10 AND "
-                    + "#nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
-                    + "#nestedlist1[2][1].#id >= :id10 AND #ids >= :ids10 AND #id2 <= :id20 AND "
-                    + "#nestedmap1.#nlist1[2] <= :nestedmap1_nlist1_30 AND "
-                    +
-                    "(#nestedmap1.#nlist1[2] = :nestedmap1_nlist1_30 OR NOT #nestedlist1[0] BETWEEN "
-                    + ":nestedlist1_4850 AND :id2)", rawBsonDocument, compareValues, keyNames));
+      "#nestedlist1[0] >= :nestedlist1_4850 AND #nestedlist1[1] <= :nestedlist1_10 AND "
+        + "#nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
+        + "#nestedmap1.#nlist1[0] NOT IN (:id, :id1, :id20, :nmap1_nlist1) AND "
+        + "#nestedmap1.#nlist1[2] <= :nestedmap1_nlist1_30 AND "
+        + "(#nestedmap1.#nlist1[2] = :nestedmap1_nlist1_30 OR #nestedlist1[0] BETWEEN "
+        + ":nestedlist1_4850 AND :id2)",
+      rawBsonDocument, compareValues, keyNames));
 
     assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "#nestedlist1[0] >= :nestedlist1_4850 AND #nestedlist1[1] <= :nestedlist1_10 AND "
-                    + "#nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
-                    + "#nestedmap1.#nlist1[0] NOT IN (:id, :id1, :id20, :nmap1_nlist1) AND "
-                    + "#nestedmap1.#nlist1[2] <= :nestedmap1_nlist1_30 AND "
-                    + "(#nestedmap1.#nlist1[2] = :nestedmap1_nlist1_30 OR #nestedlist1[0] BETWEEN "
-                    + ":nestedlist1_4850 AND :id2)", rawBsonDocument, compareValues, keyNames));
-
-    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
-            "#nestedlist1[0] >= :nestedlist1_4850 AND #nestedlist1[1] <= :nestedlist1_10 AND "
-                    + "#nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
-                    + "#nestedmap1.#nlist1[0] IN (:id,  :id1, :id20, :nmap1_nlist1) AND "
-                    + "#nestedmap1.#nlist1[2] <= :nestedmap1_nlist1_30 AND "
-                    + "(#nestedmap1.#nlist1[2] = :nestedmap1_nlist1_30 OR "
-                    + " #nestedlist1[0] NOT BETWEEN :nestedlist1_4850 AND :id2)"
-                    + " AND #nestedmap1.#4 IN (:id, :id1, :id20, :id21)",
-            rawBsonDocument, compareValues, keyNames));
+      "#nestedlist1[0] >= :nestedlist1_4850 AND #nestedlist1[1] <= :nestedlist1_10 AND "
+        + "#nestedlist1[2][0] >= :nestedlist1_xyz0123 AND "
+        + "#nestedmap1.#nlist1[0] IN (:id,  :id1, :id20, :nmap1_nlist1) AND "
+        + "#nestedmap1.#nlist1[2] <= :nestedmap1_nlist1_30 AND "
+        + "(#nestedmap1.#nlist1[2] = :nestedmap1_nlist1_30 OR "
+        + " #nestedlist1[0] NOT BETWEEN :nestedlist1_4850 AND :id2)"
+        + " AND #nestedmap1.#4 IN (:id, :id1, :id20, :id21)",
+      rawBsonDocument, compareValues, keyNames));
   }
 
   private static BsonDocument getCompareValDocument() {
@@ -280,38 +280,18 @@ public class ComparisonExpressionUtils2Test {
   }
 
   private static RawBsonDocument getDocumentValue() {
-    String json = "{\n" +
-            "  \"InPublication\" : false,\n" +
-            "  \"ISBN\" : \"111-1111111111\",\n" +
-            "  \"NestedList1\" : [ -485.34, \"1234abcd\", [ \"xyz0123\", {\n" +
-            "    \"InPublication\" : false,\n" +
-            "    \"ISBN\" : \"111-1111111111\",\n" +
-            "    \"Title\" : \"Book 101 Title\",\n" +
-            "    \"Id\" : 101.01\n" +
-            "  } ] ],\n" +
-            "  \"NestedMap1\" : {\n" +
-            "    \"InPublication\" : false,\n" +
-            "    \"ISBN\" : \"111-1111111111\",\n" +
-            "    \"Title\" : \"Book 101 Title\",\n" +
-            "    \"Id\" : 101.01,\n" +
-            "    \"NList1\" : [ \"NListVal01\", -23.4, {\n" +
-            "      \"$binary\" : {\n" +
-            "        \"base64\" : \"V2hpdGU=\",\n" +
-            "        \"subType\" : \"00\"\n" +
-            "      }\n" +
-            "    } ]\n" +
-            "  },\n" +
-            "  \"Id2\" : 101.01,\n" +
-            "  \"Id.Name\" : \"Name_\",\n" +
-            "  \"IdS\" : \"101.01\",\n" +
-            "  \">\" : 12,\n " +
-            "  \"[\" : 12,\n " +
-            "  \"#\" : 12,\n " +
-            "  \"~\" : 12,\n " +
-            "  \"^\" : 12,\n " +
-            "  \"Title\" : \"Book 101 Title\",\n" +
-            "  \"Id\" : 101.01\n" +
-            "}";
+    String json = "{\n" + "  \"InPublication\" : false,\n" + "  \"ISBN\" : \"111-1111111111\",\n"
+      + "  \"NestedList1\" : [ -485.34, \"1234abcd\", [ \"xyz0123\", {\n"
+      + "    \"InPublication\" : false,\n" + "    \"ISBN\" : \"111-1111111111\",\n"
+      + "    \"Title\" : \"Book 101 Title\",\n" + "    \"Id\" : 101.01\n" + "  } ] ],\n"
+      + "  \"NestedMap1\" : {\n" + "    \"InPublication\" : false,\n"
+      + "    \"ISBN\" : \"111-1111111111\",\n" + "    \"Title\" : \"Book 101 Title\",\n"
+      + "    \"Id\" : 101.01,\n" + "    \"NList1\" : [ \"NListVal01\", -23.4, {\n"
+      + "      \"$binary\" : {\n" + "        \"base64\" : \"V2hpdGU=\",\n"
+      + "        \"subType\" : \"00\"\n" + "      }\n" + "    } ]\n" + "  },\n"
+      + "  \"Id2\" : 101.01,\n" + "  \"Id.Name\" : \"Name_\",\n" + "  \"IdS\" : \"101.01\",\n"
+      + "  \">\" : 12,\n " + "  \"[\" : 12,\n " + "  \"#\" : 12,\n " + "  \"~\" : 12,\n "
+      + "  \"^\" : 12,\n " + "  \"Title\" : \"Book 101 Title\",\n" + "  \"Id\" : 101.01\n" + "}";
     return RawBsonDocument.parse(json);
   }
 

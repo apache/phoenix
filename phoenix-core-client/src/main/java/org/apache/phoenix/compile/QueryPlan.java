@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,6 @@ package org.apache.phoenix.compile;
 
 import java.sql.SQLException;
 import java.util.List;
-
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
@@ -34,82 +33,74 @@ import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.TableRef;
 
-
-
 /**
- * 
  * Interface for an executable query plan
- *
- * 
  * @since 0.1
  */
 public interface QueryPlan extends StatementPlan {
-    /**
-     * Get a result iterator to iterate over the results
-     * @return result iterator for iterating over the results
-     * @throws SQLException
-     */
-    public ResultIterator iterator() throws SQLException;
-    
-    public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException;
-    
-    public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException;
+  /**
+   * Get a result iterator to iterate over the results
+   * @return result iterator for iterating over the results
+   */
+  public ResultIterator iterator() throws SQLException;
 
-    public long getEstimatedSize();
+  public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException;
 
-    public Cost getCost();
+  public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException;
 
-    // TODO: change once joins are supported
-    TableRef getTableRef();
-    /**
-     * Returns projector used to formulate resultSet row
-     */
-    RowProjector getProjector();
-    
-    Integer getLimit();
+  public long getEstimatedSize();
 
-    Integer getOffset();
+  public Cost getCost();
 
-    /**
-     * Return the compiled Order By clause of {@link SelectStatement}.
-     */
-    OrderBy getOrderBy();
+  // TODO: change once joins are supported
+  TableRef getTableRef();
 
-    GroupBy getGroupBy();
+  /**
+   * Returns projector used to formulate resultSet row
+   */
+  RowProjector getProjector();
 
-    List<KeyRange> getSplits();
+  Integer getLimit();
 
-    List<List<Scan>> getScans();
+  Integer getOffset();
 
-    FilterableStatement getStatement();
+  /**
+   * Return the compiled Order By clause of {@link SelectStatement}.
+   */
+  OrderBy getOrderBy();
 
-    public boolean isDegenerate();
-    
-    public boolean isRowKeyOrdered();
+  GroupBy getGroupBy();
 
-    boolean isApplicable();
-    
-    /**
-     * 
-     * @return whether underlying {@link ResultScanner} can be picked up in a round-robin 
-     * fashion. Generally, selecting scanners in such a fashion is possible if rows don't
-     * have to be returned back in a certain order.
-     * @throws SQLException 
-     */
-    public boolean useRoundRobinIterator() throws SQLException;
+  List<KeyRange> getSplits();
 
-    <T> T accept(QueryPlanVisitor<T> visitor);
+  List<List<Scan>> getScans();
 
-    /**
-     * <pre>
-     * Get the actual OrderBys of this queryPlan, which may be different from {@link #getOrderBy()},
-     * because {@link #getOrderBy()} is only the compiled result of {@link SelectStatement}.
-     * The return type is List because we can get multiple OrderBys for the query result of {@link SortMergeJoinPlan},
-     * eg. for the sql:
-     * SELECT  * FROM T1 JOIN T2 ON T1.a = T2.a and T1.b = T2.b
-     * The result of the sort-merge-join is sorted on (T1.a, T1.b) and (T2.a, T2.b) at the same time.
-     * </pre>
-     * @return
-     */
-    public List<OrderBy> getOutputOrderBys() ;
+  FilterableStatement getStatement();
+
+  public boolean isDegenerate();
+
+  public boolean isRowKeyOrdered();
+
+  boolean isApplicable();
+
+  /**
+   * @return whether underlying {@link ResultScanner} can be picked up in a round-robin fashion.
+   *         Generally, selecting scanners in such a fashion is possible if rows don't have to be
+   *         returned back in a certain order.
+   */
+  public boolean useRoundRobinIterator() throws SQLException;
+
+  <T> T accept(QueryPlanVisitor<T> visitor);
+
+  /**
+   * <pre>
+   * Get the actual OrderBys of this queryPlan, which may be different from {@link #getOrderBy()},
+   * because {@link #getOrderBy()} is only the compiled result of {@link SelectStatement}.
+   * The return type is List because we can get multiple OrderBys for the query result of {@link SortMergeJoinPlan},
+   * eg. for the sql:
+   * SELECT  * FROM T1 JOIN T2 ON T1.a = T2.a and T1.b = T2.b
+   * The result of the sort-merge-join is sorted on (T1.a, T1.b) and (T2.a, T2.b) at the same time.
+   * </pre>
+   */
+  public List<OrderBy> getOutputOrderBys();
 }

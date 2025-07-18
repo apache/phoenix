@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,25 +18,24 @@
 package org.apache.phoenix.compat.hbase;
 
 import java.io.IOException;
-
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterBase;
 
 public class CompatDelegateFilter extends FilterBase {
-    protected Filter delegate = null;
+  protected Filter delegate = null;
 
-    public CompatDelegateFilter(Filter delegate) {
-        this.delegate = delegate;
-    }
+  public CompatDelegateFilter(Filter delegate) {
+    this.delegate = delegate;
+  }
 
-    @Override
-    public ReturnCode filterKeyValue(Cell v) throws IOException {
-        return delegate.filterKeyValue(v);
-    }
+  @Override
+  public ReturnCode filterKeyValue(Cell v) throws IOException {
+    return delegate.filterKeyValue(v);
+  }
 
-    @Override
-    public boolean filterRowKey(byte[] buffer, int offset, int length) throws IOException {
-        return delegate.filterRowKey(buffer, offset, length);
-    }
+  @Override
+  public boolean filterRowKey(byte[] buffer, int offset, int length) throws IOException {
+    return delegate.filterRowKey(buffer, offset, length);
+  }
 }

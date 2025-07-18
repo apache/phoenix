@@ -37,12 +37,12 @@
               tightly bound to the scenario. In such cases you can't create the view through the data model flow.
               The value of the tableName attribute is name of the view that is dynamically created based on the DDL
               in the ddl attribute. Queries accessing the View will need to manually make sure Pherf was run with the -l option at
-              least once. 
+              least once.
          -->
-        <scenario tableName="PHERF.TEST_MT_VIEW" tenantId="abcdefghijklmno" 
+        <scenario tableName="PHERF.TEST_MT_VIEW" tenantId="abcdefghijklmno"
                     ddl="CREATE VIEW IF NOT EXISTS PHERF.TEST_MT_VIEW (field1 VARCHAR) AS SELECT * FROM PHERF.TEST_TABLE"
                     rowCount="100" name="testMTDdlWriteScenario">
         </scenario>
-        
+
     </scenarios>
 </datamodel>

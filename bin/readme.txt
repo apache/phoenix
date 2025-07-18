@@ -3,10 +3,10 @@ SqlLine
 https://github.com/julianhyde/sqlline
 
 Execute SQL from command line. Sqlline manual is available at https://julianhyde.github.io/sqlline/manual.html
-	
-	Usage: 
-	$ sqlline.py <zookeeper> <optional_sql_file> 
-	Example: 
+
+	Usage:
+	$ sqlline.py <zookeeper> <optional_sql_file>
+	Example:
 	$ sqlline.py localhost
 	$ sqlline.py localhost <examples dir>/STOCK_SYMBOL.sql
 
@@ -47,4 +47,3 @@ Usage: hadoop jar phoneix-[version]-mapreduce.jar <parameters>
  -s,--schema <arg>            Phoenix schema name (optional)
  -t,--table <arg>             Phoenix table name (mandatory)
  -z,--zookeeper <arg>         Zookeeper quorum to connect to (optional)
-

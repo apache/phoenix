@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,45 +19,41 @@ package org.apache.phoenix.iterate;
 
 import java.sql.SQLException;
 import java.util.List;
-
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.schema.tuple.Tuple;
 
-
 /**
  * Result scanner that sorts aggregated rows by columns specified in the ORDER BY clause.
  * <p>
- * Note that currently the sort is entirely done in memory. 
- *  
- * 
+ * Note that currently the sort is entirely done in memory.
  * @since 0.1
  */
-public class OrderedAggregatingResultIterator extends OrderedResultIterator implements AggregatingResultIterator {
+public class OrderedAggregatingResultIterator extends OrderedResultIterator
+  implements AggregatingResultIterator {
 
-    public OrderedAggregatingResultIterator(AggregatingResultIterator delegate,
-            List<OrderByExpression> orderByExpressions, boolean spoolingEnabled, long thresholdBytes,
-            Integer limit, Integer offset)
-                    throws SQLException {
-        super(delegate, orderByExpressions, spoolingEnabled, thresholdBytes, limit, offset);
-    }
+  public OrderedAggregatingResultIterator(AggregatingResultIterator delegate,
+    List<OrderByExpression> orderByExpressions, boolean spoolingEnabled, long thresholdBytes,
+    Integer limit, Integer offset) throws SQLException {
+    super(delegate, orderByExpressions, spoolingEnabled, thresholdBytes, limit, offset);
+  }
 
-    @Override
-    protected AggregatingResultIterator getDelegate() {
-        return (AggregatingResultIterator)super.getDelegate();
+  @Override
+  protected AggregatingResultIterator getDelegate() {
+    return (AggregatingResultIterator) super.getDelegate();
+  }
+
+  @Override
+  public Tuple next() throws SQLException {
+    Tuple tuple = super.next();
+    if (tuple != null) {
+      aggregate(tuple);
     }
-    
-    @Override
-    public Tuple next() throws SQLException {
-        Tuple tuple = super.next();
-        if (tuple != null) {
-            aggregate(tuple);
-        }
-        return tuple;
-    }
-    
-    @Override
-    public Aggregator[] aggregate(Tuple result) {
-        return getDelegate().aggregate(result);
-    }
+    return tuple;
+  }
+
+  @Override
+  public Aggregator[] aggregate(Tuple result) {
+    return getDelegate().aggregate(result);
+  }
 }

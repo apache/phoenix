@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,22 +22,22 @@ import org.apache.phoenix.schema.SortOrder;
 
 public abstract class PWholeNumber<T> extends PNumericType<T> {
 
-    protected PWholeNumber(String sqlTypeName, int sqlType, Class clazz,
-            org.apache.phoenix.schema.types.PDataType.PDataCodec codec, int ordinal) {
-        super(sqlTypeName, sqlType, clazz, codec, ordinal);
-    }
+  protected PWholeNumber(String sqlTypeName, int sqlType, Class clazz,
+    org.apache.phoenix.schema.types.PDataType.PDataCodec codec, int ordinal) {
+    super(sqlTypeName, sqlType, clazz, codec, ordinal);
+  }
 
-    @Override
-    public int signum(byte[] bytes, int offset, int length, SortOrder sortOrder, Integer maxLength,
-            Integer scale) {
-        long l = getCodec().decodeLong(bytes, offset, sortOrder);
-        return Long.signum(l);
-    }
+  @Override
+  public int signum(byte[] bytes, int offset, int length, SortOrder sortOrder, Integer maxLength,
+    Integer scale) {
+    long l = getCodec().decodeLong(bytes, offset, sortOrder);
+    return Long.signum(l);
+  }
 
-    @Override
-    public void abs(byte[] bytes, int offset, int length, SortOrder sortOrder,
-            ImmutableBytesWritable outPtr) {
-        long l = getCodec().decodeLong(bytes, offset, sortOrder);
-        getCodec().encodeLong(Math.abs(l), outPtr);
-    }
+  @Override
+  public void abs(byte[] bytes, int offset, int length, SortOrder sortOrder,
+    ImmutableBytesWritable outPtr) {
+    long l = getCodec().decodeLong(bytes, offset, sortOrder);
+    getCodec().encodeLong(Math.abs(l), outPtr);
+  }
 }

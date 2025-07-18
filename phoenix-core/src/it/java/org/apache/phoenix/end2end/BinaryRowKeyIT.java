@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -29,133 +29,125 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
-
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
 @Category(ParallelStatsDisabledTest.class)
 public class BinaryRowKeyIT extends ParallelStatsDisabledIT {
 
-    private static void initTableValues(String tableName) throws SQLException {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.setAutoCommit(false);
-        
-        try {
+  private static void initTableValues(String tableName) throws SQLException {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    Connection conn = DriverManager.getConnection(getUrl(), props);
+    conn.setAutoCommit(false);
 
-            String ddl = "CREATE TABLE " + tableName +
-                    "   (a_binary binary(10) not null, \n" +
-                    "    a_string varchar not null, \n" +
-                    "    b_binary varbinary \n" +
-                    "    CONSTRAINT pk PRIMARY KEY (a_binary, a_string))\n";
-            createTestTable(getUrl(), ddl);
-            
-            String query;
-            PreparedStatement stmt;
-            
-            query = "UPSERT INTO " + tableName
-                    + "(a_binary, a_string) "
-                    + "VALUES(?,?)";
-            stmt = conn.prepareStatement(query);
-            
-            stmt.setBytes(1, new byte[] {0,0,0,0,0,0,0,0,0,1});
-            stmt.setString(2, "a");
-            stmt.execute();
-            
-            stmt.setBytes(1, new byte[] {0,0,0,0,0,0,0,0,0,2});
-            stmt.setString(2, "b");
-            stmt.execute();
-            conn.commit();
-            
-        } finally {
-            conn.close();
-        }
-    }
+    try {
 
-    @Test
-    public void testInsertPaddedBinaryValue() throws SQLException {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            String tableName = generateUniqueName();
-            initTableValues(tableName);
-            conn.setAutoCommit(true);
-            conn.createStatement().execute("DELETE FROM " + tableName );
-           
-            String query = "UPSERT INTO " + tableName
-                    + "(a_binary, a_string) "
-                    + "VALUES(?,?)";
-            PreparedStatement stmt = conn.prepareStatement(query);
-            stmt.setBytes(1, new byte[] {0,0,0,0,0,0,0,0,1});
-            stmt.setString(2, "a");
-            stmt.execute();
-            
-            ResultSet rs = conn.createStatement().executeQuery("SELECT a_string FROM " + tableName);
-            assertTrue(rs.next());
-            assertEquals("a",rs.getString(1));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-    }
+      String ddl = "CREATE TABLE " + tableName + "   (a_binary binary(10) not null, \n"
+        + "    a_string varchar not null, \n" + "    b_binary varbinary \n"
+        + "    CONSTRAINT pk PRIMARY KEY (a_binary, a_string))\n";
+      createTestTable(getUrl(), ddl);
 
-    @Test
-    public void testSelectValues() throws SQLException {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        
-        try {
-            String tableName = generateUniqueName();
-            initTableValues(tableName);
-            String query = "SELECT * FROM " + tableName;
-            PreparedStatement stmt = conn.prepareStatement(query);
-            ResultSet rs = stmt.executeQuery();
-            
-            assertTrue(rs.next());
-            assertArrayEquals(new byte[] {0,0,0,0,0,0,0,0,0,1}, rs.getBytes(1));
-            assertEquals("a", rs.getString(2));
-            
-            assertTrue(rs.next());
-            assertArrayEquals(new byte[] {0,0,0,0,0,0,0,0,0,2}, rs.getBytes(1));
-            assertEquals("b", rs.getString(2));
-            
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-    }
+      String query;
+      PreparedStatement stmt;
 
-    @Test
-    public void testUpsertSelectValues() throws SQLException {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        
-        try {
-            String tableName = generateUniqueName();
-            initTableValues(tableName);
-            
-            String query = "UPSERT INTO " + tableName + " (a_binary, a_string, b_binary) "
-                    + " SELECT a_binary, a_string, a_binary FROM " + tableName;
-            PreparedStatement stmt = conn.prepareStatement(query);
-            stmt.execute();
-            conn.commit();
-            
-            query = "SELECT a_binary, b_binary FROM " + tableName;
-            stmt = conn.prepareStatement(query);
-            ResultSet rs = stmt.executeQuery();
-            
-            assertTrue(rs.next());
-            assertArrayEquals(new byte[] {0,0,0,0,0,0,0,0,0,1}, rs.getBytes(1));
-            assertArrayEquals(new byte[] {0,0,0,0,0,0,0,0,0,1}, rs.getBytes(2));
-            
-            assertTrue(rs.next());
-            assertArrayEquals(new byte[] {0,0,0,0,0,0,0,0,0,2}, rs.getBytes(1));
-            assertArrayEquals(new byte[] {0,0,0,0,0,0,0,0,0,2}, rs.getBytes(2));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
+      query = "UPSERT INTO " + tableName + "(a_binary, a_string) " + "VALUES(?,?)";
+      stmt = conn.prepareStatement(query);
+
+      stmt.setBytes(1, new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 });
+      stmt.setString(2, "a");
+      stmt.execute();
+
+      stmt.setBytes(1, new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 2 });
+      stmt.setString(2, "b");
+      stmt.execute();
+      conn.commit();
+
+    } finally {
+      conn.close();
     }
+  }
+
+  @Test
+  public void testInsertPaddedBinaryValue() throws SQLException {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    Connection conn = DriverManager.getConnection(getUrl(), props);
+    try {
+      String tableName = generateUniqueName();
+      initTableValues(tableName);
+      conn.setAutoCommit(true);
+      conn.createStatement().execute("DELETE FROM " + tableName);
+
+      String query = "UPSERT INTO " + tableName + "(a_binary, a_string) " + "VALUES(?,?)";
+      PreparedStatement stmt = conn.prepareStatement(query);
+      stmt.setBytes(1, new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 1 });
+      stmt.setString(2, "a");
+      stmt.execute();
+
+      ResultSet rs = conn.createStatement().executeQuery("SELECT a_string FROM " + tableName);
+      assertTrue(rs.next());
+      assertEquals("a", rs.getString(1));
+      assertFalse(rs.next());
+    } finally {
+      conn.close();
+    }
+  }
+
+  @Test
+  public void testSelectValues() throws SQLException {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    Connection conn = DriverManager.getConnection(getUrl(), props);
+
+    try {
+      String tableName = generateUniqueName();
+      initTableValues(tableName);
+      String query = "SELECT * FROM " + tableName;
+      PreparedStatement stmt = conn.prepareStatement(query);
+      ResultSet rs = stmt.executeQuery();
+
+      assertTrue(rs.next());
+      assertArrayEquals(new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 }, rs.getBytes(1));
+      assertEquals("a", rs.getString(2));
+
+      assertTrue(rs.next());
+      assertArrayEquals(new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 2 }, rs.getBytes(1));
+      assertEquals("b", rs.getString(2));
+
+      assertFalse(rs.next());
+    } finally {
+      conn.close();
+    }
+  }
+
+  @Test
+  public void testUpsertSelectValues() throws SQLException {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    Connection conn = DriverManager.getConnection(getUrl(), props);
+
+    try {
+      String tableName = generateUniqueName();
+      initTableValues(tableName);
+
+      String query = "UPSERT INTO " + tableName + " (a_binary, a_string, b_binary) "
+        + " SELECT a_binary, a_string, a_binary FROM " + tableName;
+      PreparedStatement stmt = conn.prepareStatement(query);
+      stmt.execute();
+      conn.commit();
+
+      query = "SELECT a_binary, b_binary FROM " + tableName;
+      stmt = conn.prepareStatement(query);
+      ResultSet rs = stmt.executeQuery();
+
+      assertTrue(rs.next());
+      assertArrayEquals(new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 }, rs.getBytes(1));
+      assertArrayEquals(new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 }, rs.getBytes(2));
+
+      assertTrue(rs.next());
+      assertArrayEquals(new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 2 }, rs.getBytes(1));
+      assertArrayEquals(new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 2 }, rs.getBytes(2));
+      assertFalse(rs.next());
+    } finally {
+      conn.close();
+    }
+  }
 }

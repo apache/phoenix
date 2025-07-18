@@ -15,9 +15,7 @@
   See the License for the specific language governing permissions and
   limitations under the License.
 -->
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.phoenix</groupId>
@@ -25,9 +23,9 @@
     <version>5.3.0-SNAPSHOT</version>
   </parent>
   <artifactId>phoenix-assembly</artifactId>
+  <packaging>pom</packaging>
   <name>Phoenix Assembly</name>
   <description>Assemble Phoenix artifacts</description>
-  <packaging>pom</packaging>
 
   <properties>
     <maven.test.skip>true</maven.test.skip>
@@ -35,155 +33,6 @@
     <jacocoArgLine/>
     <main.basedir>${project.parent.basedir}</main.basedir>
   </properties>
-
-  <build>
-    <plugins>
-      <plugin>
-        <artifactId>exec-maven-plugin</artifactId>
-        <groupId>org.codehaus.mojo</groupId>
-        <executions>
-          <execution>
-            <id>embedded client without version</id>
-            <phase>compile</phase>
-            <goals>
-              <goal>exec</goal>
-            </goals>
-            <configuration>
-              <executable>ln</executable>
-              <workingDirectory>${project.basedir}/../phoenix-client-parent/phoenix-client-embedded/target</workingDirectory>
-              <arguments>
-                <argument>-fnsv</argument>
-                <argument>
-                  phoenix-client-embedded-${hbase.suffix}-${project.version}.jar
-                </argument>
-                <argument>
-                  <!-- We are overwriting the unshaded client JAR, but we don't care -->
-                  phoenix-client-embedded-${hbase.suffix}.jar
-                </argument>
-              </arguments>
-            </configuration>
-          </execution>
-          <execution>
-            <id>lite client without version</id>
-            <phase>compile</phase>
-            <goals>
-              <goal>exec</goal>
-            </goals>
-            <configuration>
-              <executable>ln</executable>
-              <workingDirectory>${project.basedir}/../phoenix-client-parent/phoenix-client-lite/target</workingDirectory>
-              <arguments>
-                <argument>-fnsv</argument>
-                <argument>
-                  phoenix-client-lite-${hbase.suffix}-${project.version}.jar
-                </argument>
-                <argument>
-                  <!-- We are overwriting the unshaded client JAR, but we don't care -->
-                  phoenix-client-lite-${hbase.suffix}.jar
-                </argument>
-              </arguments>
-            </configuration>
-          </execution>
-          <execution>
-            <id>server without version</id>
-            <phase>compile</phase>
-            <goals>
-              <goal>exec</goal>
-            </goals>
-            <configuration>
-              <executable>ln</executable>
-              <workingDirectory>${project.basedir}/../phoenix-server/target</workingDirectory>
-              <arguments>
-                <argument>-fnsv</argument>
-                <argument>
-                  phoenix-server-${hbase.suffix}-${project.version}.jar
-                </argument>
-                <argument>
-                  <!-- We are overwriting the unshaded server JAR, but we don't care -->
-                  phoenix-server-${hbase.suffix}.jar
-                </argument>
-              </arguments>
-            </configuration>
-          </execution>
-          <execution>
-            <id>mapreduce without version</id>
-            <phase>compile</phase>
-            <goals>
-              <goal>exec</goal>
-            </goals>
-            <configuration>
-              <executable>ln</executable>
-              <workingDirectory>${project.basedir}/../phoenix-mapreduce-byo-shaded-hbase/target</workingDirectory>
-              <arguments>
-                <argument>-fnsv</argument>
-                <argument>
-                  phoenix-mapreduce-byo-shaded-hbase-${hbase.suffix}-${project.version}.jar
-                </argument>
-                <argument>
-                  <!-- We are overwriting the unshaded  JAR, but we don't care -->
-                  phoenix-mapreduce-byo-shaded-hbase-${hbase.suffix}.jar
-                </argument>
-              </arguments>
-            </configuration>
-          </execution>
-          <execution>
-            <id>pherf without version</id>
-            <phase>compile</phase>
-            <goals>
-              <goal>exec</goal>
-            </goals>
-            <configuration>
-              <executable>ln</executable>
-              <workingDirectory>${project.basedir}/../phoenix-pherf/target</workingDirectory>
-              <arguments>
-                <argument>-fnsv</argument>
-                <argument>
-                  phoenix-pherf-${project.version}.jar
-                </argument>
-                <argument>
-                  phoenix-pherf.jar
-                </argument>
-              </arguments>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
-      <!-- No jars created for this module -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-jar-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>default-jar</id>
-            <phase>none</phase>
-            <goals/>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
-        <artifactId>maven-assembly-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>package-to-tar</id>
-            <phase>package</phase>
-            <goals>
-              <goal>single</goal>
-            </goals>
-            <configuration>
-            <finalName>phoenix-${hbase.suffix}-${project.version}-bin</finalName>
-              <attach>false</attach>
-              <tarLongFileMode>gnu</tarLongFileMode>
-              <appendAssemblyId>false</appendAssemblyId>
-              <descriptors>
-                <descriptor>src/build/package-to-tar-all.xml</descriptor>
-              </descriptors>
-              <tarLongFileMode>posix</tarLongFileMode>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
-    </plugins>
-  </build>
 
   <dependencies>
     <!-- Depend on all other internal projects -->
@@ -227,31 +76,146 @@
     </dependency>
   </dependencies>
 
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>embedded client without version</id>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <phase>compile</phase>
+            <configuration>
+              <executable>ln</executable>
+              <workingDirectory>${project.basedir}/../phoenix-client-parent/phoenix-client-embedded/target</workingDirectory>
+              <arguments>
+                <argument>-fnsv</argument>
+                <argument>phoenix-client-embedded-${hbase.suffix}-${project.version}.jar</argument>
+                <argument>
+                  <!-- We are overwriting the unshaded client JAR, but we don't care -->
+                  phoenix-client-embedded-${hbase.suffix}.jar
+                </argument>
+              </arguments>
+            </configuration>
+          </execution>
+          <execution>
+            <id>lite client without version</id>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <phase>compile</phase>
+            <configuration>
+              <executable>ln</executable>
+              <workingDirectory>${project.basedir}/../phoenix-client-parent/phoenix-client-lite/target</workingDirectory>
+              <arguments>
+                <argument>-fnsv</argument>
+                <argument>phoenix-client-lite-${hbase.suffix}-${project.version}.jar</argument>
+                <argument>
+                  <!-- We are overwriting the unshaded client JAR, but we don't care -->
+                  phoenix-client-lite-${hbase.suffix}.jar
+                </argument>
+              </arguments>
+            </configuration>
+          </execution>
+          <execution>
+            <id>server without version</id>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <phase>compile</phase>
+            <configuration>
+              <executable>ln</executable>
+              <workingDirectory>${project.basedir}/../phoenix-server/target</workingDirectory>
+              <arguments>
+                <argument>-fnsv</argument>
+                <argument>phoenix-server-${hbase.suffix}-${project.version}.jar</argument>
+                <argument>
+                  <!-- We are overwriting the unshaded server JAR, but we don't care -->
+                  phoenix-server-${hbase.suffix}.jar
+                </argument>
+              </arguments>
+            </configuration>
+          </execution>
+          <execution>
+            <id>mapreduce without version</id>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <phase>compile</phase>
+            <configuration>
+              <executable>ln</executable>
+              <workingDirectory>${project.basedir}/../phoenix-mapreduce-byo-shaded-hbase/target</workingDirectory>
+              <arguments>
+                <argument>-fnsv</argument>
+                <argument>phoenix-mapreduce-byo-shaded-hbase-${hbase.suffix}-${project.version}.jar</argument>
+                <argument>
+                  <!-- We are overwriting the unshaded  JAR, but we don't care -->
+                  phoenix-mapreduce-byo-shaded-hbase-${hbase.suffix}.jar
+                </argument>
+              </arguments>
+            </configuration>
+          </execution>
+          <execution>
+            <id>pherf without version</id>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <phase>compile</phase>
+            <configuration>
+              <executable>ln</executable>
+              <workingDirectory>${project.basedir}/../phoenix-pherf/target</workingDirectory>
+              <arguments>
+                <argument>-fnsv</argument>
+                <argument>phoenix-pherf-${project.version}.jar</argument>
+                <argument>phoenix-pherf.jar</argument>
+              </arguments>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <!-- No jars created for this module -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>default-jar</id>
+            <goals/>
+            <phase>none</phase>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <artifactId>maven-assembly-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>package-to-tar</id>
+            <goals>
+              <goal>single</goal>
+            </goals>
+            <phase>package</phase>
+            <configuration>
+              <finalName>phoenix-${hbase.suffix}-${project.version}-bin</finalName>
+              <attach>false</attach>
+              <tarLongFileMode>gnu</tarLongFileMode>
+              <appendAssemblyId>false</appendAssemblyId>
+              <descriptors>
+                <descriptor>src/build/package-to-tar-all.xml</descriptor>
+              </descriptors>
+              <tarLongFileMode>posix</tarLongFileMode>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
   <profiles>
     <profile>
       <id>coverage</id>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.jacoco</groupId>
-            <artifactId>jacoco-maven-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>report-aggregate</id>
-                <goals>
-                  <goal>report-aggregate</goal>
-                </goals>
-                <phase>verify</phase>
-                <configuration>
-                  <outputDirectory>${jacocoReportDir}</outputDirectory>
-                  <sourceEncoding>${project.build.sourceEncoding}</sourceEncoding>
-                  <outputEncoding>${project.reporting.outputEncoding}</outputEncoding>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
       <dependencies>
         <dependency>
           <groupId>org.apache.phoenix</groupId>
@@ -289,6 +253,28 @@
           <version>${project.version}</version>
         </dependency>
       </dependencies>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.jacoco</groupId>
+            <artifactId>jacoco-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>report-aggregate</id>
+                <goals>
+                  <goal>report-aggregate</goal>
+                </goals>
+                <phase>verify</phase>
+                <configuration>
+                  <outputDirectory>${jacocoReportDir}</outputDirectory>
+                  <sourceEncoding>${project.build.sourceEncoding}</sourceEncoding>
+                  <outputEncoding>${project.reporting.outputEncoding}</outputEncoding>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
   </profiles>
 </project>

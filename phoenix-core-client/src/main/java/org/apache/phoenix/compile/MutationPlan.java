@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,13 +18,13 @@
 package org.apache.phoenix.compile;
 
 import java.sql.SQLException;
-
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.schema.TableRef;
 
-
 public interface MutationPlan extends StatementPlan {
-    MutationState execute() throws SQLException;
-    TableRef getTargetRef();
-    QueryPlan getQueryPlan();
+  MutationState execute() throws SQLException;
+
+  TableRef getTargetRef();
+
+  QueryPlan getQueryPlan();
 }

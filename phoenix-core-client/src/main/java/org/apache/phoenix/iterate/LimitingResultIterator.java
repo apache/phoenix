@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,53 +19,47 @@ package org.apache.phoenix.iterate;
 
 import java.sql.SQLException;
 import java.util.List;
-
-import org.apache.phoenix.compile.ExplainPlanAttributes
-    .ExplainPlanAttributesBuilder;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 /**
- * 
  * Iterates through tuples up to a limit
- *
- * 
  * @since 1.2
  */
 public class LimitingResultIterator extends DelegateResultIterator {
-    private int rowCount;
-    private final int limit;
-    
-    public LimitingResultIterator(ResultIterator delegate, int limit) {
-        super(delegate);
-        this.limit = limit;
-    }
+  private int rowCount;
+  private final int limit;
 
-    @Override
-    public Tuple next() throws SQLException {
-        if (rowCount++ >= limit) {
-            close(); // Free resources early
-            return null;
-        }
-        return super.next();
-    }
+  public LimitingResultIterator(ResultIterator delegate, int limit) {
+    super(delegate);
+    this.limit = limit;
+  }
 
-    @Override
-    public void explain(List<String> planSteps) {
-        super.explain(planSteps);
-        planSteps.add("CLIENT " + limit + " ROW LIMIT");
+  @Override
+  public Tuple next() throws SQLException {
+    if (rowCount++ >= limit) {
+      close(); // Free resources early
+      return null;
     }
+    return super.next();
+  }
 
-    @Override
-    public void explain(List<String> planSteps,
-            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
-        super.explain(planSteps, explainPlanAttributesBuilder);
-        explainPlanAttributesBuilder.setClientRowLimit(limit);
-        planSteps.add("CLIENT " + limit + " ROW LIMIT");
-    }
+  @Override
+  public void explain(List<String> planSteps) {
+    super.explain(planSteps);
+    planSteps.add("CLIENT " + limit + " ROW LIMIT");
+  }
 
-    @Override
-    public String toString() {
-        return "LimitingResultIterator [rowCount=" + rowCount + ", limit="
-            + limit + "]";
-    }
+  @Override
+  public void explain(List<String> planSteps,
+    ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+    super.explain(planSteps, explainPlanAttributesBuilder);
+    explainPlanAttributesBuilder.setClientRowLimit(limit);
+    planSteps.add("CLIENT " + limit + " ROW LIMIT");
+  }
+
+  @Override
+  public String toString() {
+    return "LimitingResultIterator [rowCount=" + rowCount + ", limit=" + limit + "]";
+  }
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.hadoop.hbase.regionserver.wal;
 
 import java.io.DataInput;
@@ -26,7 +25,6 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
@@ -37,7 +35,6 @@ import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.hbase.index.wal.IndexedKeyValue;
 import org.apache.phoenix.hbase.index.wal.KeyValueCodec;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
-
 
 /**
  * Support custom indexing {@link KeyValue}s when written to the WAL.
@@ -52,43 +49,48 @@ public class IndexedWALEditCodec extends WALCellCodec {
   // the stream
   private static final int REGULAR_KEY_VALUE_MARKER = 0;
   private CompressionContext compression;
-  private static final int MIN_BINARY_COMPATIBLE_INDEX_CODEC_VERSION = VersionUtil.encodeVersion("1", "1", "3");
+  private static final int MIN_BINARY_COMPATIBLE_INDEX_CODEC_VERSION =
+    VersionUtil.encodeVersion("1", "1", "3");
   private final boolean useDefaultDecoder;
 
   private static boolean isUseDefaultDecoder() {
-      String hbaseVersion = VersionInfo.getVersion();
-      return VersionUtil.encodeVersion(hbaseVersion) >= MIN_BINARY_COMPATIBLE_INDEX_CODEC_VERSION;
+    String hbaseVersion = VersionInfo.getVersion();
+    return VersionUtil.encodeVersion(hbaseVersion) >= MIN_BINARY_COMPATIBLE_INDEX_CODEC_VERSION;
   }
 
   /*
    * No-args constructor must be provided for WALSplitter/RPC Codec path
    */
   public IndexedWALEditCodec() {
-      super();
-      this.compression = null;
-      this.useDefaultDecoder = isUseDefaultDecoder();
+    super();
+    this.compression = null;
+    this.useDefaultDecoder = isUseDefaultDecoder();
   }
 
   /*
    * Two-args Configuration and CompressionContext codec must be provided for WALCellCodec path
    */
   public IndexedWALEditCodec(Configuration conf, CompressionContext compression) {
-      super(conf, compression);
-      this.compression = compression;
-      this.useDefaultDecoder = isUseDefaultDecoder();
+    super(conf, compression);
+    this.compression = compression;
+    this.useDefaultDecoder = isUseDefaultDecoder();
   }
 
   @Override
   public Decoder getDecoder(InputStream is) {
     // compression isn't enabled
     if (this.compression == null) {
-      return useDefaultDecoder ? new IndexKeyValueDecoder(is) : new BinaryCompatibleIndexKeyValueDecoder(is);
+      return useDefaultDecoder
+        ? new IndexKeyValueDecoder(is)
+        : new BinaryCompatibleIndexKeyValueDecoder(is);
     }
 
     // there is compression, so we get the standard decoder to handle reading those kvs
     Decoder decoder = super.getDecoder(is);
     // compression is on, reqturn our custom decoder
-    return useDefaultDecoder ? new CompressedIndexKeyValueDecoder(is, decoder) : new BinaryCompatibleCompressedIndexKeyValueDecoder(is, decoder);
+    return useDefaultDecoder
+      ? new CompressedIndexKeyValueDecoder(is, decoder)
+      : new BinaryCompatibleCompressedIndexKeyValueDecoder(is, decoder);
   }
 
   @Override
@@ -107,22 +109,19 @@ public class IndexedWALEditCodec extends WALCellCodec {
    * Returns a DataInput given an InputStream
    */
   private static DataInput getDataInput(InputStream is) {
-    return is instanceof DataInput
-        ? (DataInput) is
-        : new DataInputStream(is);
+    return is instanceof DataInput ? (DataInput) is : new DataInputStream(is);
   }
 
   /**
    * Returns a DataOutput given an OutputStream
    */
   private static DataOutput getDataOutput(OutputStream os) {
-    return os instanceof DataOutput
-        ? (DataOutput) os
-        : new DataOutputStream(os);
+    return os instanceof DataOutput ? (DataOutput) os : new DataOutputStream(os);
   }
 
   private static abstract class PhoenixBaseDecoder extends BaseDecoder {
     protected DataInput dataInput;
+
     public PhoenixBaseDecoder(InputStream in) {
       super(in);
       dataInput = getDataInput(this.in);
@@ -135,16 +134,16 @@ public class IndexedWALEditCodec extends WALCellCodec {
   public static class IndexKeyValueDecoder extends PhoenixBaseDecoder {
 
     /**
-     * Create a Decoder on the given input stream with the given Decoder to parse
-     * generic {@link KeyValue}s.
+     * Create a Decoder on the given input stream with the given Decoder to parse generic
+     * {@link KeyValue}s.
      * @param is stream to read from
      */
-    public IndexKeyValueDecoder(InputStream is){
+    public IndexKeyValueDecoder(InputStream is) {
       super(is);
     }
 
     @Override
-    protected KeyValue parseCell() throws IOException{
+    protected KeyValue parseCell() throws IOException {
       return KeyValueCodec.readKeyValue(this.dataInput);
     }
   }
@@ -154,11 +153,11 @@ public class IndexedWALEditCodec extends WALCellCodec {
     private Decoder decoder;
 
     /**
-     * Create a Decoder on the given input stream with the given Decoder to parse
-     * generic {@link KeyValue}s.
-     * @param is stream to read from
+     * Create a Decoder on the given input stream with the given Decoder to parse generic
+     * {@link KeyValue}s.
+     * @param is                stream to read from
      * @param compressedDecoder decoder for generic {@link KeyValue}s. Should support the expected
-     *          compression.
+     *                          compression.
      */
     public CompressedIndexKeyValueDecoder(InputStream is, Decoder compressedDecoder) {
       super(is);
@@ -171,7 +170,7 @@ public class IndexedWALEditCodec extends WALCellCodec {
       int marker = this.in.read();
       if (marker < 0) {
         throw new EOFException(
-            "Unexepcted end of stream found while reading next (Indexed) KeyValue");
+          "Unexepcted end of stream found while reading next (Indexed) KeyValue");
       }
 
       // do the normal thing, if its a regular kv
@@ -189,6 +188,7 @@ public class IndexedWALEditCodec extends WALCellCodec {
 
   private static abstract class PhoenixBaseEncoder extends BaseEncoder {
     protected DataOutput dataOutput;
+
     public PhoenixBaseEncoder(OutputStream out) {
       super(out);
       dataOutput = getDataOutput(this.out);
@@ -240,96 +240,100 @@ public class IndexedWALEditCodec extends WALCellCodec {
 
     @Override
     public void write(Cell cell) throws IOException {
-      //make sure we are open
+      // make sure we are open
       checkFlushed();
 
-      //write the special marker so we can figure out which kind of kv is it
+      // write the special marker so we can figure out which kind of kv is it
       int marker = IndexedWALEditCodec.REGULAR_KEY_VALUE_MARKER;
       if (cell instanceof IndexedKeyValue) {
         marker = KeyValueCodec.INDEX_TYPE_LENGTH_MARKER;
       }
       out.write(marker);
 
-      //then serialize based on the marker
+      // then serialize based on the marker
       if (marker == IndexedWALEditCodec.REGULAR_KEY_VALUE_MARKER) {
         this.compressedKvEncoder.write(cell);
-      }
-      else{
+      } else {
         KeyValueCodec.write(this.dataOutput, PhoenixKeyValueUtil.maybeCopyCell(cell));
       }
     }
   }
-  
-  private static abstract class BinaryCompatiblePhoenixBaseDecoder extends BinaryCompatibleBaseDecoder {
-      protected DataInput dataInput;
-      public BinaryCompatiblePhoenixBaseDecoder(InputStream in) {
-        super(in);
-        dataInput = getDataInput(this.in);
-      } 
+
+  private static abstract class BinaryCompatiblePhoenixBaseDecoder
+    extends BinaryCompatibleBaseDecoder {
+    protected DataInput dataInput;
+
+    public BinaryCompatiblePhoenixBaseDecoder(InputStream in) {
+      super(in);
+      dataInput = getDataInput(this.in);
+    }
   }
-  
+
   /**
-   * This class is meant to be used when runtime version of HBase
-   * HBase is older than 1.1.3. This is needed to handle binary incompatibility introduced by
-   * HBASE-14501. See PHOENIX-2629 and PHOENIX-2636 for details.
+   * This class is meant to be used when runtime version of HBase HBase is older than 1.1.3. This is
+   * needed to handle binary incompatibility introduced by HBASE-14501. See PHOENIX-2629 and
+   * PHOENIX-2636 for details.
    */
-  private static class BinaryCompatibleIndexKeyValueDecoder extends BinaryCompatiblePhoenixBaseDecoder {
-      /**
-       * Create a Decoder on the given input stream with the given Decoder to parse
-       * generic {@link KeyValue}s.
-       * @param is stream to read from
-       */
-      public BinaryCompatibleIndexKeyValueDecoder(InputStream is){
-        super(is);
-      }
+  private static class BinaryCompatibleIndexKeyValueDecoder
+    extends BinaryCompatiblePhoenixBaseDecoder {
+    /**
+     * Create a Decoder on the given input stream with the given Decoder to parse generic
+     * {@link KeyValue}s.
+     * @param is stream to read from
+     */
+    public BinaryCompatibleIndexKeyValueDecoder(InputStream is) {
+      super(is);
+    }
 
-      @Override
-      protected KeyValue parseCell() throws IOException{
-        return KeyValueCodec.readKeyValue(this.dataInput);
-      }
+    @Override
+    protected KeyValue parseCell() throws IOException {
+      return KeyValueCodec.readKeyValue(this.dataInput);
+    }
   }
-  
+
   /**
-   * This class is meant to be used when runtime version of HBase
-   * HBase is older than 1.1.3. This is needed to handle binary incompatibility introduced by
-   * HBASE-14501. See PHOENIX-2629 and PHOENIX-2636 for details.
+   * This class is meant to be used when runtime version of HBase HBase is older than 1.1.3. This is
+   * needed to handle binary incompatibility introduced by HBASE-14501. See PHOENIX-2629 and
+   * PHOENIX-2636 for details.
    */
-  private static class BinaryCompatibleCompressedIndexKeyValueDecoder extends BinaryCompatiblePhoenixBaseDecoder {
+  private static class BinaryCompatibleCompressedIndexKeyValueDecoder
+    extends BinaryCompatiblePhoenixBaseDecoder {
 
-      private Decoder decoder;
+    private Decoder decoder;
 
-      /**
-       * Create a Decoder on the given input stream with the given Decoder to parse
-       * generic {@link KeyValue}s.
-       * @param is stream to read from
-       * @param compressedDecoder decoder for generic {@link KeyValue}s. Should support the expected
-       *          compression.
-       */
-      public BinaryCompatibleCompressedIndexKeyValueDecoder(InputStream is, Decoder compressedDecoder) {
-        super(is);
-        this.decoder = compressedDecoder;
+    /**
+     * Create a Decoder on the given input stream with the given Decoder to parse generic
+     * {@link KeyValue}s.
+     * @param is                stream to read from
+     * @param compressedDecoder decoder for generic {@link KeyValue}s. Should support the expected
+     *                          compression.
+     */
+    public BinaryCompatibleCompressedIndexKeyValueDecoder(InputStream is,
+      Decoder compressedDecoder) {
+      super(is);
+      this.decoder = compressedDecoder;
+    }
+
+    @Override
+    protected Cell parseCell() throws IOException {
+      // reader the marker
+      int marker = this.in.read();
+      if (marker < 0) {
+        throw new EOFException(
+          "Unexepcted end of stream found while reading next (Indexed) KeyValue");
       }
 
-      @Override
-      protected Cell parseCell() throws IOException {
-        // reader the marker
-        int marker = this.in.read();
-        if (marker < 0) {
-          throw new EOFException(
-              "Unexepcted end of stream found while reading next (Indexed) KeyValue");
+      // do the normal thing, if its a regular kv
+      if (marker == REGULAR_KEY_VALUE_MARKER) {
+        if (!this.decoder.advance()) {
+          throw new IOException("Could not read next key-value from generic KeyValue Decoder!");
         }
-
-        // do the normal thing, if its a regular kv
-        if (marker == REGULAR_KEY_VALUE_MARKER) {
-          if (!this.decoder.advance()) {
-            throw new IOException("Could not read next key-value from generic KeyValue Decoder!");
-          }
-          return this.decoder.current();
-        }
-
-        // its an indexedKeyValue, so parse it out specially
-        return KeyValueCodec.readKeyValue(this.dataInput);
+        return this.decoder.current();
       }
+
+      // its an indexedKeyValue, so parse it out specially
+      return KeyValueCodec.readKeyValue(this.dataInput);
+    }
   }
-  
+
 }

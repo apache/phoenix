@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,47 +20,48 @@ package org.apache.phoenix.parse;
 import java.sql.SQLException;
 import java.text.Format;
 import java.util.List;
-
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.function.FunctionArgumentType;
 import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.expression.function.ToCharFunction;
-import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PTimestamp;
 
 public class ToCharParseNode extends FunctionParseNode {
 
-    public ToCharParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
-        super(name, children, info);
-    }
+  public ToCharParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
+    super(name, children, info);
+  }
 
-    @Override
-    public FunctionExpression create(List<Expression> children, StatementContext context) throws SQLException {
-        PDataType dataType = children.get(0).getDataType();
-        String formatString = (String)((LiteralExpression)children.get(1)).getValue(); // either date or number format string
-        Format formatter;
-        FunctionArgumentType type;
-        if (dataType.isCoercibleTo(PTimestamp.INSTANCE)) {
-            if (formatString == null) {
-                formatString = context.getDateFormat();
-                formatter = context.getDateFormatter();
-            } else {
-                formatter = FunctionArgumentType.TEMPORAL.getFormatter(formatString);
-            }
-            type = FunctionArgumentType.TEMPORAL;
-        }
-        else if (dataType.isCoercibleTo(PDecimal.INSTANCE)) {
-            if (formatString == null)
-                formatString = context.getNumberFormat();
-            formatter = FunctionArgumentType.NUMERIC.getFormatter(formatString);
-            type = FunctionArgumentType.NUMERIC;
-        }
-        else {
-            throw new SQLException(dataType + " type is unsupported for TO_CHAR().  Numeric and temporal types are supported.");
-        }
-        return new ToCharFunction(children, type, formatString, formatter);
+  @Override
+  public FunctionExpression create(List<Expression> children, StatementContext context)
+    throws SQLException {
+    PDataType dataType = children.get(0).getDataType();
+    String formatString = (String) ((LiteralExpression) children.get(1)).getValue(); // either date
+                                                                                     // or number
+                                                                                     // format
+                                                                                     // string
+    Format formatter;
+    FunctionArgumentType type;
+    if (dataType.isCoercibleTo(PTimestamp.INSTANCE)) {
+      if (formatString == null) {
+        formatString = context.getDateFormat();
+        formatter = context.getDateFormatter();
+      } else {
+        formatter = FunctionArgumentType.TEMPORAL.getFormatter(formatString);
+      }
+      type = FunctionArgumentType.TEMPORAL;
+    } else if (dataType.isCoercibleTo(PDecimal.INSTANCE)) {
+      if (formatString == null) formatString = context.getNumberFormat();
+      formatter = FunctionArgumentType.NUMERIC.getFormatter(formatString);
+      type = FunctionArgumentType.NUMERIC;
+    } else {
+      throw new SQLException(dataType
+        + " type is unsupported for TO_CHAR().  Numeric and temporal types are supported.");
     }
+    return new ToCharFunction(children, type, formatString, formatter);
+  }
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,12 +20,9 @@ package org.apache.phoenix.hbase.index.covered;
 import static org.junit.Assert.assertEquals;
 
 import java.util.Arrays;
-
 import org.apache.hadoop.hbase.util.Bytes;
-import org.junit.Test;
-
-import org.apache.phoenix.hbase.index.covered.CoveredColumns;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.junit.Test;
 
 public class CoveredColumnsTest {
 
@@ -36,8 +33,8 @@ public class CoveredColumnsTest {
   public void testCovering() {
     ColumnReference ref = new ColumnReference(fam, qual);
     CoveredColumns columns = new CoveredColumns();
-    assertEquals("Should have only found a single column to cover", 1, columns
-        .findNonCoveredColumns(Arrays.asList(ref)).size());
+    assertEquals("Should have only found a single column to cover", 1,
+      columns.findNonCoveredColumns(Arrays.asList(ref)).size());
 
     columns.addColumn(ref);
     assertEquals("Shouldn't have any columns to cover", 0,

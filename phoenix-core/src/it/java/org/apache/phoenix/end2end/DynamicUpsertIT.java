@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -30,7 +30,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
-
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
@@ -42,198 +41,198 @@ import org.junit.experimental.categories.Category;
 
 /**
  * Basic tests for Phoenix dynamic upserting
- * 
- * 
  * @since 1.3
  */
 
-
 @Category(ParallelStatsDisabledTest.class)
 public class DynamicUpsertIT extends ParallelStatsDisabledIT {
-    private String tableName;
+  private String tableName;
 
-    @Before
-    public void doBeforeTestSetup() throws Exception {
-    	tableName = BaseTest.generateUniqueName();
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        String ddl = "create table " + tableName + "   (entry varchar not null primary key,"
-                + "    a.dummy varchar," + "    b.dummy varchar)";
-        conn.createStatement().execute(ddl);
-        conn.close();
+  @Before
+  public void doBeforeTestSetup() throws Exception {
+    tableName = BaseTest.generateUniqueName();
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    Connection conn = DriverManager.getConnection(getUrl(), props);
+    String ddl = "create table " + tableName + "   (entry varchar not null primary key,"
+      + "    a.dummy varchar," + "    b.dummy varchar)";
+    conn.createStatement().execute(ddl);
+    conn.close();
+  }
+
+  /**
+   * Test a simple upsert with a dynamic Column
+   */
+  @Test
+  public void testUpsert() throws Exception {
+    String upsertquery = "UPSERT INTO " + tableName
+      + " (entry, a.DynCol VARCHAR,a.dummy) VALUES ('dynEntry','DynValue','DynColValue')";
+    String selectquery =
+      "SELECT DynCol FROM " + tableName + " (a.DynCol VARCHAR) where entry='dynEntry'";
+    // String selectquery = "SELECT * FROM "+TABLE;
+
+    String url = getUrl() + ";";
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    Connection conn = DriverManager.getConnection(url, props);
+    conn.setAutoCommit(true);
+    try {
+      PreparedStatement statement = conn.prepareStatement(upsertquery);
+      int rowsInserted = statement.executeUpdate();
+      assertEquals(1, rowsInserted);
+      assertEquals(1, statement.getUpdateCount());
+      // When not using an UPSERT variant (e.g., ON DUPLICATE KEY) that is not capable of
+      // returning a row, we don't expect to get a result set.
+      assertNull(statement.getResultSet());
+
+      // since the upsert does not alter the schema check with a dynamicolumn
+      PreparedStatement selectStatement = conn.prepareStatement(selectquery);
+      ResultSet rs = selectStatement.executeQuery();
+      assertTrue(rs.next());
+      assertEquals("DynValue", rs.getString(1));
+      assertFalse(rs.next());
+    } finally {
+      conn.close();
     }
-    
-    /**
-     * Test a simple upsert with a dynamic Column
-     */
-    @Test
-    public void testUpsert() throws Exception {
-        String upsertquery = "UPSERT INTO " + tableName
-                + " (entry, a.DynCol VARCHAR,a.dummy) VALUES ('dynEntry','DynValue','DynColValue')";
-        String selectquery = "SELECT DynCol FROM " + tableName + " (a.DynCol VARCHAR) where entry='dynEntry'";
-        // String selectquery = "SELECT * FROM "+TABLE;
+  }
 
-        String url = getUrl() + ";";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
-        conn.setAutoCommit(true);
-        try {
-            PreparedStatement statement = conn.prepareStatement(upsertquery);
-            int rowsInserted = statement.executeUpdate();
-            assertEquals(1, rowsInserted);
-            assertEquals(1, statement.getUpdateCount());
-            // When not using an UPSERT variant (e.g., ON DUPLICATE KEY) that is not capable of
-            // returning a row, we don't expect to get a result set.
-            assertNull(statement.getResultSet());
+  /**
+   * Test an upsert of multiple dynamic Columns
+   */
+  @Test
+  public void testMultiUpsert() throws Exception {
+    String upsertquery = "UPSERT INTO " + tableName
+      + " (entry, a.DynColA VARCHAR,b.DynColB varchar) VALUES('dynEntry','DynColValuea','DynColValueb')";
+    String selectquery = "SELECT DynColA,entry,DynColB FROM " + tableName
+      + " (a.DynColA VARCHAR,b.DynColB VARCHAR) where entry='dynEntry'";
 
-            // since the upsert does not alter the schema check with a dynamicolumn
-            PreparedStatement selectStatement = conn.prepareStatement(selectquery);
-            ResultSet rs = selectStatement.executeQuery();
-            assertTrue(rs.next());
-            assertEquals("DynValue", rs.getString(1));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
+    String url = getUrl() + ";";
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    Connection conn = DriverManager.getConnection(url, props);
+    conn.setAutoCommit(true);
+    try {
+      PreparedStatement statement = conn.prepareStatement(upsertquery);
+      int rowsInserted = statement.executeUpdate();
+      assertEquals(1, rowsInserted);
+
+      // since the upsert does not alter the schema check with a dynamicolumn
+      statement = conn.prepareStatement(selectquery);
+      ResultSet rs = statement.executeQuery();
+      assertTrue(rs.next());
+      assertEquals("DynColValuea", rs.getString(1));
+      assertEquals("dynEntry", rs.getString(2));
+      assertEquals("DynColValueb", rs.getString(3));
+      assertFalse(rs.next());
+    } finally {
+      conn.close();
     }
+  }
 
-    /**
-     * Test an upsert of multiple dynamic Columns
-     */
-    @Test
-    public void testMultiUpsert() throws Exception {
-        String upsertquery = "UPSERT INTO " + tableName
-                + " (entry, a.DynColA VARCHAR,b.DynColB varchar) VALUES('dynEntry','DynColValuea','DynColValueb')";
-        String selectquery = "SELECT DynColA,entry,DynColB FROM " + tableName
-                + " (a.DynColA VARCHAR,b.DynColB VARCHAR) where entry='dynEntry'";
+  /**
+   * Test an upsert of a full row with dynamic Columns
+   */
+  @Test
+  public void testFullUpsert() throws Exception {
+    String upsertquery = "UPSERT INTO " + tableName
+      + " (a.DynColA VARCHAR,b.DynColB varchar) VALUES('dynEntry','aValue','bValue','DynColValuea','DynColValueb')";
+    String selectquery = "SELECT entry,DynColA,a.dummy,DynColB,b.dummy FROM " + tableName
+      + " (a.DynColA VARCHAR,b.DynColB VARCHAR) where entry='dynEntry'";
 
-        String url = getUrl() + ";";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
-        conn.setAutoCommit(true);
-        try {
-            PreparedStatement statement = conn.prepareStatement(upsertquery);
-            int rowsInserted = statement.executeUpdate();
-            assertEquals(1, rowsInserted);
+    String url = getUrl() + ";";
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    Connection conn = DriverManager.getConnection(url, props);
+    conn.setAutoCommit(true);
+    try {
+      PreparedStatement statement = conn.prepareStatement(upsertquery);
+      int rowsInserted = statement.executeUpdate();
+      assertEquals(1, rowsInserted);
 
-            // since the upsert does not alter the schema check with a dynamicolumn
-            statement = conn.prepareStatement(selectquery);
-            ResultSet rs = statement.executeQuery();
-            assertTrue(rs.next());
-            assertEquals("DynColValuea", rs.getString(1));
-            assertEquals("dynEntry", rs.getString(2));
-            assertEquals("DynColValueb", rs.getString(3));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
+      // since the upsert does not alter the schema check with a dynamicolumn
+      statement = conn.prepareStatement(selectquery);
+      ResultSet rs = statement.executeQuery();
+      assertTrue(rs.next());
+      assertEquals("dynEntry", rs.getString(1));
+      assertEquals("DynColValuea", rs.getString(2));
+      assertEquals("aValue", rs.getString(3));
+      assertEquals("DynColValueb", rs.getString(4));
+      assertEquals("bValue", rs.getString(5));
+      assertFalse(rs.next());
+    } finally {
+      conn.close();
     }
+  }
 
-    /**
-     * Test an upsert of a full row with dynamic Columns
-     */
-    @Test
-    public void testFullUpsert() throws Exception {
-        String upsertquery = "UPSERT INTO "
-                + tableName
-                + " (a.DynColA VARCHAR,b.DynColB varchar) VALUES('dynEntry','aValue','bValue','DynColValuea','DynColValueb')";
-        String selectquery = "SELECT entry,DynColA,a.dummy,DynColB,b.dummy FROM " + tableName
-                + " (a.DynColA VARCHAR,b.DynColB VARCHAR) where entry='dynEntry'";
+  /**
+   * Test an upsert of a full row with dynamic Columns and unbalanced number of values
+   */
+  @Test
+  public void testFullUnbalancedUpsert() throws Exception {
+    String upsertquery = "UPSERT INTO " + tableName
+      + " (a.DynCol VARCHAR,b.DynCol varchar) VALUES('dynEntry','aValue','bValue','dyncola')";
 
-        String url = getUrl() + ";";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
-        conn.setAutoCommit(true);
-        try {
-            PreparedStatement statement = conn.prepareStatement(upsertquery);
-            int rowsInserted = statement.executeUpdate();
-            assertEquals(1, rowsInserted);
-
-            // since the upsert does not alter the schema check with a dynamicolumn
-            statement = conn.prepareStatement(selectquery);
-            ResultSet rs = statement.executeQuery();
-            assertTrue(rs.next());
-            assertEquals("dynEntry", rs.getString(1));
-            assertEquals("DynColValuea", rs.getString(2));
-            assertEquals("aValue", rs.getString(3));
-            assertEquals("DynColValueb", rs.getString(4));
-            assertEquals("bValue", rs.getString(5));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
+    String url = getUrl() + ";";
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    Connection conn = DriverManager.getConnection(url, props);
+    try {
+      PreparedStatement statement = conn.prepareStatement(upsertquery);
+      statement.execute();
+      fail();
+    } catch (SQLException e) {
+      assertEquals(SQLExceptionCode.UPSERT_COLUMN_NUMBERS_MISMATCH.getErrorCode(),
+        e.getErrorCode());
+    } finally {
+      conn.close();
     }
+  }
 
-    /**
-     * Test an upsert of a full row with dynamic Columns and unbalanced number of values
-     */
-    @Test
-    public void testFullUnbalancedUpsert() throws Exception {
-        String upsertquery = "UPSERT INTO " + tableName
-                + " (a.DynCol VARCHAR,b.DynCol varchar) VALUES('dynEntry','aValue','bValue','dyncola')";
-
-        String url = getUrl() + ";";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
-        try {
-            PreparedStatement statement = conn.prepareStatement(upsertquery);
-            statement.execute();
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.UPSERT_COLUMN_NUMBERS_MISMATCH.getErrorCode(),e.getErrorCode());
-        } finally {
-            conn.close();
-        }
+  /**
+   * Test an upsert of prexisting schema defined columns and dynamic ones with different datatypes
+   */
+  @Test(expected = ColumnAlreadyExistsException.class)
+  public void testAmbiguousStaticUpsert() throws Exception {
+    String upsertquery =
+      "UPSERT INTO " + tableName + " (a.dummy INTEGER,b.dummy INTEGER) VALUES(1,2)";
+    String url = getUrl() + ";";
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    Connection conn = DriverManager.getConnection(url, props);
+    try {
+      PreparedStatement statement = conn.prepareStatement(upsertquery);
+      statement.execute();
+    } finally {
+      conn.close();
     }
+  }
 
-    /**
-     * Test an upsert of prexisting schema defined columns and dynamic ones with different datatypes
-     */
-    @Test(expected = ColumnAlreadyExistsException.class)
-    public void testAmbiguousStaticUpsert() throws Exception {
-        String upsertquery = "UPSERT INTO " + tableName + " (a.dummy INTEGER,b.dummy INTEGER) VALUES(1,2)";
-        String url = getUrl() + ";";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
-        try {
-            PreparedStatement statement = conn.prepareStatement(upsertquery);
-            statement.execute();
-        } finally {
-            conn.close();
-        }
+  /**
+   * Test an upsert of two conflicting dynamic columns
+   */
+  @Test(expected = ColumnAlreadyExistsException.class)
+  public void testAmbiguousDynamicUpsert() throws Exception {
+    String upsertquery =
+      "UPSERT INTO " + tableName + " (a.DynCol VARCHAR,a.DynCol INTEGER) VALUES('dynCol',1)";
+    String url = getUrl() + ";";
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    Connection conn = DriverManager.getConnection(url, props);
+    try {
+      PreparedStatement statement = conn.prepareStatement(upsertquery);
+      statement.execute();
+    } finally {
+      conn.close();
     }
+  }
 
-    /**
-     * Test an upsert of two conflicting dynamic columns
-     */
-    @Test(expected = ColumnAlreadyExistsException.class)
-    public void testAmbiguousDynamicUpsert() throws Exception {
-        String upsertquery = "UPSERT INTO " + tableName + " (a.DynCol VARCHAR,a.DynCol INTEGER) VALUES('dynCol',1)";
-        String url = getUrl() + ";";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
-        try {
-            PreparedStatement statement = conn.prepareStatement(upsertquery);
-            statement.execute();
-        } finally {
-            conn.close();
-        }
+  /**
+   * Test an upsert of an undefined ColumnFamily dynamic columns
+   */
+  @Test(expected = ColumnFamilyNotFoundException.class)
+  public void testFakeCFDynamicUpsert() throws Exception {
+    String upsertquery = "UPSERT INTO " + tableName + " (fakecf.DynCol VARCHAR) VALUES('dynCol')";
+    String url = getUrl() + ";";
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    Connection conn = DriverManager.getConnection(url, props);
+    try {
+      PreparedStatement statement = conn.prepareStatement(upsertquery);
+      statement.execute();
+    } finally {
+      conn.close();
     }
-
-    /**
-     * Test an upsert of an undefined ColumnFamily dynamic columns
-     */
-    @Test(expected = ColumnFamilyNotFoundException.class)
-    public void testFakeCFDynamicUpsert() throws Exception {
-        String upsertquery = "UPSERT INTO " + tableName + " (fakecf.DynCol VARCHAR) VALUES('dynCol')";
-        String url = getUrl() + ";";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
-        try {
-            PreparedStatement statement = conn.prepareStatement(upsertquery);
-            statement.execute();
-        } finally {
-            conn.close();
-        }
-    }
+  }
 }

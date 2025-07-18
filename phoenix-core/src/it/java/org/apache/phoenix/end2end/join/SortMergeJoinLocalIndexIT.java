@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,89 +20,73 @@ package org.apache.phoenix.end2end.join;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
-import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
+
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 @Category(ParallelStatsDisabledTest.class)
 public class SortMergeJoinLocalIndexIT extends SortMergeJoinIT {
-    private static final Map<String,String> virtualNameToRealNameMap = Maps.newHashMap();
-    private static final String schemaName = "S_" + generateUniqueName();
+  private static final Map<String, String> virtualNameToRealNameMap = Maps.newHashMap();
+  private static final String schemaName = "S_" + generateUniqueName();
 
-    @Override
-    protected String getSchemaName() {
-        // run all tests in a single schema
-        return schemaName;
-    }
+  @Override
+  protected String getSchemaName() {
+    // run all tests in a single schema
+    return schemaName;
+  }
 
-    @Override
-    protected Map<String,String> getTableNameMap() {
-        // cache across tests, so that tables and
-        // indexes are not recreated each time
-        return virtualNameToRealNameMap;
-    }
+  @Override
+  protected Map<String, String> getTableNameMap() {
+    // cache across tests, so that tables and
+    // indexes are not recreated each time
+    return virtualNameToRealNameMap;
+  }
 
-    public SortMergeJoinLocalIndexIT(String[] indexDDL, String[] plans) {
-        super(indexDDL, plans);
-    }
+  public SortMergeJoinLocalIndexIT(String[] indexDDL, String[] plans) {
+    super(indexDDL, plans);
+  }
 
-    @Parameters(name="SortMergeJoinLocalIndexIT_{index}") // name is used by failsafe as file name in reports
-    public static synchronized Collection<Object> data() {
-        List<Object> testCases = Lists.newArrayList();
-        testCases.add(new String[][] {
-                {
-                "CREATE LOCAL INDEX " + JOIN_CUSTOMER_INDEX + " ON " + JOIN_CUSTOMER_TABLE_FULL_NAME + "(name)",
-                "CREATE LOCAL INDEX " + JOIN_ITEM_INDEX + " ON " + JOIN_ITEM_TABLE_FULL_NAME + "(name) " +
-                        "INCLUDE (price, discount1, discount2, \"supplier_id\", description)",
-                "CREATE LOCAL INDEX " + JOIN_SUPPLIER_INDEX + " ON " + JOIN_SUPPLIER_TABLE_FULL_NAME + " (name)"
-                }, {
-                "SORT-MERGE-JOIN (LEFT) TABLES\n" +
-                "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_SUPPLIER_INDEX_FULL_NAME +
-                        "(" + JOIN_SUPPLIER_TABLE_FULL_NAME + ") [1]\n" +
-                "        SERVER FILTER BY FIRST KEY ONLY\n" +
-                "        SERVER SORTED BY [\"S.:supplier_id\"]\n" +
-                "    CLIENT MERGE SORT\n" +
-                "AND\n" +
-                "    SORT-MERGE-JOIN (INNER) TABLES\n" +
-                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_INDEX_FULL_NAME +
-                        "(" + JOIN_ITEM_TABLE_FULL_NAME + ") [1]\n" +
-                "            SERVER SORTED BY [\"I.:item_id\"]\n" +
-                "        CLIENT MERGE SORT\n" +
-                "    AND (SKIP MERGE)\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME + "\n" +
-                "            SERVER FILTER BY QUANTITY < 5000\n" +
-                "            SERVER SORTED BY [\"O.item_id\"]\n" +
-                "        CLIENT MERGE SORT\n" +
-                "    CLIENT SORTED BY [\"I.0:supplier_id\"]",
-                
-                "SORT-MERGE-JOIN (INNER) TABLES\n" +
-                "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_INDEX_FULL_NAME +
-                        "(" + JOIN_ITEM_TABLE_FULL_NAME + ") [1]\n" +
-                "        SERVER FILTER BY FIRST KEY ONLY\n" +
-                "        SERVER SORTED BY [\"I.:item_id\"]\n" +
-                "    CLIENT MERGE SORT\n" +
-                "AND\n" +
-                "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME + "\n" +
-                "        SERVER SORTED BY [\"O.item_id\"]\n" +
-                "    CLIENT MERGE SORT\n" +
-                "CLIENT 4 ROW LIMIT",
-                
-                "SORT-MERGE-JOIN (INNER) TABLES\n" +
-                "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_INDEX_FULL_NAME +
-                        "(" + JOIN_ITEM_TABLE_FULL_NAME + ") [1]\n" +
-                "        SERVER FILTER BY FIRST KEY ONLY\n" +
-                "        SERVER SORTED BY [\"I1.:item_id\"]\n" +
-                "    CLIENT MERGE SORT\n" +
-                "AND\n" +
-                "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_INDEX_FULL_NAME +
-                        "(" + JOIN_ITEM_TABLE_FULL_NAME + ") [1]\n" +
-                "        SERVER FILTER BY FIRST KEY ONLY\n" +
-                "        SERVER SORTED BY [\"I2.:item_id\"]\n" +
-                "    CLIENT MERGE SORT"
-                }});
-        return testCases;
-    }
+  @Parameters(name = "SortMergeJoinLocalIndexIT_{index}") // name is used by failsafe as file name
+                                                          // in reports
+  public static synchronized Collection<Object> data() {
+    List<Object> testCases = Lists.newArrayList();
+    testCases.add(new String[][] {
+      { "CREATE LOCAL INDEX " + JOIN_CUSTOMER_INDEX + " ON " + JOIN_CUSTOMER_TABLE_FULL_NAME
+        + "(name)",
+        "CREATE LOCAL INDEX " + JOIN_ITEM_INDEX + " ON " + JOIN_ITEM_TABLE_FULL_NAME + "(name) "
+          + "INCLUDE (price, discount1, discount2, \"supplier_id\", description)",
+        "CREATE LOCAL INDEX " + JOIN_SUPPLIER_INDEX + " ON " + JOIN_SUPPLIER_TABLE_FULL_NAME
+          + " (name)" },
+      { "SORT-MERGE-JOIN (LEFT) TABLES\n" + "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
+        + JOIN_SUPPLIER_INDEX_FULL_NAME + "(" + JOIN_SUPPLIER_TABLE_FULL_NAME + ") [1]\n"
+        + "        SERVER FILTER BY FIRST KEY ONLY\n"
+        + "        SERVER SORTED BY [\"S.:supplier_id\"]\n" + "    CLIENT MERGE SORT\n" + "AND\n"
+        + "    SORT-MERGE-JOIN (INNER) TABLES\n" + "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
+        + JOIN_ITEM_INDEX_FULL_NAME + "(" + JOIN_ITEM_TABLE_FULL_NAME + ") [1]\n"
+        + "            SERVER SORTED BY [\"I.:item_id\"]\n" + "        CLIENT MERGE SORT\n"
+        + "    AND (SKIP MERGE)\n" + "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "
+        + JOIN_ORDER_TABLE_FULL_NAME + "\n" + "            SERVER FILTER BY QUANTITY < 5000\n"
+        + "            SERVER SORTED BY [\"O.item_id\"]\n" + "        CLIENT MERGE SORT\n"
+        + "    CLIENT SORTED BY [\"I.0:supplier_id\"]",
+
+        "SORT-MERGE-JOIN (INNER) TABLES\n" + "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
+          + JOIN_ITEM_INDEX_FULL_NAME + "(" + JOIN_ITEM_TABLE_FULL_NAME + ") [1]\n"
+          + "        SERVER FILTER BY FIRST KEY ONLY\n"
+          + "        SERVER SORTED BY [\"I.:item_id\"]\n" + "    CLIENT MERGE SORT\n" + "AND\n"
+          + "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME + "\n"
+          + "        SERVER SORTED BY [\"O.item_id\"]\n" + "    CLIENT MERGE SORT\n"
+          + "CLIENT 4 ROW LIMIT",
+
+        "SORT-MERGE-JOIN (INNER) TABLES\n" + "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
+          + JOIN_ITEM_INDEX_FULL_NAME + "(" + JOIN_ITEM_TABLE_FULL_NAME + ") [1]\n"
+          + "        SERVER FILTER BY FIRST KEY ONLY\n"
+          + "        SERVER SORTED BY [\"I1.:item_id\"]\n" + "    CLIENT MERGE SORT\n" + "AND\n"
+          + "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_INDEX_FULL_NAME + "("
+          + JOIN_ITEM_TABLE_FULL_NAME + ") [1]\n" + "        SERVER FILTER BY FIRST KEY ONLY\n"
+          + "        SERVER SORTED BY [\"I2.:item_id\"]\n" + "    CLIENT MERGE SORT" } });
+    return testCases;
+  }
 }

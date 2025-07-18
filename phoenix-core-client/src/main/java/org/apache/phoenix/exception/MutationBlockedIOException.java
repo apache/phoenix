@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,17 +20,17 @@ package org.apache.phoenix.exception;
 import java.io.IOException;
 
 /**
- * Exception thrown when CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is set
- * and the current cluster role is ACTIVE_TO_STANDBY.
+ * Exception thrown when CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is set and the current cluster
+ * role is ACTIVE_TO_STANDBY.
  */
 public class MutationBlockedIOException extends IOException {
-    private static final long serialVersionUID = 1L;
+  private static final long serialVersionUID = 1L;
 
-    /**
-     * @param msg reason for the exception
-     */
-    public MutationBlockedIOException(String msg) {
-        super(msg);
-    }
+  /**
+   * @param msg reason for the exception
+   */
+  public MutationBlockedIOException(String msg) {
+    super(msg);
+  }
 
 }
