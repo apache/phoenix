@@ -2159,7 +2159,9 @@ public class Bson3IT extends ParallelStatsDisabledIT {
 
       // Flush and major compact to trigger TTL expiration
       Admin admin = getUtility().getAdmin();
+      EnvironmentEdgeManager.reset();
       admin.flush(TableName.valueOf(tableName));
+      EnvironmentEdgeManager.injectEdge(injectEdge);
 
       TestUtil.majorCompact(getUtility(), TableName.valueOf(tableName));
 
