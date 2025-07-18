@@ -1387,7 +1387,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
             "VALUES (?, ?, ?, ?)";
 
         PreparedStatement pstmt1 = conn.prepareStatement(upsert1);
-        // Need to upsert atleast 1 row to intialize Mutation metrics
+        // Need to upsert at least 1 row to initialize Mutation metrics
         // which further gets used in QueryParsingTime metrics.
         for (int i = 0; i < sourceNumRows; i++) {
             pstmt1.setInt(1, i);
