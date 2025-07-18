@@ -583,9 +583,8 @@ public class TableTTLIT extends BaseTest {
             conn.createStatement().execute("Alter Table " + tableName
                     + " set \"phoenix.max.lookback.age.seconds\" = " + tableLevelMaxLookback);
             String indexName = "I_" + generateUniqueName();
-            String indexDDL = String.format("create index %s on %s (val1) include (val2, val3) " +
-                            "\"phoenix.max.lookback.age.seconds\" = %d",
-                    indexName, tableName, tableLevelMaxLookback);
+            String indexDDL = String.format("create index %s on %s (val1) include (val2, val3) ",
+                    indexName, tableName);
             conn.createStatement().execute(indexDDL);
             updateRow(conn, tableName, "a1");
             String indexColumnValue;

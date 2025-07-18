@@ -162,6 +162,35 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
                         SQLExceptionCode.CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX.getErrorCode(), sqlE.getErrorCode());
             }
         }
+        try {
+            conn.createStatement().execute("create local index " + localIndexName
+                    + " on " + tableName + "(name) "
+                    + "\"phoenix.max.lookback.age.seconds\"=12345");
+            fail("Should fail with SQLException when setting synced property for a local index");
+        } catch (SQLException sqlE) {
+            assertEquals("Should fail to set synced property for a local index",
+                    SQLExceptionCode.CANNOT_SET_OR_ALTER_MAX_LOOKBACK_FOR_INDEX.getErrorCode(),
+                    sqlE.getErrorCode());
+        }
+        try {
+            conn.createStatement().execute("create index " + globalIndexName
+                    + " on " + tableName + "(flag) "
+                    + "\"phoenix.max.lookback.age.seconds\"=12345");
+            fail("Should fail with SQLException when setting synced property for a global index");
+        } catch (SQLException sqlE) {
+            assertEquals("Should fail to set synced property for a global index",
+                    SQLExceptionCode.CANNOT_SET_OR_ALTER_MAX_LOOKBACK_FOR_INDEX.getErrorCode(),
+                    sqlE.getErrorCode());
+        }
+        try {
+            conn.createStatement().execute("create index view_index"
+                    + " on " + viewName + " (flag)" + "\"phoenix.max.lookback.age.seconds\"=12345");
+            fail("Should fail with SQLException when setting synced property for a view index");
+        } catch (SQLException sqlE) {
+            assertEquals("Should fail to set synced property for a view index",
+                    SQLExceptionCode.CANNOT_SET_OR_ALTER_MAX_LOOKBACK_FOR_INDEX.getErrorCode(),
+                    sqlE.getErrorCode());
+        }
         conn.close();
     }
 
@@ -326,6 +355,15 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
                 assertEquals("Should fail to alter synced property for a global index",
                         SQLExceptionCode.CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX.getErrorCode(), sqlE.getErrorCode());
             }
+        }
+        try {
+            conn.createStatement().execute("alter table " + globalIndexName + " set "
+                    + "\"phoenix.max.lookback.age.seconds\"=12345");
+            fail("Should fail with SQLException when altering synced property for a global index");
+        } catch (SQLException sqlE) {
+            assertEquals("Should fail to alter synced property for a global index",
+                    SQLExceptionCode.CANNOT_SET_OR_ALTER_MAX_LOOKBACK_FOR_INDEX.getErrorCode(),
+                    sqlE.getErrorCode());
         }
         conn.close();
     }

@@ -838,8 +838,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             // now create the index async
             String indexName = generateUniqueName();
             String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
-            String indexDDL = String.format("create index %s on %s (%s) include (%s) async "
-                            + "\"phoenix.max.lookback.age.seconds\" = %d",
+            String indexDDL = String.format("create index %s on %s (%s) include (%s) async ",
                     indexName, fullDataTableName, "VAL1", ttlCol, tableLevelMaxLookback);
             conn.createStatement().execute(indexDDL);
             IndexTool it = IndexToolIT.runIndexTool(false, schemaName, tableName, indexName,
@@ -949,8 +948,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
         }
         String ddl = String.format(ddlTemplate, tableName,
                 String.format(tableDDLOptions, retainSingleQuotes(ttlExpression)));
-        String indexDDL = String.format("create index %s ON %s (col1) INCLUDE(col2) " +
-                "\"phoenix.max.lookback.age.seconds\" = %d",
+        String indexDDL = String.format("create index %s ON %s (col1) INCLUDE(col2) ",
                 indexName, tableName, tableLevelMaxLookback, isStrictTTL);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute(ddl);
@@ -1303,8 +1301,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
         String ddl = String.format("CREATE TABLE %s (ID BIGINT NOT NULL PRIMARY KEY, " +
                         "EVENT_TYPE CHAR(15), CREATED_TS TIMESTAMP) %s", tableName,
                 String.format(tableDDLOptions, ttlExpression));
-        String indexDDL = String.format("CREATE INDEX %s ON %s (EVENT_TYPE) INCLUDE(CREATED_TS) "
-                        + "\"phoenix.max.lookback.age.seconds\" = %d",
+        String indexDDL = String.format("CREATE INDEX %s ON %s (EVENT_TYPE) INCLUDE(CREATED_TS) ",
                 indexName, tableName, tableLevelMaxLookback);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute(ddl);
@@ -1468,11 +1465,6 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
             String cdcIndexName = CDCUtil.getCDCIndexName(cdcName);
             String fullCdcIndexName = SchemaUtil.getTableName(schemaName,
                     CDCUtil.getCDCIndexName(cdcName));
-            // Explicitly set table level max lookback on CDC index
-            String cdcIndexSetMaxLookbackDdl = String.format("ALTER INDEX %s ON %s ACTIVE SET "
-                    + "\"phoenix.max.lookback.age.seconds\" = %d",
-                    cdcIndexName, tableName, tableLevelMaxLookback);
-            conn.createStatement().execute(cdcIndexSetMaxLookbackDdl);
             PTable cdcIndex = ((PhoenixConnection) conn).getTableNoCache(fullCdcIndexName);
             assertEquals(cdcIndex.getTTLExpression(), TTL_EXPRESSION_FOREVER);
 
@@ -1553,11 +1545,10 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
         String indexName = "I_" + generateUniqueName();
         String tableName = schemaBuilder.getEntityTableName();
         String schema = SchemaUtil.getSchemaNameFromFullName(tableName);
-        String indexDDL = String.format("create index %s on %s (%s) include (%s) "
-                        + "\"phoenix.max.lookback.age.seconds\" = %d",
+        String indexDDL = String.format("create index %s on %s (%s) include (%s) ",
                 indexName, tableName,
                 Joiner.on(",").join(indexedColumns),
-                Joiner.on(",").join(includedColumns), tableLevelMaxLookback);
+                Joiner.on(",").join(includedColumns));
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute(indexDDL);
         }

@@ -18,14 +18,16 @@
 
 package org.apache.phoenix.end2end;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.PhoenixMasterObserver;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
-import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -46,7 +48,6 @@ import org.junit.experimental.categories.Category;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixMasterSource;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
 
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -57,15 +58,21 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_STATUS_NAME;
 import static org.apache.phoenix.query.QueryConstants.CDC_EVENT_TYPE;
+import static org.apache.phoenix.query.QueryConstants.CDC_POST_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_PRE_IMAGE;
+import static org.apache.phoenix.query.QueryConstants.CDC_TTL_DELETE_EVENT_TYPE;
 import static org.apache.phoenix.query.QueryConstants.CDC_UPSERT_EVENT_TYPE;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 @Category(NeedsOwnMiniClusterTest.class)
@@ -78,7 +85,7 @@ public class CDCStreamIT extends CDCBaseIT {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
+        props.put(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60 * 60)); // An hour
         props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
         props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB,
                 Long.toString(Long.MAX_VALUE));
@@ -93,6 +100,222 @@ public class CDCStreamIT extends CDCBaseIT {
                         .getRegions(PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
                         .get(0).getCoprocessorHost()
                         .findCoprocessorEnvironment(TaskRegionObserver.class.getName());
+    }
+
+    /**
+     * Test to verify CDC events with index/table level maxLookback and TTL.
+     */
+    @Test
+    public void testCdcWithMaxLookbackAndCompaction() throws Exception {
+        Connection conn = newConnection();
+        String tableName = generateUniqueName();
+        String cdcName = generateUniqueName();
+        String cdcDdl = "CREATE CDC " + cdcName + " ON " + tableName;
+        // maxLookback 27 hr
+        conn.createStatement().execute(
+                "CREATE TABLE  " + tableName + " ( k VARCHAR NOT NULL,"
+                        + " v1 VARCHAR, v2 BIGINT CONSTRAINT PK PRIMARY KEY(k))"
+                        + " \"phoenix.max.lookback.age.seconds\"=97200,"
+                        + "TTL='TO_NUMBER(CURRENT_TIME()) > v2', IS_STRICT_TTL=false");
+        // cdc index should get 27 hr maxLookback (for cdc index, maxLookback = TTL)
+        createCDC(conn, cdcDdl, null);
+
+        long expiry = (System.currentTimeMillis() + TimeUnit.DAYS.toMillis(3)) / 1000;
+        conn.createStatement()
+                .execute("UPSERT INTO " + tableName + " VALUES('a', 'aa', " + expiry + ")");
+        conn.commit();
+
+        String sql = "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcName;
+        // verify only pre-image exists, new row insert
+        verifyOnlyPostImage(conn, sql, expiry);
+
+        ManualEnvironmentEdge injectEdge = new ManualEnvironmentEdge();
+        long t = System.currentTimeMillis() + TimeUnit.DAYS.toMillis(3);
+        t = ((t / 1000) + 100) * 1000;
+        EnvironmentEdgeManager.injectEdge(injectEdge);
+        try {
+            injectEdge.setValue(t);
+            conn.createStatement()
+                    .execute("UPSERT INTO " + tableName + " VALUES('a', 'bb', " + expiry + ")");
+            conn.commit();
+
+            // verify insert + update event of the same row
+            verifyPreAndPostImages(conn, sql, expiry);
+
+            injectEdge.incrementValue(TimeUnit.DAYS.toMillis(1));
+            TestUtil.doMajorCompaction(conn, tableName);
+            TestUtil.doMajorCompaction(conn, CDCUtil.getCDCIndexName(cdcName));
+
+            // first compaction will expire initial insert event as we are already past
+            // (3 days + 100 sec + 24 hr), however this should not generate ttl expired event yet,
+            // because row is still in maxLookback window (27 hr) after the latest update
+            verifyImagesAfterFirstCompaction(conn, sql, expiry);
+
+            injectEdge.incrementValue(TimeUnit.HOURS.toMillis(3) + TimeUnit.SECONDS.toMillis(1));
+            TestUtil.doMajorCompaction(conn, tableName);
+            TestUtil.doMajorCompaction(conn, CDCUtil.getCDCIndexName(cdcName));
+
+            // The compaction after (3 days + 100 sec + 24 hr + 3 hr + 1 sec) should expire the
+            // row, which was last updated (24 hr + 3 hr + 1 sec) in the past.
+            // The compaction should also generate ttl expired event
+            verifyTtlExpiredPreImage(conn, sql, expiry);
+        } finally {
+            EnvironmentEdgeManager.reset();
+        }
+    }
+
+    /**
+     * Test to verify CDC events with index/table level maxLookback and TTL.
+     */
+    @Test
+    public void testCdcWithMaxLookbackAlterTable() throws Exception {
+        Connection conn = newConnection();
+        String tableName = generateUniqueName();
+        String cdcName = generateUniqueName();
+        String cdcDdl = "CREATE CDC " + cdcName + " ON " + tableName;
+        // maxLookback 27 hr
+        conn.createStatement().execute(
+                "CREATE TABLE  " + tableName + " ( k VARCHAR NOT NULL,"
+                        + " v1 VARCHAR, v2 BIGINT CONSTRAINT PK PRIMARY KEY(k))"
+                        + " \"phoenix.max.lookback.age.seconds\"=97200,"
+                        + "TTL='TO_NUMBER(CURRENT_TIME()) > v2', IS_STRICT_TTL=false");
+        // cdc index should get 27 hr maxLookback (for cdc index, maxLookback = TTL)
+        createCDC(conn, cdcDdl, null);
+
+        long expiry = (System.currentTimeMillis() + TimeUnit.DAYS.toMillis(3)) / 1000;
+        conn.createStatement()
+                .execute("UPSERT INTO " + tableName + " VALUES('a', 'aa', " + expiry + ")");
+        conn.commit();
+
+        Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+
+        TableDescriptor tableDescriptor =
+                admin.getDescriptor(TableName.valueOf(CDCUtil.getCDCIndexName(cdcName)));
+        String maxLookbackVal = tableDescriptor.getValue(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY);
+        assertEquals(97200, Integer.parseInt(maxLookbackVal));
+
+        tableDescriptor = admin.getDescriptor(TableName.valueOf(tableName));
+        maxLookbackVal = tableDescriptor.getValue(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY);
+        assertEquals(97200, Integer.parseInt(maxLookbackVal));
+
+        String sql = "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcName;
+        // verify only pre-image exists, new row insert
+        verifyOnlyPostImage(conn, sql, expiry);
+
+        // update maxLookback of data table and cdc index both to 50 sec
+        conn.createStatement().execute("ALTER TABLE " + tableName +
+                " SET \"phoenix.max.lookback.age.seconds\"=50");
+
+        ManualEnvironmentEdge injectEdge = new ManualEnvironmentEdge();
+        long t = System.currentTimeMillis() + TimeUnit.DAYS.toMillis(3);
+        t = ((t / 1000) + 100) * 1000;
+        EnvironmentEdgeManager.injectEdge(injectEdge);
+        try {
+            injectEdge.setValue(t);
+            conn.createStatement()
+                    .execute("UPSERT INTO " + tableName + " VALUES('a', 'bb', " + expiry + ")");
+            conn.commit();
+
+            // verify insert + update event of the same row
+            verifyPreAndPostImages(conn, sql, expiry);
+
+            injectEdge.incrementValue(TimeUnit.DAYS.toMillis(1));
+            TestUtil.doMajorCompaction(conn, CDCUtil.getCDCIndexName(cdcName));
+
+            // compaction will expire all rows from CDC index because the maxLookback of
+            // CDC index is no longer 27 hr, but it has been altered to 50 sec
+            ResultSet rs = conn.createStatement().executeQuery(sql);
+            assertFalse(rs.next());
+
+            tableDescriptor =
+                    admin.getDescriptor(TableName.valueOf(CDCUtil.getCDCIndexName(cdcName)));
+            maxLookbackVal = tableDescriptor.getValue(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY);
+            assertEquals(50, Integer.parseInt(maxLookbackVal));
+
+            tableDescriptor = admin.getDescriptor(TableName.valueOf(tableName));
+            maxLookbackVal = tableDescriptor.getValue(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY);
+            assertEquals(50, Integer.parseInt(maxLookbackVal));
+        } finally {
+            EnvironmentEdgeManager.reset();
+        }
+    }
+
+    private static void verifyPreAndPostImages(Connection conn, String sql, long expiry)
+            throws SQLException, JsonProcessingException {
+        ResultSet rs = conn.createStatement().executeQuery(sql);
+        assertTrue(rs.next());
+        String cdcJson = rs.getString(3);
+        Map<String, Object> map = OBJECT_MAPPER.readValue(cdcJson, Map.class);
+        assertTrue(((Map<String, Object>)map.get(CDC_PRE_IMAGE)).isEmpty());
+        assertEquals(CDC_UPSERT_EVENT_TYPE, map.get(CDC_EVENT_TYPE));
+        Map<String, Object> postImage = (Map<String, Object>) map.get(CDC_POST_IMAGE);
+        assertEquals("aa", postImage.get("V1"));
+        assertEquals(new Long(expiry).intValue(), postImage.get("V2"));
+
+        assertTrue(rs.next());
+        cdcJson = rs.getString(3);
+        map = OBJECT_MAPPER.readValue(cdcJson, Map.class);
+        assertEquals(CDC_UPSERT_EVENT_TYPE, map.get(CDC_EVENT_TYPE));
+        Map<String, Object> preImage = (Map<String, Object>) map.get(CDC_PRE_IMAGE);
+        assertEquals("aa", preImage.get("V1"));
+        assertEquals(new Long(expiry).intValue(), preImage.get("V2"));
+
+        postImage = (Map<String, Object>) map.get(CDC_POST_IMAGE);
+        assertEquals("bb", postImage.get("V1"));
+        assertEquals(new Long(expiry).intValue(), postImage.get("V2"));
+
+        assertFalse(rs.next());
+    }
+
+    private static void verifyImagesAfterFirstCompaction(Connection conn, String sql, long expiry)
+            throws SQLException, JsonProcessingException {
+        ResultSet rs = conn.createStatement().executeQuery(sql);
+        assertTrue(rs.next());
+        String cdcJson = rs.getString(3);
+        Map<String, Object> map = OBJECT_MAPPER.readValue(cdcJson, Map.class);
+        assertEquals(CDC_UPSERT_EVENT_TYPE, map.get(CDC_EVENT_TYPE));
+        Map<String, Object> preImage = (Map<String, Object>) map.get(CDC_PRE_IMAGE);
+        assertEquals("aa", preImage.get("V1"));
+        assertEquals(new Long(expiry).intValue(), preImage.get("V2"));
+
+        Map<String, Object> postImage = (Map<String, Object>) map.get(CDC_POST_IMAGE);
+        assertEquals("bb", postImage.get("V1"));
+        assertEquals(new Long(expiry).intValue(), postImage.get("V2"));
+
+        assertFalse(rs.next());
+    }
+
+    private static void verifyOnlyPostImage(Connection conn, String sql, long expiry)
+            throws SQLException, JsonProcessingException {
+        ResultSet rs = conn.createStatement().executeQuery(sql);
+        assertTrue(rs.next());
+        String cdcJson = rs.getString(3);
+        Map<String, Object> map = OBJECT_MAPPER.readValue(cdcJson, Map.class);
+        assertTrue(((Map<String, Object>)map.get(CDC_PRE_IMAGE)).isEmpty());
+        assertEquals(CDC_UPSERT_EVENT_TYPE, map.get(CDC_EVENT_TYPE));
+
+        Map<String, Object> postImage = (Map<String, Object>) map.get(CDC_POST_IMAGE);
+        assertEquals("aa", postImage.get("V1"));
+        assertEquals(new Long(expiry).intValue(), postImage.get("V2"));
+
+        assertFalse(rs.next());
+    }
+
+    private static void verifyTtlExpiredPreImage(Connection conn, String sql, long expiry)
+            throws SQLException, JsonProcessingException {
+        ResultSet rs = conn.createStatement().executeQuery(sql);
+        assertTrue(rs.next());
+        String cdcJson = rs.getString(3);
+        Map<String, Object> map = OBJECT_MAPPER.readValue(cdcJson, Map.class);
+        assertEquals(CDC_TTL_DELETE_EVENT_TYPE, map.get(CDC_EVENT_TYPE));
+        Map<String, Object> preImage = (Map<String, Object>) map.get(CDC_PRE_IMAGE);
+        assertEquals("bb", preImage.get("V1"));
+        assertEquals(new Long(expiry).intValue(), preImage.get("V2"));
+
+        Map<String, Object> postImage = (Map<String, Object>) map.get(CDC_POST_IMAGE);
+        assertNull(postImage);
+
+        assertFalse(rs.next());
     }
 
     @Test
