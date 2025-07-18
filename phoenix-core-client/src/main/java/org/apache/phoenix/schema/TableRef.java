@@ -121,7 +121,7 @@ public class TableRef {
         this.hinted = hinted;
     }
 
-    public String getColumnDisplayName(ColumnRef ref, boolean cfCaseSensitive, boolean cqCaseSensitive) {
+    public String getColumnDisplayName(ColumnRef ref, boolean cfCaseSensitive, boolean cqCaseSensitive) throws ColumnNotFoundException {
         String cf = null;
         String cq = null;       
         PColumn column = ref.getColumn();

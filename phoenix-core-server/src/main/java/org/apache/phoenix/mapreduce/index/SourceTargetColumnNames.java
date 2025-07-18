@@ -20,6 +20,7 @@ package org.apache.phoenix.mapreduce.index;
 import java.util.List;
 
 import org.apache.phoenix.mapreduce.util.IndexColumnNames;
+import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -63,7 +64,7 @@ public interface SourceTargetColumnNames {
          * @param pdataTable the data table
          * @param pindexTable the index table for the data table
          */
-        public DataSourceColNames(PTable pdataTable, PTable pindexTable) {
+        public DataSourceColNames(PTable pdataTable, PTable pindexTable) throws ColumnNotFoundException {
             super(pdataTable, pindexTable);
         }
 
@@ -133,7 +134,7 @@ public interface SourceTargetColumnNames {
          * @param pdataTable the data table
          * @param pindexTable the index table for the data table
          */
-        public IndexSourceColNames(PTable pdataTable, PTable pindexTable) {
+        public IndexSourceColNames(PTable pdataTable, PTable pindexTable) throws ColumnNotFoundException {
             super(pdataTable, pindexTable);
         }
 

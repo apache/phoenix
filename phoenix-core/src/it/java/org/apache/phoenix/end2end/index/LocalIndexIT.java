@@ -62,12 +62,14 @@ import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.end2end.ExplainPlanWithStatsEnabledIT.Estimate;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
@@ -232,6 +234,35 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         conn.createStatement().execute("DROP INDEX " + indexName + " ON " + tableName);
         conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1) INCLUDE (v2,v3)");
         testExtraWhere(conn, tableName);
+    }
+
+    @Test
+    public void testSelectFromIndexWithWhereClauseButTheValueIsSurroundedByDoubleQuotes() throws Exception {
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
+        String indexTableName = schemaName + "." + indexName;
+        try (Connection conn1 = getConnection()) {
+            if (isNamespaceMapped) {
+                conn1.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
+            }
+            String ddl = "CREATE TABLE " + tableName + " (t_id VARCHAR NOT NULL,\n" +
+                    "k1 INTEGER NOT NULL,\n" +
+                    "k2 INTEGER NOT NULL,\n" +
+                    "k3 INTEGER,\n" +
+                    "v1 VARCHAR,\n" +
+                    "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2))\n";
+            conn1.createStatement().execute(ddl);
+            conn1.commit();
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(V1)");
+            conn1.commit();
+            ResultSet rs = conn1.createStatement()
+                    .executeQuery("SELECT * FROM " + indexTableName + " WHERE \":T_ID\" = \"f\"");
+            assertTrue(rs.next());
+            fail();
+        } catch (ColumnNotFoundException e) { // Expected
+            assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
+            assertEquals(new ColumnNotFoundException("f").getMessage(), e.getMessage());
+        }
     }
 
     private void testExtraWhere(Connection conn, String tableName) throws SQLException {
