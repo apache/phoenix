@@ -826,9 +826,11 @@ public class DeleteIT extends ParallelStatsDisabledIT {
             allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(ddl);
-            Statement stmt = conn.createStatement();
+            String sqlStr = "UPSERT INTO " + tableName + " (pk1, v1) VALUES (?,'value')";
+            PreparedStatement stmt = conn.prepareStatement(sqlStr);
             for (int i = 0; i < numRecords ; i++) {
-                stmt.executeUpdate("UPSERT INTO " + tableName + " (pk1, v1) VALUES (" + i + ",'value')");
+                stmt.setInt(1, i);
+                stmt.executeUpdate();
             }
             conn.commit();
             conn.setAutoCommit(autoCommit);
@@ -891,9 +893,11 @@ public class DeleteIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(ddl);
             conn.createStatement().execute(idx1);
-            Statement stmt = conn.createStatement();
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?, ?, 'value2')");
             for(int i = 0; i < 20; i++) {
-                stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES ("+i+",'value"+i+"', 'value2')");
+                stmt.setInt(1, i);
+                stmt.setString(2, "value"+i);
+                stmt.executeUpdate();
                 if (i % 10 == 0) {
                     conn.commit();
                 }
