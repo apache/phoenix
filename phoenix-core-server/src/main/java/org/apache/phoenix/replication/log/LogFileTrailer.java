@@ -19,12 +19,10 @@ package org.apache.phoenix.replication.log;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.io.EOFException;
 import java.io.IOException;
 import java.util.Arrays;
 
-import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.util.Bytes;
 
 public class LogFileTrailer implements LogFile.Trailer {
@@ -113,23 +111,31 @@ public class LogFileTrailer implements LogFile.Trailer {
     }
 
     public void readFixedFields(DataInput in) throws IOException {
-        this.recordCount = in.readLong();
-        this.blockCount = in.readLong();
-        this.blocksStartOffset = in.readLong();
-        this.trailerStartOffset = in.readLong();
-        this.majorVersion = in.readByte();
-        this.minorVersion = in.readByte();
+        try {
+            this.recordCount = in.readLong();
+            this.blockCount = in.readLong();
+            this.blocksStartOffset = in.readLong();
+            this.trailerStartOffset = in.readLong();
+            this.majorVersion = in.readByte();
+            this.minorVersion = in.readByte();
+        } catch (EOFException e) {
+            throw (IOException) new InvalidLogTrailerException("Short fixed fields").initCause(e);
+        }
         // Basic version check for now. We assume semver conventions where only higher major
         // versions may be incompatible.
         if (majorVersion > LogFileHeader.VERSION_MAJOR) {
-            throw new IOException("Unsupported LogFile version. Got major=" + majorVersion
+            throw new InvalidLogTrailerException("Unsupported version. Got major=" + majorVersion
                 + " minor=" + minorVersion + ", expected major=" + LogFileHeader.VERSION_MAJOR
                 + " minor=" + LogFileHeader.VERSION_MINOR);
         }
         byte[] magic = new byte[LogFileHeader.MAGIC.length];
-        in.readFully(magic);
+        try {
+            in.readFully(magic);
+        } catch (EOFException e) {
+            throw (IOException) new InvalidLogTrailerException("Short magic").initCause(e);
+        }
         if (!Arrays.equals(LogFileHeader.MAGIC, magic)) {
-            throw new IOException("Invalid LogFile magic. Got " + Bytes.toStringBinary(magic)
+            throw new InvalidLogTrailerException("Bad magic. Got " + Bytes.toStringBinary(magic)
                 + ", expected " + Bytes.toStringBinary(LogFileHeader.MAGIC));
         }
     }
@@ -170,33 +176,6 @@ public class LogFileTrailer implements LogFile.Trailer {
         return Bytes.SIZEOF_INT // Protobuf message length
             // Add the size of the Protobuf serialized message when we have one
             + FIXED_TRAILER_SIZE;
-    }
-
-    public static boolean isValidTrailer(final FileSystem fs, final Path path) throws IOException {
-        try (FSDataInputStream in = fs.open(path)) {
-            return isValidTrailer(in, fs.getFileStatus(path).getLen());
-        }
-    }
-
-    public static boolean isValidTrailer(FSDataInputStream in, long length) throws IOException {
-        long offset = length - VERSION_AND_MAGIC_SIZE;
-        if (offset < 0) {
-            return false;
-        }
-        in.seek(offset);
-        byte[] magic = new byte[LogFileHeader.MAGIC.length];
-        in.readFully(magic);
-        if (!Arrays.equals(LogFileHeader.MAGIC, magic)) {
-            return false;
-        }
-        int majorVersion = in.readByte();
-        in.readByte(); // minorVersion, for now we don't use it
-        // Basic version check for now. We assume semver conventions where only higher major
-        // versions may be incompatible.
-        if (majorVersion > LogFileHeader.VERSION_MAJOR) {
-            return false;
-        }
-        return true;
     }
 
     @Override

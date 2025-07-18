@@ -41,8 +41,6 @@ public class LogFileFormatWriter implements Closeable {
     private SyncableDataOutput output;
     private ByteArrayOutputStream currentBlockBytes;
     private DataOutputStream blockDataStream;
-    private boolean headerWritten = false;
-    private boolean trailerWritten = false;
     private long recordCount = 0;
     private long blockCount = 0;
     private long blocksStartOffset = -1;
@@ -60,15 +58,14 @@ public class LogFileFormatWriter implements Closeable {
         this.currentBlockBytes = new ByteArrayOutputStream();
         this.blockDataStream = new DataOutputStream(currentBlockBytes);
         this.encoder = context.getCodec().getEncoder(blockDataStream);
+        // Write header immediately when file is created
+        writeFileHeader();
     }
 
     private void writeFileHeader() throws IOException {
-        if (!headerWritten) {
-            LogFileHeader header = new LogFileHeader();
-            header.write(output);
-            blocksStartOffset = output.getPos(); // First block starts after header
-            headerWritten = true;
-        }
+        LogFileHeader header = new LogFileHeader();
+        header.write(output);
+        blocksStartOffset = output.getPos(); // First block starts after header
     }
 
     public long getBlocksStartOffset() {
@@ -76,13 +73,6 @@ public class LogFileFormatWriter implements Closeable {
     }
 
     public void append(LogFile.Record record) throws IOException {
-        if (!headerWritten) {
-            // Lazily write file header
-            writeFileHeader();
-        }
-        if (trailerWritten) {
-            throw new IOException("Cannot append record after trailer has been written");
-        }
         if (blockDataStream == null) {
             startBlock(); // Start the block if needed
         }
@@ -188,15 +178,10 @@ public class LogFileFormatWriter implements Closeable {
 
     @Override
     public void close() throws IOException {
-        // We use the fact we have already written the trailer as the boolean "closed" condition.
-        if (trailerWritten) {
+        if (output == null) {
             return;
         }
         try {
-            // We might be closing an empty file, handle this case correctly.
-            if (!headerWritten) {
-                writeFileHeader();
-            }
             // Close any outstanding block.
             closeBlock();
             // After we write the trailer we consider the file closed.
@@ -209,6 +194,7 @@ public class LogFileFormatWriter implements Closeable {
                 } catch (IOException e) {
                     LOG.error("Exception while closing LogFormatWriter", e);
                 }
+                output = null;
             }
         }
     }
@@ -220,7 +206,6 @@ public class LogFileFormatWriter implements Closeable {
             .setBlocksStartOffset(blocksStartOffset)
             .setTrailerStartOffset(output.getPos());
         trailer.write(output);
-        trailerWritten = true;
         try {
             output.sync();
         } catch (IOException e) {
@@ -233,7 +218,6 @@ public class LogFileFormatWriter implements Closeable {
     public String toString() {
         return "LogFileFormatWriter [writerContext=" + context
             + ", currentBlockUncompressedBytes=" + currentBlockBytes
-            + ", headerWritten=" + headerWritten + ", trailerWritten=" + trailerWritten
             + ", recordCount=" + recordCount + ", blockCount=" + blockCount
             + ", blocksStartOffset=" + blocksStartOffset + "]";
     }
