@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,19 +16,16 @@
  * limitations under the License.
  */
 package org.apache.phoenix.query;
+
 import java.util.Properties;
 
 /**
- * Filters {@link Properties} instances based on property policy.
+ * Filters {@link Properties} instances based on property policy. Provided properties, check if each
+ * property inside is whitelisted, if not, throws IllegalArgumentException. For best code practice,
+ * throws the offending properties list along with exception An example will be:
  *
- * Provided properties, check if each property inside is whitelisted,
- * if not, throws IllegalArgumentException.
- * For best code practice, throws the offending properties list along
- * with exception
- *
- * An example will be:
- *<pre>
- *{@code 
+ * <pre>
+ *{@code
  *public class Customized PropertyPolicy implements PropertyPolicy {
  *  final static Set<String> propertiesKeyAllowed = Collections.unmodifiableSet(
  *      new HashSet<>(asList("DriverMajorVersion","DriverMinorVersion","DriverName","CurrentSCN")));
@@ -46,20 +43,19 @@ import java.util.Properties;
  *  }
  *}
  *}
- *</pre>
+ * </pre>
  */
 public interface PropertyPolicy {
-    /**
-     * @param properties
-     * @throws IllegalArgumentException
-     */
-    void evaluate(Properties properties) throws PropertyNotAllowedException;
+  /**
+   */
+  void evaluate(Properties properties) throws PropertyNotAllowedException;
 
-    /**
-     * Default implementation allows all properties.
-     */
-    static class PropertyPolicyImpl implements PropertyPolicy {
-        @Override
-        public void evaluate(Properties properties) throws PropertyNotAllowedException{}
+  /**
+   * Default implementation allows all properties.
+   */
+  static class PropertyPolicyImpl implements PropertyPolicy {
+    @Override
+    public void evaluate(Properties properties) throws PropertyNotAllowedException {
     }
+  }
 }

@@ -15,48 +15,46 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.parse;
-
-import org.apache.phoenix.compile.ColumnResolver;
 
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
+import org.apache.phoenix.compile.ColumnResolver;
 
 /**
  * Parse Node to help determine whether the document field contains a given value.
  */
 public class DocumentFieldContainsParseNode extends CompoundParseNode {
 
-    DocumentFieldContainsParseNode(ParseNode fieldKey, ParseNode value) {
-        super(Arrays.asList(fieldKey, value));
-    }
+  DocumentFieldContainsParseNode(ParseNode fieldKey, ParseNode value) {
+    super(Arrays.asList(fieldKey, value));
+  }
 
-    @Override
-    public <T> T accept(ParseNodeVisitor<T> visitor) throws SQLException {
-        List<T> l = java.util.Collections.emptyList();
-        if (visitor.visitEnter(this)) {
-            l = acceptChildren(visitor);
-        }
-        return visitor.visitLeave(this, l);
+  @Override
+  public <T> T accept(ParseNodeVisitor<T> visitor) throws SQLException {
+    List<T> l = java.util.Collections.emptyList();
+    if (visitor.visitEnter(this)) {
+      l = acceptChildren(visitor);
     }
+    return visitor.visitLeave(this, l);
+  }
 
-    @Override
-    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
-        List<ParseNode> children = getChildren();
-        buf.append("contains(");
-        children.get(0).toSQL(resolver, buf);
-        buf.append(", ");
-        children.get(1).toSQL(resolver, buf);
-        buf.append(")");
-    }
+  @Override
+  public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+    List<ParseNode> children = getChildren();
+    buf.append("contains(");
+    children.get(0).toSQL(resolver, buf);
+    buf.append(", ");
+    children.get(1).toSQL(resolver, buf);
+    buf.append(")");
+  }
 
-    public ParseNode getFieldKey() {
-        return getChildren().get(0);
-    }
+  public ParseNode getFieldKey() {
+    return getChildren().get(0);
+  }
 
-    public ParseNode getValue() {
-        return getChildren().get(1);
-    }
+  public ParseNode getValue() {
+    return getChildren().get(1);
+  }
 }

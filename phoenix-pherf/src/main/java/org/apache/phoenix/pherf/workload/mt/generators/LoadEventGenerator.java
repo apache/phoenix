@@ -15,48 +15,44 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.pherf.workload.mt.generators;
-
-import org.apache.phoenix.pherf.configuration.DataModel;
-import org.apache.phoenix.pherf.configuration.Scenario;
-import org.apache.phoenix.pherf.util.PhoenixUtil;
-import org.apache.phoenix.pherf.workload.mt.generators.TenantOperationInfo;
-import org.apache.phoenix.pherf.workload.mt.handlers.PherfWorkHandler;
-import org.apache.phoenix.pherf.workload.mt.operations.TenantOperationFactory;
 
 import java.util.List;
 import java.util.Properties;
+import org.apache.phoenix.pherf.configuration.DataModel;
+import org.apache.phoenix.pherf.configuration.Scenario;
+import org.apache.phoenix.pherf.util.PhoenixUtil;
+import org.apache.phoenix.pherf.workload.mt.handlers.PherfWorkHandler;
+import org.apache.phoenix.pherf.workload.mt.operations.TenantOperationFactory;
 
 /**
  * An interface that implementers can use to generate load events that can be consumed by
- * @see {@link com.lmax.disruptor.WorkHandler} which provide event handling functionality for
- * a given event.
- *
+ * @see {@link com.lmax.disruptor.WorkHandler} which provide event handling functionality for a
+ *      given event.
  * @param <T> load event object
  */
 public interface LoadEventGenerator<T> {
-    /**
-     * Initializes and readies the generator for queue based workloads
-     */
-    void start() throws Exception;
+  /**
+   * Initializes and readies the generator for queue based workloads
+   */
+  void start() throws Exception;
 
-    /**
-     * Stop the generator and waits for the queues to drain.
-     */
-    void stop() throws Exception;
+  /**
+   * Stop the generator and waits for the queues to drain.
+   */
+  void stop() throws Exception;
 
-    PhoenixUtil getPhoenixUtil();
+  PhoenixUtil getPhoenixUtil();
 
-    Scenario getScenario();
+  Scenario getScenario();
 
-    DataModel getModel();
+  DataModel getModel();
 
-    Properties getProperties();
+  Properties getProperties();
 
-    TenantOperationFactory getOperationFactory();
+  TenantOperationFactory getOperationFactory();
 
-    List<PherfWorkHandler> getWorkHandlers(Properties properties);
+  List<PherfWorkHandler> getWorkHandlers(Properties properties);
 
-    TenantOperationInfo next();
+  TenantOperationInfo next();
 }

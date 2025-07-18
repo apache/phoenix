@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,6 @@ package org.apache.phoenix.iterate;
 
 import java.util.ArrayList;
 import java.util.List;
-
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.QueryPlan;
@@ -29,37 +28,39 @@ import org.apache.phoenix.compile.QueryPlan;
  */
 public class ParallelScansCollector {
 
-    private final ParallelScanGrouper grouper;
-    private boolean lastScanCrossedRegionBoundary = false;
-    private final List<List<Scan>> parallelScans = new ArrayList<>();
-    private List<Scan> lastBatch = new ArrayList<>();
-    private Scan lastScan = null;
-    private final List<HRegionLocation> regionLocations = new ArrayList<>();
+  private final ParallelScanGrouper grouper;
+  private boolean lastScanCrossedRegionBoundary = false;
+  private final List<List<Scan>> parallelScans = new ArrayList<>();
+  private List<Scan> lastBatch = new ArrayList<>();
+  private Scan lastScan = null;
+  private final List<HRegionLocation> regionLocations = new ArrayList<>();
 
-    public ParallelScansCollector(ParallelScanGrouper grouper) {
-        this.grouper = grouper;
-        parallelScans.add(lastBatch);
+  public ParallelScansCollector(ParallelScanGrouper grouper) {
+    this.grouper = grouper;
+    parallelScans.add(lastBatch);
+  }
+
+  public void addNewScan(QueryPlan plan, Scan newScan, boolean crossesRegionBoundary,
+    HRegionLocation regionLocation) {
+    if (
+      grouper.shouldStartNewScan(plan, lastScan, newScan.getStartRow(),
+        lastScanCrossedRegionBoundary)
+    ) {
+      lastBatch = new ArrayList<>();
+      parallelScans.add(lastBatch);
     }
+    lastBatch.add(newScan);
+    regionLocations.add(regionLocation);
 
-    public void addNewScan(QueryPlan plan, Scan newScan, boolean crossesRegionBoundary,
-                           HRegionLocation regionLocation) {
-        if (grouper.shouldStartNewScan(plan, lastScan, newScan.getStartRow(),
-                lastScanCrossedRegionBoundary)) {
-            lastBatch = new ArrayList<>();
-            parallelScans.add(lastBatch);
-        }
-        lastBatch.add(newScan);
-        regionLocations.add(regionLocation);
+    lastScanCrossedRegionBoundary = crossesRegionBoundary;
+    lastScan = newScan;
+  }
 
-        lastScanCrossedRegionBoundary = crossesRegionBoundary;
-        lastScan = newScan;
-    }
+  public List<List<Scan>> getParallelScans() {
+    return parallelScans;
+  }
 
-    public List<List<Scan>> getParallelScans() {
-        return parallelScans;
-    }
-
-    public List<HRegionLocation> getRegionLocations() {
-        return regionLocations;
-    }
+  public List<HRegionLocation> getRegionLocations() {
+    return regionLocations;
+  }
 }

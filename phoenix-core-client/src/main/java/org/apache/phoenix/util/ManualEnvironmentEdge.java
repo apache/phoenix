@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,19 +18,19 @@
 package org.apache.phoenix.util;
 
 public class ManualEnvironmentEdge extends EnvironmentEdge {
-    // Sometimes 0 ts might have a special value, so lets start with 1
-    protected long value = 1L;
+  // Sometimes 0 ts might have a special value, so lets start with 1
+  protected long value = 1L;
 
-    public void setValue(long newValue) {
-        value = newValue;
-    }
+  public void setValue(long newValue) {
+    value = newValue;
+  }
 
-    public void incrementValue(long addedValue) {
-        value += addedValue;
-    }
+  public void incrementValue(long addedValue) {
+    value += addedValue;
+  }
 
-    @Override
-    public long currentTime() {
-        return this.value;
-    }
+  @Override
+  public long currentTime() {
+    return this.value;
+  }
 }

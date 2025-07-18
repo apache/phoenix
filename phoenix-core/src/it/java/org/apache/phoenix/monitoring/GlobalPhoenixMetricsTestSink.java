@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,28 +24,28 @@ import org.apache.hadoop.metrics2.MetricsSink;
 
 public class GlobalPhoenixMetricsTestSink implements MetricsSink {
 
-    public static final String PHOENIX_METRICS_RECORD_NAME = "PHOENIX";
-    // PhoenixMetricsIT tests verifies these metrics from this sink in a separate thread
-    // GlobalPhoenixMetricsTestSink is invoked based on time defined in hadoop-metrics2.properties
-    // This lock is to prevent concurrent access to metrics Iterable for these threads
-    static final Object lock = new Object();
-    static Iterable<AbstractMetric> metrics;
+  public static final String PHOENIX_METRICS_RECORD_NAME = "PHOENIX";
+  // PhoenixMetricsIT tests verifies these metrics from this sink in a separate thread
+  // GlobalPhoenixMetricsTestSink is invoked based on time defined in hadoop-metrics2.properties
+  // This lock is to prevent concurrent access to metrics Iterable for these threads
+  static final Object lock = new Object();
+  static Iterable<AbstractMetric> metrics;
 
-    @Override
-    public void putMetrics(MetricsRecord metricsRecord) {
-        if (metricsRecord.name().equals(PHOENIX_METRICS_RECORD_NAME)) {
-            synchronized (GlobalPhoenixMetricsTestSink.lock) {
-                GlobalPhoenixMetricsTestSink.metrics = metricsRecord.metrics();
-            }
-        }
+  @Override
+  public void putMetrics(MetricsRecord metricsRecord) {
+    if (metricsRecord.name().equals(PHOENIX_METRICS_RECORD_NAME)) {
+      synchronized (GlobalPhoenixMetricsTestSink.lock) {
+        GlobalPhoenixMetricsTestSink.metrics = metricsRecord.metrics();
+      }
     }
+  }
 
-    @Override
-    public void flush() {
-    }
+  @Override
+  public void flush() {
+  }
 
-    @Override
-    public void init(SubsetConfiguration subsetConfiguration) {
-    }
+  @Override
+  public void init(SubsetConfiguration subsetConfiguration) {
+  }
 
 }

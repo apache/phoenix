@@ -73,4 +73,3 @@ cd hbase-$HBASE_VERSION
 echo mvn ${SETTINGS[@]} clean install -Dhadoop.profile=3.0 -DskipTests -B $LOCALREPO
 mvn ${SETTINGS[@]} clean install -Dhadoop.profile=3.0 -DskipTests -B $LOCALREPO
 cd ${STARTDIR}
-

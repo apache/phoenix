@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,19 +24,19 @@ import static org.apache.phoenix.monitoring.MetricType.MEMORY_WAIT_TIME;
  * Class that encapsulates the metrics regarding memory resources needed for servicing a request.
  */
 public class MemoryMetricsHolder {
-    private final CombinableMetric memoryChunkSizeMetric;
-    private final CombinableMetric memoryWaitTimeMetric;
-    
-    public MemoryMetricsHolder(ReadMetricQueue readMetrics, String tableName) {
-        this.memoryChunkSizeMetric = readMetrics.allotMetric(MEMORY_CHUNK_BYTES, tableName);
-        this.memoryWaitTimeMetric = readMetrics.allotMetric(MEMORY_WAIT_TIME, tableName);
-    }
+  private final CombinableMetric memoryChunkSizeMetric;
+  private final CombinableMetric memoryWaitTimeMetric;
 
-    public CombinableMetric getMemoryChunkSizeMetric() {
-        return memoryChunkSizeMetric;
-    }
+  public MemoryMetricsHolder(ReadMetricQueue readMetrics, String tableName) {
+    this.memoryChunkSizeMetric = readMetrics.allotMetric(MEMORY_CHUNK_BYTES, tableName);
+    this.memoryWaitTimeMetric = readMetrics.allotMetric(MEMORY_WAIT_TIME, tableName);
+  }
 
-    public CombinableMetric getMemoryWaitTimeMetric() {
-        return memoryWaitTimeMetric;
-    }
+  public CombinableMetric getMemoryChunkSizeMetric() {
+    return memoryChunkSizeMetric;
+  }
+
+  public CombinableMetric getMemoryWaitTimeMetric() {
+    return memoryWaitTimeMetric;
+  }
 }

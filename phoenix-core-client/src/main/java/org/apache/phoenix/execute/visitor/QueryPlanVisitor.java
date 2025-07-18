@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,23 +23,34 @@ import org.apache.phoenix.compile.TraceQueryPlan;
 import org.apache.phoenix.execute.*;
 
 /**
- *
  * Visitor for a QueryPlan (which may contain other nested query-plans)
- *
  */
 public interface QueryPlanVisitor<E> {
-    E defaultReturn(QueryPlan plan);
-    E visit(AggregatePlan plan);
-    E visit(ScanPlan plan);
-    E visit(ClientAggregatePlan plan);
-    E visit(ClientScanPlan plan);
-    E visit(LiteralResultIterationPlan plan);
-    E visit(TupleProjectionPlan plan);
-    E visit(HashJoinPlan plan);
-    E visit(SortMergeJoinPlan plan);
-    E visit(UnionPlan plan);
-    E visit(UnnestArrayPlan plan);
-    E visit(CursorFetchPlan plan);
-    E visit(ListJarsQueryPlan plan);
-    E visit(TraceQueryPlan plan);
+  E defaultReturn(QueryPlan plan);
+
+  E visit(AggregatePlan plan);
+
+  E visit(ScanPlan plan);
+
+  E visit(ClientAggregatePlan plan);
+
+  E visit(ClientScanPlan plan);
+
+  E visit(LiteralResultIterationPlan plan);
+
+  E visit(TupleProjectionPlan plan);
+
+  E visit(HashJoinPlan plan);
+
+  E visit(SortMergeJoinPlan plan);
+
+  E visit(UnionPlan plan);
+
+  E visit(UnnestArrayPlan plan);
+
+  E visit(CursorFetchPlan plan);
+
+  E visit(ListJarsQueryPlan plan);
+
+  E visit(TraceQueryPlan plan);
 }

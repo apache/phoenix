@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,28 +16,28 @@
  * limitations under the License.
  */
 package org.apache.phoenix.log;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 
 import java.sql.SQLException;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 
 /**
- * This interface defines the contract for storing information about Phoenix connections
- * for debugging client-side issues like
+ * This interface defines the contract for storing information about Phoenix connections for
+ * debugging client-side issues like
  * {@link org.apache.phoenix.exception.SQLExceptionCode#NEW_CONNECTION_THROTTLED}
  */
 public interface ConnectionLimiter {
 
-    void acquireConnection(PhoenixConnection connection) throws SQLException;
+  void acquireConnection(PhoenixConnection connection) throws SQLException;
 
-    void returnConnection(PhoenixConnection connection);
+  void returnConnection(PhoenixConnection connection);
 
-    int onSweep(boolean internal) ;
+  int onSweep(boolean internal);
 
-    boolean isLastConnection();
+  boolean isLastConnection();
 
-    boolean isShouldThrottleNumConnections();
+  boolean isShouldThrottleNumConnections();
 
-    int getConnectionCount();
+  int getConnectionCount();
 
-    int getInternalConnectionCount();
+  int getInternalConnectionCount();
 }

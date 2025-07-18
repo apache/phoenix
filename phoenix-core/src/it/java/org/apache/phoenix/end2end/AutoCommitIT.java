@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -27,64 +27,61 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Properties;
-
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
 @Category(ParallelStatsDisabledTest.class)
 public class AutoCommitIT extends ParallelStatsDisabledIT {
 
-    @Test
-    public void testMutationJoin() throws Exception {
-        
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.setAutoCommit(true);
+  @Test
+  public void testMutationJoin() throws Exception {
 
-            String testTable = generateUniqueName();
-            String ddl = "CREATE TABLE " + testTable + " " +
-                "  (r varchar not null, col1 integer" +
-                "  CONSTRAINT pk PRIMARY KEY (r))\n";
-        createTestTable(getUrl(), ddl);
-        
-        String query = "UPSERT INTO " + testTable + "(r, col1) VALUES('row1', 1)";
-        PreparedStatement statement = conn.prepareStatement(query);
-        statement.executeUpdate();
-        conn.commit();
-        
-        conn.setAutoCommit(false);
-        query = "UPSERT INTO " + testTable + "(r, col1) VALUES('row1', 2)";
-        statement = conn.prepareStatement(query);
-        statement.executeUpdate();
-        
-        query = "DELETE FROM " + testTable + " WHERE r='row1'";
-        statement = conn.prepareStatement(query);
-        statement.executeUpdate();
-        conn.commit();
-        
-        query = "SELECT * FROM " + testTable;
-        statement = conn.prepareStatement(query);
-        ResultSet rs = statement.executeQuery();
-        assertFalse(rs.next());
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    Connection conn = DriverManager.getConnection(getUrl(), props);
+    conn.setAutoCommit(true);
 
-        query = "DELETE FROM " + testTable + " WHERE r='row1'";
-        statement = conn.prepareStatement(query);
-        statement.executeUpdate();
+    String testTable = generateUniqueName();
+    String ddl = "CREATE TABLE " + testTable + " " + "  (r varchar not null, col1 integer"
+      + "  CONSTRAINT pk PRIMARY KEY (r))\n";
+    createTestTable(getUrl(), ddl);
 
-        query = "UPSERT INTO " + testTable + "(r, col1) VALUES('row1', 3)";
-        statement = conn.prepareStatement(query);
-        statement.executeUpdate();
-        conn.commit();
-        
-        query = "SELECT * FROM " + testTable;
-        statement = conn.prepareStatement(query);
-        rs = statement.executeQuery();
-        assertTrue(rs.next());
-        assertEquals("row1", rs.getString(1));
-        assertEquals(3, rs.getInt(2));
+    String query = "UPSERT INTO " + testTable + "(r, col1) VALUES('row1', 1)";
+    PreparedStatement statement = conn.prepareStatement(query);
+    statement.executeUpdate();
+    conn.commit();
 
-        conn.close();
-    }
+    conn.setAutoCommit(false);
+    query = "UPSERT INTO " + testTable + "(r, col1) VALUES('row1', 2)";
+    statement = conn.prepareStatement(query);
+    statement.executeUpdate();
+
+    query = "DELETE FROM " + testTable + " WHERE r='row1'";
+    statement = conn.prepareStatement(query);
+    statement.executeUpdate();
+    conn.commit();
+
+    query = "SELECT * FROM " + testTable;
+    statement = conn.prepareStatement(query);
+    ResultSet rs = statement.executeQuery();
+    assertFalse(rs.next());
+
+    query = "DELETE FROM " + testTable + " WHERE r='row1'";
+    statement = conn.prepareStatement(query);
+    statement.executeUpdate();
+
+    query = "UPSERT INTO " + testTable + "(r, col1) VALUES('row1', 3)";
+    statement = conn.prepareStatement(query);
+    statement.executeUpdate();
+    conn.commit();
+
+    query = "SELECT * FROM " + testTable;
+    statement = conn.prepareStatement(query);
+    rs = statement.executeQuery();
+    assertTrue(rs.next());
+    assertEquals("row1", rs.getString(1));
+    assertEquals(3, rs.getInt(2));
+
+    conn.close();
+  }
 }

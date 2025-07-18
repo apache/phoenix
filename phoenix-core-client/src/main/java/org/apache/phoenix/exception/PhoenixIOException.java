@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,13 +19,12 @@ package org.apache.phoenix.exception;
 
 import java.sql.SQLException;
 
-
 public class PhoenixIOException extends SQLException {
-    private static final long serialVersionUID = 1L;
-    private static SQLExceptionCode code = SQLExceptionCode.IO_EXCEPTION;
+  private static final long serialVersionUID = 1L;
+  private static SQLExceptionCode code = SQLExceptionCode.IO_EXCEPTION;
 
-    public PhoenixIOException(Throwable e) {
-        super(e.getMessage(), code.getSQLState(), code.getErrorCode(), e);
-    }
+  public PhoenixIOException(Throwable e) {
+    super(e.getMessage(), code.getSQLState(), code.getErrorCode(), e);
+  }
 
 }

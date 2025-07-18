@@ -1,11 +1,19 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more contributor license agreements. See the NOTICE
- * file distributed with this work for additional information regarding copyright ownership. The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
- * License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by
- * applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language
- * governing permissions and limitations under the License.
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 package org.apache.phoenix.rpc;
 
@@ -21,7 +29,6 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
-
 import org.apache.hadoop.hbase.ipc.CallRunner;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
@@ -40,88 +47,96 @@ import org.mockito.Mockito;
 @Category(NeedsOwnMiniClusterTest.class)
 public class PhoenixClientRpcIT extends BaseTest {
 
-    private String schemaName;
-    private String indexName;
-    private String indexFullName;
-    private String dataTableFullName;
+  private String schemaName;
+  private String indexName;
+  private String indexFullName;
+  private String dataTableFullName;
 
-    @BeforeClass
-    public static synchronized void doSetup() throws Exception {
-        Map<String, String> serverProps = Collections.singletonMap(RSRpcServices.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS, 
-        		TestPhoenixIndexRpcSchedulerFactory.class.getName());
-        NUM_SLAVES_BASE = 2;
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), ReadOnlyProps.EMPTY_PROPS);
+  @BeforeClass
+  public static synchronized void doSetup() throws Exception {
+    Map<String, String> serverProps =
+      Collections.singletonMap(RSRpcServices.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS,
+        TestPhoenixIndexRpcSchedulerFactory.class.getName());
+    NUM_SLAVES_BASE = 2;
+    setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
+      ReadOnlyProps.EMPTY_PROPS);
+  }
+
+  @AfterClass
+  public static synchronized void cleanUpAfterTestSuite() throws Exception {
+    TestPhoenixIndexRpcSchedulerFactory.reset();
+  }
+
+  @Before
+  public void generateTableNames() throws SQLException {
+    schemaName = generateUniqueName();
+    indexName = generateUniqueName();
+    indexFullName = SchemaUtil.getTableName(schemaName, indexName);
+    dataTableFullName = SchemaUtil.getTableName(schemaName, generateUniqueName());
+  }
+
+  @Test
+  public void testIndexQos() throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    Connection conn = driver.connect(getUrl(), props);
+    try {
+      // create the table
+      conn.createStatement().execute("CREATE TABLE " + dataTableFullName
+        + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
+
+      // create the index
+      conn.createStatement()
+        .execute("CREATE INDEX " + indexName + " ON " + dataTableFullName + " (v1) INCLUDE (v2)");
+
+      PreparedStatement stmt =
+        conn.prepareStatement("UPSERT INTO " + dataTableFullName + " VALUES(?,?,?)");
+      stmt.setString(1, "k1");
+      stmt.setString(2, "v1");
+      stmt.setString(3, "v2");
+      stmt.execute();
+      conn.commit();
+
+      // run select query that should use the index
+      String selectSql = "SELECT k, v2 from " + dataTableFullName + " WHERE v1=?";
+      stmt = conn.prepareStatement(selectSql);
+      stmt.setString(1, "v1");
+
+      // verify that the query does a range scan on the index table
+      ResultSet rs = stmt.executeQuery("EXPLAIN " + selectSql);
+      assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexFullName + " ['v1']",
+        QueryUtil.getExplainPlan(rs));
+
+      // verify that the correct results are returned
+      rs = stmt.executeQuery();
+      assertTrue(rs.next());
+      assertEquals("k1", rs.getString(1));
+      assertEquals("v2", rs.getString(2));
+      assertFalse(rs.next());
+
+      // verify that index queue is not used (since the index writes originate from a client an not
+      // a region server)
+      Mockito.verify(TestPhoenixIndexRpcSchedulerFactory.getIndexRpcExecutor(), Mockito.never())
+        .dispatch(Mockito.any(CallRunner.class));
+    } finally {
+      conn.close();
     }
-    
-    @AfterClass
-    public static synchronized void cleanUpAfterTestSuite() throws Exception {
-        TestPhoenixIndexRpcSchedulerFactory.reset();
+  }
+
+  @Test
+  public void testMetadataQos() throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    Connection conn = driver.connect(getUrl(), props);
+    try {
+      // create the table
+      conn.createStatement().execute(
+        "CREATE TABLE " + dataTableFullName + " (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR)");
+      // verify that that metadata queue is used at least once
+      Mockito
+        .verify(TestPhoenixIndexRpcSchedulerFactory.getMetadataRpcExecutor(), Mockito.atLeastOnce())
+        .dispatch(Mockito.any(CallRunner.class));
+    } finally {
+      conn.close();
     }
-    
-    @Before
-    public void generateTableNames() throws SQLException {
-        schemaName = generateUniqueName();
-        indexName = generateUniqueName();
-        indexFullName = SchemaUtil.getTableName(schemaName, indexName);
-        dataTableFullName = SchemaUtil.getTableName(schemaName, generateUniqueName());
-    }
-
-    @Test
-    public void testIndexQos() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = driver.connect(getUrl(), props);
-        try {
-            // create the table
-            conn.createStatement().execute(
-                    "CREATE TABLE " + dataTableFullName
-                            + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
-
-            // create the index
-            conn.createStatement().execute(
-                    "CREATE INDEX " + indexName + " ON " + dataTableFullName + " (v1) INCLUDE (v2)");
-
-            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + dataTableFullName + " VALUES(?,?,?)");
-            stmt.setString(1, "k1");
-            stmt.setString(2, "v1");
-            stmt.setString(3, "v2");
-            stmt.execute();
-            conn.commit();
-
-            // run select query that should use the index
-            String selectSql = "SELECT k, v2 from " + dataTableFullName + " WHERE v1=?";
-            stmt = conn.prepareStatement(selectSql);
-            stmt.setString(1, "v1");
-
-            // verify that the query does a range scan on the index table
-            ResultSet rs = stmt.executeQuery("EXPLAIN " + selectSql);
-            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexFullName + " ['v1']", QueryUtil.getExplainPlan(rs));
-
-            // verify that the correct results are returned
-            rs = stmt.executeQuery();
-            assertTrue(rs.next());
-            assertEquals("k1", rs.getString(1));
-            assertEquals("v2", rs.getString(2));
-            assertFalse(rs.next());
-
-            // verify that index queue is not used (since the index writes originate from a client an not a region server)
-            Mockito.verify(TestPhoenixIndexRpcSchedulerFactory.getIndexRpcExecutor(), Mockito.never()).dispatch(Mockito.any(CallRunner.class));
-        } finally {
-            conn.close();
-        }
-    }
-
-    @Test
-    public void testMetadataQos() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = driver.connect(getUrl(), props);
-        try {
-            // create the table
-            conn.createStatement().execute("CREATE TABLE " + dataTableFullName + " (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR)");
-            // verify that that metadata queue is used at least once
-            Mockito.verify(TestPhoenixIndexRpcSchedulerFactory.getMetadataRpcExecutor(), Mockito.atLeastOnce()).dispatch(Mockito.any(CallRunner.class));
-        } finally {
-            conn.close();
-        }
-    }
+  }
 
 }

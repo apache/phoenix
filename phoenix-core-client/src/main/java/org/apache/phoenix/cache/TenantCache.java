@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,24 +19,25 @@ package org.apache.phoenix.cache;
 
 import java.io.Closeable;
 import java.sql.SQLException;
-
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.coprocessorclient.ServerCachingProtocol.ServerCacheFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.memory.MemoryManager;
 
-
 /**
- * 
  * Inteface to set and set cached values for a tenant
- *
- * 
  * @since 0.1
  */
 public interface TenantCache {
-    MemoryManager getMemoryManager();
-    Closeable getServerCache(ImmutableBytesPtr cacheId);
-    Closeable addServerCache(ImmutableBytesPtr cacheId, ImmutableBytesWritable cachePtr, byte[] txState, ServerCacheFactory cacheFactory, boolean useProtoForIndexMaintainer, boolean usePersistentCache, int clientVersion) throws SQLException;
-    void removeServerCache(ImmutableBytesPtr cacheId);
-    void removeAllServerCache();
+  MemoryManager getMemoryManager();
+
+  Closeable getServerCache(ImmutableBytesPtr cacheId);
+
+  Closeable addServerCache(ImmutableBytesPtr cacheId, ImmutableBytesWritable cachePtr,
+    byte[] txState, ServerCacheFactory cacheFactory, boolean useProtoForIndexMaintainer,
+    boolean usePersistentCache, int clientVersion) throws SQLException;
+
+  void removeServerCache(ImmutableBytesPtr cacheId);
+
+  void removeAllServerCache();
 }

@@ -15,94 +15,99 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.pherf.workload.mt.operations;
-
-import org.apache.phoenix.pherf.result.ResultValue;
-import org.apache.phoenix.pherf.workload.mt.generators.TenantOperationInfo;
-import org.apache.phoenix.pherf.workload.mt.operations.Operation;
 
 import java.util.ArrayList;
 import java.util.List;
+import org.apache.phoenix.pherf.result.ResultValue;
+import org.apache.phoenix.pherf.workload.mt.generators.TenantOperationInfo;
 
 /**
  * Holds metrics + contextual info on the operation run.
  */
 public class OperationStats {
-    private final TenantOperationInfo input;
-    private String handlerId;
-    private final int status;
-    private final long rowCount;
-    private final long durationInMs;
-    private final long startTime;
+  private final TenantOperationInfo input;
+  private String handlerId;
+  private final int status;
+  private final long rowCount;
+  private final long durationInMs;
+  private final long startTime;
 
-    public OperationStats(
-            TenantOperationInfo input,
-            long startTime,
-            int status,
-            long rowCount,
-            long durationInMs) {
-        this.input = input;
-        this.startTime = startTime;
-        this.status = status;
-        this.rowCount = rowCount;
-        this.durationInMs = durationInMs;
-    }
+  public OperationStats(TenantOperationInfo input, long startTime, int status, long rowCount,
+    long durationInMs) {
+    this.input = input;
+    this.startTime = startTime;
+    this.status = status;
+    this.rowCount = rowCount;
+    this.durationInMs = durationInMs;
+  }
 
-    public String getModelName() { return this.input.getModelName(); }
+  public String getModelName() {
+    return this.input.getModelName();
+  }
 
-    public String getScenarioName() { return this.input.getScenarioName(); }
+  public String getScenarioName() {
+    return this.input.getScenarioName();
+  }
 
-    public String getTenantId() { return this.input.getTenantId(); }
+  public String getTenantId() {
+    return this.input.getTenantId();
+  }
 
-    public Operation.OperationType getOpType() { return this.input.getOperation().getType(); }
+  public Operation.OperationType getOpType() {
+    return this.input.getOperation().getType();
+  }
 
-    public String getTableName() {
-        return this.input.getTableName();
-    }
+  public String getTableName() {
+    return this.input.getTableName();
+  }
 
-    public String getTenantGroup() {
-        return this.input.getTenantGroupId();
-    }
+  public String getTenantGroup() {
+    return this.input.getTenantGroupId();
+  }
 
-    public String getOperationGroup() {
-        return this.input.getOperationGroupId();
-    }
+  public String getOperationGroup() {
+    return this.input.getOperationGroupId();
+  }
 
-    public int getStatus() {
-        return status;
-    }
+  public int getStatus() {
+    return status;
+  }
 
-    public long getRowCount() {
-        return rowCount;
-    }
+  public long getRowCount() {
+    return rowCount;
+  }
 
-    public String getHandlerId() { return handlerId; }
+  public String getHandlerId() {
+    return handlerId;
+  }
 
-    public long getStartTime() { return startTime; }
+  public long getStartTime() {
+    return startTime;
+  }
 
-    public long getDurationInMs() {
-        return durationInMs;
-    }
+  public long getDurationInMs() {
+    return durationInMs;
+  }
 
-    public List<ResultValue> getCsvRepresentation() {
-        List<ResultValue> rowValues = new ArrayList<>();
-        rowValues.add(new ResultValue(getModelName()));
-        rowValues.add(new ResultValue(getScenarioName()));
-        rowValues.add(new ResultValue(getTableName()));
-        rowValues.add(new ResultValue(getTenantId()));
-        rowValues.add(new ResultValue(handlerId));
-        rowValues.add(new ResultValue(getTenantGroup()));
-        rowValues.add(new ResultValue(getOperationGroup()));
-        rowValues.add(new ResultValue(getOpType().name()));
-        rowValues.add(new ResultValue(String.valueOf(startTime)));
-        rowValues.add(new ResultValue(String.valueOf(status)));
-        rowValues.add(new ResultValue(String.valueOf(rowCount)));
-        rowValues.add(new ResultValue(String.valueOf(durationInMs)));
-        return rowValues;
-    }
+  public List<ResultValue> getCsvRepresentation() {
+    List<ResultValue> rowValues = new ArrayList<>();
+    rowValues.add(new ResultValue(getModelName()));
+    rowValues.add(new ResultValue(getScenarioName()));
+    rowValues.add(new ResultValue(getTableName()));
+    rowValues.add(new ResultValue(getTenantId()));
+    rowValues.add(new ResultValue(handlerId));
+    rowValues.add(new ResultValue(getTenantGroup()));
+    rowValues.add(new ResultValue(getOperationGroup()));
+    rowValues.add(new ResultValue(getOpType().name()));
+    rowValues.add(new ResultValue(String.valueOf(startTime)));
+    rowValues.add(new ResultValue(String.valueOf(status)));
+    rowValues.add(new ResultValue(String.valueOf(rowCount)));
+    rowValues.add(new ResultValue(String.valueOf(durationInMs)));
+    return rowValues;
+  }
 
-    public void setHandlerId(String handlerId) {
-        this.handlerId = handlerId;
-    }
+  public void setHandlerId(String handlerId) {
+    this.handlerId = handlerId;
+  }
 }
