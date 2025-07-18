@@ -72,12 +72,12 @@ public class ParseNodeFactory {
   // TODO: Use Google's Reflection library instead to find aggregate functions
   @SuppressWarnings("unchecked")
   private static final List<Class<? extends FunctionExpression>> CLIENT_SIDE_BUILT_IN_FUNCTIONS =
-          Arrays.<Class<? extends FunctionExpression>> asList(CurrentDateFunction.class,
-                  CurrentTimeFunction.class, AvgAggregateFunction.class);
+    Arrays.<Class<? extends FunctionExpression>> asList(CurrentDateFunction.class,
+      CurrentTimeFunction.class, AvgAggregateFunction.class);
   private static final Map<BuiltInFunctionKey, BuiltInFunctionInfo> BUILT_IN_FUNCTION_MAP =
-          Maps.newHashMap();
+    Maps.newHashMap();
   private static final Multimap<String, BuiltInFunctionInfo> BUILT_IN_FUNCTION_MULTIMAP =
-          ArrayListMultimap.create();
+    ArrayListMultimap.create();
   private static final BigDecimal MAX_LONG = BigDecimal.valueOf(Long.MAX_VALUE);
 
   /**
@@ -139,7 +139,7 @@ public class ParseNodeFactory {
         BuiltInFunctionKey key = new BuiltInFunctionKey(value.getName(), nArgs);
         if (BUILT_IN_FUNCTION_MAP.put(key, value) != null) {
           throw new IllegalStateException(
-                  "Multiple " + value.getName() + " functions with " + nArgs + " arguments");
+            "Multiple " + value.getName() + " functions with " + nArgs + " arguments");
         }
       } while (--nArgs >= 0 && d.args()[nArgs].defaultValue().length() > 0);
 
@@ -147,8 +147,8 @@ public class ParseNodeFactory {
       while (--nArgs >= 0) {
         if (d.args()[nArgs].defaultValue().length() > 0) {
           throw new IllegalStateException("Function " + value.getName()
-                  + " has non trailing default value of '" + d.args()[nArgs].defaultValue()
-                  + "'. Only trailing arguments may have default values");
+            + " has non trailing default value of '" + d.args()[nArgs].defaultValue()
+            + "'. Only trailing arguments may have default values");
         }
       }
     }
@@ -179,7 +179,7 @@ public class ParseNodeFactory {
       }
     } catch (Exception e) {
       throw new RuntimeException("Failed initialization of built-in functions at class '" + f + "'",
-              e);
+        e);
     }
   }
 
@@ -190,7 +190,7 @@ public class ParseNodeFactory {
   public static BuiltInFunctionInfo get(String normalizedName, List<ParseNode> children) {
     initBuiltInFunctionMap();
     BuiltInFunctionInfo info =
-            BUILT_IN_FUNCTION_MAP.get(new BuiltInFunctionKey(normalizedName, children.size()));
+      BUILT_IN_FUNCTION_MAP.get(new BuiltInFunctionKey(normalizedName, children.size()));
     return info;
   }
 
@@ -291,10 +291,10 @@ public class ParseNodeFactory {
   }
 
   public ColumnDef columnDef(ColumnName columnDefName, String sqlTypeName, boolean isNull,
-                             Integer maxLength, Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr,
-                             boolean isRowTimestamp) {
+    Integer maxLength, Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr,
+    boolean isRowTimestamp) {
     return new ColumnDef(columnDefName, sqlTypeName, isNull, maxLength, scale, isPK, sortOrder,
-            expressionStr, null, isRowTimestamp);
+      expressionStr, null, isRowTimestamp);
   }
 
   public DocumentFieldExistsParseNode documentFieldExists(ParseNode fieldName, boolean exists) {
@@ -302,7 +302,7 @@ public class ParseNodeFactory {
   }
 
   public DocumentFieldBeginsWithParseNode documentFieldBeginsWith(ParseNode fieldKey,
-                                                                  ParseNode value) {
+    ParseNode value) {
     return new DocumentFieldBeginsWithParseNode(fieldKey, value);
   }
 
@@ -315,28 +315,28 @@ public class ParseNodeFactory {
   }
 
   public ColumnDef columnDef(ColumnName columnDefName, String sqlTypeName, boolean isArray,
-                             Integer arrSize, Boolean isNull, Integer maxLength, Integer scale, boolean isPK,
-                             SortOrder sortOrder, String expressionStr, Integer encodedQualifier, boolean isRowTimestamp) {
+    Integer arrSize, Boolean isNull, Integer maxLength, Integer scale, boolean isPK,
+    SortOrder sortOrder, String expressionStr, Integer encodedQualifier, boolean isRowTimestamp) {
     return new ColumnDef(columnDefName, sqlTypeName, isArray, arrSize, isNull, maxLength, scale,
-            isPK, sortOrder, expressionStr, encodedQualifier, isRowTimestamp);
+      isPK, sortOrder, expressionStr, encodedQualifier, isRowTimestamp);
   }
 
   public ColumnDef columnDef(ColumnName columnDefName, String sqlTypeName, boolean isArray,
-                             Integer arrSize, Boolean isNull, Integer maxLength, Integer scale, boolean isPK,
-                             SortOrder sortOrder, String expressionStr, boolean isRowTimestamp) {
+    Integer arrSize, Boolean isNull, Integer maxLength, Integer scale, boolean isPK,
+    SortOrder sortOrder, String expressionStr, boolean isRowTimestamp) {
     return new ColumnDef(columnDefName, sqlTypeName, isArray, arrSize, isNull, maxLength, scale,
-            isPK, sortOrder, expressionStr, null, isRowTimestamp);
+      isPK, sortOrder, expressionStr, null, isRowTimestamp);
   }
 
   public ColumnDef columnDef(ColumnName columnDefName, String sqlTypeName, boolean isArray,
-                             Integer arrSize, Boolean isNull, Integer maxLength, Integer scale, boolean isPK,
-                             SortOrder sortOrder, boolean isRowTimestamp) {
+    Integer arrSize, Boolean isNull, Integer maxLength, Integer scale, boolean isPK,
+    SortOrder sortOrder, boolean isRowTimestamp) {
     return new ColumnDef(columnDefName, sqlTypeName, isArray, arrSize, isNull, maxLength, scale,
-            isPK, sortOrder, null, null, isRowTimestamp);
+      isPK, sortOrder, null, null, isRowTimestamp);
   }
 
   public ColumnDefInPkConstraint columnDefInPkConstraint(ColumnName columnDefName,
-                                                         SortOrder sortOrder, boolean isRowTimestamp) {
+    SortOrder sortOrder, boolean isRowTimestamp) {
     return new ColumnDefInPkConstraint(columnDefName, sortOrder, isRowTimestamp);
   }
 
@@ -349,30 +349,30 @@ public class ParseNodeFactory {
   }
 
   public CreateTableStatement createTable(TableName tableName,
-                                          ListMultimap<String, Pair<String, Object>> props, List<ColumnDef> columns,
-                                          PrimaryKeyConstraint pkConstraint, List<ParseNode> splits, PTableType tableType,
-                                          boolean ifNotExists, TableName baseTableName, ParseNode tableTypeIdNode, int bindCount,
-                                          Boolean immutableRows, Map<String, Integer> cqCounters, boolean noVerify) {
+    ListMultimap<String, Pair<String, Object>> props, List<ColumnDef> columns,
+    PrimaryKeyConstraint pkConstraint, List<ParseNode> splits, PTableType tableType,
+    boolean ifNotExists, TableName baseTableName, ParseNode tableTypeIdNode, int bindCount,
+    Boolean immutableRows, Map<String, Integer> cqCounters, boolean noVerify) {
     return new CreateTableStatement(tableName, props, columns, pkConstraint, splits, tableType,
-            ifNotExists, baseTableName, tableTypeIdNode, bindCount, immutableRows, cqCounters, noVerify);
+      ifNotExists, baseTableName, tableTypeIdNode, bindCount, immutableRows, cqCounters, noVerify);
   }
 
   public CreateTableStatement createTable(TableName tableName,
-                                          ListMultimap<String, Pair<String, Object>> props, List<ColumnDef> columns,
-                                          PrimaryKeyConstraint pkConstraint, List<ParseNode> splits, PTableType tableType,
-                                          boolean ifNotExists, TableName baseTableName, ParseNode tableTypeIdNode, int bindCount,
-                                          Boolean immutableRows, Map<String, Integer> cqCounters) {
+    ListMultimap<String, Pair<String, Object>> props, List<ColumnDef> columns,
+    PrimaryKeyConstraint pkConstraint, List<ParseNode> splits, PTableType tableType,
+    boolean ifNotExists, TableName baseTableName, ParseNode tableTypeIdNode, int bindCount,
+    Boolean immutableRows, Map<String, Integer> cqCounters) {
     return createTable(tableName, props, columns, pkConstraint, splits, tableType, ifNotExists,
-            baseTableName, tableTypeIdNode, bindCount, immutableRows, cqCounters, false);
+      baseTableName, tableTypeIdNode, bindCount, immutableRows, cqCounters, false);
   }
 
   public CreateTableStatement createTable(TableName tableName,
-                                          ListMultimap<String, Pair<String, Object>> props, List<ColumnDef> columns,
-                                          PrimaryKeyConstraint pkConstraint, List<ParseNode> splits, PTableType tableType,
-                                          boolean ifNotExists, TableName baseTableName, ParseNode tableTypeIdNode, int bindCount,
-                                          Boolean immutableRows) {
+    ListMultimap<String, Pair<String, Object>> props, List<ColumnDef> columns,
+    PrimaryKeyConstraint pkConstraint, List<ParseNode> splits, PTableType tableType,
+    boolean ifNotExists, TableName baseTableName, ParseNode tableTypeIdNode, int bindCount,
+    Boolean immutableRows) {
     return createTable(tableName, props, columns, pkConstraint, splits, tableType, ifNotExists,
-            baseTableName, tableTypeIdNode, bindCount, immutableRows, null, false);
+      baseTableName, tableTypeIdNode, bindCount, immutableRows, null, false);
   }
 
   public CreateSchemaStatement createSchema(String schemaName, boolean ifNotExists) {
@@ -380,28 +380,28 @@ public class ParseNodeFactory {
   }
 
   public CreateIndexStatement createIndex(NamedNode indexName, NamedTableNode dataTable,
-                                          IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
-                                          ListMultimap<String, Pair<String, Object>> props, boolean ifNotExists, IndexType indexType,
-                                          boolean async, int bindCount, Map<String, UDFParseNode> udfParseNodes, ParseNode where) {
+    IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
+    ListMultimap<String, Pair<String, Object>> props, boolean ifNotExists, IndexType indexType,
+    boolean async, int bindCount, Map<String, UDFParseNode> udfParseNodes, ParseNode where) {
     return new CreateIndexStatement(indexName, dataTable, ikConstraint, includeColumns, splits,
-            props, ifNotExists, indexType, async, bindCount, udfParseNodes, where);
+      props, ifNotExists, indexType, async, bindCount, udfParseNodes, where);
   }
 
   public CreateCDCStatement createCDC(NamedNode cdcObj, TableName dataTable,
-                                      Set<PTable.CDCChangeScope> includeScopes, ListMultimap<String, Pair<String, Object>> props,
-                                      boolean ifNotExists, int bindCount) {
+    Set<PTable.CDCChangeScope> includeScopes, ListMultimap<String, Pair<String, Object>> props,
+    boolean ifNotExists, int bindCount) {
     return new CreateCDCStatement(cdcObj, dataTable, includeScopes, props, ifNotExists, bindCount);
   }
 
   public CreateSequenceStatement createSequence(TableName tableName, ParseNode startsWith,
-                                                ParseNode incrementBy, ParseNode cacheSize, ParseNode minValue, ParseNode maxValue,
-                                                boolean cycle, boolean ifNotExits, int bindCount) {
+    ParseNode incrementBy, ParseNode cacheSize, ParseNode minValue, ParseNode maxValue,
+    boolean cycle, boolean ifNotExits, int bindCount) {
     return new CreateSequenceStatement(tableName, startsWith, incrementBy, cacheSize, minValue,
-            maxValue, cycle, ifNotExits, bindCount);
+      maxValue, cycle, ifNotExits, bindCount);
   }
 
   public CreateFunctionStatement createFunction(PFunction functionInfo, boolean temporary,
-                                                boolean isReplace) {
+    boolean isReplace) {
     return new CreateFunctionStatement(functionInfo, temporary, isReplace);
   }
 
@@ -431,23 +431,23 @@ public class ParseNodeFactory {
 
   public SequenceValueParseNode nextValueFor(TableName tableName, ParseNode numToAllocateNode) {
     return new SequenceValueParseNode(tableName, SequenceValueParseNode.Op.NEXT_VALUE,
-            numToAllocateNode);
+      numToAllocateNode);
   }
 
   public AddColumnStatement addColumn(NamedTableNode table, PTableType tableType,
-                                      List<ColumnDef> columnDefs, boolean ifNotExists,
-                                      ListMultimap<String, Pair<String, Object>> props, boolean cascade, List<NamedNode> indexes) {
+    List<ColumnDef> columnDefs, boolean ifNotExists,
+    ListMultimap<String, Pair<String, Object>> props, boolean cascade, List<NamedNode> indexes) {
     return new AddColumnStatement(table, tableType, columnDefs, ifNotExists, props, cascade,
-            indexes);
+      indexes);
   }
 
   public DropColumnStatement dropColumn(NamedTableNode table, PTableType tableType,
-                                        List<ColumnName> columnNodes, boolean ifExists) {
+    List<ColumnName> columnNodes, boolean ifExists) {
     return new DropColumnStatement(table, tableType, columnNodes, ifExists);
   }
 
   public DropTableStatement dropTable(TableName tableName, PTableType tableType, boolean ifExists,
-                                      boolean cascade) {
+    boolean cascade) {
     return new DropTableStatement(tableName, tableType, ifExists, cascade, false);
   }
 
@@ -460,14 +460,14 @@ public class ParseNodeFactory {
   }
 
   public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName,
-                                        boolean ifExists, PIndexState state, boolean isRebuildAll, boolean async,
-                                        ListMultimap<String, Pair<String, Object>> props) {
+    boolean ifExists, PIndexState state, boolean isRebuildAll, boolean async,
+    ListMultimap<String, Pair<String, Object>> props) {
     return new AlterIndexStatement(indexTableNode, dataTableName, ifExists, state, isRebuildAll,
-            async, props);
+      async, props);
   }
 
   public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName,
-                                        boolean ifExists, PIndexState state) {
+    boolean ifExists, PIndexState state) {
     return new AlterIndexStatement(indexTableNode, dataTableName, ifExists, state, false, false);
   }
 
@@ -506,12 +506,12 @@ public class ParseNodeFactory {
   }
 
   public NamedTableNode namedTable(String alias, TableName name, List<ColumnDef> dyn_columns,
-                                   Double tableSamplingRate) {
+    Double tableSamplingRate) {
     return new NamedTableNode(alias, name, dyn_columns, tableSamplingRate);
   }
 
   public NamedTableNode namedTable(String alias, TableName name, List<ColumnDef> dyn_columns,
-                                   LiteralParseNode tableSampleNode) {
+    LiteralParseNode tableSampleNode) {
     Double tableSamplingRate;
     if (tableSampleNode == null || tableSampleNode.getValue() == null) {
       tableSamplingRate = ConcreteTableNode.DEFAULT_TABLE_SAMPLING_RATE;
@@ -536,7 +536,7 @@ public class ParseNodeFactory {
   }
 
   public UpdateStatisticsStatement updateStatistics(NamedTableNode table,
-                                                    StatisticsCollectionScope scope, Map<String, Object> props) {
+    StatisticsCollectionScope scope, Map<String, Object> props) {
     return new UpdateStatisticsStatement(table, scope, props);
   }
 
@@ -547,7 +547,7 @@ public class ParseNodeFactory {
   public FunctionParseNode functionDistinct(String name, List<ParseNode> args) {
     if (CountAggregateFunction.NAME.equals(SchemaUtil.normalizeIdentifier(name))) {
       BuiltInFunctionInfo info =
-              getInfo(SchemaUtil.normalizeIdentifier(DistinctCountAggregateFunction.NAME), args);
+        getInfo(SchemaUtil.normalizeIdentifier(DistinctCountAggregateFunction.NAME), args);
       return new DistinctCountParseNode(DistinctCountAggregateFunction.NAME, args, info);
     } else {
       throw new UnsupportedOperationException("DISTINCT not supported with " + name);
@@ -566,8 +566,8 @@ public class ParseNodeFactory {
     Constructor<? extends FunctionParseNode> ctor = info.getNodeCtor();
     if (ctor == null) {
       return info.isAggregate()
-              ? new AggregateFunctionParseNode(name, args, info)
-              : new FunctionParseNode(name, args, info);
+        ? new AggregateFunctionParseNode(name, args, info)
+        : new FunctionParseNode(name, args, info);
     } else {
       try {
         return ctor.newInstance(name, args, info);
@@ -578,10 +578,10 @@ public class ParseNodeFactory {
   }
 
   public FunctionParseNode function(String name, List<ParseNode> valueNodes,
-                                    List<ParseNode> columnNodes, boolean isAscending) {
+    List<ParseNode> columnNodes, boolean isAscending) {
 
     List<ParseNode> args =
-            Lists.newArrayListWithExpectedSize(columnNodes.size() + valueNodes.size() + 1);
+      Lists.newArrayListWithExpectedSize(columnNodes.size() + valueNodes.size() + 1);
     args.addAll(columnNodes);
     args.add(new LiteralParseNode(Boolean.valueOf(isAscending)));
     args.addAll(valueNodes);
@@ -623,7 +623,7 @@ public class ParseNodeFactory {
   }
 
   public JoinTableNode join(JoinType type, TableNode lhs, TableNode rhs, ParseNode on,
-                            boolean singleValueOnly) {
+    boolean singleValueOnly) {
     return new JoinTableNode(type, lhs, rhs, on, singleValueOnly);
   }
 
@@ -686,7 +686,7 @@ public class ParseNodeFactory {
     String noSpace = in.replaceAll(" ", "");
     if (!noSpace.matches("^[0-9a-fA-F]+$")) {
       throw new IllegalArgumentException(
-              "Hex literal continuation line has non hex digit characters");
+        "Hex literal continuation line has non hex digit characters");
     }
     return noSpace;
   }
@@ -705,28 +705,28 @@ public class ParseNodeFactory {
     String noSpace = in.replaceAll(" ", "");
     if (!noSpace.matches("^[0-1]+$")) {
       throw new IllegalArgumentException(
-              "Binary literal continuation line has non binary digit characters");
+        "Binary literal continuation line has non binary digit characters");
     }
     return noSpace;
   }
 
   public CastParseNode cast(ParseNode expression, String dataType, Integer maxLength,
-                            Integer scale) {
+    Integer scale) {
     return new CastParseNode(expression, dataType, maxLength, scale, false);
   }
 
   public CastParseNode cast(ParseNode expression, PDataType dataType, Integer maxLength,
-                            Integer scale) {
+    Integer scale) {
     return new CastParseNode(expression, dataType, maxLength, scale, false);
   }
 
   public CastParseNode cast(ParseNode expression, PDataType dataType, Integer maxLength,
-                            Integer scale, boolean arr) {
+    Integer scale, boolean arr) {
     return new CastParseNode(expression, dataType, maxLength, scale, arr);
   }
 
   public CastParseNode cast(ParseNode expression, String dataType, Integer maxLength, Integer scale,
-                            boolean arr) {
+    boolean arr) {
     return new CastParseNode(expression, dataType, maxLength, scale, arr);
   }
 
@@ -755,8 +755,8 @@ public class ParseNodeFactory {
 
   public LiteralParseNode literal(String value, String sqlTypeName) throws SQLException {
     PDataType expectedType = sqlTypeName == null
-            ? null
-            : PDataType.fromSqlTypeName(SchemaUtil.normalizeIdentifier(sqlTypeName));
+      ? null
+      : PDataType.fromSqlTypeName(SchemaUtil.normalizeIdentifier(sqlTypeName));
     if (expectedType == null || !expectedType.isCoercibleTo(PTimestamp.INSTANCE)) {
       throw TypeMismatchException.newException(expectedType, PTimestamp.INSTANCE);
     }
@@ -765,7 +765,7 @@ public class ParseNodeFactory {
   }
 
   public LiteralParseNode coerce(LiteralParseNode literalNode, PDataType expectedType)
-          throws SQLException {
+    throws SQLException {
     PDataType actualType = literalNode.getType();
     if (actualType != null) {
       Object before = literalNode.getValue();
@@ -807,12 +807,12 @@ public class ParseNodeFactory {
 
   public ArrayAnyComparisonNode wrapInAny(CompareOperator op, ParseNode lhs, ParseNode rhs) {
     return new ArrayAnyComparisonNode(rhs,
-            comparison(op, lhs, elementRef(Arrays.<ParseNode> asList(rhs, literal(1)))));
+      comparison(op, lhs, elementRef(Arrays.<ParseNode> asList(rhs, literal(1)))));
   }
 
   public ArrayAllComparisonNode wrapInAll(CompareOperator op, ParseNode lhs, ParseNode rhs) {
     return new ArrayAllComparisonNode(rhs,
-            comparison(op, lhs, elementRef(Arrays.<ParseNode> asList(rhs, literal(1)))));
+      comparison(op, lhs, elementRef(Arrays.<ParseNode> asList(rhs, literal(1)))));
   }
 
   public ArrayElemRefNode elementRef(List<ParseNode> parseNode) {
@@ -846,8 +846,8 @@ public class ParseNodeFactory {
   public ParseNode negate(ParseNode child) {
     // Prevents reparsing of -1 from becoming 1*-1 and 1*1*-1 with each re-parsing
     if (
-            LiteralParseNode.ONE.equals(child)
-                    && ((LiteralParseNode) child).getType().isCoercibleTo(PLong.INSTANCE)
+      LiteralParseNode.ONE.equals(child)
+        && ((LiteralParseNode) child).getType().isCoercibleTo(PLong.INSTANCE)
     ) {
       return LiteralParseNode.MINUS_ONE;
     }
@@ -881,24 +881,24 @@ public class ParseNodeFactory {
   }
 
   public SelectStatement select(TableNode from, HintNode hint, boolean isDistinct,
-                                List<AliasedNode> select, ParseNode where, List<ParseNode> groupBy, ParseNode having,
-                                List<OrderByNode> orderBy, LimitNode limit, OffsetNode offset, int bindCount,
-                                boolean isAggregate, boolean hasSequence, List<SelectStatement> selects,
-                                Map<String, UDFParseNode> udfParseNodes) {
+    List<AliasedNode> select, ParseNode where, List<ParseNode> groupBy, ParseNode having,
+    List<OrderByNode> orderBy, LimitNode limit, OffsetNode offset, int bindCount,
+    boolean isAggregate, boolean hasSequence, List<SelectStatement> selects,
+    Map<String, UDFParseNode> udfParseNodes) {
 
     return new SelectStatement(from, hint, isDistinct, select, where,
-            groupBy == null ? Collections.<ParseNode> emptyList() : groupBy, having,
-            orderBy == null ? Collections.<OrderByNode> emptyList() : orderBy, limit, offset, bindCount,
-            isAggregate, hasSequence,
-            selects == null ? Collections.<SelectStatement> emptyList() : selects, udfParseNodes);
+      groupBy == null ? Collections.<ParseNode> emptyList() : groupBy, having,
+      orderBy == null ? Collections.<OrderByNode> emptyList() : orderBy, limit, offset, bindCount,
+      isAggregate, hasSequence,
+      selects == null ? Collections.<SelectStatement> emptyList() : selects, udfParseNodes);
   }
 
   public UpsertStatement upsert(NamedTableNode table, HintNode hint, List<ColumnName> columns,
-                                List<ParseNode> values, SelectStatement select, int bindCount,
-                                Map<String, UDFParseNode> udfParseNodes, List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
-                                UpsertStatement.OnDuplicateKeyType onDupKeyType) {
+    List<ParseNode> values, SelectStatement select, int bindCount,
+    Map<String, UDFParseNode> udfParseNodes, List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
+    UpsertStatement.OnDuplicateKeyType onDupKeyType) {
     return new UpsertStatement(table, hint, columns, values, select, bindCount, udfParseNodes,
-            onDupKeyPairs, onDupKeyType);
+      onDupKeyPairs, onDupKeyType);
   }
 
   public CursorName cursorName(String name) {
@@ -922,127 +922,127 @@ public class ParseNodeFactory {
   }
 
   public DeleteStatement delete(NamedTableNode table, HintNode hint, ParseNode node,
-                                List<OrderByNode> orderBy, LimitNode limit, int bindCount,
-                                Map<String, UDFParseNode> udfParseNodes) {
+    List<OrderByNode> orderBy, LimitNode limit, int bindCount,
+    Map<String, UDFParseNode> udfParseNodes) {
     return new DeleteStatement(table, hint, node, orderBy, limit, bindCount, udfParseNodes);
   }
 
   public SelectStatement select(SelectStatement statement, ParseNode where) {
     return select(statement.getFrom(), statement.getHint(), statement.isDistinct(),
-            statement.getSelect(), where, statement.getGroupBy(), statement.getHaving(),
-            statement.getOrderBy(), statement.getLimit(), statement.getOffset(), statement.getBindCount(),
-            statement.isAggregate(), statement.hasSequence(), statement.getSelects(),
-            statement.getUdfParseNodes());
+      statement.getSelect(), where, statement.getGroupBy(), statement.getHaving(),
+      statement.getOrderBy(), statement.getLimit(), statement.getOffset(), statement.getBindCount(),
+      statement.isAggregate(), statement.hasSequence(), statement.getSelects(),
+      statement.getUdfParseNodes());
   }
 
   public SelectStatement select(SelectStatement statement, ParseNode where, ParseNode having) {
     return select(statement.getFrom(), statement.getHint(), statement.isDistinct(),
-            statement.getSelect(), where, statement.getGroupBy(), having, statement.getOrderBy(),
-            statement.getLimit(), statement.getOffset(), statement.getBindCount(),
-            statement.isAggregate(), statement.hasSequence(), statement.getSelects(),
-            statement.getUdfParseNodes());
+      statement.getSelect(), where, statement.getGroupBy(), having, statement.getOrderBy(),
+      statement.getLimit(), statement.getOffset(), statement.getBindCount(),
+      statement.isAggregate(), statement.hasSequence(), statement.getSelects(),
+      statement.getUdfParseNodes());
   }
 
   public SelectStatement select(SelectStatement statement, List<AliasedNode> select,
-                                ParseNode where, List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy) {
+    ParseNode where, List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy) {
     return select(statement.getFrom(), statement.getHint(), statement.isDistinct(), select, where,
-            groupBy, having, orderBy, statement.getLimit(), statement.getOffset(),
-            statement.getBindCount(), statement.isAggregate(), statement.hasSequence(),
-            statement.getSelects(), statement.getUdfParseNodes());
+      groupBy, having, orderBy, statement.getLimit(), statement.getOffset(),
+      statement.getBindCount(), statement.isAggregate(), statement.hasSequence(),
+      statement.getSelects(), statement.getUdfParseNodes());
   }
 
   public SelectStatement select(SelectStatement statement, TableNode table) {
     return select(table, statement.getHint(), statement.isDistinct(), statement.getSelect(),
-            statement.getWhere(), statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(),
-            statement.getLimit(), statement.getOffset(), statement.getBindCount(),
-            statement.isAggregate(), statement.hasSequence(), statement.getSelects(),
-            statement.getUdfParseNodes());
+      statement.getWhere(), statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(),
+      statement.getLimit(), statement.getOffset(), statement.getBindCount(),
+      statement.isAggregate(), statement.hasSequence(), statement.getSelects(),
+      statement.getUdfParseNodes());
   }
 
   public SelectStatement select(SelectStatement statement, TableNode table, ParseNode where) {
     return select(table, statement.getHint(), statement.isDistinct(), statement.getSelect(), where,
-            statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(), statement.getLimit(),
-            statement.getOffset(), statement.getBindCount(), statement.isAggregate(),
-            statement.hasSequence(), statement.getSelects(), statement.getUdfParseNodes());
+      statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(), statement.getLimit(),
+      statement.getOffset(), statement.getBindCount(), statement.isAggregate(),
+      statement.hasSequence(), statement.getSelects(), statement.getUdfParseNodes());
   }
 
   public SelectStatement select(SelectStatement statement, boolean isDistinct,
-                                List<AliasedNode> select) {
+    List<AliasedNode> select) {
     return select(statement.getFrom(), statement.getHint(), isDistinct, select,
-            statement.getWhere(), statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(),
-            statement.getLimit(), statement.getOffset(), statement.getBindCount(),
-            statement.isAggregate(), statement.hasSequence(), statement.getSelects(),
-            statement.getUdfParseNodes());
+      statement.getWhere(), statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(),
+      statement.getLimit(), statement.getOffset(), statement.getBindCount(),
+      statement.isAggregate(), statement.hasSequence(), statement.getSelects(),
+      statement.getUdfParseNodes());
   }
 
   public SelectStatement select(SelectStatement statement, boolean isDistinct,
-                                List<AliasedNode> select, ParseNode where) {
+    List<AliasedNode> select, ParseNode where) {
     return select(statement.getFrom(), statement.getHint(), isDistinct, select, where,
-            statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(), statement.getLimit(),
-            statement.getOffset(), statement.getBindCount(), statement.isAggregate(),
-            statement.hasSequence(), statement.getSelects(), statement.getUdfParseNodes());
+      statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(), statement.getLimit(),
+      statement.getOffset(), statement.getBindCount(), statement.isAggregate(),
+      statement.hasSequence(), statement.getSelects(), statement.getUdfParseNodes());
   }
 
   public SelectStatement select(SelectStatement statement, boolean isDistinct,
-                                List<AliasedNode> select, ParseNode where, List<ParseNode> groupBy, boolean isAggregate) {
+    List<AliasedNode> select, ParseNode where, List<ParseNode> groupBy, boolean isAggregate) {
     return select(statement.getFrom(), statement.getHint(), isDistinct, select, where, groupBy,
-            statement.getHaving(), statement.getOrderBy(), statement.getLimit(), statement.getOffset(),
-            statement.getBindCount(), isAggregate, statement.hasSequence(), statement.getSelects(),
-            statement.getUdfParseNodes());
+      statement.getHaving(), statement.getOrderBy(), statement.getLimit(), statement.getOffset(),
+      statement.getBindCount(), isAggregate, statement.hasSequence(), statement.getSelects(),
+      statement.getUdfParseNodes());
   }
 
   public SelectStatement select(SelectStatement statement, List<OrderByNode> orderBy) {
     return select(statement.getFrom(), statement.getHint(), statement.isDistinct(),
-            statement.getSelect(), statement.getWhere(), statement.getGroupBy(), statement.getHaving(),
-            orderBy, statement.getLimit(), statement.getOffset(), statement.getBindCount(),
-            statement.isAggregate(), statement.hasSequence(), statement.getSelects(),
-            statement.getUdfParseNodes());
+      statement.getSelect(), statement.getWhere(), statement.getGroupBy(), statement.getHaving(),
+      orderBy, statement.getLimit(), statement.getOffset(), statement.getBindCount(),
+      statement.isAggregate(), statement.hasSequence(), statement.getSelects(),
+      statement.getUdfParseNodes());
   }
 
   public SelectStatement select(SelectStatement statement, HintNode hint) {
     return hint == null || hint.isEmpty()
-            ? statement
-            : select(statement.getFrom(), hint, statement.isDistinct(), statement.getSelect(),
-            statement.getWhere(), statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(),
-            statement.getLimit(), statement.getOffset(), statement.getBindCount(),
-            statement.isAggregate(), statement.hasSequence(), statement.getSelects(),
-            statement.getUdfParseNodes());
+      ? statement
+      : select(statement.getFrom(), hint, statement.isDistinct(), statement.getSelect(),
+        statement.getWhere(), statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(),
+        statement.getLimit(), statement.getOffset(), statement.getBindCount(),
+        statement.isAggregate(), statement.hasSequence(), statement.getSelects(),
+        statement.getUdfParseNodes());
   }
 
   public SelectStatement select(SelectStatement statement, HintNode hint, ParseNode where) {
     return select(statement.getFrom(), hint, statement.isDistinct(), statement.getSelect(), where,
-            statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(), statement.getLimit(),
-            statement.getOffset(), statement.getBindCount(), statement.isAggregate(),
-            statement.hasSequence(), statement.getSelects(), statement.getUdfParseNodes());
+      statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(), statement.getLimit(),
+      statement.getOffset(), statement.getBindCount(), statement.isAggregate(),
+      statement.hasSequence(), statement.getSelects(), statement.getUdfParseNodes());
   }
 
   public SelectStatement select(SelectStatement statement, List<OrderByNode> orderBy,
-                                LimitNode limit, OffsetNode offset, int bindCount, boolean isAggregate) {
+    LimitNode limit, OffsetNode offset, int bindCount, boolean isAggregate) {
     return select(statement.getFrom(), statement.getHint(), statement.isDistinct(),
-            statement.getSelect(), statement.getWhere(), statement.getGroupBy(), statement.getHaving(),
-            orderBy, limit, offset, bindCount, isAggregate || statement.isAggregate(),
-            statement.hasSequence(), statement.getSelects(), statement.getUdfParseNodes());
+      statement.getSelect(), statement.getWhere(), statement.getGroupBy(), statement.getHaving(),
+      orderBy, limit, offset, bindCount, isAggregate || statement.isAggregate(),
+      statement.hasSequence(), statement.getSelects(), statement.getUdfParseNodes());
 
   }
 
   public SelectStatement select(SelectStatement statement, LimitNode limit) {
     return select(statement.getFrom(), statement.getHint(), statement.isDistinct(),
-            statement.getSelect(), statement.getWhere(), statement.getGroupBy(), statement.getHaving(),
-            statement.getOrderBy(), limit, statement.getOffset(), statement.getBindCount(),
-            statement.isAggregate(), statement.hasSequence(), statement.getSelects(),
-            statement.getUdfParseNodes());
+      statement.getSelect(), statement.getWhere(), statement.getGroupBy(), statement.getHaving(),
+      statement.getOrderBy(), limit, statement.getOffset(), statement.getBindCount(),
+      statement.isAggregate(), statement.hasSequence(), statement.getSelects(),
+      statement.getUdfParseNodes());
   }
 
   public SelectStatement select(SelectStatement statement, List<OrderByNode> orderBy,
-                                LimitNode limit, OffsetNode offset) {
+    LimitNode limit, OffsetNode offset) {
     return select(statement.getFrom(), statement.getHint(), statement.isDistinct(),
-            statement.getSelect(), statement.getWhere(), statement.getGroupBy(), statement.getHaving(),
-            orderBy, limit, offset, statement.getBindCount(), statement.isAggregate(),
-            statement.hasSequence(), statement.getSelects(), statement.getUdfParseNodes());
+      statement.getSelect(), statement.getWhere(), statement.getGroupBy(), statement.getHaving(),
+      orderBy, limit, offset, statement.getBindCount(), statement.isAggregate(),
+      statement.hasSequence(), statement.getSelects(), statement.getUdfParseNodes());
   }
 
   public SelectStatement select(List<SelectStatement> statements, List<OrderByNode> orderBy,
-                                LimitNode limit, OffsetNode offset, int bindCount, boolean isAggregate) {
+    LimitNode limit, OffsetNode offset, int bindCount, boolean isAggregate) {
     if (statements.size() == 1)
       return select(statements.get(0), orderBy, limit, offset, bindCount, isAggregate);
 
@@ -1077,7 +1077,7 @@ public class ParseNodeFactory {
     }
 
     return select(null, HintNode.EMPTY_HINT_NODE, false, aliasedNodes, null, null, null, orderBy,
-            limit, offset, bindCount, false, false, statements, udfParseNodes);
+      limit, offset, bindCount, false, false, statements, udfParseNodes);
   }
 
   public SubqueryParseNode subquery(SelectStatement select, boolean expectSingleRow) {
@@ -1113,10 +1113,10 @@ public class ParseNodeFactory {
   }
 
   public ChangePermsStatement changePermsStatement(String permsString, boolean isSchemaName,
-                                                   TableName tableName, String schemaName, boolean isGroupName, LiteralParseNode userOrGroup,
-                                                   boolean isGrantStatement) {
+    TableName tableName, String schemaName, boolean isGroupName, LiteralParseNode userOrGroup,
+    boolean isGrantStatement) {
     return new ChangePermsStatement(permsString, isSchemaName, tableName, schemaName, isGroupName,
-            userOrGroup, isGrantStatement);
+      userOrGroup, isGrantStatement);
   }
 
   public ShowTablesStatement showTablesStatement(String schema, String pattern) {
