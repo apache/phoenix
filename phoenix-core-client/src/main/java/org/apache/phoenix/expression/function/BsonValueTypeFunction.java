@@ -118,12 +118,12 @@ public class BsonValueTypeFunction extends ScalarFunction {
             return true;
         }
 
-        String sqlTypeName = getSqlTypeName(bsonValue);
+        String sqlTypeName = getValueType(bsonValue);
         ptr.set(PVarchar.INSTANCE.toBytes(sqlTypeName));
         return true;
     }
 
-    private String getSqlTypeName(BsonValue bsonValue) {
+    private String getValueType(BsonValue bsonValue) {
         if (bsonValue instanceof BsonString) {
             return PVarchar.INSTANCE.getSqlTypeName();
         } else if (bsonValue instanceof BsonInt32) {
