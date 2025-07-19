@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -143,7 +144,7 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
             + "pk1 FLOAT NOT NULL, " 
             + "pk2 VARCHAR(3) NOT NULL, "
             + "col1 VARCHAR, " 
-            + "CONSTRAINT pk PRIMARY KEY (pk1, pk2)"
+            + "CONSTRAINT pk PRIMARY KEY (pk1 DESC, pk2)"
         + ")";
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             try (Statement stmt = conn.createStatement()) {
@@ -172,7 +173,18 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
     @Test
     public void testArrayAnyComparisonWithLongToIntegerConversion() throws Exception {
         String tableName = generateUniqueName();
-        createTableASCPkColumns(tableName);
+        String ddl = "CREATE TABLE " + tableName + " (" 
+            + "pk1 INTEGER NOT NULL, " 
+            + "pk2 VARCHAR(3) NOT NULL, "
+            + "col1 VARCHAR, " 
+            + "CONSTRAINT pk PRIMARY KEY (pk1 DESC, pk2)"
+        + ")";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute(ddl);
+                conn.commit();
+            }
+        }
         insertData(tableName, 2, "y", "b");
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String selectSql = "SELECT * FROM " + tableName + " WHERE pk1 = ANY(?) AND pk2 = 'y'";
@@ -547,41 +559,132 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
     @Test
     public void testArrayAnyComparisonForBinaryColumn() throws Exception {
         String tableName = generateUniqueName();
-        String ddl = "CREATE TABLE " + tableName + " (pk1 BINARY NOT NULL, " + "pk2 VARCHAR(3), "
-            + "col1 VARCHAR, " + "CONSTRAINT pk PRIMARY KEY (pk1, pk2))";
+        String ddl = "CREATE TABLE " + tableName + " ("
+            + "pk1 BINARY(3) NOT NULL, "
+            + "pk2 VARBINARY_ENCODED(3) NOT NULL, "
+            + "pk3 VARBINARY(3) NOT NULL, "
+            + "col1 VARCHAR, " 
+            + "CONSTRAINT pk PRIMARY KEY (pk1, pk2, pk3)" 
+        + ")";
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             try (Statement stmt = conn.createStatement()) {
                 stmt.execute(ddl);
                 conn.commit();
             }
         }
-        String pk1Value = "1234567890";
-        String pk2Value = "x";
-        String upsertStmt = "UPSERT INTO " + tableName + " VALUES (?, ?, ?)";
+        String pk1Value = "a";
+        String pk2Value = "b";
+        String pk3Value = "c";
+        String col1Value = "d";
+        String upsertStmt = "UPSERT INTO " + tableName + " VALUES (?, ?, ?, ?)";
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             try (PreparedStatement stmt = conn.prepareStatement(upsertStmt)) {
                 stmt.setBytes(1, pk1Value.getBytes());
-                stmt.setString(2, pk2Value);
-                stmt.setString(3, "a");
+                stmt.setBytes(2, pk2Value.getBytes());
+                stmt.setBytes(3, pk3Value.getBytes());
+                stmt.setString(4, col1Value);
                 stmt.executeUpdate();
                 conn.commit();
             }
         }
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             TestUtil.dumpTable(conn, TableName.valueOf(tableName));
-            String selectSql = "SELECT * FROM " + tableName + " WHERE pk1 = ANY(?) AND pk2 = ANY(?)";
-            Array binaryArr = conn.createArrayOf("BINARY", new byte[][] { pk1Value.getBytes(), pk1Value.getBytes(), pk1Value.getBytes() });
+            String selectSql = "SELECT * FROM " + tableName
+                + " WHERE pk1 = ANY(?) AND pk2 = ANY(?) AND pk3 = ANY(?)";
+            byte[][] nativeByteArr =
+                new byte[][] { pk1Value.getBytes(), pk2Value.getBytes(), pk3Value.getBytes() };
+            Array binaryArr = conn.createArrayOf("BINARY", nativeByteArr);
+            Array varbinaryArr = conn.createArrayOf("VARBINARY", nativeByteArr);
             try (PreparedStatement stmt = conn.prepareStatement(selectSql)) {
                 stmt.setArray(1, binaryArr);
-                stmt.setString(2, pk2Value);
+                stmt.setArray(2, varbinaryArr);
+                stmt.setArray(3, varbinaryArr);
                 try (ResultSet rs = stmt.executeQuery()) {
                     assertTrue(rs.next());
-                    assertEquals(pk1Value, new String(rs.getBytes(1)));
-                    assertEquals(pk2Value, rs.getString(2));
-                    assertEquals("a", rs.getString(3));
+                    assertBinaryValue(pk1Value.getBytes(), rs.getBytes(1));
+                    assertBinaryValue(pk2Value.getBytes(), rs.getBytes(2));
+                    assertBinaryValue(pk3Value.getBytes(), rs.getBytes(3));
+                    assertEquals(col1Value, rs.getString(4));
                 }
             }
-            assertPointLookupsAreGenerated(selectSql, conn, binaryArr);
+            try (PreparedStatement stmt = conn.prepareStatement("EXPLAIN " + selectSql)) {
+                stmt.setArray(1, binaryArr);
+                stmt.setArray(2, varbinaryArr);
+                stmt.setArray(3, varbinaryArr);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    String explainPlan = QueryUtil.getExplainPlan(rs);
+                    assertTrue(explainPlan.contains("POINT LOOKUP ON"));
+                }
+            }
+        }
+    }
+    
+    @Test
+    public void testArrayAnyComparisonForBinaryColumnWithCoercion() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE " + tableName + " ("
+            + "pk1 BINARY(3) NOT NULL, "
+            + "pk2 VARBINARY_ENCODED(3) NOT NULL, "
+            + "pk3 VARBINARY(3) NOT NULL, "
+            + "col1 VARCHAR, " 
+            + "CONSTRAINT pk PRIMARY KEY (pk1 DESC, pk2 DESC, pk3)" 
+        + ")";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute(ddl);
+                conn.commit();
+            }
+        }
+        String pk1Value = "a";
+        String pk2Value = "b";
+        String pk3Value = "c";
+        String col1Value = "d";
+        String upsertStmt = "UPSERT INTO " + tableName + " VALUES (?, ?, ?, ?)";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            try (PreparedStatement stmt = conn.prepareStatement(upsertStmt)) {
+                stmt.setBytes(1, pk1Value.getBytes());
+                stmt.setBytes(2, pk2Value.getBytes());
+                stmt.setBytes(3, pk3Value.getBytes());
+                stmt.setString(4, col1Value);
+                stmt.executeUpdate();
+                conn.commit();
+            }
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
+            String selectSql = "SELECT * FROM " + tableName
+                + " WHERE pk1 = ANY(?) AND pk2 = ANY(?) AND pk3 = ANY(?)";
+            byte[][] nativeByteArr =
+                new byte[][] { pk1Value.getBytes(), pk2Value.getBytes(), pk3Value.getBytes() };
+            Array binaryArr = conn.createArrayOf("BINARY", nativeByteArr);
+            try (PreparedStatement stmt = conn.prepareStatement(selectSql)) {
+                stmt.setArray(1, binaryArr);
+                stmt.setArray(2, binaryArr);
+                stmt.setArray(3, binaryArr);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    assertTrue(rs.next());
+                    assertBinaryValue(pk1Value.getBytes(), rs.getBytes(1));
+                    assertBinaryValue(pk2Value.getBytes(), rs.getBytes(2));
+                    assertBinaryValue(pk3Value.getBytes(), rs.getBytes(3));
+                    assertEquals(col1Value, rs.getString(4));
+                }
+            }
+            try (PreparedStatement stmt = conn.prepareStatement("EXPLAIN " + selectSql)) {
+                stmt.setArray(1, binaryArr);
+                stmt.setArray(2, binaryArr);
+                stmt.setArray(3, binaryArr);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    String explainPlan = QueryUtil.getExplainPlan(rs);
+                    assertTrue(explainPlan.contains("POINT LOOKUP ON"));
+                }
+            }
+        }
+    }
+    
+    private void assertBinaryValue(byte[] expected, byte[] actual) {
+        int expectedLength = expected.length;
+        for (int i = 0; i < expectedLength; i++) {
+            assertEquals(expected[i], actual[i]);
         }
     }
 
