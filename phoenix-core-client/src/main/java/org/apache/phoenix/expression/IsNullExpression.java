@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,7 +22,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
-
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -30,132 +29,131 @@ import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ExpressionUtil;
 
-
 /**
- * 
  * Implementation of IS NULL and IS NOT NULL expression
- *
  */
 public class IsNullExpression extends BaseSingleExpression {
-    private boolean isNegate;
+  private boolean isNegate;
 
-    public static Expression create(Expression child, boolean negate, ImmutableBytesWritable ptr) throws SQLException {
-        if (!child.isNullable()) {
-            return LiteralExpression.newConstant(negate, PBoolean.INSTANCE, child.getDeterminism());
-        }
-        if (ExpressionUtil.isConstant(child)) {
-            boolean evaluated = child.evaluate(null, ptr);
-            return LiteralExpression.newConstant(negate ^ (!evaluated || ptr.getLength() == 0), PBoolean.INSTANCE, child.getDeterminism());
-        }
-        return new IsNullExpression(child, negate);
+  public static Expression create(Expression child, boolean negate, ImmutableBytesWritable ptr)
+    throws SQLException {
+    if (!child.isNullable()) {
+      return LiteralExpression.newConstant(negate, PBoolean.INSTANCE, child.getDeterminism());
     }
-    
-    public IsNullExpression() {
+    if (ExpressionUtil.isConstant(child)) {
+      boolean evaluated = child.evaluate(null, ptr);
+      return LiteralExpression.newConstant(negate ^ (!evaluated || ptr.getLength() == 0),
+        PBoolean.INSTANCE, child.getDeterminism());
     }
-    
-    private IsNullExpression(Expression expression, boolean negate) {
-        super(expression);
-        this.isNegate = negate;
-    }
+    return new IsNullExpression(child, negate);
+  }
 
-    public IsNullExpression(List<Expression> children, boolean negate) {
-        super(children);
-        this.isNegate = negate;
-    }
+  public IsNullExpression() {
+  }
 
-    public IsNullExpression clone(List<Expression> children) {
-        return new IsNullExpression(children, this.isNegate());
-    }
-    
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        boolean evaluated = getChild().evaluate(tuple, ptr);
-        if (evaluated) {
-            ptr.set(isNegate ^ ptr.getLength() == 0 ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
-            return true;
-        }
-        if (tuple.isImmutable()) {
-            ptr.set(isNegate ? PDataType.FALSE_BYTES : PDataType.TRUE_BYTES);
-            return true;
-        }
-        
-        return false;
-    }
+  private IsNullExpression(Expression expression, boolean negate) {
+    super(expression);
+    this.isNegate = negate;
+  }
 
-    public boolean isNegate() {
-        return isNegate;
+  public IsNullExpression(List<Expression> children, boolean negate) {
+    super(children);
+    this.isNegate = negate;
+  }
+
+  public IsNullExpression clone(List<Expression> children) {
+    return new IsNullExpression(children, this.isNegate());
+  }
+
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    boolean evaluated = getChild().evaluate(tuple, ptr);
+    if (evaluated) {
+      ptr.set(isNegate ^ ptr.getLength() == 0 ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
+      return true;
+    }
+    if (tuple.isImmutable()) {
+      ptr.set(isNegate ? PDataType.FALSE_BYTES : PDataType.TRUE_BYTES);
+      return true;
     }
 
-    @Override
-    public boolean contains(Expression other) {
-        if (!(other instanceof ComparisonExpression || other instanceof IsNullExpression)) {
-            return false;
-        }
-        if (!this.getChildren().get(0).equals(other.getChildren().get(0))) {
-            return false;
-        }
-        if (other instanceof ComparisonExpression) {
-            return isNegate;
-        }
-        return isNegate == ((IsNullExpression) other).isNegate;
-    }
+    return false;
+  }
 
-    @Override
-    public void readFields(DataInput input) throws IOException {
-        super.readFields(input);
-        isNegate = input.readBoolean();
-    }
+  public boolean isNegate() {
+    return isNegate;
+  }
 
-    @Override
-    public void write(DataOutput output) throws IOException {
-        super.write(output);
-        output.writeBoolean(isNegate);
+  @Override
+  public boolean contains(Expression other) {
+    if (!(other instanceof ComparisonExpression || other instanceof IsNullExpression)) {
+      return false;
     }
+    if (!this.getChildren().get(0).equals(other.getChildren().get(0))) {
+      return false;
+    }
+    if (other instanceof ComparisonExpression) {
+      return isNegate;
+    }
+    return isNegate == ((IsNullExpression) other).isNegate;
+  }
 
-    @Override
-    public PDataType getDataType() {
-        return PBoolean.INSTANCE;
-    }
-    
-    @Override
-    public final <T> T accept(ExpressionVisitor<T> visitor) {
-        List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
-        T t = visitor.visitLeave(this, l);
-        if (t == null) {
-            t = visitor.defaultReturn(this, l);
-        }
-        return t;
-    }
-    
-    @Override
-    public String toString() {
-        StringBuilder buf = new StringBuilder(children.get(0).toString());
-        if (isNegate) {
-            buf.append(" IS NOT NULL");
-        } else {
-            buf.append(" IS NULL");
-        }
-        return buf.toString();
-    }
-    
-    @Override
-    public boolean requiresFinalEvaluation() {
-        return super.requiresFinalEvaluation() || !this.isNegate();
-    }
+  @Override
+  public void readFields(DataInput input) throws IOException {
+    super.readFields(input);
+    isNegate = input.readBoolean();
+  }
 
-    @Override
-    public boolean equals(Object o) {
-        if (!super.equals(o)) {
-            return false;
-        }
-        IsNullExpression that = (IsNullExpression) o;
-        return isNegate == that.isNegate;
-    }
+  @Override
+  public void write(DataOutput output) throws IOException {
+    super.write(output);
+    output.writeBoolean(isNegate);
+  }
 
-    @Override
-    public int hashCode() {
-        int result = super.hashCode();
-        result = 31 * result + (isNegate ? 1 : 0);
-        return result;
+  @Override
+  public PDataType getDataType() {
+    return PBoolean.INSTANCE;
+  }
+
+  @Override
+  public final <T> T accept(ExpressionVisitor<T> visitor) {
+    List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
+    T t = visitor.visitLeave(this, l);
+    if (t == null) {
+      t = visitor.defaultReturn(this, l);
     }
+    return t;
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder buf = new StringBuilder(children.get(0).toString());
+    if (isNegate) {
+      buf.append(" IS NOT NULL");
+    } else {
+      buf.append(" IS NULL");
+    }
+    return buf.toString();
+  }
+
+  @Override
+  public boolean requiresFinalEvaluation() {
+    return super.requiresFinalEvaluation() || !this.isNegate();
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (!super.equals(o)) {
+      return false;
+    }
+    IsNullExpression that = (IsNullExpression) o;
+    return isNegate == that.isNegate;
+  }
+
+  @Override
+  public int hashCode() {
+    int result = super.hashCode();
+    result = 31 * result + (isNegate ? 1 : 0);
+    return result;
+  }
 }

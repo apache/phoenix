@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,29 +17,28 @@
  */
 package org.apache.phoenix.end2end;
 
+import java.io.IOException;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessorEnvironment;
 import org.apache.phoenix.cache.ServerMetadataCache;
 import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
 
-import java.io.IOException;
-
 /**
- * PhoenixRegionServerEndpoint for integration tests.
- * Uses {@link ServerMetadataCacheTestImpl} to support keeping multiple cache instances.
+ * PhoenixRegionServerEndpoint for integration tests. Uses {@link ServerMetadataCacheTestImpl} to
+ * support keeping multiple cache instances.
  */
 public class PhoenixRegionServerEndpointTestImpl extends PhoenixRegionServerEndpoint {
-    protected ServerName serverName;
+  protected ServerName serverName;
 
-    @Override
-    public void start(CoprocessorEnvironment env) throws IOException {
-        super.start(env);
-        this.serverName = ((RegionServerCoprocessorEnvironment)env).getServerName();
-    }
+  @Override
+  public void start(CoprocessorEnvironment env) throws IOException {
+    super.start(env);
+    this.serverName = ((RegionServerCoprocessorEnvironment) env).getServerName();
+  }
 
-    @Override
-    public ServerMetadataCache getServerMetadataCache() {
-        return ServerMetadataCacheTestImpl.getInstance(conf, serverName);
-    }
+  @Override
+  public ServerMetadataCache getServerMetadataCache() {
+    return ServerMetadataCacheTestImpl.getInstance(conf, serverName);
+  }
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,35 +20,35 @@ package org.apache.phoenix.parse;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 
 public class DropCDCStatement extends MutableStatement {
-    private final TableName tableName;
-    private final NamedNode cdcObjName;
-    private final boolean ifExists;
+  private final TableName tableName;
+  private final NamedNode cdcObjName;
+  private final boolean ifExists;
 
-    public DropCDCStatement(NamedNode cdcObjName, TableName tableName, boolean ifExists) {
-        this.cdcObjName = cdcObjName;
-        this.tableName = tableName;
-        this.ifExists = ifExists;
-    }
+  public DropCDCStatement(NamedNode cdcObjName, TableName tableName, boolean ifExists) {
+    this.cdcObjName = cdcObjName;
+    this.tableName = tableName;
+    this.ifExists = ifExists;
+  }
 
-    public TableName getTableName() {
-        return tableName;
-    }
+  public TableName getTableName() {
+    return tableName;
+  }
 
-    public NamedNode getCdcObjName() {
-        return cdcObjName;
-    }
+  public NamedNode getCdcObjName() {
+    return cdcObjName;
+  }
 
-    @Override
-    public int getBindCount() {
-        return 0;
-    }
+  @Override
+  public int getBindCount() {
+    return 0;
+  }
 
-    public boolean ifExists() {
-        return ifExists;
-    }
+  public boolean ifExists() {
+    return ifExists;
+  }
 
-    @Override
-    public PhoenixStatement.Operation getOperation() {
-        return PhoenixStatement.Operation.DELETE;
-    }
+  @Override
+  public PhoenixStatement.Operation getOperation() {
+    return PhoenixStatement.Operation.DELETE;
+  }
 }

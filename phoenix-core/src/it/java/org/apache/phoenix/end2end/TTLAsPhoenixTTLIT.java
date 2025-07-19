@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,18 +17,32 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX;
+import static org.apache.phoenix.exception.SQLExceptionCode.TTL_ALREADY_DEFINED_IN_HIERARCHY;
+import static org.apache.phoenix.exception.SQLExceptionCode.TTL_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_DEFINED;
+import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+import java.util.Properties;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
-import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
-import org.apache.phoenix.schema.LiteralTTLExpression;
+import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
@@ -42,624 +56,593 @@ import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import java.io.IOException;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
-import java.util.Properties;
-
-import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX;
-import static org.apache.phoenix.exception.SQLExceptionCode.TTL_ALREADY_DEFINED_IN_HIERARCHY;
-import static org.apache.phoenix.exception.SQLExceptionCode.TTL_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY;
-import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
-import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR;
-import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
-import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_DEFINED;
-import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
-public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
+public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT {
 
-    private static final String DDL_TEMPLATE = "CREATE TABLE IF NOT EXISTS %s "
-            + "("
-            + " ID INTEGER NOT NULL,"
-            + " COL1 INTEGER NOT NULL,"
-            + " COL2 bigint NOT NULL,"
-            + " CREATED_DATE DATE,"
-            + " CREATION_TIME TIME,"
-            + " CONSTRAINT NAME_PK PRIMARY KEY (ID, COL1, COL2)"
-            + ")";
+  private static final String DDL_TEMPLATE =
+    "CREATE TABLE IF NOT EXISTS %s " + "(" + " ID INTEGER NOT NULL," + " COL1 INTEGER NOT NULL,"
+      + " COL2 bigint NOT NULL," + " CREATED_DATE DATE," + " CREATION_TIME TIME,"
+      + " CONSTRAINT NAME_PK PRIMARY KEY (ID, COL1, COL2)" + ")";
 
-    private static final String DEFAULT_DDL_OPTIONS = "MULTI_TENANT=true";
+  private static final String DEFAULT_DDL_OPTIONS = "MULTI_TENANT=true";
 
-    private static final int DEFAULT_TTL_FOR_TEST = 86400;
-    private static final int DEFAULT_TTL_FOR_CHILD = 10000;
-    private static final int DEFAULT_TTL_FOR_ALTER = 7000;
-    private static final String DEFAULT_TTL_EXPRESSION = "CURRENT_TIME() - cREATION_TIME > 500"; // case-insensitive comparison
-    private static final String DEFAULT_TTL_EXPRESSION_FOR_ALTER =
-            "CURRENT_TIME() - PHOENIX_ROW_TIMESTAMP() > 100";
+  private static final int DEFAULT_TTL_FOR_TEST = 86400;
+  private static final int DEFAULT_TTL_FOR_CHILD = 10000;
+  private static final int DEFAULT_TTL_FOR_ALTER = 7000;
+  private static final String DEFAULT_TTL_EXPRESSION = "CURRENT_TIME() - cREATION_TIME > 500"; // case-insensitive
+                                                                                               // comparison
+  private static final String DEFAULT_TTL_EXPRESSION_FOR_ALTER =
+    "CURRENT_TIME() - PHOENIX_ROW_TIMESTAMP() > 100";
 
-    private boolean useExpression;
-    private TTLExpression defaultTTL;
-    private String defaultTTLDDLOption;
-    private TTLExpression alterTTL;
-    private String alterTTLDDLOption;
+  private boolean useExpression;
+  private TTLExpression defaultTTL;
+  private String defaultTTLDDLOption;
+  private TTLExpression alterTTL;
+  private String alterTTLDDLOption;
 
-    public TTLAsPhoenixTTLIT(boolean useExpression) {
-        this.useExpression = useExpression;
-        this.defaultTTL = useExpression ?
-                TTLExpressionFactory.create(DEFAULT_TTL_EXPRESSION) :
-                TTLExpressionFactory.create(DEFAULT_TTL_FOR_TEST);
-        this.defaultTTLDDLOption = useExpression ?
-                String.format("'%s'", DEFAULT_TTL_EXPRESSION) :
-                String.valueOf(DEFAULT_TTL_FOR_TEST);
-        this.alterTTL = useExpression ?
-                TTLExpressionFactory.create(DEFAULT_TTL_EXPRESSION_FOR_ALTER) :
-                TTLExpressionFactory.create(DEFAULT_TTL_FOR_ALTER);
-        this.alterTTLDDLOption = useExpression ?
-                String.format("'%s'", DEFAULT_TTL_EXPRESSION_FOR_ALTER) :
-                String.valueOf(DEFAULT_TTL_FOR_ALTER);
+  public TTLAsPhoenixTTLIT(boolean useExpression) {
+    this.useExpression = useExpression;
+    this.defaultTTL = useExpression
+      ? TTLExpressionFactory.create(DEFAULT_TTL_EXPRESSION)
+      : TTLExpressionFactory.create(DEFAULT_TTL_FOR_TEST);
+    this.defaultTTLDDLOption = useExpression
+      ? String.format("'%s'", DEFAULT_TTL_EXPRESSION)
+      : String.valueOf(DEFAULT_TTL_FOR_TEST);
+    this.alterTTL = useExpression
+      ? TTLExpressionFactory.create(DEFAULT_TTL_EXPRESSION_FOR_ALTER)
+      : TTLExpressionFactory.create(DEFAULT_TTL_FOR_ALTER);
+    this.alterTTLDDLOption = useExpression
+      ? String.format("'%s'", DEFAULT_TTL_EXPRESSION_FOR_ALTER)
+      : String.valueOf(DEFAULT_TTL_FOR_ALTER);
+  }
+
+  @Parameterized.Parameters(name = "useExpression={0}")
+  public static synchronized Collection<Boolean[]> data() {
+    return Arrays.asList(new Boolean[][] { { false }, { true } });
+  }
+
+  /**
+   * test TTL is being set as PhoenixTTL when PhoenixTTL is enabled.
+   */
+  @Test
+  public void testCreateTableWithTTL() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl());) {
+      PTable table = conn.unwrap(PhoenixConnection.class)
+        .getTable(new PTableKey(null, createTableWithOrWithOutTTLAsItsProperty(conn, true)));
+      TestUtil.assertTTLValue(conn, table, defaultTTL);
+      assertTrue("RowKeyMatcher should be Null",
+        (Bytes.compareTo(HConstants.EMPTY_BYTE_ARRAY, table.getRowKeyMatcher()) == 0));
     }
+  }
 
-    @Parameterized.Parameters(name = "useExpression={0}")
-    public static synchronized Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][]{
-                {false}, {true}
-        });
+  @Test
+  public void testCreateTableWithNoTTL() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl());) {
+      PTable table = conn.unwrap(PhoenixConnection.class)
+        .getTable(new PTableKey(null, createTableWithOrWithOutTTLAsItsProperty(conn, false)));
+      TestUtil.assertTTLValue(conn, table, TTL_EXPRESSION_NOT_DEFINED);
+      assertFalse(table.hasConditionalTTL());
     }
+  }
 
-    /**
-     * test TTL is being set as PhoenixTTL when PhoenixTTL is enabled.
-     */
-    @Test
-    public void testCreateTableWithTTL() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());) {
-            PTable table = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,
-                    createTableWithOrWithOutTTLAsItsProperty(conn, true)));
-            TestUtil.assertTTLValue(conn, table, defaultTTL);
-            assertTrue("RowKeyMatcher should be Null",
-                    (Bytes.compareTo(HConstants.EMPTY_BYTE_ARRAY, table.getRowKeyMatcher()) == 0));
-        }
+  @Test
+  public void testSwitchingTTLFromCondToValue() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, true);
+      PTable table = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, tableName));
+      TestUtil.assertTTLValue(conn, table, defaultTTL);
+      assertTrue(table.hasConditionalTTL() == useExpression);
+      // Switch from cond ttl to value or vice versa
+      String alterTTL = useExpression
+        ? String.valueOf(DEFAULT_TTL_FOR_ALTER)
+        : String.format("'%s'", DEFAULT_TTL_EXPRESSION_FOR_ALTER);
+      String alterDDL = "ALTER TABLE " + tableName + " SET TTL = " + alterTTL;
+      conn.createStatement().execute(alterDDL);
+      TTLExpression expected = useExpression
+        ? TTLExpressionFactory.create(DEFAULT_TTL_FOR_ALTER)
+        : TTLExpressionFactory.create(DEFAULT_TTL_EXPRESSION_FOR_ALTER);
+      TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), expected, tableName);
     }
+  }
 
-    @Test
-    public void testCreateTableWithNoTTL() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());) {
-            PTable table = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,
-                    createTableWithOrWithOutTTLAsItsProperty(conn, false)));
-            TestUtil.assertTTLValue(conn, table, TTL_EXPRESSION_NOT_DEFINED);
-            assertFalse(table.hasConditionalTTL());
-        }
+  /**
+   * Tests that when: 1) DDL has both pk as well as key value columns 2) Key value columns have *
+   * both default and explicit column family names 3) TTL specifier doesn't have column family *
+   * name. Then it should not affect TTL being set at Phoenix Level.
+   */
+  @Test
+  public void testCreateTableWithTTLWithDifferentColumnFamilies() throws Exception {
+    if (useExpression) {
+      return; // multiple column families not supported for Conditional TTL
     }
+    String tableName = generateUniqueName();
+    String ddl = "create table IF NOT EXISTS  " + tableName + "  (" + " id char(1) NOT NULL,"
+      + " col1 integer NOT NULL," + " b.col2 bigint," + " col3 bigint, "
+      + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)" + " ) TTL=" + DEFAULT_TTL_FOR_TEST;
+    Connection conn = DriverManager.getConnection(getUrl());
+    conn.createStatement().execute(ddl);
+    TTLExpression expected = TTLExpressionFactory.create(DEFAULT_TTL_FOR_TEST);
+    TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), expected, tableName);
+    // Setting TTL should also stored in CF Descriptor properties for Backward compatibility
+    Admin admin = driver.getConnectionQueryServices(getUrl(), new Properties()).getAdmin();
+    ColumnFamilyDescriptor[] columnFamilies =
+      admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
+    assertEquals(DEFAULT_TTL_FOR_TEST, columnFamilies[0].getTimeToLive());
+  }
 
-    @Test
-    public void testSwitchingTTLFromCondToValue() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, true);
-            PTable table = conn.unwrap(PhoenixConnection.class).
-                    getTable(new PTableKey(null, tableName));
-            TestUtil.assertTTLValue(conn, table, defaultTTL);
-            assertTrue(table.hasConditionalTTL() == useExpression);
-            // Switch from cond ttl to value or vice versa
-            String alterTTL = useExpression ? String.valueOf(DEFAULT_TTL_FOR_ALTER) :
-                    String.format("'%s'", DEFAULT_TTL_EXPRESSION_FOR_ALTER);
-            String alterDDL = "ALTER TABLE " + tableName + " SET TTL = " + alterTTL;
-            conn.createStatement().execute(alterDDL);
-            TTLExpression expected = useExpression ?
-                    TTLExpressionFactory.create(DEFAULT_TTL_FOR_ALTER) :
-                    TTLExpressionFactory.create(DEFAULT_TTL_EXPRESSION_FOR_ALTER);
-            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), expected, tableName);
-        }
+  @Test
+  public void testCreateAndAlterTableDDLWithForeverAndNoneTTLValues() throws Exception {
+    if (useExpression) {
+      return;
     }
+    String tableName = generateUniqueName();
+    String ddl = "create table IF NOT EXISTS  " + tableName + "  (" + " id char(1) NOT NULL,"
+      + " col1 integer NOT NULL," + " b.col2 bigint," + " col3 bigint, "
+      + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)" + " ) TTL=FOREVER";
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute(ddl);
+      TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), TTL_EXPRESSION_NOT_DEFINED,
+        tableName);
 
-    /**
-     * Tests that when: 1) DDL has both pk as well as key value columns 2) Key value columns have
-     *      * both default and explicit column family names 3) TTL specifier doesn't have column family
-     *      * name. Then it should not affect TTL being set at Phoenix Level.
-     */
-    @Test
-    public void  testCreateTableWithTTLWithDifferentColumnFamilies() throws  Exception {
-        if (useExpression) {
-            return; // multiple column families not supported for Conditional TTL
-        }
-        String tableName = generateUniqueName();
-        String ddl =
-                "create table IF NOT EXISTS  " + tableName + "  (" + " id char(1) NOT NULL,"
-                        + " col1 integer NOT NULL," + " b.col2 bigint," + " col3 bigint, "
-                        + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
-                        + " ) TTL=" + DEFAULT_TTL_FOR_TEST;
-        Connection conn = DriverManager.getConnection(getUrl());
+      ddl = "ALTER TABLE  " + tableName + " SET TTL=NONE";
+      conn.createStatement().execute(ddl);
+      TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), TTL_EXPRESSION_NOT_DEFINED,
+        tableName);
+      // Setting TTL should not be stored as CF Descriptor properties when
+      // phoenix.table.ttl.enabled is true
+      Admin admin = driver.getConnectionQueryServices(getUrl(), new Properties()).getAdmin();
+      ColumnFamilyDescriptor[] columnFamilies =
+        admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
+      assertEquals(HConstants.FOREVER, columnFamilies[0].getTimeToLive());
+
+      tableName = generateUniqueName();
+      ddl = "create table IF NOT EXISTS  " + tableName + "  (" + " id char(1) NOT NULL,"
+        + " col1 integer NOT NULL," + " b.col2 bigint," + " col3 bigint, "
+        + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)" + " ) TTL=NONE";
+      conn.createStatement().execute(ddl);
+      TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), TTL_EXPRESSION_NOT_DEFINED,
+        tableName);
+
+      ddl = "ALTER TABLE  " + tableName + " SET TTL=FOREVER";
+      conn.createStatement().execute(ddl);
+      TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), TTL_EXPRESSION_NOT_DEFINED,
+        tableName);
+      // Setting TTL should not be stored as CF Descriptor properties when
+      // phoenix.table.ttl.enabled is true
+      columnFamilies = admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
+      assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_TTL, columnFamilies[0].getTimeToLive());
+    }
+  }
+
+  @Test
+  public void testSettingTTLAsAlterTableCommand() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), new Properties());
+      PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);) {
+      String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, false);
+      // Checking Default TTL in case of PhoenixTTLEnabled
+      TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), TTL_EXPRESSION_NOT_DEFINED,
+        tableName);
+
+      String ddl = "ALTER TABLE  " + tableName + " SET TTL = " + this.alterTTLDDLOption;
+      conn.createStatement().execute(ddl);
+      TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), this.alterTTL, tableName);
+      // Asserting TTL should not be stored as CF Descriptor properties when
+      // phoenix.table.ttl.enabled is true
+      Admin admin = driver.getConnectionQueryServices(getUrl(), new Properties()).getAdmin();
+      ColumnFamilyDescriptor[] columnFamilies =
+        admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
+      PTable pTable = pConn.getTableNoCache(tableName);
+      TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), this.alterTTL, tableName);
+    }
+  }
+
+  @Test
+  public void testSettingTTLForIndexes() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, true);
+
+      // By default, Indexes should set TTL what Base Table has
+      createIndexOnTableOrViewProvidedWithTTL(conn, tableName, PTable.IndexType.LOCAL, false);
+      createIndexOnTableOrViewProvidedWithTTL(conn, tableName, PTable.IndexType.GLOBAL, false);
+      List<PTable> indexes = PhoenixRuntime.getTable(conn, tableName).getIndexes();
+      for (PTable index : indexes) {
+        TestUtil.assertTTLValue(conn, index, defaultTTL);
+      }
+
+      tableName = createTableWithOrWithOutTTLAsItsProperty(conn, false);
+
+      String localIndexName =
+        createIndexOnTableOrViewProvidedWithTTL(conn, tableName, PTable.IndexType.LOCAL, false);
+      String globalIndexName =
+        createIndexOnTableOrViewProvidedWithTTL(conn, tableName, PTable.IndexType.GLOBAL, false);
+      indexes =
+        conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, tableName)).getIndexes();
+      for (PTable index : indexes) {
+        TestUtil.assertTTLValue(conn, index, TTL_EXPRESSION_NOT_DEFINED);
+        assertTrue(Bytes.compareTo(index.getRowKeyMatcher(), HConstants.EMPTY_BYTE_ARRAY) == 0);
+      }
+
+      // Test setting TTL as index property not allowed while creating them or setting them
+      // explicitly.
+      String ttl =
+        (useExpression ? String.format("'%s'", DEFAULT_TTL_EXPRESSION) : String.valueOf(1000));
+      try {
+        conn.createStatement().execute("ALTER TABLE " + localIndexName + " SET TTL = " + ttl);
+        fail();
+      } catch (SQLException sqe) {
+        assertEquals("Should fail with cannot set or alter property for index",
+          CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX.getErrorCode(), sqe.getErrorCode());
+      }
+
+      try {
+        conn.createStatement().execute("ALTER TABLE " + globalIndexName + " SET TTL = " + ttl);
+        fail();
+      } catch (SQLException sqe) {
+        assertEquals("Should fail with cannot set or alter property for index",
+          CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX.getErrorCode(), sqe.getErrorCode());
+      }
+
+      try {
+        createIndexOnTableOrViewProvidedWithTTL(conn, tableName, PTable.IndexType.LOCAL, true);
+        fail();
+      } catch (SQLException sqe) {
+        assertEquals("Should fail with cannot set or alter property for index",
+          CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX.getErrorCode(), sqe.getErrorCode());
+      }
+
+      try {
+        createIndexOnTableOrViewProvidedWithTTL(conn, tableName, PTable.IndexType.GLOBAL, true);
+        fail();
+      } catch (SQLException sqe) {
+        assertEquals("Should fail with cannot set or alter property for index",
+          CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX.getErrorCode(), sqe.getErrorCode());
+      }
+    }
+  }
+
+  @Test
+  public void testConditionalTTLDDL() throws Exception {
+    if (!useExpression) {
+      return;
+    }
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String tableName = generateUniqueName();
+      String ddl =
+        "CREATE TABLE %s (ID1 VARCHAR NOT NULL, ID2 INTEGER NOT NULL, COL1 VARCHAR, COL2 DATE "
+          + "CONSTRAINT PK PRIMARY KEY(ID1, ID2)) TTL = '%s'";
+      try {
+        conn.createStatement()
+          .execute(String.format(ddl, tableName, "ID2 = 12 OR UNKNOWN_COLUMN = 67"));
+        fail("Should have thrown ColumnNotFoundException");
+      } catch (SQLException e) {
+        assertTrue(e.getCause() instanceof ColumnNotFoundException);
+      }
+      String ttl = "ID2 = 34 AND COL2 > CURRENT_DATE() + 1000";
+      conn.createStatement().execute(String.format(ddl, tableName, ttl));
+      TTLExpression expected = TTLExpressionFactory.create(ttl);
+      TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), expected, tableName);
+
+      conn.createStatement().execute(String.format("ALTER TABLE %s SET TTL=NONE", tableName));
+      TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), TTL_EXPRESSION_NOT_DEFINED,
+        tableName);
+
+      try {
+        conn.createStatement()
+          .execute(String.format("ALTER TABLE %s SET TTL='%s'", tableName, "UNKNOWN_COLUMN=67"));
+        fail("Alter table should have thrown ColumnNotFoundException");
+      } catch (SQLException e) {
+        assertTrue(e.getCause() instanceof ColumnNotFoundException);
+      }
+
+      String viewName = generateUniqueName();
+      ddl = "CREATE VIEW %s ( VINT SMALLINT) AS SELECT * FROM %s TTL='%s'";
+      ttl = "F.ID2 = 124";
+      try {
+        conn.createStatement().execute(String.format(ddl, viewName, tableName, ttl));
+        fail("Should have thrown ColumnFamilyNotFoundException");
+      } catch (SQLException e) {
+        assertTrue(e.getCause() instanceof ColumnFamilyNotFoundException);
+      }
+
+      ttl = "COL2 > CURRENT_DATE() + 200 AND VINT > 123";
+      conn.createStatement().execute(String.format(ddl, viewName, tableName, ttl));
+      expected = TTLExpressionFactory.create(ttl);
+      TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), expected, viewName);
+
+      ttl = "COL2 > CURRENT_DATE() + 500 AND VINT > 123";
+      conn.createStatement().execute(String.format("ALTER VIEW %s SET TTL='%s'", viewName, ttl));
+      expected = TTLExpressionFactory.create(ttl);
+      TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), expected, viewName);
+    }
+  }
+
+  @Test
+  public void testSettingTTLForViewsOnTableWithTTL() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String tenantID = generateUniqueName().substring(1);
+      String tenantID1 = generateUniqueName().substring(1);
+
+      Properties props = new Properties();
+      props.setProperty(TENANT_ID_ATTRIB, tenantID);
+      Connection tenantConn = DriverManager.getConnection(getUrl(), props);
+
+      Properties props1 = new Properties();
+      props1.setProperty(TENANT_ID_ATTRIB, tenantID1);
+      Connection tenantConn1 = DriverManager.getConnection(getUrl(), props1);
+
+      String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, true);
+      TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), defaultTTL, tableName);
+
+      // Setting TTL on views is not allowed if Table already has TTL
+      try {
+        createUpdatableViewOnTableWithTTL(conn, tableName, true);
+        fail();
+      } catch (SQLException sqe) {
+        assertEquals("Should fail with TTL already defined in hierarchy",
+          TTL_ALREADY_DEFINED_IN_HIERARCHY.getErrorCode(), sqe.getErrorCode());
+      }
+
+      // TTL is only supported for Table and Updatable Views
+      try {
+        createReadOnlyViewOnTableWithTTL(conn, tableName, true);
+        fail();
+      } catch (SQLException sqe) {
+        assertEquals("Should have failed with TTL supported on Table and Updatable" + "View only",
+          TTL_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY.getErrorCode(), sqe.getErrorCode());
+      }
+
+      // View should have gotten TTL from parent table.
+      String viewName = createUpdatableViewOnTableWithTTL(conn, tableName, false);
+      TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), defaultTTL, viewName);
+
+      // Child View's PTable gets TTL from parent View's PTable which gets from Table.
+      String childView = createViewOnViewWithTTL(tenantConn, viewName, false);
+      TestUtil.assertTTLValue(tenantConn.unwrap(PhoenixConnection.class), defaultTTL, childView);
+
+      String childView1 = createViewOnViewWithTTL(tenantConn1, viewName, false);
+      TestUtil.assertTTLValue(tenantConn1.unwrap(PhoenixConnection.class), defaultTTL, childView1);
+
+      createIndexOnTableOrViewProvidedWithTTL(conn, viewName, PTable.IndexType.GLOBAL, false);
+      createIndexOnTableOrViewProvidedWithTTL(conn, viewName, PTable.IndexType.LOCAL, false);
+
+      List<PTable> indexes =
+        PhoenixRuntime.getTable(conn.unwrap(PhoenixConnection.class), viewName).getIndexes();
+
+      for (PTable index : indexes) {
+        TestUtil.assertTTLValue(conn, index, defaultTTL);
+      }
+
+      createIndexOnTableOrViewProvidedWithTTL(conn, tableName, PTable.IndexType.GLOBAL, false);
+      List<PTable> tIndexes =
+        PhoenixRuntime.getTable(conn.unwrap(PhoenixConnection.class), tableName).getIndexes();
+
+      for (PTable index : tIndexes) {
+        TestUtil.assertTTLValue(conn, index, defaultTTL);
+      }
+    }
+  }
+
+  @Test
+  public void testAlteringTTLToNONEAndThenSettingAtAnotherLevel() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String tenantID = generateUniqueName().substring(1);
+
+      Properties props = new Properties();
+      props.setProperty(TENANT_ID_ATTRIB, tenantID);
+      Connection tenantConn = DriverManager.getConnection(getUrl(), props);
+
+      String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, true);
+      TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), defaultTTL, tableName);
+
+      // Setting TTL on views is not allowed if Table already has TTL
+      try {
+        createUpdatableViewOnTableWithTTL(conn, tableName, true);
+        fail();
+      } catch (SQLException sqe) {
+        assertEquals("Should fail with TTL already defined in hierarchy",
+          TTL_ALREADY_DEFINED_IN_HIERARCHY.getErrorCode(), sqe.getErrorCode());
+      }
+
+      String ddl = "ALTER TABLE " + tableName + " SET TTL=NONE";
+      conn.createStatement().execute(ddl);
+
+      TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), TTL_EXPRESSION_NOT_DEFINED,
+        tableName);
+
+      String viewName = createUpdatableViewOnTableWithTTL(conn, tableName, true);
+      TTLExpression expectedChildTTl = useExpression
+        ? TTLExpressionFactory.create(DEFAULT_TTL_EXPRESSION)
+        : TTLExpressionFactory.create(DEFAULT_TTL_FOR_CHILD);
+      TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), expectedChildTTl, viewName);
+
+      try {
+        createViewOnViewWithTTL(tenantConn, viewName, true);
+        fail();
+      } catch (SQLException sqe) {
+        assertEquals("Should fail with TTL already defined in hierarchy",
+          TTL_ALREADY_DEFINED_IN_HIERARCHY.getErrorCode(), sqe.getErrorCode());
+      }
+
+      String ttlAlter = (useExpression
+        ? String.format("'%s'", DEFAULT_TTL_EXPRESSION_FOR_ALTER)
+        : String.valueOf(DEFAULT_TTL_FOR_ALTER));
+      try {
+        ddl = "ALTER TABLE " + tableName + " SET TTL=" + ttlAlter;
         conn.createStatement().execute(ddl);
-        TTLExpression expected = TTLExpressionFactory.create(DEFAULT_TTL_FOR_TEST);
-        TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), expected, tableName);
-        //Setting TTL should also stored in CF Descriptor properties for Backward compatibility
-        Admin admin = driver.getConnectionQueryServices(getUrl(), new Properties()).getAdmin();
-        ColumnFamilyDescriptor[] columnFamilies =
-                admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
-        assertEquals(DEFAULT_TTL_FOR_TEST, columnFamilies[0].getTimeToLive());
+      } catch (SQLException sqe) {
+        assertEquals("Should fail with TTL already defined in hierarchy",
+          TTL_ALREADY_DEFINED_IN_HIERARCHY.getErrorCode(), sqe.getErrorCode());
+      }
+
+      ddl = "ALTER VIEW " + viewName + " SET TTL=NONE";
+      conn.createStatement().execute(ddl);
+
+      String childView = createViewOnViewWithTTL(tenantConn, viewName, true);
+      TestUtil.assertTTLValue(tenantConn.unwrap(PhoenixConnection.class), expectedChildTTl,
+        childView);
+
+      ddl = "ALTER VIEW " + childView + " SET TTL=NONE";
+      tenantConn.createStatement().execute(ddl);
+
+      TestUtil.assertTTLValue(tenantConn.unwrap(PhoenixConnection.class),
+        TTL_EXPRESSION_NOT_DEFINED, childView);
+
+      ddl = "ALTER VIEW " + viewName + " SET TTL=" + ttlAlter;
+      conn.createStatement().execute(ddl);
+      TTLExpression expectedAlterTTl = useExpression
+        ? TTLExpressionFactory.create(DEFAULT_TTL_EXPRESSION_FOR_ALTER)
+        : TTLExpressionFactory.create(DEFAULT_TTL_FOR_ALTER);
+      TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), expectedAlterTTl, viewName);
     }
+  }
 
-    @Test
-    public void testCreateAndAlterTableDDLWithForeverAndNoneTTLValues() throws Exception {
-        if (useExpression) {
-            return;
-        }
-        String tableName = generateUniqueName();
-        String ddl =
-                "create table IF NOT EXISTS  " + tableName + "  (" + " id char(1) NOT NULL,"
-                        + " col1 integer NOT NULL," + " b.col2 bigint," + " col3 bigint, "
-                        + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
-                        + " ) TTL=FOREVER";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            conn.createStatement().execute(ddl);
-            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class),
-                    TTL_EXPRESSION_NOT_DEFINED, tableName);
+  @Test
+  public void testAlteringTTLAtOneLevelAndCheckingAtAnotherLevel() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String tenantID = generateUniqueName().substring(1);
+      String tenantID1 = generateUniqueName().substring(1);
 
-            ddl = "ALTER TABLE  " + tableName + " SET TTL=NONE";
-            conn.createStatement().execute(ddl);
-            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class),
-                    TTL_EXPRESSION_NOT_DEFINED, tableName);
-            //Setting TTL should not be stored as CF Descriptor properties when
-            //phoenix.table.ttl.enabled is true
-            Admin admin = driver.getConnectionQueryServices(getUrl(), new Properties()).getAdmin();
-            ColumnFamilyDescriptor[] columnFamilies =
-                    admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
-            assertEquals(HConstants.FOREVER, columnFamilies[0].getTimeToLive());
+      Properties props = new Properties();
+      props.setProperty(TENANT_ID_ATTRIB, tenantID);
+      Connection tenantConn = DriverManager.getConnection(getUrl(), props);
 
-            tableName = generateUniqueName();
-            ddl =
-                    "create table IF NOT EXISTS  " + tableName + "  (" + " id char(1) NOT NULL,"
-                            + " col1 integer NOT NULL," + " b.col2 bigint," + " col3 bigint, "
-                            + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
-                            + " ) TTL=NONE";
-            conn.createStatement().execute(ddl);
-            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class),
-                    TTL_EXPRESSION_NOT_DEFINED, tableName);
+      Properties props1 = new Properties();
+      props1.setProperty(TENANT_ID_ATTRIB, tenantID1);
+      Connection tenantConn1 = DriverManager.getConnection(getUrl(), props1);
 
-            ddl = "ALTER TABLE  " + tableName + " SET TTL=FOREVER";
-            conn.createStatement().execute(ddl);
-            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class),
-                    TTL_EXPRESSION_NOT_DEFINED, tableName);
-            //Setting TTL should not be stored as CF Descriptor properties when
-            //phoenix.table.ttl.enabled is true
-            columnFamilies =
-                    admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
-            assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_TTL, columnFamilies[0].getTimeToLive());
-        }
+      String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, true);
+      TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), defaultTTL, tableName);
+
+      // View should have gotten TTL from parent table.
+      String viewName = createUpdatableViewOnTableWithTTL(conn, tableName, false);
+      TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), defaultTTL, viewName);
+
+      // Child View's PTable gets TTL from parent View's PTable which gets from Table.
+      String childView = createViewOnViewWithTTL(tenantConn, viewName, false);
+      TestUtil.assertTTLValue(tenantConn.unwrap(PhoenixConnection.class), defaultTTL, childView);
+
+      String childView1 = createViewOnViewWithTTL(tenantConn1, viewName, false);
+      TestUtil.assertTTLValue(tenantConn1.unwrap(PhoenixConnection.class), defaultTTL, childView1);
+
+      String ttlAlter = (useExpression
+        ? String.format("'%s'", DEFAULT_TTL_EXPRESSION_FOR_ALTER)
+        : String.valueOf(DEFAULT_TTL_FOR_ALTER));
+      String alter = "ALTER TABLE " + tableName + " SET TTL = " + ttlAlter;
+      conn.createStatement().execute(alter);
+
+      // Clear Cache for all Tables to reflect Alter TTL commands in hierarchy
+      clearCache(conn, null, tableName);
+      clearCache(conn, null, viewName);
+      clearCache(tenantConn, null, childView);
+      clearCache(tenantConn1, null, childView1);
+
+      TTLExpression expectedAlterTTl = useExpression
+        ? TTLExpressionFactory.create(DEFAULT_TTL_EXPRESSION_FOR_ALTER)
+        : TTLExpressionFactory.create(DEFAULT_TTL_FOR_ALTER);
+      // Assert TTL for each entity again with altered value
+      TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), expectedAlterTTl, viewName);
+      TestUtil.assertTTLValue(tenantConn.unwrap(PhoenixConnection.class), expectedAlterTTl,
+        childView);
+      TestUtil.assertTTLValue(tenantConn1.unwrap(PhoenixConnection.class), expectedAlterTTl,
+        childView1);
     }
+  }
 
-    @Test
-    public void testSettingTTLAsAlterTableCommand() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl(), new Properties());
-             PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);){
-            String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, false);
-            //Checking Default TTL in case of PhoenixTTLEnabled
-            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), TTL_EXPRESSION_NOT_DEFINED, tableName);
-
-            String ddl = "ALTER TABLE  " + tableName + " SET TTL = " + this.alterTTLDDLOption;
-            conn.createStatement().execute(ddl);
-            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), this.alterTTL, tableName);
-            //Asserting TTL should not be stored as CF Descriptor properties when
-            //phoenix.table.ttl.enabled is true
-            Admin admin = driver.getConnectionQueryServices(getUrl(), new Properties()).getAdmin();
-            ColumnFamilyDescriptor[] columnFamilies =
-                    admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
-            PTable pTable = pConn.getTableNoCache(tableName);
-            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), this.alterTTL, tableName);
-        }
+  private String createTableWithOrWithOutTTLAsItsProperty(Connection conn, boolean withTTL)
+    throws SQLException {
+    String tableName = generateUniqueName();
+    StringBuilder ddl = new StringBuilder();
+    ddl.append(String.format(DDL_TEMPLATE, tableName));
+    ddl.append(DEFAULT_DDL_OPTIONS);
+    if (withTTL) {
+      ddl.append(", TTL = " + this.defaultTTLDDLOption);
     }
+    conn.createStatement().execute(ddl.toString());
+    return tableName;
+  }
 
-    @Test
-    public void testSettingTTLForIndexes() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, true);
+  private String createIndexOnTableOrViewProvidedWithTTL(Connection conn,
+    String baseTableOrViewName, PTable.IndexType indexType, boolean withTTL) throws SQLException {
+    String ttl = (useExpression
+      ? String.format("'%s'", DEFAULT_TTL_EXPRESSION)
+      : String.valueOf(DEFAULT_TTL_FOR_CHILD));
+    switch (indexType) {
+      case LOCAL:
+        String localIndexName = baseTableOrViewName + "_Local_" + generateUniqueName();
+        conn.createStatement()
+          .execute("CREATE LOCAL INDEX " + localIndexName + " ON " + baseTableOrViewName
+            + " (COL2) INCLUDE (CREATION_TIME)" + (withTTL ? "TTL = " + ttl : ""));
+        return localIndexName;
 
-            //By default, Indexes should set TTL what Base Table has
-            createIndexOnTableOrViewProvidedWithTTL(conn, tableName, PTable.IndexType.LOCAL, false);
-            createIndexOnTableOrViewProvidedWithTTL(conn, tableName, PTable.IndexType.GLOBAL, false);
-            List<PTable> indexes = PhoenixRuntime.getTable(conn, tableName).getIndexes();
-            for (PTable index : indexes) {
-                TestUtil.assertTTLValue(conn, index, defaultTTL);
-            }
+      case GLOBAL:
+        String globalIndexName = baseTableOrViewName + "_Global_" + generateUniqueName();
+        conn.createStatement()
+          .execute("CREATE INDEX " + globalIndexName + " ON " + baseTableOrViewName
+            + " (COL2) INCLUDE (CREATION_TIME) " + (withTTL ? "TTL = " + ttl : ""));
+        return globalIndexName;
 
-            tableName = createTableWithOrWithOutTTLAsItsProperty(conn, false);
-
-            String localIndexName = createIndexOnTableOrViewProvidedWithTTL(conn, tableName, PTable.IndexType.LOCAL, false);
-            String globalIndexName = createIndexOnTableOrViewProvidedWithTTL(conn, tableName, PTable.IndexType.GLOBAL, false);
-            indexes = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, tableName)).getIndexes();
-            for (PTable index : indexes) {
-                TestUtil.assertTTLValue(conn, index, TTL_EXPRESSION_NOT_DEFINED);
-                assertTrue(Bytes.compareTo(
-                        index.getRowKeyMatcher(), HConstants.EMPTY_BYTE_ARRAY) == 0
-                );
-            }
-
-            //Test setting TTL as index property not allowed while creating them or setting them explicitly.
-            String ttl = (useExpression ?
-                    String.format("'%s'",DEFAULT_TTL_EXPRESSION) :
-                    String.valueOf(1000));
-            try {
-                conn.createStatement().execute("ALTER TABLE " + localIndexName + " SET TTL = " + ttl);
-                fail();
-            } catch (SQLException sqe) {
-                assertEquals("Should fail with cannot set or alter property for index",
-                        CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX.getErrorCode(), sqe.getErrorCode());
-            }
-
-            try {
-                conn.createStatement().execute("ALTER TABLE " + globalIndexName + " SET TTL = " + ttl);
-                fail();
-            } catch (SQLException sqe) {
-                assertEquals("Should fail with cannot set or alter property for index",
-                        CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX.getErrorCode(), sqe.getErrorCode());
-            }
-
-            try {
-                createIndexOnTableOrViewProvidedWithTTL(conn, tableName, PTable.IndexType.LOCAL, true);
-                fail();
-            } catch (SQLException sqe) {
-                assertEquals("Should fail with cannot set or alter property for index",
-                        CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX.getErrorCode(), sqe.getErrorCode());
-            }
-
-            try {
-                createIndexOnTableOrViewProvidedWithTTL(conn, tableName, PTable.IndexType.GLOBAL, true);
-                fail();
-            } catch (SQLException sqe) {
-                assertEquals("Should fail with cannot set or alter property for index",
-                        CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX.getErrorCode(), sqe.getErrorCode());
-            }
-        }
+      default:
+        return baseTableOrViewName;
     }
+  }
 
-    @Test
-    public void testConditionalTTLDDL() throws Exception {
-        if (!useExpression) {
-            return;
-        }
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            String tableName = generateUniqueName();
-            String ddl = "CREATE TABLE %s (ID1 VARCHAR NOT NULL, ID2 INTEGER NOT NULL, COL1 VARCHAR, COL2 DATE " +
-                    "CONSTRAINT PK PRIMARY KEY(ID1, ID2)) TTL = '%s'";
-            try {
-                conn.createStatement().execute(String.format(ddl, tableName, "ID2 = 12 OR UNKNOWN_COLUMN = 67"));
-                fail("Should have thrown ColumnNotFoundException");
-            } catch (SQLException e) {
-                assertTrue(e.getCause() instanceof ColumnNotFoundException);
-            }
-            String ttl = "ID2 = 34 AND COL2 > CURRENT_DATE() + 1000";
-            conn.createStatement().execute(String.format(ddl, tableName, ttl));
-            TTLExpression expected = TTLExpressionFactory.create(ttl);
-            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), expected, tableName);
+  private String createReadOnlyViewOnTableWithTTL(Connection conn, String baseTableName,
+    boolean withTTL) throws SQLException {
+    String ttl = (useExpression
+      ? String.format("'%s'", DEFAULT_TTL_EXPRESSION)
+      : String.valueOf(DEFAULT_TTL_FOR_CHILD));
+    String viewName = "VIEW_" + baseTableName + "_" + generateUniqueName();
+    conn.createStatement().execute(
+      "CREATE VIEW " + viewName + " (" + generateUniqueName() + " SMALLINT) as select * from "
+        + baseTableName + " where COL1 > 1 " + (withTTL ? "TTL = " + ttl : ""));
+    return viewName;
+  }
 
-            conn.createStatement().execute(String.format("ALTER TABLE %s SET TTL=NONE", tableName));
-            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), TTL_EXPRESSION_NOT_DEFINED, tableName);
+  private String createUpdatableViewOnTableWithTTL(Connection conn, String baseTableName,
+    boolean withTTL) throws SQLException {
+    String ttl = (useExpression
+      ? String.format("'%s'", DEFAULT_TTL_EXPRESSION)
+      : String.valueOf(DEFAULT_TTL_FOR_CHILD));
+    String viewName = "VIEW_" + baseTableName + "_" + generateUniqueName();
+    conn.createStatement().execute(
+      "CREATE VIEW " + viewName + " (" + generateUniqueName() + " SMALLINT) as select * from "
+        + baseTableName + " where COL1 = 1 " + (withTTL ? "TTL = " + ttl : ""));
+    return viewName;
+  }
 
-            try {
-                conn.createStatement().execute(String.format("ALTER TABLE %s SET TTL='%s'",
-                        tableName, "UNKNOWN_COLUMN=67"));
-                fail("Alter table should have thrown ColumnNotFoundException");
-            } catch (SQLException e) {
-                assertTrue(e.getCause() instanceof ColumnNotFoundException);
-            }
+  private String createViewOnViewWithTTL(Connection conn, String parentViewName, boolean withTTL)
+    throws SQLException {
+    String ttl = (useExpression
+      ? String.format("'%s'", DEFAULT_TTL_EXPRESSION)
+      : String.valueOf(DEFAULT_TTL_FOR_CHILD));
+    String childView = parentViewName + "_" + generateUniqueName();
+    conn.createStatement()
+      .execute("CREATE VIEW " + childView + " (E BIGINT, F BIGINT) AS SELECT * FROM "
+        + parentViewName + (withTTL ? " TTL = " + ttl : ""));
+    return childView;
+  }
 
-            String viewName = generateUniqueName();
-            ddl = "CREATE VIEW %s ( VINT SMALLINT) AS SELECT * FROM %s TTL='%s'";
-            ttl = "F.ID2 = 124";
-            try {
-                conn.createStatement().execute(String.format(ddl, viewName, tableName, ttl));
-                fail("Should have thrown ColumnFamilyNotFoundException");
-            } catch (SQLException e) {
-                assertTrue(e.getCause() instanceof ColumnFamilyNotFoundException);
-            }
+  /**
+   * TODO :- We are externally calling clearCache for Alter Table scenario, remove this after
+   * https://issues.apache.org/jira/browse/PHOENIX-7135 is completed.
+   */
 
-            ttl = "COL2 > CURRENT_DATE() + 200 AND VINT > 123";
-            conn.createStatement().execute(String.format(ddl, viewName, tableName, ttl));
-            expected = TTLExpressionFactory.create(ttl);
-            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), expected, viewName);
+  public static void clearCache(Connection tenantConnection, String schemaName, String tableName)
+    throws SQLException {
 
-            ttl = "COL2 > CURRENT_DATE() + 500 AND VINT > 123";
-            conn.createStatement().execute(String.format("ALTER VIEW %s SET TTL='%s'",
-                    viewName, ttl));
-            expected = TTLExpressionFactory.create(ttl);
-            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), expected, viewName);
-        }
-    }
+    PhoenixConnection currentConnection = tenantConnection.unwrap(PhoenixConnection.class);
+    PName tenantIdName = currentConnection.getTenantId();
+    String tenantId = tenantIdName == null ? "" : tenantIdName.getString();
 
-    @Test
-    public void testSettingTTLForViewsOnTableWithTTL() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            String tenantID = generateUniqueName().substring(1);
-            String tenantID1 = generateUniqueName().substring(1);
+    // Clear server side cache
+    currentConnection.unwrap(PhoenixConnection.class).getQueryServices().clearTableFromCache(
+      Bytes.toBytes(tenantId),
+      schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName),
+      Bytes.toBytes(tableName), 0);
 
-            Properties props = new Properties();
-            props.setProperty(TENANT_ID_ATTRIB, tenantID);
-            Connection tenantConn = DriverManager.getConnection(getUrl(), props);
-
-            Properties props1 = new Properties();
-            props1.setProperty(TENANT_ID_ATTRIB, tenantID1);
-            Connection tenantConn1 = DriverManager.getConnection(getUrl(), props1);
-
-            String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, true);
-            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), defaultTTL, tableName);
-
-            //Setting TTL on views is not allowed if Table already has TTL
-            try {
-                createUpdatableViewOnTableWithTTL(conn, tableName, true);
-                fail();
-            } catch (SQLException sqe) {
-                assertEquals("Should fail with TTL already defined in hierarchy",
-                        TTL_ALREADY_DEFINED_IN_HIERARCHY.getErrorCode(), sqe.getErrorCode());
-            }
-
-            //TTL is only supported for Table and Updatable Views
-            try {
-                createReadOnlyViewOnTableWithTTL(conn, tableName, true);
-                fail();
-            } catch (SQLException sqe) {
-                assertEquals("Should have failed with TTL supported on Table and Updatable" +
-                        "View only", TTL_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY.getErrorCode(), sqe.getErrorCode());
-            }
-
-            //View should have gotten TTL from parent table.
-            String viewName = createUpdatableViewOnTableWithTTL(conn, tableName, false);
-            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), defaultTTL, viewName);
-
-            //Child View's PTable gets TTL from parent View's PTable which gets from Table.
-            String childView = createViewOnViewWithTTL(tenantConn, viewName, false);
-            TestUtil.assertTTLValue(tenantConn.unwrap(PhoenixConnection.class), defaultTTL, childView);
-
-            String childView1 = createViewOnViewWithTTL(tenantConn1, viewName, false);
-            TestUtil.assertTTLValue(tenantConn1.unwrap(PhoenixConnection.class), defaultTTL, childView1);
-
-            createIndexOnTableOrViewProvidedWithTTL(conn, viewName, PTable.IndexType.GLOBAL,
-                    false);
-            createIndexOnTableOrViewProvidedWithTTL(conn, viewName, PTable.IndexType.LOCAL,
-                    false);
-
-            List<PTable> indexes = PhoenixRuntime.getTable(
-                    conn.unwrap(PhoenixConnection.class), viewName).getIndexes();
-
-            for (PTable index : indexes) {
-                TestUtil.assertTTLValue(conn, index, defaultTTL);
-            }
-
-            createIndexOnTableOrViewProvidedWithTTL(conn, tableName, PTable.IndexType.GLOBAL, false);
-            List<PTable> tIndexes = PhoenixRuntime.getTable(
-                    conn.unwrap(PhoenixConnection.class), tableName).getIndexes();
-
-            for (PTable index : tIndexes) {
-                TestUtil.assertTTLValue(conn, index, defaultTTL);
-            }
-        }
-    }
-
-    @Test
-    public void testAlteringTTLToNONEAndThenSettingAtAnotherLevel() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            String tenantID = generateUniqueName().substring(1);
-
-            Properties props = new Properties();
-            props.setProperty(TENANT_ID_ATTRIB, tenantID);
-            Connection tenantConn = DriverManager.getConnection(getUrl(), props);
-
-            String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, true);
-            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), defaultTTL, tableName);
-
-            //Setting TTL on views is not allowed if Table already has TTL
-            try {
-                createUpdatableViewOnTableWithTTL(conn, tableName, true);
-                fail();
-            } catch (SQLException sqe) {
-                assertEquals("Should fail with TTL already defined in hierarchy",
-                        TTL_ALREADY_DEFINED_IN_HIERARCHY.getErrorCode(), sqe.getErrorCode());
-            }
-
-            String ddl = "ALTER TABLE " + tableName + " SET TTL=NONE";
-            conn.createStatement().execute(ddl);
-
-            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class),
-                    TTL_EXPRESSION_NOT_DEFINED, tableName);
-
-            String viewName = createUpdatableViewOnTableWithTTL(conn, tableName, true);
-            TTLExpression expectedChildTTl = useExpression ?
-                    TTLExpressionFactory.create(DEFAULT_TTL_EXPRESSION) :
-                    TTLExpressionFactory.create(DEFAULT_TTL_FOR_CHILD);
-            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), expectedChildTTl, viewName);
-
-            try {
-                createViewOnViewWithTTL(tenantConn, viewName, true);
-                fail();
-            } catch (SQLException sqe) {
-                assertEquals("Should fail with TTL already defined in hierarchy",
-                        TTL_ALREADY_DEFINED_IN_HIERARCHY.getErrorCode(), sqe.getErrorCode());
-            }
-
-            String ttlAlter = (useExpression ?
-                    String.format("'%s'", DEFAULT_TTL_EXPRESSION_FOR_ALTER) :
-                    String.valueOf(DEFAULT_TTL_FOR_ALTER));
-            try {
-                ddl = "ALTER TABLE " + tableName + " SET TTL=" + ttlAlter;
-                conn.createStatement().execute(ddl);
-            } catch (SQLException sqe) {
-                assertEquals("Should fail with TTL already defined in hierarchy",
-                        TTL_ALREADY_DEFINED_IN_HIERARCHY.getErrorCode(), sqe.getErrorCode());
-            }
-
-            ddl = "ALTER VIEW " + viewName + " SET TTL=NONE";
-            conn.createStatement().execute(ddl);
-
-            String childView = createViewOnViewWithTTL(tenantConn, viewName, true);
-            TestUtil.assertTTLValue(tenantConn.unwrap(PhoenixConnection.class), expectedChildTTl, childView);
-
-            ddl = "ALTER VIEW " + childView + " SET TTL=NONE";
-            tenantConn.createStatement().execute(ddl);
-
-            TestUtil.assertTTLValue(tenantConn.unwrap(PhoenixConnection.class),
-                    TTL_EXPRESSION_NOT_DEFINED, childView);
-
-            ddl = "ALTER VIEW " + viewName + " SET TTL=" + ttlAlter;
-            conn.createStatement().execute(ddl);
-            TTLExpression expectedAlterTTl = useExpression ?
-                    TTLExpressionFactory.create(DEFAULT_TTL_EXPRESSION_FOR_ALTER) :
-                    TTLExpressionFactory.create(DEFAULT_TTL_FOR_ALTER);
-            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), expectedAlterTTl, viewName);
-        }
-    }
-
-    @Test
-    public void testAlteringTTLAtOneLevelAndCheckingAtAnotherLevel() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            String tenantID = generateUniqueName().substring(1);
-            String tenantID1 = generateUniqueName().substring(1);
-
-            Properties props = new Properties();
-            props.setProperty(TENANT_ID_ATTRIB, tenantID);
-            Connection tenantConn = DriverManager.getConnection(getUrl(), props);
-
-            Properties props1 = new Properties();
-            props1.setProperty(TENANT_ID_ATTRIB, tenantID1);
-            Connection tenantConn1 = DriverManager.getConnection(getUrl(), props1);
-
-            String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, true);
-            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), defaultTTL, tableName);
-
-            //View should have gotten TTL from parent table.
-            String viewName = createUpdatableViewOnTableWithTTL(conn, tableName, false);
-            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), defaultTTL, viewName);
-
-            //Child View's PTable gets TTL from parent View's PTable which gets from Table.
-            String childView = createViewOnViewWithTTL(tenantConn, viewName, false);
-            TestUtil.assertTTLValue(tenantConn.unwrap(PhoenixConnection.class), defaultTTL, childView);
-
-            String childView1 = createViewOnViewWithTTL(tenantConn1, viewName, false);
-            TestUtil.assertTTLValue(tenantConn1.unwrap(PhoenixConnection.class), defaultTTL, childView1);
-
-            String ttlAlter = (useExpression ?
-                    String.format("'%s'", DEFAULT_TTL_EXPRESSION_FOR_ALTER) :
-                    String.valueOf(DEFAULT_TTL_FOR_ALTER));
-            String alter = "ALTER TABLE " + tableName + " SET TTL = " + ttlAlter;
-            conn.createStatement().execute(alter);
-
-            //Clear Cache for all Tables to reflect Alter TTL commands in hierarchy
-            clearCache(conn, null, tableName);
-            clearCache(conn, null, viewName);
-            clearCache(tenantConn, null, childView);
-            clearCache(tenantConn1, null, childView1);
-
-            TTLExpression expectedAlterTTl = useExpression ?
-                    TTLExpressionFactory.create(DEFAULT_TTL_EXPRESSION_FOR_ALTER) :
-                    TTLExpressionFactory.create(DEFAULT_TTL_FOR_ALTER);
-            //Assert TTL for each entity again with altered value
-            TestUtil.assertTTLValue(conn.unwrap(PhoenixConnection.class), expectedAlterTTl, viewName);
-            TestUtil.assertTTLValue(tenantConn.unwrap(PhoenixConnection.class), expectedAlterTTl, childView);
-            TestUtil.assertTTLValue(tenantConn1.unwrap(PhoenixConnection.class), expectedAlterTTl, childView1);
-        }
-    }
-
-    private String createTableWithOrWithOutTTLAsItsProperty(Connection conn, boolean withTTL) throws SQLException {
-        String tableName = generateUniqueName();
-        StringBuilder ddl = new StringBuilder();
-        ddl.append(String.format(DDL_TEMPLATE, tableName));
-        ddl.append(DEFAULT_DDL_OPTIONS);
-        if (withTTL) {
-            ddl.append(", TTL = " + this.defaultTTLDDLOption);
-        }
-        conn.createStatement().execute(ddl.toString());
-        return tableName;
-    }
-
-    private String createIndexOnTableOrViewProvidedWithTTL(Connection conn, String baseTableOrViewName, PTable.IndexType indexType,
-                                                           boolean withTTL) throws SQLException {
-        String ttl = (useExpression ?
-                String.format("'%s'", DEFAULT_TTL_EXPRESSION) :
-                String.valueOf(DEFAULT_TTL_FOR_CHILD));
-        switch (indexType) {
-            case LOCAL:
-                String localIndexName = baseTableOrViewName + "_Local_" + generateUniqueName();
-                conn.createStatement().execute("CREATE LOCAL INDEX " + localIndexName + " ON " +
-                        baseTableOrViewName + " (COL2) INCLUDE (CREATION_TIME)" +
-                        (withTTL ? "TTL = " + ttl : ""));
-                return localIndexName;
-
-            case GLOBAL:
-                String globalIndexName = baseTableOrViewName + "_Global_" + generateUniqueName();
-                conn.createStatement().execute("CREATE INDEX " + globalIndexName + " ON " +
-                        baseTableOrViewName + " (COL2) INCLUDE (CREATION_TIME) " +
-                        (withTTL ? "TTL = " + ttl : ""));
-                return globalIndexName;
-
-            default:
-                return baseTableOrViewName;
-        }
-    }
-
-    private String createReadOnlyViewOnTableWithTTL(Connection conn, String baseTableName,
-                                            boolean withTTL) throws SQLException {
-        String ttl = (useExpression ?
-                String.format("'%s'", DEFAULT_TTL_EXPRESSION) :
-                String.valueOf(DEFAULT_TTL_FOR_CHILD));
-        String viewName = "VIEW_" + baseTableName + "_" + generateUniqueName();
-        conn.createStatement().execute("CREATE VIEW " + viewName
-                + " (" + generateUniqueName() + " SMALLINT) as select * from "
-                + baseTableName + " where COL1 > 1 "
-                + (withTTL ? "TTL = " + ttl  : "") );
-        return viewName;
-    }
-
-    private String createUpdatableViewOnTableWithTTL(Connection conn, String baseTableName,
-                                            boolean withTTL) throws SQLException {
-        String ttl = (useExpression ?
-                String.format("'%s'", DEFAULT_TTL_EXPRESSION) :
-                String.valueOf(DEFAULT_TTL_FOR_CHILD));
-        String viewName = "VIEW_" + baseTableName + "_" + generateUniqueName();
-        conn.createStatement().execute("CREATE VIEW " + viewName
-                + " (" + generateUniqueName() + " SMALLINT) as select * from "
-                + baseTableName + " where COL1 = 1 "
-                + (withTTL ? "TTL = " + ttl : "") );
-        return viewName;
-    }
-
-    private String createViewOnViewWithTTL(Connection conn, String parentViewName,
-                                           boolean withTTL) throws SQLException {
-        String ttl = (useExpression ?
-                String.format("'%s'", DEFAULT_TTL_EXPRESSION) :
-                String.valueOf(DEFAULT_TTL_FOR_CHILD));
-        String childView = parentViewName + "_" + generateUniqueName();
-        conn.createStatement().execute("CREATE VIEW " + childView +
-                " (E BIGINT, F BIGINT) AS SELECT * FROM " + parentViewName +
-                (withTTL ? " TTL = " + ttl : ""));
-        return childView;
-    }
-
-    /**
-     * TODO :- We are externally calling clearCache for Alter Table scenario, remove this after
-     * https://issues.apache.org/jira/browse/PHOENIX-7135 is completed.
-     * @throws SQLException
-     */
-
-    public static void clearCache(Connection tenantConnection, String schemaName, String tableName) throws SQLException {
-
-        PhoenixConnection currentConnection = tenantConnection.unwrap(PhoenixConnection.class);
-        PName tenantIdName = currentConnection.getTenantId();
-        String tenantId = tenantIdName == null ? "" : tenantIdName.getString();
-
-        // Clear server side cache
-        currentConnection.unwrap(PhoenixConnection.class).getQueryServices().clearTableFromCache(
-                Bytes.toBytes(tenantId), schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY :
-                        Bytes.toBytes(schemaName), Bytes.toBytes(tableName), 0);
-
-        // Clear connection cache
-        currentConnection.getMetaDataCache().removeTable(currentConnection.getTenantId(),
-                String.format("%s.%s", schemaName, tableName), null, 0);
-    }
+    // Clear connection cache
+    currentConnection.getMetaDataCache().removeTable(currentConnection.getTenantId(),
+      String.format("%s.%s", schemaName, tableName), null, 0);
+  }
 }

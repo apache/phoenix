@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.expression.util.bson;
 
 /**
@@ -23,11 +22,11 @@ package org.apache.phoenix.expression.util.bson;
  */
 public class BsonConditionInvalidArgumentException extends IllegalArgumentException {
 
-    public BsonConditionInvalidArgumentException(String message) {
-        super(message);
-    }
+  public BsonConditionInvalidArgumentException(String message) {
+    super(message);
+  }
 
-    public BsonConditionInvalidArgumentException(String message, Throwable cause) {
-        super(message, cause);
-    }
+  public BsonConditionInvalidArgumentException(String message, Throwable cause) {
+    super(message, cause);
+  }
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,27 +21,23 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 
 /**
- * 
  * Exception thrown when an invalid or illegal data value is found
- *
- * 
  * @since 0.1
  */
 public class IllegalDataException extends ConstraintViolationException {
-	private static final long serialVersionUID = 1L;
+  private static final long serialVersionUID = 1L;
 
-    public IllegalDataException() {
-        this((String)null);
-    }
-    
-    public IllegalDataException(String message) {
-        super(new SQLExceptionInfo.Builder(
-                SQLExceptionCode.ILLEGAL_DATA).setMessage(message)
-                .build().buildException());
-    }
+  public IllegalDataException() {
+    this((String) null);
+  }
 
-    public IllegalDataException(Throwable cause) {
-        super(cause);  // Already wrapped - don't rewrap
-    }
-    
+  public IllegalDataException(String message) {
+    super(new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA).setMessage(message).build()
+      .buildException());
+  }
+
+  public IllegalDataException(Throwable cause) {
+    super(cause); // Already wrapped - don't rewrap
+  }
+
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,64 +18,63 @@
 package org.apache.phoenix.schema.tuple;
 
 import java.util.List;
-
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
 public class DelegateTuple implements Tuple {
-    private final Tuple delegate;
-    
-    public DelegateTuple(Tuple delegate) {
-        this.delegate = delegate;
-    }
-    
-    @Override
-    public int size() {
-        return delegate.size();
-    }
+  private final Tuple delegate;
 
-    @Override
-    public boolean isImmutable() {
-        return delegate.isImmutable();
-    }
+  public DelegateTuple(Tuple delegate) {
+    this.delegate = delegate;
+  }
 
-    @Override
-    public void getKey(ImmutableBytesWritable ptr) {
-        delegate.getKey(ptr);
-    }
+  @Override
+  public int size() {
+    return delegate.size();
+  }
 
-    @Override
-    public Cell mergeWithDynColsListBytesAndGetValue(int index, byte[] dynColsList) {
-        return delegate.mergeWithDynColsListBytesAndGetValue(index, dynColsList);
-    }
+  @Override
+  public boolean isImmutable() {
+    return delegate.isImmutable();
+  }
 
-    @Override
-    public Cell getValue(int index) {
-        return delegate.getValue(index);
-    }
+  @Override
+  public void getKey(ImmutableBytesWritable ptr) {
+    delegate.getKey(ptr);
+  }
 
-    @Override
-    public Cell getValue(byte[] family, byte[] qualifier) {
-        return delegate.getValue(family, qualifier);
-    }
+  @Override
+  public Cell mergeWithDynColsListBytesAndGetValue(int index, byte[] dynColsList) {
+    return delegate.mergeWithDynColsListBytesAndGetValue(index, dynColsList);
+  }
 
-    @Override
-    public boolean getValue(byte[] family, byte[] qualifier, ImmutableBytesWritable ptr) {
-        return delegate.getValue(family, qualifier, ptr);
-    }
+  @Override
+  public Cell getValue(int index) {
+    return delegate.getValue(index);
+  }
 
-    @Override
-    public long getSequenceValue(int index) {
-        return delegate.getSequenceValue(index);
-    }
+  @Override
+  public Cell getValue(byte[] family, byte[] qualifier) {
+    return delegate.getValue(family, qualifier);
+  }
 
-    @Override
-    public void setKeyValues(List<Cell> values) {
-        delegate.setKeyValues(values);
-    }
+  @Override
+  public boolean getValue(byte[] family, byte[] qualifier, ImmutableBytesWritable ptr) {
+    return delegate.getValue(family, qualifier, ptr);
+  }
 
-    @Override
-    public long getSerializedSize() {
-        return delegate.getSerializedSize();
-    }
+  @Override
+  public long getSequenceValue(int index) {
+    return delegate.getSequenceValue(index);
+  }
+
+  @Override
+  public void setKeyValues(List<Cell> values) {
+    delegate.setKeyValues(values);
+  }
+
+  @Override
+  public long getSerializedSize() {
+    return delegate.getSerializedSize();
+  }
 }

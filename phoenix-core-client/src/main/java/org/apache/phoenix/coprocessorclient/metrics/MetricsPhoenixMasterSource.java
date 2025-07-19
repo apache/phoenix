@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.coprocessorclient.metrics;
 
 import org.apache.hadoop.hbase.metrics.BaseSource;
@@ -25,36 +24,36 @@ import org.apache.hadoop.hbase.metrics.BaseSource;
  */
 public interface MetricsPhoenixMasterSource extends BaseSource {
 
-    String METRICS_NAME = "PhoenixMasterObserver";
-    String METRICS_CONTEXT = "phoenix";
-    String METRICS_DESCRIPTION = "Metrics about the Phoenix Master Coprocessor";
-    String METRICS_JMX_CONTEXT = "Master,sub=" + METRICS_NAME;
+  String METRICS_NAME = "PhoenixMasterObserver";
+  String METRICS_CONTEXT = "phoenix";
+  String METRICS_DESCRIPTION = "Metrics about the Phoenix Master Coprocessor";
+  String METRICS_JMX_CONTEXT = "Master,sub=" + METRICS_NAME;
 
-    String PHOENIX_POST_SPLIT_PARTITION_UPDATE_FAILURES = "phoenixPostSplitPartitionUpdateFailures";
-    String PHOENIX_POST_SPLIT_PARTITION_UPDATE_FAILURES_DESC =
-            "The number of failures during partition metadata updates after region splits";
+  String PHOENIX_POST_SPLIT_PARTITION_UPDATE_FAILURES = "phoenixPostSplitPartitionUpdateFailures";
+  String PHOENIX_POST_SPLIT_PARTITION_UPDATE_FAILURES_DESC =
+    "The number of failures during partition metadata updates after region splits";
 
-    String PHOENIX_POST_MERGE_PARTITION_UPDATE_FAILURES = "phoenixPostMergePartitionUpdateFailures";
-    String PHOENIX_POST_MERGE_PARTITION_UPDATE_FAILURES_DESC =
-            "The number of failures during partition metadata updates after region merges";
+  String PHOENIX_POST_MERGE_PARTITION_UPDATE_FAILURES = "phoenixPostMergePartitionUpdateFailures";
+  String PHOENIX_POST_MERGE_PARTITION_UPDATE_FAILURES_DESC =
+    "The number of failures during partition metadata updates after region merges";
 
-    /**
-     * Return the number of failures during partition metadata updates after region splits.
-     */
-    long getPostSplitPartitionUpdateFailureCount();
+  /**
+   * Return the number of failures during partition metadata updates after region splits.
+   */
+  long getPostSplitPartitionUpdateFailureCount();
 
-    /**
-     * Increment the number of failures during partition metadata updates after region splits.
-     */
-    void incrementPostSplitPartitionUpdateFailureCount();
+  /**
+   * Increment the number of failures during partition metadata updates after region splits.
+   */
+  void incrementPostSplitPartitionUpdateFailureCount();
 
-    /**
-     * Return the number of failures during partition metadata updates after region merges.
-     */
-    long getPostMergePartitionUpdateFailureCount();
+  /**
+   * Return the number of failures during partition metadata updates after region merges.
+   */
+  long getPostMergePartitionUpdateFailureCount();
 
-    /**
-     * Increment the number of failures during partition metadata updates after region merges.
-     */
-    void incrementPostMergePartitionUpdateFailureCount();
-} 
+  /**
+   * Increment the number of failures during partition metadata updates after region merges.
+   */
+  void incrementPostMergePartitionUpdateFailureCount();
+}
