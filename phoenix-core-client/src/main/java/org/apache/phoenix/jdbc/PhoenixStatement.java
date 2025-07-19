@@ -295,6 +295,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
   // Caching per Statement
   protected final Calendar localCalendar = Calendar.getInstance();
   private boolean validateLastDdlTimestamp;
+  private long sqlQueryParsingTime = 0;
 
   public PhoenixStatement(PhoenixConnection connection) {
     this.connection = connection;
@@ -310,6 +311,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
   private int getDefaultQueryTimeoutMillis() {
     return connection.getQueryServices().getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB,
       QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
+  }
+
+  private void setSqlQueryParsingTime(long time) {
+    this.sqlQueryParsingTime = time;
   }
 
   public PhoenixResultSet newResultSet(ResultIterator iterator, RowProjector projector,
@@ -416,6 +421,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                 context.getScan() != null ? context.getScan().toString() : null);
             }
             overallQuerymetrics.startQuery();
+            overallQuerymetrics.setQueryParsingTimeMS( PhoenixStatement.this.sqlQueryParsingTime);
             rs = newResultSet(resultIterator, plan.getProjector(), plan.getContext());
             // newResultset sets lastResultset
             // ExecutableShowCreateTable/ExecutableShowTablesStatement/ExecutableShowSchemasStatement
@@ -605,6 +611,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                 throw new UpgradeRequiredException();
               }
               state = connection.getMutationState();
+              state.setMutationQueryParsingtime(PhoenixStatement.this.sqlQueryParsingTime);
               isUpsert = stmt instanceof ExecutableUpsertStatement;
               isDelete = stmt instanceof ExecutableDeleteStatement;
               if (
@@ -2456,6 +2463,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
   }
 
   protected CompilableStatement parseStatement(String sql) throws SQLException {
+    long startQueryParsingTime = EnvironmentEdgeManager.currentTimeMillis();
     PhoenixStatementParser parser = null;
     try {
       parser = new PhoenixStatementParser(sql, new ExecutableNodeFactory());
@@ -2463,6 +2471,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       throw ClientUtil.parseServerException(e);
     }
     CompilableStatement statement = parser.parseStatement();
+    setSqlQueryParsingTime(EnvironmentEdgeManager.currentTimeMillis() - startQueryParsingTime);
     return statement;
   }
 
