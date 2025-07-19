@@ -2171,4 +2171,206 @@ public class ComparisonExpressionUtilsTest {
     return RawBsonDocument.parse(json);
   }
 
+  @Test
+  public void testSizeFunction() {
+    RawBsonDocument rawBsonDocument = getSizeTestDocument();
+    RawBsonDocument compareValues = getSizeCompareValDocument();
+
+    // Test string size - should return string length
+    assertTrue(SQLComparisonExpressionUtils
+      .evaluateConditionExpression("size(ShortString) = :Size5", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils
+      .evaluateConditionExpression("size(LongString) = :Size24", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils
+      .evaluateConditionExpression("size(EmptyString) = :Size0", rawBsonDocument, compareValues));
+
+    // Test array size - should return number of elements
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression("size(SmallArray) = :Size3",
+      rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression("size(LargeArray) = :Size5",
+      rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression("size(EmptyArray) = :Size0",
+      rawBsonDocument, compareValues));
+
+    // Test document size - should return number of fields
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression("size(SmallDoc) = :Size2",
+      rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression("size(LargeDoc) = :Size4",
+      rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression("size(EmptyDoc) = :Size0",
+      rawBsonDocument, compareValues));
+
+    // Test set size - should return number of elements in set
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression("size(StringSet) = :Size3",
+      rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression("size(NumberSet) = :Size4",
+      rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression("size(EmptySet) = :Size0",
+      rawBsonDocument, compareValues));
+
+    // Test binary size - should return byte array length
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression("size(BinaryData) = :Size5",
+      rawBsonDocument, compareValues));
+
+    // Test nested field sizes
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "size(NestedDoc.NestedString) = :Size12", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "size(NestedDoc.NestedArray) = :Size3", rawBsonDocument, compareValues));
+
+    // Test non-existent field - should return 0
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "size(NonExistentField) = :Size0", rawBsonDocument, compareValues));
+
+    // Test size with comparison operators
+    assertTrue(SQLComparisonExpressionUtils
+      .evaluateConditionExpression("size(LongString) > :Size20", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils
+      .evaluateConditionExpression("size(LongString) >= :Size24", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils
+      .evaluateConditionExpression("size(ShortString) < :Size10", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils
+      .evaluateConditionExpression("size(ShortString) <= :Size5", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils
+      .evaluateConditionExpression("size(ShortString) <> :Size10", rawBsonDocument, compareValues));
+
+    // Test size with IN operator
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "size(SmallArray) IN (:Size3, :Size4, :Size5)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "size(SmallArray) IN (:Size1, :Size2, :Size4)", rawBsonDocument, compareValues));
+
+    // Test size in complex boolean expressions
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "size(ShortString) = :Size5 AND size(SmallArray) = :Size3", rawBsonDocument, compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "size(EmptyString) = :Size0 OR size(LargeArray) = :Size5", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "size(ShortString) = :Size10 AND size(SmallArray) = :Size3", rawBsonDocument, compareValues));
+
+    // Test NOT with size
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "NOT size(ShortString) = :Size10", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "NOT size(ShortString) = :Size5", rawBsonDocument, compareValues));
+
+    // Test size combined with other functions
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "size(ShortString) = :Size5 AND field_exists(ShortString)", rawBsonDocument, compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "size(NonExistentField) = :Size0 AND field_not_exists(NonExistentField)", rawBsonDocument,
+      compareValues));
+
+    // Test size with BETWEEN
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "size(LongString) BETWEEN :Size20 AND :Size30", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "size(ShortString) BETWEEN :Size10 AND :Size20", rawBsonDocument, compareValues));
+
+    // Test negative cases - wrong size comparisons
+    assertFalse(SQLComparisonExpressionUtils
+      .evaluateConditionExpression("size(ShortString) = :Size10", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils
+      .evaluateConditionExpression("size(EmptyArray) = :Size5", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression("size(SmallDoc) = :Size10",
+      rawBsonDocument, compareValues));
+
+    // Test array element size
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "size(ArrayOfStrings[0]) = :Size6", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "size(ArrayOfStrings[1]) = :Size5", rawBsonDocument, compareValues));
+
+    // Test size comparison with specific values (size() only as LHS)
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "size(ArrayOfStrings[0]) > :Size5", rawBsonDocument, compareValues)); // "String" (6) > 5
+
+    // Test edge cases with very large sizes
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "size(VeryLargeArray) = :Size100", rawBsonDocument, compareValues));
+
+    // Test size comparisons with specific values (size() only as LHS)
+    assertTrue(SQLComparisonExpressionUtils
+      .evaluateConditionExpression("size(ShortString) < :Size24", rawBsonDocument, compareValues)); // "Hello"
+    // (5)
+    // <
+    // 24
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression("size(EmptyArray) < :Size3",
+      rawBsonDocument, compareValues)); // 0 < 3
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression("size(SmallDoc) < :Size4",
+      rawBsonDocument, compareValues)); // 2 < 4
+
+    // Test error cases for unsupported types
+    try {
+      SQLComparisonExpressionUtils.evaluateConditionExpression("size(NumberField) = :Size5",
+        rawBsonDocument, compareValues);
+      fail("Expected BsonConditionInvalidArgumentException for number field");
+    } catch (BsonConditionInvalidArgumentException e) {
+      // expected
+    }
+
+    try {
+      SQLComparisonExpressionUtils.evaluateConditionExpression("size(BooleanField) = :Size1",
+        rawBsonDocument, compareValues);
+      fail("Expected BsonConditionInvalidArgumentException for boolean field");
+    } catch (BsonConditionInvalidArgumentException e) {
+      // expected
+    }
+
+    try {
+      SQLComparisonExpressionUtils.evaluateConditionExpression("size(NullField) = :Size0",
+        rawBsonDocument, compareValues);
+      fail("Expected BsonConditionInvalidArgumentException for null field");
+    } catch (BsonConditionInvalidArgumentException e) {
+      // expected
+    }
+  }
+
+  private static RawBsonDocument getSizeTestDocument() {
+    String json = "{\n" + "  \"ShortString\" : \"Hello\",\n"
+      + "  \"LongString\" : \"This is a longer string!\",\n" + "  \"EmptyString\" : \"\",\n"
+      + "  \"SmallArray\" : [ 1, 2, 3 ],\n"
+      + "  \"LargeArray\" : [ \"a\", \"b\", \"c\", \"d\", \"e\" ],\n" + "  \"EmptyArray\" : [ ],\n"
+      + "  \"SmallDoc\" : {\n" + "    \"field1\" : \"value1\",\n" + "    \"field2\" : \"value2\"\n"
+      + "  },\n" + "  \"LargeDoc\" : {\n" + "    \"name\" : \"John\",\n" + "    \"age\" : 30,\n"
+      + "    \"city\" : \"New York\",\n" + "    \"active\" : true\n" + "  },\n"
+      + "  \"EmptyDoc\" : { },\n"
+      + "  \"StringSet\" : { \"$set\" : [ \"apple\", \"banana\", \"cherry\" ] },\n"
+      + "  \"NumberSet\" : { \"$set\" : [ 10, 20, 30, 40 ] },\n"
+      + "  \"EmptySet\" : { \"$set\" : [ ] },\n" + "  \"BinaryData\" : {\n"
+      + "    \"$binary\" : {\n" + "      \"base64\" : \"SGVsbG8=\",\n"
+      + "      \"subType\" : \"00\"\n" + "    }\n" + "  },\n" + "  \"NestedDoc\" : {\n"
+      + "    \"NestedString\" : \"Nested Value\",\n"
+      + "    \"NestedArray\" : [ \"x\", \"y\", \"z\" ]\n" + "  },\n"
+      + "  \"ArrayOfStrings\" : [ \"String\", \"World\" ],\n" + "  \"NumberField\" : 42,\n"
+      + "  \"BooleanField\" : true,\n" + "  \"NullField\" : null,\n" + "  \"VeryLargeArray\" : [ ";
+
+    // Generate a large array with 100 elements
+    for (int i = 0; i < 100; i++) {
+      json += i;
+      if (i < 99) {
+        json += ", ";
+      }
+    }
+    json += " ]\n}";
+
+    return RawBsonDocument.parse(json);
+  }
+
+  private static RawBsonDocument getSizeCompareValDocument() {
+    String json = "{\n" + "  \":Size0\" : 0,\n" + "  \":Size1\" : 1,\n" + "  \":Size2\" : 2,\n"
+      + "  \":Size3\" : 3,\n" + "  \":Size4\" : 4,\n" + "  \":Size5\" : 5,\n"
+      + "  \":Size6\" : 6,\n" + "  \":Size10\" : 10,\n" + "  \":Size12\" : 12,\n"
+      + "  \":Size20\" : 20,\n" + "  \":Size24\" : 24,\n" + "  \":Size30\" : 30,\n"
+      + "  \":Size100\" : 100\n" + "}";
+    return RawBsonDocument.parse(json);
+  }
+
 }
