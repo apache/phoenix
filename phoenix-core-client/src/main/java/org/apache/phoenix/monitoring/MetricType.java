@@ -209,6 +209,7 @@ public enum MetricType {
   QUERY_OPTIMIZER_TIME_MS("qot", "Time elapsed in query optimizer", LogLevel.INFO, PLong.INSTANCE),
   QUERY_RESULT_ITR_TIME_MS("qrt", "Time elapsed in query result iterator", LogLevel.INFO,
     PLong.INSTANCE),
+  SQL_QUERY_PARSING_TIME_MS("pt", "Time elapsed in query parsing", LogLevel.OFF, PLong.INSTANCE),
   OPEN_PHOENIX_CONNECTIONS_COUNTER("o", "Number of open phoenix connections", LogLevel.OFF,
     PLong.INSTANCE),
   OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER("io", "Number of open internal phoenix connections",
