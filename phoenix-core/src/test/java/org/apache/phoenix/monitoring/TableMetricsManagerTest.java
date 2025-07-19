@@ -103,6 +103,59 @@ public class TableMetricsManagerTest {
     TableLevelMetricsTestData testData = new TableLevelMetricsTestData();
     populateMetrics();
 
+<<<<<<< HEAD
+        QueryServicesOptions mockOptions = Mockito.mock(QueryServicesOptions.class);
+        Mockito.doReturn(true).when(mockOptions).isTableLevelMetricsEnabled();
+        Mockito.doReturn(tableName).when(mockOptions).getAllowedListTableNames();
+        Mockito.doReturn(conf).when(mockOptions).getConfiguration();
+        TableMetricsManager tableMetricsManager = new TableMetricsManager(mockOptions);
+        TableMetricsManager.setInstance(tableMetricsManager);
+
+        TableMetricsManager.updateLatencyHistogramForMutations(tableName, 1, true);
+        MutationMetricQueue.MutationMetric metric = new MutationMetricQueue.MutationMetric(
+                0L, 5L, 0L, 0L, 0L,0L,
+                0L, 1L, 0L, 5L, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
+        TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName, metric.getTotalMutationsSizeBytes().getValue(), true);
+
+        TableMetricsManager.updateLatencyHistogramForMutations(tableName, 2, true);
+        metric = new MutationMetricQueue.MutationMetric(0L, 10L, 0L, 0L, 0L,0L,
+                0L, 1L, 0L, 10L, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
+        TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName, metric.getTotalMutationsSizeBytes().getValue(), true);
+
+        TableMetricsManager.updateLatencyHistogramForMutations(tableName, 4, true);
+        metric = new MutationMetricQueue.MutationMetric(0L, 50L, 0L, 0L, 0L,0L,
+                0L, 1L, 0L, 50L, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
+        TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName, metric.getTotalMutationsSizeBytes().getValue(), true);
+
+        TableMetricsManager.updateLatencyHistogramForMutations(tableName, 5, true);
+        metric = new MutationMetricQueue.MutationMetric(0L, 100L, 0L, 0L, 0L,0L,
+                0L, 1L, 0L, 100L, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
+        TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName, metric.getTotalMutationsSizeBytes().getValue(), true);
+
+        TableMetricsManager.updateLatencyHistogramForMutations(tableName, 6, true);
+        metric = new MutationMetricQueue.MutationMetric(0L, 500L, 0L, 0L, 0L,0L,
+                0L, 1L, 0L, 500L, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
+        TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName, metric.getTotalMutationsSizeBytes().getValue(), true);
+
+        TableMetricsManager.updateLatencyHistogramForMutations(tableName, 8, true);
+        metric = new MutationMetricQueue.MutationMetric(0L, 1000L, 0L, 0L, 0L,0L,
+                0L, 1L, 0L, 1000L, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
+        TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName, metric.getTotalMutationsSizeBytes().getValue(), true);
+
+
+        // Generate distribution map from histogram snapshots.
+        LatencyHistogram latencyHistogram =
+                TableMetricsManager.getUpsertLatencyHistogramForTable(tableName);
+        SizeHistogram sizeHistogram = TableMetricsManager.getUpsertSizeHistogramForTable(tableName);
+
+        Map<String, Long> latencyMap = latencyHistogram.getRangeHistogramDistribution().getRangeDistributionMap();
+        Map<String, Long> sizeMap = sizeHistogram.getRangeHistogramDistribution().getRangeDistributionMap();
+        for (Long count: latencyMap.values()) {
+            Assert.assertEquals(new Long(2), count);
+        }
+        for (Long count: sizeMap.values()) {
+            Assert.assertEquals(new Long(2), count);
+=======
     ExecutorService executorService =
       Executors.newFixedThreadPool(tableNames.length, new ThreadFactory() {
         @Override
@@ -111,6 +164,7 @@ public class TableMetricsManagerTest {
           t.setDaemon(true);
           t.setPriority(Thread.MIN_PRIORITY);
           return t;
+>>>>>>> upstream/master
         }
       });
     List<Future<?>> futureList = Lists.newArrayListWithExpectedSize(tableNames.length);
@@ -238,6 +292,38 @@ public class TableMetricsManagerTest {
     conf.set(QueryServices.PHOENIX_HISTOGRAM_LATENCY_RANGES, "2,5,8");
     conf.set(QueryServices.PHOENIX_HISTOGRAM_SIZE_RANGES, "10, 100, 1000");
 
+<<<<<<< HEAD
+        TableMetricsManager.updateLatencyHistogramForMutations(tableName, 1, false);
+        MutationMetricQueue.MutationMetric metric = new MutationMetricQueue.MutationMetric(
+                0L, 0L, 5L, 0L, 0L, 0L,
+                0L, 0L, 1L, 5L, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
+        TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName, metric.getTotalMutationsSizeBytes().getValue(), false);
+
+        TableMetricsManager.updateLatencyHistogramForMutations(tableName, 2, false);
+        metric = new MutationMetricQueue.MutationMetric(0L, 0L, 10L, 0L, 0L, 0L,
+                0L, 0L, 1L, 10L, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
+        TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName, metric.getTotalMutationsSizeBytes().getValue(), false);
+
+        TableMetricsManager.updateLatencyHistogramForMutations(tableName, 4, false);
+        metric = new MutationMetricQueue.MutationMetric(0L, 0L, 50L, 0L, 0L, 0L,
+                0L, 0L, 1L, 50L, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
+        TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName, metric.getTotalMutationsSizeBytes().getValue(), false);
+
+        TableMetricsManager.updateLatencyHistogramForMutations(tableName, 5,false);
+        metric = new MutationMetricQueue.MutationMetric(0L, 0L, 100L, 0L, 0L, 0L,
+                0L, 0L, 1L, 100L, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
+        TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName, metric.getTotalMutationsSizeBytes().getValue(), false);
+
+        TableMetricsManager.updateLatencyHistogramForMutations(tableName, 6,false);
+        metric = new MutationMetricQueue.MutationMetric(0L, 0L, 500L, 0L, 0L, 0L,
+                0L, 0L, 1L, 500L, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
+        TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName, metric.getTotalMutationsSizeBytes().getValue(), false);
+
+        TableMetricsManager.updateLatencyHistogramForMutations(tableName, 8, false);
+        metric = new MutationMetricQueue.MutationMetric(0L, 0L, 1000L, 0L, 0L, 0L,
+                0L, 0L, 1L, 1000L, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
+        TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName, metric.getTotalMutationsSizeBytes().getValue(), false);
+=======
     QueryServicesOptions mockOptions = Mockito.mock(QueryServicesOptions.class);
     Mockito.doReturn(true).when(mockOptions).isTableLevelMetricsEnabled();
     Mockito.doReturn(tableName).when(mockOptions).getAllowedListTableNames();
@@ -274,6 +360,7 @@ public class TableMetricsManagerTest {
       0L, 0L, 0L, 0L, 0L);
     TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName,
       metric.getTotalMutationsSizeBytes().getValue(), true);
+>>>>>>> upstream/master
 
     TableMetricsManager.updateLatencyHistogramForMutations(tableName, 8, true);
     metric = new MutationMetricQueue.MutationMetric(0L, 1000L, 0L, 0L, 0L, 0L, 0L, 1L, 0L, 1000L,

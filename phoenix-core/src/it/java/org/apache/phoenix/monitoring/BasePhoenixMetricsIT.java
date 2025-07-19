@@ -227,6 +227,134 @@ public abstract class BasePhoenixMetricsIT extends BaseTest {
       assertTrue(deleteCommitTimeCounterPresent);
       assertTrue(mutationBatchCounterPresent);
     }
+<<<<<<< HEAD
+
+    static void assertMutationMetrics(String tableName, int numRows, boolean isUpsert,
+            Map<String, Map<MetricType, Long>> mutationMetrics) {
+        for (Map.Entry<String, Map<MetricType, Long>> entry : mutationMetrics.entrySet()) {
+            String t = entry.getKey();
+            assertEquals("Table names didn't match!", tableName, t);
+            Map<MetricType, Long> p = entry.getValue();
+
+            assertEquals("There should have been eighteen metrics", 18, p.size());
+
+            boolean mutationBatchSizePresent = false;
+            boolean mutationCommitTimePresent = false;
+            boolean mutationBytesPresent = false;
+            boolean mutationBatchFailedPresent = false;
+            boolean upsertBatchFailedSizePresent = false;
+            boolean deleteBatchFailedSizePresent = false;
+            boolean upsertBatchFailedCounterPresent = false;
+            boolean deleteBatchFailedCounterPresent = false;
+            boolean deleteMutationBytesPresent = false;
+            boolean upsertMutationBytesPresent = false;
+            boolean indexCommitFailureSizePresent = false;
+            boolean deleteMutationSqlCounterPresent = false;
+            boolean upsertMutationSqlCounterPresent = false;
+            boolean upsertCommitTimeCounterPresent = false;
+            boolean deleteCommitTimeCounterPresent = false;
+            boolean mutationBatchCounterPresent = false;
+            for (Map.Entry<MetricType, Long> metric : p.entrySet()) {
+                MetricType metricType = metric.getKey();
+                long metricValue = metric.getValue();
+                if (metricType.equals(MetricType.MUTATION_BATCH_SIZE)) {
+                    assertEquals("Mutation batch sizes didn't match!", numRows, metricValue);
+                    mutationBatchSizePresent = true;
+                } else if (metricType.equals(MUTATION_COMMIT_TIME)) {
+                    assertTrue("Mutation commit time should be greater than zero", metricValue > 0);
+                    mutationCommitTimePresent = true;
+                } else if (metricType.equals(MetricType.MUTATION_BYTES)) {
+                    assertTrue("Mutation bytes size should be greater than zero", metricValue > 0);
+                    mutationBytesPresent = true;
+                } else if (metricType.equals(MetricType.MUTATION_BATCH_FAILED_SIZE)) {
+                    assertEquals("Zero failed mutations expected", 0, metricValue);
+                    mutationBatchFailedPresent = true;
+                } else if (metricType.equals(UPSERT_BATCH_FAILED_SIZE)) {
+                    assertEquals("Zero failed upsert mutations size expected", 0, metricValue);
+                    upsertBatchFailedSizePresent = true;
+                } else if (metricType.equals(DELETE_BATCH_FAILED_SIZE)) {
+                    assertEquals("Zero failed delete mutations size expected", 0, metricValue);
+                    deleteBatchFailedSizePresent = true;
+                } else if (metricType.equals(UPSERT_BATCH_FAILED_COUNTER)) {
+                    assertEquals("Zero failed upsert mutations counter expected", 0, metricValue);
+                    upsertBatchFailedCounterPresent = true;
+                } else if (metricType.equals(DELETE_BATCH_FAILED_COUNTER)) {
+                    assertEquals("Zero failed delete mutations counter expected", 0, metricValue);
+                    deleteBatchFailedCounterPresent = true;
+                } else if (metricType.equals(MetricType.DELETE_MUTATION_BYTES)) {
+                    if (isUpsert) {
+                        assertEquals("Zero delete mutation bytes size expected", 0, metricValue);
+                    } else {
+                        assertTrue("Delete mutation bytes size should be greater than zero", metricValue > 0);
+                    }
+                    deleteMutationBytesPresent = true;
+                } else if (metricType.equals(MetricType.UPSERT_MUTATION_BYTES)) {
+                    if (isUpsert) {
+                        assertTrue("Upsert mutation bytes size should be greater than zero", metricValue > 0);
+                    } else {
+                        assertEquals("Zero Upsert mutation bytes size expected", 0, metricValue);
+                    }
+                    upsertMutationBytesPresent = true;
+                } else if (metricType.equals(MetricType.INDEX_COMMIT_FAILURE_SIZE)) {
+                    assertEquals("Zero index commit failures expected", 0, metricValue);
+                    indexCommitFailureSizePresent = true;
+                } else if (metricType.equals(MetricType.DELETE_MUTATION_SQL_COUNTER)) {
+                    if (isUpsert) {
+                        assertEquals("Zero delete mutations sql counter expected", 0, metricValue);
+                    } else {
+                        assertTrue("Delete mutations sql counter should be greater than zero", metricValue > 0);
+                    }
+                    deleteMutationSqlCounterPresent = true;
+                } else if (metricType.equals(MetricType.UPSERT_MUTATION_SQL_COUNTER)) {
+                    if (isUpsert) {
+                        assertTrue("Upsert mutation sql counter should be greater than zero", metricValue > 0);
+                    } else {
+                        assertEquals("Zero upsert mutations sql counter expected", 0, metricValue);
+                    }
+                    upsertMutationSqlCounterPresent = true;
+                } else if (metricType.equals(MetricType.UPSERT_COMMIT_TIME)) {
+                    if (isUpsert) {
+                        assertTrue("Upsert commit time counter should be greater than zero", metricValue > 0);
+                    } else {
+                        assertEquals("Zero upsert commit time counter expected", 0, metricValue);
+                    }
+                    upsertCommitTimeCounterPresent = true;
+                } else if (metricType.equals(MetricType.DELETE_COMMIT_TIME)) {
+                    if (!isUpsert) {
+                        assertTrue("delete commit time counter should be greater than zero",
+                                metricValue > 0);
+                    } else {
+                        assertEquals("Zero delete commit time counter expected", 0, metricValue);
+                    }
+                    deleteCommitTimeCounterPresent = true;
+                }
+                else if (metricType.equals(MetricType.MUTATION_BATCH_COUNTER)) {
+                    assertTrue("mutation batch success counter should be greater than zero",
+                            metricValue > 0);
+                    mutationBatchCounterPresent = true;
+                }
+            }
+            assertTrue(mutationBatchSizePresent);
+            assertTrue(mutationCommitTimePresent);
+            assertTrue(mutationBytesPresent);
+            assertTrue(mutationBatchFailedPresent);
+            assertTrue(deleteMutationBytesPresent);
+            assertTrue(upsertMutationBytesPresent);
+            assertTrue(indexCommitFailureSizePresent);
+            assertTrue(deleteMutationSqlCounterPresent);
+            assertTrue(upsertMutationSqlCounterPresent);
+            assertTrue(upsertBatchFailedSizePresent);
+            assertTrue(deleteBatchFailedSizePresent);
+            assertTrue(upsertBatchFailedCounterPresent);
+            assertTrue(deleteBatchFailedCounterPresent);
+            assertTrue(upsertCommitTimeCounterPresent);
+            assertTrue(deleteCommitTimeCounterPresent);
+            assertTrue(mutationBatchCounterPresent);
+        }
+    }
+
+=======
   }
+>>>>>>> upstream/master
 
 }

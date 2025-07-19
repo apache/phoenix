@@ -126,6 +126,88 @@ public enum MetricType {
   MUTATION_BATCH_COUNTER("mbc", "Number of mutation batches committed " + "in a commit call",
     LogLevel.OFF, PLong.INSTANCE),
 
+<<<<<<< HEAD
+    // select-specific query (read) metrics updated during executeQuery
+    SELECT_SUCCESS_SQL_COUNTER("sss", "Counter for number of select sql queries that successfully"
+            + " passed the executeQuery phase", LogLevel.OFF, PLong.INSTANCE),
+    SELECT_AGGREGATE_SUCCESS_SQL_COUNTER("sassc","Counter which indicates  if everything in executeQuery"
+            + " phase and all rs.next() are successful",LogLevel.OFF, PLong.INSTANCE),
+    SELECT_AGGREGATE_FAILURE_SQL_COUNTER("safsc","Counter which indicates if anything in "
+            + "executeQuery phase or any of the rs.next() fail",LogLevel.OFF, PLong.INSTANCE),
+    SELECT_POINTLOOKUP_SUCCESS_SQL_COUNTER("spls", "Counter for number of point lookup select sql "
+            + "queries that succeeded the executeQuery phase", LogLevel.OFF, PLong.INSTANCE),
+    SELECT_SCAN_SUCCESS_SQL_COUNTER("sscs", "Counter for number of scan select sql queries "
+            + "that succeed the executeQuery phase", LogLevel.OFF, PLong.INSTANCE),
+    SELECT_FAILED_SQL_COUNTER("sfsc", "Counter for number of select sql queries that"
+            + " failed the executeQuery phase", LogLevel.OFF, PLong.INSTANCE),
+    SELECT_POINTLOOKUP_FAILED_SQL_COUNTER("splf", "Counter for number of point lookup select sql "
+            + "queries that failed the executeQuery phase", LogLevel.OFF, PLong.INSTANCE),
+    SELECT_SCAN_FAILED_SQL_COUNTER("sscf", "Counter for number of scan select sql queries "
+            + "that failed the executeQuery phase", LogLevel.OFF, PLong.INSTANCE),
+    SELECT_SQL_QUERY_TIME("sqt", "Time taken by select sql queries inside executeQuery",
+            LogLevel.OFF, PLong.INSTANCE),
+    INDEX_COMMIT_FAILURE_SIZE("p3s", "Number of mutations that failed in phase 3", LogLevel.OFF, PLong.INSTANCE),
+    QUERY_POINTLOOKUP_TIMEOUT_COUNTER("qplo", "Number of times the point lookup select query timed out"
+            + " when fetching results", LogLevel.DEBUG, PLong.INSTANCE),
+    QUERY_SCAN_TIMEOUT_COUNTER("qso", "Number of times the scan select query timed out"
+            + " when fetching results", LogLevel.DEBUG, PLong.INSTANCE),
+    QUERY_POINTLOOKUP_FAILED_COUNTER("qplf", "Number of times the point lookup select query failed"
+            + " when fetching results", LogLevel.DEBUG, PLong.INSTANCE),
+    QUERY_SCAN_FAILED_COUNTER("qsf", "Number of times the scan select query failed when fetching"
+            + " results", LogLevel.DEBUG, PLong.INSTANCE),
+    // query (read) related metrics
+    QUERY_TIME("qt", "Query times",LogLevel.OFF, PLong.INSTANCE),
+    QUERY_TIMEOUT_COUNTER("qo", "Number of times query timed out",LogLevel.DEBUG, PLong.INSTANCE),
+    QUERY_FAILED_COUNTER("qf", "Number of times query failed",LogLevel.DEBUG, PLong.INSTANCE),
+    NUM_PARALLEL_SCANS("ps", "Number of scans that were executed in parallel",LogLevel.DEBUG, PLong.INSTANCE),
+    SCAN_BYTES("sb", "Number of bytes read by scans",LogLevel.OFF, PLong.INSTANCE),
+    SELECT_SQL_COUNTER("sc", "Counter for number of sql queries",LogLevel.OFF, PLong.INSTANCE),
+    // task metrics
+    TASK_QUEUE_WAIT_TIME("tw", "Time in milliseconds tasks had to wait in the queue of the thread pool executor",LogLevel.DEBUG, PLong.INSTANCE),
+    TASK_END_TO_END_TIME("tee", "Time in milliseconds spent by tasks from creation to completion",LogLevel.DEBUG, PLong.INSTANCE),
+    TASK_EXECUTION_TIME("tx", "Time in milliseconds tasks took to execute",LogLevel.DEBUG, PLong.INSTANCE),
+    TASK_EXECUTED_COUNTER("te", "Counter for number of tasks submitted to the thread pool executor",LogLevel.DEBUG, PLong.INSTANCE),
+    TASK_REJECTED_COUNTER("tr", "Counter for number of tasks that were rejected by the thread pool executor",LogLevel.DEBUG, PLong.INSTANCE),
+    // spool metrics
+    SPOOL_FILE_SIZE("ss", "Size of spool files created in bytes",LogLevel.DEBUG, PLong.INSTANCE),
+    SPOOL_FILE_COUNTER("sn", "Number of spool files created",LogLevel.DEBUG, PLong.INSTANCE),
+    // misc metrics
+    MEMORY_CHUNK_BYTES("mc", "Number of bytes allocated by the memory manager",LogLevel.DEBUG, PLong.INSTANCE),
+    MEMORY_WAIT_TIME("mw", "Number of milliseconds threads needed to wait for memory to be allocated through memory manager",LogLevel.DEBUG, PLong.INSTANCE),
+    CACHE_REFRESH_SPLITS_COUNTER("cr", "Number of times cache was refreshed because of splits",LogLevel.DEBUG, PLong.INSTANCE),
+    WALL_CLOCK_TIME_MS("tq", "Wall clock time elapsed for the overall query execution",LogLevel.INFO, PLong.INSTANCE),
+    RESULT_SET_TIME_MS("tn", "Wall clock time elapsed for reading all records using resultSet.next()",LogLevel.INFO, PLong.INSTANCE),
+    QUERY_COMPILER_TIME_MS("qct", "Time elapsed in query compiler", LogLevel.INFO, PLong.INSTANCE),
+    QUERY_OPTIMIZER_TIME_MS("qot", "Time elapsed in query optimizer",
+        LogLevel.INFO, PLong.INSTANCE),
+    QUERY_RESULT_ITR_TIME_MS("qrt", "Time elapsed in query result iterator",
+        LogLevel.INFO, PLong.INSTANCE),
+    SQL_QUERY_PARSING_TIME_MS("pt", "Time elapsed in query parsing", LogLevel.OFF, PLong.INSTANCE),
+    OPEN_PHOENIX_CONNECTIONS_COUNTER("o", "Number of open phoenix connections",LogLevel.OFF, PLong.INSTANCE),
+    OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER("io", "Number of open internal phoenix connections",LogLevel.OFF, PLong.INSTANCE),
+    QUERY_SERVICES_COUNTER("cqs", "Number of ConnectionQueryServicesImpl instantiated",LogLevel.OFF, PLong.INSTANCE),
+    HCONNECTIONS_COUNTER("h", "Number of HConnections created by phoenix driver",LogLevel.OFF, PLong.INSTANCE),
+    PHOENIX_CONNECTIONS_THROTTLED_COUNTER("ct", "Number of client Phoenix connections prevented from opening " +
+                                              "because there are already too many to that target cluster.",LogLevel.OFF, PLong.INSTANCE),
+    PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER("ca","Number of requests for Phoenix connections, whether successful or not.",LogLevel.OFF, PLong.INSTANCE),
+    PHOENIX_CONNECTIONS_FAILED_COUNTER("cf", "Number of client Phoenix Connections Failed to open" +
+                                                ", not including throttled connections", LogLevel.OFF, PLong.INSTANCE),
+    CLIENT_METADATA_CACHE_MISS_COUNTER("cmcm", "Number of cache misses for the CQSI cache.", LogLevel.DEBUG, PLong.INSTANCE),
+    CLIENT_METADATA_CACHE_HIT_COUNTER("cmch", "Number of cache hits for the CQSI cache.", LogLevel.DEBUG, PLong.INSTANCE),
+    CLIENT_METADATA_CACHE_EVICTION_COUNTER("cmce", "Number of cache evictions for the CQSI cache" +
+            ".", LogLevel.DEBUG,  PLong.INSTANCE),
+    CLIENT_METADATA_CACHE_REMOVAL_COUNTER("cmcr", "Number of cache removals for the CQSI cache.",
+            LogLevel.DEBUG, PLong.INSTANCE),
+    CLIENT_METADATA_CACHE_ADD_COUNTER("cmca", "Number of cache adds for the CQSI cache.",
+            LogLevel.DEBUG, PLong.INSTANCE),
+    CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE("cmcu", "Estimated used size of the CQSI cache.",
+            LogLevel.DEBUG, PLong.INSTANCE),
+    PAGED_ROWS_COUNTER("prc", "Number of dummy rows returned to client due to paging.",
+            LogLevel.DEBUG, PLong.INSTANCE),
+    STALE_METADATA_CACHE_EXCEPTION_COUNTER("smce",
+            "Number of StaleMetadataCacheException encountered.",
+            LogLevel.DEBUG, PLong.INSTANCE),
+=======
   // select-specific query (read) metrics updated during executeQuery
   SELECT_SUCCESS_SQL_COUNTER("sss",
     "Counter for number of select sql queries that successfully" + " passed the executeQuery phase",
@@ -243,6 +325,7 @@ public enum MetricType {
     LogLevel.DEBUG, PLong.INSTANCE),
   STALE_METADATA_CACHE_EXCEPTION_COUNTER("smce",
     "Number of StaleMetadataCacheException encountered.", LogLevel.DEBUG, PLong.INSTANCE),
+>>>>>>> upstream/master
 
   // hbase metrics
   COUNT_RPC_CALLS("rp", "Number of RPC calls", LogLevel.DEBUG, PLong.INSTANCE),

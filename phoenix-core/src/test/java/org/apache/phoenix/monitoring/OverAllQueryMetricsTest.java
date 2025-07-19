@@ -26,6 +26,7 @@ import static org.apache.phoenix.monitoring.MetricType.QUERY_OPTIMIZER_TIME_MS;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_RESULT_ITR_TIME_MS;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_TIMEOUT_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.RESULT_SET_TIME_MS;
+import static org.apache.phoenix.monitoring.MetricType.SQL_QUERY_PARSING_TIME_MS;
 import static org.apache.phoenix.monitoring.MetricType.WALL_CLOCK_TIME_MS;
 import static org.junit.Assert.assertEquals;
 
@@ -166,6 +167,97 @@ public class OverAllQueryMetricsTest {
     metricsObj.setQueryResultItrTimeMS(delta);
   }
 
+<<<<<<< HEAD
+    @Test
+    public void testPublish() {
+        MyClock clock = new MyClock(10L, delta);
+        EnvironmentEdgeManager.injectEdge(clock);
+        overAllQueryMetrics.startQuery();
+        overAllQueryMetrics.startResultSetWatch();
+        assertPublishedMetrics(overAllQueryMetrics.publish(), numParallelScans, queryTimeouts,
+                queryFailures, cacheRefreshesDueToSplits, 0L, delta, delta, delta, delta);
+        overAllQueryMetrics.endQuery();
+        overAllQueryMetrics.stopResultSetWatch();
+        // expect 2 * delta since we call both endQuery() and stopResultSetWatch()
+        assertPublishedMetrics(overAllQueryMetrics.publish(), numParallelScans, queryTimeouts,
+                queryFailures, cacheRefreshesDueToSplits, 2*delta, delta, delta, delta, delta);
+    }
+
+    @Test
+    public void testReset() {
+        assertPublishedMetrics(overAllQueryMetrics.publish(), numParallelScans, queryTimeouts,
+                queryFailures, cacheRefreshesDueToSplits, 0L, delta, delta, delta, delta);
+        overAllQueryMetrics.reset();
+        assertPublishedMetrics(overAllQueryMetrics.publish(), 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
+    }
+
+    @Test
+    public void testCombine() {
+        OverAllQueryMetrics otherMetrics = new OverAllQueryMetrics(true, LogLevel.TRACE);
+        final long otherNumParallelScans = 9L;
+        final int otherQueryTimeouts = 8;
+        final int otherQueryFailures = 7;
+        final int otherCacheRefreshes = 6;
+        populateMetrics(otherMetrics, otherNumParallelScans, otherQueryTimeouts, otherQueryFailures,
+                otherCacheRefreshes);
+        OverAllQueryMetrics finalMetricObj = this.overAllQueryMetrics.combine(otherMetrics);
+        assertPublishedMetrics(finalMetricObj.publish(), numParallelScans + otherNumParallelScans,
+                queryTimeouts + otherQueryTimeouts, queryFailures + otherQueryFailures,
+                cacheRefreshesDueToSplits + otherCacheRefreshes, 0L, 2*delta, 2*delta, 2*delta, 2*delta);
+    }
+
+    @Test
+    public void testNoOpRequestMetricsIfRequestMetricsDisabled() {
+        OverAllQueryMetrics noOpMetrics = new OverAllQueryMetrics(false, LogLevel.OFF);
+        populateMetrics(noOpMetrics, numParallelScans, queryTimeouts, queryFailures,
+                cacheRefreshesDueToSplits);
+        Map<MetricType, Long> noOpMap = noOpMetrics.publish();
+        assertEquals(1, noOpMap.size());
+        assertEquals(0L, (long)noOpMap.get(NO_OP_METRIC));
+    }
+
+    private void populateMetrics(OverAllQueryMetrics metricsObj, long numParallelScansSetting,
+            int queryTimeoutsSetting, int queryFailuresSetting,
+            int cacheRefreshesDueToSplitsSetting) {
+        metricsObj.updateNumParallelScans(numParallelScansSetting);
+        for (int i = 0; i < queryTimeoutsSetting; i++) {
+            metricsObj.queryTimedOut();
+        }
+        for (int i = 0; i < queryFailuresSetting; i++) {
+            metricsObj.queryFailed();
+        }
+        for (int i = 0; i < cacheRefreshesDueToSplitsSetting; i++) {
+            metricsObj.cacheRefreshedDueToSplits();
+        }
+        metricsObj.setQueryParsingTimeMS(delta);
+        metricsObj.setQueryCompilerTimeMS(delta);
+        metricsObj.setQueryOptimizerTimeMS(delta);
+        metricsObj.setQueryResultItrTimeMS(delta);
+    }
+
+    private void assertPublishedMetrics(
+            final Map<MetricType, Long> metrics,
+            final long expectedNumParallelScans,
+            final long expectedQueryTimeouts,
+            final long expectedQueryFailures,
+            final long expectedCacheRefreshes,
+            final long expectedElapsedTime,
+            final long expectedQueryCompilerTimeMS,
+            final long expectedQueryOptimizerTimeMS,
+            final long expectedQueryResultItrSetTimeMS,
+            final long expectedQueryParsingTime) {
+        assertEquals(expectedNumParallelScans, (long)metrics.get(NUM_PARALLEL_SCANS));
+        assertEquals(expectedQueryTimeouts, (long)metrics.get(QUERY_TIMEOUT_COUNTER));
+        assertEquals(expectedQueryFailures, (long)metrics.get(QUERY_FAILED_COUNTER));
+        assertEquals(expectedCacheRefreshes, (long)metrics.get(CACHE_REFRESH_SPLITS_COUNTER));
+        assertEquals(expectedElapsedTime, (long)metrics.get(WALL_CLOCK_TIME_MS));
+        assertEquals(expectedElapsedTime, (long)metrics.get(RESULT_SET_TIME_MS));
+        assertEquals(expectedQueryParsingTime, (long)metrics.get(SQL_QUERY_PARSING_TIME_MS));
+        assertEquals(expectedQueryCompilerTimeMS, (long)metrics.get(QUERY_COMPILER_TIME_MS));
+        assertEquals(expectedQueryOptimizerTimeMS, (long)metrics.get(QUERY_OPTIMIZER_TIME_MS));
+        assertEquals(expectedQueryResultItrSetTimeMS, (long)metrics.get(QUERY_RESULT_ITR_TIME_MS));
+    }
+=======
   private void assertPublishedMetrics(final Map<MetricType, Long> metrics,
     final long expectedNumParallelScans, final long expectedQueryTimeouts,
     final long expectedQueryFailures, final long expectedCacheRefreshes,
@@ -181,5 +273,6 @@ public class OverAllQueryMetricsTest {
     assertEquals(expectedQueryOptimizerTimeMS, (long) metrics.get(QUERY_OPTIMIZER_TIME_MS));
     assertEquals(expectedQueryResultItrSetTimeMS, (long) metrics.get(QUERY_RESULT_ITR_TIME_MS));
   }
+>>>>>>> upstream/master
 
 }
