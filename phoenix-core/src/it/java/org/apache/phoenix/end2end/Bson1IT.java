@@ -257,7 +257,7 @@ public class Bson1IT extends ParallelStatsDisabledIT {
       keyDoc.put("#attr_5", new BsonString("attr_5"));
       conditionDoc.put("$KEYS", keyDoc);
       query = "SELECT * FROM " + tableName + " WHERE BSON_CONDITION_EXPRESSION(COL, '"
-              + conditionDoc.toJson() + "')";
+        + conditionDoc.toJson() + "')";
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertTrue(rs.next());
@@ -267,7 +267,7 @@ public class Bson1IT extends ParallelStatsDisabledIT {
       conditionDoc.put("$EXPR", new BsonString(conditionExpression));
       conditionDoc.put("$VAL", compareValuesDocument);
       query = "SELECT * FROM " + tableName + " WHERE BSON_CONDITION_EXPRESSION(COL, '"
-              + conditionDoc.toJson() + "')";
+        + conditionDoc.toJson() + "')";
       rs = conn.createStatement().executeQuery(query);
       assertFalse(rs.next());
 
@@ -281,7 +281,7 @@ public class Bson1IT extends ParallelStatsDisabledIT {
       conditionDoc.put("$KEYS", keyDoc);
 
       query = "SELECT * FROM " + tableName + " WHERE BSON_CONDITION_EXPRESSION(COL, '"
-              + conditionDoc.toJson() + "')";
+        + conditionDoc.toJson() + "')";
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("pk0002", rs.getString(1));
