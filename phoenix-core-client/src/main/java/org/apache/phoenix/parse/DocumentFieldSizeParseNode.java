@@ -45,7 +45,7 @@ public class DocumentFieldSizeParseNode extends CompoundParseNode {
     buf.append(")");
   }
 
-  public String getValue() {
-    return getChildren().get(0).toString();
+  public Object getValue() {
+    return ((LiteralParseNode) getChildren().get(0)).getValue();
   }
 }
