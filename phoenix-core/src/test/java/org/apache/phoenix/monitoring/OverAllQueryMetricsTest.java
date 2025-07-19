@@ -138,7 +138,7 @@ public class OverAllQueryMetricsTest {
     assertPublishedMetrics(finalMetricObj.publish(), numParallelScans + otherNumParallelScans,
       queryTimeouts + otherQueryTimeouts, queryFailures + otherQueryFailures,
       cacheRefreshesDueToSplits + otherCacheRefreshes, 0L, 2 * delta, 2 * delta, 2 * delta,
-      2*delta);
+      2 * delta);
   }
 
   @Test
@@ -184,6 +184,6 @@ public class OverAllQueryMetricsTest {
     assertEquals(expectedQueryCompilerTimeMS, (long) metrics.get(QUERY_COMPILER_TIME_MS));
     assertEquals(expectedQueryOptimizerTimeMS, (long) metrics.get(QUERY_OPTIMIZER_TIME_MS));
     assertEquals(expectedQueryResultItrSetTimeMS, (long) metrics.get(QUERY_RESULT_ITR_TIME_MS));
-    assertEquals(expectedQueryParsingTime, (long)metrics.get(SQL_QUERY_PARSING_TIME_MS));
+    assertEquals(expectedQueryParsingTime, (long) metrics.get(SQL_QUERY_PARSING_TIME_MS));
   }
 }

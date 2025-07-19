@@ -181,7 +181,7 @@ public class MutationState implements SQLCloseable {
   private Map<String, Long> timeInExecuteMutationMap = new HashMap<>();
   private static boolean allUpsertsMutations = true;
   private static boolean allDeletesMutations = true;
-  private static long mutationQueryParsingTimeMS = 0;
+  private long mutationQueryParsingTimeMS = 0;
 
   private final boolean indexRegionObserverEnabledAllTables;
 
@@ -1679,14 +1679,17 @@ public class MutationState implements SQLCloseable {
           mutationCommitTime = EnvironmentEdgeManager.currentTimeMillis() - startTime;
           GLOBAL_MUTATION_COMMIT_TIME.update(mutationCommitTime);
           MutationMetric failureMutationMetrics = MutationMetric.EMPTY_METRIC;
+          long mutationQueryParsingTimeMS = this.mutationQueryParsingTimeMS;
           if (!areAllBatchesSuccessful) {
-            failureMutationMetrics = updateMutationBatchFailureMetrics(currentMutationBatch,
-              htableNameStr, numFailedMutations, table.isTransactional());
+            failureMutationMetrics =
+              updateMutationBatchFailureMetrics(currentMutationBatch, htableNameStr,
+                numFailedMutations, table.isTransactional(), mutationQueryParsingTimeMS);
           }
 
           MutationMetric committedMutationsMetric =
             getCommittedMutationsMetric(totalMutationBytesObject, mutationBatchList, numMutations,
-              numFailedMutations, numFailedPhase3Mutations, mutationCommitTime, totalBatchCount);
+              numFailedMutations, numFailedPhase3Mutations, mutationCommitTime, totalBatchCount,
+              mutationQueryParsingTimeMS);
           // Combine failure mutation metrics with committed ones for the final picture
           committedMutationsMetric.combineMetric(failureMutationMetrics);
           mutationMetricQueue.addMetricsForTable(htableNameStr, committedMutationsMetric);
@@ -1752,7 +1755,7 @@ public class MutationState implements SQLCloseable {
    */
   public static MutationMetricQueue.MutationMetric updateMutationBatchFailureMetrics(
     List<Mutation> failedMutationBatch, String tableName, long numFailedMutations,
-    boolean isTransactional) {
+    boolean isTransactional, long mutationQueryParsingTimeMS) {
 
     if (
       failedMutationBatch == null || failedMutationBatch.isEmpty()
@@ -1807,7 +1810,8 @@ public class MutationState implements SQLCloseable {
    */
   static MutationMetric getCommittedMutationsMetric(MutationBytes totalMutationBytesObject,
     List<List<Mutation>> unsentMutationBatchList, long numMutations, long numFailedMutations,
-    long numFailedPhase3Mutations, long mutationCommitTime, long mutationBatchCounter) {
+    long numFailedPhase3Mutations, long mutationCommitTime, long mutationBatchCounter,
+    long mutationQueryParsingTimeMS) {
     long committedUpsertMutationBytes =
       totalMutationBytesObject == null ? 0 : totalMutationBytesObject.getUpsertMutationBytes();
     long committedAtomicUpsertMutationBytes = totalMutationBytesObject == null
@@ -2460,7 +2464,7 @@ public class MutationState implements SQLCloseable {
     timeInExecuteMutationMap.put(tableName, timeSpent);
   }
 
-  public void setMutationQueryParsingtime(long time) {
+  public void setMutationQueryParsingTime(long time) {
     mutationQueryParsingTimeMS = time;
   }
 

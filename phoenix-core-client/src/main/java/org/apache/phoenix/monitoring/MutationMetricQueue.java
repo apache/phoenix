@@ -115,7 +115,7 @@ public class MutationMetricQueue {
       publishedMetricsForTable.put(metric.getMutationBatchCounter().getMetricType(),
         metric.getMutationBatchCounter().getValue());
       publishedMetricsForTable.put(metric.getMutationQueryParsingTimeMS().getMetricType(),
-          metric.getMutationQueryParsingTimeMS().getValue());
+        metric.getMutationQueryParsingTimeMS().getValue());
     }
     return publishedMetrics;
   }
@@ -158,7 +158,7 @@ public class MutationMetricQueue {
     private final CombinableMetric deleteBatchFailedCounter =
       new CombinableMetricImpl(DELETE_BATCH_FAILED_COUNTER);
     private final CombinableMetric mutationQueryParsingTimeMS =
-        new CombinableMetricImpl(SQL_QUERY_PARSING_TIME_MS);
+      new CombinableMetricImpl(SQL_QUERY_PARSING_TIME_MS);
 
     private final CombinableMetric numOfIndexCommitFailMutations =
       new CombinableMetricImpl(INDEX_COMMIT_FAILURE_SIZE);
@@ -263,7 +263,9 @@ public class MutationMetricQueue {
       return mutationBatchCounter;
     }
 
-    public CombinableMetric getMutationQueryParsingTimeMS() { return mutationQueryParsingTimeMS; }
+    public CombinableMetric getMutationQueryParsingTimeMS() {
+      return mutationQueryParsingTimeMS;
+    }
 
     public void combineMetric(MutationMetric other) {
       this.numMutations.combine(other.numMutations);

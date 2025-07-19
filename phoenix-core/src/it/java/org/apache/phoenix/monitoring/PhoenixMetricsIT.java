@@ -133,9 +133,9 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
     "DELETE FROM %s WHERE A=? AND B=? AND C=? AND D=? AND G=FALSE";
   private static final String DELETE_ALL_DML = "DELETE FROM %s";
 
-  private static final List<MetricType> mutationMetricsToSkip = Lists.newArrayList(
-    MUTATION_COMMIT_TIME, UPSERT_COMMIT_TIME, DELETE_COMMIT_TIME, MUTATION_BATCH_COUNTER,
-    SQL_QUERY_PARSING_TIME_MS);
+  private static final List<MetricType> mutationMetricsToSkip =
+    Lists.newArrayList(MUTATION_COMMIT_TIME, UPSERT_COMMIT_TIME, DELETE_COMMIT_TIME,
+      MUTATION_BATCH_COUNTER, SQL_QUERY_PARSING_TIME_MS);
   private static final List<MetricType> readMetricsToSkip = Lists.newArrayList(TASK_QUEUE_WAIT_TIME,
     TASK_EXECUTION_TIME, TASK_END_TO_END_TIME, COUNT_MILLS_BETWEEN_NEXTS);
   private static final String CUSTOM_URL_STRING = "SESSION";
@@ -1395,27 +1395,16 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
     int sourceNumRows = 1;
 
     Connection conn = DriverManager.getConnection(getUrl());
-    String ddl1 =
-        "CREATE TABLE " + tableName1 + " (" +
-            "ID INTEGER NOT NULL PRIMARY KEY, " +
-            "CATEGORY VARCHAR(30), " +
-            "REGION VARCHAR(30), " +
-            "DISTRICT VARCHAR(30)" +
-            ")";
+    String ddl1 = "CREATE TABLE " + tableName1 + " (" + "ID INTEGER NOT NULL PRIMARY KEY, "
+      + "CATEGORY VARCHAR(30), " + "REGION VARCHAR(30), " + "DISTRICT VARCHAR(30)" + ")";
     conn.createStatement().execute(ddl1);
 
-    String ddl2 =
-        "CREATE TABLE " + tableName2 + " (" +
-            "ID INTEGER NOT NULL PRIMARY KEY, " +
-            "CATEGORY VARCHAR(30), " +
-            "REGION VARCHAR(30), " +
-            "DISTRICT VARCHAR(30)" +
-            ")";
+    String ddl2 = "CREATE TABLE " + tableName2 + " (" + "ID INTEGER NOT NULL PRIMARY KEY, "
+      + "CATEGORY VARCHAR(30), " + "REGION VARCHAR(30), " + "DISTRICT VARCHAR(30)" + ")";
     conn.createStatement().execute(ddl2);
 
-    String upsert1 = "UPSERT INTO " + tableName1 +
-        " (ID, CATEGORY, REGION, DISTRICT) " +
-        "VALUES (?, ?, ?, ?)";
+    String upsert1 =
+      "UPSERT INTO " + tableName1 + " (ID, CATEGORY, REGION, DISTRICT) " + "VALUES (?, ?, ?, ?)";
 
     PreparedStatement pstmt1 = conn.prepareStatement(upsert1);
     // Need to upsert at least 1 row to initialize Mutation metrics
@@ -1431,9 +1420,9 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
 
     // Creating a query with lots of IN CLAUSE to increase query parsing time
     String whereStr =
-        "   REGION IN ('REGION_0', 'REGION_1', 'REGION_2', 'REGION_3', 'REGION_4', 'REGION_5') " +
-            "   AND CATEGORY IN ('CATEGORY_0', 'CATEGORY_1', 'CATEGORY_2', 'CATEGORY_3') " +
-            "   AND DISTRICT IN ('DISTRICT_0', 'DISTRICT_1', 'DISTRICT_2', 'DISTRICT_3') ";
+      "   REGION IN ('REGION_0', 'REGION_1', 'REGION_2', 'REGION_3', 'REGION_4', 'REGION_5') "
+        + "   AND CATEGORY IN ('CATEGORY_0', 'CATEGORY_1', 'CATEGORY_2', 'CATEGORY_3') "
+        + "   AND DISTRICT IN ('DISTRICT_0', 'DISTRICT_1', 'DISTRICT_2', 'DISTRICT_3') ";
 
     String whereCaluse = whereStr;
     for (int i = 0; i < 50; i++) {
@@ -1441,10 +1430,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
     }
 
     String queryStr =
-        " SELECT " +
-            "   ID, REGION" +
-            " FROM " + tableName1 +
-            " WHERE " + whereCaluse;
+      " SELECT " + "   ID, REGION" + " FROM " + tableName1 + " WHERE " + whereCaluse;
 
     PhoenixRuntime.resetMetrics(conn);
     String upsertSelectQuery = "UPSERT INTO " + tableName2 + " " + queryStr;
@@ -1454,15 +1440,13 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
     conn.commit();
 
     Map<String, Map<MetricType, Long>> mutationMetrics =
-        PhoenixRuntime.getWriteMetricInfoForMutationsSinceLastReset(conn);
+      PhoenixRuntime.getWriteMetricInfoForMutationsSinceLastReset(conn);
     long parsingTime = mutationMetrics.get(tableName2).get(SQL_QUERY_PARSING_TIME_MS);
-    assertTrue("parsing time should be greater than zero",
-        parsingTime > 0);
+    assertTrue("parsing time should be greater than zero", parsingTime > 0);
     ResultSet rs = conn.createStatement().executeQuery(queryStr);
-    Map<MetricType, Long> overallReadMetrics =
-        PhoenixRuntime.getOverAllReadRequestMetricInfo(rs);
+    Map<MetricType, Long> overallReadMetrics = PhoenixRuntime.getOverAllReadRequestMetricInfo(rs);
     assertTrue("Query parsing time should be greater than zero",
-        overallReadMetrics.get(SQL_QUERY_PARSING_TIME_MS) > 0);
+      overallReadMetrics.get(SQL_QUERY_PARSING_TIME_MS) > 0);
     conn.close();
   }
 

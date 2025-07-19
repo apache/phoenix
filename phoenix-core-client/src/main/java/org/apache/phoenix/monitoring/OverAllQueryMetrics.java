@@ -90,8 +90,8 @@ public class OverAllQueryMetrics {
       QUERY_SCAN_FAILED_COUNTER);
     cacheRefreshedDueToSplits = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,
       connectionLogLevel, CACHE_REFRESH_SPLITS_COUNTER);
-    queryParsingTimeMS = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,
-        connectionLogLevel, SQL_QUERY_PARSING_TIME_MS);
+    queryParsingTimeMS = MetricUtil.getCombinableMetric(isRequestMetricsEnabled, connectionLogLevel,
+      SQL_QUERY_PARSING_TIME_MS);
   }
 
   public void updateNumParallelScans(long numParallelScans) {

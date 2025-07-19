@@ -317,6 +317,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     this.sqlQueryParsingTime = time;
   }
 
+  private long getSqlQueryParsingTime() {
+    return this.sqlQueryParsingTime;
+  }
+
   public PhoenixResultSet newResultSet(ResultIterator iterator, RowProjector projector,
     StatementContext context) throws SQLException {
     return new PhoenixResultSet(iterator, projector, context);
@@ -421,7 +425,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                 context.getScan() != null ? context.getScan().toString() : null);
             }
             overallQuerymetrics.startQuery();
-            overallQuerymetrics.setQueryParsingTimeMS( PhoenixStatement.this.sqlQueryParsingTime);
+            overallQuerymetrics.setQueryParsingTimeMS(getSqlQueryParsingTime());
             rs = newResultSet(resultIterator, plan.getProjector(), plan.getContext());
             // newResultset sets lastResultset
             // ExecutableShowCreateTable/ExecutableShowTablesStatement/ExecutableShowSchemasStatement
@@ -611,7 +615,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                 throw new UpgradeRequiredException();
               }
               state = connection.getMutationState();
-              state.setMutationQueryParsingtime(PhoenixStatement.this.sqlQueryParsingTime);
+              state.setMutationQueryParsingTime(getSqlQueryParsingTime());
               isUpsert = stmt instanceof ExecutableUpsertStatement;
               isDelete = stmt instanceof ExecutableDeleteStatement;
               if (
