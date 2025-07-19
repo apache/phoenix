@@ -1893,145 +1893,424 @@ public class ComparisonExpressionUtilsTest {
   }
 
   @Test
+  public void testFieldTypeFunction() {
+    RawBsonDocument rawBsonDocument = getFieldTypeTestDocument();
+    RawBsonDocument compareValues = getFieldTypeCompareValDocument();
+
+    // Test String type (S)
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(StringField, :TypeS)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(StringField, :TypeN)", rawBsonDocument, compareValues));
+
+    // Test Number type (N) - testing both integer and double
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(NumberFieldInt, :TypeN)", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(NumberFieldDouble, :TypeN)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(NumberFieldInt, :TypeS)", rawBsonDocument, compareValues));
+
+    // Test Binary type (B)
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(BinaryField, :TypeB)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(BinaryField, :TypeS)", rawBsonDocument, compareValues));
+
+    // Test Boolean type (BOOL)
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(BooleanFieldTrue, :TypeBOOL)", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(BooleanFieldFalse, :TypeBOOL)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(BooleanFieldTrue, :TypeS)", rawBsonDocument, compareValues));
+
+    // Test Null type (NULL)
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(NullField, :TypeNULL)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(NullField, :TypeS)", rawBsonDocument, compareValues));
+
+    // Test List/Array type (L)
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(ArrayField, :TypeL)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(ArrayField, :TypeS)", rawBsonDocument, compareValues));
+
+    // Test Map/Document type (M)
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(DocumentField, :TypeM)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(DocumentField, :TypeS)", rawBsonDocument, compareValues));
+
+    // Test String Set type (SS)
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(StringSetField, :TypeSS)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(StringSetField, :TypeNS)", rawBsonDocument, compareValues));
+
+    // Test Number Set type (NS)
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(NumberSetField, :TypeNS)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(NumberSetField, :TypeSS)", rawBsonDocument, compareValues));
+
+    // Test Binary Set type (BS)
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(BinarySetField, :TypeBS)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(BinarySetField, :TypeSS)", rawBsonDocument, compareValues));
+
+    // Test nested field types
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(NestedDoc.NestedString, :TypeS)", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(NestedDoc.NestedNumber, :TypeN)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(NestedDoc.NestedString, :TypeN)", rawBsonDocument, compareValues));
+
+    // Test non-existent field
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(NonExistentField, :TypeS)", rawBsonDocument, compareValues));
+
+    // Test complex expressions with field_type
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(StringField, :TypeS) AND field_type(NumberFieldInt, :TypeN)", rawBsonDocument,
+      compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(StringField, :TypeN) OR field_type(NumberFieldInt, :TypeN)", rawBsonDocument,
+      compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(StringField, :TypeN) AND field_type(NumberFieldInt, :TypeS)", rawBsonDocument,
+      compareValues));
+
+    // Test NOT with field_type
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "NOT field_type(StringField, :TypeN)", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "NOT field_type(StringField, :TypeS)", rawBsonDocument, compareValues));
+
+    // Test field_type combined with other functions
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(StringField, :TypeS) AND field_exists(StringField)", rawBsonDocument,
+      compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(NonExistentField, :TypeS) AND field_exists(NonExistentField)", rawBsonDocument,
+      compareValues));
+
+    // Test attribute_type (alternative syntax for field_type)
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "attribute_type(StringField, :TypeS)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "attribute_type(StringField, :TypeN)", rawBsonDocument, compareValues));
+
+    // Test attribute_type with different data types
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "attribute_type(NumberFieldInt, :TypeN)", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "attribute_type(BooleanFieldTrue, :TypeBOOL)", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "attribute_type(ArrayField, :TypeL)", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "attribute_type(DocumentField, :TypeM)", rawBsonDocument, compareValues));
+
+    // Test attribute_type with sets
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "attribute_type(StringSetField, :TypeSS)", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "attribute_type(NumberSetField, :TypeNS)", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "attribute_type(BinarySetField, :TypeBS)", rawBsonDocument, compareValues));
+
+    // Test attribute_type with nested fields
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "attribute_type(NestedDoc.NestedString, :TypeS)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "attribute_type(NestedDoc.NestedString, :TypeN)", rawBsonDocument, compareValues));
+
+    // Test attribute_type in complex expressions
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "attribute_type(StringField, :TypeS) AND attribute_type(NumberFieldInt, :TypeN)",
+      rawBsonDocument, compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "attribute_type(StringField, :TypeN) OR attribute_type(NumberFieldInt, :TypeN)",
+      rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "attribute_type(StringField, :TypeN) AND attribute_type(NumberFieldInt, :TypeS)",
+      rawBsonDocument, compareValues));
+
+    // Test NOT with attribute_type
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "NOT attribute_type(StringField, :TypeN)", rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "NOT attribute_type(StringField, :TypeS)", rawBsonDocument, compareValues));
+
+    // Test mixing field_type and attribute_type
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(StringField, :TypeS) AND attribute_type(NumberFieldInt, :TypeN)", rawBsonDocument,
+      compareValues));
+
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(StringField, :TypeN) OR attribute_type(NumberFieldInt, :TypeN)", rawBsonDocument,
+      compareValues));
+
+    // Test attribute_type with non-existent field
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "attribute_type(NonExistentField, :TypeS)", rawBsonDocument, compareValues));
+
+    // Test attribute_type combined with other functions
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "attribute_type(StringField, :TypeS) AND attribute_exists(StringField)", rawBsonDocument,
+      compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "attribute_type(NonExistentField, :TypeS) AND attribute_not_exists(NonExistentField)",
+      rawBsonDocument, compareValues));
+
+    // Test empty sets - should return false for type checking
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(EmptyStringSet, :TypeSS)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(EmptyNumberSet, :TypeNS)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(EmptyBinarySet, :TypeBS)", rawBsonDocument, compareValues));
+
+    // Test empty sets with attribute_type syntax
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "attribute_type(EmptyStringSet, :TypeSS)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "attribute_type(EmptyNumberSet, :TypeNS)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "attribute_type(EmptyBinarySet, :TypeBS)", rawBsonDocument, compareValues));
+
+    // Test empty sets in complex expressions
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(StringSetField, :TypeSS) AND NOT field_type(EmptyStringSet, :TypeSS)",
+      rawBsonDocument, compareValues));
+
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(EmptyStringSet, :TypeSS) AND field_type(StringSetField, :TypeSS)",
+      rawBsonDocument, compareValues));
+
+    // Test array element access at specific indices
+    // ArrayField contains: [ "item1", "item2", 123 ]
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(ArrayField[0], :TypeS)", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(ArrayField[1], :TypeS)", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(ArrayField[2], :TypeN)", rawBsonDocument, compareValues));
+
+    // Test negative cases for array element types
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(ArrayField[0], :TypeN)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(ArrayField[2], :TypeS)", rawBsonDocument, compareValues));
+
+    // Test array element access with attribute_type
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "attribute_type(ArrayField[0], :TypeS)", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "attribute_type(ArrayField[2], :TypeN)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "attribute_type(ArrayField[1], :TypeN)", rawBsonDocument, compareValues));
+
+    // Test nested array element access
+    // NestedDoc.NestedArray contains: [ 1, 2, 3 ]
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(NestedDoc.NestedArray[0], :TypeN)", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(NestedDoc.NestedArray[1], :TypeN)", rawBsonDocument, compareValues));
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(NestedDoc.NestedArray[2], :TypeN)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(NestedDoc.NestedArray[0], :TypeS)", rawBsonDocument, compareValues));
+
+    // Test non-existent array indices
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(ArrayField[5], :TypeS)", rawBsonDocument, compareValues));
+    assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
+      "field_type(NestedDoc.NestedArray[10], :TypeN)", rawBsonDocument, compareValues));
+  }
+
+  private static RawBsonDocument getFieldTypeTestDocument() {
+    String json = "{\n" + "  \"StringField\" : \"Hello World\",\n" + "  \"NumberFieldInt\" : 42,\n"
+      + "  \"NumberFieldDouble\" : 3.14159,\n" + "  \"BinaryField\" : {\n" + "    \"$binary\" : {\n"
+      + "      \"base64\" : \"SGVsbG8gV29ybGQ=\",\n" + "      \"subType\" : \"00\"\n" + "    }\n"
+      + "  },\n" + "  \"BooleanFieldTrue\" : true,\n" + "  \"BooleanFieldFalse\" : false,\n"
+      + "  \"NullField\" : null,\n" + "  \"ArrayField\" : [ \"item1\", \"item2\", 123 ],\n"
+      + "  \"DocumentField\" : {\n" + "    \"nestedKey\" : \"nestedValue\",\n"
+      + "    \"nestedNum\" : 999\n" + "  },\n"
+      + "  \"StringSetField\" : { \"$set\" : [ \"apple\", \"banana\", \"cherry\" ] },\n"
+      + "  \"NumberSetField\" : { \"$set\" : [ 10, 20, 30 ] },\n"
+      + "  \"BinarySetField\" : { \"$set\" : [ {\n" + "    \"$binary\" : {\n"
+      + "      \"base64\" : \"VGVzdA==\",\n" + "      \"subType\" : \"00\"\n" + "    }\n"
+      + "  }, {\n" + "    \"$binary\" : {\n" + "      \"base64\" : \"RGF0YQ==\",\n"
+      + "      \"subType\" : \"00\"\n" + "    }\n" + "  } ] },\n"
+      + "  \"EmptyStringSet\" : { \"$set\" : [ ] },\n"
+      + "  \"EmptyNumberSet\" : { \"$set\" : [ ] },\n"
+      + "  \"EmptyBinarySet\" : { \"$set\" : [ ] },\n" + "  \"NestedDoc\" : {\n"
+      + "    \"NestedString\" : \"nested value\",\n" + "    \"NestedNumber\" : 777,\n"
+      + "    \"NestedArray\" : [ 1, 2, 3 ]\n" + "  }\n" + "}";
+    return RawBsonDocument.parse(json);
+  }
+
+  private static RawBsonDocument getFieldTypeCompareValDocument() {
+    String json =
+      "{\n" + "  \":TypeS\" : \"S\",\n" + "  \":TypeN\" : \"N\",\n" + "  \":TypeB\" : \"B\",\n"
+        + "  \":TypeBOOL\" : \"BOOL\",\n" + "  \":TypeNULL\" : \"NULL\",\n"
+        + "  \":TypeL\" : \"L\",\n" + "  \":TypeM\" : \"M\",\n" + "  \":TypeSS\" : \"SS\",\n"
+        + "  \":TypeNS\" : \"NS\",\n" + "  \":TypeBS\" : \"BS\"\n" + "}";
+    return RawBsonDocument.parse(json);
+  }
+
+  @Test
   public void testSizeFunction() {
     RawBsonDocument rawBsonDocument = getSizeTestDocument();
     RawBsonDocument compareValues = getSizeCompareValDocument();
 
     // Test string size - should return string length
     assertTrue(SQLComparisonExpressionUtils
-      .evaluateConditionExpression("size(ShortString) = :Size5", rawBsonDocument, compareValues));
+            .evaluateConditionExpression("size(ShortString) = :Size5", rawBsonDocument, compareValues));
     assertTrue(SQLComparisonExpressionUtils
-      .evaluateConditionExpression("size(LongString) = :Size24", rawBsonDocument, compareValues));
+            .evaluateConditionExpression("size(LongString) = :Size24", rawBsonDocument, compareValues));
     assertTrue(SQLComparisonExpressionUtils
-      .evaluateConditionExpression("size(EmptyString) = :Size0", rawBsonDocument, compareValues));
+            .evaluateConditionExpression("size(EmptyString) = :Size0", rawBsonDocument, compareValues));
 
     // Test array size - should return number of elements
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression("size(SmallArray) = :Size3",
-      rawBsonDocument, compareValues));
+            rawBsonDocument, compareValues));
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression("size(LargeArray) = :Size5",
-      rawBsonDocument, compareValues));
+            rawBsonDocument, compareValues));
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression("size(EmptyArray) = :Size0",
-      rawBsonDocument, compareValues));
+            rawBsonDocument, compareValues));
 
     // Test document size - should return number of fields
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression("size(SmallDoc) = :Size2",
-      rawBsonDocument, compareValues));
+            rawBsonDocument, compareValues));
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression("size(LargeDoc) = :Size4",
-      rawBsonDocument, compareValues));
+            rawBsonDocument, compareValues));
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression("size(EmptyDoc) = :Size0",
-      rawBsonDocument, compareValues));
+            rawBsonDocument, compareValues));
 
     // Test set size - should return number of elements in set
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression("size(StringSet) = :Size3",
-      rawBsonDocument, compareValues));
+            rawBsonDocument, compareValues));
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression("size(NumberSet) = :Size4",
-      rawBsonDocument, compareValues));
+            rawBsonDocument, compareValues));
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression("size(EmptySet) = :Size0",
-      rawBsonDocument, compareValues));
+            rawBsonDocument, compareValues));
 
     // Test binary size - should return byte array length
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression("size(BinaryData) = :Size5",
-      rawBsonDocument, compareValues));
+            rawBsonDocument, compareValues));
 
     // Test nested field sizes
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-      "size(NestedDoc.NestedString) = :Size12", rawBsonDocument, compareValues));
+            "size(NestedDoc.NestedString) = :Size12", rawBsonDocument, compareValues));
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-      "size(NestedDoc.NestedArray) = :Size3", rawBsonDocument, compareValues));
+            "size(NestedDoc.NestedArray) = :Size3", rawBsonDocument, compareValues));
 
     // Test non-existent field - should return 0
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-      "size(NonExistentField) = :Size0", rawBsonDocument, compareValues));
+            "size(NonExistentField) = :Size0", rawBsonDocument, compareValues));
 
     // Test size with comparison operators
     assertTrue(SQLComparisonExpressionUtils
-      .evaluateConditionExpression("size(LongString) > :Size20", rawBsonDocument, compareValues));
+            .evaluateConditionExpression("size(LongString) > :Size20", rawBsonDocument, compareValues));
     assertTrue(SQLComparisonExpressionUtils
-      .evaluateConditionExpression("size(LongString) >= :Size24", rawBsonDocument, compareValues));
+            .evaluateConditionExpression("size(LongString) >= :Size24", rawBsonDocument, compareValues));
     assertTrue(SQLComparisonExpressionUtils
-      .evaluateConditionExpression("size(ShortString) < :Size10", rawBsonDocument, compareValues));
+            .evaluateConditionExpression("size(ShortString) < :Size10", rawBsonDocument, compareValues));
     assertTrue(SQLComparisonExpressionUtils
-      .evaluateConditionExpression("size(ShortString) <= :Size5", rawBsonDocument, compareValues));
+            .evaluateConditionExpression("size(ShortString) <= :Size5", rawBsonDocument, compareValues));
     assertTrue(SQLComparisonExpressionUtils
-      .evaluateConditionExpression("size(ShortString) <> :Size10", rawBsonDocument, compareValues));
+            .evaluateConditionExpression("size(ShortString) <> :Size10", rawBsonDocument, compareValues));
 
     // Test size with IN operator
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-      "size(SmallArray) IN (:Size3, :Size4, :Size5)", rawBsonDocument, compareValues));
+            "size(SmallArray) IN (:Size3, :Size4, :Size5)", rawBsonDocument, compareValues));
     assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
-      "size(SmallArray) IN (:Size1, :Size2, :Size4)", rawBsonDocument, compareValues));
+            "size(SmallArray) IN (:Size1, :Size2, :Size4)", rawBsonDocument, compareValues));
 
     // Test size in complex boolean expressions
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-      "size(ShortString) = :Size5 AND size(SmallArray) = :Size3", rawBsonDocument, compareValues));
+            "size(ShortString) = :Size5 AND size(SmallArray) = :Size3", rawBsonDocument, compareValues));
 
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-      "size(EmptyString) = :Size0 OR size(LargeArray) = :Size5", rawBsonDocument, compareValues));
+            "size(EmptyString) = :Size0 OR size(LargeArray) = :Size5", rawBsonDocument, compareValues));
 
     assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
-      "size(ShortString) = :Size10 AND size(SmallArray) = :Size3", rawBsonDocument, compareValues));
+            "size(ShortString) = :Size10 AND size(SmallArray) = :Size3", rawBsonDocument, compareValues));
 
     // Test NOT with size
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-      "NOT size(ShortString) = :Size10", rawBsonDocument, compareValues));
+            "NOT size(ShortString) = :Size10", rawBsonDocument, compareValues));
 
     assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
-      "NOT size(ShortString) = :Size5", rawBsonDocument, compareValues));
+            "NOT size(ShortString) = :Size5", rawBsonDocument, compareValues));
 
     // Test size combined with other functions
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-      "size(ShortString) = :Size5 AND field_exists(ShortString)", rawBsonDocument, compareValues));
+            "size(ShortString) = :Size5 AND field_exists(ShortString)", rawBsonDocument, compareValues));
 
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-      "size(NonExistentField) = :Size0 AND field_not_exists(NonExistentField)", rawBsonDocument,
-      compareValues));
+            "size(NonExistentField) = :Size0 AND field_not_exists(NonExistentField)", rawBsonDocument,
+            compareValues));
 
     // Test size with BETWEEN
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-      "size(LongString) BETWEEN :Size20 AND :Size30", rawBsonDocument, compareValues));
+            "size(LongString) BETWEEN :Size20 AND :Size30", rawBsonDocument, compareValues));
 
     assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression(
-      "size(ShortString) BETWEEN :Size10 AND :Size20", rawBsonDocument, compareValues));
+            "size(ShortString) BETWEEN :Size10 AND :Size20", rawBsonDocument, compareValues));
 
     // Test negative cases - wrong size comparisons
     assertFalse(SQLComparisonExpressionUtils
-      .evaluateConditionExpression("size(ShortString) = :Size10", rawBsonDocument, compareValues));
+            .evaluateConditionExpression("size(ShortString) = :Size10", rawBsonDocument, compareValues));
     assertFalse(SQLComparisonExpressionUtils
-      .evaluateConditionExpression("size(EmptyArray) = :Size5", rawBsonDocument, compareValues));
+            .evaluateConditionExpression("size(EmptyArray) = :Size5", rawBsonDocument, compareValues));
     assertFalse(SQLComparisonExpressionUtils.evaluateConditionExpression("size(SmallDoc) = :Size10",
-      rawBsonDocument, compareValues));
+            rawBsonDocument, compareValues));
 
     // Test array element size
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-      "size(ArrayOfStrings[0]) = :Size6", rawBsonDocument, compareValues));
+            "size(ArrayOfStrings[0]) = :Size6", rawBsonDocument, compareValues));
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-      "size(ArrayOfStrings[1]) = :Size5", rawBsonDocument, compareValues));
+            "size(ArrayOfStrings[1]) = :Size5", rawBsonDocument, compareValues));
 
     // Test size comparison with specific values (size() only as LHS)
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-      "size(ArrayOfStrings[0]) > :Size5", rawBsonDocument, compareValues)); // "String" (6) > 5
+            "size(ArrayOfStrings[0]) > :Size5", rawBsonDocument, compareValues)); // "String" (6) > 5
 
     // Test edge cases with very large sizes
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
-      "size(VeryLargeArray) = :Size100", rawBsonDocument, compareValues));
+            "size(VeryLargeArray) = :Size100", rawBsonDocument, compareValues));
 
     // Test size comparisons with specific values (size() only as LHS)
     assertTrue(SQLComparisonExpressionUtils
-      .evaluateConditionExpression("size(ShortString) < :Size24", rawBsonDocument, compareValues)); // "Hello"
-                                                                                                    // (5)
-                                                                                                    // <
-                                                                                                    // 24
+            .evaluateConditionExpression("size(ShortString) < :Size24", rawBsonDocument, compareValues)); // "Hello"
+    // (5)
+    // <
+    // 24
 
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression("size(EmptyArray) < :Size3",
-      rawBsonDocument, compareValues)); // 0 < 3
+            rawBsonDocument, compareValues)); // 0 < 3
 
     assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression("size(SmallDoc) < :Size4",
-      rawBsonDocument, compareValues)); // 2 < 4
+            rawBsonDocument, compareValues)); // 2 < 4
 
     // Test error cases for unsupported types
     try {
       SQLComparisonExpressionUtils.evaluateConditionExpression("size(NumberField) = :Size5",
-        rawBsonDocument, compareValues);
+              rawBsonDocument, compareValues);
       fail("Expected BsonConditionInvalidArgumentException for number field");
     } catch (BsonConditionInvalidArgumentException e) {
       // expected
@@ -2039,7 +2318,7 @@ public class ComparisonExpressionUtilsTest {
 
     try {
       SQLComparisonExpressionUtils.evaluateConditionExpression("size(BooleanField) = :Size1",
-        rawBsonDocument, compareValues);
+              rawBsonDocument, compareValues);
       fail("Expected BsonConditionInvalidArgumentException for boolean field");
     } catch (BsonConditionInvalidArgumentException e) {
       // expected
@@ -2047,7 +2326,7 @@ public class ComparisonExpressionUtilsTest {
 
     try {
       SQLComparisonExpressionUtils.evaluateConditionExpression("size(NullField) = :Size0",
-        rawBsonDocument, compareValues);
+              rawBsonDocument, compareValues);
       fail("Expected BsonConditionInvalidArgumentException for null field");
     } catch (BsonConditionInvalidArgumentException e) {
       // expected
@@ -2056,22 +2335,22 @@ public class ComparisonExpressionUtilsTest {
 
   private static RawBsonDocument getSizeTestDocument() {
     String json = "{\n" + "  \"ShortString\" : \"Hello\",\n"
-      + "  \"LongString\" : \"This is a longer string!\",\n" + "  \"EmptyString\" : \"\",\n"
-      + "  \"SmallArray\" : [ 1, 2, 3 ],\n"
-      + "  \"LargeArray\" : [ \"a\", \"b\", \"c\", \"d\", \"e\" ],\n" + "  \"EmptyArray\" : [ ],\n"
-      + "  \"SmallDoc\" : {\n" + "    \"field1\" : \"value1\",\n" + "    \"field2\" : \"value2\"\n"
-      + "  },\n" + "  \"LargeDoc\" : {\n" + "    \"name\" : \"John\",\n" + "    \"age\" : 30,\n"
-      + "    \"city\" : \"New York\",\n" + "    \"active\" : true\n" + "  },\n"
-      + "  \"EmptyDoc\" : { },\n"
-      + "  \"StringSet\" : { \"$set\" : [ \"apple\", \"banana\", \"cherry\" ] },\n"
-      + "  \"NumberSet\" : { \"$set\" : [ 10, 20, 30, 40 ] },\n"
-      + "  \"EmptySet\" : { \"$set\" : [ ] },\n" + "  \"BinaryData\" : {\n"
-      + "    \"$binary\" : {\n" + "      \"base64\" : \"SGVsbG8=\",\n"
-      + "      \"subType\" : \"00\"\n" + "    }\n" + "  },\n" + "  \"NestedDoc\" : {\n"
-      + "    \"NestedString\" : \"Nested Value\",\n"
-      + "    \"NestedArray\" : [ \"x\", \"y\", \"z\" ]\n" + "  },\n"
-      + "  \"ArrayOfStrings\" : [ \"String\", \"World\" ],\n" + "  \"NumberField\" : 42,\n"
-      + "  \"BooleanField\" : true,\n" + "  \"NullField\" : null,\n" + "  \"VeryLargeArray\" : [ ";
+            + "  \"LongString\" : \"This is a longer string!\",\n" + "  \"EmptyString\" : \"\",\n"
+            + "  \"SmallArray\" : [ 1, 2, 3 ],\n"
+            + "  \"LargeArray\" : [ \"a\", \"b\", \"c\", \"d\", \"e\" ],\n" + "  \"EmptyArray\" : [ ],\n"
+            + "  \"SmallDoc\" : {\n" + "    \"field1\" : \"value1\",\n" + "    \"field2\" : \"value2\"\n"
+            + "  },\n" + "  \"LargeDoc\" : {\n" + "    \"name\" : \"John\",\n" + "    \"age\" : 30,\n"
+            + "    \"city\" : \"New York\",\n" + "    \"active\" : true\n" + "  },\n"
+            + "  \"EmptyDoc\" : { },\n"
+            + "  \"StringSet\" : { \"$set\" : [ \"apple\", \"banana\", \"cherry\" ] },\n"
+            + "  \"NumberSet\" : { \"$set\" : [ 10, 20, 30, 40 ] },\n"
+            + "  \"EmptySet\" : { \"$set\" : [ ] },\n" + "  \"BinaryData\" : {\n"
+            + "    \"$binary\" : {\n" + "      \"base64\" : \"SGVsbG8=\",\n"
+            + "      \"subType\" : \"00\"\n" + "    }\n" + "  },\n" + "  \"NestedDoc\" : {\n"
+            + "    \"NestedString\" : \"Nested Value\",\n"
+            + "    \"NestedArray\" : [ \"x\", \"y\", \"z\" ]\n" + "  },\n"
+            + "  \"ArrayOfStrings\" : [ \"String\", \"World\" ],\n" + "  \"NumberField\" : 42,\n"
+            + "  \"BooleanField\" : true,\n" + "  \"NullField\" : null,\n" + "  \"VeryLargeArray\" : [ ";
 
     // Generate a large array with 100 elements
     for (int i = 0; i < 100; i++) {
@@ -2087,10 +2366,10 @@ public class ComparisonExpressionUtilsTest {
 
   private static RawBsonDocument getSizeCompareValDocument() {
     String json = "{\n" + "  \":Size0\" : 0,\n" + "  \":Size1\" : 1,\n" + "  \":Size2\" : 2,\n"
-      + "  \":Size3\" : 3,\n" + "  \":Size4\" : 4,\n" + "  \":Size5\" : 5,\n"
-      + "  \":Size6\" : 6,\n" + "  \":Size10\" : 10,\n" + "  \":Size12\" : 12,\n"
-      + "  \":Size20\" : 20,\n" + "  \":Size24\" : 24,\n" + "  \":Size30\" : 30,\n"
-      + "  \":Size100\" : 100\n" + "}";
+            + "  \":Size3\" : 3,\n" + "  \":Size4\" : 4,\n" + "  \":Size5\" : 5,\n"
+            + "  \":Size6\" : 6,\n" + "  \":Size10\" : 10,\n" + "  \":Size12\" : 12,\n"
+            + "  \":Size20\" : 20,\n" + "  \":Size24\" : 24,\n" + "  \":Size30\" : 30,\n"
+            + "  \":Size100\" : 100\n" + "}";
     return RawBsonDocument.parse(json);
   }
 

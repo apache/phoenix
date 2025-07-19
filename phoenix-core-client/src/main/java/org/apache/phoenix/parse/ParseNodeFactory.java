@@ -310,6 +310,10 @@ public class ParseNodeFactory {
     return new DocumentFieldContainsParseNode(fieldKey, value);
   }
 
+  public DocumentFieldTypeParseNode documentFieldType(ParseNode fieldKey, ParseNode value) {
+    return new DocumentFieldTypeParseNode(fieldKey, value);
+  }
+  
   public DocumentFieldSizeParseNode documentFieldSize(ParseNode fieldKey) {
     return new DocumentFieldSizeParseNode(fieldKey);
   }
