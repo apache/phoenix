@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,7 +28,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
-
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.schema.types.PInteger;
@@ -36,142 +35,145 @@ import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
 @Category(ParallelStatsDisabledTest.class)
 public class DecodeFunctionIT extends ParallelStatsDisabledIT {
 
-	@Test
-	public void shouldPass() throws Exception {
-		Connection conn = DriverManager.getConnection(getUrl());
+  @Test
+  public void shouldPass() throws Exception {
+    Connection conn = DriverManager.getConnection(getUrl());
 
-		String testTable = generateUniqueName();
-		String ddl = "CREATE TABLE " + testTable
-				+ " ( some_column BINARY(12) NOT NULL CONSTRAINT PK PRIMARY KEY (some_column))";
+    String testTable = generateUniqueName();
+    String ddl = "CREATE TABLE " + testTable
+      + " ( some_column BINARY(12) NOT NULL CONSTRAINT PK PRIMARY KEY (some_column))";
 
-		conn.createStatement().execute(ddl);
-		PreparedStatement ps = conn.prepareStatement(
-				"UPSERT INTO " + testTable + " (some_column) VALUES (?)");
+    conn.createStatement().execute(ddl);
+    PreparedStatement ps =
+      conn.prepareStatement("UPSERT INTO " + testTable + " (some_column) VALUES (?)");
 
-		byte[] kk = Bytes.add(PUnsignedLong.INSTANCE.toBytes(2232594215l), PInteger.INSTANCE.toBytes(-8));
-		ps.setBytes(1, kk);
+    byte[] kk =
+      Bytes.add(PUnsignedLong.INSTANCE.toBytes(2232594215l), PInteger.INSTANCE.toBytes(-8));
+    ps.setBytes(1, kk);
 
-		ps.execute();
-		conn.commit();
+    ps.execute();
+    conn.commit();
 
-		ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + testTable
-				+ " WHERE some_column = DECODE('000000008512af277ffffff8', 'hex')");
-		assertTrue(rs.next());
-	}
+    ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + testTable
+      + " WHERE some_column = DECODE('000000008512af277ffffff8', 'hex')");
+    assertTrue(rs.next());
+  }
 
-	@Test
-	public void upperCaseHexEncoding() throws Exception {
-		Connection conn = DriverManager.getConnection(getUrl());
+  @Test
+  public void upperCaseHexEncoding() throws Exception {
+    Connection conn = DriverManager.getConnection(getUrl());
 
-		String testTable = generateUniqueName();
-		String ddl = "CREATE TABLE " + testTable
-				+ " ( some_column BINARY(12) NOT NULL CONSTRAINT PK PRIMARY KEY (some_column))";
+    String testTable = generateUniqueName();
+    String ddl = "CREATE TABLE " + testTable
+      + " ( some_column BINARY(12) NOT NULL CONSTRAINT PK PRIMARY KEY (some_column))";
 
-		conn.createStatement().execute(ddl);
-		PreparedStatement ps = conn.prepareStatement(
-				"UPSERT INTO " + testTable + " (some_column) VALUES (?)");
+    conn.createStatement().execute(ddl);
+    PreparedStatement ps =
+      conn.prepareStatement("UPSERT INTO " + testTable + " (some_column) VALUES (?)");
 
-		byte[] kk = Bytes.add(PUnsignedLong.INSTANCE.toBytes(2232594215l), PInteger.INSTANCE.toBytes(-8));
-		ps.setBytes(1, kk);
+    byte[] kk =
+      Bytes.add(PUnsignedLong.INSTANCE.toBytes(2232594215l), PInteger.INSTANCE.toBytes(-8));
+    ps.setBytes(1, kk);
 
-		ps.execute();
-		conn.commit();
+    ps.execute();
+    conn.commit();
 
-		ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + testTable
-				+ " WHERE some_column = DECODE('000000008512af277ffffff8', 'HEX')");
-		assertTrue(rs.next());
-	}
+    ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + testTable
+      + " WHERE some_column = DECODE('000000008512af277ffffff8', 'HEX')");
+    assertTrue(rs.next());
+  }
 
-	@Test
-	public void invalidCharacters() throws Exception {
-		Connection conn = DriverManager.getConnection(getUrl());
-		String testTable = generateUniqueName();
-		String ddl = "CREATE TABLE " + testTable
-				+ " ( some_column BINARY(12) NOT NULL CONSTRAINT PK PRIMARY KEY (some_column))";
+  @Test
+  public void invalidCharacters() throws Exception {
+    Connection conn = DriverManager.getConnection(getUrl());
+    String testTable = generateUniqueName();
+    String ddl = "CREATE TABLE " + testTable
+      + " ( some_column BINARY(12) NOT NULL CONSTRAINT PK PRIMARY KEY (some_column))";
 
-		conn.createStatement().execute(ddl);
+    conn.createStatement().execute(ddl);
 
-		try {
-			conn.createStatement().executeQuery(
-					"SELECT * FROM " + testTable + " WHERE some_column = DECODE('zzxxuuyyzzxxuuyy', 'hex')");
-	        fail();
-		} catch (SQLException e) {
-			assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
-		}
-	}
+    try {
+      conn.createStatement().executeQuery(
+        "SELECT * FROM " + testTable + " WHERE some_column = DECODE('zzxxuuyyzzxxuuyy', 'hex')");
+      fail();
+    } catch (SQLException e) {
+      assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
+    }
+  }
 
-	@Test
-	public void invalidLength() throws Exception {
-		Connection conn = DriverManager.getConnection(getUrl());
-		String testTable = generateUniqueName();
-		String ddl = "CREATE TABLE " + testTable
-				+ " ( some_column BINARY(12) NOT NULL CONSTRAINT PK PRIMARY KEY (some_column))";
+  @Test
+  public void invalidLength() throws Exception {
+    Connection conn = DriverManager.getConnection(getUrl());
+    String testTable = generateUniqueName();
+    String ddl = "CREATE TABLE " + testTable
+      + " ( some_column BINARY(12) NOT NULL CONSTRAINT PK PRIMARY KEY (some_column))";
 
-		conn.createStatement().execute(ddl);
+    conn.createStatement().execute(ddl);
 
-		try {
-			conn.createStatement().executeQuery(
-					"SELECT * FROM " + testTable + " WHERE some_column = DECODE('8', 'hex')");
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
-        }
-	}
+    try {
+      conn.createStatement()
+        .executeQuery("SELECT * FROM " + testTable + " WHERE some_column = DECODE('8', 'hex')");
+      fail();
+    } catch (SQLException e) {
+      assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
+    }
+  }
 
-	@Test
-	public void nullEncoding() throws Exception {
-		Connection conn = DriverManager.getConnection(getUrl());
-		String testTable = generateUniqueName();
-		String ddl = "CREATE TABLE " + testTable
-				+ " ( some_column BINARY(12) NOT NULL CONSTRAINT PK PRIMARY KEY (some_column))";
+  @Test
+  public void nullEncoding() throws Exception {
+    Connection conn = DriverManager.getConnection(getUrl());
+    String testTable = generateUniqueName();
+    String ddl = "CREATE TABLE " + testTable
+      + " ( some_column BINARY(12) NOT NULL CONSTRAINT PK PRIMARY KEY (some_column))";
 
-		conn.createStatement().execute(ddl);
+    conn.createStatement().execute(ddl);
 
-		ResultSet rs = conn.createStatement().executeQuery(
-				"SELECT * FROM " + testTable + " WHERE some_column = DECODE('8', NULL)");
-		assertFalse(rs.next());
-	}
+    ResultSet rs = conn.createStatement()
+      .executeQuery("SELECT * FROM " + testTable + " WHERE some_column = DECODE('8', NULL)");
+    assertFalse(rs.next());
+  }
 
-	@Test
-	public void invalidEncoding() throws Exception {
-		Connection conn = DriverManager.getConnection(getUrl());
-		String testTable = generateUniqueName();
-		String ddl = "CREATE TABLE " + testTable
-				+ " ( some_column BINARY(12) NOT NULL CONSTRAINT PK PRIMARY KEY (some_column))";
+  @Test
+  public void invalidEncoding() throws Exception {
+    Connection conn = DriverManager.getConnection(getUrl());
+    String testTable = generateUniqueName();
+    String ddl = "CREATE TABLE " + testTable
+      + " ( some_column BINARY(12) NOT NULL CONSTRAINT PK PRIMARY KEY (some_column))";
 
-		conn.createStatement().execute(ddl);
+    conn.createStatement().execute(ddl);
 
-		try {
-			conn.createStatement().executeQuery("SELECT * FROM "+ testTable + " WHERE some_column = DECODE('8', 'someNonexistFormat')");
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
-        }
-	}
+    try {
+      conn.createStatement().executeQuery(
+        "SELECT * FROM " + testTable + " WHERE some_column = DECODE('8', 'someNonexistFormat')");
+      fail();
+    } catch (SQLException e) {
+      assertEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
+    }
+  }
 
-    @Test
-    public void testDecodeBase642() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+  @Test
+  public void testDecodeBase642() throws Exception {
+    Connection conn = DriverManager.getConnection(getUrl());
 
-        String testTable = generateUniqueName();
-        String ddl = "CREATE TABLE " + testTable + " (id INTEGER PRIMARY KEY, data VARCHAR)";
+    String testTable = generateUniqueName();
+    String ddl = "CREATE TABLE " + testTable + " (id INTEGER PRIMARY KEY, data VARCHAR)";
 
-        conn.createStatement().execute(ddl);
+    conn.createStatement().execute(ddl);
 
-        PreparedStatement ps =
-                conn.prepareStatement("UPSERT INTO " + testTable + " (id, data) VALUES (1, 'SGVsbG9QaG9lbml4')");
-        ps.execute();
-        conn.commit();
+    PreparedStatement ps = conn
+      .prepareStatement("UPSERT INTO " + testTable + " (id, data) VALUES (1, 'SGVsbG9QaG9lbml4')");
+    ps.execute();
+    conn.commit();
 
-        ResultSet rs = conn.createStatement().executeQuery("SELECT DECODE(data, 'BASE64') FROM " + testTable);
-        assertTrue(rs.next());
-        byte[] actualBytes = rs.getBytes(1);
-        assertTrue(Arrays.equals("HelloPhoenix".getBytes(), actualBytes));
-        assertFalse(rs.next());
-	}
+    ResultSet rs =
+      conn.createStatement().executeQuery("SELECT DECODE(data, 'BASE64') FROM " + testTable);
+    assertTrue(rs.next());
+    byte[] actualBytes = rs.getBytes(1);
+    assertTrue(Arrays.equals("HelloPhoenix".getBytes(), actualBytes));
+    assertFalse(rs.next());
+  }
 
 }

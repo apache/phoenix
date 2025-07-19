@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,38 +23,36 @@ import java.util.List;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 
 public class ExplainPlan {
-    public static final ExplainPlan EMPTY_PLAN = new ExplainPlan(Collections.<String>emptyList());
+  public static final ExplainPlan EMPTY_PLAN = new ExplainPlan(Collections.<String> emptyList());
 
-    private final List<String> planSteps;
-    private final ExplainPlanAttributes planStepsAsAttributes;
+  private final List<String> planSteps;
+  private final ExplainPlanAttributes planStepsAsAttributes;
 
-    public ExplainPlan(List<String> planSteps) {
-        this.planSteps = ImmutableList.copyOf(planSteps);
-        this.planStepsAsAttributes =
-            ExplainPlanAttributes.getDefaultExplainPlan();
+  public ExplainPlan(List<String> planSteps) {
+    this.planSteps = ImmutableList.copyOf(planSteps);
+    this.planStepsAsAttributes = ExplainPlanAttributes.getDefaultExplainPlan();
+  }
+
+  public ExplainPlan(List<String> planSteps, ExplainPlanAttributes planStepsAsAttributes) {
+    this.planSteps = planSteps;
+    this.planStepsAsAttributes = planStepsAsAttributes;
+  }
+
+  public List<String> getPlanSteps() {
+    return planSteps;
+  }
+
+  public ExplainPlanAttributes getPlanStepsAsAttributes() {
+    return planStepsAsAttributes;
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder buf = new StringBuilder();
+    for (String step : planSteps) {
+      buf.append(step);
+      buf.append('\n');
     }
-
-    public ExplainPlan(List<String> planSteps,
-            ExplainPlanAttributes planStepsAsAttributes) {
-        this.planSteps = planSteps;
-        this.planStepsAsAttributes = planStepsAsAttributes;
-    }
-
-    public List<String> getPlanSteps() {
-        return planSteps;
-    }
-
-    public ExplainPlanAttributes getPlanStepsAsAttributes() {
-        return planStepsAsAttributes;
-    }
-
-    @Override
-    public String toString() {
-        StringBuilder buf = new StringBuilder();
-        for (String step : planSteps) {
-            buf.append(step);
-            buf.append('\n');
-        }
-        return buf.toString();
-    }
+    return buf.toString();
+  }
 }

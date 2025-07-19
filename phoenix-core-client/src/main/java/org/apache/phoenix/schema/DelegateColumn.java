@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,102 +20,103 @@ package org.apache.phoenix.schema;
 import org.apache.phoenix.util.SizedUtil;
 
 public class DelegateColumn extends DelegateDatum implements PColumn {
-    
-    public DelegateColumn(PColumn delegate) {
-        super(delegate);
-    }
-    
-    @Override
-    protected PColumn getDelegate() {
-        return (PColumn)super.getDelegate();
-    }
-    
-    @Override
-    public PName getName() {
-        return getDelegate().getName();
-    }
-    
-    @Override
-    public SortOrder getSortOrder() {
-    	return getDelegate().getSortOrder();
-    }
 
-    @Override
-    public PName getFamilyName() {
-        return getDelegate().getFamilyName();
-    }
+  public DelegateColumn(PColumn delegate) {
+    super(delegate);
+  }
 
-    @Override
-    public int getPosition() {
-        return getDelegate().getPosition();
-    }
+  @Override
+  protected PColumn getDelegate() {
+    return (PColumn) super.getDelegate();
+  }
 
-    @Override
-    public Integer getArraySize() {
-        return getDelegate().getArraySize();
-    }
+  @Override
+  public PName getName() {
+    return getDelegate().getName();
+  }
 
-    @Override
-    public byte[] getViewConstant() {
-        return getDelegate().getViewConstant();
-    }
+  @Override
+  public SortOrder getSortOrder() {
+    return getDelegate().getSortOrder();
+  }
 
-    @Override
-    public int getEstimatedSize() {
-        return SizedUtil.OBJECT_SIZE + getDelegate().getEstimatedSize();
-    }
+  @Override
+  public PName getFamilyName() {
+    return getDelegate().getFamilyName();
+  }
 
-    @Override
-    public boolean isViewReferenced() {
-        return getDelegate().isViewReferenced();
-    }
-    
-    @Override
-    public String getExpressionStr() {
-        return getDelegate().getExpressionStr();
-    }
+  @Override
+  public int getPosition() {
+    return getDelegate().getPosition();
+  }
 
-    @Override
-    public long getTimestamp() {
-        return getDelegate().getTimestamp();
-    }
+  @Override
+  public Integer getArraySize() {
+    return getDelegate().getArraySize();
+  }
 
-    @Override
-    public boolean isDerived() {
-        return getDelegate().isDerived();
-    }
+  @Override
+  public byte[] getViewConstant() {
+    return getDelegate().getViewConstant();
+  }
 
-    @Override
-    public boolean isExcluded() {
-        return getDelegate().isExcluded();
-    }
+  @Override
+  public int getEstimatedSize() {
+    return SizedUtil.OBJECT_SIZE + getDelegate().getEstimatedSize();
+  }
 
-    @Override
-    public boolean isRowTimestamp() {
-        return getDelegate().isRowTimestamp();
-    }    
-    
-    @Override
-    public String toString() {
-        return getDelegate().toString();
-    }
+  @Override
+  public boolean isViewReferenced() {
+    return getDelegate().isViewReferenced();
+  }
 
-	@Override
-	public boolean isDynamic() {
-		return getDelegate().isDynamic();
-	}
+  @Override
+  public String getExpressionStr() {
+    return getDelegate().getExpressionStr();
+  }
 
-	@Override
-	public int hashCode() {
-	    return getDelegate().hashCode();
-	}
-	
-	@Override
-    public boolean equals(Object o) {
-	    return getDelegate().equals(o);
-	}
-    @Override
-    public byte[] getColumnQualifierBytes() {
-        return getDelegate().getColumnQualifierBytes();
-    }
+  @Override
+  public long getTimestamp() {
+    return getDelegate().getTimestamp();
+  }
+
+  @Override
+  public boolean isDerived() {
+    return getDelegate().isDerived();
+  }
+
+  @Override
+  public boolean isExcluded() {
+    return getDelegate().isExcluded();
+  }
+
+  @Override
+  public boolean isRowTimestamp() {
+    return getDelegate().isRowTimestamp();
+  }
+
+  @Override
+  public String toString() {
+    return getDelegate().toString();
+  }
+
+  @Override
+  public boolean isDynamic() {
+    return getDelegate().isDynamic();
+  }
+
+  @Override
+  public int hashCode() {
+    return getDelegate().hashCode();
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    return getDelegate().equals(o);
+  }
+
+  @Override
+  public byte[] getColumnQualifierBytes() {
+    return getDelegate().getColumnQualifierBytes();
+  }
 }

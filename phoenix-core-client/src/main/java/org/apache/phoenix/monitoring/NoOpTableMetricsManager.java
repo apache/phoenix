@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,37 +22,41 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * TableMetricsManager will be replaced by this case
- * incase of tableMetrics flag is set to  false.
+ * TableMetricsManager will be replaced by this case incase of tableMetrics flag is set to false.
  */
-
 
 public class NoOpTableMetricsManager extends TableMetricsManager {
 
-    public static final NoOpTableMetricsManager noOpsTableMetricManager = new NoOpTableMetricsManager();
+  public static final NoOpTableMetricsManager noOpsTableMetricManager =
+    new NoOpTableMetricsManager();
 
-    private NoOpTableMetricsManager() {
-        super();
-    }
+  private NoOpTableMetricsManager() {
+    super();
+  }
 
-    @Override public void updateMetrics(String tableName, MetricType type, long value) {
+  @Override
+  public void updateMetrics(String tableName, MetricType type, long value) {
 
-    }
+  }
 
-    @Override public void pushMetricsFromConnInstance(Map<String, Map<MetricType, Long>> map) {
+  @Override
+  public void pushMetricsFromConnInstance(Map<String, Map<MetricType, Long>> map) {
 
-    }
+  }
 
-    @Override public void clearTableLevelMetrics() {
+  @Override
+  public void clearTableLevelMetrics() {
 
-    }
+  }
 
-    @Override public Map<String, List<PhoenixTableMetric>> getTableLevelMetrics() {
-        return Collections.emptyMap();
-    }
+  @Override
+  public Map<String, List<PhoenixTableMetric>> getTableLevelMetrics() {
+    return Collections.emptyMap();
+  }
 
-    @Override public TableClientMetrics getTableClientMetrics(String tableName) {
-        return null;
-    }
+  @Override
+  public TableClientMetrics getTableClientMetrics(String tableName) {
+    return null;
+  }
 
 }

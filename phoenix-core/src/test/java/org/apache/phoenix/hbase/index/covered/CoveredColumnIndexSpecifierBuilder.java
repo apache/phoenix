@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.hbase.index.covered;
 
 import java.io.IOException;
@@ -24,7 +23,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.client.TableDescriptor;
@@ -44,13 +42,14 @@ public class CoveredColumnIndexSpecifierBuilder {
   // each joined column are either just the columns in the group or all the most recent data in the
   // row (a fully covered index).
   private static final String COUNT = ".count";
-  private static final String INDEX_GROUPS_COUNT_KEY = INDEX_TO_TABLE_CONF_PREFX + ".groups" + COUNT;
+  private static final String INDEX_GROUPS_COUNT_KEY =
+    INDEX_TO_TABLE_CONF_PREFX + ".groups" + COUNT;
   private static final String INDEX_GROUP_PREFIX = INDEX_TO_TABLE_CONF_PREFX + "group.";
   private static final String INDEX_GROUP_COVERAGE_SUFFIX = ".columns";
   private static final String TABLE_SUFFIX = ".table";
 
-  public static final String NON_TX_INDEX_BUILDER_CLASSNAME = "org.apache.phoenix.index.PhoenixIndexBuilder";
-
+  public static final String NON_TX_INDEX_BUILDER_CLASSNAME =
+    "org.apache.phoenix.index.PhoenixIndexBuilder";
 
   // right now, we don't support this should be easy enough to add later
   // private static final String INDEX_GROUP_FULLY_COVERED = ".covered";
@@ -102,9 +101,6 @@ public class CoveredColumnIndexSpecifierBuilder {
   }
 
   /**
-   * @param specs
-   * @param columns
-   * @param index
    */
   private void addIndexGroupToSpecs(Map<String, String> specs, ColumnGroup columns, int index) {
     // hbase.index.covered.group.<i>
@@ -113,16 +109,16 @@ public class CoveredColumnIndexSpecifierBuilder {
     // set the table to which the group writes
     // hbase.index.covered.group.<i>.table
     specs.put(prefix + TABLE_SUFFIX, columns.getTable());
-    
+
     // a different key for each column in the group
     // hbase.index.covered.group.<i>.columns
     String columnPrefix = prefix + INDEX_GROUP_COVERAGE_SUFFIX;
     // hbase.index.covered.group.<i>.columns.count = <j>
     String columnsSizeKey = columnPrefix + COUNT;
     specs.put(columnsSizeKey, Integer.toString(columns.size()));
-    
+
     // add each column in the group
-    int i=0; 
+    int i = 0;
     for (CoveredColumn column : columns) {
       // hbase.index.covered.group.<i>.columns.<j>
       String nextKey = columnPrefix + "." + Integer.toString(i);
@@ -132,23 +128,24 @@ public class CoveredColumnIndexSpecifierBuilder {
     }
   }
 
-    public TableDescriptor build(TableDescriptor desc) throws IOException {
-        return build(desc, CoveredColumnIndexCodec.class);
-    }
+  public TableDescriptor build(TableDescriptor desc) throws IOException {
+    return build(desc, CoveredColumnIndexCodec.class);
+  }
 
-  public TableDescriptor build(TableDescriptor desc, Class<? extends IndexCodec> clazz) throws IOException {
+  public TableDescriptor build(TableDescriptor desc, Class<? extends IndexCodec> clazz)
+    throws IOException {
     // add the codec for the index to the map of options
     Map<String, String> opts = this.convertToMap();
     opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, clazz.getName());
-        TableDescriptorBuilder newBuilder = TableDescriptorBuilder.newBuilder(desc);
-        IndexUtil.enableIndexing(newBuilder, NonTxIndexBuilder.class.getName(), opts,
-                Coprocessor.PRIORITY_USER, QueryConstants.INDEXER_CLASSNAME);
-        return newBuilder.build();
+    TableDescriptorBuilder newBuilder = TableDescriptorBuilder.newBuilder(desc);
+    IndexUtil.enableIndexing(newBuilder, NonTxIndexBuilder.class.getName(), opts,
+      Coprocessor.PRIORITY_USER, QueryConstants.INDEXER_CLASSNAME);
+    return newBuilder.build();
   }
 
   public static List<ColumnGroup> getColumns(Configuration conf) {
-    int count= conf.getInt(INDEX_GROUPS_COUNT_KEY, 0);
-    if (count ==0) {
+    int count = conf.getInt(INDEX_GROUPS_COUNT_KEY, 0);
+    if (count == 0) {
       return Collections.emptyList();
     }
 
@@ -168,7 +165,7 @@ public class CoveredColumnIndexSpecifierBuilder {
       // hbase.index.covered.group.<i>.columns.count = j
       String columnsSizeKey = columnPrefix + COUNT;
       int columnCount = conf.getInt(columnsSizeKey, 0);
-      for(int j=0; j< columnCount; j++){
+      for (int j = 0; j < columnCount; j++) {
         String columnKey = columnPrefix + "." + j;
         CoveredColumn column = CoveredColumn.parse(conf.get(columnKey));
         group.add(column);
@@ -181,8 +178,6 @@ public class CoveredColumnIndexSpecifierBuilder {
   }
 
   /**
-   * @param key
-   * @param value
    */
   public void addArbitraryConfigForTesting(String key, String value) {
     this.specs.put(key, value);

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,6 @@ package org.apache.phoenix.end2end.index;
 
 import java.util.Arrays;
 import java.util.Collection;
-
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.junit.Ignore;
 import org.junit.experimental.categories.Category;
@@ -29,15 +28,15 @@ import org.junit.runners.Parameterized.Parameters;
 @Ignore("No transactionProviders with local index support currently available")
 public class LocalMutableTxIndexIT extends BaseIndexIT {
 
-    public LocalMutableTxIndexIT(String transactionProvider, boolean columnEncoded) {
-        super(true, false, true, transactionProvider, columnEncoded);
-    }
+  public LocalMutableTxIndexIT(String transactionProvider, boolean columnEncoded) {
+    super(true, false, true, transactionProvider, columnEncoded);
+  }
 
-    // name is used by failsafe as file name in reports
-    @Parameters(name="LocalMutableTxIndexIT_transactionProvider={0},columnEncoded={1}")
-    public static synchronized Collection<Object[]> data() {
-        return Arrays.asList(new Object[][] {
-            // OMID does not support local indexes
-        });
-    }
+  // name is used by failsafe as file name in reports
+  @Parameters(name = "LocalMutableTxIndexIT_transactionProvider={0},columnEncoded={1}")
+  public static synchronized Collection<Object[]> data() {
+    return Arrays.asList(new Object[][] {
+        // OMID does not support local indexes
+    });
+  }
 }

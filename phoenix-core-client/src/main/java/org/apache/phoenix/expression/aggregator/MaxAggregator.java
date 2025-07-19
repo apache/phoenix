@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,30 +19,27 @@ package org.apache.phoenix.expression.aggregator;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-
 import org.apache.phoenix.schema.SortOrder;
-
 
 /**
  * Aggregator that finds the max of values. Inverse of {@link MinAggregator}.
- *
- * 
  * @since 0.1
  */
 abstract public class MaxAggregator extends MinAggregator {
-    
-    public MaxAggregator(SortOrder sortOrder) {
-        super(sortOrder);
-    }
-    
-    @Override
-    protected boolean keepFirst(ImmutableBytesWritable ibw1, ImmutableBytesWritable ibw2) {
-        return !super.keepFirst(ibw1, ibw2);
-    }
-    
-    @Override
-    public String toString() {
-        return "MAX [value=" + Bytes.toStringBinary(value.get(),value.getOffset(),value.getLength()) + "]";
-    }
+
+  public MaxAggregator(SortOrder sortOrder) {
+    super(sortOrder);
+  }
+
+  @Override
+  protected boolean keepFirst(ImmutableBytesWritable ibw1, ImmutableBytesWritable ibw2) {
+    return !super.keepFirst(ibw1, ibw2);
+  }
+
+  @Override
+  public String toString() {
+    return "MAX [value=" + Bytes.toStringBinary(value.get(), value.getOffset(), value.getLength())
+      + "]";
+  }
 
 }

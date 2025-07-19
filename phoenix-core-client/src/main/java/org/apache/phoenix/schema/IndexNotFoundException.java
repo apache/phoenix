@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,22 +22,22 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.util.SchemaUtil;
 
 public class IndexNotFoundException extends TableNotFoundException {
-    private static SQLExceptionCode code = SQLExceptionCode.INDEX_UNDEFINED;
+  private static SQLExceptionCode code = SQLExceptionCode.INDEX_UNDEFINED;
 
-    public IndexNotFoundException(IndexNotFoundException e, long timestamp) {
-        this(e.getSchemaName(),e.getTableName(), timestamp);
-    }
+  public IndexNotFoundException(IndexNotFoundException e, long timestamp) {
+    this(e.getSchemaName(), e.getTableName(), timestamp);
+  }
 
-    public IndexNotFoundException(String tableName) {
-        this(SchemaUtil.getSchemaNameFromFullName(tableName),
-                SchemaUtil.getTableNameFromFullName(tableName));
-    }
+  public IndexNotFoundException(String tableName) {
+    this(SchemaUtil.getSchemaNameFromFullName(tableName),
+      SchemaUtil.getTableNameFromFullName(tableName));
+  }
 
-    public IndexNotFoundException(String schemaName, String tableName) {
-        this(schemaName, tableName, HConstants.LATEST_TIMESTAMP);
-    }
+  public IndexNotFoundException(String schemaName, String tableName) {
+    this(schemaName, tableName, HConstants.LATEST_TIMESTAMP);
+  }
 
-    public IndexNotFoundException(String schemaName, String tableName, long timestamp) {
-        super(schemaName, tableName, timestamp, code, false);
-    }
+  public IndexNotFoundException(String schemaName, String tableName, long timestamp) {
+    super(schemaName, tableName, timestamp, code, false);
+  }
 }

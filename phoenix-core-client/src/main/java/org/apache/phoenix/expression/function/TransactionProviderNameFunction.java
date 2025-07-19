@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,6 @@ package org.apache.phoenix.expression.function;
 
 import java.sql.SQLException;
 import java.util.List;
-
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
@@ -31,51 +30,45 @@ import org.apache.phoenix.schema.types.PTinyint;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.transaction.TransactionFactory;
 
-
 /**
- * 
- * Function used to get the index state name from the serialized byte value
- * Usage:
- * IndexStateName('a')
- * will return 'ACTIVE'
- * 
- * 
+ * Function used to get the index state name from the serialized byte value Usage:
+ * IndexStateName('a') will return 'ACTIVE'
  * @since 2.1
  */
-@BuiltInFunction(name=TransactionProviderNameFunction.NAME, args= {
-    @Argument(allowedTypes= PInteger.class)} )
+@BuiltInFunction(name = TransactionProviderNameFunction.NAME,
+    args = { @Argument(allowedTypes = PInteger.class) })
 public class TransactionProviderNameFunction extends ScalarFunction {
-    public static final String NAME = "TransactionProviderName";
+  public static final String NAME = "TransactionProviderName";
 
-    public TransactionProviderNameFunction() {
-    }
-    
-    public TransactionProviderNameFunction(List<Expression> children) throws SQLException {
-        super(children);
-    }
-    
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        Expression child = children.get(0);
-        if (!child.evaluate(tuple, ptr)) {
-            return false;
-        }
-        if (ptr.getLength() == 0) {
-            return true;
-        }
-        int code = PTinyint.INSTANCE.getCodec().decodeByte(ptr, child.getSortOrder());
-        TransactionFactory.Provider provider = TransactionFactory.Provider.fromCode(code);
-        ptr.set(PVarchar.INSTANCE.toBytes(provider.name()));
-        return true;
-    }
+  public TransactionProviderNameFunction() {
+  }
 
-    @Override
-    public PDataType getDataType() {
-        return PVarchar.INSTANCE;
+  public TransactionProviderNameFunction(List<Expression> children) throws SQLException {
+    super(children);
+  }
+
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    Expression child = children.get(0);
+    if (!child.evaluate(tuple, ptr)) {
+      return false;
     }
-    
-    @Override
-    public String getName() {
-        return NAME;
+    if (ptr.getLength() == 0) {
+      return true;
     }
+    int code = PTinyint.INSTANCE.getCodec().decodeByte(ptr, child.getSortOrder());
+    TransactionFactory.Provider provider = TransactionFactory.Provider.fromCode(code);
+    ptr.set(PVarchar.INSTANCE.toBytes(provider.name()));
+    return true;
+  }
+
+  @Override
+  public PDataType getDataType() {
+    return PVarchar.INSTANCE;
+  }
+
+  @Override
+  public String getName() {
+    return NAME;
+  }
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,167 +28,164 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
 @Category(ParallelStatsDisabledTest.class)
 public class ModulusExpressionIT extends ParallelStatsDisabledIT {
-    
-    private static final long SMALL_VALUE = 31L;
-    private static final long LARGE_VALUE = 0x5dec6f3847021a9bL;
-    
-    private static final long[] DIVIDENDS = {Long.MAX_VALUE, LARGE_VALUE, SMALL_VALUE, 0, -SMALL_VALUE, -LARGE_VALUE, Long.MIN_VALUE};
-    private static final long[] DIVISORS = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 31, 127, 1024};
-    
-    private void initTable(Connection conn, long value, String tableName) throws SQLException {
 
-        String ddl = "CREATE TABLE " + tableName + " (pk BIGINT NOT NULL PRIMARY KEY, kv BIGINT)";
-        conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO " + tableName + " VALUES(?)";
-        PreparedStatement stmt = conn.prepareStatement(dml);
-        stmt.setLong(1, value);
-        stmt.execute();
-        conn.commit();        
-    }
-    
-    private void testDividend(long dividend) throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateUniqueName();
-        initTable(conn, dividend, tableName);
+  private static final long SMALL_VALUE = 31L;
+  private static final long LARGE_VALUE = 0x5dec6f3847021a9bL;
 
-        for(long divisor : DIVISORS) {
-            long remainder = dividend % divisor;
-            String sql = "SELECT pk % " + divisor + " FROM " + tableName;
-            
-            ResultSet rs = conn.createStatement().executeQuery(sql);
-            assertTrue(rs.next());
-            assertEquals(remainder, rs.getLong(1));
-            assertFalse(rs.next());
-        }
-    }
-    
-    @Test
-    public void testSmallPositiveDividend() throws SQLException {
-        testDividend(SMALL_VALUE);
-    }
-    
-    @Test
-    public void testLargePositiveDividend() throws SQLException {
-        testDividend(LARGE_VALUE);
-    }
-    
-    @Test
-    public void testLongMaxDividend() throws SQLException {
-        testDividend(Long.MAX_VALUE);
-    }      
-    
-    @Test
-    public void testSmallNegativeDividend() throws Exception {
-        testDividend(-1 * SMALL_VALUE);
-    }
-    
-    @Test
-    public void testLargeNegativeDividend() throws SQLException {
-        testDividend(-1 * LARGE_VALUE);
-    }
-    
-    @Test
-    public void testLongMinDividend() throws SQLException {
-        testDividend(Long.MIN_VALUE);
-    }   
-    
-    @Test
-    public void testZeroDividend() throws SQLException {
-        testDividend(0);
-    }
-    
-    @Test
-    public void testZeroDivisor() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateUniqueName();
-        initTable(conn, 0, tableName);
-        
-        for(long dividend : DIVIDENDS) {
-            try {
-                String sql = "SELECT " + dividend + " % pk FROM " + tableName;
+  private static final long[] DIVIDENDS =
+    { Long.MAX_VALUE, LARGE_VALUE, SMALL_VALUE, 0, -SMALL_VALUE, -LARGE_VALUE, Long.MIN_VALUE };
+  private static final long[] DIVISORS = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 31, 127, 1024 };
 
-                // workaround for parser not being able to parse Long.MIN_VALUE
-                // see: https://issues.apache.org/jira/browse/PHOENIX-1061
-                if(dividend == Long.MIN_VALUE) {
-                    sql = "SELECT (" + (dividend + 1) + " + -1) % pk FROM " + tableName;
-                }
+  private void initTable(Connection conn, long value, String tableName) throws SQLException {
 
-                ResultSet rs = conn.createStatement().executeQuery(sql);
-                rs.next();
-                rs.getLong(1);
-                fail("modulus by zero: dividend: " + dividend + ". divisor : 0");
-            }
-            catch (ArithmeticException ex) {
-                // success
-            }
-        }
+    String ddl = "CREATE TABLE " + tableName + " (pk BIGINT NOT NULL PRIMARY KEY, kv BIGINT)";
+    conn.createStatement().execute(ddl);
+    String dml = "UPSERT INTO " + tableName + " VALUES(?)";
+    PreparedStatement stmt = conn.prepareStatement(dml);
+    stmt.setLong(1, value);
+    stmt.execute();
+    conn.commit();
+  }
+
+  private void testDividend(long dividend) throws SQLException {
+    Connection conn = DriverManager.getConnection(getUrl());
+    String tableName = generateUniqueName();
+    initTable(conn, dividend, tableName);
+
+    for (long divisor : DIVISORS) {
+      long remainder = dividend % divisor;
+      String sql = "SELECT pk % " + divisor + " FROM " + tableName;
+
+      ResultSet rs = conn.createStatement().executeQuery(sql);
+      assertTrue(rs.next());
+      assertEquals(remainder, rs.getLong(1));
+      assertFalse(rs.next());
     }
-    
-    @Test
-    public void testNullDividend() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateUniqueName();
-        initTable(conn, SMALL_VALUE, tableName);
-        
-        for(long divisor : DIVISORS) {
-            String sql = "SELECT kv % " + divisor + " FROM " + tableName;
-            
-            ResultSet rs = conn.createStatement().executeQuery(sql);
-            assertTrue(rs.next());
-            assertNull(rs.getObject(1));
-            assertFalse(rs.next());
+  }
+
+  @Test
+  public void testSmallPositiveDividend() throws SQLException {
+    testDividend(SMALL_VALUE);
+  }
+
+  @Test
+  public void testLargePositiveDividend() throws SQLException {
+    testDividend(LARGE_VALUE);
+  }
+
+  @Test
+  public void testLongMaxDividend() throws SQLException {
+    testDividend(Long.MAX_VALUE);
+  }
+
+  @Test
+  public void testSmallNegativeDividend() throws Exception {
+    testDividend(-1 * SMALL_VALUE);
+  }
+
+  @Test
+  public void testLargeNegativeDividend() throws SQLException {
+    testDividend(-1 * LARGE_VALUE);
+  }
+
+  @Test
+  public void testLongMinDividend() throws SQLException {
+    testDividend(Long.MIN_VALUE);
+  }
+
+  @Test
+  public void testZeroDividend() throws SQLException {
+    testDividend(0);
+  }
+
+  @Test
+  public void testZeroDivisor() throws SQLException {
+    Connection conn = DriverManager.getConnection(getUrl());
+    String tableName = generateUniqueName();
+    initTable(conn, 0, tableName);
+
+    for (long dividend : DIVIDENDS) {
+      try {
+        String sql = "SELECT " + dividend + " % pk FROM " + tableName;
+
+        // workaround for parser not being able to parse Long.MIN_VALUE
+        // see: https://issues.apache.org/jira/browse/PHOENIX-1061
+        if (dividend == Long.MIN_VALUE) {
+          sql = "SELECT (" + (dividend + 1) + " + -1) % pk FROM " + tableName;
         }
-    }
-    
-    @Test
-    public void testNullDivisor() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateUniqueName();
-        initTable(conn, SMALL_VALUE, tableName);
-        
-        for(long dividend : DIVIDENDS) {
-            String sql = "SELECT " + dividend + " % kv FROM " + tableName;
-            
-            // workaround for parser not being able to parse Long.MIN_VALUE
-            // see: https://issues.apache.org/jira/browse/PHOENIX-1061
-            if(dividend == Long.MIN_VALUE) {
-                sql = "SELECT (" + (dividend + 1) + " + -1) % kv FROM " + tableName;
-            }
-            
-            ResultSet rs = conn.createStatement().executeQuery(sql);
-            assertTrue(rs.next());
-            assertNull(rs.getObject(1));
-            assertFalse(rs.next());
-        }
-    }
-    
-    @Test
-    public void testNullEverything() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateUniqueName();
-        initTable(conn, SMALL_VALUE, tableName);
-        
-        String sql = "SELECT null % kv FROM " + tableName;
-        
+
         ResultSet rs = conn.createStatement().executeQuery(sql);
-        assertTrue(rs.next());
-        assertNull(rs.getObject(1));
-        assertFalse(rs.next());
-        
-        sql = "SELECT kv % null FROM " + tableName;
-        
-        rs = conn.createStatement().executeQuery(sql);
-        assertTrue(rs.next());
-        assertNull(rs.getObject(1));
-        assertFalse(rs.next());
+        rs.next();
+        rs.getLong(1);
+        fail("modulus by zero: dividend: " + dividend + ". divisor : 0");
+      } catch (ArithmeticException ex) {
+        // success
+      }
     }
+  }
 
+  @Test
+  public void testNullDividend() throws SQLException {
+    Connection conn = DriverManager.getConnection(getUrl());
+    String tableName = generateUniqueName();
+    initTable(conn, SMALL_VALUE, tableName);
+
+    for (long divisor : DIVISORS) {
+      String sql = "SELECT kv % " + divisor + " FROM " + tableName;
+
+      ResultSet rs = conn.createStatement().executeQuery(sql);
+      assertTrue(rs.next());
+      assertNull(rs.getObject(1));
+      assertFalse(rs.next());
+    }
+  }
+
+  @Test
+  public void testNullDivisor() throws SQLException {
+    Connection conn = DriverManager.getConnection(getUrl());
+    String tableName = generateUniqueName();
+    initTable(conn, SMALL_VALUE, tableName);
+
+    for (long dividend : DIVIDENDS) {
+      String sql = "SELECT " + dividend + " % kv FROM " + tableName;
+
+      // workaround for parser not being able to parse Long.MIN_VALUE
+      // see: https://issues.apache.org/jira/browse/PHOENIX-1061
+      if (dividend == Long.MIN_VALUE) {
+        sql = "SELECT (" + (dividend + 1) + " + -1) % kv FROM " + tableName;
+      }
+
+      ResultSet rs = conn.createStatement().executeQuery(sql);
+      assertTrue(rs.next());
+      assertNull(rs.getObject(1));
+      assertFalse(rs.next());
+    }
+  }
+
+  @Test
+  public void testNullEverything() throws SQLException {
+    Connection conn = DriverManager.getConnection(getUrl());
+    String tableName = generateUniqueName();
+    initTable(conn, SMALL_VALUE, tableName);
+
+    String sql = "SELECT null % kv FROM " + tableName;
+
+    ResultSet rs = conn.createStatement().executeQuery(sql);
+    assertTrue(rs.next());
+    assertNull(rs.getObject(1));
+    assertFalse(rs.next());
+
+    sql = "SELECT kv % null FROM " + tableName;
+
+    rs = conn.createStatement().executeQuery(sql);
+    assertTrue(rs.next());
+    assertNull(rs.getObject(1));
+    assertFalse(rs.next());
+  }
 
 }

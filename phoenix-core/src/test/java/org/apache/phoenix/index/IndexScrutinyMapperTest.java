@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.index;
 
+import java.util.Arrays;
+import java.util.Collection;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyMapper;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
@@ -33,100 +35,98 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
-import java.util.Arrays;
-import java.util.Collection;
-
 @RunWith(Parameterized.class)
 public class IndexScrutinyMapperTest extends BaseConnectionlessQueryTest {
-    String schema, tableName, indexName;
-    boolean isNamespaceEnabled;
-    PTable inputTable;
+  String schema, tableName, indexName;
+  boolean isNamespaceEnabled;
+  PTable inputTable;
 
-    @Before
-    public void setup() {
-        schema = "S_" + generateUniqueName();
-        tableName = "T_" + generateUniqueName();
-        indexName = "I_" + generateUniqueName();
-        inputTable = Mockito.mock(PTable.class);
+  @Before
+  public void setup() {
+    schema = "S_" + generateUniqueName();
+    tableName = "T_" + generateUniqueName();
+    indexName = "I_" + generateUniqueName();
+    inputTable = Mockito.mock(PTable.class);
 
-    }
+  }
 
-    @Parameterized.Parameters(name ="IndexUpgradeToolTest_isNamespaceEnabled={0}")
-    public static synchronized Collection<Boolean> data() {
-        return Arrays.asList( false, true);
-    }
+  @Parameterized.Parameters(name = "IndexUpgradeToolTest_isNamespaceEnabled={0}")
+  public static synchronized Collection<Boolean> data() {
+    return Arrays.asList(false, true);
+  }
 
-    public IndexScrutinyMapperTest(boolean isNamespaceEnabled) {
-        this.isNamespaceEnabled = isNamespaceEnabled;
-    }
-    @Test
-    public void testGetSourceTableName_table() {
-        String fullTableName = SchemaUtil.getQualifiedTableName(schema, tableName);
-        PName sourcePhysicalName = SchemaUtil.getPhysicalHBaseTableName(schema, tableName,
-                isNamespaceEnabled);
-        String expectedName = SchemaUtil.getPhysicalTableName(Bytes.toBytes(fullTableName),
-                isNamespaceEnabled).toString();
-        //setup
-        Mockito.when(inputTable.getType()).thenReturn(PTableType.TABLE);
-        Mockito.when(inputTable.getPhysicalName()).thenReturn(sourcePhysicalName);
-        Mockito.when(inputTable.getTableName()).thenReturn(PNameFactory.newName(tableName));
-        Mockito.when(inputTable.getSchemaName()).thenReturn(PNameFactory.newName(schema));
-        //test
-        String output = IndexScrutinyMapper.getSourceTableName(inputTable, isNamespaceEnabled);
-        //assert
-        Assert.assertEquals(expectedName, output);
-    }
+  public IndexScrutinyMapperTest(boolean isNamespaceEnabled) {
+    this.isNamespaceEnabled = isNamespaceEnabled;
+  }
 
-    @Test
-    public void testGetSourceTableName_view() {
-        String fullTableName = SchemaUtil.getQualifiedTableName(schema, tableName);
-        PName sourcePhysicalName = SchemaUtil.getPhysicalHBaseTableName(schema, tableName,
-                isNamespaceEnabled);
-        String expectedName = SchemaUtil.getPhysicalTableName(Bytes.toBytes(fullTableName),
-                isNamespaceEnabled).toString();
-        //setup
-        Mockito.when(inputTable.getType()).thenReturn(PTableType.VIEW);
-        Mockito.when(inputTable.getPhysicalName()).thenReturn(sourcePhysicalName);
-        //test
-        String output = IndexScrutinyMapper.getSourceTableName(inputTable, isNamespaceEnabled);
-        //assert
-        Assert.assertEquals(expectedName, output);
-    }
+  @Test
+  public void testGetSourceTableName_table() {
+    String fullTableName = SchemaUtil.getQualifiedTableName(schema, tableName);
+    PName sourcePhysicalName =
+      SchemaUtil.getPhysicalHBaseTableName(schema, tableName, isNamespaceEnabled);
+    String expectedName =
+      SchemaUtil.getPhysicalTableName(Bytes.toBytes(fullTableName), isNamespaceEnabled).toString();
+    // setup
+    Mockito.when(inputTable.getType()).thenReturn(PTableType.TABLE);
+    Mockito.when(inputTable.getPhysicalName()).thenReturn(sourcePhysicalName);
+    Mockito.when(inputTable.getTableName()).thenReturn(PNameFactory.newName(tableName));
+    Mockito.when(inputTable.getSchemaName()).thenReturn(PNameFactory.newName(schema));
+    // test
+    String output = IndexScrutinyMapper.getSourceTableName(inputTable, isNamespaceEnabled);
+    // assert
+    Assert.assertEquals(expectedName, output);
+  }
 
-    @Test
-    public void testGetSourceTableName_index() {
-        String fullTableName = SchemaUtil.getQualifiedTableName(schema, indexName);
-        PName sourcePhysicalName = SchemaUtil.getPhysicalHBaseTableName(schema, indexName,
-                isNamespaceEnabled);
-        String expectedName = SchemaUtil.getPhysicalTableName(Bytes.toBytes(fullTableName),
-                isNamespaceEnabled).toString();
+  @Test
+  public void testGetSourceTableName_view() {
+    String fullTableName = SchemaUtil.getQualifiedTableName(schema, tableName);
+    PName sourcePhysicalName =
+      SchemaUtil.getPhysicalHBaseTableName(schema, tableName, isNamespaceEnabled);
+    String expectedName =
+      SchemaUtil.getPhysicalTableName(Bytes.toBytes(fullTableName), isNamespaceEnabled).toString();
+    // setup
+    Mockito.when(inputTable.getType()).thenReturn(PTableType.VIEW);
+    Mockito.when(inputTable.getPhysicalName()).thenReturn(sourcePhysicalName);
+    // test
+    String output = IndexScrutinyMapper.getSourceTableName(inputTable, isNamespaceEnabled);
+    // assert
+    Assert.assertEquals(expectedName, output);
+  }
 
-        //setup
-        Mockito.when(inputTable.getType()).thenReturn(PTableType.INDEX);
-        Mockito.when(inputTable.getPhysicalName()).thenReturn(sourcePhysicalName);
-        Mockito.when(inputTable.getTableName()).thenReturn(PNameFactory.newName(indexName));
-        Mockito.when(inputTable.getSchemaName()).thenReturn(PNameFactory.newName(schema));
+  @Test
+  public void testGetSourceTableName_index() {
+    String fullTableName = SchemaUtil.getQualifiedTableName(schema, indexName);
+    PName sourcePhysicalName =
+      SchemaUtil.getPhysicalHBaseTableName(schema, indexName, isNamespaceEnabled);
+    String expectedName =
+      SchemaUtil.getPhysicalTableName(Bytes.toBytes(fullTableName), isNamespaceEnabled).toString();
 
-        //test
-        String output = IndexScrutinyMapper.getSourceTableName(inputTable, isNamespaceEnabled);
-        //assert
-        Assert.assertEquals(expectedName, output);
-    }
+    // setup
+    Mockito.when(inputTable.getType()).thenReturn(PTableType.INDEX);
+    Mockito.when(inputTable.getPhysicalName()).thenReturn(sourcePhysicalName);
+    Mockito.when(inputTable.getTableName()).thenReturn(PNameFactory.newName(indexName));
+    Mockito.when(inputTable.getSchemaName()).thenReturn(PNameFactory.newName(schema));
 
-    @Test
-    public void testGetSourceTableName_viewIndex() {
-        PName physicalTableName = SchemaUtil.getPhysicalHBaseTableName(schema, tableName,
-                isNamespaceEnabled);
-        String expectedName = MetaDataUtil.getViewIndexPhysicalName(physicalTableName.getString());
-        PName physicalIndexTableName = PNameFactory
-                .newName(MetaDataUtil.getViewIndexPhysicalName(physicalTableName.getString()));
+    // test
+    String output = IndexScrutinyMapper.getSourceTableName(inputTable, isNamespaceEnabled);
+    // assert
+    Assert.assertEquals(expectedName, output);
+  }
 
-        PTable pSourceTable = Mockito.mock(PTable.class);
-        //setup
-        Mockito.when(pSourceTable.getPhysicalName()).thenReturn(physicalIndexTableName);
-        //test
-        String output = IndexScrutinyMapper.getSourceTableName(pSourceTable, isNamespaceEnabled);
-        //assert
-        Assert.assertEquals(expectedName, output);
-    }
+  @Test
+  public void testGetSourceTableName_viewIndex() {
+    PName physicalTableName =
+      SchemaUtil.getPhysicalHBaseTableName(schema, tableName, isNamespaceEnabled);
+    String expectedName = MetaDataUtil.getViewIndexPhysicalName(physicalTableName.getString());
+    PName physicalIndexTableName =
+      PNameFactory.newName(MetaDataUtil.getViewIndexPhysicalName(physicalTableName.getString()));
+
+    PTable pSourceTable = Mockito.mock(PTable.class);
+    // setup
+    Mockito.when(pSourceTable.getPhysicalName()).thenReturn(physicalIndexTableName);
+    // test
+    String output = IndexScrutinyMapper.getSourceTableName(pSourceTable, isNamespaceEnabled);
+    // assert
+    Assert.assertEquals(expectedName, output);
+  }
 }
