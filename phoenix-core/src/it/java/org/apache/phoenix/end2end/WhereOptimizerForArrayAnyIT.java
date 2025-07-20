@@ -39,10 +39,13 @@ import java.util.HashMap;
 
 import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
+import org.bson.RawBsonDocument;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -508,13 +511,12 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
     @Test
     public void testArrayAnyComparisonWithTimestampToDatTimeCoercion() throws Exception {
         String tableName = generateUniqueName();
-        String ddl =
-            "CREATE TABLE " + tableName + " ("
-                + "pk1 TIMESTAMP NOT NULL, "
-                + "pk2 DATE NOT NULL, "
-                + "col1 VARCHAR, " 
-                + "CONSTRAINT pk PRIMARY KEY (pk1, pk2 DESC)" 
-            + ")";
+        String ddl = "CREATE TABLE " + tableName + " ("
+            + "pk1 TIMESTAMP NOT NULL, "
+            + "pk2 DATE NOT NULL, "
+            + "col1 VARCHAR, " 
+            + "CONSTRAINT pk PRIMARY KEY (pk1, pk2 DESC)" 
+        + ")";
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             try (Statement stmt = conn.createStatement()) {
                 stmt.execute(ddl);
@@ -681,6 +683,54 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
         }
     }
     
+    @Test
+    public void testArrayAnyComparisonForBsonColumn() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE " + tableName + " ("
+            + "pk1 BSON NOT NULL, "
+            + "col1 VARCHAR, " 
+            + "CONSTRAINT pk PRIMARY KEY (pk1 DESC)" 
+        + ")";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute(ddl);
+                conn.commit();
+            }
+        }
+        RawBsonDocument pk1Value = getBsonDocument1();
+        String upsertStmt = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            try (PreparedStatement stmt = conn.prepareStatement(upsertStmt)) {
+                stmt.setObject(1, pk1Value);
+                stmt.setString(2, "a");
+                stmt.executeUpdate();
+                conn.commit();
+            }
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
+            String selectSql = "SELECT * FROM " + tableName + " WHERE pk1 = ANY(?)";
+            Array bsonArr = conn.createArrayOf("VARBINARY", new byte[][] { 
+                ByteUtil.toBytes(pk1Value.getByteBuffer().asNIO()),
+                ByteUtil.toBytes(getBsonDocument2().getByteBuffer().asNIO()),
+            });
+            try (PreparedStatement stmt = conn.prepareStatement(selectSql)) {
+                stmt.setArray(1, bsonArr);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    assertTrue(rs.next());
+                    // ResultSet#getBytes() takes care of inverting the bytes as sort order of
+                    // column is DESC. Is this a gap in PBson#toObject()?
+                    byte[] pk1ValueBytes = rs.getBytes(1);
+                    RawBsonDocument actualPk1Value =
+                        new RawBsonDocument(pk1ValueBytes, 0, pk1ValueBytes.length);
+                    assertEquals(pk1Value, actualPk1Value);
+                    assertEquals("a", rs.getString(2));
+                }
+            }
+            assertPointLookupsAreGenerated(selectSql, conn, bsonArr);
+        }
+    }
+    
     private void assertBinaryValue(byte[] expected, byte[] actual) {
         int expectedLength = expected.length;
         for (int i = 0; i < expectedLength; i++) {
@@ -747,4 +797,103 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
             }
         }
     }
+
+    private static RawBsonDocument getBsonDocument1() {
+        String json = "{\n" +
+                "  \"attr_9\" : {\n" +
+                "    \"$set\" : [ {\n" +
+                "      \"$binary\" : {\n" +
+                "        \"base64\" : \"YWJjZA==\",\n" +
+                "        \"subType\" : \"00\"\n" +
+                "      }\n" +
+                "    }, {\n" +
+                "      \"$binary\" : {\n" +
+                "        \"base64\" : \"c3RyaW5nXzAyMDM=\",\n" +
+                "        \"subType\" : \"00\"\n" +
+                "      }\n" +
+                "    } ]\n" +
+                "  },\n" +
+                "  \"attr_8\" : {\n" +
+                "    \"$set\" : [ 3802.34, -40.667, -4839, 7593 ]\n" +
+                "  },\n" +
+                "  \"attr_7\" : {\n" +
+                "    \"$set\" : [ \"str_set002\", \"strset003\", \"strset001\" ]\n" +
+                "  },\n" +
+                "  \"attr_6\" : {\n" +
+                "    \"n_attr_0\" : \"str_val_0\",\n" +
+                "    \"n_attr_1\" : 1295.03,\n" +
+                "    \"n_attr_2\" : {\n" +
+                "      \"$binary\" : {\n" +
+                "        \"base64\" : \"MjA0OHU1bmJsd2plaVdGR1RIKDRiZjkzMA==\",\n" +
+                "        \"subType\" : \"00\"\n" +
+                "      }\n" +
+                "    },\n" +
+                "    \"n_attr_3\" : true,\n" +
+                "    \"n_attr_4\" : null\n" +
+                "  },\n" +
+                "  \"attr_5\" : [ 1234, \"str001\", {\n" +
+                "    \"$binary\" : {\n" +
+                "      \"base64\" : \"AAECAwQF\",\n" +
+                "      \"subType\" : \"00\"\n" +
+                "    }\n" +
+                "  } ],\n" +
+                "  \"attr_4\" : null,\n" +
+                "  \"attr_3\" : true,\n" +
+                "  \"attr_2\" : {\n" +
+                "    \"$binary\" : {\n" +
+                "      \"base64\" : \"cmFuZG9tZTkzaDVvbmVmaHUxbmtyXzE5MzBga2p2LSwhJCVeaWVpZmhiajAzNA==\",\n" +
+                "      \"subType\" : \"00\"\n" +
+                "    }\n" +
+                "  },\n" +
+                "  \"attr_1\" : 1295.03,\n" +
+                "  \"attr_0\" : \"str_val_0\"\n" +
+                "}";
+        return RawBsonDocument.parse(json);
+      }
+      
+      private static RawBsonDocument getBsonDocument2() {
+        String json = "{\n" +
+                "  \"InPublication\" : false,\n" +
+                "  \"ISBN\" : \"111-1111111111\",\n" +
+                "  \"NestedList1\" : [ -485.34, \"1234abcd\", [ \"xyz0123\", {\n" +
+                "    \"InPublication\" : false,\n" +
+                "    \"ISBN\" : \"111-1111111111\",\n" +
+                "    \"Title\" : \"Book 101 Title\",\n" +
+                "    \"Id\" : 101.01\n" +
+                "  } ] ],\n" +
+                "  \"NestedMap1\" : {\n" +
+                "    \"InPublication\" : false,\n" +
+                "    \"ISBN\" : \"111-1111111111\",\n" +
+                "    \"Title\" : \"Book 101 Title\",\n" +
+                "    \"Id\" : 101.01,\n" +
+                "    \"NList1\" : [ \"NListVal01\", -23.4 ]\n" +
+                "  },\n" +
+                "  \"Id2\" : 101.01,\n" +
+                "  \"attr_6\" : {\n" +
+                "    \"n_attr_0\" : \"str_val_0\",\n" +
+                "    \"n_attr_1\" : 1295.03,\n" +
+                "    \"n_attr_2\" : {\n" +
+                "      \"$binary\" : {\n" +
+                "        \"base64\" : \"MjA0OHU1bmJsd2plaVdGR1RIKDRiZjkzMA==\",\n" +
+                "        \"subType\" : \"00\"\n" +
+                "      }\n" +
+                "    },\n" +
+                "    \"n_attr_3\" : true,\n" +
+                "    \"n_attr_4\" : null\n" +
+                "  },\n" +
+                "  \"attr_5\" : [ 1234, \"str001\", {\n" +
+                "    \"$binary\" : {\n" +
+                "      \"base64\" : \"AAECAwQF\",\n" +
+                "      \"subType\" : \"00\"\n" +
+                "    }\n" +
+                "  } ],\n" +
+                "  \"IdS\" : \"101.01\",\n" +
+                "  \"Title\" : \"Book 101 Title\",\n" +
+                "  \"Id\" : 101.01,\n" +
+                "  \"attr_1\" : 1295.03,\n" +
+                "  \"attr_0\" : \"str_val_0\"\n" +
+                "}";
+        return RawBsonDocument.parse(json);
+      }
+      
 }
