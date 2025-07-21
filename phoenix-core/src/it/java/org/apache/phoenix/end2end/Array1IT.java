@@ -35,11 +35,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -67,7 +65,7 @@ public class Array1IT extends ArrayIT {
                 + "    long_array bigint[5],\n"
                 + "    short_array smallint array,\n"
                 + "    string_array varchar(100) array[3],\n"
-                + "    CONSTRAINT pk PRIMARY KEY (organization_id, entity_id DESC)\n"
+                + "    CONSTRAINT pk PRIMARY KEY (organization_id, entity_id)\n"
                 + ")";
         BaseTest.createTestTable(url, ddlStmt, bs, null);
         return tableName;
@@ -78,7 +76,7 @@ public class Array1IT extends ArrayIT {
         String ddlStmt = "create table "
                 + tableName
                 + "   (organization_id char(15) not null, \n"
-                + "    entity_id VARCHAR not null,\n"
+                + "    entity_id char(15) not null,\n"
                 + "    x_double double,\n"
                 + "    a_double_array double array[],\n"
                 + "    a_char_array char(5) array[],\n"
@@ -454,23 +452,15 @@ public class Array1IT extends ArrayIT {
             initSimpleArrayTable(table, tenantId, null, false);
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             conn = DriverManager.getConnection(getUrl(), props);
-            TestUtil.dumpTable(conn, TableName.valueOf(table));
-            Array arr = conn.createArrayOf("CHAR", new String[] { "0A123122312312", "0A123122312313" });
-            String query = "SELECT x_double  FROM " + table
-                + " WHERE ENTITY_ID = ANY(?) AND ORGANIZATION_ID = '" + getOrganizationId() + "'";
-            PreparedStatement stmt = conn.prepareStatement("EXPLAIN " + query);
-            stmt.setArray(1, arr);
-            ResultSet rs = stmt.executeQuery();
-            String explainPlan = QueryUtil.getExplainPlan(rs);
-            System.out.println("Explain plan: " + explainPlan);
-            rs.close();
-            stmt.close();
+            String query = "SELECT a_double_array[1]  FROM " + table
+                    + " WHERE CAST(89.96 AS DOUBLE) = ANY(a_double_array)";
             PreparedStatement statement = conn.prepareStatement(query);
-            statement.setArray(1, arr);
-            rs = statement.executeQuery();
+            ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
+            Double[] doubleArr = new Double[1];
+            doubleArr[0] = 64.87d;
             Double result = rs.getDouble(1);
-            assertEquals(result, (Double) 1.2d);
+            assertEquals(result, doubleArr[0]);
             assertFalse(rs.next());
         } finally {
             if (conn != null) {
