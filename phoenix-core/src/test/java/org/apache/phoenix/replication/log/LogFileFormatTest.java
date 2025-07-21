@@ -296,6 +296,9 @@ public class LogFileFormatTest {
         byte[] data = writerBaos.toByteArray();
         byte[] truncatedData = Arrays.copyOf(data, (int) truncationPoint);
 
+        // We truncated the final block, so the trailer is gone too.
+        readerContext.setValidateTrailer(false);
+
         initLogFileReader(truncatedData);
 
         List<LogFile.Record> decoded = new ArrayList<>();
@@ -342,6 +345,7 @@ public class LogFileFormatTest {
         LogFileTestUtil.SeekableByteArrayInputStream input =
             new LogFileTestUtil.SeekableByteArrayInputStream(truncatedData);
         readerContext.setFileSize(truncatedData.length);
+        readerContext.setValidateTrailer(false);
         // This init should log a warning but succeed
         reader.init(readerContext, input);
 
@@ -377,6 +381,7 @@ public class LogFileFormatTest {
         LogFileTestUtil.SeekableByteArrayInputStream input =
             new LogFileTestUtil.SeekableByteArrayInputStream(truncatedData);
         readerContext.setFileSize(truncatedData.length);
+        readerContext.setValidateTrailer(false);
         // Init should log a warning but succeed by ignoring the trailer
         reader.init(readerContext, input);
 
@@ -404,6 +409,88 @@ public class LogFileFormatTest {
         // However we should have read all of the blocks and records.
         assertEquals("Blocks read count mismatch", 2, readerContext.getBlocksRead());
         assertEquals("Records read count mismatch", totalRecords, readerContext.getRecordsRead());
+    }
+
+    @Test
+    public void testFailIfMissingHeader() throws IOException {
+        // Zero length file
+        byte[] data = new byte[0];
+        LogFileTestUtil.SeekableByteArrayInputStream input =
+            new LogFileTestUtil.SeekableByteArrayInputStream(data);
+        readerContext.setFileSize(data.length);
+        readerContext.setValidateTrailer(false);
+        try {
+            reader.init(readerContext, input);
+            fail("Expected InvalidLogHeaderException for zero length file");
+        } catch (InvalidLogHeaderException e) {
+            assertTrue("Exception message should contain 'Short magic'",
+                e.getMessage().contains("Short magic"));
+        }
+    }
+
+    @Test
+    public void testFailIfInvalidHeader() throws IOException {
+        initLogFileWriter();
+        writer.close(); // Writes valid trailer
+        byte[] data = writerBaos.toByteArray();
+        LogFileTestUtil.SeekableByteArrayInputStream input =
+            new LogFileTestUtil.SeekableByteArrayInputStream(data);
+        readerContext.setFileSize(data.length);
+        readerContext.setValidateTrailer(true);
+        data[0] = (byte) 'X'; // Corrupt the first magic byte
+        try {
+            reader.init(readerContext, input);
+            fail("Expected InvalidLogHeaderException for file with corrupted header magic");
+        } catch (InvalidLogHeaderException e) {
+            assertTrue("Exception message should contain 'Bad magic'",
+                e.getMessage().contains("Bad magic"));
+        }
+    }
+
+    @Test
+    public void testFailIfMissingTrailer() throws IOException {
+        initLogFileWriter();
+        writeBlock(writer, "B1", 0, 5);
+        // Don't close the writer, simulate missing trailer
+        byte[] data = writerBaos.toByteArray();
+        // Re-initialize reader with truncated data and trailer validation enabled
+        LogFileTestUtil.SeekableByteArrayInputStream input =
+            new LogFileTestUtil.SeekableByteArrayInputStream(data);
+        readerContext.setFileSize(data.length);
+        // Enable trailer validation
+        readerContext.setValidateTrailer(true);
+        try {
+            reader.init(readerContext, input);
+            fail("Expected InvalidLogTrailerException when trailer is missing");
+        } catch (InvalidLogTrailerException e) {
+            assertTrue("Exception message should contain 'Unsupported version'",
+                e.getMessage().contains("Unsupported version"));
+        }
+    }
+
+    @Test
+    public void testFailIfInvalidTrailer() throws IOException {
+        initLogFileWriter();
+        writeBlock(writer, "B1", 0, 5);
+        writer.close(); // Writes valid trailer
+        byte[] data = writerBaos.toByteArray();
+        // Corrupt the trailer by changing the magic bytes
+        int trailerStartOffset = data.length - LogFileTrailer.FIXED_TRAILER_SIZE;
+        int magicOffset = trailerStartOffset + LogFileTrailer.FIXED_TRAILER_SIZE
+            - LogFileHeader.MAGIC.length;
+        data[magicOffset] = (byte) 'X'; // Corrupt the first magic byte
+        // Re-initialize reader with corrupted trailer and trailer validation enabled
+        LogFileTestUtil.SeekableByteArrayInputStream input =
+            new LogFileTestUtil.SeekableByteArrayInputStream(data);
+        readerContext.setFileSize(data.length);
+        readerContext.setValidateTrailer(true);
+        try {
+            reader.init(readerContext, input);
+            fail("Expected InvalidLogTrailerException when trailer magic is corrupt");
+        } catch (InvalidLogTrailerException e) {
+            assertTrue("Exception message should contain 'Bad magic'",
+                e.getMessage().contains("Bad magic"));
+        }
     }
 
     @Test

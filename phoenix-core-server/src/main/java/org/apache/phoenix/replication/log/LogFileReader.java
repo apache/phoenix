@@ -137,7 +137,8 @@ public class LogFileReader implements LogFile.Reader  {
             throw e;
         } finally {
             closed = true;
-            LOG.debug("Closed LogFileReader for path {}", context.getFilePath());
+            LOG.debug("Closed LogFileReader for path {}", context != null ? context.getFilePath()
+                : "null");
         }
     }
 
