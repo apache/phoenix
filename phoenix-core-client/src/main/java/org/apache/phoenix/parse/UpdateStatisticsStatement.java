@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,36 +21,34 @@ import static org.apache.phoenix.schema.stats.StatisticsCollectionScope.ALL;
 import static org.apache.phoenix.schema.stats.StatisticsCollectionScope.COLUMNS;
 import static org.apache.phoenix.schema.stats.StatisticsCollectionScope.INDEX;
 
+import edu.umd.cs.findbugs.annotations.NonNull;
 import java.util.Map;
-
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 
-import edu.umd.cs.findbugs.annotations.NonNull;
-
-
 public class UpdateStatisticsStatement extends SingleTableStatement {
-    private final StatisticsCollectionScope scope;
-    private final Map<String,Object> props;
-    
-    public UpdateStatisticsStatement(NamedTableNode table, @NonNull StatisticsCollectionScope scope, Map<String,Object> props) {
-        super(table, 0);
-        this.scope = scope;
-        this.props = props;
-    }
+  private final StatisticsCollectionScope scope;
+  private final Map<String, Object> props;
 
-    public boolean updateColumns() {
-        return scope == COLUMNS || scope == ALL;
-    }
+  public UpdateStatisticsStatement(NamedTableNode table, @NonNull StatisticsCollectionScope scope,
+    Map<String, Object> props) {
+    super(table, 0);
+    this.scope = scope;
+    this.props = props;
+  }
 
-    public boolean updateIndex() {
-        return scope == INDEX || scope == ALL;
-    }
+  public boolean updateColumns() {
+    return scope == COLUMNS || scope == ALL;
+  }
 
-    public boolean updateAll() {
-        return scope == ALL;
-    }
+  public boolean updateIndex() {
+    return scope == INDEX || scope == ALL;
+  }
 
-    public Map<String,Object> getProps() {
-        return props;
-    };
+  public boolean updateAll() {
+    return scope == ALL;
+  }
+
+  public Map<String, Object> getProps() {
+    return props;
+  };
 }

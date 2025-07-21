@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -27,7 +27,6 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Properties;
-
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.end2end.ParallelStatsEnabledIT;
@@ -37,50 +36,46 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
 @Category(ParallelStatsEnabledTest.class)
 public class ImmutableIndexWithStatsIT extends ParallelStatsEnabledIT {
-    
-    @Test
-    public void testIndexCreationDeadlockWithStats() throws Exception {
-        String query;
-        ResultSet rs;
-        
-        String tableName = generateUniqueName();
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.setAutoCommit(false);
-        conn.createStatement().execute("CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR) IMMUTABLE_ROWS=TRUE");
-        query = "SELECT * FROM " + tableName;
-        rs = conn.createStatement().executeQuery(query);
-        assertFalse(rs.next());
 
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?,?)");
-        for (int i=0; i<6;i++) {
-	        stmt.setString(1, "kkkkkkkkkk" + i);
-	        stmt.setString(2, "vvvvvvvvvv" + i );
-	        stmt.execute();
-        }
-        conn.commit();
-        
-        conn.createStatement().execute("UPDATE STATISTICS " + tableName);
-        query = "SELECT COUNT(*) FROM " + tableName;
+  @Test
+  public void testIndexCreationDeadlockWithStats() throws Exception {
+    String query;
+    ResultSet rs;
 
-        ExplainPlan plan = conn.prepareStatement(query)
-            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
-            .getExplainPlan();
-        ExplainPlanAttributes explainPlanAttributes =
-            plan.getPlanStepsAsAttributes();
-        assertEquals("PARALLEL 1-WAY",
-            explainPlanAttributes.getIteratorTypeAndScanSize());
-        assertEquals("FULL SCAN ",
-            explainPlanAttributes.getExplainScanType());
+    String tableName = generateUniqueName();
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    Connection conn = DriverManager.getConnection(getUrl(), props);
+    conn.setAutoCommit(false);
+    conn.createStatement().execute("CREATE TABLE " + tableName
+      + " (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR) IMMUTABLE_ROWS=TRUE");
+    query = "SELECT * FROM " + tableName;
+    rs = conn.createStatement().executeQuery(query);
+    assertFalse(rs.next());
 
-        String indexName = "I_" + generateUniqueName();
-        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + " (v)");
-        
-        query = "SELECT * FROM " + indexName;
-        rs = conn.createStatement().executeQuery(query);
-        assertTrue(rs.next());
+    PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?,?)");
+    for (int i = 0; i < 6; i++) {
+      stmt.setString(1, "kkkkkkkkkk" + i);
+      stmt.setString(2, "vvvvvvvvvv" + i);
+      stmt.execute();
     }
+    conn.commit();
+
+    conn.createStatement().execute("UPDATE STATISTICS " + tableName);
+    query = "SELECT COUNT(*) FROM " + tableName;
+
+    ExplainPlan plan = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)
+      .optimizeQuery().getExplainPlan();
+    ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
+    assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
+    assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
+
+    String indexName = "I_" + generateUniqueName();
+    conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + " (v)");
+
+    query = "SELECT * FROM " + indexName;
+    rs = conn.createStatement().executeQuery(query);
+    assertTrue(rs.next());
+  }
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,54 +17,52 @@
  */
 package org.apache.phoenix.mapreduce.bulkload;
 
-import java.util.Map;
-
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.Map;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
- * Represents the logical and physical name of a single table to which data is to be loaded.
- *
- * This class exists to allow for the difference between HBase physical table names and
- * Phoenix logical table names.
+ * Represents the logical and physical name of a single table to which data is to be loaded. This
+ * class exists to allow for the difference between HBase physical table names and Phoenix logical
+ * table names.
  */
 public class TargetTableRef {
 
-    @JsonProperty
-    private final String logicalName;
+  @JsonProperty
+  private final String logicalName;
 
-    @JsonProperty
-    private final String physicalName;
+  @JsonProperty
+  private final String physicalName;
 
-    @JsonProperty
-    private Map<String,String> configuration = Maps.newHashMap();
+  @JsonProperty
+  private Map<String, String> configuration = Maps.newHashMap();
 
-    public TargetTableRef(String name) {
-        this(name, name);
-    }
+  public TargetTableRef(String name) {
+    this(name, name);
+  }
 
-    @JsonCreator
-    public TargetTableRef(@JsonProperty("logicalName") String logicalName,
-        @JsonProperty("physicalName") String physicalName) {
-        this.logicalName = logicalName;
-        this.physicalName = physicalName;
-    }
+  @JsonCreator
+  public TargetTableRef(@JsonProperty("logicalName") String logicalName,
+    @JsonProperty("physicalName") String physicalName) {
+    this.logicalName = logicalName;
+    this.physicalName = physicalName;
+  }
 
-    public String getLogicalName() {
-        return logicalName;
-    }
+  public String getLogicalName() {
+    return logicalName;
+  }
 
-    public String getPhysicalName() {
-        return physicalName;
-    }
+  public String getPhysicalName() {
+    return physicalName;
+  }
 
-    public Map<String, String> getConfiguration() {
-        return configuration;
-    }
+  public Map<String, String> getConfiguration() {
+    return configuration;
+  }
 
-    public void setConfiguration(Map<String, String> configuration) {
-        this.configuration = configuration;
-    }
+  public void setConfiguration(Map<String, String> configuration) {
+    this.configuration = configuration;
+  }
 }

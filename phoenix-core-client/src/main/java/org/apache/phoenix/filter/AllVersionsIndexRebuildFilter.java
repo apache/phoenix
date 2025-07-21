@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,33 +18,31 @@
 package org.apache.phoenix.filter;
 
 import java.io.IOException;
-
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.filter.Filter;
 
 /**
- * This filter overrides the behavior of delegate so that we do not jump to the next
- * column as soon as we find a value for a column but rather include all versions which is
- * needed for rebuilds.
+ * This filter overrides the behavior of delegate so that we do not jump to the next column as soon
+ * as we find a value for a column but rather include all versions which is needed for rebuilds.
  */
 public class AllVersionsIndexRebuildFilter extends DelegateFilter {
 
-    public AllVersionsIndexRebuildFilter(Filter originalFilter) {
-        super(originalFilter);
-    }
+  public AllVersionsIndexRebuildFilter(Filter originalFilter) {
+    super(originalFilter);
+  }
 
-    @Override
-    public ReturnCode filterKeyValue(Cell v) throws IOException {
-        return filterCell(v);
-    }
+  // No @Override for HBase 3 compatibility
+  public ReturnCode filterKeyValue(Cell v) throws IOException {
+    return filterCell(v);
+  }
 
-    @Override
-    public ReturnCode filterCell(Cell v) throws IOException {
-        ReturnCode delegateCode = super.filterCell(v);
-        if (delegateCode == ReturnCode.INCLUDE_AND_NEXT_COL) {
-            return ReturnCode.INCLUDE;
-        } else {
-            return delegateCode;
-        }
+  @Override
+  public ReturnCode filterCell(Cell v) throws IOException {
+    ReturnCode delegateCode = super.filterCell(v);
+    if (delegateCode == ReturnCode.INCLUDE_AND_NEXT_COL) {
+      return ReturnCode.INCLUDE;
+    } else {
+      return delegateCode;
     }
+  }
 }

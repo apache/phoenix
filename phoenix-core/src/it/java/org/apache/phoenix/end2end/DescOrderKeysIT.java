@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.end2end;
 
 import java.math.BigDecimal;
@@ -23,7 +22,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
-
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.junit.Assert;
@@ -41,8 +39,8 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
       conn.setAutoCommit(true);
       final Statement stmt = conn.createStatement();
 
-      stmt.execute("CREATE TABLE " + tableName +
-        " (COL1 VARCHAR, COL2 VARCHAR CONSTRAINT PK PRIMARY KEY (COL1 DESC, COL2)) ");
+      stmt.execute("CREATE TABLE " + tableName
+        + " (COL1 VARCHAR, COL2 VARCHAR CONSTRAINT PK PRIMARY KEY (COL1 DESC, COL2)) ");
 
       stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2) VALUES ('h1uniq1', 'val1')");
       stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2) VALUES ('41efh', 'val2')");
@@ -99,28 +97,28 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
       conn.setAutoCommit(true);
       final Statement stmt = conn.createStatement();
 
-      stmt.execute("CREATE TABLE " + tableName +
-        " (COL1 VARCHAR, COL2 VARCHAR, COL3 VARCHAR CONSTRAINT " +
-        "PK PRIMARY KEY (COL1 DESC, COL2 DESC, COL3)) ");
+      stmt.execute(
+        "CREATE TABLE " + tableName + " (COL1 VARCHAR, COL2 VARCHAR, COL3 VARCHAR CONSTRAINT "
+          + "PK PRIMARY KEY (COL1 DESC, COL2 DESC, COL3)) ");
 
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "('h1uniq1', 'key1', 'val1')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "('41efh', 'key2', 'val2')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "('c49ghd', 'key3', 'val3')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "('zsw4tg', 'key5', 'val5')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "('zsw4tg', 'key4', 'val4')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "('h1uniq1', 'key6', 'val6')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "('93hgwef', 'key7', 'val7')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "('3jfytw', 'key8', 'val8')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "('4232jfjg', 'key9', 'val9')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "('h1uniq1', 'key1', 'val1')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "('41efh', 'key2', 'val2')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "('c49ghd', 'key3', 'val3')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "('zsw4tg', 'key5', 'val5')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "('zsw4tg', 'key4', 'val4')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "('h1uniq1', 'key6', 'val6')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "('93hgwef', 'key7', 'val7')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "('3jfytw', 'key8', 'val8')");
+      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES "
+        + "('4232jfjg', 'key9', 'val9')");
 
       final String sql = "select COL1, COL2, COL3 from " + tableName;
 
@@ -186,28 +184,28 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
       conn.setAutoCommit(true);
       final Statement stmt = conn.createStatement();
 
-      stmt.execute("CREATE TABLE " + tableName +
-        " (COL1 INTEGER NOT NULL, COL2 INTEGER NOT NULL, COL3 VARCHAR NOT NULL CONSTRAINT " +
-        "PK PRIMARY KEY (COL1 DESC, COL2 DESC, COL3)) ");
+      stmt.execute("CREATE TABLE " + tableName
+        + " (COL1 INTEGER NOT NULL, COL2 INTEGER NOT NULL, COL3 VARCHAR NOT NULL CONSTRAINT "
+        + "PK PRIMARY KEY (COL1 DESC, COL2 DESC, COL3)) ");
 
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(1234, 3957, 'val1')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(2453, 234, 'val2')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(3463, 345561, 'val3')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(34534, 345657, 'val4')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(2453, 92374, 'val5')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(9375, 11037, 'val6')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(9375, 455, 'val7')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(9375, 7712, 'val8')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(1234, 3956, 'val9')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "(1234, 3957, 'val1')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "(2453, 234, 'val2')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "(3463, 345561, 'val3')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "(34534, 345657, 'val4')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "(2453, 92374, 'val5')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "(9375, 11037, 'val6')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "(9375, 455, 'val7')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "(9375, 7712, 'val8')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "(1234, 3956, 'val9')");
 
       final String sql = "select COL1, COL2, COL3 from " + tableName;
 
@@ -273,28 +271,28 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
       conn.setAutoCommit(true);
       final Statement stmt = conn.createStatement();
 
-      stmt.execute("CREATE TABLE " + tableName +
-        " (COL1 DOUBLE NOT NULL, COL2 DOUBLE NOT NULL, COL3 VARCHAR NOT NULL CONSTRAINT " +
-        "PK PRIMARY KEY (COL1 DESC, COL2 DESC, COL3)) ");
+      stmt.execute("CREATE TABLE " + tableName
+        + " (COL1 DOUBLE NOT NULL, COL2 DOUBLE NOT NULL, COL3 VARCHAR NOT NULL CONSTRAINT "
+        + "PK PRIMARY KEY (COL1 DESC, COL2 DESC, COL3)) ");
 
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(1234.39, 3957.124, 'val1')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(2453.97, 234.112, 'val2')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(3463.384, 345561.124, 'val3')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(34534.9191, 345657.913, 'val4')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(2453.89, 92374.11, 'val5')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(9375.23, 11037.729, 'val6')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(9375.23, 11037.8, 'val7')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(9375.23, 11037.72888, 'val8')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(1234.39, 3957.123999, 'val9')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "(1234.39, 3957.124, 'val1')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "(2453.97, 234.112, 'val2')");
+      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES "
+        + "(3463.384, 345561.124, 'val3')");
+      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES "
+        + "(34534.9191, 345657.913, 'val4')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "(2453.89, 92374.11, 'val5')");
+      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES "
+        + "(9375.23, 11037.729, 'val6')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "(9375.23, 11037.8, 'val7')");
+      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES "
+        + "(9375.23, 11037.72888, 'val8')");
+      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES "
+        + "(1234.39, 3957.123999, 'val9')");
 
       final String sql = "select COL1, COL2, COL3 from " + tableName;
 
@@ -360,28 +358,28 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
       conn.setAutoCommit(true);
       final Statement stmt = conn.createStatement();
 
-      stmt.execute("CREATE TABLE " + tableName +
-        " (COL1 DECIMAL NOT NULL, COL2 DECIMAL NOT NULL, COL3 VARCHAR NOT NULL CONSTRAINT " +
-        "PK PRIMARY KEY (COL1 DESC, COL2 DESC, COL3)) ");
+      stmt.execute("CREATE TABLE " + tableName
+        + " (COL1 DECIMAL NOT NULL, COL2 DECIMAL NOT NULL, COL3 VARCHAR NOT NULL CONSTRAINT "
+        + "PK PRIMARY KEY (COL1 DESC, COL2 DESC, COL3)) ");
 
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(1234.39, 3957.124, 'val1')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(2453.97, 234.112, 'val2')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(3463.384, 345561.124, 'val3')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(34534.9191, 345657.913, 'val4')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(2453.89, 92374.11, 'val5')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(9375.23, 11037.729, 'val6')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(9375.23, 11037.8, 'val7')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(9375.23, 11037.72888, 'val8')");
-      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " +
-        "(1234.39, 3957.123999, 'val9')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "(1234.39, 3957.124, 'val1')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "(2453.97, 234.112, 'val2')");
+      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES "
+        + "(3463.384, 345561.124, 'val3')");
+      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES "
+        + "(34534.9191, 345657.913, 'val4')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "(2453.89, 92374.11, 'val5')");
+      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES "
+        + "(9375.23, 11037.729, 'val6')");
+      stmt.execute(
+        "UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES " + "(9375.23, 11037.8, 'val7')");
+      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES "
+        + "(9375.23, 11037.72888, 'val8')");
+      stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2, COL3) VALUES "
+        + "(1234.39, 3957.123999, 'val9')");
 
       final String sql = "select COL1, COL2, COL3 from " + tableName;
 
@@ -449,29 +447,29 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
       final Statement stmt = conn.createStatement();
 
       stmt.execute("CREATE TABLE " + tableName
-              + " (COL1 VARCHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
-              + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
+        + " (COL1 VARCHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
+        + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
       stmt.execute("CREATE VIEW " + view01
-              + " (VCOL1 INTEGER NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1 DESC))"
-              + " AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
+        + " (VCOL1 INTEGER NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1 DESC))"
+        + " AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
       stmt.execute("CREATE VIEW " + view02
-              + " (VCOL2 CHAR(10) NOT NULL, COL6 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL2))"
-              + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 1");
+        + " (VCOL2 CHAR(10) NOT NULL, COL6 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL2))"
+        + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 1");
 
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0001', 'vcol2_01', 'col5_01', 'col6_01')");
+        + " (col2, vcol2, col5, col6) values ('0001', 'vcol2_01', 'col5_01', 'col6_01')");
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0002', 'vcol2_02', 'col5_02', 'col6_02')");
+        + " (col2, vcol2, col5, col6) values ('0002', 'vcol2_02', 'col5_02', 'col6_02')");
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0003', 'vcol2_03', 'col5_03', 'col6_03')");
+        + " (col2, vcol2, col5, col6) values ('0003', 'vcol2_03', 'col5_03', 'col6_03')");
       stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
-              + "('0004', 2, 'col3_04', 'col4_04', 'col5_04')");
+        + "('0004', 2, 'col3_04', 'col4_04', 'col5_04')");
       stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
-              + "('0005', -2, 'col3_05', 'col4_05', 'col5_05')");
+        + "('0005', -2, 'col3_05', 'col4_05', 'col5_05')");
       stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
-              + "('0006', -1, 'col3_06', 'col4_06', 'col5_06')");
+        + "('0006', -1, 'col3_06', 'col4_06', 'col5_06')");
       stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
-              + "('0007', 1, 'col3_07', 'col4_07', 'col5_07')");
+        + "('0007', 1, 'col3_07', 'col4_07', 'col5_07')");
       conn.commit();
 
       ResultSet rs = stmt.executeQuery("SELECT COL1, COL2, VCOL1 FROM " + view01);
@@ -566,29 +564,29 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
       final Statement stmt = conn.createStatement();
 
       stmt.execute("CREATE TABLE " + tableName
-              + " (COL1 VARCHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
-              + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
+        + " (COL1 VARCHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
+        + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
       stmt.execute("CREATE VIEW " + view01
-              + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1 DESC))"
-              + " AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
+        + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1 DESC))"
+        + " AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
       stmt.execute("CREATE VIEW " + view02
-              + " (VCOL2 CHAR(10) NOT NULL, COL6 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL2))"
-              + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
+        + " (VCOL2 CHAR(10) NOT NULL, COL6 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL2))"
+        + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
 
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0001', 'vcol2_01', 'col5_01', 'col6_01')");
+        + " (col2, vcol2, col5, col6) values ('0001', 'vcol2_01', 'col5_01', 'col6_01')");
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0002', 'vcol2_02', 'col5_02', 'col6_02')");
+        + " (col2, vcol2, col5, col6) values ('0002', 'vcol2_02', 'col5_02', 'col6_02')");
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0003', 'vcol2_03', 'col5_03', 'col6_03')");
+        + " (col2, vcol2, col5, col6) values ('0003', 'vcol2_03', 'col5_03', 'col6_03')");
       stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
-              + "('0004', 'vcol2', 'col3_04', 'col4_04', 'col5_04')");
+        + "('0004', 'vcol2', 'col3_04', 'col4_04', 'col5_04')");
       stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
-              + "('0005', 'vcol-2', 'col3_05', 'col4_05', 'col5_05')");
+        + "('0005', 'vcol-2', 'col3_05', 'col4_05', 'col5_05')");
       stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
-              + "('0006', 'vcol-1', 'col3_06', 'col4_06', 'col5_06')");
+        + "('0006', 'vcol-1', 'col3_06', 'col4_06', 'col5_06')");
       stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
-              + "('0007', 'vcol1', 'col3_07', 'col4_07', 'col5_07')");
+        + "('0007', 'vcol1', 'col3_07', 'col4_07', 'col5_07')");
       conn.commit();
 
       ResultSet rs = stmt.executeQuery("SELECT COL1, COL2, VCOL1 FROM " + view01);
@@ -671,8 +669,8 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 
       Assert.assertFalse(rs.next());
 
-      rs = stmt.executeQuery("SELECT COL1, COL2, VCOL1 FROM " + view01 + " ORDER BY "
-              + "VCOL1 DESC, COL2 ASC");
+      rs = stmt.executeQuery(
+        "SELECT COL1, COL2, VCOL1 FROM " + view01 + " ORDER BY " + "VCOL1 DESC, COL2 ASC");
 
       Assert.assertTrue(rs.next());
 
@@ -719,7 +717,7 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
       Assert.assertFalse(rs.next());
 
       rs = stmt.executeQuery("SELECT COL2, VCOL1, VCOL2, COL5, COL6 FROM " + view02
-              + " ORDER BY VCOL2 DESC, VCOL1 DESC");
+        + " ORDER BY VCOL2 DESC, VCOL1 DESC");
 
       Assert.assertTrue(rs.next());
 
@@ -767,29 +765,29 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
       final Statement stmt = conn.createStatement();
 
       stmt.execute("CREATE TABLE " + tableName
-              + " (COL1 VARCHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
-              + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
+        + " (COL1 VARCHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
+        + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
       stmt.execute("CREATE VIEW " + view01
-              + " (VCOL1 DOUBLE NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1 DESC))"
-              + " AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
+        + " (VCOL1 DOUBLE NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1 DESC))"
+        + " AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
       stmt.execute("CREATE VIEW " + view02
-              + " (VCOL2 CHAR(10) NOT NULL, COL6 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL2))"
-              + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 234.75");
+        + " (VCOL2 CHAR(10) NOT NULL, COL6 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL2))"
+        + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 234.75");
 
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0001', 'vcol2_01', 'col5_01', 'col6_01')");
+        + " (col2, vcol2, col5, col6) values ('0001', 'vcol2_01', 'col5_01', 'col6_01')");
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0002', 'vcol2_02', 'col5_02', 'col6_02')");
+        + " (col2, vcol2, col5, col6) values ('0002', 'vcol2_02', 'col5_02', 'col6_02')");
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0003', 'vcol2_03', 'col5_03', 'col6_03')");
+        + " (col2, vcol2, col5, col6) values ('0003', 'vcol2_03', 'col5_03', 'col6_03')");
       stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
-              + "('0004', 236.49, 'col3_04', 'col4_04', 'col5_04')");
+        + "('0004', 236.49, 'col3_04', 'col4_04', 'col5_04')");
       stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
-              + "('0005', 17.053, 'col3_05', 'col4_05', 'col5_05')");
+        + "('0005', 17.053, 'col3_05', 'col4_05', 'col5_05')");
       stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
-              + "('0006', 98.8452, 'col3_06', 'col4_06', 'col5_06')");
+        + "('0006', 98.8452, 'col3_06', 'col4_06', 'col5_06')");
       stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
-              + "('0007', 234.75, 'col3_07', 'col4_07', 'col5_07')");
+        + "('0007', 234.75, 'col3_07', 'col4_07', 'col5_07')");
       conn.commit();
 
       ResultSet rs = stmt.executeQuery("SELECT COL1, COL2, VCOL1 FROM " + view01);
@@ -872,8 +870,8 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 
       Assert.assertFalse(rs.next());
 
-      rs = stmt.executeQuery("SELECT COL1, COL2, VCOL1 FROM " + view01 + " ORDER BY "
-              + "VCOL1 DESC, COL2 ASC");
+      rs = stmt.executeQuery(
+        "SELECT COL1, COL2, VCOL1 FROM " + view01 + " ORDER BY " + "VCOL1 DESC, COL2 ASC");
 
       Assert.assertTrue(rs.next());
 
@@ -920,7 +918,7 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
       Assert.assertFalse(rs.next());
 
       rs = stmt.executeQuery("SELECT COL2, VCOL1, VCOL2, COL5, COL6 FROM " + view02
-              + " ORDER BY VCOL2 DESC, VCOL1 DESC");
+        + " ORDER BY VCOL2 DESC, VCOL1 DESC");
 
       Assert.assertTrue(rs.next());
 
@@ -970,34 +968,33 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
       final Statement stmt = conn.createStatement();
 
       stmt.execute("CREATE TABLE " + tableName
-              + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
-              + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1 ASC, COL2 DESC))");
-      stmt.execute("CREATE VIEW " + view01
-              + " (VCOL1 CHAR(8), COL5 VARCHAR) AS SELECT * FROM " + tableName
-              + " WHERE COL1 = 'col1'");
+        + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
+        + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1 ASC, COL2 DESC))");
+      stmt.execute("CREATE VIEW " + view01 + " (VCOL1 CHAR(8), COL5 VARCHAR) AS SELECT * FROM "
+        + tableName + " WHERE COL1 = 'col1'");
       stmt.execute("CREATE VIEW " + view02 + " (VCOL2 CHAR(10), COL6 VARCHAR)"
-              + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
+        + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
       stmt.execute("CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
-              + "(COL1, COL2, COL3)");
+        + "(COL1, COL2, COL3)");
       stmt.execute("CREATE INDEX " + index_view02 + " ON " + view02 + " (COL6) INCLUDE "
-              + "(COL1, COL2, COL3)");
+        + "(COL1, COL2, COL3)");
 
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0001', 'vcol2_01', 'col5_01', 'col6_01')");
+        + " (col2, vcol2, col5, col6) values ('0001', 'vcol2_01', 'col5_01', 'col6_01')");
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0002', 'vcol2_02', 'col5_02', 'col6_02')");
+        + " (col2, vcol2, col5, col6) values ('0002', 'vcol2_02', 'col5_02', 'col6_02')");
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0003', 'vcol2_03', 'col5_03', 'col6_03')");
+        + " (col2, vcol2, col5, col6) values ('0003', 'vcol2_03', 'col5_03', 'col6_03')");
       stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
-              + "('0004', 'vcol2', 'col3_04', 'col4_04', 'col5_04')");
+        + "('0004', 'vcol2', 'col3_04', 'col4_04', 'col5_04')");
       stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
-              + "('0005', 'vcol-2', 'col3_05', 'col4_05', 'col5_05')");
+        + "('0005', 'vcol-2', 'col3_05', 'col4_05', 'col5_05')");
       stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
-              + "('0006', 'vcol-1', 'col3_06', 'col4_06', 'col5_06')");
+        + "('0006', 'vcol-1', 'col3_06', 'col4_06', 'col5_06')");
       stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
-              + "('0007', 'vcol1', 'col3_07', 'col4_07', 'col5_07')");
+        + "('0007', 'vcol1', 'col3_07', 'col4_07', 'col5_07')");
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0008', 'vcol2_08', 'col5_08', 'col6_02')");
+        + " (col2, vcol2, col5, col6) values ('0008', 'vcol2_08', 'col5_08', 'col6_02')");
       conn.commit();
 
       ResultSet rs = stmt.executeQuery("SELECT COL2, VCOL1, VCOL2, COL5, COL6 FROM " + view02);
@@ -1103,8 +1100,7 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 
       Assert.assertFalse(rs.next());
 
-      rs = stmt.executeQuery(
-              "SELECT * FROM " + view02 + " WHERE COL6 = 'col6_02'");
+      rs = stmt.executeQuery("SELECT * FROM " + view02 + " WHERE COL6 = 'col6_02'");
 
       Assert.assertTrue(rs.next());
 
@@ -1130,8 +1126,8 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 
       Assert.assertFalse(rs.next());
 
-      rs = stmt.executeQuery(
-              "SELECT COL1, COL2, VCOL1, COL6 FROM " + view02 + " WHERE COL6 = 'col6_02'");
+      rs = stmt
+        .executeQuery("SELECT COL1, COL2, VCOL1, COL6 FROM " + view02 + " WHERE COL6 = 'col6_02'");
 
       Assert.assertTrue(rs.next());
 
@@ -1163,34 +1159,33 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
       final Statement stmt = conn.createStatement();
 
       stmt.execute("CREATE TABLE " + tableName
-              + " (COL1 TIMESTAMP NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
-              + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1 ASC, COL2 DESC))");
-      stmt.execute("CREATE VIEW " + view01
-              + " (VCOL1 CHAR(8), COL5 VARCHAR) AS SELECT * FROM " + tableName
-              + " WHERE COL1 = TO_TIMESTAMP('2023-01-20 00:10:00')");
+        + " (COL1 TIMESTAMP NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
+        + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1 ASC, COL2 DESC))");
+      stmt.execute("CREATE VIEW " + view01 + " (VCOL1 CHAR(8), COL5 VARCHAR) AS SELECT * FROM "
+        + tableName + " WHERE COL1 = TO_TIMESTAMP('2023-01-20 00:10:00')");
       stmt.execute("CREATE VIEW " + view02 + " (VCOL2 CHAR(10), COL6 VARCHAR)"
-              + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
+        + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
       stmt.execute("CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
-              + "(COL1, COL2, COL3)");
+        + "(COL1, COL2, COL3)");
       stmt.execute("CREATE INDEX " + index_view02 + " ON " + view02 + " (COL6) INCLUDE "
-              + "(COL1, COL2, COL3)");
+        + "(COL1, COL2, COL3)");
 
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0001', 'vcol2_01', 'col5_01', 'col6_01')");
+        + " (col2, vcol2, col5, col6) values ('0001', 'vcol2_01', 'col5_01', 'col6_01')");
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0002', 'vcol2_02', 'col5_02', 'col6_02')");
+        + " (col2, vcol2, col5, col6) values ('0002', 'vcol2_02', 'col5_02', 'col6_02')");
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0003', 'vcol2_03', 'col5_03', 'col6_03')");
+        + " (col2, vcol2, col5, col6) values ('0003', 'vcol2_03', 'col5_03', 'col6_03')");
       stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
-              + "('0004', 'vcol2', 'col3_04', 'col4_04', 'col5_04')");
+        + "('0004', 'vcol2', 'col3_04', 'col4_04', 'col5_04')");
       stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
-              + "('0005', 'vcol-2', 'col3_05', 'col4_05', 'col5_05')");
+        + "('0005', 'vcol-2', 'col3_05', 'col4_05', 'col5_05')");
       stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
-              + "('0006', 'vcol-1', 'col3_06', 'col4_06', 'col5_06')");
+        + "('0006', 'vcol-1', 'col3_06', 'col4_06', 'col5_06')");
       stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
-              + "('0007', 'vcol1', 'col3_07', 'col4_07', 'col5_07')");
+        + "('0007', 'vcol1', 'col3_07', 'col4_07', 'col5_07')");
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0008', 'vcol2_08', 'col5_08', 'col6_02')");
+        + " (col2, vcol2, col5, col6) values ('0008', 'vcol2_08', 'col5_08', 'col6_02')");
       conn.commit();
 
       ResultSet rs = stmt.executeQuery("SELECT COL2, VCOL1, VCOL2, COL5, COL6 FROM " + view02);
@@ -1296,8 +1291,7 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 
       Assert.assertFalse(rs.next());
 
-      rs = stmt.executeQuery(
-              "SELECT * FROM " + view02 + " WHERE COL6 = 'col6_02'");
+      rs = stmt.executeQuery("SELECT * FROM " + view02 + " WHERE COL6 = 'col6_02'");
 
       Assert.assertTrue(rs.next());
 
@@ -1323,8 +1317,8 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 
       Assert.assertFalse(rs.next());
 
-      rs = stmt.executeQuery(
-              "SELECT COL1, COL2, VCOL1, COL6 FROM " + view02 + " WHERE COL6 = 'col6_02'");
+      rs = stmt
+        .executeQuery("SELECT COL1, COL2, VCOL1, COL6 FROM " + view02 + " WHERE COL6 = 'col6_02'");
 
       Assert.assertTrue(rs.next());
 

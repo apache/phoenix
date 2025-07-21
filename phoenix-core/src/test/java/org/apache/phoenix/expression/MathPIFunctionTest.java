@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,7 +22,6 @@ import static org.junit.Assert.assertTrue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.function.MathPIFunction;
 import org.apache.phoenix.query.BaseTest;
-
 import org.junit.Test;
 
 /**
@@ -30,15 +29,15 @@ import org.junit.Test;
  */
 public class MathPIFunctionTest {
 
-    @Test
-    public void testMathPIFunction() {
-        Expression mathPIFunction = new MathPIFunction();
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        boolean res = mathPIFunction.evaluate(null, ptr);
-        if (res) {
-            Double result = (Double) mathPIFunction.getDataType().toObject(ptr);
-            assertTrue(BaseTest.twoDoubleEquals(result.doubleValue(), Math.PI));
-        }
-        assertTrue(res);
+  @Test
+  public void testMathPIFunction() {
+    Expression mathPIFunction = new MathPIFunction();
+    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    boolean res = mathPIFunction.evaluate(null, ptr);
+    if (res) {
+      Double result = (Double) mathPIFunction.getDataType().toObject(ptr);
+      assertTrue(BaseTest.twoDoubleEquals(result.doubleValue(), Math.PI));
     }
+    assertTrue(res);
+  }
 }

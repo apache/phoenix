@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,50 +20,44 @@ package org.apache.phoenix.schema;
 import edu.umd.cs.findbugs.annotations.SuppressWarnings;
 
 /**
- * A SequenceKey and the number of slots requested to be allocated for the sequence. 
- * It binds these two together to allow operations such as sorting
- * a Collection of SequenceKeys and at the same time preserving the associated requested
- * number of slots to allocate.
- * 
- * This class delegates hashCode, equals and compareTo to @see{SequenceKey}.
- *
+ * A SequenceKey and the number of slots requested to be allocated for the sequence. It binds these
+ * two together to allow operations such as sorting a Collection of SequenceKeys and at the same
+ * time preserving the associated requested number of slots to allocate. This class delegates
+ * hashCode, equals and compareTo to @see{SequenceKey}.
  */
 public class SequenceAllocation implements Comparable<SequenceAllocation> {
-    
-    private final SequenceKey sequenceKey;
-    private final long numAllocations;
-    
-    public SequenceAllocation(SequenceKey sequenceKey, long numAllocations) {
-        this.sequenceKey = sequenceKey;
-        this.numAllocations = numAllocations;
-    }
-    
-    
-    public SequenceKey getSequenceKey() {
-        return sequenceKey;
-    }
 
+  private final SequenceKey sequenceKey;
+  private final long numAllocations;
 
-    public long getNumAllocations() {
-        return numAllocations;
-    }
+  public SequenceAllocation(SequenceKey sequenceKey, long numAllocations) {
+    this.sequenceKey = sequenceKey;
+    this.numAllocations = numAllocations;
+  }
 
+  public SequenceKey getSequenceKey() {
+    return sequenceKey;
+  }
 
-    @Override
-    public int hashCode() {
-        return sequenceKey.hashCode();
-    }
-    
-    @Override
-    @SuppressWarnings(value="EQ_CHECK_FOR_OPERAND_NOT_COMPATIBLE_WITH_THIS",
-            justification="Checked in called function")
-    public boolean equals(Object obj) {
-        return sequenceKey.equals(obj);
-    }
-    
-    @Override
-    public int compareTo(SequenceAllocation that) {
-        return sequenceKey.compareTo(that.sequenceKey);
-    }
-    
+  public long getNumAllocations() {
+    return numAllocations;
+  }
+
+  @Override
+  public int hashCode() {
+    return sequenceKey.hashCode();
+  }
+
+  @Override
+  @SuppressWarnings(value = "EQ_CHECK_FOR_OPERAND_NOT_COMPATIBLE_WITH_THIS",
+      justification = "Checked in called function")
+  public boolean equals(Object obj) {
+    return sequenceKey.equals(obj);
+  }
+
+  @Override
+  public int compareTo(SequenceAllocation that) {
+    return sequenceKey.compareTo(that.sequenceKey);
+  }
+
 }

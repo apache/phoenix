@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,7 +18,6 @@
 package org.apache.phoenix.end2end;
 
 import java.util.Map;
-
 import org.apache.phoenix.iterate.SizeBoundQueue;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -34,16 +33,16 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 @Category(NeedsOwnMiniClusterTest.class)
 public class OrderByWithServerClientSpoolingDisabledIT extends BaseOrderByIT {
 
-    @BeforeClass
-    public static synchronized void doSetup() throws Exception {
-        Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        // make sure disabling server side spooling has no affect on correctness(existing orderby
-        // IT)
-        props.put(QueryServices.SERVER_ORDERBY_SPOOLING_ENABLED_ATTRIB,
-            Boolean.toString(Boolean.FALSE));
-        props.put(QueryServices.CLIENT_ORDERBY_SPOOLING_ENABLED_ATTRIB,
-            Boolean.toString(Boolean.FALSE));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
+  @BeforeClass
+  public static synchronized void doSetup() throws Exception {
+    Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+    // make sure disabling server side spooling has no affect on correctness(existing orderby
+    // IT)
+    props.put(QueryServices.SERVER_ORDERBY_SPOOLING_ENABLED_ATTRIB,
+      Boolean.toString(Boolean.FALSE));
+    props.put(QueryServices.CLIENT_ORDERBY_SPOOLING_ENABLED_ATTRIB,
+      Boolean.toString(Boolean.FALSE));
+    setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+  }
 
 }

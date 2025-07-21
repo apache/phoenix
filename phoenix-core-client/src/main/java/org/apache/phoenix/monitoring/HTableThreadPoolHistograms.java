@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -61,116 +61,116 @@ import org.apache.hbase.thirdparty.com.google.common.collect.ImmutableList;
  * collected metrics for monitoring and analysis.
  */
 public class HTableThreadPoolHistograms {
-    /**
-     * Predefined tag keys for dimensional monitoring and contextual categorization of histogram
-     * instances. These tags provide context about the connection and CQSI instance associated with
-     * the metrics.
-     */
-    public enum Tag {
-        servers,
-        cqsiName,
-    }
+  /**
+   * Predefined tag keys for dimensional monitoring and contextual categorization of histogram
+   * instances. These tags provide context about the connection and CQSI instance associated with
+   * the metrics.
+   */
+  public enum Tag {
+    servers,
+    cqsiName,
+  }
 
-    /**
-     * Enum that captures the name of each of the monitored metrics. These names correspond to the
-     * specific thread pool performance metrics being tracked.
-     */
-    public enum HistogramName {
-        ActiveThreadsCount,
-        QueueSize,
-    }
+  /**
+   * Enum that captures the name of each of the monitored metrics. These names correspond to the
+   * specific thread pool performance metrics being tracked.
+   */
+  public enum HistogramName {
+    ActiveThreadsCount,
+    QueueSize,
+  }
 
-    private final UtilizationHistogram activeThreadsHisto;
-    private final UtilizationHistogram queuedSizeHisto;
+  private final UtilizationHistogram activeThreadsHisto;
+  private final UtilizationHistogram queuedSizeHisto;
 
-    /**
-     * Creates a new instance of HTableThreadPoolHistograms with the specified maximum values for
-     * thread pool and queue size.
-     * @param maxThreadPoolSize the maximum number of threads in the thread pool, used to configure
-     *                          the active threads histogram
-     * @param maxQueueSize      the maximum size of the thread pool queue, used to configure the
-     *                          queue size histogram
-     */
-    public HTableThreadPoolHistograms(long maxThreadPoolSize, long maxQueueSize) {
-        activeThreadsHisto = new UtilizationHistogram(maxThreadPoolSize,
-                HistogramName.ActiveThreadsCount.name());
-        queuedSizeHisto = new UtilizationHistogram(maxQueueSize, HistogramName.QueueSize.name());
-    }
+  /**
+   * Creates a new instance of HTableThreadPoolHistograms with the specified maximum values for
+   * thread pool and queue size.
+   * @param maxThreadPoolSize the maximum number of threads in the thread pool, used to configure
+   *                          the active threads histogram
+   * @param maxQueueSize      the maximum size of the thread pool queue, used to configure the queue
+   *                          size histogram
+   */
+  public HTableThreadPoolHistograms(long maxThreadPoolSize, long maxQueueSize) {
+    activeThreadsHisto =
+      new UtilizationHistogram(maxThreadPoolSize, HistogramName.ActiveThreadsCount.name());
+    queuedSizeHisto = new UtilizationHistogram(maxQueueSize, HistogramName.QueueSize.name());
+  }
 
-    /**
-     * Updates the histogram that tracks active threads count with the current number of active
-     * threads. <br/>
-     * <br/>
-     * This method is to be called from HTableThreadPoolUtilizationStats class only and should not
-     * be used from outside Phoenix.
-     * @param activeThreads the current number of threads actively executing tasks
-     */
-    public void updateActiveThreads(long activeThreads) {
-        activeThreadsHisto.addValue(activeThreads);
-    }
+  /**
+   * Updates the histogram that tracks active threads count with the current number of active
+   * threads. <br/>
+   * <br/>
+   * This method is to be called from HTableThreadPoolUtilizationStats class only and should not be
+   * used from outside Phoenix.
+   * @param activeThreads the current number of threads actively executing tasks
+   */
+  public void updateActiveThreads(long activeThreads) {
+    activeThreadsHisto.addValue(activeThreads);
+  }
 
-    /**
-     * Updates the histogram that tracks queue size with the current number of queued tasks. <br/>
-     * <br/>
-     * This method is to be called from HTableThreadPoolUtilizationStats class only and should not
-     * be used from outside Phoenix.
-     * @param queuedSize the current number of tasks waiting in the thread pool queue
-     */
-    public void updateQueuedSize(long queuedSize) {
-        queuedSizeHisto.addValue(queuedSize);
-    }
+  /**
+   * Updates the histogram that tracks queue size with the current number of queued tasks. <br/>
+   * <br/>
+   * This method is to be called from HTableThreadPoolUtilizationStats class only and should not be
+   * used from outside Phoenix.
+   * @param queuedSize the current number of tasks waiting in the thread pool queue
+   */
+  public void updateQueuedSize(long queuedSize) {
+    queuedSizeHisto.addValue(queuedSize);
+  }
 
-    /**
-     * Adds a server tag for dimensional monitoring that identifies the connection quorum string
-     * such as ZK quorum, master quorum, etc. This corresponds to the "servers" tag key. <br/>
-     * <br/>
-     * This is an external user-facing method which can be called when creating an instance of the
-     * class.
-     * @param value the connection quorum string value
-     */
-    public void addServerTag(String value) {
-        addTag(Tag.servers.name(), value);
-    }
+  /**
+   * Adds a server tag for dimensional monitoring that identifies the connection quorum string such
+   * as ZK quorum, master quorum, etc. This corresponds to the "servers" tag key. <br/>
+   * <br/>
+   * This is an external user-facing method which can be called when creating an instance of the
+   * class.
+   * @param value the connection quorum string value
+   */
+  public void addServerTag(String value) {
+    addTag(Tag.servers.name(), value);
+  }
 
-    /**
-     * Adds a CQSI name tag that captures the principal of the CQSI instance. This corresponds to
-     * the "cqsiName" tag key. <br/>
-     * <br/>
-     * This is an external user-facing method which can be called while creating instance of the
-     * class.
-     * @param value the principal identifier for the CQSI instance
-     */
-    public void addCqsiNameTag(String value) {
-        addTag(Tag.cqsiName.name(), value);
-    }
+  /**
+   * Adds a CQSI name tag that captures the principal of the CQSI instance. This corresponds to the
+   * "cqsiName" tag key. <br/>
+   * <br/>
+   * This is an external user-facing method which can be called while creating instance of the
+   * class.
+   * @param value the principal identifier for the CQSI instance
+   */
+  public void addCqsiNameTag(String value) {
+    addTag(Tag.cqsiName.name(), value);
+  }
 
-    /**
-     * Adds a custom tag with the specified key-value pair for dimensional monitoring. This method
-     * allows adding arbitrary tags beyond the predefined servers and CQSI name tags. <br/>
-     * <br/>
-     * This is an external user-facing method which can be called while creating instance of the
-     * class.
-     * @param key   the tag key
-     * @param value the tag value
-     */
-    public void addTag(String key, String value) {
-        activeThreadsHisto.addTag(key, value);
-        queuedSizeHisto.addTag(key, value);
-    }
+  /**
+   * Adds a custom tag with the specified key-value pair for dimensional monitoring. This method
+   * allows adding arbitrary tags beyond the predefined servers and CQSI name tags. <br/>
+   * <br/>
+   * This is an external user-facing method which can be called while creating instance of the
+   * class.
+   * @param key   the tag key
+   * @param value the tag value
+   */
+  public void addTag(String key, String value) {
+    activeThreadsHisto.addTag(key, value);
+    queuedSizeHisto.addTag(key, value);
+  }
 
-    /**
-     * Returns a list of HistogramDistribution which are immutable snapshots containing percentile
-     * distribution, min/max values, and count of values for the monitored metrics (active threads
-     * count and queue size). <br/>
-     * <br/>
-     * This method is to be called from
-     * {@link HTableThreadPoolMetricsManager#getHistogramsForAllThreadPools()} only and should not
-     * be used from outside Phoenix.
-     * @return list of HistogramDistribution instances representing comprehensive snapshots of the
-     *         metrics
-     */
-    public List<HistogramDistribution> getThreadPoolHistogramsDistribution() {
-        return ImmutableList.of(activeThreadsHisto.getPercentileHistogramDistribution(),
-                queuedSizeHisto.getPercentileHistogramDistribution());
-    }
+  /**
+   * Returns a list of HistogramDistribution which are immutable snapshots containing percentile
+   * distribution, min/max values, and count of values for the monitored metrics (active threads
+   * count and queue size). <br/>
+   * <br/>
+   * This method is to be called from
+   * {@link HTableThreadPoolMetricsManager#getHistogramsForAllThreadPools()} only and should not be
+   * used from outside Phoenix.
+   * @return list of HistogramDistribution instances representing comprehensive snapshots of the
+   *         metrics
+   */
+  public List<HistogramDistribution> getThreadPoolHistogramsDistribution() {
+    return ImmutableList.of(activeThreadsHisto.getPercentileHistogramDistribution(),
+      queuedSizeHisto.getPercentileHistogramDistribution());
+  }
 }

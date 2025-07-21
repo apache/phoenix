@@ -123,6 +123,7 @@ message PTable {
   optional string CDCIncludeScopes=54;
   optional bytes ttl = 55;
   optional bytes rowKeyMatcher = 56;
+  optional bool isStrictTTL = 57;
 }
 
 message EncodedCQCounter {

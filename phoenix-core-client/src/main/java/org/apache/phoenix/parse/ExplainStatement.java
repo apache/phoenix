@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,29 +20,29 @@ package org.apache.phoenix.parse;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 
 public class ExplainStatement implements BindableStatement {
-    private final BindableStatement statement;
-    private final ExplainType explainType;
+  private final BindableStatement statement;
+  private final ExplainType explainType;
 
-    public ExplainStatement(BindableStatement statement, ExplainType explainType) {
-        this.statement = statement;
-        this.explainType = explainType;
-    }
+  public ExplainStatement(BindableStatement statement, ExplainType explainType) {
+    this.statement = statement;
+    this.explainType = explainType;
+  }
 
-    public BindableStatement getStatement() {
-        return statement;
-    }
+  public BindableStatement getStatement() {
+    return statement;
+  }
 
-    @Override
-    public int getBindCount() {
-        return statement.getBindCount();
-    }
+  @Override
+  public int getBindCount() {
+    return statement.getBindCount();
+  }
 
-    @Override
-    public Operation getOperation() {
-        return Operation.QUERY;
-    }
+  @Override
+  public Operation getOperation() {
+    return Operation.QUERY;
+  }
 
-    public ExplainType getExplainType() {
-        return explainType;
-    }
+  public ExplainType getExplainType() {
+    return explainType;
+  }
 }

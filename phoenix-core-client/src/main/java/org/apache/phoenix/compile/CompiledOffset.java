@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,21 +23,21 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
  * CompiledOffset represents the result of the Compiler on the OFFSET clause.
  */
 public class CompiledOffset {
-    public static final CompiledOffset EMPTY_COMPILED_OFFSET =
-            new CompiledOffset(Optional.<Integer>absent(), Optional.<byte[]>absent());
-    private final Optional<Integer> integerOffset;
-    private final Optional<byte[]> byteOffset;
+  public static final CompiledOffset EMPTY_COMPILED_OFFSET =
+    new CompiledOffset(Optional.<Integer> absent(), Optional.<byte[]> absent());
+  private final Optional<Integer> integerOffset;
+  private final Optional<byte[]> byteOffset;
 
-    public CompiledOffset(Optional<Integer> integerOffset, Optional<byte[]> byteOffset) {
-        this.integerOffset = integerOffset;
-        this.byteOffset = byteOffset;
-    }
+  public CompiledOffset(Optional<Integer> integerOffset, Optional<byte[]> byteOffset) {
+    this.integerOffset = integerOffset;
+    this.byteOffset = byteOffset;
+  }
 
-    public Optional<Integer> getIntegerOffset() {
-        return integerOffset;
-    }
+  public Optional<Integer> getIntegerOffset() {
+    return integerOffset;
+  }
 
-    public Optional<byte[]> getByteOffset() {
-        return byteOffset;
-    }
+  public Optional<byte[]> getByteOffset() {
+    return byteOffset;
+  }
 }

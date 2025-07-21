@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,8 +18,8 @@
 package org.apache.phoenix.coprocessorclient.tasks;
 
 public class IndexRebuildTaskConstants {
-    public static final String INDEX_NAME = "IndexName";
-    public static final String JOB_ID = "JobID";
-    public static final String DISABLE_BEFORE = "DisableBefore";
-    public static final String REBUILD_ALL = "RebuildAll";
+  public static final String INDEX_NAME = "IndexName";
+  public static final String JOB_ID = "JobID";
+  public static final String DISABLE_BEFORE = "DisableBefore";
+  public static final String REBUILD_ALL = "RebuildAll";
 }

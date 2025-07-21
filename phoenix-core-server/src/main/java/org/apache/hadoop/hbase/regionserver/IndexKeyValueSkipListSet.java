@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,7 +18,6 @@
 package org.apache.hadoop.hbase.regionserver;
 
 import java.util.concurrent.ConcurrentSkipListMap;
-
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
 
@@ -35,12 +34,11 @@ public class IndexKeyValueSkipListSet extends KeyValueSkipListSet {
   /**
    * Create a new {@link IndexKeyValueSkipListSet} based on the passed comparator.
    * @param comparator to use when comparing keyvalues. It is used both to determine sort order as
-   *          well as object equality in the map.
+   *                   well as object equality in the map.
    * @return a map that uses the passed comparator
    */
   public static IndexKeyValueSkipListSet create(CellComparator comparator) {
-    ConcurrentSkipListMap<Cell, Cell> delegate =
-        new ConcurrentSkipListMap<Cell, Cell>(comparator);
+    ConcurrentSkipListMap<Cell, Cell> delegate = new ConcurrentSkipListMap<Cell, Cell>(comparator);
     IndexKeyValueSkipListSet ret = new IndexKeyValueSkipListSet(delegate);
     return ret;
   }
@@ -54,20 +52,19 @@ public class IndexKeyValueSkipListSet extends KeyValueSkipListSet {
   }
 
   /**
-   * Add the passed KeyValue to the set, only if one is not already set. This is equivalent
-   * to
+   * Add the passed KeyValue to the set, only if one is not already set. This is equivalent to
+   *
    * <pre>
-   * if (!set.containsKey(key))
-   *   return set.put(key);
-   * else
-   *  return map.set(key);
+   * if (!set.containsKey(key)) return set.put(key);
+   * else return map.set(key);
    * </pre>
+   *
    * except that the action is performed atomically.
    * @param kv KeyValue to add
    * @return the previous value associated with the specified key, or <tt>null</tt> if there was no
    *         previously stored key
-   * @throws ClassCastException if the specified key cannot be compared with the keys currently in
-   *           the map
+   * @throws ClassCastException   if the specified key cannot be compared with the keys currently in
+   *                              the map
    * @throws NullPointerException if the specified key is null
    */
   public Cell putIfAbsent(Cell kv) {

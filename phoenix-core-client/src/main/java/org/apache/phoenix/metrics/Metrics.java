@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -24,43 +24,44 @@ import org.slf4j.LoggerFactory;
 
 public class Metrics {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(Metrics.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(Metrics.class);
 
   private static volatile MetricsSystem manager = DefaultMetricsSystem.instance();
 
-    private static boolean initialized;
+  private static boolean initialized;
 
-    /** This must match the prefix that we are using in the hadoop-metrics2 config on the client */
-    public static final String METRICS_SYSTEM_NAME = "phoenix";
-    public static MetricsSystem initialize() {
-        // if the jars aren't on the classpath, then we don't start the metrics system
-        if (manager == null) {
-            LOGGER.warn("Phoenix metrics could not be initialized - no MetricsManager found!");
-            return null;
-        }
-        // only initialize the metrics system once
-        synchronized (Metrics.class) {
-            if (!initialized) {
-                LOGGER.info("Initializing metrics system: " + Metrics.METRICS_SYSTEM_NAME);
-                manager.init(Metrics.METRICS_SYSTEM_NAME);
-                initialized = true;
-            }
-        }
-        return manager;
+  /** This must match the prefix that we are using in the hadoop-metrics2 config on the client */
+  public static final String METRICS_SYSTEM_NAME = "phoenix";
+
+  public static MetricsSystem initialize() {
+    // if the jars aren't on the classpath, then we don't start the metrics system
+    if (manager == null) {
+      LOGGER.warn("Phoenix metrics could not be initialized - no MetricsManager found!");
+      return null;
     }
-
-    private static volatile boolean sinkInitialized = false;
-
-    /**
-     * Mark that the metrics/tracing sink has been initialized
-     */
-    public static void markSinkInitialized() {
-        sinkInitialized = true;
+    // only initialize the metrics system once
+    synchronized (Metrics.class) {
+      if (!initialized) {
+        LOGGER.info("Initializing metrics system: " + Metrics.METRICS_SYSTEM_NAME);
+        manager.init(Metrics.METRICS_SYSTEM_NAME);
+        initialized = true;
+      }
     }
+    return manager;
+  }
 
-    public static void ensureConfigured() {
-        if (!sinkInitialized) {
-            LOGGER.warn("Phoenix metrics2/tracing sink was not started. Should be it be?");
-        }
+  private static volatile boolean sinkInitialized = false;
+
+  /**
+   * Mark that the metrics/tracing sink has been initialized
+   */
+  public static void markSinkInitialized() {
+    sinkInitialized = true;
+  }
+
+  public static void ensureConfigured() {
+    if (!sinkInitialized) {
+      LOGGER.warn("Phoenix metrics2/tracing sink was not started. Should be it be?");
     }
+  }
 }
