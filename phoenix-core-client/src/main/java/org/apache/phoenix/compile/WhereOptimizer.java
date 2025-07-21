@@ -1928,7 +1928,7 @@ public class WhereOptimizer {
     @Override
     public KeySlots visitLeave(InListExpression node, List<KeySlots> childParts) {
       if (childParts.isEmpty()) {
-          return null;
+        return null;
       }
 
       List<Expression> keyExpressions = node.getKeyExpressions();
@@ -1937,13 +1937,13 @@ public class WhereOptimizer {
       KeyPart childPart = childSlot.getKeyPart();
       // Handles cases like WHERE substr(foo,1,3) IN ('aaa','bbb')
       for (Expression key : keyExpressions) {
-          KeyRange range = childPart.getKeyRange(CompareOperator.EQUAL, key);
-          if (range == null) {
-              return null;
-          }
-          if (range != KeyRange.EMPTY_RANGE) { // null means it can't possibly be in range
-              ranges.add(range);
-          }
+        KeyRange range = childPart.getKeyRange(CompareOperator.EQUAL, key);
+        if (range == null) {
+            return null;
+        }
+        if (range != KeyRange.EMPTY_RANGE) { // null means it can't possibly be in range
+            ranges.add(range);
+        }
       }
       return newKeyParts(childSlot, node, new ArrayList<KeyRange>(ranges));
     }
