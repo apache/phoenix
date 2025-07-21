@@ -2023,6 +2023,8 @@ public class WhereOptimizer {
                     keyRange == null || keyRange == KeyRange.EMPTY_RANGE
                         || keyRange == KeyRange.IS_NULL_RANGE
                 ) {
+                    // Skip null range along with empty range as null check is done via IS NULL as
+                    // per SQL standards
                     continue;
                 }
                 keyRanges.add(keyRange);

@@ -17,10 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.math.BigDecimal;
@@ -39,7 +37,6 @@ import java.util.HashMap;
 
 import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.query.BaseTest;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -64,7 +61,7 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
         insertData(tableName, 1, "x", "a");
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String selectSql = "SELECT * FROM " + tableName + " WHERE col1 = ANY(?)";
-            Array arr = conn.createArrayOf("VARCHAR", new String[] { "a" });
+            Array arr = conn.createArrayOf("VARCHAR", new String[] { "a", "b" });
             try (PreparedStatement stmt = conn.prepareStatement(selectSql)) {
                 stmt.setArray(1, arr);
                 try (ResultSet rs = stmt.executeQuery()) {
@@ -509,7 +506,7 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
     }
     
     @Test
-    public void testArrayAnyComparisonWithTimestampToDatTimeCoercion() throws Exception {
+    public void testArrayAnyComparisonWithTimestampToDateCoercion() throws Exception {
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " ("
             + "pk1 TIMESTAMP NOT NULL, "
@@ -537,7 +534,6 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
             }
         }
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
             // Use literal arrays to test the point lookup optimization.
             String timestampLiteralArr = "ARRAY["
                 + "TO_TIMESTAMP('" + pk1Value + "'), "
@@ -731,6 +727,42 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
         }
     }
     
+    @Test
+    public void testArrayAnyComparisonInGroupedAggregateQuery() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE " + tableName + " ("
+            + "pk1 INTEGER NOT NULL, "
+            + "pk2 VARCHAR NOT NULL, "
+            + "col1 VARCHAR, " 
+            + "CONSTRAINT pk PRIMARY KEY (pk1, pk2)" 
+        + ")";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute(ddl);
+                conn.commit();
+            }
+        }
+        insertData(tableName, 1, "a11", "b11");
+        insertData(tableName, 1, "a12", "b12");
+        insertData(tableName, 2, "a21", "b21");
+        insertData(tableName, 2, "a22", "b22");
+        insertData(tableName, 2, "a23", "b23");
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String selectSql = "SELECT pk1, COUNT(*) FROM " + tableName
+                + " WHERE pk1 = 2 AND pk2 = ANY(?) GROUP BY pk1";
+            Array arr = conn.createArrayOf("VARCHAR", new String[] { "a11", "a21", "a23" });
+            try (PreparedStatement stmt = conn.prepareStatement(selectSql)) {
+                stmt.setArray(1, arr);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    assertTrue(rs.next());
+                    assertEquals(2, rs.getInt(1));
+                    assertEquals(2, rs.getInt(2));
+                }
+            }
+            assertPointLookupsAreGenerated(selectSql, conn, arr);
+        }
+    }
+    
     private void assertBinaryValue(byte[] expected, byte[] actual) {
         int expectedLength = expected.length;
         for (int i = 0; i < expectedLength; i++) {
@@ -746,7 +778,8 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
             }
             try (ResultSet rs = stmt.executeQuery()) {
                 String explainPlan = QueryUtil.getExplainPlan(rs);
-                assertTrue(explainPlan.contains("FULL SCAN") || explainPlan.contains("RANGE SCAN"));
+                System.out.println("EXPLAIN PLAN: " + explainPlan);
+                assertTrue(explainPlan.contains("FULL SCAN"));
                 assertFalse(explainPlan.contains("POINT LOOKUP ON"));
             }
         }
@@ -760,14 +793,19 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
             }
             try (ResultSet rs = stmt.executeQuery()) {
                 String explainPlan = QueryUtil.getExplainPlan(rs);
+                System.out.println("EXPLAIN PLAN: " + explainPlan);
                 assertTrue(explainPlan.contains("POINT LOOKUP ON"));
             }
         }
     }
 
     private void createTableASCPkColumns(String tableName) throws SQLException {
-        String ddl = "CREATE TABLE " + tableName + " (pk1 INTEGER NOT NULL, " + "pk2 VARCHAR(3), "
-            + "col1 VARCHAR, " + "CONSTRAINT pk PRIMARY KEY (pk1, pk2))";
+        String ddl = "CREATE TABLE " + tableName + " ("
+            + "pk1 INTEGER NOT NULL, "
+            + "pk2 VARCHAR(3), "
+            + "col1 VARCHAR, " 
+            + "CONSTRAINT pk PRIMARY KEY (pk1, pk2)" 
+        + ")";
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             try (Statement stmt = conn.createStatement()) {
                 stmt.execute(ddl);
