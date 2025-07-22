@@ -22,6 +22,7 @@ import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 import static org.apache.phoenix.util.TestUtil.LOCALHOST;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -33,6 +34,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Map;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
@@ -40,12 +42,14 @@ import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class ContextClassloaderIT  extends BaseTest {
 
@@ -55,16 +59,19 @@ public class ContextClassloaderIT  extends BaseTest {
 
     @BeforeClass
     public static synchronized void setUpBeforeClass() throws Exception {
-        Configuration conf = HBaseConfiguration.create();
-        setUpConfigForMiniCluster(conf);
-        hbaseTestUtil = new HBaseTestingUtility(conf);
-        hbaseTestUtil.startMiniCluster();
-        String clientPort = hbaseTestUtil.getConfiguration().get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
-        String url = JDBC_PROTOCOL_ZK + JDBC_PROTOCOL_SEPARATOR + LOCALHOST + JDBC_PROTOCOL_SEPARATOR + clientPort
-                + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
-        driver = initAndRegisterTestDriver(url, ReadOnlyProps.EMPTY_PROPS);
-        
-        Connection conn = DriverManager.getConnection(url);
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(ReadOnlyProps.EMPTY_PROPS, ReadOnlyProps.EMPTY_PROPS);
+        } else {
+            Configuration conf = HBaseConfiguration.create();
+            setUpConfigForMiniCluster(conf);
+            hbaseTestUtil = new HBaseTestingUtility(conf);
+            hbaseTestUtil.startMiniCluster();
+            String clientPort = hbaseTestUtil.getConfiguration().get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
+            String url = JDBC_PROTOCOL_ZK + JDBC_PROTOCOL_SEPARATOR + LOCALHOST + JDBC_PROTOCOL_SEPARATOR + clientPort
+                    + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
+            driver = initAndRegisterTestDriver(url, ReadOnlyProps.EMPTY_PROPS);
+        }
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         Statement stmt = conn.createStatement();
         stmt.execute("CREATE TABLE test (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR)");
         stmt.execute("UPSERT INTO test VALUES (1, 'name1')");
@@ -77,6 +84,9 @@ public class ContextClassloaderIT  extends BaseTest {
     }
 
     protected static String getUrl() {
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            return CLUSTERS.getJdbcHAUrlWithoutPrincipal()+";"+PHOENIX_TEST_DRIVER_URL_PARAM;
+        }
         return "jdbc:phoenix:localhost:" + hbaseTestUtil.getZkCluster().getClientPort() + ";test=true";
     }
 
@@ -88,7 +98,7 @@ public class ContextClassloaderIT  extends BaseTest {
             @Override
             public void run() {
                 try {
-                    Connection conn = DriverManager.getConnection(getUrl());
+                    Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                     Statement stmt = conn.createStatement();
                     ResultSet rs = stmt.executeQuery("select * from test where name = 'name2'");
                     while (rs.next()) {
@@ -114,7 +124,7 @@ public class ContextClassloaderIT  extends BaseTest {
             @Override
             public void run() {
                 try {
-                    Connection conn = DriverManager.getConnection(getUrl());
+                    Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                     ResultSet tablesRs = conn.getMetaData().getTables(null, null, null, null);
                     while (tablesRs.next()) {
                         // Just make sure we run over all records
@@ -138,7 +148,7 @@ public class ContextClassloaderIT  extends BaseTest {
             @Override
             public void run() {
                 try {
-                    Connection conn = DriverManager.getConnection(getUrl());
+                    Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                     Statement stmt = conn.createStatement();
                     stmt.execute("CREATE TABLE T2 (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR)");
                     stmt.execute("UPSERT INTO T2 VALUES (1, 'name1')");

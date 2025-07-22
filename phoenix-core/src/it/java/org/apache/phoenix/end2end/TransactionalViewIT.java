@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.analyzeTable;
 import static org.apache.phoenix.util.TestUtil.getAllSplits;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 
 import java.sql.Connection;
@@ -29,6 +30,7 @@ import java.util.Collection;
 import java.util.List;
 
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
@@ -37,7 +39,7 @@ import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-
+//Passing with HA Connection
 @Category(ParallelStatsEnabledTest.class)
 @RunWith(Parameterized.class)
 public class TransactionalViewIT extends ParallelStatsEnabledIT {
@@ -66,8 +68,8 @@ public class TransactionalViewIT extends ParallelStatsEnabledIT {
 
     @Test
     public void testReadOwnWritesWithStats() throws Exception {
-        try (Connection conn1 = DriverManager.getConnection(getUrl()); 
-                Connection conn2 = DriverManager.getConnection(getUrl())) {
+        try (Connection conn1 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+             Connection conn2 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String ddl = "CREATE TABLE " + fullTableName
                     + " (k INTEGER NOT NULL PRIMARY KEY, v1 DATE) TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + transactionProvider + "'";
             conn1.createStatement().execute(ddl);
@@ -101,8 +103,8 @@ public class TransactionalViewIT extends ParallelStatsEnabledIT {
     
     @Test
     public void testInvalidRowsWithStats() throws Exception {
-        try (Connection conn1 = DriverManager.getConnection(getUrl()); 
-                Connection conn2 = DriverManager.getConnection(getUrl())) {
+        try (Connection conn1 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+                Connection conn2 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String ddl = "CREATE TABLE " + fullTableName
                     + " (k INTEGER NOT NULL PRIMARY KEY, v1 DATE) TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + transactionProvider + "'";
             conn1.createStatement().execute(ddl);

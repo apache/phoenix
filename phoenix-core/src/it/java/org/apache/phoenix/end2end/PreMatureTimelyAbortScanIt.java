@@ -79,7 +79,7 @@ public class PreMatureTimelyAbortScanIt extends ParallelStatsDisabledIT {
         }
 
         try {
-            PhoenixMonitoredConnection conn = DriverManager.getConnection(getUniqueUrl()).unwrap(PhoenixMonitoredConnection.class);
+            PhoenixMonitoredConnection conn = DriverManager.getConnection(getUniqueUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixMonitoredConnection.class);
             ScanningResultIterator.setIsScannerClosedForcefully(true);
             ResultSet resultSet = conn.createStatement().executeQuery(
                     "SELECT COUNT(*) FROM LONG_BUG WHERE ID % 2 = 0");

@@ -686,7 +686,7 @@ public class ViewUtil {
      * PHOENIX-3534) we choose the child column over the parent column
      * @return table with inherited columns
      */
-    public static PTable addDerivedColumnsFromParent(PhoenixConnection connection,
+    public static PTable addDerivedColumnsFromParent(PhoenixMonitoredConnection connection,
         PTable view, PTable parentTable)
         throws SQLException {
         return addDerivedColumnsFromParent(connection, view, parentTable, true);
@@ -697,7 +697,7 @@ public class ViewUtil {
      * PHOENIX-3534) we choose the child column over the parent column
      * @return table with inherited columns
      */
-    public static PTable addDerivedColumnsFromParent(PhoenixConnection connection,
+    public static PTable addDerivedColumnsFromParent(PhoenixMonitoredConnection connection,
         PTable view, PTable parentTable,
         boolean recalculateBaseColumnCount)
             throws SQLException {

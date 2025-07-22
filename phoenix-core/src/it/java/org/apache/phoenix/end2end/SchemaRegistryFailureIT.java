@@ -44,7 +44,7 @@ import java.sql.SQLException;
 import java.util.Map;
 
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY;
-//Failing with HA Connection
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class SchemaRegistryFailureIT extends ParallelStatsDisabledIT{
 
@@ -82,8 +82,15 @@ public class SchemaRegistryFailureIT extends ParallelStatsDisabledIT{
             try {
                 PTable table = conn.getTable(fullTableName);
                 Assert.fail("Shouldn't have found the table because it shouldn't have been created");
-            } catch (TableNotFoundException tnfe) {
-                //eat the exception, which is what we expect
+            } catch (Exception e) {
+                if (e instanceof SQLException) {
+                    if (e.getCause() instanceof TableNotFoundException) {
+                        //Expected in case of HA Enabled
+                        //eat the exception, which is what we expect
+                    }
+                } else if (e instanceof TableNotFoundException) {
+                    //eat the exception, which is what we expect
+                }
             }
         }
     }

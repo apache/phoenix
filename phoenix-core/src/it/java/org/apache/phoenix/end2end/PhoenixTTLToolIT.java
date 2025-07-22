@@ -33,6 +33,7 @@ import org.apache.hadoop.hbase.filter.RegexStringComparator;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.mapreduce.PhoenixTTLTool;
 import org.apache.phoenix.mapreduce.util.PhoenixMultiInputUtil;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.*;
@@ -94,12 +95,12 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
         InstanceResolver.getSingleton(ConfigurationFactory.class, new ConfigurationFactory() {
             @Override
             public Configuration getConfiguration() {
-                return new Configuration(config);
+                return new Configuration(BaseTest.getConfiguration());
             }
 
             @Override
             public Configuration getConfiguration(Configuration confToClone) {
-                Configuration copy = new Configuration(config);
+                Configuration copy = new Configuration(BaseTest.getConfiguration());
                 copy.addResource(confToClone);
                 return copy;
             }
@@ -194,9 +195,9 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
 
         try (Connection globalConn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenant1Connection =
-                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
+                     PhoenixMultiInputUtil.buildTenantConnection(PropertiesUtil.deepCopy(TEST_PROPERTIES), getUrl(), tenant1);
              Connection tenant2Connection =
-                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
+                     PhoenixMultiInputUtil.buildTenantConnection(PropertiesUtil.deepCopy(TEST_PROPERTIES), getUrl(), tenant2)) {
 
             createMultiTenantTable(globalConn, baseTableFullName);
             globalConn.createStatement().execute(String.format(VIEW_DDL_WITH_ID_PREFIX_AND_TTL,
@@ -267,11 +268,11 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
         String tenant1 = generateUniqueName();
         String tenant2 = generateUniqueName();
 
-        try (Connection globalConn = DriverManager.getConnection(getUrl());
+        try (Connection globalConn = DriverManager.getConnection(getUrl() , PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenant1Connection =
-                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
+                     PhoenixMultiInputUtil.buildTenantConnection(PropertiesUtil.deepCopy(TEST_PROPERTIES),getUrl(), tenant1);
              Connection tenant2Connection =
-                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
+                     PhoenixMultiInputUtil.buildTenantConnection(PropertiesUtil.deepCopy(TEST_PROPERTIES), getUrl(), tenant2)) {
 
             createMultiTenantTable(globalConn, baseTableFullName);
 
@@ -351,11 +352,11 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
         String tenant1 = generateUniqueName();
         String tenant2 = generateUniqueName();
 
-        try (Connection globalConn = DriverManager.getConnection(getUrl());
+        try (Connection globalConn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenant1Connection =
-                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
+                     PhoenixMultiInputUtil.buildTenantConnection(PropertiesUtil.deepCopy(TEST_PROPERTIES), getUrl(), tenant1);
              Connection tenant2Connection =
-                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
+                     PhoenixMultiInputUtil.buildTenantConnection(PropertiesUtil.deepCopy(TEST_PROPERTIES), getUrl(), tenant2)) {
 
             createMultiTenantTable(globalConn, baseTableFullName);
             String ddl = "CREATE VIEW %s (PK1 BIGINT PRIMARY KEY, " +
@@ -441,11 +442,11 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
         String tenant1 = generateUniqueName();
         String tenant2 = generateUniqueName();
 
-        try (Connection globalConn = DriverManager.getConnection(getUrl());
+        try (Connection globalConn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenant1Connection =
-                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
+                     PhoenixMultiInputUtil.buildTenantConnection(PropertiesUtil.deepCopy(TEST_PROPERTIES), getUrl(), tenant1);
              Connection tenant2Connection =
-                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
+                     PhoenixMultiInputUtil.buildTenantConnection(PropertiesUtil.deepCopy(TEST_PROPERTIES), getUrl(), tenant2)) {
 
             createMultiTenantTable(globalConn, baseTableFullName);
             String ddl = "CREATE VIEW %s (PK1 BIGINT PRIMARY KEY, " +
@@ -502,7 +503,7 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
         String globalViewName1 = schema + "." + generateUniqueName();
         String globalViewName2 = schema + "." + generateUniqueName();
 
-        try (Connection globalConn = DriverManager.getConnection(getUrl())) {
+        try (Connection globalConn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String ddl = "CREATE TABLE " + baseTableFullName  +
                     " (ID CHAR(10) NOT NULL PRIMARY KEY, NUM BIGINT)";
             globalConn.createStatement().execute(ddl);
@@ -561,7 +562,7 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
         String indexTable4 = generateUniqueName() + "_IDX";
         String indexTable = "_IDX_" + baseTableFullName;
 
-        try (Connection globalConn = DriverManager.getConnection(getUrl())) {
+        try (Connection globalConn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String ddl = "CREATE TABLE " + baseTableFullName  +
                     " (PK1 BIGINT NOT NULL, ID CHAR(10) NOT NULL, NUM BIGINT CONSTRAINT " +
                     "PK PRIMARY KEY (PK1,ID))";
@@ -629,9 +630,9 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
         String tenantViewName2 = schema + "." + generateUniqueName();
         String tenant1 = generateUniqueName();
 
-        try (Connection globalConn = DriverManager.getConnection(getUrl());
+        try (Connection globalConn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenant1Connection =
-                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1)) {
+                     PhoenixMultiInputUtil.buildTenantConnection(PropertiesUtil.deepCopy(TEST_PROPERTIES), getUrl(), tenant1)) {
 
             createMultiTenantTable(globalConn, baseTableFullName);
             String ddl = "CREATE VIEW %s (PK1 BIGINT PRIMARY KEY, " +
@@ -693,11 +694,11 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
         String tenant1 = generateUniqueName();
         String tenant2 = generateUniqueName();
 
-        try (Connection globalConn = DriverManager.getConnection(getUrl());
+        try (Connection globalConn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenant1Connection =
-                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
+                     PhoenixMultiInputUtil.buildTenantConnection(PropertiesUtil.deepCopy(TEST_PROPERTIES), getUrl(), tenant1);
              Connection tenant2Connection =
-                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
+                     PhoenixMultiInputUtil.buildTenantConnection(PropertiesUtil.deepCopy(TEST_PROPERTIES), getUrl(), tenant2)) {
 
             createMultiTenantTable(globalConn, baseTableFullName);
             String ddl = "CREATE VIEW %s (PK1 BIGINT PRIMARY KEY, " +
@@ -771,11 +772,11 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
         String tenant1 = generateUniqueName();
         String tenant2 = generateUniqueName();
 
-        try (Connection globalConn = DriverManager.getConnection(getUrl());
+        try (Connection globalConn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenant1Connection =
-                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
+                     PhoenixMultiInputUtil.buildTenantConnection(PropertiesUtil.deepCopy(TEST_PROPERTIES), getUrl(), tenant1);
              Connection tenant2Connection =
-                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
+                     PhoenixMultiInputUtil.buildTenantConnection(PropertiesUtil.deepCopy(TEST_PROPERTIES), getUrl(), tenant2)) {
 
             createMultiTenantTable(globalConn, baseTableFullName);
             String ddl = "CREATE VIEW %s (PK1 BIGINT PRIMARY KEY, " +
@@ -847,7 +848,7 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
         String leafViewName1 = schema + "." + generateUniqueName();
         String leafViewName2 = schema + "." + generateUniqueName();
 
-        try (Connection globalConn = DriverManager.getConnection(getUrl())) {
+        try (Connection globalConn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String baseTableDdl = "CREATE TABLE " + baseTableFullName  +
                     " (ID CHAR(10) NOT NULL PRIMARY KEY, NUM BIGINT)";
             globalConn.createStatement().execute(baseTableDdl);

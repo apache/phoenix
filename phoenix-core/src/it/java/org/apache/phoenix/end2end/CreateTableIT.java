@@ -1309,7 +1309,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 String val = htd.getValue("PRIORITY");
                 assertNotNull("PRIORITY is not set for table:" + htd, val);
                 assertTrue(Integer.parseInt(val)
-                        >= IndexUtil.getMetadataPriority(config));
+                        >= IndexUtil.getMetadataPriority(getConfiguration()));
             }
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             String ddl ="CREATE TABLE " + fullTableName + TestUtil.TEST_TABLE_SCHEMA;
@@ -1333,7 +1333,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                     org.apache.hadoop.hbase.TableName.valueOf(fullIndexeName));
             val = indexTable.getValue("PRIORITY");
             assertNotNull("PRIORITY is not set for table:" + indexTable, val);
-            assertTrue(Integer.parseInt(val) >= IndexUtil.getIndexPriority(config));
+            assertTrue(Integer.parseInt(val) >= IndexUtil.getIndexPriority(getConfiguration()));
         }
     }
 

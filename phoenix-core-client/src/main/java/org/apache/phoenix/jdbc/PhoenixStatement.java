@@ -617,7 +617,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                             final long startExecuteMutationTime = EnvironmentEdgeManager.currentTimeMillis();
                             clearResultSet();
                             try {
-                                PhoenixConnection conn = getConnection();
+                                PhoenixMonitoredConnection conn = getConnection();
                                 if (conn.getQueryServices().isUpgradeRequired() && !conn.isRunningUpgrade()
                                         && stmt.getOperation() != Operation.UPGRADE) {
                                     throw new UpgradeRequiredException();

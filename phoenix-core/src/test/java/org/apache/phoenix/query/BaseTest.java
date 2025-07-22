@@ -441,8 +441,8 @@ public abstract class BaseTest {
     protected static PhoenixTestDriver driver;
     protected static boolean clusterInitialized = false;
     protected static HBaseTestingUtility utility;
-    protected static final Configuration config = HBaseConfiguration.create();
-    protected static HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS;
+    protected static Configuration config;
+    public static HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS;
     private static final Logger LOG = LoggerFactory.getLogger(BaseTest.class);
 
     @AfterClass
@@ -491,6 +491,9 @@ public abstract class BaseTest {
         if (!clusterInitialized) {
             throw new IllegalStateException("Cluster must be initialized before attempting to get the URL");
         }
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            return CLUSTERS.getJdbcHAUrl(principal)+";"+PHOENIX_TEST_DRIVER_URL_PARAM;
+        }
         return getLocalClusterUrl(utility, principal);
     }
     
@@ -516,21 +519,26 @@ public abstract class BaseTest {
         }
     }
 
-    protected static void setUpTestClusterForHA(ReadOnlyProps serverProps, ReadOnlyProps clientProps) throws Exception {
+    public static void setUpTestClusterForHA(ReadOnlyProps serverProps, ReadOnlyProps clientProps) throws Exception {
         CLUSTERS = new HighAvailabilityTestingUtility.HBaseTestingUtilityPair(serverProps); //server
-        CLUSTERS.start();
+        CLUSTERS.start(serverProps.getInt(
+                QueryServices.TESTS_MINI_CLUSTER_NUM_REGION_SERVERS, NUM_SLAVES_BASE));
         driver = newTestDriver(clientProps); //client
         DriverManager.registerDriver(driver);
         haGroupName = TEST_PROPERTIES.getProperty(PHOENIX_HA_GROUP_ATTR);
         // Make first cluster ACTIVE
         CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER);
         clusterInitialized = true;
-        haGroup = getHighAvailibilityGroup(CLUSTERS.getJdbcHAUrl(), TEST_PROPERTIES);
+        Properties haGroupProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        for (Map.Entry<String, String> entry : clientProps) {
+            haGroupProps.setProperty(entry.getKey(), entry.getValue());
+        }
+        haGroup = getHighAvailibilityGroup(CLUSTERS.getJdbcHAUrl(), haGroupProps);
         LOG.info("Initialized haGroup {} with URL {}", haGroup, CLUSTERS.getJdbcHAUrl());
         Properties driverProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection fconn = driver.connect(getUrl(), driverProps);
         fconn.close();
-        CLUSTERS.createTableOnClusterPair(haGroup, generateUniqueName());
+//        CLUSTERS.createTableOnClusterPair(haGroup, generateUniqueName());
     }
 
     protected static void destroyDriver() {
@@ -754,7 +762,7 @@ public abstract class BaseTest {
     private static PhoenixTestDriver newTestDriver(ReadOnlyProps props) throws Exception {
         PhoenixTestDriver newDriver;
         String driverClassName = props.get(DRIVER_CLASS_NAME_ATTRIB);
-        if(isDistributedClusterModeEnabled(config)) {
+        if(isDistributedClusterModeEnabled(getConfiguration())) {
             HashMap<String, String> distPropMap = new HashMap<>(1);
             distPropMap.put(DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
             props = new ReadOnlyProps(props, distPropMap.entrySet().iterator());
@@ -990,7 +998,7 @@ public abstract class BaseTest {
     }
 
     private static void deletePriorSchemas(long ts, String url) throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1024));
         if (ts != HConstants.LATEST_TIMESTAMP) {
             props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts));
@@ -1041,7 +1049,7 @@ public abstract class BaseTest {
     }
     
     private static void deletePriorTables(long ts, String tenantId, String url) throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1024));
         if (ts != HConstants.LATEST_TIMESTAMP) {
             props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts));
@@ -1693,7 +1701,7 @@ public abstract class BaseTest {
      */
     protected static synchronized void disableAndDropNonSystemTables() throws Exception {
         if (driver == null) return;
-        Admin admin = driver.getConnectionQueryServices(getUrl(), new Properties()).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getActiveUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).getAdmin();
         try {
             List<TableDescriptor> tables = admin.listTableDescriptors();
             for (TableDescriptor table : tables) {
@@ -1874,7 +1882,16 @@ public abstract class BaseTest {
         }
         return utility;
     }
-    
+
+    public static Configuration getConfiguration() {
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            System.out.println("inside ha enabled config");
+            config = CLUSTERS.getHBaseCluster1().getConfiguration();
+        } else {
+            config = HBaseConfiguration.create();
+        }
+        return config;
+    }
     public static void upsertRows(Connection conn, String fullTableName, int numRows) throws SQLException {
         for (int i=1; i<=numRows; ++i) {
             upsertRow(conn, fullTableName, i, false);
@@ -1999,7 +2016,7 @@ public abstract class BaseTest {
     
     private  static void verifySequence(String tenantID, String sequenceName, String sequenceSchemaName, boolean exists, long value) throws SQLException {
 
-        PhoenixMonitoredConnection phxConn = DriverManager.getConnection(getUrl()).unwrap(PhoenixMonitoredConnection.class);
+        PhoenixMonitoredConnection phxConn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixMonitoredConnection.class);
         String ddl = "SELECT "
                 + PhoenixDatabaseMetaData.TENANT_ID + ","
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
@@ -2066,7 +2083,7 @@ public abstract class BaseTest {
 
     protected static void splitTable(TableName fullTableName, List<byte[]> splitPoints) throws Exception {
         Admin admin =
-                driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+                driver.getConnectionQueryServices(getActiveUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         assertTrue("Needs at least two split points ", splitPoints.size() > 1);
         assertTrue(
                 "Number of split points should be less than or equal to the number of region servers ",
@@ -2160,7 +2177,7 @@ public abstract class BaseTest {
      * Ensures each region of SYSTEM.CATALOG is on a different region server
      */
     private static void moveRegion(RegionInfo regionInfo, ServerName srcServerName, ServerName dstServerName) throws Exception  {
-        Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getActiveUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         HBaseTestingUtility util = getUtility();
         MiniHBaseCluster cluster = util.getHBaseCluster();
         HMaster master = cluster.getMaster();

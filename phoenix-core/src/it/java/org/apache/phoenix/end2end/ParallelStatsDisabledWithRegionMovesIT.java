@@ -221,7 +221,7 @@ public abstract class ParallelStatsDisabledWithRegionMovesIT extends BaseTest {
                                     regionStatesCount.getOpenRegions() ==
                                             regionStatesCount.getTotalRegions()) {
                                 try (Table table =
-                                             utility.getConnection()
+                                             getUtility().getConnection()
                                                      .getTable(TableName.valueOf(tableName))) {
                                     try (ResultScanner resultScanner = table.getScanner(
                                                     new Scan())) {

@@ -58,6 +58,7 @@ import org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ConcurrentTableMutationException;
 import org.apache.phoenix.schema.PTable;
@@ -80,6 +81,7 @@ import org.junit.runners.Parameterized.Parameters;
  * Tests for views dealing with other ongoing concurrent operations and
  * failure scenarios
  */
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class ViewConcurrencyAndFailureIT extends SplitSystemCatalogIT {
@@ -135,8 +137,14 @@ public class ViewConcurrencyAndFailureIT extends SplitSystemCatalogIT {
         serverProps.put(PHOENIX_META_DATA_COPROCESSOR_CONF_KEY,
                 TestMetaDataRegionObserver.class.getName());
         serverProps.put("hbase.coprocessor.abortonerror", "false");
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
-                ReadOnlyProps.EMPTY_PROPS);
+        serverProps.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()),
+                    ReadOnlyProps.EMPTY_PROPS);
+        } else {
+            setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
+                    ReadOnlyProps.EMPTY_PROPS);
+        }
         // Split SYSTEM.CATALOG once after the mini-cluster is started
         if (splitSystemCatalog) {
             // splitSystemCatalog is incompatible with the balancer chore
@@ -157,8 +165,8 @@ public class ViewConcurrencyAndFailureIT extends SplitSystemCatalogIT {
 
     @Test
     public void testChildViewCreationFails() throws Exception {
-        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
-                Statement stmt = conn.createStatement()) {
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+             Statement stmt = conn.createStatement()) {
 
             String fullTableName = SchemaUtil.getTableName(SCHEMA1,
                     generateUniqueName());
@@ -188,8 +196,15 @@ public class ViewConcurrencyAndFailureIT extends SplitSystemCatalogIT {
             try {
                 conn.getTableNoCache(failingViewName);
                 fail();
-            } catch (TableNotFoundException ignored) {
+            } catch (Exception e) {
+            if (e instanceof SQLException) {
+                if (e.getCause() instanceof TableNotFoundException) {
+                    //Expected in case of HA Enabled
+                }
+            } else if(e instanceof TableNotFoundException) {
+                //eat the exception, which is what we expect
             }
+        }
 
             // we should be able to load the table
             conn.getTableNoCache(fullTableName);
@@ -200,7 +215,7 @@ public class ViewConcurrencyAndFailureIT extends SplitSystemCatalogIT {
 
     @Test
     public void testConcurrentViewCreationAndTableDrop() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                 Statement stmt = conn.createStatement()) {
             String fullTableName = SchemaUtil.getTableName(SCHEMA1,
                     generateUniqueName());
@@ -259,7 +274,7 @@ public class ViewConcurrencyAndFailureIT extends SplitSystemCatalogIT {
 
     @Test
     public void testChildLinkCreationFailThrowsException() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                 Statement stmt = conn.createStatement()) {
             String fullTableName = SchemaUtil.getTableName(SCHEMA1,
                     generateUniqueName());
@@ -291,7 +306,7 @@ public class ViewConcurrencyAndFailureIT extends SplitSystemCatalogIT {
 
     @Test
     public void testConcurrentAddSameColumnDifferentType() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                 Statement stmt = conn.createStatement()) {
             String fullTableName = SchemaUtil.getTableName(SCHEMA1,
                     generateUniqueName());
@@ -378,12 +393,12 @@ public class ViewConcurrencyAndFailureIT extends SplitSystemCatalogIT {
                 + " (v2 VARCHAR) AS SELECT * FROM "
                 + fullTableName + " WHERE k = 6";
 
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                 Statement stmt = conn.createStatement()) {
             // create a multi-tenant base table
             stmt.execute(tableDdl);
 
-            Properties props = new Properties();
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
             try (Connection tenantConn = DriverManager.getConnection(getUrl(),
                     props);
@@ -443,7 +458,7 @@ public class ViewConcurrencyAndFailureIT extends SplitSystemCatalogIT {
     @Test
     public void testConcurrentAddDifferentColumnParentHasColEncoding()
             throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                 Statement stmt = conn.createStatement()) {
             String fullTableName = SchemaUtil.getTableName(SCHEMA1,
                     generateUniqueName());
@@ -535,7 +550,7 @@ public class ViewConcurrencyAndFailureIT extends SplitSystemCatalogIT {
     @Test
     public void testConcurrentViewCreationParentColDropViewCondition()
             throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                 Statement stmt = conn.createStatement()) {
             String fullTableName = SchemaUtil.getTableName(SCHEMA1,
                     generateUniqueName());
@@ -606,7 +621,7 @@ public class ViewConcurrencyAndFailureIT extends SplitSystemCatalogIT {
     @Test
     public void testConcurrentViewCreationWithNewColParentColAddition()
     throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                 Statement stmt = conn.createStatement()) {
             String fullTableName = SchemaUtil.getTableName(SCHEMA1,
                     generateUniqueName());

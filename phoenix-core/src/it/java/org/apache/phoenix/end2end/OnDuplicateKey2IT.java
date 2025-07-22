@@ -71,7 +71,7 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-//Failing with HA Connection
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
@@ -1389,7 +1389,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
     private long getColumnLatestCellTimestamp(String tableName, byte[] cq) throws Exception {
         Scan scan = new Scan();
         try (org.apache.hadoop.hbase.client.Connection hconn =
-                     ConnectionFactory.createConnection(config)) {
+                     ConnectionFactory.createConnection(getConfiguration())) {
             Table table = hconn.getTable(TableName.valueOf(tableName));
             ResultScanner resultScanner = table.getScanner(scan);
             Result result = resultScanner.next();

@@ -52,7 +52,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-//Failing with HA Connection
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
@@ -97,7 +97,7 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
         Scan scan = new Scan();
         byte[] emptyKVQualifier = EncodedColumnsUtil.getEmptyKeyValueInfo(this.encoded).getFirst();
         try (org.apache.hadoop.hbase.client.Connection hconn =
-                ConnectionFactory.createConnection(config)) {
+                ConnectionFactory.createConnection(getConfiguration())) {
             Table table = hconn.getTable(TableName.valueOf(tableName));
             ResultScanner resultScanner = table.getScanner(scan);
             int rowCount = 0;
@@ -118,7 +118,7 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
 
         byte[] emptyKVQualifier = EncodedColumnsUtil.getEmptyKeyValueInfo(this.encoded).getFirst();
         try (org.apache.hadoop.hbase.client.Connection hconn =
-                ConnectionFactory.createConnection(config)) {
+                ConnectionFactory.createConnection(getConfiguration())) {
             Table table = hconn.getTable(TableName.valueOf(tableName));
             Get get = new Get(Bytes.toBytesBinary(rowKey));
             Result result = table.get(get);

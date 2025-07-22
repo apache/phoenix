@@ -101,7 +101,7 @@ import org.slf4j.LoggerFactory;
  */
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
-//Failing with HA Connection
+//Passing with HA Connection - No changes needed
 public class AlterTableIT extends ParallelStatsDisabledIT {
     private String schemaName;
     private String dataTableName;

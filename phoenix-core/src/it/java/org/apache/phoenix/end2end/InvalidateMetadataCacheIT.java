@@ -38,7 +38,7 @@ import static org.apache.phoenix.query.QueryServices.PHOENIX_METADATA_CACHE_INVA
 import static org.apache.phoenix.query.QueryServices.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.fail;
-
+//Passing with HA Connection
 @Category({NeedsOwnMiniClusterTest.class })
 public class InvalidateMetadataCacheIT extends BaseTest {
     private static final Logger LOGGER = LoggerFactory.getLogger(InvalidateMetadataCacheIT.class);
@@ -54,7 +54,11 @@ public class InvalidateMetadataCacheIT extends BaseTest {
                 FailingPhoenixRegionServerEndpoint.class.getName());
         // Setting phoenix metadata cache invalidation timeout to a small number to fail fast.
         props.put(PHOENIX_METADATA_CACHE_INVALIDATION_TIMEOUT_MS, String.valueOf(2000));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     /**
@@ -68,7 +72,7 @@ public class InvalidateMetadataCacheIT extends BaseTest {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String dataTableFullName = generateUniqueName();
         String ddl = getCreateTableStmt(dataTableFullName);
-        HRegionServer regionServerZero = utility.getMiniHBaseCluster().getRegionServer(0);
+        HRegionServer regionServerZero = getUtility().getMiniHBaseCluster().getRegionServer(0);
         FailingPhoenixRegionServerEndpoint coprocForRS0 =
                 getFailingPhoenixRegionServerEndpoint(regionServerZero);
         coprocForRS0.sleep();
@@ -93,7 +97,7 @@ public class InvalidateMetadataCacheIT extends BaseTest {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String dataTableFullName = generateUniqueName();
         String ddl = getCreateTableStmt(dataTableFullName);
-        HRegionServer regionServerZero = utility.getMiniHBaseCluster().getRegionServer(0);
+        HRegionServer regionServerZero = getUtility().getMiniHBaseCluster().getRegionServer(0);
         FailingPhoenixRegionServerEndpoint coprocForRS0 =
                 getFailingPhoenixRegionServerEndpoint(regionServerZero);
         coprocForRS0.throwException();
@@ -118,7 +122,7 @@ public class InvalidateMetadataCacheIT extends BaseTest {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String dataTableFullName = generateUniqueName();
         String ddl = getCreateTableStmt(dataTableFullName);
-        HRegionServer regionServerZero = utility.getMiniHBaseCluster().getRegionServer(0);
+        HRegionServer regionServerZero = getUtility().getMiniHBaseCluster().getRegionServer(0);
         FailingPhoenixRegionServerEndpoint coprocForRS0 =
                 getFailingPhoenixRegionServerEndpoint(regionServerZero);
         coprocForRS0.failFirstAndThenSucceed();

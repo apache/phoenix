@@ -42,15 +42,18 @@ public abstract class ParallelStatsEnabledIT extends BaseTest {
     protected static RegionCoprocessorEnvironment TaskRegionEnvironment;
 
     @BeforeClass
-    public static synchronized final void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
         props.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(5));
         props.put(QueryServices.MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB, Long.toString(5));
         props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(true));
         props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
         TaskRegionEnvironment =
                 getUtility()
                         .getRSForFirstRegionInTable(

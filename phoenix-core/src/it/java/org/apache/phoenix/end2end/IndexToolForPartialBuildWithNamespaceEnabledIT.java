@@ -34,6 +34,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 /**
  * Tests for the {@link IndexToolForPartialBuildWithNamespaceEnabled}
  */
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class IndexToolForPartialBuildWithNamespaceEnabledIT extends IndexToolForPartialBuildIT {
@@ -51,7 +52,11 @@ public class IndexToolForPartialBuildWithNamespaceEnabledIT extends IndexToolFor
         serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
         clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
+        }
     }
     
     @Parameters(name="isNamespaceEnabled = {0}")

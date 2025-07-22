@@ -32,7 +32,9 @@ import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.replication.ReplicationPeerConfig;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -68,6 +70,7 @@ import static org.apache.phoenix.query.QueryServices.COLLECT_REQUEST_LEVEL_METRI
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_MASTER;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_RPC;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_ZK;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -113,9 +116,9 @@ public class HighAvailabilityTestingUtility {
          *
          * @throws Exception if fails to start either cluster
          */
-        public void start() throws Exception {
-            hbaseCluster1.startMiniCluster();
-            hbaseCluster2.startMiniCluster();
+        public void start(int num) throws Exception {
+            hbaseCluster1.startMiniCluster(num);
+            hbaseCluster2.startMiniCluster(num);
 
             /*
             Note that in hbase2 testing utility these give inconsistent results, one gives ip other gives localhost
@@ -125,9 +128,11 @@ public class HighAvailabilityTestingUtility {
 
             String confAddress1 = hbaseCluster1.getConfiguration().get(HConstants.ZOOKEEPER_QUORUM);
             String confAddress2 = hbaseCluster2.getConfiguration().get(HConstants.ZOOKEEPER_QUORUM);
+            String znode1 = hbaseCluster1.getConfiguration().get(HConstants.ZOOKEEPER_ZNODE_PARENT , DEFAULT_ZOOKEEPER_ZNODE_PARENT);
+            String znode2 = hbaseCluster2.getConfiguration().get(HConstants.ZOOKEEPER_ZNODE_PARENT , DEFAULT_ZOOKEEPER_ZNODE_PARENT);
 
-            zkUrl1 = String.format("%s\\:%d::/hbase", confAddress1, hbaseCluster1.getZkCluster().getClientPort());
-            zkUrl2 = String.format("%s\\:%d::/hbase", confAddress2, hbaseCluster2.getZkCluster().getClientPort());
+            zkUrl1 = String.format("%s\\:%d::%s", confAddress1, hbaseCluster1.getZkCluster().getClientPort(), znode1);
+            zkUrl2 = String.format("%s\\:%d::%s", confAddress2, hbaseCluster2.getZkCluster().getClientPort(),  znode2);
 
             haAdmin1 = new PhoenixHAAdmin(getZkUrl1(), hbaseCluster1.getConfiguration(), HighAvailibilityCuratorProvider.INSTANCE);
             haAdmin2 = new PhoenixHAAdmin(getZkUrl2(), hbaseCluster2.getConfiguration(), HighAvailibilityCuratorProvider.INSTANCE);
@@ -145,6 +150,9 @@ public class HighAvailabilityTestingUtility {
             LOG.info("MiniHBase DR cluster pair is ready for testing.  Cluster Urls [{},{}]",
                     getZkUrl1(), getZkUrl2());
             logClustersStates();
+        }
+        public void start() throws Exception {
+            start(0);
         }
 
         /**
@@ -538,12 +546,12 @@ public class HighAvailabilityTestingUtility {
          * @param replicationScope the table replication scope true=1 and false=0
          * @throws SQLException if error happens
          */
-        public void createTableOnClusterPair(HighAvailabilityGroup haGroup, String tableName, boolean replicationScope)
+        public void createTableOnClusterPair(HighAvailabilityGroup haGroup, String tableName, boolean replicationScope, Properties props)
                 throws SQLException {
             for (String url : Arrays.asList(getURL(1, haGroup.getRoleRecord().getRegistryType()),
                     getURL(2, haGroup.getRoleRecord().getRegistryType()))) {
                 String jdbcUrl = getJdbcUrl(haGroup, url);
-                try (Connection conn = DriverManager.getConnection(jdbcUrl, new Properties())) {
+                try (Connection conn = DriverManager.getConnection(jdbcUrl, props)) {
                     conn.createStatement().execute(String.format(
                             "CREATE TABLE IF NOT EXISTS %s (\n"
                                     + "id INTEGER PRIMARY KEY,\n"
@@ -559,10 +567,15 @@ public class HighAvailabilityTestingUtility {
                     which otherwise short circuits the table creation on the 2nd call
                     As the 2 region servers share a jvm
                      */
-                    ((PhoenixConnection) conn).getQueryServices().clearCache();
+                    ((PhoenixMonitoredConnection) conn).getQueryServices().clearCache();
                 }
             }
             LOG.info("Created table {} on cluster pair {}", tableName, this);
+        }
+
+        public void createTableOnClusterPair(HighAvailabilityGroup haGroup, String tableName, boolean replicationScope)
+                throws SQLException {
+             createTableOnClusterPair(haGroup, tableName, replicationScope, PropertiesUtil.deepCopy(TEST_PROPERTIES));
         }
 
         /**

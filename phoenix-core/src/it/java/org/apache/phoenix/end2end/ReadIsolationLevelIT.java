@@ -35,7 +35,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
+//Passing with HA Connection
 @Category(ParallelStatsEnabledTest.class)
 public class ReadIsolationLevelIT extends ParallelStatsEnabledIT {
     private static final String ENTITY_ID1= "000000000000001";
@@ -48,7 +48,7 @@ public class ReadIsolationLevelIT extends ParallelStatsEnabledIT {
         String tableName = generateUniqueName();
         ensureTableCreated(getUrl(),tableName, ATABLE_NAME);
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection upsertConn = DriverManager.getConnection(getUrl(), props);
         // Insert all rows at ts
         PreparedStatement stmt = upsertConn.prepareStatement(
@@ -71,7 +71,7 @@ public class ReadIsolationLevelIT extends ParallelStatsEnabledIT {
     public void testStatementReadIsolationLevel() throws Exception {
         String tableName = initTableValues();
         String query = "SELECT A_STRING FROM " + tableName + " WHERE ORGANIZATION_ID=? AND ENTITY_ID=?";
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         Connection conn2 = DriverManager.getConnection(getUrl(), props);

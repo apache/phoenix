@@ -22,6 +22,7 @@ import org.apache.hadoop.hbase.util.PairOfSameType;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.ParallelPhoenixUtil.FutureResult;
+import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.PMetaData;
@@ -766,6 +767,31 @@ public class ParallelPhoenixConnection implements PhoenixMonitoredConnection {
 
     @Override
     public void setIsClosing(boolean imitateIsClosing) throws SQLException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public String getDatePattern() throws SQLException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public PTable getTable(@Nullable String tenantId, String fullTableName, @Nullable Long timestamp) throws SQLException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean isRunningUpgrade() throws SQLException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public String getURL() throws SQLException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public LogLevel getLogLevel() throws SQLException {
         throw new UnsupportedOperationException();
     }
 }

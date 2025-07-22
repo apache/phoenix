@@ -306,7 +306,7 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
                     cstmt.execute(globalViewIndexSQL);
                 }
 
-                return getRowKeyMatchersFromView(globalConnection.unwrap(PhoenixConnection.class),
+                return getRowKeyMatchersFromView(globalConnection.unwrap(PhoenixMonitoredConnection.class),
                         globalViewName);
             }
         }
@@ -353,7 +353,7 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
                     LOGGER.info("Created tenant view ((WO_PK)) {}", viewWithoutPKSQL);
                     cstmt.execute(viewWithoutPKSQL);
                 }
-                return getRowKeyMatchersFromView(tenantConnection.unwrap(PhoenixConnection.class),
+                return getRowKeyMatchersFromView(tenantConnection.unwrap(PhoenixMonitoredConnection.class),
                         tenantViewName);
             }
         }

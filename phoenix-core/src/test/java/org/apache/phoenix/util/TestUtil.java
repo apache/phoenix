@@ -512,7 +512,7 @@ public class TestUtil {
     }
 
     public static void clearMetaDataCache(Connection conn) throws Throwable {
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PhoenixMonitoredConnection pconn = conn.unwrap(PhoenixMonitoredConnection.class);
         Table htable = pconn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
         htable.coprocessorService(MetaDataService.class, HConstants.EMPTY_START_ROW,
             HConstants.EMPTY_END_ROW, new Batch.Call<MetaDataService, ClearCacheResponse>() {
@@ -1304,7 +1304,7 @@ public class TestUtil {
     }
 
     public static void removeCoprocessor(Connection conn, String tableName, Class coprocessorClass) throws Exception {
-        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        ConnectionQueryServices services = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
         TableDescriptor descriptor = services.getTableDescriptor(Bytes.toBytes(tableName));
         TableDescriptorBuilder descriptorBuilder = null;
         if (descriptor.getCoprocessorDescriptors().stream().map(CoprocessorDescriptor::getClassName)
@@ -1513,7 +1513,7 @@ public class TestUtil {
 
     public static int getRawCellCount(Connection conn, TableName tableName, byte[] row)
             throws SQLException, IOException {
-        ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        ConnectionQueryServices cqs = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
         Table table = cqs.getTable(tableName.getName());
         CellCount cellCount = getCellCount(table, true);
         return cellCount.getCellCount(Bytes.toString(row));
@@ -1536,7 +1536,7 @@ public class TestUtil {
     public static void assertRowExistsAtSCN(String url, String sql, long scn, boolean shouldExist)
         throws SQLException {
         boolean rowExists = false;
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         ResultSet rs;
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn));
         try (Connection conn = DriverManager.getConnection(url, props)) {
@@ -1556,7 +1556,7 @@ public class TestUtil {
 
     public static void assertRowHasExpectedValueAtSCN(String url, String sql,
                                                       long scn, String value) throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         ResultSet rs;
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn));
         try (Connection conn = DriverManager.getConnection(url, props)) {

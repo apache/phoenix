@@ -74,7 +74,7 @@ public class DefaultPhoenixMultiViewListProviderIT extends ParallelStatsDisabled
         String tenant2 = generateUniqueName();
         DefaultPhoenixMultiViewListProvider defaultPhoenixMultiViewListProvider =
                 new DefaultPhoenixMultiViewListProvider();
-        Configuration cloneConfig = PropertiesUtil.cloneConfig(config);
+        Configuration cloneConfig = PropertiesUtil.cloneConfig(getConfiguration());
 
         cloneConfig.set(PhoenixConfigurationUtil.MAPREDUCE_PHOENIX_TTL_DELETE_JOB_ALL_VIEWS,
                 DELETE_ALL_VIEWS);
@@ -96,9 +96,9 @@ public class DefaultPhoenixMultiViewListProviderIT extends ParallelStatsDisabled
         */
         try (Connection globalConn = DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenant1Connection =
-                     PhoenixMultiInputUtil.buildTenantConnection(url, tenant1);
+                     PhoenixMultiInputUtil.buildTenantConnection(PropertiesUtil.deepCopy(TEST_PROPERTIES), url, tenant1);
              Connection tenant2Connection =
-                     PhoenixMultiInputUtil.buildTenantConnection(url, tenant2)) {
+                     PhoenixMultiInputUtil.buildTenantConnection(PropertiesUtil.deepCopy(TEST_PROPERTIES), url, tenant2)) {
 
             globalConn.createStatement().execute(String.format(BASE_TABLE_DDL, baseTableFullName));
             globalConn.createStatement().execute(String.format(VIEW_DDL_WITH_ID_PREFIX_AND_TTL,
@@ -147,9 +147,9 @@ public class DefaultPhoenixMultiViewListProviderIT extends ParallelStatsDisabled
         */
 
         try (Connection tenant1Connection =
-                     PhoenixMultiInputUtil.buildTenantConnection(url, tenant1);
+                     PhoenixMultiInputUtil.buildTenantConnection(PropertiesUtil.deepCopy(TEST_PROPERTIES), url, tenant1);
              Connection tenant2Connection =
-                     PhoenixMultiInputUtil.buildTenantConnection(url, tenant2)) {
+                     PhoenixMultiInputUtil.buildTenantConnection(PropertiesUtil.deepCopy(TEST_PROPERTIES), url, tenant2)) {
             tenant1Connection.createStatement().execute(
                     String.format(TENANT_VIEW_DDL_WITH_TTL,tenantViewName3, globalViewName2));
             tenant2Connection.createStatement().execute(
@@ -162,7 +162,7 @@ public class DefaultPhoenixMultiViewListProviderIT extends ParallelStatsDisabled
             Testing tenant specific case. Even tenant1 created 2 leaf views, one of them was created
             under a global view with TTL. This will not add to the deletion list.
          */
-        cloneConfig = PropertiesUtil.cloneConfig(config);
+        cloneConfig = PropertiesUtil.cloneConfig(getConfiguration());
         cloneConfig.set(MAPREDUCE_MULTI_INPUT_QUERY_BATCH_SIZE,"2");
         cloneConfig.set(PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID, tenant1);
         result = defaultPhoenixMultiViewListProvider.getPhoenixMultiViewList(cloneConfig);
@@ -182,7 +182,7 @@ public class DefaultPhoenixMultiViewListProviderIT extends ParallelStatsDisabled
             Without tenant id, it will not add the job to the list even the tenant view name is
             provided.
          */
-        cloneConfig = PropertiesUtil.cloneConfig(config);
+        cloneConfig = PropertiesUtil.cloneConfig(getConfiguration());
         cloneConfig.set(MAPREDUCE_MULTI_INPUT_QUERY_BATCH_SIZE,"2");
         cloneConfig.set(PhoenixConfigurationUtil.MAPREDUCE_PHOENIX_TTL_DELETE_JOB_PER_VIEW,
                 tenantViewName3);

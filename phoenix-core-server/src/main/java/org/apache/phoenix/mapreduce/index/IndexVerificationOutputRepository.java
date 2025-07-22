@@ -116,7 +116,7 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
     @VisibleForTesting
     public IndexVerificationOutputRepository(byte[] indexName, Connection conn) throws SQLException {
         ConnectionQueryServices queryServices =
-            conn.unwrap(PhoenixConnection.class).getQueryServices();
+            conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
         outputTable = queryServices.getTable(OUTPUT_TABLE_NAME_BYTES);
         indexTable = queryServices.getTable(indexName);
     }

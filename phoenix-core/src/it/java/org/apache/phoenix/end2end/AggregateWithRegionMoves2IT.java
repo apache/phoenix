@@ -114,7 +114,6 @@ public class AggregateWithRegionMoves2IT extends AggregateWithRegionMovesIT {
         props.put(QueryServices.PHOENIX_POST_VALID_PROCESS,
                 TestScanningResultPostValidResultCaller.class.getName());
         if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
-            System.out.println("in if condition for ha enable before class in 2it");
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

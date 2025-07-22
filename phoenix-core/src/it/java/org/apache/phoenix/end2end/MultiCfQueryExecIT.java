@@ -44,7 +44,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
+//Passing with HA Connection
 @Category(ParallelStatsEnabledTest.class)
 public class MultiCfQueryExecIT extends ParallelStatsEnabledIT {
     private String fullTableName;
@@ -345,7 +345,7 @@ public class MultiCfQueryExecIT extends ParallelStatsEnabledIT {
 
     @Test
     public void testCFWildcardProjection() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String tableName = generateUniqueName();
             String ddl =
                     "CREATE TABLE IF NOT EXISTS " + tableName + " (pk1 INTEGER NOT NULL PRIMARY KEY, x.v1 VARCHAR, y.v2 INTEGER)";
@@ -376,7 +376,7 @@ public class MultiCfQueryExecIT extends ParallelStatsEnabledIT {
 
     @Test
     public void testMultipleCFWildcardProjection() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String tableName = generateUniqueName();
             String ddl =
                     "CREATE TABLE IF NOT EXISTS " + tableName + " (pk1 INTEGER NOT NULL PRIMARY KEY, x.v1 VARCHAR, y.v2 INTEGER, z.v3 INTEGER)";
@@ -410,7 +410,7 @@ public class MultiCfQueryExecIT extends ParallelStatsEnabledIT {
 
     @Test
     public void testMixedDefaultAndExplicitCFs() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String tableName = generateUniqueName();
             String ddl =
                     "CREATE TABLE IF NOT EXISTS " + tableName + " (pk1 INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, y.v1 INTEGER)";
@@ -436,7 +436,7 @@ public class MultiCfQueryExecIT extends ParallelStatsEnabledIT {
 
     @Test
     public void testBug3890() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String tableName = generateUniqueName();
             String ddl =
                     "CREATE TABLE IF NOT EXISTS " + tableName + " (HOST CHAR(2) NOT NULL,"
@@ -504,7 +504,7 @@ public class MultiCfQueryExecIT extends ParallelStatsEnabledIT {
 
     @Test
     public void testBug4658() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
           Statement stmt = conn.createStatement()) {
             String tableName = generateUniqueName();
 

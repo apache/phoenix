@@ -117,7 +117,7 @@ import org.junit.runners.Parameterized.BeforeParam;
 import org.junit.runners.Parameterized.Parameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-//Failing with HA Connection
+//Passing with HA Connection - No changes needed
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class IndexToolIT extends BaseTest {
@@ -170,7 +170,7 @@ public class IndexToolIT extends BaseTest {
             String transactionProvider, boolean mutable, boolean localIndex,
             boolean useSnapshot, boolean useTenantId, boolean namespaceMapped)
                     throws Exception {
-        if (clusterInitialized && Boolean.valueOf(namespaceMapped).equals(utility.getConfiguration()
+        if (clusterInitialized && Boolean.valueOf(namespaceMapped).equals(getUtility().getConfiguration()
                 .getBoolean(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, true))) {
             //Perf optimization: no need to re-initialize the minicluster
             return;

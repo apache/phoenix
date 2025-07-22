@@ -92,6 +92,7 @@ import org.apache.phoenix.index.CDCTableInfo;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.query.QueryConstants;
@@ -1117,7 +1118,7 @@ public class ScanUtil {
                 ((isServerSideMaskingSet != null) && (Boolean.parseBoolean(isServerSideMaskingSet))));
     }
 
-    public static boolean getStatsForParallelizationProp(PhoenixConnection conn, PTable table)
+    public static boolean getStatsForParallelizationProp(PhoenixMonitoredConnection conn, PTable table)
             throws SQLException {
         Boolean useStats = table.useStatsForParallelization();
         if (useStats != null) {

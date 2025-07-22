@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.end2end.index.IndexTestUtil;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hbase.TableName;
@@ -73,7 +74,7 @@ import static org.apache.phoenix.mapreduce.index.IndexUpgradeTool.UPGRADE_OP;
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.mockito.Mockito.times;
-
+//Failing with HA Connection
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
 public class ParameterizedIndexUpgradeToolIT extends BaseTest {
@@ -130,10 +131,14 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
 
         setClusterProperties();
 
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
-                new ReadOnlyProps(clientProps.entrySet().iterator()));
-
-        conn = DriverManager.getConnection(getUrl(), new Properties());
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()),
+                    new ReadOnlyProps(clientProps.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
+                    new ReadOnlyProps(clientProps.entrySet().iterator()));
+        }
+        conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.setAutoCommit(true);
 
         String tenantId = generateUniqueName();
@@ -141,7 +146,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         connTenant = DriverManager.getConnection(getUrl(), props);
 
-        ConnectionQueryServices queryServices = conn.unwrap(PhoenixConnection.class)
+        ConnectionQueryServices queryServices = conn.unwrap(PhoenixMonitoredConnection.class)
                 .getQueryServices();
         admin = queryServices.getAdmin();
         if (!mutable) {
@@ -576,7 +581,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
     }
 
     private void validateTablesEnabled(String inputList) throws IOException, SQLException {
-        Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+        Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin();
         String[] tableNames = inputList.split(",");
         Assert.assertNotNull(tableNames);
         Assert.assertTrue(tableNames.length > 0);

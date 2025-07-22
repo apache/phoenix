@@ -43,7 +43,7 @@ import org.junit.experimental.categories.Category;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
-
+//Failing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class RenewLeaseIT extends BaseTest {
     private static final long SCANNER_LEASE_TIMEOUT = 12000;
@@ -57,13 +57,17 @@ public class RenewLeaseIT extends BaseTest {
         Map<String,String> clientProps = Maps.newHashMapWithExpectedSize(1);
         // Must update config before starting server
         serverProps.put(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD, Long.toString(SCANNER_LEASE_TIMEOUT));
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
+        }
     }
     
     @Test
     public void testLeaseDoesNotTimeout() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("create table " + TABLE_NAME + "(k VARCHAR PRIMARY KEY)");
         SLEEP_NOW = true;
         try {

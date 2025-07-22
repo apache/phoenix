@@ -83,7 +83,7 @@ import org.apache.phoenix.util.StringUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-//Failing with HA Connection
+//Passing with HA Connection - no changes needed
 @Category(ParallelStatsDisabledTest.class)
 public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
 

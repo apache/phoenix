@@ -55,7 +55,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
-//Failing with HA Connection
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class QueryTimeoutIT extends BaseTest {
     private String tableName;
@@ -94,7 +94,7 @@ public class QueryTimeoutIT extends BaseTest {
         Properties overriddenProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         overriddenProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         overriddenProps.setProperty("hbase.rpc.timeout", Long.toString(100));
-        String url = QueryUtil.getConnectionUrl(overriddenProps, config, "longRunning");
+        String url = QueryUtil.getConnectionUrl(overriddenProps, getConfiguration(), "longRunning");
         Connection conn1 = DriverManager.getConnection(url, overriddenProps);
         ConnectionQueryServices s1 = conn1.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
         ReadOnlyProps configProps = s1.getProps();

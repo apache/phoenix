@@ -24,11 +24,13 @@ import static java.sql.Types.VARCHAR;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_ENCODED_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_SCHEME;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -51,6 +53,7 @@ import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS
  * {@link org.apache.phoenix.query.QueryServices#WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB} config is
  * turned on
  */
+//Passing with HA Connection
 //FIXME this class has no @Category and is never run by maven
 @RunWith(Parameterized.class)
 public class DynamicColumnWildcardIT extends BaseTest {
@@ -74,7 +77,11 @@ public class DynamicColumnWildcardIT extends BaseTest {
     public static synchronized void doSetup() throws Exception {
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
         clientProps.put(WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB, "true");
-        setUpTestDriver(ReadOnlyProps.EMPTY_PROPS, new ReadOnlyProps(clientProps));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(ReadOnlyProps.EMPTY_PROPS, new ReadOnlyProps(clientProps));
+        } else {
+            setUpTestDriver(ReadOnlyProps.EMPTY_PROPS, new ReadOnlyProps(clientProps));
+        }
     }
 
     // Create either a mutable table or an immutable table with the specified storage scheme
@@ -94,7 +101,7 @@ public class DynamicColumnWildcardIT extends BaseTest {
     @Test
     // Test the case where the table DDL only contains 1 column which is the primary key
     public void testOnlySinglePkWithDynamicColumns() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.setAutoCommit(true);
         String tableName = generateUniqueName();
         conn.createStatement().execute(generateTableCreateDDL(tableName,
@@ -146,7 +153,7 @@ public class DynamicColumnWildcardIT extends BaseTest {
     @Test
     // Test the case where the table DDL contains 1 primary key column and other columns as well
     public void testSinglePkAndOtherColsWithDynamicColumns() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.setAutoCommit(true);
         String tableName = generateUniqueName();
 
@@ -219,7 +226,7 @@ public class DynamicColumnWildcardIT extends BaseTest {
     @Test
     // Test the case where the table DDL contains just the composite key and no other columns
     public void testCompositeKeyWithDynamicColumns() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.setAutoCommit(true);
         String tableName = generateUniqueName();
 
@@ -286,7 +293,7 @@ public class DynamicColumnWildcardIT extends BaseTest {
     @Test
     // Test the case where the table DDL contains the composite key and other columns
     public void testCompositeKeyAndOtherColsWithDynamicColumns() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.setAutoCommit(true);
         String tableName = generateUniqueName();
 
@@ -387,7 +394,7 @@ public class DynamicColumnWildcardIT extends BaseTest {
     @Test
     // Test if dynamic columns are properly exposed in column family wildcard queries
     public void testColumnFamilyWildcards() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.setAutoCommit(true);
         String tableName = generateUniqueName();
 

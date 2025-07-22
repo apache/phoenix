@@ -28,8 +28,10 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsEnabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SaltingUtil;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.Assert;
 import org.junit.experimental.categories.Category;
@@ -48,7 +50,9 @@ import java.util.Properties;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
+//Passing with HA Connection
 @Category(ParallelStatsEnabledIT.class)
 @RunWith(Parameterized.class)
 public class SaltedTableWithParallelStatsEnabledIT extends ParallelStatsEnabledIT {
@@ -88,7 +92,7 @@ public class SaltedTableWithParallelStatsEnabledIT extends ParallelStatsEnabledI
         int pointLookupsPerSaltBkt = pk2ValuesForPointLookups.length / saltBucketCount;
 
         String connProfile = "testRangeScanForPhoenix7580" + withStatsForParallelization;
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.USE_STATS_FOR_PARALLELIZATION,
                 withStatsForParallelization ? Boolean.TRUE.toString() : Boolean.FALSE.toString());
         try (Connection conn = DriverManager.getConnection(getUrl(connProfile), props)) {
@@ -144,7 +148,7 @@ public class SaltedTableWithParallelStatsEnabledIT extends ParallelStatsEnabledI
                                                           String tableName, int saltBucketCount,
                                                           String primaryKeyPrefix)
             throws Exception {
-        Table hTable = conn.unwrap(PhoenixConnection.class)
+        Table hTable = conn.unwrap(PhoenixMonitoredConnection.class)
                 .getQueryServices().getTable(tableName.getBytes());
         int rowCountFromHBase = 0;
         byte[] rowKeyPrefix = new byte[primaryKeyPrefix.length() + 1];
@@ -176,7 +180,7 @@ public class SaltedTableWithParallelStatsEnabledIT extends ParallelStatsEnabledI
 
     private void assertFullScanRowCntFromHBaseAndPhoenix(Connection conn, int expectedRowCount,
                                                          String tableName) throws Exception {
-        Table hTable = conn.unwrap(PhoenixConnection.class)
+        Table hTable = conn.unwrap(PhoenixMonitoredConnection.class)
                 .getQueryServices().getTable(tableName.getBytes());
         int rowCountFromHBase = 0;
         Scan scan = new Scan();
@@ -205,7 +209,7 @@ public class SaltedTableWithParallelStatsEnabledIT extends ParallelStatsEnabledI
             throws Exception {
         String secondPrimaryKeyPrefix = "pk2_";
         String primaryKeyPrefix = firstPrimaryKey + secondPrimaryKeyPrefix;
-        Table hTable = conn.unwrap(PhoenixConnection.class)
+        Table hTable = conn.unwrap(PhoenixMonitoredConnection.class)
                 .getQueryServices().getTable(tableName.getBytes());
         int rowCountFromHBase = 0;
         byte[] rowKey = new byte[primaryKeyPrefix.length() + 3];
@@ -263,7 +267,7 @@ public class SaltedTableWithParallelStatsEnabledIT extends ParallelStatsEnabledI
         // Save this and will be used to verify that conditions to trigger PHOENIX-7580 are
         // being met at the end of this method call.
         expectedEndKeyPrefixAfterSplit = Bytes.copy(rowKeyPrefix);
-        Table hTable = conn.unwrap(PhoenixConnection.class)
+        Table hTable = conn.unwrap(PhoenixMonitoredConnection.class)
                 .getQueryServices().getTable(tableName.getBytes());
         Scan scan = new Scan();
         scan.setRowPrefixFilter(rowKeyPrefix);
@@ -283,7 +287,7 @@ public class SaltedTableWithParallelStatsEnabledIT extends ParallelStatsEnabledI
         }
 
         // Identify region corresponding to the second last salt bucket for splitting
-        Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+        Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin();
         List<RegionInfo> regions = admin.getRegions(TableName.valueOf(tableName));
         RegionInfo secondLastSaltBucketRegion = null;
         for (RegionInfo regionInfo : regions) {

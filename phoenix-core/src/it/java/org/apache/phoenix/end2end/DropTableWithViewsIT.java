@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
@@ -36,6 +37,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TableViewFinderResult;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.util.ViewUtil;
@@ -53,7 +55,7 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class DropTableWithViewsIT extends SplitSystemCatalogIT {
@@ -116,9 +118,9 @@ public class DropTableWithViewsIT extends SplitSystemCatalogIT {
     @Test
     public void testDropTableWithChildViews() throws Exception {
         String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                Connection viewConn =
-                        isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+             Connection viewConn =
+                        isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES)) : conn) {
             conn.setAutoCommit(true);
             viewConn.setAutoCommit(true);
             // Empty the task table first.

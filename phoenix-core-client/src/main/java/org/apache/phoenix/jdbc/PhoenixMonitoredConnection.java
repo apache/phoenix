@@ -20,6 +20,7 @@ package org.apache.phoenix.jdbc;
 
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.PMetaData;
@@ -28,6 +29,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.types.PDataType;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.Reader;
@@ -80,5 +82,11 @@ public interface PhoenixMonitoredConnection extends Connection {
      PTable getTableNoCache(PName tenantId, String name) throws SQLException;
     void setIsClosing(boolean imitateIsClosing) throws SQLException;
     PreparedStatement prepareStatement(String sql) throws SQLException;
+    String getDatePattern() throws SQLException;
+    PTable getTable(@Nullable String tenantId, String fullTableName,
+                           @Nullable Long timestamp) throws SQLException;
+    boolean isRunningUpgrade() throws SQLException;
+    String getURL() throws SQLException;
+    LogLevel getLogLevel() throws SQLException;
 
 }

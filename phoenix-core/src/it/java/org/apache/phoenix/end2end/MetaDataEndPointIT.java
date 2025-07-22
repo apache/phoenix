@@ -41,7 +41,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-//Failing with HA Connection
+//Passing with HA Connection - No changes needed
 @Category(ParallelStatsDisabledTest.class)
 public class MetaDataEndPointIT extends ParallelStatsDisabledIT {
     @Test

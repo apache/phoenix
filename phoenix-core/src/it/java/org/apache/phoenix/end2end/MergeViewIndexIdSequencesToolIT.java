@@ -30,7 +30,7 @@ import java.sql.ResultSet;
 import static junit.framework.TestCase.assertEquals;
 import static junit.framework.TestCase.assertTrue;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-//Failing with HA Connection
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class MergeViewIndexIdSequencesToolIT extends ParallelStatsDisabledIT {
     private final String CLEAN_QUERY = "DELETE FROM SYSTEM.\"SEQUENCE\"";
@@ -57,7 +57,7 @@ public class MergeViewIndexIdSequencesToolIT extends ParallelStatsDisabledIT {
     private void testSequenceRowCount(boolean isTestingOldFormat) throws Exception {
         int expectedRowCount = isTestingOldFormat ? 2 : 1;
         MergeViewIndexIdSequencesTool tool = new MergeViewIndexIdSequencesTool();
-        tool.setConf(config);
+        tool.setConf(getConfiguration());
         try(Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(CLEAN_QUERY);
             try (PreparedStatement preparedStatement = conn.prepareStatement(UPSERT_QUERY)) {

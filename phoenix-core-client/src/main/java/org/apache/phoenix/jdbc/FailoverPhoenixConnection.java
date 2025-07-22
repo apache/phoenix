@@ -22,6 +22,7 @@ import org.apache.phoenix.exception.FailoverSQLException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.PMetaData;
@@ -385,6 +386,32 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
     public PreparedStatement prepareStatement(String sql) throws SQLException {
         return wrapActionDuringFailover(() -> connection.prepareStatement(sql));
     }
+
+    @Override
+    public String getDatePattern() throws SQLException {
+        return wrapActionDuringFailover(() -> connection.getDatePattern());
+    }
+
+    @Override
+    public PTable getTable(@Nullable String tenantId, String fullTableName, @Nullable Long timestamp) throws SQLException {
+        return wrapActionDuringFailover(() -> connection.getTable(tenantId, fullTableName, timestamp));
+    }
+
+    @Override
+    public boolean isRunningUpgrade() throws SQLException {
+        return wrapActionDuringFailover(() -> connection.isRunningUpgrade());
+    }
+
+    @Override
+    public String getURL() throws SQLException {
+        return wrapActionDuringFailover(() -> connection.getURL());
+    }
+
+    @Override
+    public LogLevel getLogLevel() throws SQLException {
+        return wrapActionDuringFailover(() -> connection.getLogLevel());
+    }
+
 
     @Override
     public CallableStatement prepareCall(String sql) throws SQLException {

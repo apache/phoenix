@@ -23,6 +23,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -47,6 +48,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.mapreduce.OrphanViewTool;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.AfterClass;
@@ -58,7 +60,7 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class OrphanViewToolIT extends BaseOwnClusterIT {
@@ -136,7 +138,11 @@ public class OrphanViewToolIT extends BaseOwnClusterIT {
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
-        setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(ReadOnlyProps.EMPTY_PROPS, ReadOnlyProps.EMPTY_PROPS);
+        } else {
+            setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
+        }
         //Create these after the minicluster has started, and overwritten java.io.tmpdir
         tmpDir = Files.createTempDirectory(OrphanViewToolIT.class.getCanonicalName()).toString();
         viewFileName = Paths.get(tmpDir, OrphanViewTool.fileName[OrphanViewTool.VIEW]).toString();
@@ -249,9 +255,9 @@ public class OrphanViewToolIT extends BaseOwnClusterIT {
     public void testCreateTableAndViews() throws Exception {
         String baseTableName = generateUniqueName();
         String baseTableFullName = SchemaUtil.getTableName(SCHEMA1, baseTableName);
-        try (Connection connection = DriverManager.getConnection(getUrl());
+        try (Connection connection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection viewConnection =
-                     isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL) : connection) {
+                     isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL, PropertiesUtil.deepCopy(TEST_PROPERTIES)) : connection) {
             createBaseTableIndexAndViews(connection, baseTableFullName, viewConnection, SCHEMA2, SCHEMA3, SCHEMA4);
             // Run the orphan view tool to drop orphan views but no view should be dropped
             runOrphanViewTool(true, false, true, false);
@@ -294,9 +300,9 @@ public class OrphanViewToolIT extends BaseOwnClusterIT {
     public void testDeleteBaseTableRows() throws Exception {
         String baseTableName = generateUniqueName();
         String baseTableFullName = SchemaUtil.getTableName(SCHEMA1, baseTableName);
-        try (Connection connection = DriverManager.getConnection(getUrl());
+        try (Connection connection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection viewConnection =
-                     isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL) : connection) {
+                     isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL, PropertiesUtil.deepCopy(TEST_PROPERTIES)) : connection) {
             createBaseTableIndexAndViews(connection, baseTableFullName, viewConnection, SCHEMA2, SCHEMA2, SCHEMA2);
             // Delete the base table row from the system catalog
             executeDeleteQuery(connection, deleteTableRows, SCHEMA1);
@@ -328,9 +334,9 @@ public class OrphanViewToolIT extends BaseOwnClusterIT {
     public void testDeleteChildViewRows() throws Exception {
         String baseTableName = generateUniqueName();
         String baseTableFullName = SchemaUtil.getTableName(SCHEMA1, baseTableName);
-        try (Connection connection = DriverManager.getConnection(getUrl());
+        try (Connection connection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection viewConnection =
-                     isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL) : connection) {
+                     isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL, PropertiesUtil.deepCopy(TEST_PROPERTIES)) : connection) {
             createBaseTableIndexAndViews(connection, baseTableFullName, viewConnection, null, SCHEMA3, SCHEMA3);
             // Delete the rows of the immediate child views of the base table from the system catalog
             executeDeleteQuery(connection, deleteViewRows, null);
@@ -357,9 +363,9 @@ public class OrphanViewToolIT extends BaseOwnClusterIT {
     public void testDeleteGrandchildViewRows() throws Exception {
         String baseTableName = generateUniqueName();
         String baseTableFullName = SchemaUtil.getTableName(SCHEMA1, baseTableName);
-        try (Connection connection = DriverManager.getConnection(getUrl());
+        try (Connection connection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection viewConnection =
-                     isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL) : connection) {
+                     isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL, PropertiesUtil.deepCopy(TEST_PROPERTIES)) : connection) {
             createBaseTableIndexAndViews(connection, baseTableFullName, viewConnection, SCHEMA2, SCHEMA3, null);
             // Delete the grand child view rows from the system catalog
             executeDeleteQuery(connection, deleteViewRows, SCHEMA3);
@@ -387,9 +393,9 @@ public class OrphanViewToolIT extends BaseOwnClusterIT {
     public void testDeleteParentChildLinkRows() throws Exception {
         String baseTableName = generateUniqueName();
         String baseTableFullName = SchemaUtil.getTableName(SCHEMA1, baseTableName);
-        try (Connection connection = DriverManager.getConnection(getUrl());
+        try (Connection connection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection viewConnection =
-                     isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL) : connection) {
+                     isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL, PropertiesUtil.deepCopy(TEST_PROPERTIES)) : connection) {
             createBaseTableIndexAndViews(connection, baseTableFullName, viewConnection, SCHEMA2, SCHEMA3, SCHEMA4);
             // Delete the CHILD_TABLE links to grand child views
             executeDeleteQuery(connection, deleteChildLinks, SCHEMA2);
@@ -415,9 +421,9 @@ public class OrphanViewToolIT extends BaseOwnClusterIT {
     public void testDeleteChildParentLinkRows() throws Exception {
         String baseTableName = generateUniqueName();
         String baseTableFullName = SchemaUtil.getTableName(SCHEMA1, baseTableName);
-        try (Connection connection = DriverManager.getConnection(getUrl());
+        try (Connection connection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection viewConnection =
-                     isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL) : connection) {
+                     isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL, PropertiesUtil.deepCopy(TEST_PROPERTIES)) : connection) {
             createBaseTableIndexAndViews(connection, baseTableFullName, viewConnection, SCHEMA2, SCHEMA3, SCHEMA4);
             // Delete the PARENT_TABLE links from  grand grand child views
             executeDeleteQuery(connection, deleteParentLinks, SCHEMA4);
@@ -441,9 +447,9 @@ public class OrphanViewToolIT extends BaseOwnClusterIT {
     public void testDeletePhysicalTableLinks() throws Exception {
         String baseTableName = generateUniqueName();
         String baseTableFullName = SchemaUtil.getTableName(SCHEMA1, baseTableName);
-        try (Connection connection = DriverManager.getConnection(getUrl());
+        try (Connection connection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection viewConnection =
-                     isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL) : connection) {
+                     isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL, PropertiesUtil.deepCopy(TEST_PROPERTIES)) : connection) {
             createBaseTableIndexAndViews(connection, baseTableFullName, viewConnection, SCHEMA2, SCHEMA3, SCHEMA3);
             // Delete the physical table link rows from the system catalog
             executeDeleteQuery(connection, deletePhysicalLinks, SCHEMA2);

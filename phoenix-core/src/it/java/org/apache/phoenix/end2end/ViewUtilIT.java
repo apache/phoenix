@@ -53,24 +53,24 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-//Failing with HA Connection
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class ViewUtilIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testGetSystemTableForChildLinks() throws Exception {
         assertEquals(SYSTEM_LINK_HBASE_TABLE_NAME, ViewUtil.getSystemTableForChildLinks(
-                MIN_SPLITTABLE_SYSTEM_CATALOG, config));
+                MIN_SPLITTABLE_SYSTEM_CATALOG, getConfiguration()));
 
         // lower version should also give CHILD_LINK table as server upgrade to advanced version
         assertEquals(SYSTEM_LINK_HBASE_TABLE_NAME, ViewUtil.getSystemTableForChildLinks(
-                MIN_SPLITTABLE_SYSTEM_CATALOG - 1, config));
+                MIN_SPLITTABLE_SYSTEM_CATALOG - 1, getConfiguration()));
     }
 
     @Test
     public void testHasChildViewsInGlobalViewCase() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        TableName catalogOrChildTableName = ViewUtil.getSystemTableForChildLinks(0, config);
+        TableName catalogOrChildTableName = ViewUtil.getSystemTableForChildLinks(0, getConfiguration());
         String schema = generateUniqueName();
         byte[] schemaInBytes = schema.getBytes(StandardCharsets.UTF_8);
         byte[] tenantIdInBytes = new byte[0];
@@ -136,7 +136,7 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         tenantProps.setProperty(TENANT_ID_ATTRIB, tenantId);
-        TableName catalogOrChildTableName = ViewUtil.getSystemTableForChildLinks(0, config);
+        TableName catalogOrChildTableName = ViewUtil.getSystemTableForChildLinks(0, getConfiguration());
         String schema = generateUniqueName();
         byte[] schemaInBytes = schema.getBytes(StandardCharsets.UTF_8);
         byte[] tenantIdInBytes = tenantId.getBytes(StandardCharsets.UTF_8);
@@ -212,7 +212,7 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
     @Test
     public void testFindAllRelativesForGlobalConnection() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        TableName catalogOrChildTableName = ViewUtil.getSystemTableForChildLinks(0, config);
+        TableName catalogOrChildTableName = ViewUtil.getSystemTableForChildLinks(0, getConfiguration());
         String schema = generateUniqueName();
         byte[] schemaInBytes = schema.getBytes(StandardCharsets.UTF_8);
         byte[] tenantIdInBytes = new byte[0];
@@ -281,7 +281,7 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
         String tenantId2 = generateUniqueName();
         Properties tenantProps2 = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         tenantProps2.setProperty(TENANT_ID_ATTRIB, tenantId2);
-        TableName catalogOrChildTableName = ViewUtil.getSystemTableForChildLinks(0, config);
+        TableName catalogOrChildTableName = ViewUtil.getSystemTableForChildLinks(0 , getConfiguration());
         String schema = generateUniqueName();
         byte[] schemaInBytes = schema.getBytes(StandardCharsets.UTF_8);
         byte[] tenantId1InBytes = tenantId1.getBytes(StandardCharsets.UTF_8);

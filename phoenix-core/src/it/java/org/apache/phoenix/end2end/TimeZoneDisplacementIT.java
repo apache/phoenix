@@ -30,13 +30,14 @@ import java.util.Properties;
 import java.util.TimeZone;
 
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
+//Passing with HA Connection
 @Category(ParallelStatsEnabledTest.class)
 public class TimeZoneDisplacementIT extends ParallelStatsEnabledIT {
 
@@ -45,10 +46,10 @@ public class TimeZoneDisplacementIT extends ParallelStatsEnabledIT {
         String tableName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.put(QueryServices.APPLY_TIME_ZONE_DISPLACMENT_ATTRIB, Boolean.TRUE.toString());
-        try (PhoenixConnection conn =
-                (PhoenixConnection) DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement();
-                PreparedStatement insertPstmt =
+        try (PhoenixMonitoredConnection conn =
+                (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), props);
+             Statement stmt = conn.createStatement();
+             PreparedStatement insertPstmt =
                         conn.prepareStatement("upsert into " + tableName
                                 + " (ID, D1, D2, T1, T2, S1, S2, UD1, UD2, UT1, UT2, US1, US2) VALUES"
                                 + " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ")) {
@@ -120,8 +121,8 @@ public class TimeZoneDisplacementIT extends ParallelStatsEnabledIT {
         String tableName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.put(QueryServices.APPLY_TIME_ZONE_DISPLACMENT_ATTRIB, Boolean.TRUE.toString());
-        try (PhoenixConnection conn =
-                (PhoenixConnection) DriverManager.getConnection(getUrl(), props);
+        try (PhoenixMonitoredConnection conn =
+                (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), props);
                 Statement stmt = conn.createStatement();
                 PreparedStatement insertPstmt =
                         conn.prepareStatement("upsert into " + tableName + " (ID, D, T, S) VALUES"
@@ -173,8 +174,8 @@ public class TimeZoneDisplacementIT extends ParallelStatsEnabledIT {
         // is different
         // We are testing that the displacement gets applied both ways
         props.put(QueryServices.APPLY_TIME_ZONE_DISPLACMENT_ATTRIB, Boolean.TRUE.toString());
-        try (PhoenixConnection conn =
-                (PhoenixConnection) DriverManager.getConnection(getUrl(), props);
+        try (PhoenixMonitoredConnection conn =
+                (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), props);
                 Statement stmt = conn.createStatement();) {
             conn.setAutoCommit(true);
             stmt.executeUpdate("create table " + tableName + " (ID integer primary key,"
@@ -220,8 +221,8 @@ public class TimeZoneDisplacementIT extends ParallelStatsEnabledIT {
         String tableName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.put(QueryServices.APPLY_TIME_ZONE_DISPLACMENT_ATTRIB, Boolean.TRUE.toString());
-        try (PhoenixConnection conn =
-                (PhoenixConnection) DriverManager.getConnection(getUrl(), props);
+        try (PhoenixMonitoredConnection conn =
+                (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), props);
                 Statement stmt = conn.createStatement();
                 PreparedStatement upsertStmt =
                         conn.prepareStatement(
@@ -303,8 +304,8 @@ public class TimeZoneDisplacementIT extends ParallelStatsEnabledIT {
         String tableName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.put(QueryServices.APPLY_TIME_ZONE_DISPLACMENT_ATTRIB, Boolean.TRUE.toString());
-        try (PhoenixConnection conn =
-                     (PhoenixConnection) DriverManager.getConnection(getUrl(), props)) {
+        try (PhoenixMonitoredConnection conn =
+                     (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(true);
             try (Statement stmt = conn.createStatement()) {
                 stmt.execute("CREATE TABLE " + tableName +

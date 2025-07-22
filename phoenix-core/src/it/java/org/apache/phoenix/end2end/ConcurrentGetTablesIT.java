@@ -21,6 +21,7 @@ import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
@@ -43,9 +44,11 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 /**
  * Tests to ensure concurrent metadata RPC calls can be served with limited metadata handlers.
  */
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class ConcurrentGetTablesIT extends BaseTest {
 
@@ -67,7 +70,11 @@ public class ConcurrentGetTablesIT extends BaseTest {
         props.put(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, "ALWAYS");
         props.put(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED, Boolean.toString(false));
         props.put(QueryServices.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED, Boolean.toString(false));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     @BeforeClass
@@ -90,8 +97,7 @@ public class ConcurrentGetTablesIT extends BaseTest {
         final String index_view02 = "idx_v02_" + tableName;
         final String index_view03 = "idx_v03_" + tableName;
         final String index_view04 = "idx_v04_" + tableName;
-
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + tableName

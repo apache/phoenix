@@ -41,7 +41,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-//Failing with HA Connection
+//Passing with HA Connection - No Changes needed
 @Category(NeedsOwnMiniClusterTest.class)
 public class BaseAggregateWithRegionMoves4IT extends BaseAggregateWithRegionMoves2IT {
 

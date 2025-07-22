@@ -66,7 +66,7 @@ import static org.junit.Assert.assertTrue;
 /**
  * ServerPagingIT tests that include some region moves while performing rs#next.
  */
-//Failing with HA Connection
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
 

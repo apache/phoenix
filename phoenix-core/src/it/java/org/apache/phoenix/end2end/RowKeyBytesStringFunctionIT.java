@@ -36,7 +36,7 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-//Failing with HA Connection
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class RowKeyBytesStringFunctionIT extends ParallelStatsDisabledIT {
 
@@ -67,7 +67,7 @@ public class RowKeyBytesStringFunctionIT extends ParallelStatsDisabledIT {
             ResultSet rs =
                     conn.createStatement().executeQuery("SELECT ROWKEY_BYTES_STRING() FROM " + tableName);
             try (org.apache.hadoop.hbase.client.Connection hconn =
-                    ConnectionFactory.createConnection(config)) {
+                    ConnectionFactory.createConnection(getConfiguration())) {
                 Table table = hconn.getTable(TableName.valueOf(tableName));
                 int i = 0;
                 while (rs.next()) {
