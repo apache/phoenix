@@ -1653,10 +1653,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
         }
       }
 
-      if (!SchemaUtil.isSystemTable(tableName)) {
-        if (newDesc.hasCoprocessor(QueryConstants.PHOENIX_TTL_REGION_OBSERVER_CLASSNAME)) {
-          builder.removeCoprocessor(QueryConstants.PHOENIX_TTL_REGION_OBSERVER_CLASSNAME);
-        }
+      // PhoenixTTLRegionObserver should no longer be in use
+      if (newDesc.hasCoprocessor(QueryConstants.PHOENIX_TTL_REGION_OBSERVER_CLASSNAME)) {
+        builder.removeCoprocessor(QueryConstants.PHOENIX_TTL_REGION_OBSERVER_CLASSNAME);
       }
 
       if (
