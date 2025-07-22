@@ -38,9 +38,12 @@ public final class PhoenixIndexBuilderHelper {
     private static final byte[] ON_DUP_KEY_IGNORE_BYTES = new byte[] {1}; // boolean true
     private static final int ON_DUP_KEY_HEADER_BYTE_SIZE = Bytes.SIZEOF_SHORT + Bytes.SIZEOF_BOOLEAN;
     public static final String ATOMIC_OP_ATTRIB = "_ATOMIC_OP_ATTRIB";
+    public static final String ATOMIC_OP_UPDATE_ONLY_ATTRIB = "_ATOMIC_OP_UPDATE_ONLY_ATTRIB";
 
     public static final String RETURN_RESULT = "_RETURN_RESULT";
     public static final byte[] RETURN_RESULT_ROW = new byte[]{0};
+    public static final byte[] RETURN_RESULT_OLD_ROW = new byte[]{1};
+    public static final byte[] ATOMIC_OP_UPDATE_ONLY_ATTRIB_VALUE = new byte[]{1};
 
     public static byte[] serializeOnDupKeyIgnore() {
         return ON_DUP_KEY_IGNORE_BYTES;

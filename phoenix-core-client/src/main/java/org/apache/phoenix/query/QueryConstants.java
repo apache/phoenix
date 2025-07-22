@@ -106,6 +106,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NUM_PREC_RADIX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.OLD_METADATA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_PARTITION_ID;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_PARTITION_START_TIME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARTITION_END_KEY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARTITION_END_TIME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARTITION_ID;
@@ -662,7 +663,8 @@ public interface QueryConstants {
             TABLE_NAME + "," + STREAM_NAME + "))\n" +
             HConstants.VERSIONS + "=%s,\n" +
             ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" +
-            TRANSACTIONAL + "=" + Boolean.FALSE;
+            TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" +
+            UPDATE_CACHE_FREQUENCY + "=" + "7200000";
 
     String CREATE_CDC_STREAM_METADATA = "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" +
             SYSTEM_CDC_STREAM_TABLE + "\"(\n" +
@@ -675,10 +677,12 @@ public interface QueryConstants {
             PARTITION_START_TIME + " BIGINT," +
             PARTITION_END_TIME + " BIGINT," +
             PARTITION_START_KEY + " VARBINARY_ENCODED," +
-            PARTITION_END_KEY + " VARBINARY_ENCODED,\n" +
+            PARTITION_END_KEY + " VARBINARY_ENCODED," +
+            PARENT_PARTITION_START_TIME + " BIGINT,\n" +
             "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" +
             TABLE_NAME + "," + STREAM_NAME + "," + PARTITION_ID + "," + PARENT_PARTITION_ID + "))\n" +
             HConstants.VERSIONS + "=%s,\n" +
             ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" +
-            TRANSACTIONAL + "=" + Boolean.FALSE;
+            TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" +
+            UPDATE_CACHE_FREQUENCY + "=" + "7200000";
 }

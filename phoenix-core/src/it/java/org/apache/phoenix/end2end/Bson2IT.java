@@ -359,6 +359,46 @@ public class Bson2IT extends ParallelStatsDisabledIT {
       assertEquals(bsonDocument2, document2);
 
       assertFalse(rs.next());
+
+      /*
+      updateExp = "SET newKey1 = if_not_exists(NestedMap1.ColorList[0], 42),
+      NestedMap1.NestedMap2.newKey21 = if_not_exists(keyNotExists, "foo");
+      */
+      updateExp = "{\n" +
+              "  \"$SET\": {\n" +
+              "\"newKey1\": {\n" +
+              "      \"$IF_NOT_EXISTS\": {\n" +
+              "        \"NestedMap1.ColorList[0]\": 42\n" +
+              "      }\n" +
+              "    },\n" +
+              "    \"NestedMap1.NestedMap2.newKey2\": {\n" +
+              "      \"$IF_NOT_EXISTS\": {\n" +
+              "        \"keyNotExists\": \"foo\"\n" +
+              "      }\n" +
+              "    }\n" +
+              "  }\n" +
+              "}";
+
+      stmt = conn.prepareStatement("UPSERT INTO " + tableName
+              + " VALUES (?,?) ON DUPLICATE KEY UPDATE COL = BSON_UPDATE_EXPRESSION(COL, '"
+              + updateExp + "')");
+      stmt.setString(1, "pk0001");
+      stmt.setString(2, "pk0002");
+      stmt.executeUpdate();
+      conn.commit();
+
+      query = "SELECT * FROM " + tableName;
+      rs = conn.createStatement().executeQuery(query);
+
+      assertTrue(rs.next());
+      assertEquals("pk0001", rs.getString(1));
+      assertEquals("pk0002", rs.getString(2));
+
+      BsonDocument bsonDocument3 = getDocument3();
+      BsonDocument document3 = (BsonDocument) rs.getObject(3);
+      assertEquals(bsonDocument3, document3);
+
+      assertFalse(rs.next());
     }
   }
 
@@ -1085,6 +1125,300 @@ public class Bson2IT extends ParallelStatsDisabledIT {
     //      "ISBN" : "111-1111111111999",
     //      "Title" : "Book 10122 Title",
     //      "Id" : -12243.78
+    //    },
+    //    "Id" : 101.01,
+    //    "NList1" : [ {
+    //      "$set" : [ "Updated_set_01", "Updated_set_02" ]
+    //    }, -0.00234 ],
+    //    "NSet1" : {
+    //      "$set" : [ 123.45, 9586.7778, -124, 10238 ]
+    //    }
+    //  },
+    //  "Id1" : "12345",
+    //  "attr_6" : {
+    //    "n_attr_0" : "str_val_0",
+    //    "n_attr_1" : 1295.03,
+    //    "n_attr_2" : {
+    //      "$binary" : {
+    //        "base64" : "MjA0OHU1bmJsd2plaVdGR1RIKDRiZjkzMA==",
+    //        "subType" : "00"
+    //      }
+    //    },
+    //    "n_attr_3" : true,
+    //    "n_attr_4" : null
+    //  },
+    //  "attr_5" : [ 1224, "str001", {
+    //    "$binary" : {
+    //      "base64" : "AAECAwQF",
+    //      "subType" : "00"
+    //    }
+    //  } ],
+    //  "NestedList12" : [ -485.34, "1234abcd", [ {
+    //    "$set" : [ "xyz01234", "xyz0123", "abc01234" ]
+    //  }, {
+    //    "$set" : [ {
+    //      "$binary" : {
+    //        "base64" : "dmFsMDE=",
+    //        "subType" : "00"
+    //      }
+    //    }, {
+    //      "$binary" : {
+    //        "base64" : "dmFsMDM=",
+    //        "subType" : "00"
+    //      }
+    //    }, {
+    //      "$binary" : {
+    //        "base64" : "dmFsMDI=",
+    //        "subType" : "00"
+    //      }
+    //    }, {
+    //      "$binary" : {
+    //        "base64" : "dmFsMDQ=",
+    //        "subType" : "00"
+    //      }
+    //    } ]
+    //  } ] ],
+    //  "Id" : "12345",
+    //  "attr_1" : 1295.03,
+    //  "attr_0" : "str_val_0",
+    //  "RelatedItems" : {
+    //    "$set" : [ 123.0948, -485.45582904, 1234, 0.111 ]
+    //  }
+    //}
+    return RawBsonDocument.parse(json);
+  }
+
+  private static RawBsonDocument getDocument3() {
+    String json = "{\n" +
+            "   \"newKey1\" : \"Black\",\n" +
+            "  \"Pictures\" : {\n" +
+            "    \"$set\" : [ \"123_rear.jpg\", \"xyz5@_rear.jpg\", \"xyz_front.jpg\", \"xyz_rear.jpg\", \"123_front.jpg\", \"1235@_rear.jpg\" ]\n" +
+            "  },\n" +
+            "  \"PictureBinarySet\" : {\n" +
+            "    \"$set\" : [ {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"MTIzYWJjX3JlYXIuanBn\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    }, {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"eHl6X3JlYXIuanBn\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    }, {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"eHl6YWJjX3JlYXIuanBn\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    }, {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"MTIzX2Zyb250LmpwZw==\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    } ]\n" +
+            "  },\n" +
+            "  \"Title\" : \"Cycle_1234_new\",\n" +
+            "  \"InPublication\" : false,\n" +
+            "  \"AddedId\" : 10,\n" +
+            "  \"ColorBytes\" : {\n" +
+            "    \"$binary\" : {\n" +
+            "      \"base64\" : \"QmxhY2s=\",\n" +
+            "      \"subType\" : \"00\"\n" +
+            "    }\n" +
+            "  },\n" +
+            "  \"ISBN\" : \"111-1111111111\",\n" +
+            "  \"NestedList1\" : [ -473.11999999999995, \"1234abcd\", [ \"xyz0123\", {\n" +
+            "    \"InPublication\" : false,\n" +
+            "    \"BinaryTitleSet\" : {\n" +
+            "      \"$set\" : [ {\n" +
+            "        \"$binary\" : {\n" +
+            "          \"base64\" : \"Qm9vayAxMDExIFRpdGxlIEJpbmFyeQ==\",\n" +
+            "          \"subType\" : \"00\"\n" +
+            "        }\n" +
+            "      }, {\n" +
+            "        \"$binary\" : {\n" +
+            "          \"base64\" : \"Qm9vayAxMDEwIFRpdGxlIEJpbmFyeQ==\",\n" +
+            "          \"subType\" : \"00\"\n" +
+            "        }\n" +
+            "      }, {\n" +
+            "        \"$binary\" : {\n" +
+            "          \"base64\" : \"Qm9vayAxMTExIFRpdGxlIEJpbmFyeQ==\",\n" +
+            "          \"subType\" : \"00\"\n" +
+            "        }\n" +
+            "      } ]\n" +
+            "    },\n" +
+            "    \"ISBN\" : \"111-1111111122\",\n" +
+            "    \"IdSet\" : {\n" +
+            "      \"$set\" : [ 20576024, -3.9457860486939475E7, 204850.69703847595, 4.86906704836275E21, 19306873 ]\n" +
+            "    },\n" +
+            "    \"Title\" : \"Book 101 Title\",\n" +
+            "    \"Id\" : 101.01,\n" +
+            "    \"TitleSet2\" : {\n" +
+            "      \"$set\" : [ \"Book 1201 Title\", \"Book 1111 Title\", \"Book 1200 Title\" ]\n" +
+            "    }\n" +
+            "  } ], null, true ],\n" +
+            "  \"NestedMap1\" : {\n" +
+            "    \"InPublication\" : false,\n" +
+            "    \"ColorList\" : [ \"Black\", {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"V2hpdGU=\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    }, \"Silver\" ],\n" +
+            "    \"AddedId\" : 10,\n" +
+            "    \"ISBN\" : \"111-1111111111\",\n" +
+            "    \"NestedMap2\" : {\n" +
+            "      \"NewID\" : \"12345\",\n" +
+            "      \"NList\" : [ 12.22, -0.00234, null ],\n" +
+            "      \"ISBN\" : \"111-1111111111999\",\n" +
+            "      \"Title\" : \"Book 10122 Title\",\n" +
+            "      \"Id\" : -12243.78\n" +
+            "      \"newKey2\" : \"foo\"" +
+            "    },\n" +
+            "    \"Id\" : 101.01,\n" +
+            "    \"NList1\" : [ {\n" +
+            "      \"$set\" : [ \"Updated_set_01\", \"Updated_set_02\" ]\n" +
+            "    }, -0.00234 ],\n" +
+            "    \"NSet1\" : {\n" +
+            "      \"$set\" : [ 123.45, 9586.7778, -124, 10238 ]\n" +
+            "    }\n" +
+            "  },\n" +
+            "  \"Id1\" : \"12345\",\n" +
+            "  \"attr_6\" : {\n" +
+            "    \"n_attr_0\" : \"str_val_0\",\n" +
+            "    \"n_attr_1\" : 1295.03,\n" +
+            "    \"n_attr_2\" : {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"MjA0OHU1bmJsd2plaVdGR1RIKDRiZjkzMA==\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    },\n" +
+            "    \"n_attr_3\" : true,\n" +
+            "    \"n_attr_4\" : null\n" +
+            "  },\n" +
+            "  \"attr_5\" : [ 1224, \"str001\", {\n" +
+            "    \"$binary\" : {\n" +
+            "      \"base64\" : \"AAECAwQF\",\n" +
+            "      \"subType\" : \"00\"\n" +
+            "    }\n" +
+            "  } ],\n" +
+            "  \"NestedList12\" : [ -485.34, \"1234abcd\", [ {\n" +
+            "    \"$set\" : [ \"xyz01234\", \"xyz0123\", \"abc01234\" ]\n" +
+            "  }, {\n" +
+            "    \"$set\" : [ {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"dmFsMDE=\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    }, {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"dmFsMDM=\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    }, {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"dmFsMDI=\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    }, {\n" +
+            "      \"$binary\" : {\n" +
+            "        \"base64\" : \"dmFsMDQ=\",\n" +
+            "        \"subType\" : \"00\"\n" +
+            "      }\n" +
+            "    } ]\n" +
+            "  } ] ],\n" +
+            "  \"Id\" : \"12345\",\n" +
+            "  \"attr_1\" : 1295.03,\n" +
+            "  \"attr_0\" : \"str_val_0\",\n" +
+            "  \"RelatedItems\" : {\n" +
+            "    \"$set\" : [ 123.0948, -485.45582904, 1234, 0.111 ]\n" +
+            "  }\n" +
+            "}";
+    //{
+    // "newKey1" : "Black",
+    //  "Pictures" : {
+    //    "$set" : [ "123_rear.jpg", "xyz5@_rear.jpg", "xyz_front.jpg", "xyz_rear.jpg", "123_front.jpg", "1235@_rear.jpg" ]
+    //  },
+    //  "PictureBinarySet" : {
+    //    "$set" : [ {
+    //      "$binary" : {
+    //        "base64" : "MTIzYWJjX3JlYXIuanBn",
+    //        "subType" : "00"
+    //      }
+    //    }, {
+    //      "$binary" : {
+    //        "base64" : "eHl6X3JlYXIuanBn",
+    //        "subType" : "00"
+    //      }
+    //    }, {
+    //      "$binary" : {
+    //        "base64" : "eHl6YWJjX3JlYXIuanBn",
+    //        "subType" : "00"
+    //      }
+    //    }, {
+    //      "$binary" : {
+    //        "base64" : "MTIzX2Zyb250LmpwZw==",
+    //        "subType" : "00"
+    //      }
+    //    } ]
+    //  },
+    //  "Title" : "Cycle_1234_new",
+    //  "InPublication" : false,
+    //  "AddedId" : 10,
+    //  "ColorBytes" : {
+    //    "$binary" : {
+    //      "base64" : "QmxhY2s=",
+    //      "subType" : "00"
+    //    }
+    //  },
+    //  "ISBN" : "111-1111111111",
+    //  "NestedList1" : [ -473.11999999999995, "1234abcd", [ "xyz0123", {
+    //    "InPublication" : false,
+    //    "BinaryTitleSet" : {
+    //      "$set" : [ {
+    //        "$binary" : {
+    //          "base64" : "Qm9vayAxMDExIFRpdGxlIEJpbmFyeQ==",
+    //          "subType" : "00"
+    //        }
+    //      }, {
+    //        "$binary" : {
+    //          "base64" : "Qm9vayAxMDEwIFRpdGxlIEJpbmFyeQ==",
+    //          "subType" : "00"
+    //        }
+    //      }, {
+    //        "$binary" : {
+    //          "base64" : "Qm9vayAxMTExIFRpdGxlIEJpbmFyeQ==",
+    //          "subType" : "00"
+    //        }
+    //      } ]
+    //    },
+    //    "ISBN" : "111-1111111122",
+    //    "IdSet" : {
+    //      "$set" : [ 20576024, -3.9457860486939475E7, 204850.69703847595, 4.86906704836275E21, 19306873 ]
+    //    },
+    //    "Title" : "Book 101 Title",
+    //    "Id" : 101.01,
+    //    "TitleSet2" : {
+    //      "$set" : [ "Book 1201 Title", "Book 1111 Title", "Book 1200 Title" ]
+    //    }
+    //  } ], null, true ],
+    //  "NestedMap1" : {
+    //    "InPublication" : false,
+    //    "ColorList" : [ "Black", {
+    //      "$binary" : {
+    //        "base64" : "V2hpdGU=",
+    //        "subType" : "00"
+    //      }
+    //    }, "Silver" ],
+    //    "AddedId" : 10,
+    //    "ISBN" : "111-1111111111",
+    //    "NestedMap2" : {
+    //      "NewID" : "12345",
+    //      "NList" : [ 12.22, -0.00234, null ],
+    //      "ISBN" : "111-1111111111999",
+    //      "Title" : "Book 10122 Title",
+    //      "Id" : -12243.78,
+    //      "newKey2" : "foo"
     //    },
     //    "Id" : 101.01,
     //    "NList1" : [ {

@@ -80,6 +80,10 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
         stmt.setString(2, ROW1);
         stmt.setString(3, A_VALUE);
         stmt.execute();
+        assertEquals(1, stmt.getUpdateCount());
+        // When not using an UPSERT variant (e.g., ON DUPLICATE KEY) that is not capable of
+        // returning a row, we don't expect to get a result set.
+        assertNull(stmt.getResultSet());
         
         String query = "SELECT entity_id, a_string FROM " + atable;
         PreparedStatement statement = conn.prepareStatement(query);
@@ -95,8 +99,13 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
             + " (ORGANIZATION_ID CHAR(15) NOT NULL, ENTITY_ID CHAR(15) NOT NULL, A_STRING VARCHAR\n"
             +
         "CONSTRAINT pk PRIMARY KEY (organization_id, entity_id DESC))");
-        
-        conn.createStatement().execute("UPSERT INTO " + atable2 + " SELECT * FROM " + atable);
+
+        Statement upsertStmt = conn.createStatement();
+        upsertStmt.execute("UPSERT INTO " + atable2 + " SELECT * FROM " + atable);
+        assertEquals(1, upsertStmt.getUpdateCount());
+        // When not using an UPSERT variant (e.g., ON DUPLICATE KEY) that is not capable of
+        // returning a row, we don't expect to get a result set.
+        assertNull(upsertStmt.getResultSet());
         query = "SELECT entity_id, a_string FROM " + atable2;
         statement = conn.prepareStatement(query);
         rs = statement.executeQuery();
@@ -179,8 +188,13 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("CREATE TABLE " + tableName
                 + " (pk INTEGER PRIMARY KEY, val INTEGER) UPDATE_CACHE_FREQUENCY=3600000");
 
-        conn.createStatement().execute(
+        Statement upsertStmt = conn.createStatement();
+        upsertStmt.execute(
             "UPSERT INTO " + tableName + " VALUES (NEXT VALUE FOR "+ tableName + "_seq, 1)");
+        assertEquals(1, upsertStmt.getUpdateCount());
+        // When not using an UPSERT variant (e.g., ON DUPLICATE KEY) that is not capable of
+        // returning a row, we don't expect to get a result set.
+        assertNull(upsertStmt.getResultSet());
         PreparedStatement stmt =
                 conn.prepareStatement("UPSERT INTO " + tableName
                         + " SELECT NEXT VALUE FOR "+ tableName + "_seq, val FROM " + tableName);

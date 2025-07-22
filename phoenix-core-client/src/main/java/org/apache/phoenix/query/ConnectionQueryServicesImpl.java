@@ -78,6 +78,7 @@ import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_FAIL
 import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_SUCCESS;
 import static org.apache.phoenix.monitoring.MetricType.TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CQSI_THREAD_POOL_METRICS_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_ENABLED;
@@ -144,6 +145,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 import javax.annotation.concurrent.GuardedBy;
@@ -243,14 +245,18 @@ import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.iterate.TableResultIterator;
 import org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus;
+import org.apache.phoenix.jdbc.AbstractRPCConnectionInfo;
 import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.RPCConnectionInfo;
+import org.apache.phoenix.jdbc.ZKConnectionInfo;
+import org.apache.phoenix.job.HTableThreadPoolWithUtilizationStats;
 import org.apache.phoenix.log.ConnectionLimiter;
 import org.apache.phoenix.log.DefaultConnectionLimiter;
 import org.apache.phoenix.log.LoggingConnectionLimiter;
 import org.apache.phoenix.log.QueryLoggerDisruptor;
+import org.apache.phoenix.monitoring.HTableThreadPoolHistograms;
 import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
@@ -511,16 +517,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // Based on implementations used in
             // org.apache.hadoop.hbase.client.ConnectionImplementation
             final BlockingQueue<Runnable> workQueue = new LinkedBlockingQueue<>(maxQueue);
+            Supplier<HTableThreadPoolHistograms> hTableThreadPoolHistogramsSupplier =
+                    getThreadPoolHistogramsSupplier(maxThreads, maxQueue);
             this.threadPoolExecutor =
-                    new ThreadPoolExecutor(corePoolSize, maxThreads, keepAlive, TimeUnit.SECONDS,
-                            workQueue, new ThreadFactoryBuilder()
-                                        .setDaemon(true)
-                                        .setNameFormat("CQSI-" + threadPoolName
-                                                + "-" + threadPoolNumber.incrementAndGet()
-                                                + "-shared-pool-%d")
-                                        .setUncaughtExceptionHandler(
-                                                Threads.LOGGING_EXCEPTION_HANDLER)
-                                        .build());
+                    new HTableThreadPoolWithUtilizationStats(corePoolSize, maxThreads, keepAlive,
+                            TimeUnit.SECONDS, workQueue, new ThreadFactoryBuilder()
+                            .setDaemon(true)
+                            .setNameFormat("CQSI-" + threadPoolName
+                                    + "-" + threadPoolNumber.incrementAndGet()
+                                    + "-shared-pool-%d")
+                            .setUncaughtExceptionHandler(
+                                    Threads.LOGGING_EXCEPTION_HANDLER)
+                            .build(), connectionInfo.toUrl(), hTableThreadPoolHistogramsSupplier);
             this.threadPoolExecutor.allowCoreThreadTimeOut(finalConfig
                     .getBoolean(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT,
                     DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT));
@@ -640,6 +648,34 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
         this.metricsMetadataCachingSource = MetricsPhoenixCoprocessorSourceFactory.getInstance()
                 .getMetadataCachingSource();
+    }
+
+    private Supplier<HTableThreadPoolHistograms> getThreadPoolHistogramsSupplier(
+            int maxThreadPoolSize, int maxQueueSize) {
+        if (this.config.getBoolean(CQSI_THREAD_POOL_METRICS_ENABLED,
+                DEFAULT_CQSI_THREAD_POOL_METRICS_ENABLED)) {
+            return new Supplier<HTableThreadPoolHistograms>() {
+                @Override
+                public HTableThreadPoolHistograms get() {
+                    HTableThreadPoolHistograms hTableThreadPoolHistograms =
+                            new HTableThreadPoolHistograms(maxThreadPoolSize, maxQueueSize);
+                    if (connectionInfo instanceof ZKConnectionInfo) {
+                        hTableThreadPoolHistograms.addServerTag(
+                                ((ZKConnectionInfo) connectionInfo).getZkHosts());
+                    } else if (connectionInfo instanceof AbstractRPCConnectionInfo) {
+                        hTableThreadPoolHistograms.addServerTag(
+                                ((AbstractRPCConnectionInfo) connectionInfo).getBoostrapServers());
+                    } else {
+                        throw new IllegalStateException("Unexpected connection info type!!");
+                    }
+                    String cqsiName = connectionInfo.getPrincipal();
+                    hTableThreadPoolHistograms.addCqsiNameTag(cqsiName != null
+                            ? cqsiName : DEFAULT_QUERY_SERVICES_NAME);
+                    return hTableThreadPoolHistograms;
+                }
+            };
+        }
+        return null;
     }
 
     private Connection openConnection(Configuration conf) throws SQLException {

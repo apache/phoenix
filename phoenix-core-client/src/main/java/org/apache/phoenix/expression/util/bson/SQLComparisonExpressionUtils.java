@@ -34,12 +34,15 @@ import org.apache.phoenix.parse.NotParseNode;
 import org.apache.phoenix.parse.OrParseNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.bson.BsonDocument;
+import org.bson.BsonString;
 import org.bson.BsonValue;
 import org.bson.RawBsonDocument;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -70,7 +73,30 @@ public final class SQLComparisonExpressionUtils {
                       + "conditionExpression: {}", rawBsonDocument, conditionExpression);
       return false;
     }
-    return evaluateExpression(conditionExpression, rawBsonDocument, comparisonValuesDocument);
+    return evaluateExpression(conditionExpression, rawBsonDocument, comparisonValuesDocument, null);
+  }
+
+  /**
+   * Evaluate the given condition expression on the BSON Document.
+   *
+   * @param conditionExpression The condition expression consisting of operands, operators.
+   * @param rawBsonDocument The BSON Document on which the condition expression is evaluated.
+   * @param comparisonValuesDocument The BSON Document consisting of place-holder key-value pairs.
+   * @param keyAliasDocument The BSON Document consisting of place-holder for keys.
+   * @return True if the evaluation is successful, False otherwise.
+   */
+  public static boolean evaluateConditionExpression(final String conditionExpression,
+                                                    final RawBsonDocument rawBsonDocument,
+                                                    final BsonDocument comparisonValuesDocument,
+                                                    final BsonDocument keyAliasDocument) {
+    if (rawBsonDocument == null || conditionExpression == null) {
+      LOGGER.warn(
+              "Document and/or Condition Expression document are empty. Document: {}, "
+                      + "conditionExpression: {}", rawBsonDocument, conditionExpression);
+      return false;
+    }
+    return evaluateExpression(conditionExpression, rawBsonDocument, comparisonValuesDocument,
+            keyAliasDocument);
   }
 
   /**
@@ -79,11 +105,13 @@ public final class SQLComparisonExpressionUtils {
    * @param conditionExpression The condition expression consisting of operands, operators.
    * @param rawBsonDocument The BSON Document on which the condition expression is evaluated.
    * @param comparisonValuesDocument The BSON Document consisting of place-holder key-value pairs.
+   * @param keyAliasDocument The BSON Document consisting of place-holder for keys.
    * @return True if the evaluation is successful, False otherwise.
    */
   private static boolean evaluateExpression(final String conditionExpression,
                                             final RawBsonDocument rawBsonDocument,
-                                            final BsonDocument comparisonValuesDocument) {
+                                            final BsonDocument comparisonValuesDocument,
+                                            final BsonDocument keyAliasDocument) {
     BsonExpressionParser bsonExpressionParser = new BsonExpressionParser(conditionExpression);
     ParseNode parseNode;
     try {
@@ -92,7 +120,15 @@ public final class SQLComparisonExpressionUtils {
       LOGGER.error("Expression {} could not be evaluated.", conditionExpression, e);
       throw new RuntimeException("Expression could not be evaluated: " + conditionExpression, e);
     }
-    return evaluateExpression(parseNode, rawBsonDocument, comparisonValuesDocument);
+    List<String> sortedKeyNames;
+    if (keyAliasDocument == null || keyAliasDocument.isEmpty()) {
+      sortedKeyNames = Collections.emptyList();
+    } else {
+      sortedKeyNames = new ArrayList<>(keyAliasDocument.keySet());
+      sortedKeyNames.sort((a, b) -> Integer.compare(b.length(), a.length()));
+    }
+    return evaluateExpression(parseNode, rawBsonDocument, comparisonValuesDocument,
+            keyAliasDocument, sortedKeyNames);
   }
 
   /**
@@ -101,11 +137,17 @@ public final class SQLComparisonExpressionUtils {
    * @param parseNode The root ParseNode of the parse tree.
    * @param rawBsonDocument BSON Document value of the Cell.
    * @param comparisonValuesDocument BSON Document with place-holder values.
+   * @param keyAliasDocument The BSON Document consisting of place-holder for keys.
+   * @param sortedKeyNames The document key names in the descending sorted order of their string
+   * length.
    * @return True if the evaluation is successful, False otherwise.
    */
   private static boolean evaluateExpression(final ParseNode parseNode,
                                             final RawBsonDocument rawBsonDocument,
-                                            final BsonDocument comparisonValuesDocument) {
+                                            final BsonDocument comparisonValuesDocument,
+                                            final BsonDocument keyAliasDocument,
+                                            final List<String> sortedKeyNames) {
+
     // In Phoenix, usually every ParseNode has corresponding Expression class. The expression
     // is evaluated on the Tuple. However, the expression requires data type of PDataType instance.
     // This case is different: we need to evaluate the parse node on the document, not on Tuple.
@@ -119,27 +161,31 @@ public final class SQLComparisonExpressionUtils {
               (DocumentFieldExistsParseNode) parseNode;
       final LiteralParseNode fieldKey =
               (LiteralParseNode) documentFieldExistsParseNode.getChildren().get(0);
-      final String fieldName = (String) fieldKey.getValue();
+      String fieldName = (String) fieldKey.getValue();
+      fieldName = replaceExpressionFieldNames(fieldName, keyAliasDocument, sortedKeyNames);
       return documentFieldExistsParseNode.isExists() == exists(fieldName, rawBsonDocument);
     } else if (parseNode instanceof EqualParseNode) {
       final EqualParseNode equalParseNode = (EqualParseNode) parseNode;
       final LiteralParseNode lhs = (LiteralParseNode) equalParseNode.getLHS();
       final LiteralParseNode rhs = (LiteralParseNode) equalParseNode.getRHS();
-      final String fieldKey = (String) lhs.getValue();
+      String fieldKey = (String) lhs.getValue();
+      fieldKey = replaceExpressionFieldNames(fieldKey, keyAliasDocument, sortedKeyNames);
       final String expectedFieldValue = (String) rhs.getValue();
       return isEquals(fieldKey, expectedFieldValue, rawBsonDocument, comparisonValuesDocument);
     } else if (parseNode instanceof NotEqualParseNode) {
       final NotEqualParseNode notEqualParseNode = (NotEqualParseNode) parseNode;
       final LiteralParseNode lhs = (LiteralParseNode) notEqualParseNode.getLHS();
       final LiteralParseNode rhs = (LiteralParseNode) notEqualParseNode.getRHS();
-      final String fieldKey = (String) lhs.getValue();
+      String fieldKey = (String) lhs.getValue();
+      fieldKey = replaceExpressionFieldNames(fieldKey, keyAliasDocument, sortedKeyNames);
       final String expectedFieldValue = (String) rhs.getValue();
       return !isEquals(fieldKey, expectedFieldValue, rawBsonDocument, comparisonValuesDocument);
     } else if (parseNode instanceof LessThanParseNode) {
       final LessThanParseNode lessThanParseNode = (LessThanParseNode) parseNode;
       final LiteralParseNode lhs = (LiteralParseNode) lessThanParseNode.getLHS();
       final LiteralParseNode rhs = (LiteralParseNode) lessThanParseNode.getRHS();
-      final String fieldKey = (String) lhs.getValue();
+      String fieldKey = (String) lhs.getValue();
+      fieldKey = replaceExpressionFieldNames(fieldKey, keyAliasDocument, sortedKeyNames);
       final String expectedFieldValue = (String) rhs.getValue();
       return lessThan(fieldKey, expectedFieldValue, rawBsonDocument, comparisonValuesDocument);
     } else if (parseNode instanceof LessThanOrEqualParseNode) {
@@ -147,7 +193,8 @@ public final class SQLComparisonExpressionUtils {
               (LessThanOrEqualParseNode) parseNode;
       final LiteralParseNode lhs = (LiteralParseNode) lessThanOrEqualParseNode.getLHS();
       final LiteralParseNode rhs = (LiteralParseNode) lessThanOrEqualParseNode.getRHS();
-      final String fieldKey = (String) lhs.getValue();
+      String fieldKey = (String) lhs.getValue();
+      fieldKey = replaceExpressionFieldNames(fieldKey, keyAliasDocument, sortedKeyNames);
       final String expectedFieldValue = (String) rhs.getValue();
       return lessThanOrEquals(fieldKey, expectedFieldValue, rawBsonDocument,
               comparisonValuesDocument);
@@ -156,7 +203,8 @@ public final class SQLComparisonExpressionUtils {
               (GreaterThanParseNode) parseNode;
       final LiteralParseNode lhs = (LiteralParseNode) greaterThanParseNode.getLHS();
       final LiteralParseNode rhs = (LiteralParseNode) greaterThanParseNode.getRHS();
-      final String fieldKey = (String) lhs.getValue();
+      String fieldKey = (String) lhs.getValue();
+      fieldKey = replaceExpressionFieldNames(fieldKey, keyAliasDocument, sortedKeyNames);
       final String expectedFieldValue = (String) rhs.getValue();
       return greaterThan(fieldKey, expectedFieldValue, rawBsonDocument, comparisonValuesDocument);
     } else if (parseNode instanceof GreaterThanOrEqualParseNode) {
@@ -164,7 +212,8 @@ public final class SQLComparisonExpressionUtils {
               (GreaterThanOrEqualParseNode) parseNode;
       final LiteralParseNode lhs = (LiteralParseNode) greaterThanOrEqualParseNode.getLHS();
       final LiteralParseNode rhs = (LiteralParseNode) greaterThanOrEqualParseNode.getRHS();
-      final String fieldKey = (String) lhs.getValue();
+      String fieldKey = (String) lhs.getValue();
+      fieldKey = replaceExpressionFieldNames(fieldKey, keyAliasDocument, sortedKeyNames);
       final String expectedFieldValue = (String) rhs.getValue();
       return greaterThanOrEquals(fieldKey, expectedFieldValue, rawBsonDocument,
               comparisonValuesDocument);
@@ -174,7 +223,8 @@ public final class SQLComparisonExpressionUtils {
               (LiteralParseNode) betweenParseNode.getChildren().get(0);
       final LiteralParseNode lhs = (LiteralParseNode) betweenParseNode.getChildren().get(1);
       final LiteralParseNode rhs = (LiteralParseNode) betweenParseNode.getChildren().get(2);
-      final String fieldName = (String) fieldKey.getValue();
+      String fieldName = (String) fieldKey.getValue();
+      fieldName = replaceExpressionFieldNames(fieldName, keyAliasDocument, sortedKeyNames);
       final String expectedFieldValue1 = (String) lhs.getValue();
       final String expectedFieldValue2 = (String) rhs.getValue();
       return betweenParseNode.isNegate() !=
@@ -184,7 +234,8 @@ public final class SQLComparisonExpressionUtils {
       final InListParseNode inListParseNode = (InListParseNode) parseNode;
       final List<ParseNode> childrenNodes = inListParseNode.getChildren();
       final LiteralParseNode fieldKey = (LiteralParseNode) childrenNodes.get(0);
-      final String fieldName = (String) fieldKey.getValue();
+      String fieldName = (String) fieldKey.getValue();
+      fieldName = replaceExpressionFieldNames(fieldName, keyAliasDocument, sortedKeyNames);
       final String[] inList = new String[childrenNodes.size() - 1];
       for (int i = 1; i < childrenNodes.size(); i++) {
         LiteralParseNode literalParseNode = (LiteralParseNode) childrenNodes.get(i);
@@ -196,7 +247,8 @@ public final class SQLComparisonExpressionUtils {
       AndParseNode andParseNode = (AndParseNode) parseNode;
       List<ParseNode> children = andParseNode.getChildren();
       for (ParseNode node : children) {
-        if (!evaluateExpression(node, rawBsonDocument, comparisonValuesDocument)) {
+        if (!evaluateExpression(node, rawBsonDocument, comparisonValuesDocument,
+                keyAliasDocument, sortedKeyNames)) {
           return false;
         }
       }
@@ -205,7 +257,8 @@ public final class SQLComparisonExpressionUtils {
       OrParseNode orParseNode = (OrParseNode) parseNode;
       List<ParseNode> children = orParseNode.getChildren();
       for (ParseNode node : children) {
-        if (evaluateExpression(node, rawBsonDocument, comparisonValuesDocument)) {
+        if (evaluateExpression(node, rawBsonDocument, comparisonValuesDocument, keyAliasDocument,
+                sortedKeyNames)) {
           return true;
         }
       }
@@ -213,11 +266,48 @@ public final class SQLComparisonExpressionUtils {
     } else if (parseNode instanceof NotParseNode) {
       NotParseNode notParseNode = (NotParseNode) parseNode;
       return !evaluateExpression(notParseNode.getChildren().get(0), rawBsonDocument,
-              comparisonValuesDocument);
+              comparisonValuesDocument, keyAliasDocument, sortedKeyNames);
     } else {
       throw new IllegalArgumentException("ParseNode " + parseNode + " is not recognized for " +
               "document comparison");
     }
+  }
+
+  /**
+   * Replaces expression field names with their corresponding actual field names.
+   * This method supports field name aliasing by replacing placeholder expressions
+   * with actual field names from the provided key alias document.
+   * <p>Expression field names allow users to reference field names using placeholder
+   * syntax, which is useful for:</p>
+   * <ul>
+   *   <li>Avoiding conflicts with reserved words</li>
+   *   <li>Handling field names with special characters</li>
+   *   <li>Improving readability of complex expressions</li>
+   *   <li>Supporting dynamic field name substitution</li>
+   * </ul>
+   *
+   * @param fieldKey the field key expression that may contain expression field names.
+   * @param keyAliasDocument the BSON document containing mappings from expression
+   * field names to actual field names. Each key should be
+   * an expression field name and each value should be a BsonString
+   * containing the actual field name.
+   * @param sortedKeys the list of expression field names sorted by length in
+   * descending order.
+   * @return the field key with all expression field names replaced by their
+   * corresponding actual field names.
+   */
+  private static String replaceExpressionFieldNames(String fieldKey,
+                                                    BsonDocument keyAliasDocument,
+                                                    List<String> sortedKeys) {
+    String tmpFieldKey = fieldKey;
+    for (String expressionAttributeName : sortedKeys) {
+      if (tmpFieldKey.contains(expressionAttributeName)) {
+        String actualFieldName =
+                ((BsonString) keyAliasDocument.get(expressionAttributeName)).getValue();
+        tmpFieldKey = tmpFieldKey.replace(expressionAttributeName, actualFieldName);
+      }
+    }
+    return tmpFieldKey;
   }
 
   /**

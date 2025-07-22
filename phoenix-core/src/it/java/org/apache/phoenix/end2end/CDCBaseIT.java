@@ -33,7 +33,6 @@ import org.apache.phoenix.end2end.index.SingleCellIndexIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.TTLExpression;
 import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.schema.types.PBinaryBase;
 import org.apache.phoenix.schema.types.PChar;
@@ -48,6 +47,11 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.coprocessor.TaskRegionObserver;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_STATUS_NAME;
+import static org.apache.phoenix.util.CDCUtil.CDC_STREAM_NAME_FORMAT;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -110,6 +114,8 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
 
     protected ManualEnvironmentEdge injectEdge;
     protected Calendar cal = Calendar.getInstance();
+
+    protected static RegionCoprocessorEnvironment taskRegionEnvironment;
 
     protected void createTable(Connection conn, String table_sql)
             throws Exception {
@@ -1003,4 +1009,96 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
             gen.writeEndObject();
         }
     }
+
+    /**
+     * Gets the stream name for a CDC stream.
+     * 
+     * @param conn The connection to use
+     * @param tableName The name of the table
+     * @param cdcName The name of the CDC stream
+     * @return The full stream name
+     * @throws SQLException if an error occurs
+     */
+    public String getStreamName(Connection conn, String tableName, String cdcName)
+            throws SQLException {
+        long creationTS = CDCUtil.getCDCCreationTimestamp(
+                conn.unwrap(PhoenixConnection.class).getTableNoCache(tableName));
+        return String.format(CDC_STREAM_NAME_FORMAT, tableName, cdcName, creationTS,
+                CDCUtil.getCDCCreationUTCDateTime(creationTS));
+    }
+
+    /**
+     * Gets the status of a CDC stream.
+     * 
+     * @param conn The connection to use.
+     * @param tableName The name of the table.
+     * @param streamName The name of the stream.
+     * @return The stream status.
+     * @throws Exception if an error occurs.
+     */
+    public String getStreamStatus(Connection conn, String tableName, String streamName)
+            throws Exception {
+        ResultSet rs = conn.createStatement().executeQuery("SELECT STREAM_STATUS FROM "
+                + SYSTEM_CDC_STREAM_STATUS_NAME + " WHERE TABLE_NAME='" + tableName +
+                "' AND STREAM_NAME='" + streamName + "'");
+        assertTrue(rs.next());
+        return rs.getString(1);
+    }
+
+    /**
+     * Creates a table and enables CDC on it. This method is shared between CDCStreamIT and
+     * CDCStream2IT.
+     * 
+     * @param conn The connection to use.
+     * @param tableName The name of the table to create.
+     * @param useTaskRegionObserver Whether to use TaskRegionObserver.SelfHealingTask to enable
+     * the stream.
+     * @throws Exception if an error occurs.
+     */
+    public void createTableAndEnableCDC(Connection conn, String tableName,
+                                        boolean useTaskRegionObserver) throws Exception {
+        String cdcName = generateUniqueName();
+        String cdcSql = "CREATE CDC " + cdcName + " ON " + tableName;
+        conn.createStatement().execute(
+                "CREATE TABLE  " + tableName + " (k VARCHAR PRIMARY KEY," + " v1 INTEGER,"
+                        + " v2 VARCHAR)");
+        createCDC(conn, cdcSql, null);
+        String streamName = getStreamName(conn, tableName, cdcName);
+        if (useTaskRegionObserver) {
+            TaskRegionObserver.SelfHealingTask task =
+                    new TaskRegionObserver.SelfHealingTask(
+                            taskRegionEnvironment,
+                            QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
+            task.run();
+        } else {
+            while (!CDCUtil.CdcStreamStatus.ENABLED.toString()
+                    .equals(getStreamStatus(conn, tableName, streamName))) {
+                Thread.sleep(1000);
+            }
+        }
+    }
+
+    /**
+     * Partition Metadata class.
+     */
+    public static class PartitionMetadata {
+        public String partitionId;
+        public String parentPartitionId;
+        public Long startTime;
+        public Long endTime;
+        public byte[] startKey;
+        public byte[] endKey;
+        public Long parentStartTime;
+
+        public PartitionMetadata(ResultSet rs) throws Exception {
+            partitionId = rs.getString(3);
+            parentPartitionId = rs.getString(4);
+            startTime = rs.getLong(5);
+            endTime = rs.getLong(6);
+            startKey = rs.getBytes(7);
+            endKey = rs.getBytes(8);
+            parentStartTime = rs.getLong(9);
+        }
+    }
+
 }

@@ -24,11 +24,20 @@ import java.util.Map;
 import org.apache.hadoop.hbase.util.Pair;
 
 public class UpsertStatement extends DMLStatement {
+
+    public enum OnDuplicateKeyType {
+        NONE,
+        IGNORE,
+        UPDATE,
+        UPDATE_ONLY
+    }
+
     private final List<ColumnName> columns;
     private final List<ParseNode> values;
     private final SelectStatement select;
     private final HintNode hint;
     private final List<Pair<ColumnName,ParseNode>> onDupKeyPairs;
+    private final OnDuplicateKeyType onDupKeyType;
 
     public UpsertStatement(NamedTableNode table, HintNode hint, List<ColumnName> columns,
             List<ParseNode> values, SelectStatement select, int bindCount,
@@ -39,6 +48,27 @@ public class UpsertStatement extends DMLStatement {
         this.select = select;
         this.hint = hint == null ? HintNode.EMPTY_HINT_NODE : hint;
         this.onDupKeyPairs = onDupKeyPairs;
+        if (onDupKeyPairs == null) {
+            this.onDupKeyType = OnDuplicateKeyType.NONE;
+        } else if (onDupKeyPairs.isEmpty()) {
+            this.onDupKeyType = OnDuplicateKeyType.IGNORE;
+        } else {
+            this.onDupKeyType = OnDuplicateKeyType.UPDATE;
+        }
+    }
+
+    public UpsertStatement(NamedTableNode table, HintNode hint, List<ColumnName> columns,
+                           List<ParseNode> values, SelectStatement select, int bindCount,
+                           Map<String, UDFParseNode> udfParseNodes,
+                           List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
+                           OnDuplicateKeyType onDupKeyType) {
+        super(table, bindCount, udfParseNodes);
+        this.columns = columns == null ? Collections.emptyList() : columns;
+        this.values = values;
+        this.select = select;
+        this.hint = hint == null ? HintNode.EMPTY_HINT_NODE : hint;
+        this.onDupKeyPairs = onDupKeyPairs;
+        this.onDupKeyType = onDupKeyType;
     }
 
     public List<ColumnName> getColumns() {
@@ -59,5 +89,9 @@ public class UpsertStatement extends DMLStatement {
 
     public List<Pair<ColumnName,ParseNode>> getOnDupKeyPairs() {
         return onDupKeyPairs;
+    }
+
+    public OnDuplicateKeyType getOnDupKeyType() {
+        return onDupKeyType;
     }
 }

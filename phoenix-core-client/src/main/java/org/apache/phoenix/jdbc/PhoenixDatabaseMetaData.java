@@ -467,6 +467,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String PARTITION_END_TIME = "PARTITION_END_TIME";
     public static final String PARTITION_START_KEY = "PARTITION_START_KEY";
     public static final String PARTITION_END_KEY = "PARTITION_END_KEY";
+    public static final String PARENT_PARTITION_START_TIME = "PARENT_PARTITION_START_TIME";
 
     public static final String QUERY_ID = "QUERY_ID";
     public static final String USER = "USER";

@@ -24,6 +24,7 @@ import static org.apache.phoenix.util.TestUtil.closeStmtAndConn;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -78,6 +79,10 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " (inst,host,\"DATE\") VALUES(?,'b',CURRENT_DATE())");
         stmt.setString(1, "a");
         stmt.execute();
+        // When not using an UPSERT variant (e.g., ON DUPLICATE KEY) that is not capable of
+        // returning a row, we don't expect to get a result set.
+        assertNull(stmt.getResultSet());
+        assertEquals(1, stmt.getUpdateCount());
         stmt.execute();
         stmt.execute();
         stmt.setString(1, "b");

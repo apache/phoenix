@@ -50,7 +50,6 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
-import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
@@ -64,7 +63,6 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.bson.BsonDocument;
 import org.bson.RawBsonDocument;
-import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -162,10 +160,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
 
             validateAtomicUpsertReturnRow(tableName, conn, bsonDocument1, bsonDocument2);
 
-            PhoenixPreparedStatement ps =
-                    conn.prepareStatement(
-                            "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 " +
-                                    "= ? AND PK3 = ?").unwrap(PhoenixPreparedStatement.class);
+            PreparedStatement ps = conn.prepareStatement("DELETE FROM " + tableName
+                    + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ?");
             ps.setString(1, "pk000");
             ps.setDouble(2, -123.98);
             ps.setString(3, "pk003");
@@ -205,11 +201,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
 
             verifyIndexRow(conn, tableName, false);
 
-            PhoenixPreparedStatement ps =
-                    conn.prepareStatement(
-                                    "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 " +
-                                            "= ? AND PK3 = ? AND COL4 = ?")
-                            .unwrap(PhoenixPreparedStatement.class);
+            PreparedStatement ps = conn.prepareStatement("DELETE FROM " + tableName
+                    + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ?");
             ps.setString(1, "pk000");
             ps.setDouble(2, -123.98);
             ps.setString(3, "pk003");
@@ -217,8 +210,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             validateReturnedRowAfterDelete(ps, "col2_001", true, false, bsonDocument2, 234);
 
             ps = conn.prepareStatement("DELETE FROM " + tableName
-                            + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ?")
-                    .unwrap(PhoenixPreparedStatement.class);
+                    + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ?");
             ps.setString(1, "pk000");
             ps.setDouble(2, -123.98);
             ps.setString(3, "pk003");
@@ -263,11 +255,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
 
             validateAtomicUpsertReturnRow(tableName, conn, bsonDocument1, bsonDocument2);
 
-            PhoenixPreparedStatement ps =
-                    conn.prepareStatement(
-                                    "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 " +
-                                            "= ? AND PK3 = ? AND COL4 = ?")
-                            .unwrap(PhoenixPreparedStatement.class);
+            PreparedStatement ps = conn.prepareStatement("DELETE FROM " + tableName
+                    + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ?");
             ps.setString(1, "pk000");
             ps.setDouble(2, -123.98);
             ps.setString(3, "pk003");
@@ -275,8 +264,60 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             validateReturnedRowAfterDelete(ps, "col2_001", true, false, bsonDocument2, 234);
 
             ps = conn.prepareStatement("DELETE FROM " + tableName
-                            + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ?")
-                    .unwrap(PhoenixPreparedStatement.class);
+                    + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ?");
+            ps.setString(1, "pk000");
+            ps.setDouble(2, -123.98);
+            ps.setString(3, "pk003");
+            ps.setInt(4, 234);
+            validateReturnedRowAfterDelete(ps, "col2_001", true, true, bsonDocument2, 234);
+
+            validateReturnedRowAfterDelete(ps, "col2_001", true, false, bsonDocument2, 234);
+
+            validateMultiRowDelete(tableName, conn, bsonDocument2);
+        }
+    }
+
+    @Test
+    public void testReturnRowResult5() throws Exception {
+        Assume.assumeTrue("Set correct result to RegionActionResult on hbase versions " +
+                "2.4.18+, 2.5.9+, and 2.6.0+", isSetCorrectResultEnabledOnHBase());
+        // NOTE - Tuple result projection does not work well with local index because
+        // this assertion can be false: CellUtil.matchingRows(kvs[0], kvs[kvs.length-1])
+        // as the Tuple contains different rowkeys.
+        Assume.assumeTrue("ResultSet return does not work with local index",
+                !indexDDL.startsWith("create local index"));
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String sample1 = getJsonString("json/sample_01.json");
+        String sample2 = getJsonString("json/sample_02.json");
+        BsonDocument bsonDocument1 = RawBsonDocument.parse(sample1);
+        BsonDocument bsonDocument2 = RawBsonDocument.parse(sample2);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            String tableName = "XYZ.\"abc123" + generateUniqueName() + "\"";
+            String ddl = "CREATE TABLE " + tableName
+                    + "(PK1 VARCHAR, PK2 DOUBLE NOT NULL, PK3 VARCHAR, COUNTER1 DOUBLE,"
+                    + " COUNTER2 VARCHAR,"
+                    + " COL3 BSON, COL4 INTEGER, CONSTRAINT pk PRIMARY KEY(PK1, PK2, PK3))";
+            conn.createStatement().execute(ddl);
+            if (!indexDDL.isEmpty()) {
+                String indexDdl =
+                        String.format(indexDDL, "abc123" + generateUniqueName(), tableName);
+                conn.createStatement().execute(indexDdl);
+            }
+
+            validateAtomicUpsertOnlyReturnRow(tableName, conn, bsonDocument1, bsonDocument2);
+
+            PreparedStatement ps = conn.prepareStatement("DELETE FROM " + tableName
+                    + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ?");
+            ps.setString(1, "pk000");
+            ps.setDouble(2, -123.98);
+            ps.setString(3, "pk003");
+            ps.setInt(4, 235);
+            validateReturnedRowAfterDelete(ps, "col2_001", true, false, bsonDocument2, 234);
+
+            ps = conn.prepareStatement("DELETE FROM " + tableName
+                    + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ?");
             ps.setString(1, "pk000");
             ps.setDouble(2, -123.98);
             ps.setString(3, "pk003");
@@ -320,10 +361,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
 
             validateAtomicUpsertReturnRow(tableName, conn, bsonDocument1, bsonDocument2);
 
-            PhoenixPreparedStatement ps =
-                    conn.prepareStatement(
-                            "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 " +
-                                    "= ? AND PK3 = ?").unwrap(PhoenixPreparedStatement.class);
+            PreparedStatement ps = conn.prepareStatement("DELETE FROM " + tableName
+                    + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ?");
             ps.setString(1, "pk000");
             ps.setDouble(2, -123.98);
             ps.setString(3, "pk003");
@@ -361,15 +400,13 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             throws SQLException {
         addRows(tableName, conn);
 
-        PhoenixPreparedStatement ps = conn.prepareStatement(
-                        "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ?")
-                .unwrap(PhoenixPreparedStatement.class);
+        PreparedStatement ps = conn.prepareStatement(
+                "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ?");
         ps.setString(1, "pk001");
         ps.setDouble(2, 122.34);
         validateReturnedRowAfterDelete(ps, "col2_001", false, false, bsonDocument2, 234);
 
-        ps = conn.prepareStatement(
-                "DELETE FROM " + tableName).unwrap(PhoenixPreparedStatement.class);
+        ps = conn.prepareStatement("DELETE FROM " + tableName);
         validateReturnedRowAfterDelete(ps, "col2_001", false, false, bsonDocument2, 234);
 
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
@@ -377,10 +414,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
 
         addRows(tableName, conn);
 
-        ps = conn.prepareStatement(
-                        "DELETE FROM " + tableName + " WHERE PK1 IN (?) AND PK2 IN (?) AND " +
-                                "PK3 IN (?, ?)")
-                .unwrap(PhoenixPreparedStatement.class);
+        ps = conn.prepareStatement("DELETE FROM " + tableName
+                + " WHERE PK1 IN (?) AND PK2 IN (?) AND PK3 IN (?, ?)");
         ps.setString(1, "pk001");
         ps.setDouble(2, 122.34);
         ps.setString(3, "pk004");
@@ -398,8 +433,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
 
         upsertSql =
                 "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1) "
-                        + "VALUES('pk000', -123.98, 'pk003', 0) ON DUPLICATE"
-                        + " KEY IGNORE";
+                        + "VALUES('pk000', -123.98, 'pk003', 0) ON DUPLICATE KEY IGNORE";
         validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 1011.202, null, false,
                 null, bsonDocument1, 123);
 
@@ -431,6 +465,50 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                 , null, bsonDocument2, 234);
     }
 
+    private static void validateAtomicUpsertOnlyReturnRow(String tableName, Connection conn,
+                                                          BsonDocument bsonDocument1,
+                                                          BsonDocument bsonDocument2)
+            throws SQLException {
+        String upsertSql = "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1, COL3, COL4)"
+                + " VALUES('pk000', -123.98, 'pk003', 1011.202, ?, 123) ON DUPLICATE KEY " +
+                "IGNORE";
+        validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 1011.202, null, true,
+                bsonDocument1, bsonDocument1, 123);
+
+        upsertSql =
+                "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1) "
+                        + "VALUES('pk000', -123.98, 'pk003', 0) ON DUPLICATE KEY IGNORE";
+        validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 1011.202, null, false,
+                null, bsonDocument1, 123);
+
+        upsertSql =
+                "UPSERT INTO " + tableName
+                        + " (PK1, PK2, PK3, COUNTER1, COUNTER2) VALUES('pk000', -123.98, "
+                        + "'pk003', 234, 'col2_000')";
+        validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 234d, "col2_000", true,
+                null, bsonDocument1, 123);
+
+        upsertSql = "UPSERT INTO " + tableName
+                + " (PK1, PK2, PK3) VALUES('pk000', -123.98, 'pk003') ON DUPLICATE KEY UPDATE_ONLY "
+                + "COUNTER1 = CASE WHEN COUNTER1 < 2000 THEN COUNTER1 + 1999.99 ELSE COUNTER1"
+                + " END, "
+                + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 "
+                + "END, "
+                + "COL3 = ?, "
+                + "COL4 = 234";
+        validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 2233.99, "col2_001", true,
+                bsonDocument2, bsonDocument2, 234);
+
+        upsertSql = "UPSERT INTO " + tableName
+                + " (PK1, PK2, PK3) VALUES('pk000', -123.98, 'pk003') ON DUPLICATE KEY UPDATE_ONLY "
+                + "COUNTER1 = CASE WHEN COUNTER1 < 2000 THEN COUNTER1 + 1999.99 ELSE COUNTER1"
+                + " END,"
+                + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 "
+                + "END";
+        validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 2233.99, "col2_001", false
+                , null, bsonDocument2, 234);
+    }
+
     private static void addRows(String tableName, Connection conn) throws SQLException {
         String upsertSql;
         upsertSql =
@@ -450,14 +528,15 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
         conn.createStatement().execute(upsertSql);
     }
 
-    private static void validateReturnedRowAfterDelete(PhoenixPreparedStatement ps,
+    private static void validateReturnedRowAfterDelete(PreparedStatement ps,
                                                        String col2,
                                                        boolean isSinglePointLookup,
                                                        boolean atomicDeleteSuccessful,
                                                        BsonDocument expectedDoc,
                                                        Integer col4)
             throws SQLException {
-        final Pair<Integer, ResultSet> resultPair = ps.executeAtomicUpdateReturnRow();
+        final Pair<Integer, ResultSet> resultPair =
+                ps.unwrap(PhoenixPreparedStatement.class).executeAtomicUpdateReturnRow();
         ResultSet resultSet = resultPair.getSecond();
         if (!isSinglePointLookup) {
             assertNull(resultSet);
@@ -499,24 +578,265 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                                                        BsonDocument expectedDoc,
                                                        Integer col4)
             throws SQLException {
-        final Pair<Integer, ResultSet> resultPair;
+        int updateCount;
+        ResultSet resultSet;
         if (inputDoc != null) {
-            PhoenixPreparedStatement ps =
-                    conn.prepareStatement(upsertSql).unwrap(PhoenixPreparedStatement.class);
+            PreparedStatement ps = conn.prepareStatement(upsertSql);
             ps.setObject(1, inputDoc);
-            resultPair = ps.executeAtomicUpdateReturnRow();
+            updateCount = ps.executeUpdate();
+            resultSet =  ps.getResultSet();
         } else {
-            resultPair = conn.createStatement().unwrap(PhoenixStatement.class)
-                    .executeAtomicUpdateReturnRow(upsertSql);
+            Statement stmt = conn.createStatement();
+            resultSet = stmt.execute(upsertSql) ? stmt.getResultSet() : null;
+            updateCount = stmt.getUpdateCount();
         }
-        assertEquals(success ? 1 : 0, resultPair.getFirst().intValue());
-        ResultSet resultSet = resultPair.getSecond();
+        boolean isOnDuplicateKey = upsertSql.toUpperCase().contains("ON DUPLICATE KEY");
+        if (conn.getAutoCommit() && isOnDuplicateKey) {
+            assertEquals(success ? 1 : 0, updateCount);
+            assertEquals("pk000", resultSet.getString(1));
+            assertEquals(-123.98, resultSet.getDouble(2), 0.0);
+            assertEquals("pk003", resultSet.getString(3));
+            assertEquals(col1, resultSet.getDouble(4), 0.0);
+            validateReturnedRowResult(col2, expectedDoc, col4, resultSet);
+            assertFalse(resultSet.next());
+        }
+        else {
+            assertNull(resultSet);
+            assertEquals(1, updateCount);
+        }
+    }
 
-        assertEquals("pk000", resultSet.getString(1));
-        assertEquals(-123.98, resultSet.getDouble(2), 0.0);
-        assertEquals("pk003", resultSet.getString(3));
-        assertEquals(col1, resultSet.getDouble(4), 0.0);
-        validateReturnedRowResult(col2, expectedDoc, col4, resultSet);
+    /**
+     * Validates that the returned row contains the original state before the upsert operation.
+     * This method uses executeAtomicUpdateReturnOldRow() to test the OLD_ROW functionality.
+     */
+    private static void validateReturnedRowBeforeUpsert(Connection conn,
+                                                       String upsertSql,
+                                                       String tableName,
+                                                       Double col1,
+                                                       String col2,
+                                                       boolean success,
+                                                       BsonDocument inputDoc,
+                                                       BsonDocument expectedDoc,
+                                                       Integer col4)
+            throws SQLException {
+        int updateCount;
+        ResultSet resultSet;
+        if (inputDoc != null) {
+            PreparedStatement ps = conn.prepareStatement(upsertSql);
+            ps.setObject(1, inputDoc);
+            Pair<Integer, ResultSet> resultPair =
+                    ps.unwrap(PhoenixPreparedStatement.class).executeAtomicUpdateReturnOldRow();
+            updateCount = resultPair.getFirst();
+            resultSet = resultPair.getSecond();
+        } else {
+            Statement stmt = conn.createStatement();
+            Pair<Integer, ResultSet> resultPair =
+                    stmt.unwrap(PhoenixStatement.class).executeAtomicUpdateReturnOldRow(upsertSql);
+            updateCount = resultPair.getFirst();
+            resultSet = resultPair.getSecond();
+        }
+        boolean isOnDuplicateKey = upsertSql.toUpperCase().contains("ON DUPLICATE KEY");
+        if (conn.getAutoCommit() && isOnDuplicateKey) {
+            assertEquals(success ? 1 : 0, updateCount);
+            if (resultSet != null) {
+                assertEquals("pk000", resultSet.getString(1));
+                assertEquals(-123.98, resultSet.getDouble(2), 0.0);
+                assertEquals("pk003", resultSet.getString(3));
+                assertEquals(col1, resultSet.getDouble(4), 0.0);
+                validateReturnedRowResult(col2, expectedDoc, col4, resultSet);
+                assertFalse(resultSet.next());
+            }
+        }
+    }
+
+    @Test
+    public void testReturnOldRowResult1() throws Exception {
+        Assume.assumeTrue("Set correct result to RegionActionResult on hbase versions " +
+                "2.4.18+, 2.5.9+, and 2.6.0+", isSetCorrectResultEnabledOnHBase());
+        // NOTE - Tuple result projection does not work well with local index because
+        // this assertion can be false: CellUtil.matchingRows(kvs[0], kvs[kvs.length-1])
+        // as the Tuple contains different rowkeys.
+        Assume.assumeTrue("ResultSet return does not work with local index",
+            !indexDDL.startsWith("create local index"));
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String sample1 = getJsonString("json/sample_01.json");
+        String sample2 = getJsonString("json/sample_02.json");
+        BsonDocument bsonDocument1 = RawBsonDocument.parse(sample1);
+        BsonDocument bsonDocument2 = RawBsonDocument.parse(sample2);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            String tableName = generateUniqueName();
+            String ddl = "CREATE TABLE " + tableName
+                    + "(PK1 VARCHAR, PK2 DOUBLE NOT NULL, PK3 VARCHAR, COUNTER1 DOUBLE,"
+                    + " COUNTER2 VARCHAR,"
+                    + " COL3 BSON, COL4 INTEGER, CONSTRAINT pk PRIMARY KEY(PK1, PK2, PK3))";
+            conn.createStatement().execute(ddl);
+            createIndex(conn, tableName);
+
+            validateAtomicUpsertReturnOldRow(tableName, conn, bsonDocument1, bsonDocument2);
+
+            verifyIndexRow(conn, tableName, false);
+        }
+    }
+
+    @Test
+    public void testReturnOldRowUsingUpdateOnly() throws Exception {
+        Assume.assumeTrue("Set correct result to RegionActionResult on hbase versions " +
+                "2.4.18+, 2.5.9+, and 2.6.0+", isSetCorrectResultEnabledOnHBase());
+        // NOTE - Tuple result projection does not work well with local index because
+        // this assertion can be false: CellUtil.matchingRows(kvs[0], kvs[kvs.length-1])
+        // as the Tuple contains different rowkeys.
+        Assume.assumeTrue("ResultSet return does not work with local index",
+                !indexDDL.startsWith("create local index"));
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String sample1 = getJsonString("json/sample_01.json");
+        String sample2 = getJsonString("json/sample_02.json");
+        BsonDocument bsonDocument1 = RawBsonDocument.parse(sample1);
+        BsonDocument bsonDocument2 = RawBsonDocument.parse(sample2);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            String tableName = generateUniqueName();
+            String ddl = "CREATE TABLE " + tableName
+                    + "(PK1 VARCHAR, PK2 DOUBLE NOT NULL, PK3 VARCHAR, COUNTER1 DOUBLE,"
+                    + " COUNTER2 VARCHAR,"
+                    + " COL3 BSON, COL4 INTEGER, CONSTRAINT pk PRIMARY KEY(PK1, PK2, PK3))";
+            conn.createStatement().execute(ddl);
+            createIndex(conn, tableName);
+
+            validateAtomicUpsertOnlyReturnOldRow(tableName, conn, bsonDocument1, bsonDocument2);
+
+            verifyIndexRow(conn, tableName, false);
+        }
+    }
+
+    private static void validateAtomicUpsertReturnOldRow(String tableName, Connection conn,
+                                                         BsonDocument bsonDocument1,
+                                                         BsonDocument bsonDocument2)
+            throws SQLException {
+        String upsertSql = "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1, COL3, COL4)"
+                + " VALUES('pk000', -123.98, 'pk003', 1011.202, ?, 123) ON DUPLICATE KEY " +
+                "IGNORE";
+        validateReturnedRowBeforeUpsert(conn, upsertSql, tableName, 0.0, null, true,
+                bsonDocument1, null, null);
+
+        upsertSql =
+                "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1) "
+                        + "VALUES('pk000', -123.98, 'pk003', 0) ON DUPLICATE KEY IGNORE";
+        validateReturnedRowBeforeUpsert(conn, upsertSql, tableName, 1011.202, null, false,
+                null, bsonDocument1, 123);
+
+        upsertSql =
+                "UPSERT INTO " + tableName
+                        + " (PK1, PK2, PK3, COUNTER1, COUNTER2) VALUES('pk000', -123.98, "
+                        + "'pk003', 234, 'col2_000')";
+        validateReturnedRowBeforeUpsert(conn, upsertSql, tableName, 1011.202, null, true,
+                null, bsonDocument1, 123);
+
+        upsertSql = "UPSERT INTO " + tableName
+                + " (PK1, PK2, PK3) VALUES('pk000', -123.98, 'pk003') ON DUPLICATE KEY UPDATE "
+                + "COUNTER1 = CASE WHEN COUNTER1 < 2000 THEN COUNTER1 + 1999.99 ELSE COUNTER1"
+                + " END, "
+                + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 "
+                + "END, "
+                + "COL3 = ?, "
+                + "COL4 = 234";
+        validateReturnedRowBeforeUpsert(conn, upsertSql, tableName, 234d, "col2_000", true,
+                bsonDocument2, bsonDocument1, 123);
+
+        upsertSql = "UPSERT INTO " + tableName
+                + " (PK1, PK2, PK3) VALUES('pk000', -123.98, 'pk003') ON DUPLICATE KEY UPDATE "
+                + "COUNTER1 = CASE WHEN COUNTER1 < 2000 THEN COUNTER1 + 1999.99 ELSE COUNTER1"
+                + " END,"
+                + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 "
+                + "END";
+        validateReturnedRowBeforeUpsert(conn, upsertSql, tableName, 2233.99, "col2_001", false
+                , null, bsonDocument2, 234);
+    }
+
+    private static void validateAtomicUpsertOnlyReturnOldRow(String tableName, Connection conn,
+                                                             BsonDocument bsonDocument1,
+                                                             BsonDocument bsonDocument2)
+            throws SQLException {
+        String upsertSql = "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1, COL3, COL4)"
+                + " VALUES('pk000', -123.98, 'pk003', 1011.202, ?, 123) ON DUPLICATE KEY " +
+                "IGNORE";
+        validateReturnedRowBeforeUpsert(conn, upsertSql, tableName, 0.0, null, true,
+                bsonDocument1, null, null);
+
+        upsertSql =
+                "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1) "
+                        + "VALUES('pk000', -123.98, 'pk003', 0) ON DUPLICATE KEY IGNORE";
+        validateReturnedRowBeforeUpsert(conn, upsertSql, tableName, 1011.202, null, false,
+                null, bsonDocument1, 123);
+
+        upsertSql =
+                "UPSERT INTO " + tableName
+                        + " (PK1, PK2, PK3, COUNTER1, COUNTER2) VALUES('pk000', -123.98, "
+                        + "'pk003', 234, 'col2_000')";
+        validateReturnedRowBeforeUpsert(conn, upsertSql, tableName, 1011.202, null, true,
+                null, bsonDocument1, 123);
+
+        upsertSql = "UPSERT INTO " + tableName
+                + " (PK1, PK2, PK3) VALUES('pk000', -123.98, 'pk003') ON DUPLICATE KEY UPDATE_ONLY "
+                + "COUNTER1 = CASE WHEN COUNTER1 < 2000 THEN COUNTER1 + 1999.99 ELSE COUNTER1"
+                + " END, "
+                + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 "
+                + "END, "
+                + "COL3 = ?, "
+                + "COL4 = 234";
+        validateReturnedRowBeforeUpsert(conn, upsertSql, tableName, 234d, "col2_000", true,
+                bsonDocument2, bsonDocument1, 123);
+
+        upsertSql = "UPSERT INTO " + tableName
+                + " (PK1, PK2, PK3) VALUES('pk000', -123.98, 'pk003') ON DUPLICATE KEY UPDATE_ONLY "
+                + "COUNTER1 = CASE WHEN COUNTER1 < 2000 THEN COUNTER1 + 1999.99 ELSE COUNTER1"
+                + " END,"
+                + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 "
+                + "END";
+        validateReturnedRowBeforeUpsert(conn, upsertSql, tableName, 2233.99, "col2_001", false
+                , null, bsonDocument2, 234);
+    }
+
+    @Test
+    public void testReturnOldRowResult2() throws Exception {
+        Assume.assumeTrue("Set correct result to RegionActionResult on hbase versions " +
+                "2.4.18+, 2.5.9+, and 2.6.0+", isSetCorrectResultEnabledOnHBase());
+        // NOTE - Tuple result projection does not work well with local index because
+        // this assertion can be false: CellUtil.matchingRows(kvs[0], kvs[kvs.length-1])
+        // as the Tuple contains different rowkeys.
+        Assume.assumeTrue("ResultSet return does not work with local index",
+            !indexDDL.startsWith("create local index"));
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String sample1 = getJsonString("json/sample_01.json");
+        String sample2 = getJsonString("json/sample_02.json");
+        BsonDocument bsonDocument1 = RawBsonDocument.parse(sample1);
+        BsonDocument bsonDocument2 = RawBsonDocument.parse(sample2);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            String tableName = generateUniqueName();
+            String ddl = "CREATE TABLE " + tableName
+                    + "(PK1 VARCHAR, PK2 DOUBLE NOT NULL, PK3 VARCHAR, COUNTER1 DOUBLE,"
+                    + " COUNTER2 VARCHAR,"
+                    + " COL3 BSON, COL4 INTEGER, CONSTRAINT pk PRIMARY KEY(PK1, PK2, PK3))";
+            conn.createStatement().execute(ddl);
+            createIndex(conn, tableName);
+
+            String upsertSql = "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1, COL3, COL4)"
+                    + " VALUES('pk000', -123.98, 'pk003', 999.999, ?, 999) ON DUPLICATE KEY " +
+                    "IGNORE";
+            validateReturnedRowBeforeUpsert(conn, upsertSql, tableName, 0.0, null, true,
+                    bsonDocument1, null, null);
+
+            upsertSql = "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1, COL3, COL4)"
+                    + " VALUES('pk000', -123.98, 'pk003', 888.888, ?, 888) ON DUPLICATE KEY " +
+                    "IGNORE";
+            validateReturnedRowBeforeUpsert(conn, upsertSql, tableName, 999.999, null, false,
+                    bsonDocument2, bsonDocument1, 999);
+        }
     }
 
     @Test
@@ -536,9 +856,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
 
             addRows2(tableName, conn);
 
-            PhoenixPreparedStatement ps = conn.prepareStatement(
-                            "DELETE FROM " + tableName + " WHERE PK IN (?, ?, ?)")
-                    .unwrap(PhoenixPreparedStatement.class);
+            PreparedStatement ps = conn.prepareStatement(
+                    "DELETE FROM " + tableName + " WHERE PK IN (?, ?, ?)");
             ps.setString(1, "pk001");
             ps.setString(2, "pk002");
             ps.setString(3, "pk003");
@@ -590,10 +909,6 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                     "IGNORE";
             validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 1011.202, null, true,
                     bsonDocument1, bsonDocument1, 123);
-            throw new RuntimeException("Should not reach here");
-        } catch (SQLException e) {
-            Assert.assertEquals(SQLExceptionCode.AUTO_COMMIT_NOT_ENABLED.getErrorCode(),
-                    e.getErrorCode());
         }
     }
 

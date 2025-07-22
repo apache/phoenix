@@ -129,6 +129,7 @@ import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.RegionMetrics;
 import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.StartMiniClusterOption;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionInfo;
@@ -623,8 +624,14 @@ public abstract class BaseTest {
         utility = new HBaseTestingUtility(conf);
         try {
             long startTime = System.currentTimeMillis();
-            utility.startMiniCluster(overrideProps.getInt(
-                    QueryServices.TESTS_MINI_CLUSTER_NUM_REGION_SERVERS, NUM_SLAVES_BASE));
+            StartMiniClusterOption.Builder builder = StartMiniClusterOption.builder();
+            builder.numMasters(overrideProps.getInt(QueryServices.TESTS_MINI_CLUSTER_NUM_MASTERS,
+                    1));
+            int numSlaves = overrideProps.getInt(
+                    QueryServices.TESTS_MINI_CLUSTER_NUM_REGION_SERVERS, NUM_SLAVES_BASE);
+            builder.numRegionServers(numSlaves);
+            builder.numDataNodes(numSlaves);
+            utility.startMiniCluster(builder.build());
             long startupTime = System.currentTimeMillis()-startTime;
             LOGGER.info("HBase minicluster startup complete in {} ms", startupTime);
             return getLocalClusterUrl(utility);

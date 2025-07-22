@@ -15,29 +15,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.monitoring;
 
-import java.util.Map;
+package org.apache.phoenix.schema;
 
-import org.apache.hbase.thirdparty.com.google.common.collect.ImmutableMap;
+/**
+ * Exception thrown when a parent partition cannot be found in the CDC stream metadata.
+ * This typically occurs during region split or merge operations when trying to update
+ * the parent-daughter relationship in the CDC stream metadata.
+ */
+public class ParentPartitionNotFound extends RuntimeException {
 
-public interface HistogramDistribution {
-    public long getMin();
-
-    public long getMax();
-
-    public long getCount();
-
-    public String getHistoName();
-
-    public Map<String, Long> getRangeDistributionMap();
-
-    default ImmutableMap<String, Long> getPercentileDistributionMap() {
-        throw new UnsupportedOperationException("Percentile Histogram Distribution is not "
-                + "supported!!");
+    /**
+     * Creates a new ParentPartitionNotFound exception with the specified error message.
+     *
+     * @param message the error message.
+     */
+    public ParentPartitionNotFound(String message) {
+        super(message);
     }
 
-    default ImmutableMap<String, String> getTags() {
-        return ImmutableMap.of();
-    }
 }

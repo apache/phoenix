@@ -2067,7 +2067,9 @@ public class MetaDataClient {
         // create Stream with ENABLING status
         long cdcIndexTimestamp = CDCUtil.getCDCCreationTimestamp(connection.getTable(tableName));
         String streamStatusSQL = "UPSERT INTO " + SYSTEM_CDC_STREAM_STATUS_NAME + " VALUES (?, ?, ?)";
-        String streamName = String.format(CDC_STREAM_NAME_FORMAT, tableName, cdcObjName, cdcIndexTimestamp);
+        String streamName = String.format(CDC_STREAM_NAME_FORMAT,
+                tableName, cdcObjName, cdcIndexTimestamp,
+                CDCUtil.getCDCCreationUTCDateTime(cdcIndexTimestamp));
         try (PreparedStatement ps = connection.prepareStatement(streamStatusSQL)) {
             ps.setString(1, tableName);
             ps.setString(2, streamName);
@@ -4020,7 +4022,9 @@ public class MetaDataClient {
         // Mark CDC Stream as Disabled
         long cdcIndexTimestamp = connection.getTable(indexName).getTimeStamp();
         String streamStatusSQL = "UPSERT INTO " + SYSTEM_CDC_STREAM_STATUS_NAME + " VALUES (?, ?, ?)";
-        String streamName = String.format(CDC_STREAM_NAME_FORMAT, parentTableName, cdcTableName, cdcIndexTimestamp);
+        String streamName = String.format(CDC_STREAM_NAME_FORMAT,
+                parentTableName, cdcTableName, cdcIndexTimestamp,
+                CDCUtil.getCDCCreationUTCDateTime(cdcIndexTimestamp));
         try (PreparedStatement ps = connection.prepareStatement(streamStatusSQL)) {
             ps.setString(1, parentTableName);
             ps.setString(2, streamName);

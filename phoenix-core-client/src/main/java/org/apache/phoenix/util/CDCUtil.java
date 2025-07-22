@@ -20,12 +20,17 @@ package org.apache.phoenix.util;
 
 import java.sql.SQLException;
 import java.sql.Types;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Base64;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.NavigableSet;
 import java.util.Set;
 import java.util.StringTokenizer;
+import java.util.TimeZone;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -35,14 +40,13 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarchar;
 import org.bson.RawBsonDocument;
 
 public class CDCUtil {
     public static final String CDC_INDEX_PREFIX = "PHOENIX_CDC_INDEX_";
 
-    // phoenix/cdc/stream/{tableName}/{cdc object name}/{cdc index timestamp}
-    public static String CDC_STREAM_NAME_FORMAT = "phoenix/cdc/stream/%s/%s/%d";
+    // phoenix/cdc/stream/{tableName}/{cdc object name}/{cdc index timestamp}/{cdc index creation datetime}
+    public static String CDC_STREAM_NAME_FORMAT = "phoenix/cdc/stream/%s/%s/%d/%s";
 
     /**
      * Make a set of CDC change scope enums from the given string containing comma separated scope
@@ -93,6 +97,15 @@ public class CDCUtil {
 
     public static boolean isCDCIndex(String indexName) {
         return indexName.startsWith(CDC_INDEX_PREFIX);
+    }
+
+    public static boolean isCDCIndex(byte[] indexNameBytes) {
+        String indexName = Bytes.toString(indexNameBytes);
+        return isCDCIndex(indexName);
+    }
+
+    public static byte[] getCdcObjectName(byte[] cdcIndexName) {
+        return Arrays.copyOfRange(cdcIndexName, CDC_INDEX_PREFIX.length(), cdcIndexName.length);
     }
 
     public static boolean isCDCIndex(PTable indexTable) {
@@ -179,5 +192,12 @@ public class CDCUtil {
             }
         }
         return -1;
+    }
+
+    public static String getCDCCreationUTCDateTime(long timestamp) {
+        Date date = new Date(timestamp);
+        DateFormat format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS");
+        format.setTimeZone(TimeZone.getTimeZone("Etc/UTC"));
+        return format.format(date);
     }
 }
