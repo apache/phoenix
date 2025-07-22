@@ -34,6 +34,8 @@ tokens
     FIELD_NOT = 'field_not_exists';
     BEGINS_WITH = 'begins_with';
     CONTAINS = 'contains';
+    FIELD_TYPE = 'field_type';
+    ATTR_TYPE = 'attribute_type';
 }
 
 @parser::header {
@@ -238,6 +240,8 @@ boolean_expression returns [ParseNode ret]
                 {$ret = factory.documentFieldBeginsWith(l, r); } )
         |   CONTAINS ( LPAREN l=value_expression COMMA r=value_expression RPAREN
                 {$ret = factory.documentFieldContains(l, r); } )
+        |   (FIELD_TYPE | ATTR_TYPE) ( LPAREN l=value_expression COMMA r=value_expression RPAREN
+                {$ret = factory.documentFieldType(l, r); } )
     ;
 
 value_expression returns [ParseNode ret]
