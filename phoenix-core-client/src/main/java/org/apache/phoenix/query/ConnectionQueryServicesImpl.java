@@ -4140,9 +4140,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
               if (lastDDLTimestampValidationEnabled) {
                 refreshLiveRegionServers();
               }
-              String skipSystemExistenceCheck =
-                props.getProperty(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK);
-              if (skipSystemExistenceCheck != null && Boolean.valueOf(skipSystemExistenceCheck)) {
+              boolean skipSystemExistenceCheck =
+                getProps().getBoolean(QueryServices.SKIP_SYSTEM_TABLES_EXISTENCE_CHECK,
+                  QueryServicesOptions.DEFAULT_SKIP_SYSTEM_TABLES_EXISTENCE_CHECK);
+              if (skipSystemExistenceCheck) {
                 initialized = true;
                 success = true;
                 return null;
