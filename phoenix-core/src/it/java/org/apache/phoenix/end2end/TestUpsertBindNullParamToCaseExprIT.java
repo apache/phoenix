@@ -41,11 +41,16 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 @Category(ParallelStatsDisabledTest.class)
-public class UpsertBindNullParamToCaseExprIT extends BaseTest {
+//Passing with HA Connection
+public class TestUpsertBindNullParamToCaseExprIT extends BaseTest {
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
-        setUpTestDriver(new ReadOnlyProps(new HashMap<>()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(new HashMap<>()), new ReadOnlyProps(new HashMap<>()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(new HashMap<>()));
+        }
     }
 
     @AfterClass

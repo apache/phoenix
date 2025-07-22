@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -27,10 +28,11 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Properties;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertEquals;
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class IndexWithDefaultValueIT extends ParallelStatsDisabledIT {
 
@@ -39,7 +41,7 @@ public class IndexWithDefaultValueIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String indexName = generateUniqueName();
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String schema = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
@@ -80,7 +82,7 @@ public class IndexWithDefaultValueIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String indexName = generateUniqueName();
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String schema = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
@@ -128,7 +130,7 @@ public class IndexWithDefaultValueIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String indexName = generateUniqueName();
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String schema = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
@@ -180,7 +182,7 @@ public class IndexWithDefaultValueIT extends ParallelStatsDisabledIT {
                 + "c1 INTEGER,"
                 + "c2 INTEGER DEFAULT 100)";
 
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
         conn.commit();
 
@@ -211,7 +213,7 @@ public class IndexWithDefaultValueIT extends ParallelStatsDisabledIT {
                 + "c1 INTEGER,"
                 + "c2 INTEGER DEFAULT 100)";
 
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
         conn.commit();
 
@@ -242,7 +244,7 @@ public class IndexWithDefaultValueIT extends ParallelStatsDisabledIT {
                 "pk2 INTEGER DEFAULT 10, " +
                 "CONSTRAINT NAME_PK PRIMARY KEY (pk1))";
 
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
 
         String dml = "UPSERT INTO " + sharedTable1 + " VALUES (1, 1)";

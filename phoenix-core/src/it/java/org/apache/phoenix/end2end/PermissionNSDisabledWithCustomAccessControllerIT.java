@@ -19,7 +19,7 @@ package org.apache.phoenix.end2end;
 
 import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
-
+//Passing with HA Connection - no changes needed
 @Category(NeedsOwnMiniClusterTest.class)
 public class PermissionNSDisabledWithCustomAccessControllerIT extends PermissionNSDisabledIT{
     public PermissionNSDisabledWithCustomAccessControllerIT() throws Exception {

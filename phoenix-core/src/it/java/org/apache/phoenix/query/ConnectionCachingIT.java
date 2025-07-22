@@ -30,6 +30,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import org.apache.phoenix.end2end.ParallelStatsEnabledIT;
 import org.apache.phoenix.end2end.ParallelStatsEnabledTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
@@ -43,7 +44,7 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+//Passing with HA Connection
 @Category(ParallelStatsEnabledTest.class)
 @RunWith(Parameterized.class)
 public class ConnectionCachingIT extends ParallelStatsEnabledIT {
@@ -90,7 +91,7 @@ public class ConnectionCachingIT extends ParallelStatsEnabledIT {
   }
 
   long getNumCachedConnections(Connection conn) throws Exception {
-    PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+    PhoenixMonitoredConnection pConn = conn.unwrap(PhoenixMonitoredConnection.class);
     ConnectionQueryServices cqs = pConn.getQueryServices();
     // For whatever reason, we sometimes get a delegate here, and sometimes the real thing.
     if (cqs instanceof DelegateConnectionQueryServices) {

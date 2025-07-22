@@ -47,7 +47,7 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
+//Passing with HA Connection - No changes needed
 @Category(ParallelStatsDisabledTest.class)
 public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
 

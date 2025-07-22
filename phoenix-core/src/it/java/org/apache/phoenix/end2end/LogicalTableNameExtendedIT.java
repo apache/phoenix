@@ -25,6 +25,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.index.SingleCellIndexIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.types.PInteger;
@@ -44,7 +45,7 @@ import java.util.Properties;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
-
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class LogicalTableNameExtendedIT extends LogicalTableNameBaseIT {
     private Properties propsNamespace = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -95,7 +96,7 @@ public class LogicalTableNameExtendedIT extends LogicalTableNameBaseIT {
                 QueryConstants.UNVERIFIED_BYTES, true);
         // Now change physical data table
         createAndPointToNewPhysicalTable(conn, fullTableHName, true);
-        try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices()
+        try (Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices()
                 .getAdmin()) {
             assertEquals(false, admin.tableExists(TableName.valueOf(fullTableHName)));
             assertEquals(false, admin.tableExists(TableName.valueOf(fullIndexHName)));
@@ -115,7 +116,7 @@ public class LogicalTableNameExtendedIT extends LogicalTableNameBaseIT {
         try (Connection conn = getConnection(propsNamespace)) {
             try (Connection conn2 = getConnection(propsNamespace)) {
                 test_bothTableAndIndexHaveDifferentNames(conn, conn2, schemaName, tableName, indexName);
-                try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices()
+                try (Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices()
                         .getAdmin()) {
                     conn2.setAutoCommit(true);
                     // Add row and check

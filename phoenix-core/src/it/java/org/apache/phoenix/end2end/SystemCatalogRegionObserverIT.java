@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.coprocessor.SystemCatalogRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -41,7 +42,7 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class SystemCatalogRegionObserverIT extends BaseTest {
 
@@ -54,7 +55,11 @@ public class SystemCatalogRegionObserverIT extends BaseTest {
         serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
         clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()),new ReadOnlyProps(clientProps.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
+        }
     }
 
     protected Connection getConnection() throws SQLException{
@@ -66,7 +71,7 @@ public class SystemCatalogRegionObserverIT extends BaseTest {
     @Test
     public void testSystemCatalogRegionObserverWasAdded() throws Exception {
         try (Connection conn = getConnection()){
-            PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
+            PhoenixMonitoredConnection phoenixConn = conn.unwrap(PhoenixMonitoredConnection.class);
             Table syscatTable = phoenixConn.getQueryServices().getTable(
                 SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, true).getName());
             assertTrue("SystemCatalogRegionObserver was not added to SYSTEM.CATALOG",

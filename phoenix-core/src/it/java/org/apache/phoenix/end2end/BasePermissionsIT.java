@@ -353,7 +353,7 @@ public abstract class BasePermissionsIT extends BaseTest {
         return DriverManager.getConnection(getUrl(), getClientProperties(tenantId));
     }
 
-    protected static String getUrl() {
+    public static String getUrl() {
         return "jdbc:phoenix:localhost:" + testUtil.getZkCluster().getClientPort() + ":/hbase";
     }
 

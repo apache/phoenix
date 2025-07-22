@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -26,16 +27,17 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.util.ArrayList;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class NthValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void simpleTest() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String nthValue = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nthValue + " "
@@ -64,7 +66,7 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void multipleNthValueFunctionTest() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String nthValue = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nthValue + " "
@@ -129,7 +131,7 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void offsetValueAscOrder() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String nth_test_table = generateUniqueName();
 
@@ -163,8 +165,7 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void offsetValueDescOrder() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String nth_test_table = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nth_test_table + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
@@ -196,7 +197,7 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void offsetValueSubAggregation() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String nth_test_table = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nth_test_table + " "
@@ -230,7 +231,7 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void offsetValueLastMismatchByColumn() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String nth_test_table = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nth_test_table + " "
@@ -263,8 +264,7 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSortOrderInDataColWithOffset() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String nth_test_table = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nth_test_table + " "
                 + "(id INTEGER NOT NULL, page_id UNSIGNED_LONG,"
@@ -294,7 +294,7 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void nonUniqueValuesInOrderByAsc() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String nthValue = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nthValue + " "
@@ -325,7 +325,7 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void nonUniqueValuesInOrderByAscSkipDuplicit() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String nthValue = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nthValue + " "
@@ -356,7 +356,7 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void nonUniqueValuesInOrderByDesc() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String nthValue = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nthValue + " "
@@ -387,7 +387,7 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void nonUniqueValuesInOrderNextValueDesc() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String nthValue = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nthValue + " "
@@ -420,7 +420,7 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void nonUniqueValuesInOrderNextValueAsc() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String nthValue = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nthValue + " "
@@ -453,7 +453,7 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void ignoreNullValues() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String nth_test_table = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nth_test_table + " "
@@ -492,7 +492,7 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testUnionAll() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String nthValue = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nthValue + " "

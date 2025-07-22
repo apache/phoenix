@@ -42,7 +42,7 @@ import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.UpgradePr
 /**
  * This class is meant for specifically testing syscat with all compatible client versions.
  */
-
+//Failing with HA Connection
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
 public class BackwardCompatibilityForSplittableSyscatIT extends SplitSystemCatalogIT {
@@ -63,9 +63,9 @@ public class BackwardCompatibilityForSplittableSyscatIT extends SplitSystemCatal
     public synchronized void setup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(1);
         doSetup(serverProps);
-        zkQuorum = "localhost:" + getZKClientPort(config);
+        zkQuorum = "localhost:" + getZKClientPort(getConfiguration());
         url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
-        checkForPreConditions(compatibleClientVersion, config);
+        checkForPreConditions(compatibleClientVersion, getConfiguration());
     }
 
     @Test

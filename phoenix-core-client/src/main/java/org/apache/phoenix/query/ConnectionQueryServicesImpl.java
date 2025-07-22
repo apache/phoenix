@@ -3795,7 +3795,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     }
 
-    private void moveTTLFromHBaseLevelTTLToPhoenixLevelTTL(PhoenixConnection oldMetaConnection) throws IOException {
+    private void moveTTLFromHBaseLevelTTLToPhoenixLevelTTL(PhoenixConnection oldMetaConnection) throws IOException, SQLException {
         // Increase the timeouts so that the scan queries during Copy Data does not timeout
         // on large SYSCAT Tables
         Map<String, String> options = new HashMap<>();

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -25,16 +26,16 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class FirstValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void signedLongAsBigInt() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
@@ -64,8 +65,7 @@ public class FirstValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSortOrderInSortCol() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " "
                 + "(id INTEGER NOT NULL, page_id UNSIGNED_LONG,"
@@ -95,8 +95,7 @@ public class FirstValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSortOrderInDataCol() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " "
                 + "(id INTEGER NOT NULL, page_id UNSIGNED_LONG,"
@@ -126,8 +125,7 @@ public class FirstValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void doubleDataType() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG, "
@@ -157,8 +155,7 @@ public class FirstValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void varcharFixedLenghtDatatype() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String table_name = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + table_name + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG, "
@@ -188,8 +185,7 @@ public class FirstValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void floatDataType() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
@@ -220,7 +216,7 @@ public class FirstValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void allColumnsNull() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " "

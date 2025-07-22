@@ -29,11 +29,13 @@ import java.util.Map;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import org.junit.BeforeClass;
 import org.junit.runners.Parameterized;
 
-
+//Passing with HA Connection
 public class BaseMutationBatchFailedStateMetricIT extends ParallelStatsDisabledIT {
     String create_table =
             "CREATE TABLE IF NOT EXISTS %s(ID VARCHAR NOT NULL PRIMARY KEY, VAL1 INTEGER, VAL2 INTEGER)";
@@ -66,8 +68,13 @@ public class BaseMutationBatchFailedStateMetricIT extends ParallelStatsDisabledI
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
         clientProps.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
         clientProps.put(QueryServices.TRANSACTIONS_ENABLED, "true");
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
-                new ReadOnlyProps(clientProps.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()),
+                    new ReadOnlyProps(clientProps.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
+                    new ReadOnlyProps(clientProps.entrySet().iterator()));
+        }
 
     }
 
@@ -78,7 +85,7 @@ public class BaseMutationBatchFailedStateMetricIT extends ParallelStatsDisabledI
 
     private void populateTables() {
         final int NROWS = 5;
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             try (PreparedStatement dataPreparedStatement =
                          conn.prepareStatement(String.format(upsertStatement, deleteTableName))) {
                 for (int i = 1; i <= NROWS; i++) {
@@ -94,7 +101,7 @@ public class BaseMutationBatchFailedStateMetricIT extends ParallelStatsDisabledI
         }
     }
     private void createTables() {
-        try (Connection con = DriverManager.getConnection(getUrl())) {
+        try (Connection con = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             Statement stmt = con.createStatement();
             stmt.execute(String.format(create_table, deleteTableName));
             stmt.execute(String.format(create_index, deleteTableName));

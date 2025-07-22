@@ -44,7 +44,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-
+//Passing with HA Connection - No changes needed
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class IntArithmeticIT extends BaseQueryIT {

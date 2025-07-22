@@ -28,6 +28,7 @@ import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.TENANT_VIE
 import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.TENANT_VIEW_PK_TYPES;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_DEFINED;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -69,6 +70,7 @@ import org.apache.hadoop.hbase.filter.SubstringComparator;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.PhoenixTestBuilder;
 import org.apache.phoenix.query.PhoenixTestBuilder.BasicDataReader;
 import org.apache.phoenix.query.PhoenixTestBuilder.BasicDataWriter;
@@ -109,6 +111,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -118,7 +121,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+//Failing with HA Connection
 @RunWith(Parameterized.class)
 public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
     static final Logger LOGGER = LoggerFactory.getLogger(ViewTTLIT.class);
@@ -314,14 +317,14 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
             throws SQLException {
 
         if (globalFixNeeded) {
-            try (PhoenixConnection globalConnection = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
+            try (PhoenixMonitoredConnection globalConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixMonitoredConnection.class)) {
                 clearCache(globalConnection, "PLATFORM_ENTITY", "DECISION_TABLE_RECORDSET");
             }
         }
         if (tenantFixNeeded || globalFixNeeded) {
             for (String tenantId : allTenants) {
                 String tenantURL = getUrl() + ';' + TENANT_ID_ATTRIB + '=' + tenantId;
-                try (Connection tenantConnection = DriverManager.getConnection(tenantURL)) {
+                try (Connection tenantConnection = DriverManager.getConnection(tenantURL, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                     clearCache(tenantConnection, "PLATFORM_ENTITY", "195");
                 }
             }
@@ -330,12 +333,12 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
 
     private static void clearCache(Connection tenantConnection, String schemaName, String tableName) throws SQLException {
 
-        PhoenixConnection currentConnection = tenantConnection.unwrap(PhoenixConnection.class);
+        PhoenixMonitoredConnection currentConnection = tenantConnection.unwrap(PhoenixMonitoredConnection.class);
         PName tenantIdName = currentConnection.getTenantId();
         String tenantId = tenantIdName == null ? "" : tenantIdName.getString();
 
         // Clear server side cache
-        currentConnection.unwrap(PhoenixConnection.class).getQueryServices().clearTableFromCache(
+        currentConnection.unwrap(PhoenixMonitoredConnection.class).getQueryServices().clearTableFromCache(
                 Bytes.toBytes(tenantId), Bytes.toBytes(schemaName), Bytes.toBytes(tableName), 0);
 
         // Clear connection cache
@@ -347,7 +350,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
     void assertUsingHBaseRows(byte[] hbaseTableName,
             long minTimestamp, int expectedRows) throws IOException, SQLException {
 
-        try (Table tbl = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES)
+        try (Table tbl = driver.getConnectionQueryServices(getActiveUrl(), TEST_PROPERTIES)
                 .getTable(hbaseTableName)) {
 
             Scan allRows = new Scan();
@@ -374,7 +377,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                 new BinaryComparator(PhoenixDatabaseMetaData.TTL_BYTES));
         filterList.addFilter(schemaNameFilter);
         filterList.addFilter(phoenixTTLQualifierFilter);
-        try (Table tbl = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES)
+        try (Table tbl = driver.getConnectionQueryServices(getActiveUrl(), TEST_PROPERTIES)
                 .getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES)) {
 
             Scan allRows = new Scan();
@@ -397,7 +400,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
     void assertSyscatHavePhoenixTTLRelatedColumns(String tenantId, String schemaName,
             String tableName, String tableType, String ttlExpected) throws SQLException {
 
-        try (Connection connection = DriverManager.getConnection(getUrl())) {
+        try (Connection connection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             Statement stmt = connection.createStatement();
             String tenantClause = tenantId == null || tenantId.isEmpty() ?
                     "TENANT_ID IS NULL" :
@@ -557,7 +560,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                 getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
 
         // Verify before TTL expiration
-        try (Connection readConnection = DriverManager.getConnection(tenantConnectUrl)) {
+        try (Connection readConnection = DriverManager.getConnection(tenantConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             dataReader.setConnection(readConnection);
             org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object> fetchedData
                     = fetchData(dataReader);
@@ -568,7 +571,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
 
         // Verify after TTL expiration
         long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis() + (2 * viewTTL * 1000);
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty("CurrentSCN", Long.toString(scnTimestamp));
         injectEdge.setValue(scnTimestamp);
         EnvironmentEdgeManager.injectEdge(injectEdge);
@@ -592,7 +595,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                 getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
 
         // Verify before TTL expiration
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis() + 1;
         props.setProperty("CurrentSCN", Long.toString(scnTimestamp));
         props.setProperty(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
@@ -634,7 +637,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
 
         // Verify rows exists (not masked) at current time
         long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis() + 1;
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty("CurrentSCN", Long.toString(scnTimestamp ));
         injectEdge.setValue(scnTimestamp);
         EnvironmentEdgeManager.injectEdge(injectEdge);
@@ -960,7 +963,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' +
                             schemaBuilder.getDataOptions().getTenantId() :
                     getUrl();
-            try (Connection writeConnection = DriverManager.getConnection(connectUrl)) {
+            try (Connection writeConnection = DriverManager.getConnection(connectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                 writeConnection.setAutoCommit(true);
                 dataWriter.setConnection(writeConnection);
                 dataWriter.setDataSupplier(dataSupplier);
@@ -1065,7 +1068,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
         List<String> rowKeyColumns = Lists.newArrayList("ZID");
         String tenantConnectUrl =
                 getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
-        try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl)) {
+        try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             writeConnection.setAutoCommit(true);
             dataWriter.setConnection(writeConnection);
             dataWriter.setDataSupplier(dataSupplier);
@@ -1147,7 +1150,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
 
                     String index1Name;
                     String index2Name;
-                    try (Connection globalConn = DriverManager.getConnection(getUrl());
+                    try (Connection globalConn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                             final Statement statement = globalConn.createStatement()) {
 
                         index1Name = String.format("IDX_%s_%s",
@@ -1216,7 +1219,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                         String tenantConnectUrl =
                                 getUrl() + ';' + TENANT_ID_ATTRIB + '=' + tenantId;
                         try (Connection writeConnection =
-                                DriverManager.getConnection(tenantConnectUrl)) {
+                                DriverManager.getConnection(tenantConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                             writeConnection.setAutoCommit(true);
                             dataWriter.setConnection(writeConnection);
                             dataWriter.setDataSupplier(dataSupplier);
@@ -1331,9 +1334,9 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                                 tenantId, schemaName, tableName));
                         String tenantConnectUrl = getUrl() + ';' + TENANT_ID_ATTRIB + '='
                                 + tenantId;
-                        try (Connection tenantConn = DriverManager.getConnection(tenantConnectUrl);
+                        try (Connection tenantConn = DriverManager.getConnection(tenantConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES));
                                 final Statement statement = tenantConn.createStatement()) {
-                            PhoenixConnection phxConn = tenantConn.unwrap(PhoenixConnection.class);
+                            PhoenixMonitoredConnection phxConn = tenantConn.unwrap(PhoenixMonitoredConnection.class);
 
                             String index1Name = String.format("IDX_%s_%s",
                                     schemaBuilder.getEntityTenantViewName().replaceAll("\\.", "_"),
@@ -1395,7 +1398,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                                 .newArrayList("ID", "COL4", "COL5", "COL6", "COL7", "COL8", "COL9");
                         List<String> rowKeyColumns = Lists.newArrayList("ID");
                         try (Connection writeConnection = DriverManager
-                                .getConnection(tenantConnectUrl)) {
+                                .getConnection(tenantConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                             writeConnection.setAutoCommit(true);
                             dataWriter.setConnection(writeConnection);
                             dataWriter.setDataSupplier(dataSupplier);
@@ -1573,7 +1576,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' +
                             schemaBuilder.getDataOptions().getTenantId() :
                     getUrl();
-            try (Connection writeConnection = DriverManager.getConnection(connectUrl)) {
+            try (Connection writeConnection = DriverManager.getConnection(connectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                 writeConnection.setAutoCommit(true);
                 dataWriter.setConnection(writeConnection);
                 dataWriter.setDataSupplier(dataSupplier);
@@ -1763,7 +1766,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' +
                             schemaBuilder.getDataOptions().getTenantId() :
                     getUrl();
-            try (Connection writeConnection = DriverManager.getConnection(connectUrl)) {
+            try (Connection writeConnection = DriverManager.getConnection(connectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                 writeConnection.setAutoCommit(true);
                 dataWriter.setConnection(writeConnection);
                 dataWriter.setDataSupplier(dataSupplier);
@@ -1927,7 +1930,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                             getUrl() + ';' + TENANT_ID_ATTRIB + '=' +
                                     schemaBuilder.getDataOptions().getTenantId();
                     try (Connection writeConnection = DriverManager
-                            .getConnection(tenantConnectUrl)) {
+                            .getConnection(tenantConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                         writeConnection.setAutoCommit(true);
                         dataWriter.setConnection(writeConnection);
                         dataWriter.setDataSupplier(dataSupplier);
@@ -2045,9 +2048,9 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                     tenantId, schemaName, tableName));
             String tenantConnectUrl = getUrl() + ';' + TENANT_ID_ATTRIB + '='
                     + tenantId;
-            try (Connection tenantConn = DriverManager.getConnection(tenantConnectUrl);
+            try (Connection tenantConn = DriverManager.getConnection(tenantConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES));
                     final Statement statement = tenantConn.createStatement()) {
-                PhoenixConnection phxConn = tenantConn.unwrap(PhoenixConnection.class);
+                PhoenixMonitoredConnection phxConn = tenantConn.unwrap(PhoenixMonitoredConnection.class);
 
                 String index1Name = String.format("IDX_%s_%s",
                         schemaBuilder.getEntityTenantViewName().replaceAll("\\.", "_"),
@@ -2102,7 +2105,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
             List<String> columns =
                     Lists.newArrayList("ID", "ZID", "COL4", "COL5", "COL6", "COL7", "COL8", "COL9");
             List<String> rowKeyColumns = Lists.newArrayList("ID", "ZID");
-            try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl)) {
+            try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                 writeConnection.setAutoCommit(true);
                 dataWriter.setConnection(writeConnection);
                 dataWriter.setDataSupplier(dataSupplier);
@@ -2224,7 +2227,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                 .withOtherOptions(testCaseWhenAllCFMatchAndAllDefault);
 
         int tenantNum = dataOptions.getTenantNumber();
-        try (Connection globalConnection = DriverManager.getConnection(getUrl())) {
+        try (Connection globalConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String entityTableName = SchemaUtil.getTableName(
                     dataOptions.getSchemaName(), dataOptions.getTableName());
             String CO_BASE_TBL_TEMPLATE =
@@ -2263,7 +2266,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                     tableKey =
                     new PTableKey(null, SchemaUtil.normalizeFullTableName(entityTableName));
             schemaBuilder.setBaseTable(
-                    globalConnection.unwrap(PhoenixConnection.class).getTable(tableKey));
+                    globalConnection.unwrap(PhoenixMonitoredConnection.class).getTable(tableKey));
         }
 
         OtherOptions otherOptions = OtherOptions.withDefaults();
@@ -2334,7 +2337,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                         .withOtherOptions(otherOptions)
                         .buildWithNewTenant();
 
-                try (Connection globalConn = DriverManager.getConnection(getUrl());
+                try (Connection globalConn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                         final Statement statement = globalConn.createStatement()) {
 
                     String index1Name = String.format("IDX_%s_%s",
@@ -2362,9 +2365,9 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                         getUrl() + ';' + TENANT_ID_ATTRIB + '=' +
                                 schemaBuilder.getDataOptions().getTenantId();
 
-                try (Connection tenantConn = DriverManager.getConnection(tenantConnectUrl);
+                try (Connection tenantConn = DriverManager.getConnection(tenantConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES));
                         final Statement statement = tenantConn.createStatement()) {
-                    PhoenixConnection phxConn = tenantConn.unwrap(PhoenixConnection.class);
+                    PhoenixMonitoredConnection phxConn = tenantConn.unwrap(PhoenixMonitoredConnection.class);
 
                     String index1Name = String.format("IDX_%s_%s",
                             schemaBuilder.getEntityTenantViewName().replaceAll("\\.", "_"),
@@ -2428,7 +2431,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                 List<String> rowKeyColumns = Lists.newArrayList("ID", "ZID");
 
                 try (Connection writeConnection = DriverManager
-                        .getConnection(tenantConnectUrl)) {
+                        .getConnection(tenantConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                     writeConnection.setAutoCommit(true);
                     dataWriter.setConnection(writeConnection);
                     dataWriter.setDataSupplier(dataSupplier);
@@ -2770,7 +2773,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' +
                             schemaBuilder.getDataOptions().getTenantId();
             try (Connection writeConnection = DriverManager
-                    .getConnection(tenantConnectUrl)) {
+                    .getConnection(tenantConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                 writeConnection.setAutoCommit(true);
                 dataWriter.setConnection(writeConnection);
                 dataWriter.setDataSupplier(dataSupplier);
@@ -2906,7 +2909,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                         .withOtherOptions(otherOptions)
                         .buildWithNewTenant();
 
-                try (Connection globalConn = DriverManager.getConnection(getUrl());
+                try (Connection globalConn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                         final Statement statement = globalConn.createStatement()) {
 
                     String index1Name = String.format("IDX_%s_%s",
@@ -2934,9 +2937,9 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                         getUrl() + ';' + TENANT_ID_ATTRIB + '=' +
                                 schemaBuilder.getDataOptions().getTenantId();
 
-                try (Connection tenantConn = DriverManager.getConnection(tenantConnectUrl);
+                try (Connection tenantConn = DriverManager.getConnection(tenantConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES));
                         final Statement statement = tenantConn.createStatement()) {
-                    PhoenixConnection phxConn = tenantConn.unwrap(PhoenixConnection.class);
+                    PhoenixMonitoredConnection phxConn = tenantConn.unwrap(PhoenixMonitoredConnection.class);
 
                     String index1Name = String.format("IDX_%s_%s",
                             schemaBuilder.getEntityTenantViewName().replaceAll("\\.", "_"),
@@ -3000,7 +3003,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                 List<String> rowKeyColumns = Lists.newArrayList("ID", "ZID");
 
                 try (Connection writeConnection = DriverManager
-                        .getConnection(tenantConnectUrl)) {
+                        .getConnection(tenantConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                     writeConnection.setAutoCommit(true);
                     dataWriter.setConnection(writeConnection);
                     dataWriter.setDataSupplier(dataSupplier);

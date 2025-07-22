@@ -33,6 +33,7 @@ import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ColumnInfo;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Before;
 import org.junit.Rule;
@@ -54,10 +55,11 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
@@ -97,7 +99,7 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
 
     @Before
     public void setup() throws SQLException {
-        prop = new Properties();
+        prop = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         conn = DriverManager.getConnection(getUrl(), prop);
         conn.setAutoCommit(true);
         String schemaName = "S_"+generateUniqueName();

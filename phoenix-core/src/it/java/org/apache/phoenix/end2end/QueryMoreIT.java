@@ -17,12 +17,14 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -42,13 +44,14 @@ import java.util.Map;
 import java.util.Properties;
 
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class QueryMoreIT extends ParallelStatsDisabledIT {
     
@@ -105,7 +108,7 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
                 "VERSIONS = 1, MULTI_TENANT = true" + (dataTableSalted ? ", SALT_BUCKETS = 4" : "");
         
         //create cursor and data tables.
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(cursorTableDDL);
         conn.createStatement().execute(baseDataTableDDL);
         conn.close();
@@ -141,7 +144,7 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
         }
         
         */
-        Connection conn2 = DriverManager.getConnection(getUrl());
+        Connection conn2 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         ResultSet rs = conn2.createStatement().executeQuery("SELECT count(*) from " + cursorTableName);
         rs.next();
         assertEquals(numRowsPerTenant, rs.getInt(1));
@@ -178,7 +181,7 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
     
     private Map<String, List<String>> createHistoryTableRows(String dataTableName, String[] tenantIds, int numRowsPerTenant) throws Exception {
         String upsertDML = "UPSERT INTO " + dataTableName + " VALUES (?, ?, ?, ?, ?, ?, ?)";
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         Map<String, List<String>> historyIdsForTenant = new HashMap<String, List<String>>();
         try {
             PreparedStatement stmt = conn.prepareStatement(upsertDML);
@@ -209,7 +212,7 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
     private int upsertSelectRecordsInCursorTableForTenant(String tableOrViewName, boolean queryAgainstTenantView, String tenantId, String cursorQueryId,
         final String cursorTable) throws Exception {
         String sequenceName = "\"" + tenantId + "_SEQ\"";
-        Connection conn = queryAgainstTenantView ? getTenantSpecificConnection(tenantId) : DriverManager.getConnection(getUrl());
+        Connection conn = queryAgainstTenantView ? getTenantSpecificConnection(tenantId) : DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         
         // Create a sequence. This sequence is used to fill cursor_order column for each row inserted in the cursor table.
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " CACHE " + Long.MAX_VALUE);
@@ -244,7 +247,7 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
     }
     
     private Connection getTenantSpecificConnection(String tenantId) throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         return DriverManager.getConnection(getUrl(), props);
     }
@@ -256,7 +259,7 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
     
     private String[] getRecordsOutofCursorTable(String tableOrViewName, boolean queryAgainstTenantSpecificView, String tenantId, String cursorQueryId,
         int startOrder, int endOrder, final String cursorTable) throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         List<String> pkIds = new ArrayList<String>();
         String cols = queryAgainstTenantSpecificView ? "PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID" : "TENANT_ID, PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID";
         String dynCols = queryAgainstTenantSpecificView ? "(PARENT_ID CHAR(15), CREATED_DATE DATE, ENTITY_HISTORY_ID CHAR(15))" : "(TENANT_ID CHAR(15), PARENT_ID CHAR(15), CREATED_DATE DATE, ENTITY_HISTORY_ID CHAR(15))";
@@ -289,7 +292,7 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
     }
     
     private List<String> doQueryMore(boolean queryAgainstTenantView, String tenantId, String tenantViewName, String[] cursorIds) throws Exception {
-        Connection conn = queryAgainstTenantView ? getTenantSpecificConnection(tenantId) : DriverManager.getConnection(getUrl());
+        Connection conn = queryAgainstTenantView ? getTenantSpecificConnection(tenantId) : DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = queryAgainstTenantView ? tenantViewName : dataTableName;
         @SuppressWarnings("unchecked")
         List<Pair<String, String>> columns = queryAgainstTenantView ? Lists.newArrayList(new Pair<String, String>(null, "PARENT_ID"), new Pair<String, String>(null, "CREATED_DATE"), new Pair<String, String>(null, "ENTITY_HISTORY_ID")) : Lists.newArrayList(new Pair<String, String>(null, "TENANT_ID"), new Pair<String, String>(null, "PARENT_ID"), new Pair<String, String>(null, "CREATED_DATE"), new Pair<String, String>(null, "ENTITY_HISTORY_ID"));
@@ -341,7 +344,7 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
         Date date = new Date(System.currentTimeMillis());
         initEntityHistoryTableValues("abcd", getDefaultSplits("abcd"), date, null);
         String query = "SELECT NEW_VALUE, NEW_VALUE FROM " + TestUtil.ENTITY_HISTORY_TABLE_NAME + " LIMIT 1";
-        ResultSet rs = DriverManager.getConnection(getUrl()).createStatement().executeQuery(query);
+        ResultSet rs = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).createStatement().executeQuery(query);
         assertTrue(rs.next());
         rs.getObject("NEW_VALUE");
         assertFalse(rs.next());
@@ -351,7 +354,7 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
     @Test
     public void testNullBigDecimalWithScale() throws Exception {
         final String table = generateUniqueName();
-        final Connection conn = DriverManager.getConnection(getUrl());
+        final Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.setAutoCommit(true);
         try (Statement stmt = conn.createStatement()) {
             assertFalse(stmt.execute("CREATE TABLE IF NOT EXISTS " + table + " (\n" +
@@ -379,7 +382,7 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testRVCOnDescWithLeadingPKEquality() throws Exception {
-        final Connection conn = DriverManager.getConnection(getUrl());
+        final Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String fullTableName = generateUniqueName();
         try (Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + fullTableName + "(\n" + 
@@ -433,7 +436,7 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testSingleDescPKColumnComparison() throws Exception {
-        final Connection conn = DriverManager.getConnection(getUrl());
+        final Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String fullTableName = generateUniqueName();
         try (Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + fullTableName + "(\n" + 
@@ -473,10 +476,10 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testMutationBatch() throws Exception {
-        Properties connectionProperties = new Properties();
+        Properties connectionProperties = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         connectionProperties.setProperty(QueryServices.MUTATE_BATCH_SIZE_ATTRIB, "10");
         connectionProperties.setProperty(QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB, "128");
-        PhoenixConnection connection = (PhoenixConnection) DriverManager.getConnection(getUrl(), connectionProperties);
+        PhoenixMonitoredConnection connection = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), connectionProperties);
         String fullTableName = generateUniqueName();
         try (Statement stmt = connection.createStatement()) {
             stmt.execute("CREATE TABLE " + fullTableName + "(\n" +
@@ -497,14 +500,14 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
         // set the batch size (rows) to 2 since three are at least 2 mutations when updates a single row
         connectionProperties.setProperty(QueryServices.MUTATE_BATCH_SIZE_ATTRIB, "2");
         connectionProperties.setProperty(QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB, "128");
-        connection = (PhoenixConnection) DriverManager.getConnection(getUrl(), connectionProperties);
+        connection = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), connectionProperties);
         upsertRows(connection, fullTableName);
         connection.commit();
         // each row should be in its own batch
         assertEquals(2L, connection.getMutationState().getBatchCount());
     }
     
-    private void upsertRows(PhoenixConnection conn, String fullTableName) throws SQLException {
+    private void upsertRows(PhoenixMonitoredConnection conn, String fullTableName) throws SQLException {
         PreparedStatement stmt = conn.prepareStatement("upsert into " + fullTableName +
                 " (organization_id, entity_id, score) values (?,?,?)");
         for (int i = 0; i < 4; i++) {
@@ -516,7 +519,7 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
     }
 
     @Test public void testRVCWithDescAndAscendingPK() throws Exception {
-        final Connection conn = DriverManager.getConnection(getUrl());
+        final Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String fullTableName = generateUniqueName();
         try (Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + fullTableName + "(\n"
@@ -554,7 +557,7 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
         String tenantView = generateUniqueName();
         String indexName = generateUniqueName();
         // create base table and global view using global connection
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             Statement stmt = conn.createStatement();
             stmt.execute(
                     "CREATE TABLE " + fullTableName + "(\n"
@@ -598,7 +601,7 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
         }
 
         // create and use an tenant specific view to write data
-        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1,PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             Statement stmt = viewConn.createStatement();
             stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + " AS SELECT * FROM "
                     + fullViewName);
@@ -637,7 +640,7 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
         }
 
         // validate that running query using global view gives same results
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             ResultSet
                     rs =
                     conn.createStatement().executeQuery("SELECT TEXT1, TEXT2 FROM " + fullViewName

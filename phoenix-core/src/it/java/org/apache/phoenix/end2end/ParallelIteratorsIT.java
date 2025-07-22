@@ -49,7 +49,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 
-
+//Passing with HA Connection - no changes needed
 @Category(ParallelStatsEnabledTest.class)
 public class ParallelIteratorsIT extends ParallelStatsEnabledIT {
 

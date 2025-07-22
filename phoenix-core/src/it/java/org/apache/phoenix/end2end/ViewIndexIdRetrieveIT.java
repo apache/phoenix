@@ -51,6 +51,7 @@ import org.junit.experimental.categories.Category;
     a coproc that checks the client request version and send it back to the client.
     For more information, please see PHOENIX-3547, PHOENIX-5712
  */
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class ViewIndexIdRetrieveIT extends BaseTest {
     private final String BASE_TABLE_DDL = "CREATE TABLE %s (TENANT_ID CHAR(15) NOT NULL, " +
@@ -67,7 +68,11 @@ public class ViewIndexIdRetrieveIT extends BaseTest {
     @BeforeClass
     public static synchronized void setUp() throws Exception {
         Map<String, String> props = new HashMap<>();
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     @Test
@@ -91,7 +96,7 @@ public class ViewIndexIdRetrieveIT extends BaseTest {
         String viewName = generateUniqueName();
         String viewFullName = SchemaUtil.getTableName(schema, viewName);
         String viewIndexName = generateUniqueName();
-        try (final Connection conn = DriverManager.getConnection(url,props);
+        try (final Connection conn = DriverManager.getConnection(getUrl(),props);
              final Statement stmt = conn.createStatement()) {
             stmt.execute(String.format(BASE_TABLE_DDL, fullTableName));
             stmt.execute(String.format(VIEW_DDL, viewFullName, fullTableName));
@@ -119,7 +124,7 @@ public class ViewIndexIdRetrieveIT extends BaseTest {
         String viewIndexName1 = generateUniqueName();
 
         // view index id data type is long
-        try (final Connection conn = DriverManager.getConnection(url,propsForLongType);
+        try (final Connection conn = DriverManager.getConnection(getUrl(),propsForLongType);
              final Statement stmt = conn.createStatement()) {
             stmt.execute(String.format(BASE_TABLE_DDL, fullTableName));
             stmt.execute(String.format(VIEW_DDL, viewFullName, fullTableName));
@@ -136,7 +141,7 @@ public class ViewIndexIdRetrieveIT extends BaseTest {
         String viewIndexName2 = generateUniqueName();
         Properties propsForShortType = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         propsForShortType.setProperty(LONG_VIEW_INDEX_ENABLED_ATTRIB, "false");
-        try (final Connection conn = DriverManager.getConnection(url,propsForShortType);
+        try (final Connection conn = DriverManager.getConnection(getUrl(),propsForShortType);
              final Statement stmt = conn.createStatement()) {
             stmt.execute(String.format(VIEW_INDEX_DDL, viewIndexName2, viewFullName));
 
@@ -148,7 +153,7 @@ public class ViewIndexIdRetrieveIT extends BaseTest {
         }
 
         // check select * from syscat
-        try (final Connection conn = DriverManager.getConnection(url);
+        try (final Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES));
              final Statement stmt = conn.createStatement()) {
             ResultSet rs = stmt.executeQuery(String.format(SELECT_ALL));
             boolean checkShort = false;

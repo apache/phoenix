@@ -41,6 +41,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
  * Basic tests that include region move hooks while scanning the rows.
  * <p>
  */
+//Passing with HA Connection - No changes needed
 @RunWith(Parameterized.class)
 public abstract class BaseQueryWithRegionMovesIT extends ParallelStatsDisabledWithRegionMovesIT {
     protected static final String tenantId = getOrganizationId();

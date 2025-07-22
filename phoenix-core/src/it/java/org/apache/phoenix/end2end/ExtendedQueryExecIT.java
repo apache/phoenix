@@ -40,7 +40,7 @@ import org.junit.experimental.categories.Category;
  * Extended tests for Phoenix JDBC implementation
  * 
  */
-
+//Passing with HA Connection - No changes needed
 @Category(ParallelStatsDisabledTest.class)
 public class ExtendedQueryExecIT extends ParallelStatsDisabledIT {
 

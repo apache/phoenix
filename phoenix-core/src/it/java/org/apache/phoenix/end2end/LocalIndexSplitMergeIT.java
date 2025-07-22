@@ -37,6 +37,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
@@ -51,7 +52,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class LocalIndexSplitMergeIT extends BaseTest {
 
@@ -63,8 +64,12 @@ public class LocalIndexSplitMergeIT extends BaseTest {
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
         clientProps.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         clientProps.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.TRUE.toString());
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
-            new ReadOnlyProps(clientProps.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
+                    new ReadOnlyProps(clientProps.entrySet().iterator()));
+        }
     }
 
     private Connection getConnectionForLocalIndexTest() throws SQLException {
@@ -114,7 +119,7 @@ public class LocalIndexSplitMergeIT extends BaseTest {
             ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + tableName);
             assertTrue(rs.next());
 
-            Admin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+            Admin admin = conn1.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin();
             for (int i = 1; i < 3; i++) {
                 admin.split(physicalTableName, ByteUtil.concat(Bytes.toBytes(strings[3 * i])));
                 List<RegionInfo> regionsOfUserTable =
@@ -239,7 +244,7 @@ public class LocalIndexSplitMergeIT extends BaseTest {
             ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + tableName);
             assertTrue(rs.next());
 
-            Admin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+            Admin admin = conn1.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin();
             List<RegionInfo> regionsOfUserTable =
                     MetaTableAccessor.getTableRegions(admin.getConnection(), physicalTableName,
                         false);
@@ -335,7 +340,7 @@ public class LocalIndexSplitMergeIT extends BaseTest {
             conn1.createStatement()
             .execute("CREATE LOCAL INDEX " + indexName + "_2 ON " + tableName + "(k3)");
 
-            Admin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+            Admin admin = conn1.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin();
             List<RegionInfo> regionsOfUserTable =
                     MetaTableAccessor.getTableRegions(admin.getConnection(), physicalTableName,
                         false);

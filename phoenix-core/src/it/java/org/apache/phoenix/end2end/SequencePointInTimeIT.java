@@ -42,7 +42,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
-
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class SequencePointInTimeIT extends BaseTest {
     private static final String SCHEMA_NAME = "S";
@@ -56,7 +56,11 @@ public class SequencePointInTimeIT extends BaseTest {
         // Must update config before starting server
         props.put(QueryServices.DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB, Boolean.TRUE.toString());
         props.put(QueryServices.DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB, "5");
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     @Test

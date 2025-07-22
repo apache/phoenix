@@ -32,6 +32,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.PhoenixTestBuilder;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder;
@@ -39,6 +40,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Assume;
@@ -63,6 +65,7 @@ import java.util.Optional;
 import java.util.Properties;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHANGE_DETECTION_ENABLED;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -71,6 +74,7 @@ import static org.junit.Assert.fail;
 
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
+//Passing with HA Connection
 public class WALAnnotationIT extends BaseTest {
     private final boolean isImmutable;
     private final boolean isMultiTenant;
@@ -94,7 +98,11 @@ public class WALAnnotationIT extends BaseTest {
             AnnotatedWALObserver.class.getName());
         props.put(IndexRegionObserver.PHOENIX_APPEND_METADATA_TO_WAL, "true");
         props.put(QueryServices.ENABLE_SERVER_UPSERT_SELECT, "true");
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     @Test
@@ -107,7 +115,7 @@ public class WALAnnotationIT extends BaseTest {
 
     @Test
     public void testNoAnnotationsIfChangeDetectionDisabled() throws Exception {
-        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.setAutoCommit(true);
             SchemaBuilder builder = new SchemaBuilder(getUrl());
             SchemaBuilder.TableOptions tableOptions = getTableOptions();
@@ -150,7 +158,7 @@ public class WALAnnotationIT extends BaseTest {
 
     @Test
     public void testCantSetChangeDetectionOnIndex() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             SchemaBuilder builder = new SchemaBuilder(getUrl());
             builder.withTableDefaults().build();
             try {
@@ -182,7 +190,7 @@ public class WALAnnotationIT extends BaseTest {
     // "base" table data they index.
 
     private String upsertAndDeleteHelper(SchemaBuilder builder, boolean createGlobalIndex) throws Exception {
-        try (PhoenixConnection conn = getConnection()) {
+        try (PhoenixMonitoredConnection conn = getConnection()) {
             SchemaBuilder.TableOptions tableOptions = getTableOptions();
 
             if (createGlobalIndex) {
@@ -223,7 +231,7 @@ public class WALAnnotationIT extends BaseTest {
 
     @Test
     public void testUpsertSelectClientSide() throws Exception {
-        try (PhoenixConnection conn = getConnection()) {
+        try (PhoenixMonitoredConnection conn = getConnection()) {
             SchemaBuilder baseBuilder = new SchemaBuilder(getUrl());
             SchemaBuilder targetBuilder = new SchemaBuilder(getUrl());
             //upsert selecting from a different table will force processing to be client-side
@@ -242,7 +250,7 @@ public class WALAnnotationIT extends BaseTest {
         }
     }
 
-    private void verifyBaseAndTargetAnnotations(PhoenixConnection conn, SchemaBuilder baseBuilder,
+    private void verifyBaseAndTargetAnnotations(PhoenixMonitoredConnection conn, SchemaBuilder baseBuilder,
                                                 SchemaBuilder targetBuilder,
                                                 int expectedAnnotations) throws SQLException, IOException {
         PTable baseTable = conn.getTableNoCache(baseBuilder.getEntityTableName());
@@ -255,7 +263,7 @@ public class WALAnnotationIT extends BaseTest {
     public void testUpsertSelectServerSide() throws Exception {
         Assume.assumeFalse(isImmutable); //only mutable tables can be processed server-side
         SchemaBuilder targetBuilder = new SchemaBuilder(getUrl());
-        try (PhoenixConnection conn = getConnection()) {
+        try (PhoenixMonitoredConnection conn = getConnection()) {
             targetBuilder.withTableOptions(getTableOptions()).build();
             conn.createStatement().execute("UPSERT INTO " + targetBuilder.getEntityTableName() + " " +
                 "VALUES" +
@@ -279,7 +287,7 @@ public class WALAnnotationIT extends BaseTest {
         // processed client-side
         SchemaBuilder baseBuilder = new SchemaBuilder(getUrl());
         SchemaBuilder targetBuilder = new SchemaBuilder(getUrl());
-        try (PhoenixConnection conn = getConnection()) {
+        try (PhoenixMonitoredConnection conn = getConnection()) {
             baseBuilder.withTableOptions(getTableOptions()).build();
             targetBuilder.withTableOptions(getTableOptions()).build();
             conn.createStatement().execute("UPSERT INTO " + baseBuilder.getEntityTableName() + " VALUES" +
@@ -304,7 +312,7 @@ public class WALAnnotationIT extends BaseTest {
     private void testRangeDeleteHelper(boolean isClientSide) throws Exception {
         SchemaBuilder builder = new SchemaBuilder(getUrl());
         builder.withTableOptions(getTableOptions()).build();
-        try (PhoenixConnection conn = getConnection()) {
+        try (PhoenixMonitoredConnection conn = getConnection()) {
             conn.createStatement().execute("UPSERT INTO " + builder.getEntityTableName() +
                 " VALUES ('a', 'b', '2', 'bc', '3')");
             conn.commit();
@@ -334,7 +342,7 @@ public class WALAnnotationIT extends BaseTest {
     @Test
     public void testGlobalViewUpsert() throws Exception {
         SchemaBuilder builder = new SchemaBuilder(getUrl());
-        try (PhoenixConnection conn = getConnection()) {
+        try (PhoenixMonitoredConnection conn = getConnection()) {
             createGlobalViewHelper(builder, conn);
             conn.createStatement().execute("UPSERT INTO " + builder.getEntityGlobalViewName()
                 + " VALUES" + " ('a', '" + PhoenixTestBuilder.DDLDefaults.DEFAULT_KP +
@@ -351,7 +359,7 @@ public class WALAnnotationIT extends BaseTest {
 
     }
 
-    private void createGlobalViewHelper(SchemaBuilder builder, PhoenixConnection conn) throws Exception {
+    private void createGlobalViewHelper(SchemaBuilder builder, PhoenixMonitoredConnection conn) throws Exception {
         builder.withTableOptions(getTableOptions()).
             withGlobalViewOptions(getGlobalViewOptions(builder)).build();
         PTable view = conn.getTableNoCache(builder.getEntityGlobalViewName());
@@ -377,10 +385,10 @@ public class WALAnnotationIT extends BaseTest {
         // child tenant view. Make sure that the annotations use the tenant view name
         String tenant = generateUniqueName();
         SchemaBuilder builder = new SchemaBuilder(getUrl());
-        try (PhoenixConnection conn = getConnection()) {
+        try (PhoenixMonitoredConnection conn = getConnection()) {
             createGlobalViewHelper(builder, conn);
         }
-        try (PhoenixConnection conn = (PhoenixConnection) getTenantConnection(tenant)) {
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) getTenantConnection(tenant)) {
             SchemaBuilder.DataOptions dataOptions = builder.getDataOptions();
             dataOptions.setTenantId(tenant);
             if (createIndex) {
@@ -428,7 +436,7 @@ public class WALAnnotationIT extends BaseTest {
     public void testOnDuplicateUpsertWithIndex() throws Exception {
         Assume.assumeFalse(this.isImmutable); // on duplicate is not supported for immutable tables
         SchemaBuilder builder = new SchemaBuilder(getUrl());
-        try (PhoenixConnection conn = getConnection()) {
+        try (PhoenixMonitoredConnection conn = getConnection()) {
             SchemaBuilder.TableOptions tableOptions = getTableOptions();
             builder.withTableOptions(tableOptions).withTableIndexDefaults().build();
             PTable table = conn.getTableNoCache(builder.getEntityTableName());
@@ -492,14 +500,14 @@ public class WALAnnotationIT extends BaseTest {
         assertEquals(0, notFoundCount);
     }
 
-    private PhoenixConnection getConnection() throws SQLException {
-        Properties props = new Properties();
+    private PhoenixMonitoredConnection getConnection() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(false));
-        return (PhoenixConnection) DriverManager.getConnection(getUrl(), props);
+        return (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), props);
     }
 
     private Connection getTenantConnection(String tenant) throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenant);
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(false));
         return DriverManager.getConnection(getUrl(), props);

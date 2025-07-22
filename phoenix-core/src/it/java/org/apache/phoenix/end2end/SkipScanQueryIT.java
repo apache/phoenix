@@ -46,6 +46,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.filter.SkipScanFilter;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.util.TestUtil;
@@ -56,7 +57,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     
@@ -169,7 +170,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSelectAfterUpsertInQuery() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initSelectAfterUpsertTable(conn);
         try {
             String query;
@@ -185,7 +186,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     }
     @Test
     public void testInQuery() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.setAutoCommit(false);
         String tableName = initIntInTable(conn,Arrays.asList(2,7,10));
         try {
@@ -206,7 +207,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testVarCharParallelListInQuery() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.setAutoCommit(false);
         String tableName = initVarCharParallelListInTable(conn,Arrays.asList("d","da","db"),Arrays.asList("m","mc","tt"));
         try {
@@ -224,7 +225,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testVarCharXInQuery() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.setAutoCommit(false);
         String tableName = initVarCharCrossProductInTable(conn,Arrays.asList("d","da","db"),Arrays.asList("m","mc","tt"));
         try {
@@ -251,7 +252,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testVarCharXIntInQuery() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.setAutoCommit(false);
         String tableName = initVarCharCrossProductInTable(conn,Arrays.asList("d","da","db"),Arrays.asList("m","mc","tt"));
         try {
@@ -272,7 +273,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     @Test
     public void testPreSplitCompositeFixedKey() throws Exception {
         String tableName = generateUniqueName();
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             conn.createStatement().execute("create table " + tableName + "(key_1 char(3) not null, key_2 char(4) not null, v varchar(8)  CONSTRAINT pk PRIMARY KEY (key_1,key_2)) split on('000','100','200')");
             conn.setAutoCommit(true);
@@ -300,7 +301,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testInWithDescKey() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         try {
             conn.createStatement().execute("create table " + tableName + "(key_1 char(3) not null, key_2 char(4) not null, v varchar(8)  CONSTRAINT pk PRIMARY KEY (key_1,key_2 desc))");
@@ -340,7 +341,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testSkipScanIntersectionAtEnd() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         conn.createStatement()
                 .execute(
@@ -450,7 +451,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testOrPKWithAndNonPK() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         try {
             conn.createStatement().execute("create table " + tableName + "(ID varchar primary key,company varchar)");
@@ -471,7 +472,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testNullInfiniteLoop() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String tableName = generateUniqueName();
             conn.setAutoCommit(true);
             conn.createStatement().execute(
@@ -494,7 +495,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSkipScanQueryWhenSplitKeyIsSmaller() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String tableName = generateUniqueName();
             StringBuffer buf =
                     new StringBuffer("CREATE TABLE IF NOT EXISTS " + tableName
@@ -544,7 +545,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
             stmt.executeUpdate();
             conn.commit();
             try (Admin admin =
-                    conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+                    conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin()) {
                 /*
                  * The split key is 27 bytes instead of at least 30 bytes (CHAR(15) + CHAR(15)).
                  * Note that we cannot use the phoenix way of giving split points in the ddl because
@@ -580,7 +581,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSkipScanJoinOptimization() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String tableName = generateUniqueName();
             String viewName = generateUniqueName();
             String idxName = "IDX_" + tableName;
@@ -602,7 +603,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     @Test
     public void testOrWithMixedOrderPKs() throws Exception {
         String tableName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.setAutoCommit(true);
             Statement stmt = conn.createStatement();
 
@@ -666,7 +667,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     @Test
     public void testRVCClipBug5753() throws Exception {
         String tableName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.setAutoCommit(true);
             Statement stmt = conn.createStatement();
 
@@ -724,7 +725,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " (PK1 VARCHAR NOT NULL, PK2 INTEGER NOT NULL, " +
                 "PK3 BIGINT NOT NULL CONSTRAINT PK PRIMARY KEY (PK1,PK2,PK3))";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(ddl);
             conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a',0,1)");
             conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a',1,1)");
@@ -750,7 +751,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " (PK1 DOUBLE NOT NULL, PK2 INTEGER NOT NULL, " +
                 " CONSTRAINT PK PRIMARY KEY (PK1,PK2))";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(ddl);
             conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(10.0,10)");
             conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(20.0,20)");
@@ -769,7 +770,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " (PK1 VARCHAR NOT NULL, PK2 VARCHAR NOT NULL, " +
                 "PK3 BIGINT NOT NULL CONSTRAINT PK PRIMARY KEY (PK1,PK2,PK3))";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(ddl);
             conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a','0',1)");
             conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a','1',1)");
@@ -794,7 +795,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " (PK1 INTEGER NOT NULL, PK2 VARCHAR NOT NULL, " +
                 "PK3 BIGINT NOT NULL CONSTRAINT PK PRIMARY KEY (PK1,PK2,PK3))";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(ddl);
             conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(1,'0',1)");
             conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(1,'1',1)");
@@ -844,7 +845,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
         createTestTable(getUrl(), baseTableDDL);
         createTestTable(getUrl(), globalViewDDL);
 
-        Properties tenantProps = new Properties();
+        Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "tenant1");
         String upsertOne = "UPSERT INTO " + tenantViewName + " (DOUBLE1, INT1) VALUES (10.0,10)";
         String upsertTwo = "UPSERT INTO " + tenantViewName + " (DOUBLE1, INT1) VALUES (20.0,20)";
@@ -920,7 +921,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
         createTestTable(getUrl(), baseTableDDL);
         createTestTable(getUrl(), globalViewDDL);
 
-        Properties tenantProps = new Properties();
+        Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "tenant1");
         String upsertOne = "UPSERT INTO " + tenantViewName + " (DOUBLE1, INT1) VALUES (10.0,10)";
         String upsertTwo = "UPSERT INTO " + tenantViewName + " (DOUBLE1, INT1) VALUES (20.0,20)";
@@ -985,7 +986,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
                 "        PK4\n" +
                 "    )\n" +
                 ")";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(ddl);
             conn.createStatement().execute("UPSERT INTO " + tableName + " (PK1, PK4, COL1, PK2, COL2, PK3, COL3, COL4)" +
                     "            VALUES ('xx', 'xid1', 0, 7, 7, 7, 'INSERT', null)");
@@ -1014,7 +1015,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
                      " count2 INTEGER, " +
                      " CONSTRAINT PK PRIMARY KEY (vdate,tab,dev,app,target,channel,one,two))";
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(ddl);
             conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('2018-02-14','channel_agg',2,null,null,'A004',null,null,2,2)");
             conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('2018-02-14','channel_agg',2,null,null,null,null,null,2,2)");

@@ -47,6 +47,7 @@ import org.junit.runners.Parameterized.Parameters;
  * Basic tests for Phoenix JDBC implementation
  *
  */
+//Passing with HA Connection - No changes needed
 @Category(ParallelStatsDisabledTest.class)
 public class QueryIT extends BaseQueryIT {
     

@@ -10,6 +10,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -52,6 +53,7 @@ import static org.junit.Assert.assertTrue;
 /**
  * Tests for the {@link IndexScrutinyTool}
  */
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public  class IndexScrutinyToolForTenantIT extends IndexScrutinyToolBaseIT {
     private Connection connGlobal = null;
@@ -166,7 +168,7 @@ public  class IndexScrutinyToolForTenantIT extends IndexScrutinyToolBaseIT {
         connGlobal.createStatement()
                 .execute(String.format(createIndexStr, indexNameGlobal, multiTenantTable));
 
-        PhoenixConnection pconn = connGlobal.unwrap(PhoenixConnection.class);
+        PhoenixMonitoredConnection pconn = connGlobal.unwrap(PhoenixMonitoredConnection.class);
         PTable pDataTable = pconn.getTable(new PTableKey(null, multiTenantTable));
         PTable pIndexTable = pconn.getTable(new PTableKey(null, indexNameGlobal));
 
@@ -241,7 +243,7 @@ public  class IndexScrutinyToolForTenantIT extends IndexScrutinyToolBaseIT {
                 indexNameTenant, 5555, "wrongName"));
         connTenant.commit();
 
-        ConnectionQueryServices queryServices = connGlobal.unwrap(PhoenixConnection.class).getQueryServices();
+        ConnectionQueryServices queryServices = connGlobal.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
         Admin admin = queryServices.getAdmin();
         TableName tableName = TableName.valueOf(viewIndexTableName);
         admin.disableTable(tableName);

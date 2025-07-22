@@ -19,6 +19,7 @@ package org.apache.phoenix.coprocessor;
 
 import static org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker.COMPACTION_UPDATE_STATS_ROW_COUNT;
 import static org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker.CONCURRENT_UPDATE_STATS_ROW_COUNT;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -37,14 +38,16 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsEnabledIT;
 import org.apache.phoenix.end2end.ParallelStatsEnabledTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
+//Passing with HA Connection
 @Category(ParallelStatsEnabledTest.class)
 public class StatisticsCollectionRunTrackerIT extends ParallelStatsEnabledIT {
     private static final StatisticsCollectionRunTracker tracker = StatisticsCollectionRunTracker
@@ -86,7 +89,7 @@ public class StatisticsCollectionRunTrackerIT extends ParallelStatsEnabledIT {
         // Upsert values in the table.
         String keyPrefix = "aaaaaaaaaaaaaaaaaaaa";
         String upsert = "UPSERT INTO " + tableName + " VALUES (?, ?)";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             PreparedStatement stmt = conn.prepareStatement(upsert);
             for (int i = 0; i < 1000; i++) {
                 stmt.setString(1, keyPrefix + i);
@@ -150,10 +153,10 @@ public class StatisticsCollectionRunTrackerIT extends ParallelStatsEnabledIT {
     private RegionInfo createTableAndGetRegion(String tableName) throws Exception {
         TableName tn = TableName.valueOf(tableName);
         String ddl = "CREATE TABLE " + tableName + " (PK1 VARCHAR PRIMARY KEY, KV1 VARCHAR)";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(ddl);
             conn.createStatement().execute("CREATE LOCAL INDEX " + generateUniqueName() + " ON " + tableName + "(KV1)");
-            PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+            PhoenixMonitoredConnection phxConn = conn.unwrap(PhoenixMonitoredConnection.class);
             try (Admin admin = phxConn.getQueryServices().getAdmin()) {
                 List<RegionInfo> tableRegions = admin.getRegions(tn);
                 return tableRegions.get(0);
@@ -162,13 +165,13 @@ public class StatisticsCollectionRunTrackerIT extends ParallelStatsEnabledIT {
     }
     
     private long runUpdateStats(String tableName) throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             return conn.createStatement().executeUpdate("UPDATE STATISTICS " + tableName);
         }
     }
     
     private void runMajorCompaction(String tableName) throws Exception {
-        try (PhoenixConnection conn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
+        try (PhoenixMonitoredConnection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixMonitoredConnection.class)) {
             try (Admin admin = conn.getQueryServices().getAdmin()) {
                 TableName t = TableName.valueOf(tableName);
                 admin.flush(t);

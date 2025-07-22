@@ -17,15 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.ROW1;
-import static org.apache.phoenix.util.TestUtil.ROW2;
-import static org.apache.phoenix.util.TestUtil.ROW3;
-import static org.apache.phoenix.util.TestUtil.ROW4;
-import static org.apache.phoenix.util.TestUtil.ROW5;
-import static org.apache.phoenix.util.TestUtil.ROW6;
-import static org.apache.phoenix.util.TestUtil.ROW7;
-import static org.apache.phoenix.util.TestUtil.ROW8;
-import static org.apache.phoenix.util.TestUtil.ROW9;
+import static org.apache.phoenix.util.TestUtil.*;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -35,10 +27,11 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class TopNIT extends ParallelStatsDisabledIT {
 
@@ -47,7 +40,7 @@ public class TopNIT extends ParallelStatsDisabledIT {
         String tenantId = getOrganizationId();
         String tableName = initATableValues(null, tenantId, getDefaultSplits(tenantId), null, null, getUrl(), null);
         String query = "SELECT entity_id FROM " + tableName + " ORDER BY b_string, entity_id LIMIT 5";
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -74,7 +67,7 @@ public class TopNIT extends ParallelStatsDisabledIT {
         String tenantId = getOrganizationId();
         String tableName = initATableValues(null, tenantId, getDefaultSplits(tenantId), null, null, getUrl(), null);
         String query = "SELECT entity_id FROM  " + tableName + "  ORDER BY b_string || entity_id desc LIMIT 5";
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -112,7 +105,7 @@ public class TopNIT extends ParallelStatsDisabledIT {
                 initATableValues(null, tenantId, getDefaultSplits(tenantId), null, null, getUrl(),
                     null);
         String query = "DELETE FROM  " + tableName + "  ORDER BY b_string, entity_id LIMIT 5";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.setAutoCommit(autoCommit);
             PreparedStatement statement = conn.prepareStatement(query);
             statement.execute();

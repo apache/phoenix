@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -30,11 +31,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class UpsertWithSCNIT extends ParallelStatsDisabledIT {
 
@@ -56,7 +58,7 @@ public class UpsertWithSCNIT extends ParallelStatsDisabledIT {
                 + (rowColumn? "CREATED_DATE ROW_TIMESTAMP, ":"") + "METRIC_ID)) "
                 + "IMMUTABLE_ROWS=" + (mutable? "false" : "true" )
                 + (txTable ? ", TRANSACTION_PROVIDER='OMID',TRANSACTIONAL=true":"");
-        props = new Properties();
+        props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(createTable);
 
@@ -92,7 +94,7 @@ public class UpsertWithSCNIT extends ParallelStatsDisabledIT {
 
         helpTestUpsertWithSCNIT(false, false, true, false, false);
         prep.executeUpdate();
-        props = new Properties();
+        props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(),props);
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM "+tableName);
         assertTrue(rs.next());
@@ -106,7 +108,7 @@ public class UpsertWithSCNIT extends ParallelStatsDisabledIT {
 
         helpTestUpsertWithSCNIT(false, false, false, false, false);
         prep.executeUpdate();
-        props = new Properties();
+        props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(),props);
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM "+tableName);
         assertTrue(rs.next());

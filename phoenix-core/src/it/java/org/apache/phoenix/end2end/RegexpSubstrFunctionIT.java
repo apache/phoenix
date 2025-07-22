@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.createGroupByTestTable;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -29,11 +30,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class RegexpSubstrFunctionIT extends ParallelStatsDisabledIT {
 
@@ -43,7 +45,7 @@ public class RegexpSubstrFunctionIT extends ParallelStatsDisabledIT {
     @Before
     public void doBeforeTestSetup() throws Exception {
         tableName = generateUniqueName();
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         createGroupByTestTable(conn, tableName);
         insertRow(conn, "Report1?1", 10);
         insertRow(conn, "Report1?2", 10);
@@ -80,7 +82,7 @@ public class RegexpSubstrFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testGroupByScanWithRegexpSubstr() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         // Default offset
         testGroupByScanWithRegexpSubstr(conn, null, "Report");
         // Positive offset
@@ -102,7 +104,7 @@ public class RegexpSubstrFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testFilterWithRegexSubstr() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         // Default offset
         testFilterWithRegexSubstr(conn, null, "Report");
         // Positive offset

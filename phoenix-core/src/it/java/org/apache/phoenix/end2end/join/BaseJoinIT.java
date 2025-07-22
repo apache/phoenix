@@ -161,7 +161,7 @@ public abstract class BaseJoinIT extends ParallelStatsDisabledIT {
 
     @Before
     public void createSchema() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             schemaName = "S_" + generateUniqueName();
             seqName = "SEQ_" + generateUniqueName();

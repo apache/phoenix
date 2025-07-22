@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -37,6 +38,7 @@ import java.text.SimpleDateFormat;
 import java.util.TimeZone;
 
 import org.apache.phoenix.expression.function.ToCharFunction;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -48,7 +50,7 @@ import org.junit.experimental.categories.Category;
  * 
  * @since 0.1
  */
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class ToCharFunctionIT extends ParallelStatsDisabledIT {
     
@@ -80,7 +82,7 @@ public class ToCharFunctionIT extends ParallelStatsDisabledIT {
                 "col_decimal decimal\n" + 
                 "CONSTRAINT my_pk PRIMARY KEY (pk))";
         createTestTable(getUrl(), ddl);
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.setAutoCommit(false);
         
         PreparedStatement stmt = conn.prepareStatement(
@@ -214,7 +216,7 @@ public class ToCharFunctionIT extends ParallelStatsDisabledIT {
     }
     
     private void runOneRowQueryTest(String oneRowQuery, Integer pkValue, String projectedValue) throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             PreparedStatement statement = conn.prepareStatement(oneRowQuery);
             ResultSet rs = statement.executeQuery();
@@ -238,7 +240,7 @@ public class ToCharFunctionIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testToCharWithCloneMethod() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
     	String ddl = "create table " + tableName + " (k varchar primary key, v integer[])";
         conn.createStatement().execute(ddl);
@@ -254,7 +256,7 @@ public class ToCharFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testIndexedNull() throws SQLException {
         final String tableName = generateUniqueName();
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("create table " + tableName +
                 " (id integer primary key, ts1 timestamp, ts2 timestamp)");
         conn.createStatement().execute("create index t_ts2_idx on " + tableName + " (ts2)");
@@ -273,7 +275,7 @@ public class ToCharFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testToChar100Times() throws Exception {
         String tableName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Statement statement = conn.createStatement()) {
             conn.setAutoCommit(true);
             statement.execute("create table " + tableName +

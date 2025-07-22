@@ -33,6 +33,7 @@ import java.util.Properties;
 
 import org.apache.phoenix.end2end.index.ImmutableIndexIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -42,7 +43,7 @@ import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class MutationBatchFailedStateMetricWithAllDeleteIT extends BaseMutationBatchFailedStateMetricIT {
@@ -84,7 +85,7 @@ public class MutationBatchFailedStateMetricWithAllDeleteIT extends BaseMutationB
             Assert.fail("Commit should not have succeeded");
         } catch (SQLException e) {
             Map<String, Map<MetricType, Long>> mutationMetrics =
-                    conn.unwrap(PhoenixConnection.class).getMutationMetrics();
+                    conn.unwrap(PhoenixMonitoredConnection.class).getMutationMetrics();
             int dbfs =
                     mutationMetrics.get(deleteTableName).get(DELETE_BATCH_FAILED_SIZE).intValue();
             int upfs =

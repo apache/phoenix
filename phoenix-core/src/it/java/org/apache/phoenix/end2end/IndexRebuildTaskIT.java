@@ -25,6 +25,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -53,7 +54,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.waitForIndexRebuild;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
-
+//Failing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class IndexRebuildTaskIT extends BaseTest {
     protected static String TENANT1 = "tenant1";
@@ -63,6 +64,11 @@ public class IndexRebuildTaskIT extends BaseTest {
     public static synchronized void doSetup() throws Exception {
         HashMap<String, String> props = new HashMap<>();
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
         TaskRegionEnvironment =
                 getUtility()
                         .getRSForFirstRegionInTable(
@@ -88,7 +94,7 @@ public class IndexRebuildTaskIT extends BaseTest {
         Connection conn = null;
         Connection tenantConn = null;
         try {
-            conn = DriverManager.getConnection(getUrl());
+            conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
             conn.setAutoCommit(false);
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, TENANT1);
@@ -121,7 +127,7 @@ public class IndexRebuildTaskIT extends BaseTest {
 
             waitForIndexRebuild(conn, indexName, PIndexState.ACTIVE);
             String viewIndexTableName = MetaDataUtil.getViewIndexPhysicalName(baseTable);
-            ConnectionQueryServices queryServices = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            ConnectionQueryServices queryServices = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
 
             Table indexHTable = queryServices.getTable(Bytes.toBytes(viewIndexTableName));
             int count = getUtility().countRows(indexHTable);

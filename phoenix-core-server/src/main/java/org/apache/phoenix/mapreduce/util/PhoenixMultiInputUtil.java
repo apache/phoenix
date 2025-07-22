@@ -48,7 +48,11 @@ public class PhoenixMultiInputUtil {
 
     public static Connection buildTenantConnection(String url, String tenantId)
             throws SQLException {
-        Properties props = new Properties();
+        return buildTenantConnection(new Properties(), url, tenantId);
+    }
+
+    public static Connection buildTenantConnection(Properties props, String url, String tenantId)
+            throws SQLException {
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         return DriverManager.getConnection(url, props);
     }

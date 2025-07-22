@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.TypeMismatchException;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -28,9 +29,10 @@ import org.junit.experimental.categories.Category;
 import java.sql.*;
 import java.util.Properties;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.*;
 
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class ToDateFunctionIT extends ParallelStatsDisabledIT {
 
@@ -40,7 +42,7 @@ public class ToDateFunctionIT extends ParallelStatsDisabledIT {
 
     @Before
     public void setUp() throws SQLException {
-        conn = DriverManager.getConnection(getUrl());
+        conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
     }
 
     @After
@@ -150,7 +152,7 @@ public class ToDateFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testToDate_CustomTimeZoneViaQueryServices() throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB, "GMT+1");
         Connection customTimeZoneConn = DriverManager.getConnection(getUrl(), props);
 
@@ -161,7 +163,7 @@ public class ToDateFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testToDate_CustomTimeZoneViaQueryServicesAndCustomFormat() throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB, "GMT+1");
         Connection customTimeZoneConn = DriverManager.getConnection(getUrl(), props);
 
@@ -173,7 +175,7 @@ public class ToDateFunctionIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testTimestampCast() throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB, "GMT+1");
         Connection customTimeZoneConn = DriverManager.getConnection(getUrl(), props);
 
@@ -194,7 +196,7 @@ public class ToDateFunctionIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testUnsignedLongToTimestampCast() throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB, "GMT+1");
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
@@ -256,7 +258,7 @@ public class ToDateFunctionIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testToDateWithCloneMethod() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
     	String ddl = "create table " + tableName + " (k varchar primary key, v varchar[])";
         conn.createStatement().execute(ddl);

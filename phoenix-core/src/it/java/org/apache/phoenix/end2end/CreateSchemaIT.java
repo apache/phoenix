@@ -28,7 +28,7 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SchemaAlreadyExistsException;
 import org.apache.phoenix.util.ClientUtil;
@@ -37,7 +37,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class CreateSchemaIT extends ParallelStatsDisabledIT {
 
@@ -55,7 +55,7 @@ public class CreateSchemaIT extends ParallelStatsDisabledIT {
         String ddl1 = "CREATE SCHEMA \"" + schemaName1 + "\"";
         String ddl2 = "CREATE SCHEMA " + schemaName2;
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();) {
+             Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin();) {
             conn.createStatement().execute(ddl1);
             assertTrue(ClientUtil.isHBaseNamespaceAvailable(admin, schemaName1));
             conn.createStatement().execute(ddl2);
@@ -72,7 +72,7 @@ public class CreateSchemaIT extends ParallelStatsDisabledIT {
         // Create schema DEFAULT and HBASE (Should allow since they are upper-cased) and verify that it exists
         // Create schema default and hbase and it should fail
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-             Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();) {
+             Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin();) {
 
             // default is a SQL keyword, hence it should always be passed in double-quotes
             try {

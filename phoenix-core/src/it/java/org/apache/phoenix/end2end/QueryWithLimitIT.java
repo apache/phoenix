@@ -47,7 +47,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-
+//Failing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class QueryWithLimitIT extends BaseTest {
     
@@ -67,7 +67,11 @@ public class QueryWithLimitIT extends BaseTest {
     @Before
     public void setupDriver() throws Exception {
         destroyDriver();
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
         tableName = generateUniqueName();
     }
 
@@ -134,7 +138,11 @@ public class QueryWithLimitIT extends BaseTest {
             // copy the existing properties
             Map<String, String> newProps = Maps.newHashMap(props);
             newProps.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(UNLIMITED_QUEUE_SIZE));
-            setUpTestDriver(new ReadOnlyProps(newProps.entrySet().iterator()));
+            if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+                setUpTestClusterForHA(new ReadOnlyProps(newProps.entrySet().iterator()),new ReadOnlyProps(newProps.entrySet().iterator()));
+            } else {
+                setUpTestDriver(new ReadOnlyProps(newProps.entrySet().iterator()));
+            }
             try (Connection conn = DriverManager.getConnection(getUrl(), connProps)) {
                 // now the query should succeed
                 ResultSet rs = conn.createStatement().executeQuery(query);

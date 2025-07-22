@@ -38,6 +38,7 @@ import org.junit.runners.Parameterized.Parameters;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 @RunWith(Parameterized.class)
 public abstract class BaseLocalIndexIT extends BaseTest {
     protected boolean isNamespaceMapped;
@@ -62,11 +63,16 @@ public abstract class BaseLocalIndexIT extends BaseTest {
         // generating stats for local indexes
         clientProps.put(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB, "120000");
         clientProps.put(QueryServices.MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN, "2");
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
+
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
+        }
     }
 
     protected Connection getConnection() throws SQLException{
-        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
         return DriverManager.getConnection(getUrl(),props);
     }

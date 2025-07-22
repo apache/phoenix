@@ -20,6 +20,7 @@ package org.apache.phoenix.schema.tool;
 import org.apache.phoenix.end2end.ParallelStatsEnabledIT;
 import org.apache.phoenix.end2end.ParallelStatsEnabledTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.parse.ParseException;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.schema.PTable;
@@ -50,14 +51,18 @@ import static junit.framework.TestCase.assertEquals;
 import static junit.framework.TestCase.assertTrue;
 import static junit.framework.TestCase.fail;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-
+//Passing with HA Connection
 @Category(ParallelStatsEnabledTest.class)
 public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
 
     @BeforeClass
     public static synchronized void setup() throws Exception {
         Map<String, String> props = Collections.emptyMap();
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     @Test
@@ -136,8 +141,8 @@ public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
         List<String> queries = new ArrayList<String>(){};
         queries.add(createTableStatement);
         queries.add(createIndexStatement);
-        try (PhoenixConnection conn = DriverManager.getConnection(getUrl(), props)
-                .unwrap(PhoenixConnection.class)) {
+        try (PhoenixMonitoredConnection conn = DriverManager.getConnection(getUrl(), props)
+                .unwrap(PhoenixMonitoredConnection.class)) {
             executeCreateStatements(conn, queries);
             PTable pData = conn.getTable(pTableFullName);
             PTable pIndex = conn.getTable(pIndexFullName);
@@ -661,7 +666,7 @@ public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
     }
 
     private Connection getTenantConnection(String url, String tenantId) throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         return DriverManager.getConnection(url, props);
     }
@@ -696,7 +701,7 @@ public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
     public static String runSchemaTool(Connection conn, String [] args) throws Exception {
         SchemaTool set = new SchemaTool();
         if(conn!=null) {
-            set.setConf(conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration());
+            set.setConf(conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getConfiguration());
         }
         int ret = set.run(args);
         if (ret != 0) {

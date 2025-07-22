@@ -33,6 +33,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
+//Failing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public abstract class UnnestArrayIT extends ParallelStatsDisabledIT {
     private String tableName;

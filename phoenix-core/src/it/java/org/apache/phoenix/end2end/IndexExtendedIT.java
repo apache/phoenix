@@ -42,6 +42,7 @@ import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.BaseTest;
@@ -64,6 +65,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 /**
  * Tests for the {@link IndexTool}
  */
+//Passing with HA Connection
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
 public class IndexExtendedIT extends BaseTest {
@@ -107,6 +109,13 @@ public class IndexExtendedIT extends BaseTest {
         clientProps.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.TRUE.toString());
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet()
                 .iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet()
+                    .iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet()
+                    .iterator()));
+        }
     }
     
     @Parameters(name="mutable = {0} , localIndex = {1}, useViewIndex = {2}, useSnapshot = {3}")
@@ -327,7 +336,7 @@ public class IndexExtendedIT extends BaseTest {
                 baseTableNameOfIndex = viewName;
                 physicalTableNameOfIndex = "_IDX_" + dataTableFullName;
             }
-            Table hIndexTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(physicalTableNameOfIndex));
+            Table hIndexTable = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getTable(Bytes.toBytes(physicalTableNameOfIndex));
 
             stmt.execute(
                     String.format("CREATE INDEX %s ON %s (UPPER(NAME, 'en_US')) %s", indexName,

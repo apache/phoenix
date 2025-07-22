@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
@@ -93,7 +94,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-
+//Failing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
@@ -142,7 +143,11 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
         // to force multiple verification tasks to be spawned so that we can exercise the page splitting logic
         props.put(GlobalIndexRegionScanner.INDEX_VERIFY_ROW_COUNTS_PER_TASK_CONF_KEY, Long.toString(2));
         props.put("hbase.procedure.remote.dispatcher.delay.msec", "0");
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     @Before
@@ -170,9 +175,9 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
     }
 
     private void setIndexRowStatusesToVerified(Connection conn, String dataTableFullName, String indexTableFullName) throws Exception {
-        PTable pDataTable = conn.unwrap(PhoenixConnection.class).getTable(dataTableFullName);
-        PTable pIndexTable = conn.unwrap(PhoenixConnection.class).getTable(indexTableFullName);
-        Table hTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
+        PTable pDataTable = conn.unwrap(PhoenixMonitoredConnection.class).getTable(dataTableFullName);
+        PTable pIndexTable = conn.unwrap(PhoenixMonitoredConnection.class).getTable(indexTableFullName);
+        Table hTable = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices()
                 .getTable(pIndexTable.getPhysicalName().getBytes());
         Scan scan = new Scan();
         PhoenixConnection phoenixConnection = conn.unwrap(PhoenixConnection.class);
@@ -840,7 +845,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
     public void deleteAllRows(Connection conn, TableName tableName) throws SQLException,
             IOException, InterruptedException {
         Scan scan = new Scan();
-        Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().
+        Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().
                 getAdmin();
         org.apache.hadoop.hbase.client.Connection hbaseConn = admin.getConnection();
         Table table = hbaseConn.getTable(tableName);

@@ -19,6 +19,7 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -34,6 +35,7 @@ import java.util.Properties;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK;
 import static org.apache.phoenix.exception.SQLExceptionCode.VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES;
 import static org.apache.phoenix.query.QueryServices.DISABLE_VIEW_SUBTREE_VALIDATION;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -41,6 +43,7 @@ import static org.junit.Assert.fail;
 /**
  * Tests for restrictions associated with view extending primary key of its parent.
  */
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
 
@@ -49,14 +52,14 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
     private static final String TENANT_ID = "tenant_01";
 
     private Connection getTenantConnection(final String tenantId) throws Exception {
-        Properties tenantProps = new Properties();
+        Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         return DriverManager.getConnection(getUrl(), tenantProps);
     }
 
     private Connection getTenantConnection(final String tenantId,
         final boolean disableCreateIndexCheck) throws Exception {
-        Properties tenantProps = new Properties();
+        Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         tenantProps.setProperty(DISABLE_VIEW_SUBTREE_VALIDATION,
             Boolean.toString(disableCreateIndexCheck));
@@ -69,8 +72,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String indexName = "idx_" + tableName;
         final String view01 = "v01_" + tableName;
         boolean allStmtExecuted = false;
-
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + tableName
@@ -109,7 +111,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String view01 = SchemaUtil.getTableName(schemaName2, "v01_" + tableName);
         boolean allStmtExecuted = false;
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + fullTableName
@@ -147,7 +149,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String indexName = "idx_" + tableName;
         final String view01 = SchemaUtil.getTableName(schemaName2, "v01_" + tableName);
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final Statement stmt = conn.createStatement();
             stmt.execute("CREATE TABLE " + fullTableName
                 + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
@@ -184,7 +186,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String view01 = "v01_" + tableName;
         boolean allStmtExecuted = false;
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + tableName
@@ -221,7 +223,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String index_view01 = "idx_v01_" + tableName;
         final String index_view02 = "idx_v02_" + tableName;
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + tableName
@@ -248,7 +250,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String index_view01 = "idx_v01_" + tableName;
         boolean allStmtExecuted = false;
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + tableName
@@ -291,7 +293,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String index_view01 = "idx_v01_" + tableName;
         boolean allStmtExecuted = false;
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + fullTableName
@@ -334,7 +336,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String index_view01 = "idx_v01_" + tableName;
         boolean allStmtExecuted = false;
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + fullTableName
@@ -384,7 +386,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String index_view01 = "idx_v01_" + tableName;
         boolean allStmtExecuted = false;
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + tableName
@@ -437,7 +439,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String index_view01 = "idx_v01_" + tableName;
         boolean allStmtExecuted = false;
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + fullTableName
@@ -497,7 +499,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String index_view01 = "idx_v01_" + tableName;
         boolean allStmtExecuted = false;
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))){
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + fullTableName
@@ -559,7 +561,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String view05 = SchemaUtil.getTableName(schemaName6, "v05_" + tableName);
         final String index_view01 = "idx_v01_" + tableName;
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + fullTableName
@@ -607,7 +609,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String index_view01 = "idx_v01_" + tableName;
         boolean allStmtExecuted = false;
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + fullTableName
@@ -671,7 +673,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String index_table = "idx_" + tableName;
         boolean allStmtExecuted = false;
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + fullTableName
@@ -732,7 +734,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String view04 = SchemaUtil.getTableName(schemaName5, "v04_" + tableName);
         final String index_table = "idx_" + tableName;
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(DISABLE_VIEW_SUBTREE_VALIDATION, "true");
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -773,7 +775,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String index_view01 = "idx_v01_" + tableName;
         final String index_view02 = "idx_v02_" + tableName;
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(DISABLE_VIEW_SUBTREE_VALIDATION, "true");
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -810,7 +812,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String index_view02 = "idx_v02_" + tableName;
         boolean allStmtExecuted = false;
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + tableName
@@ -865,7 +867,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String index_view02 = "idx_v02_" + tableName;
         boolean allStmtExecuted = false;
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + fullTableName
@@ -920,7 +922,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String index_view02 = "idx_v02_" + tableName;
         boolean allStmtExecuted = false;
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + fullTableName
@@ -978,7 +980,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String index_view02 = "idx_v02_" + tableName;
         boolean allStmtExecuted = false;
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + tableName
@@ -1033,7 +1035,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String index_view02 = "idx_v02_" + tableName;
         boolean allStmtExecuted = false;
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + fullTableName
@@ -1087,7 +1089,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String index_view01 = "idx_v01_" + tableName;
         boolean allStmtExecuted = false;
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + fullTableName
@@ -1141,7 +1143,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String index_view01 = "idx_v01_" + tableName;
         final String index_view02 = "idx_v02_" + tableName;
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + tableName

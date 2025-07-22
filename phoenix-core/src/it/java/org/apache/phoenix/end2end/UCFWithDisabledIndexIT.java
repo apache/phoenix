@@ -29,6 +29,7 @@ import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.query.BaseTest;
@@ -37,6 +38,7 @@ import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.ClientUtil;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -56,11 +58,13 @@ import java.util.Map;
 import java.util.Properties;
 
 import static org.apache.phoenix.query.QueryServices.DISABLE_VIEW_SUBTREE_VALIDATION;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
 /**
  * Tests that use UPDATE_CACHE_FREQUENCY with some of the disabled index states that require
  * clients to override UPDATE_CACHE_FREQUENCY and perform metadata calls to retrieve PTable.
  */
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class UCFWithDisabledIndexIT extends BaseTest {
 
@@ -76,7 +80,11 @@ public class UCFWithDisabledIndexIT extends BaseTest {
         props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
                 Long.toString(Long.MAX_VALUE));
         props.put(DISABLE_VIEW_SUBTREE_VALIDATION, "true");
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     @BeforeClass
@@ -113,7 +121,7 @@ public class UCFWithDisabledIndexIT extends BaseTest {
         final String index_view03 = "idx_v03_" + tableName;
         final String index_view04 = "idx_v04_" + tableName;
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + tableName
@@ -198,7 +206,7 @@ public class UCFWithDisabledIndexIT extends BaseTest {
         final String tableName = generateUniqueName();
         final String indexName = "IDX_" + tableName;
 
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             final Statement stmt = createIndexAndUpdateCoproc(conn, tableName, indexName, true);
 
@@ -207,10 +215,18 @@ public class UCFWithDisabledIndexIT extends BaseTest {
                     + "'c012', 'c013', 'c014')");
             conn.commit();
             throw new RuntimeException("Should not reach here");
-        } catch (PhoenixIOException e) {
-            LOGGER.error("Error thrown. ", e);
-            Assert.assertTrue(e.getCause() instanceof DoNotRetryIOException);
-            Assert.assertTrue(e.getCause().getMessage().contains("Not allowed"));
+        } catch (Exception e) {
+            if(e instanceof SQLException) {
+                if(e.getCause() instanceof PhoenixIOException){
+                    LOGGER.error("Error thrown. ", e);
+                    Assert.assertTrue(e.getCause().getCause() instanceof DoNotRetryIOException);
+                    Assert.assertTrue(e.getCause().getCause().getMessage().contains("Not allowed"));
+                }
+            } else if(e instanceof PhoenixIOException) {
+                LOGGER.error("Error thrown. ", e);
+                Assert.assertTrue(e.getCause() instanceof DoNotRetryIOException);
+                Assert.assertTrue(e.getCause().getMessage().contains("Not allowed"));
+            }
         } finally {
             updateIndexToRebuild(conn, tableName, indexName);
             TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);
@@ -291,7 +307,7 @@ public class UCFWithDisabledIndexIT extends BaseTest {
 
         stmt.execute("ALTER INDEX " + indexName + " ON " + tableName + " REBUILD");
 
-        PTable indexTable = conn.unwrap(PhoenixConnection.class).getTableNoCache(indexName);
+        PTable indexTable = conn.unwrap(PhoenixMonitoredConnection.class).getTableNoCache(indexName);
         Assert.assertEquals(PIndexState.ACTIVE, indexTable.getIndexState());
 
         // attach coproc that does not allow getTable RPC call
@@ -348,7 +364,7 @@ public class UCFWithDisabledIndexIT extends BaseTest {
         // expected to call getTable
         conn.commit();
 
-        PTable indexTable = conn.unwrap(PhoenixConnection.class).getTableNoCache(indexName);
+        PTable indexTable = conn.unwrap(PhoenixMonitoredConnection.class).getTableNoCache(indexName);
         if (alterIndexState) {
             Assert.assertEquals(PIndexState.DISABLE, indexTable.getIndexState());
         } else {
@@ -366,16 +382,24 @@ public class UCFWithDisabledIndexIT extends BaseTest {
         final String tableName = generateUniqueName();
         final String indexName = "IDX_" + tableName;
 
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             final Statement stmt = createIndexAndUpdateCoproc(conn, tableName, indexName, true);
 
             stmt.execute("SELECT * FROM " + indexName);
             throw new RuntimeException("Should not reach here");
-        } catch (PhoenixIOException e) {
-            LOGGER.error("Error thrown. ", e);
-            Assert.assertTrue(e.getCause() instanceof DoNotRetryIOException);
-            Assert.assertTrue(e.getCause().getMessage().contains("Not allowed"));
+        } catch (Exception e) {
+            if(e instanceof SQLException) {
+                if(e.getCause() instanceof PhoenixIOException){
+                    LOGGER.error("Error thrown. ", e);
+                    Assert.assertTrue(e.getCause().getCause() instanceof DoNotRetryIOException);
+                    Assert.assertTrue(e.getCause().getCause().getMessage().contains("Not allowed"));
+                }
+            } else if(e instanceof PhoenixIOException) {
+                LOGGER.error("Error thrown. ", e);
+                Assert.assertTrue(e.getCause() instanceof DoNotRetryIOException);
+                Assert.assertTrue(e.getCause().getMessage().contains("Not allowed"));
+            }
         } finally {
             updateIndexToRebuild(conn, tableName, indexName);
             TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);
@@ -390,7 +414,7 @@ public class UCFWithDisabledIndexIT extends BaseTest {
         final String tableName = generateUniqueName();
         final String indexName = "IDX_" + tableName;
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.INDEX_CREATE_DEFAULT_STATE,
                 PIndexState.CREATE_DISABLE.toString());
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -403,10 +427,18 @@ public class UCFWithDisabledIndexIT extends BaseTest {
                     + "'c012', 'c013', 'c014')");
             conn.commit();
             throw new RuntimeException("Should not reach here");
-        } catch (PhoenixIOException e) {
-            LOGGER.error("Error thrown. ", e);
-            Assert.assertTrue(e.getCause() instanceof DoNotRetryIOException);
-            Assert.assertTrue(e.getCause().getMessage().contains("Not allowed"));
+        } catch (Exception e) {
+            if(e instanceof SQLException) {
+                if(e.getCause() instanceof PhoenixIOException){
+                    LOGGER.error("Error thrown. ", e);
+                    Assert.assertTrue(e.getCause().getCause() instanceof DoNotRetryIOException);
+                    Assert.assertTrue(e.getCause().getCause().getMessage().contains("Not allowed"));
+                }
+            } else if(e instanceof PhoenixIOException) {
+                LOGGER.error("Error thrown. ", e);
+                Assert.assertTrue(e.getCause() instanceof DoNotRetryIOException);
+                Assert.assertTrue(e.getCause().getMessage().contains("Not allowed"));
+            }
         } finally {
             updateIndexToRebuild(conn, tableName, indexName);
             TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);

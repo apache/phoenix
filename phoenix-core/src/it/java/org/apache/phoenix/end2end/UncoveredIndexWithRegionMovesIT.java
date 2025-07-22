@@ -30,6 +30,7 @@ import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
@@ -55,6 +56,7 @@ import java.util.concurrent.TimeoutException;
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlan;
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlanWithLimit;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PAGED_ROWS_COUNTER;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -63,6 +65,7 @@ import static org.junit.Assert.assertTrue;
 /**
  * Uncovered index tests that include some region moves while performing rs#next.
  */
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class UncoveredIndexWithRegionMovesIT extends ParallelStatsDisabledIT {
 
@@ -103,7 +106,11 @@ public class UncoveredIndexWithRegionMovesIT extends ParallelStatsDisabledIT {
         props.put(HConstants.HBASE_CLIENT_SCANNER_MAX_RESULT_SIZE_KEY, String.valueOf(1));
         props.put(QueryServices.PHOENIX_POST_DUMMY_PROCESS,
                 TestScanningResultPostDummyResultCaller.class.getName());
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     @After
@@ -207,7 +214,7 @@ public class UncoveredIndexWithRegionMovesIT extends ParallelStatsDisabledIT {
         String dataTableName = generateUniqueName();
         populateTable(
                 dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE UNCOVERED INDEX "
                     + indexTableName + " on " + dataTableName + " (val1) ");
@@ -295,7 +302,7 @@ public class UncoveredIndexWithRegionMovesIT extends ParallelStatsDisabledIT {
         hasTestStarted = true;
         String dataTableName = generateUniqueName();
         populateTable(dataTableName);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE UNCOVERED INDEX "
                     + indexTableName + " on " + dataTableName + " (val1) ");
@@ -376,7 +383,7 @@ public class UncoveredIndexWithRegionMovesIT extends ParallelStatsDisabledIT {
     }
 
     private void populateTable(String tableName) throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("create table " + tableName +
                 " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10)," +
                 " val3 varchar(10))");

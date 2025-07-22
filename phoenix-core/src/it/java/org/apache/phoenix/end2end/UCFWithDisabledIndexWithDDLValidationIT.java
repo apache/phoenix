@@ -33,6 +33,7 @@ import java.util.Map;
  * The cluster is brought up with required configs at client and server side to enable
  * metadata caching redesign.
  */
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class UCFWithDisabledIndexWithDDLValidationIT extends UCFWithDisabledIndexIT {
 
@@ -45,7 +46,11 @@ public class UCFWithDisabledIndexWithDDLValidationIT extends UCFWithDisabledInde
         props.put(QueryServices.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED, Boolean.toString(true));
         props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
                 Long.toString(Long.MAX_VALUE));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     @BeforeClass

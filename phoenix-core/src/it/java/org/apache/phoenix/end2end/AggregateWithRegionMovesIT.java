@@ -39,7 +39,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-
+//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class AggregateWithRegionMovesIT extends BaseAggregateWithRegionMovesIT {
 
@@ -117,7 +117,7 @@ public class AggregateWithRegionMovesIT extends BaseAggregateWithRegionMovesIT {
 
     @Test
     public void testGroupByCoerceExpressionBug3453() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             //Type is INT
             String intTableName = generateUniqueName();
             String sql = "CREATE TABLE " + intTableName + "(" +
@@ -285,7 +285,7 @@ public class AggregateWithRegionMovesIT extends BaseAggregateWithRegionMovesIT {
 
     @Override
     protected void testCountNullInNonEmptyKeyValueCF(int columnEncodedBytes) throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             //Type is INT
             String intTableName = generateUniqueName();
             TABLE_NAMES.add(intTableName);

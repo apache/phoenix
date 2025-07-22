@@ -44,7 +44,11 @@ import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.executeQu
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.executeQueryWithClientVersion;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.UpgradeProps.NONE;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.UpgradeProps.SET_MAX_LOOK_BACK_AGE;
+import static org.apache.phoenix.query.BaseTest.getConfiguration;
+import static org.apache.phoenix.query.BaseTest.getUtility;
 import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
+import static org.apache.phoenix.query.BaseTest.setUpTestClusterForHA;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -53,9 +57,11 @@ import static org.junit.Assert.assertTrue;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.Collection;
+import java.util.Map;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.TableDescriptor;
@@ -64,11 +70,15 @@ import org.apache.phoenix.coprocessor.TaskMetaDataEndpoint;
 import org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.MavenCoordinates;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.jdbc.ZKConnectionInfo;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.SystemTaskSplitPolicy;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ServerUtil.ConnectionFactory;
 import org.junit.After;
 import org.junit.Assume;
@@ -86,7 +96,7 @@ import org.slf4j.LoggerFactory;
  * against the current server version. It runs SQL queries with given 
  * client versions and compares the output against gold files
  */
-
+//Failing with HA Connection
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
 public class BackwardCompatibilityIT {
@@ -113,18 +123,30 @@ public class BackwardCompatibilityIT {
     @Before
     public synchronized void doSetup() throws Exception {
         tmpDir = System.getProperty("java.io.tmpdir");
-        conf = HBaseConfiguration.create();
-        conf.set(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB,
-            Long.toString(Long.MAX_VALUE));
-        conf.set(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
-            Long.toString(Long.MAX_VALUE));
-        hbaseTestUtil = new HBaseTestingUtility(conf);
-        setUpConfigForMiniCluster(conf);
-        conf.set(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
-        hbaseTestUtil.startMiniCluster();
-        zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
-        url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
-        DriverManager.registerDriver(PhoenixDriver.INSTANCE);
+        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+            props.put(HConstants.ZOOKEEPER_ZNODE_PARENT, "/hbase-test");
+            props.put(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, ZKConnectionInfo.ZK_REGISTRY_NAME);
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+            conf = getConfiguration();
+            hbaseTestUtil = getUtility();
+            zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
+            url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
+
+        } else {
+            conf = HBaseConfiguration.create();
+            conf.set(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB,
+                    Long.toString(Long.MAX_VALUE));
+            conf.set(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
+                    Long.toString(Long.MAX_VALUE));
+            hbaseTestUtil = new HBaseTestingUtility(conf);
+            setUpConfigForMiniCluster(conf);
+            conf.set(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+            hbaseTestUtil.startMiniCluster();
+            zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
+            url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
+            DriverManager.registerDriver(PhoenixDriver.INSTANCE);
+        }
         checkForPreConditions(compatibleClientVersion, conf);
     }
 
@@ -188,7 +210,7 @@ public class BackwardCompatibilityIT {
             throws Exception {
         // Create a base table, view and make it diverge from an old client
         executeQueryWithClientVersion(compatibleClientVersion, CREATE_DIVERGED_VIEW, zkQuorum);
-        try (Connection conn = DriverManager.getConnection(url)) {
+        try (Connection conn = DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             // Just connect with a new client to cause a metadata upgrade
         }
         // Query with an old client again

@@ -32,6 +32,7 @@ import org.junit.experimental.categories.Category;
  * use a class ITGuidePostsCacheFactory which is for testing only that keeps track of the number
  * of cache instances generated.
  */
+//Passing with HA Connection
 @Category(ParallelStatsEnabledTest.class)
 public class ConfigurableCacheIT extends ParallelStatsEnabledIT {
 
@@ -41,7 +42,7 @@ public class ConfigurableCacheIT extends ParallelStatsEnabledIT {
     public static synchronized void initTables() throws Exception {
         table = generateUniqueName();
         // Use phoenix test driver for setup
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement()
                     .execute("CREATE TABLE " + table
                             + " (k INTEGER PRIMARY KEY, c1.a bigint, c2.b bigint)"
@@ -66,7 +67,7 @@ public class ConfigurableCacheIT extends ParallelStatsEnabledIT {
     private Connection getCacheFactory(String principal, String cacheFactoryString)
             throws Exception {
 
-        String url = getUrl();
+        String url = getActiveUrl();
         url = url.replace(";" + PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM, "");
 
         // As there is a map of connections in the phoenix driver need to differentiate the url to
@@ -96,7 +97,7 @@ public class ConfigurableCacheIT extends ParallelStatsEnabledIT {
     @Test
     public void testWithDefaults() throws Exception {
         int initialCount = ITGuidePostsCacheFactory.getCount();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().executeQuery("SELECT * FROM " + table);
         }
         assertEquals(initialCount, ITGuidePostsCacheFactory.getCount());

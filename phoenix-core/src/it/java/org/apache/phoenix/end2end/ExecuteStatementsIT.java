@@ -24,6 +24,7 @@ import static org.apache.phoenix.util.TestUtil.ROW6;
 import static org.apache.phoenix.util.TestUtil.ROW7;
 import static org.apache.phoenix.util.TestUtil.ROW8;
 import static org.apache.phoenix.util.TestUtil.ROW9;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -43,10 +44,11 @@ import java.util.List;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class ExecuteStatementsIT extends ParallelStatsDisabledIT {
     
@@ -78,7 +80,7 @@ public class ExecuteStatementsIT extends ParallelStatsDisabledIT {
             "    SELECT \"DATE\"+1, val*10, host FROM " + ptsdbTableName + ";";
         
         Date now = new Date(System.currentTimeMillis());
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.setAutoCommit(true);
         List<Object> binds = Arrays.<Object>asList(6);
         int nStatements = PhoenixRuntime.executeStatements(conn, new StringReader(statements), binds);
@@ -119,7 +121,7 @@ public class ExecuteStatementsIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testCharPadding() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         String rowKey = "hello"; 
         String testString = "world";

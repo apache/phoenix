@@ -39,6 +39,7 @@ import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.ByteUtil;
@@ -163,7 +164,7 @@ public class IndexVerificationResultRepository implements AutoCloseable {
     }
 
     public void createResultTable(Connection connection) throws IOException, SQLException {
-        ConnectionQueryServices queryServices = connection.unwrap(PhoenixConnection.class).getQueryServices();
+        ConnectionQueryServices queryServices = connection.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
         try (Admin admin = queryServices.getAdmin()) {
             TableName resultTableName = TableName.valueOf(RESULT_TABLE_NAME);
             if (!admin.tableExists(resultTableName)) {

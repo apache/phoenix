@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.PhoenixTestBuilder;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TableOptions;
@@ -28,6 +29,7 @@ import org.apache.phoenix.schema.LiteralTTLExpression;
 import org.apache.phoenix.schema.TTLExpression;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
 import org.junit.Test;
@@ -45,7 +47,8 @@ import java.util.List;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
-
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class TTLIT extends ParallelStatsDisabledIT {
@@ -183,8 +186,7 @@ public class TTLIT extends ParallelStatsDisabledIT {
 
         PTable table = schemaBuilder.getBaseTable();
         String indexName = schemaBuilder.getEntityTableIndexName();
-
-        try (Connection globalConnection = DriverManager.getConnection(getUrl())) {
+        try (Connection globalConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             assertTTLForGivenPTable(globalConnection, table, DEFAULT_TEST_TTL_VALUE);
             assertTTLForIndexName(globalConnection, indexName, DEFAULT_TEST_TTL_VALUE);
             //Assert TTL for index by getting PTable from table's PTable
@@ -228,10 +230,9 @@ public class TTLIT extends ParallelStatsDisabledIT {
         PTable table = schemaBuilder.getBaseTable();
         String globalView = schemaBuilder.getEntityGlobalViewName();
         String childView = schemaBuilder.getEntityTenantViewName();
-
-        try (Connection globalConnection = DriverManager.getConnection(getUrl());
+        try (Connection globalConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
             Connection tenantConnection = DriverManager.getConnection(
-                    getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId())) {
+                    getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             //All level entities should have TTL value equal to TTL defined at table level
             assertTTLForGivenPTable(globalConnection, table, DEFAULT_TEST_TTL_VALUE);
             assertTTLForGivenEntity(globalConnection, globalView, DEFAULT_TEST_TTL_VALUE);
@@ -273,10 +274,9 @@ public class TTLIT extends ParallelStatsDisabledIT {
         PTable table = schemaBuilder.getBaseTable();
         String globalViewName = schemaBuilder.getEntityGlobalViewName();
         String childViewName = schemaBuilder.getEntityTenantViewName();
-
-        try (Connection globalConnection = DriverManager.getConnection(getUrl());
+        try (Connection globalConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenantConnection = DriverManager.getConnection(
-                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId())) {
+                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             //All level entities should have TTL value equal to TTL defined at table level
             assertTTLForGivenPTable(globalConnection, table, DEFAULT_TEST_TTL_VALUE);
             assertTTLForGivenEntity(globalConnection, globalViewName, DEFAULT_TEST_TTL_VALUE);
@@ -321,10 +321,9 @@ public class TTLIT extends ParallelStatsDisabledIT {
         String indexName = schemaBuilder.getEntityTableIndexName();
         String globalView = schemaBuilder.getEntityGlobalViewName();
         String childView = schemaBuilder.getEntityTenantViewName();
-
-        try (Connection globalConnection = DriverManager.getConnection(getUrl());
+        try (Connection globalConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenantConnection = DriverManager.getConnection(
-                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId())) {
+                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             //All level entities should have TTL value equal to TTL defined at table level
             assertTTLForGivenPTable(globalConnection, table, DEFAULT_TEST_TTL_VALUE);
             assertTTLForIndexName(globalConnection, indexName, DEFAULT_TEST_TTL_VALUE);
@@ -352,9 +351,9 @@ public class TTLIT extends ParallelStatsDisabledIT {
 
         String childView = schemaBuilder.getEntityTenantViewName();
 
-        try (Connection globalConnection = DriverManager.getConnection(getUrl());
+        try (Connection globalConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenantConnection = DriverManager.getConnection(
-                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId())) {
+                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             //All level entities should have TTL value equal to TTL defined at table level
             assertTTLForGivenPTable(globalConnection, table, DEFAULT_TEST_TTL_VALUE);
 
@@ -381,9 +380,9 @@ public class TTLIT extends ParallelStatsDisabledIT {
         String childView = schemaBuilder.getEntityTenantViewName();
         String childViewIndexName = isMultiTenant ? schemaBuilder.getEntityTenantViewIndexName() : SKIP_ASSERT;
 
-        try (Connection globalConnection = DriverManager.getConnection(getUrl());
+        try (Connection globalConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenantConnection = DriverManager.getConnection(
-                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId())) {
+                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             //All level entities should have TTL value equal to TTL defined at table level
             assertTTLForGivenPTable(globalConnection, table, DEFAULT_TEST_TTL_VALUE);
 
@@ -411,9 +410,9 @@ public class TTLIT extends ParallelStatsDisabledIT {
         String globalViewIndexName = schemaBuilder.getEntityGlobalViewIndexName();
         String childViewName = schemaBuilder.getEntityTenantViewName();
 
-        try (Connection globalConnection = DriverManager.getConnection(getUrl());
+        try (Connection globalConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenantConnection = DriverManager.getConnection(
-                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId())) {
+                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             //All level entities should have TTL value equal to TTL defined at table level
             assertTTLForGivenPTable(globalConnection, table, TTL_NOT_DEFINED);
             assertTTLForGivenEntity(globalConnection, globalViewName, DEFAULT_TEST_TTL_VALUE_AT_GLOBAL);
@@ -434,9 +433,9 @@ public class TTLIT extends ParallelStatsDisabledIT {
         String childViewName = schemaBuilder.getEntityTenantViewName();
         String childViewIndexName = isMultiTenant ? schemaBuilder.getEntityTenantViewIndexName() : SKIP_ASSERT;
 
-        try (Connection globalConnection = DriverManager.getConnection(getUrl());
+        try (Connection globalConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenantConnection = DriverManager.getConnection(
-                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId())) {
+                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             //All level entities should have TTL value equal to TTL defined at table level
             assertTTLForGivenPTable(globalConnection, table, TTL_NOT_DEFINED);
             assertTTLForGivenEntity(globalConnection, globalViewName, DEFAULT_TEST_TTL_VALUE_AT_GLOBAL);
@@ -465,9 +464,9 @@ public class TTLIT extends ParallelStatsDisabledIT {
         String globalViewName = schemaBuilder.getEntityGlobalViewName();
         String childViewName = schemaBuilder.getEntityTenantViewName();
 
-        try (Connection globalConnection = DriverManager.getConnection(getUrl());
+        try (Connection globalConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenantConnection = DriverManager.getConnection(
-                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId())) {
+                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
 
             //All level entities should have TTL value equal to TTL defined at table level
             assertTTLForGivenPTable(globalConnection, table, TTL_NOT_DEFINED);
@@ -488,9 +487,9 @@ public class TTLIT extends ParallelStatsDisabledIT {
         String globalViewName = schemaBuilder.getEntityGlobalViewName();
         String childViewName = schemaBuilder.getEntityTenantViewName();
 
-        try (Connection globalConnection = DriverManager.getConnection(getUrl());
+        try (Connection globalConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenantConnection = DriverManager.getConnection(
-                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId())) {
+                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             //All level entities should have TTL value equal to TTL defined at table level
             assertTTLForGivenPTable(globalConnection, table, TTL_NOT_DEFINED);
             assertTTLForGivenEntity(globalConnection, globalViewName, DEFAULT_TEST_TTL_VALUE_AT_GLOBAL);
@@ -529,9 +528,9 @@ public class TTLIT extends ParallelStatsDisabledIT {
         String childView = schemaBuilder.getEntityTenantViewName();
         String childViewIndex = isMultiTenant ? schemaBuilder.getEntityTenantViewIndexName() : SKIP_ASSERT;
 
-        try (Connection globalConnection = DriverManager.getConnection(getUrl());
+        try (Connection globalConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenantConnection = DriverManager.getConnection(
-                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId())) {
+                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             //All level entities should have TTL value equal to TTL defined at table level
             assertTTLForGivenPTable(globalConnection, table, TTL_NOT_DEFINED);
             assertTTLForGivenEntity(globalConnection, globalView, TTL_NOT_DEFINED);
@@ -552,9 +551,9 @@ public class TTLIT extends ParallelStatsDisabledIT {
         String childView = schemaBuilder.getEntityTenantViewName();
         String childViewIndex = isMultiTenant ? schemaBuilder.getEntityTenantViewIndexName() : SKIP_ASSERT;
 
-        try (Connection globalConnection = DriverManager.getConnection(getUrl());
+        try (Connection globalConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenantConnection = DriverManager.getConnection(
-                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId())) {
+                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             //All level entities should have TTL value equal to TTL defined at table level
             assertTTLForGivenPTable(globalConnection, table, TTL_NOT_DEFINED);
             assertTTLForGivenEntity(globalConnection, globalView, TTL_NOT_DEFINED);
@@ -600,9 +599,9 @@ public class TTLIT extends ParallelStatsDisabledIT {
         String tenantViewName = schemaBuilder.getEntityTenantViewName();
         String tenantViewIndexName = isMultiTenant ? schemaBuilder.getEntityTenantViewIndexName() : SKIP_ASSERT;
 
-        try (Connection globalConnection = DriverManager.getConnection(getUrl());
+        try (Connection globalConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenantConnection = DriverManager.getConnection(
-                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId())) {
+                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             //All level entities should have TTL value equal to TTL defined at table level
             assertTTLForGivenPTable(globalConnection, table, DEFAULT_TEST_TTL_VALUE);
             assertTTLForGivenEntity(globalConnection, globalViewName, DEFAULT_TEST_TTL_VALUE);
@@ -615,7 +614,7 @@ public class TTLIT extends ParallelStatsDisabledIT {
             globalConnection.createStatement().execute(dml);
 
             //Clearing cache as MetaDataCaching is not there for TTL usecase
-            globalConnection.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+            globalConnection.unwrap(PhoenixMonitoredConnection.class).getQueryServices().clearCache();
 
             assertTTLForGivenEntity(globalConnection, tableName, TTL_NOT_DEFINED);
             assertTTLForGivenEntity(globalConnection, globalViewName, TTL_NOT_DEFINED);
@@ -628,7 +627,7 @@ public class TTLIT extends ParallelStatsDisabledIT {
             globalConnection.createStatement().execute(dml);
 
             //Clearing cache again
-            globalConnection.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+            globalConnection.unwrap(PhoenixMonitoredConnection.class).getQueryServices().clearCache();
 
             assertTTLForGivenEntity(globalConnection, tableName, TTL_NOT_DEFINED);
             assertTTLForGivenEntity(globalConnection, globalViewName, ALTER_TEST_TTL_VALUE);
@@ -654,9 +653,9 @@ public class TTLIT extends ParallelStatsDisabledIT {
         String tenantViewName = schemaBuilder.getEntityTenantViewName();
         String tenantViewIndexName = isMultiTenant ? schemaBuilder.getEntityTenantViewIndexName() : SKIP_ASSERT;
 
-        try (Connection globalConnection = DriverManager.getConnection(getUrl());
+        try (Connection globalConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenantConnection = DriverManager.getConnection(
-                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId())) {
+                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             //All level entities should have TTL value equal to TTL defined at table level
             assertTTLForGivenPTable(globalConnection, table, DEFAULT_TEST_TTL_VALUE);
             assertTTLForGivenEntity(globalConnection, globalViewName, DEFAULT_TEST_TTL_VALUE);
@@ -669,7 +668,7 @@ public class TTLIT extends ParallelStatsDisabledIT {
             globalConnection.createStatement().execute(dml);
 
             //Clearing cache as MetaDataCaching is not there for TTL usecase
-            globalConnection.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+            globalConnection.unwrap(PhoenixMonitoredConnection.class).getQueryServices().clearCache();
 
             assertTTLForGivenEntity(globalConnection, tableName, TTL_NOT_DEFINED);
             assertTTLForGivenEntity(globalConnection, globalViewName, TTL_NOT_DEFINED);
@@ -682,7 +681,7 @@ public class TTLIT extends ParallelStatsDisabledIT {
             tenantConnection.createStatement().execute(dml);
 
             //Clearing cache again
-            globalConnection.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+            globalConnection.unwrap(PhoenixMonitoredConnection.class).getQueryServices().clearCache();
 
             assertTTLForGivenEntity(globalConnection, tableName, TTL_NOT_DEFINED);
             assertTTLForGivenEntity(globalConnection, globalViewName, TTL_NOT_DEFINED);
@@ -708,9 +707,9 @@ public class TTLIT extends ParallelStatsDisabledIT {
         String tenantViewName = schemaBuilder.getEntityTenantViewName();
         String tenantViewIndexName = isMultiTenant ? schemaBuilder.getEntityTenantViewIndexName() : SKIP_ASSERT;
 
-        try (Connection globalConnection = DriverManager.getConnection(getUrl());
+        try (Connection globalConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenantConnection = DriverManager.getConnection(
-                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId())) {
+                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             //All level entities should have TTL value equal to TTL defined at table level
             assertTTLForGivenPTable(globalConnection, table, TTL_NOT_DEFINED);
             assertTTLForGivenEntity(globalConnection, globalViewName, DEFAULT_TEST_TTL_VALUE_AT_GLOBAL);
@@ -723,7 +722,7 @@ public class TTLIT extends ParallelStatsDisabledIT {
             globalConnection.createStatement().execute(dml);
 
             //Clearing cache as MetaDataCaching is not there for TTL usecase
-            globalConnection.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+            globalConnection.unwrap(PhoenixMonitoredConnection.class).getQueryServices().clearCache();
 
             assertTTLForGivenEntity(globalConnection, tableName, TTL_NOT_DEFINED);
             assertTTLForGivenEntity(globalConnection, globalViewName, TTL_NOT_DEFINED);
@@ -736,7 +735,7 @@ public class TTLIT extends ParallelStatsDisabledIT {
             tenantConnection.createStatement().execute(dml);
 
             //Clearing cache again
-            globalConnection.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+            globalConnection.unwrap(PhoenixMonitoredConnection.class).getQueryServices().clearCache();
 
             assertTTLForGivenEntity(globalConnection, tableName, TTL_NOT_DEFINED);
             assertTTLForGivenEntity(globalConnection, globalViewName, TTL_NOT_DEFINED);
@@ -762,9 +761,9 @@ public class TTLIT extends ParallelStatsDisabledIT {
         String tenantViewName = schemaBuilder.getEntityTenantViewName();
         String tenantViewIndexName = isMultiTenant ? schemaBuilder.getEntityTenantViewIndexName() : SKIP_ASSERT;
 
-        try (Connection globalConnection = DriverManager.getConnection(getUrl());
+        try (Connection globalConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenantConnection = DriverManager.getConnection(
-                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId())) {
+                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             //All level entities should have TTL value equal to TTL defined at table level
             assertTTLForGivenPTable(globalConnection, table, TTL_NOT_DEFINED);
             assertTTLForGivenEntity(globalConnection, globalViewName, TTL_NOT_DEFINED);
@@ -777,7 +776,7 @@ public class TTLIT extends ParallelStatsDisabledIT {
             tenantConnection.createStatement().execute(dml);
 
             //Clearing cache as MetaDataCaching is not there for TTL usecase
-            globalConnection.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+            globalConnection.unwrap(PhoenixMonitoredConnection.class).getQueryServices().clearCache();
 
             assertTTLForGivenEntity(globalConnection, tableName, TTL_NOT_DEFINED);
             assertTTLForGivenEntity(globalConnection, globalViewName, TTL_NOT_DEFINED);
@@ -790,7 +789,7 @@ public class TTLIT extends ParallelStatsDisabledIT {
             globalConnection.createStatement().execute(dml);
 
             //Clearing cache again
-            globalConnection.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+            globalConnection.unwrap(PhoenixMonitoredConnection.class).getQueryServices().clearCache();
 
             assertTTLForGivenEntity(globalConnection, tableName, ALTER_TEST_TTL_VALUE);
             assertTTLForGivenEntity(globalConnection, globalViewName, ALTER_TEST_TTL_VALUE);
@@ -817,9 +816,9 @@ public class TTLIT extends ParallelStatsDisabledIT {
         String tenantViewName = schemaBuilder.getEntityTenantViewName();
         String tenantViewIndexName = isMultiTenant ? schemaBuilder.getEntityTenantViewIndexName() : SKIP_ASSERT;
 
-        try (Connection globalConnection = DriverManager.getConnection(getUrl());
+        try (Connection globalConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Connection tenantConnection = DriverManager.getConnection(
-                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId())) {
+                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             //All level entities should have TTL value equal to TTL defined at table level
             assertTTLForGivenPTable(globalConnection, table, TTL_NOT_DEFINED);
             assertTTLForGivenEntity(globalConnection, globalViewName, TTL_NOT_DEFINED);
@@ -833,7 +832,7 @@ public class TTLIT extends ParallelStatsDisabledIT {
 
             //Clearing cache as MetaDataCaching is not there for TTL usecase
             //Clearing cache as MetaDataCaching is not there for TTL usecase
-            globalConnection.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+            globalConnection.unwrap(PhoenixMonitoredConnection.class).getQueryServices().clearCache();
 
             assertTTLForGivenEntity(globalConnection, tableName, TTL_NOT_DEFINED);
             assertTTLForGivenEntity(globalConnection, globalViewName, TTL_NOT_DEFINED);
@@ -847,7 +846,7 @@ public class TTLIT extends ParallelStatsDisabledIT {
 
             //Clearing cache again
             //Clearing cache as MetaDataCaching is not there for TTL usecase
-            globalConnection.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+            globalConnection.unwrap(PhoenixMonitoredConnection.class).getQueryServices().clearCache();
 
             assertTTLForGivenEntity(globalConnection, tableName, TTL_NOT_DEFINED);
             assertTTLForGivenEntity(globalConnection, globalViewName, ALTER_TEST_TTL_VALUE);

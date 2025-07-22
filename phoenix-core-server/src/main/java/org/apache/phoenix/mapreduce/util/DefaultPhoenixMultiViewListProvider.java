@@ -19,6 +19,7 @@ package org.apache.phoenix.mapreduce.util;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
@@ -57,7 +58,7 @@ public class DefaultPhoenixMultiViewListProvider implements PhoenixMultiViewList
         }
         String tenantId = configuration.get(PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID);
 
-        try (PhoenixConnection connection = (PhoenixConnection)
+        try (PhoenixMonitoredConnection connection = (PhoenixMonitoredConnection)
                 ConnectionUtil.getInputConnection(configuration)){
             try (PreparedStatement stmt = connection.prepareStatement(query)) {
                 do {
@@ -103,7 +104,7 @@ public class DefaultPhoenixMultiViewListProvider implements PhoenixMultiViewList
         List<ViewInfoWritable> viewInfoWritables = new ArrayList<>();
         String query = PhoenixMultiInputUtil.getFetchViewQuery(configuration);
 
-        try (PhoenixConnection connection = (PhoenixConnection)
+        try (PhoenixMonitoredConnection connection = (PhoenixMonitoredConnection)
                 ConnectionUtil.getInputConnection(configuration)) {
             try (Statement stmt = connection.createStatement()) {
                 ResultSet viewRs = stmt.executeQuery(query);
@@ -130,7 +131,7 @@ public class DefaultPhoenixMultiViewListProvider implements PhoenixMultiViewList
         return viewInfoWritables;
     }
 
-    private boolean isParentHasTTL(PhoenixConnection connection,
+    private boolean isParentHasTTL(PhoenixMonitoredConnection connection,
                                    String tenantId, String fullTableName) {
         boolean skip= false;
         try {
@@ -160,7 +161,7 @@ public class DefaultPhoenixMultiViewListProvider implements PhoenixMultiViewList
         return skip;
     }
 
-    private void addingViewIndexToTheFinalList(PhoenixConnection connection, String tenantId,
+    private void addingViewIndexToTheFinalList(PhoenixMonitoredConnection connection, String tenantId,
                                                String fullTableName, long viewTtlValue,
                                                List<ViewInfoWritable> viewInfoWritables)
             throws Exception {
