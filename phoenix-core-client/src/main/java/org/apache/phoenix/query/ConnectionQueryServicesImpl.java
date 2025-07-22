@@ -1653,6 +1653,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
         }
       }
 
+      if (!SchemaUtil.isSystemTable(tableName)) {
+        if (newDesc.hasCoprocessor(QueryConstants.PHOENIX_TTL_REGION_OBSERVER_CLASSNAME)) {
+          builder.removeCoprocessor(QueryConstants.PHOENIX_TTL_REGION_OBSERVER_CLASSNAME);
+        }
+      }
+
       if (
         Arrays.equals(tableName,
           SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, props).getName())
