@@ -67,7 +67,6 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.CsvBulkImportUtil;
 import org.apache.phoenix.mapreduce.PhoenixServerBuildIndexInputFormat;
-import org.apache.phoenix.mapreduce.PhoenixTTLTool;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.PhoenixServerBuildIndexDBWritable;
@@ -367,7 +366,7 @@ public class TransformTool extends Configured implements Tool {
     if (cmdLine.hasOption(SPLIT_SIZE_OPTION.getOpt())) {
       splitSize = Integer.parseInt(cmdLine.getOptionValue(SPLIT_SIZE_OPTION.getOpt()));
     } else {
-      splitSize = PhoenixTTLTool.DEFAULT_MAPPER_SPLIT_SIZE;
+      splitSize = 10;
     }
     logicalTableName = dataTable;
     logicalParentName = null;
@@ -607,7 +606,6 @@ public class TransformTool extends Configured implements Tool {
       fs = outputPath.getFileSystem(configuration);
       fs.delete(outputPath, true);
     }
-    PhoenixConfigurationUtil.setMultiInputMapperSplitSize(configuration, splitSize);
 
     this.job = Job.getInstance(getConf(), jobName);
     job.setJarByClass(TransformTool.class);

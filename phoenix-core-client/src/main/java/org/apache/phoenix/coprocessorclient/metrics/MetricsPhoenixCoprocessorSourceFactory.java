@@ -24,25 +24,11 @@ public class MetricsPhoenixCoprocessorSourceFactory {
 
   private static final MetricsPhoenixCoprocessorSourceFactory INSTANCE =
     new MetricsPhoenixCoprocessorSourceFactory();
-  // Holds the PHOENIX_TTL related metrics.
-  private static volatile MetricsPhoenixTTLSource phoenixTTLSource;
   private static volatile MetricsMetadataCachingSource metadataCachingSource;
   private static volatile MetricsPhoenixMasterSource phoenixMasterSource;
 
   public static MetricsPhoenixCoprocessorSourceFactory getInstance() {
     return INSTANCE;
-  }
-
-  // return the metric source for PHOENIX_TTL coproc.
-  public MetricsPhoenixTTLSource getPhoenixTTLSource() {
-    if (INSTANCE.phoenixTTLSource == null) {
-      synchronized (MetricsPhoenixTTLSource.class) {
-        if (INSTANCE.phoenixTTLSource == null) {
-          INSTANCE.phoenixTTLSource = new MetricsPhoenixTTLSourceImpl();
-        }
-      }
-    }
-    return INSTANCE.phoenixTTLSource;
   }
 
   public MetricsMetadataCachingSource getMetadataCachingSource() {

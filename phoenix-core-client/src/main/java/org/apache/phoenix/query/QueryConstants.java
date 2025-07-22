@@ -363,8 +363,6 @@ public interface QueryConstants {
     "org.apache.phoenix.coprocessor.TaskMetaDataEndpoint";
   final String CHILD_LINK_META_DATA_ENDPOINT_CLASSNAME =
     "org.apache.phoenix.coprocessor.ChildLinkMetaDataEndpoint";
-  final String PHOENIX_TTL_REGION_OBSERVER_CLASSNAME =
-    "org.apache.phoenix.coprocessor.PhoenixTTLRegionObserver";
   final String SYSTEM_CATALOG_REGION_OBSERVER_CLASSNAME =
     "org.apache.phoenix.coprocessor.SystemCatalogRegionObserver";
 

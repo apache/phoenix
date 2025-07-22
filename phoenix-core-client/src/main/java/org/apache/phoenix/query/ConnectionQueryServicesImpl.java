@@ -1445,9 +1445,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
           QueryServicesOptions.DEFAULT_INDEX_REGION_OBSERVER_ENABLED);
       boolean isViewIndex =
         TRUE_BYTES_AS_STRING.equals(tableProps.get(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_NAME));
-      boolean isServerSideMaskingEnabled =
-        config.getBoolean(QueryServices.PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED,
-          QueryServicesOptions.DEFAULT_SERVER_SIDE_MASKING_ENABLED);
 
       boolean isViewBaseTransactional = false;
       if (!isTransactional && isViewIndex) {
@@ -1653,21 +1650,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
           if (coprocessorGCClassName != null && newDesc.hasCoprocessor(coprocessorGCClassName)) {
             builder.removeCoprocessor(coprocessorGCClassName);
           }
-        }
-      }
-
-      // The priority for this co-processor should be set higher than the GlobalIndexChecker so that
-      // the read repair scans
-      // are intercepted by the TTLAwareRegionObserver and only the rows that are not ttl-expired
-      // are returned.
-      if (!SchemaUtil.isSystemTable(tableName)) {
-        if (
-          !newDesc.hasCoprocessor(QueryConstants.PHOENIX_TTL_REGION_OBSERVER_CLASSNAME)
-            && isServerSideMaskingEnabled
-        ) {
-          builder.setCoprocessor(CoprocessorDescriptorBuilder
-            .newBuilder(QueryConstants.PHOENIX_TTL_REGION_OBSERVER_CLASSNAME)
-            .setPriority(priority - 2).setProperties(Collections.emptyMap()).build());
         }
       }
 
@@ -5187,7 +5169,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     try (Statement statement = metaConnection.createStatement()) {
       statement.executeUpdate(getTaskDDL());
     } catch (NewerTableAlreadyExistsException ignored) {
-
     } catch (TableAlreadyExistsException e) {
       // take snapshot first
       takeSnapshotOfSysTable(systemTableToSnapshotMap, e);
