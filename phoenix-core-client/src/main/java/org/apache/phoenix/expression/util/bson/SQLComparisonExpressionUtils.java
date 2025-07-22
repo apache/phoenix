@@ -28,6 +28,7 @@ import org.apache.phoenix.parse.BsonExpressionParser;
 import org.apache.phoenix.parse.DocumentFieldBeginsWithParseNode;
 import org.apache.phoenix.parse.DocumentFieldContainsParseNode;
 import org.apache.phoenix.parse.DocumentFieldExistsParseNode;
+import org.apache.phoenix.parse.DocumentFieldSizeParseNode;
 import org.apache.phoenix.parse.DocumentFieldTypeParseNode;
 import org.apache.phoenix.parse.EqualParseNode;
 import org.apache.phoenix.parse.GreaterThanOrEqualParseNode;
@@ -41,7 +42,10 @@ import org.apache.phoenix.parse.NotParseNode;
 import org.apache.phoenix.parse.OrParseNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.bson.BsonArray;
+import org.bson.BsonBinary;
 import org.bson.BsonDocument;
+import org.bson.BsonInt32;
+import org.bson.BsonNumber;
 import org.bson.BsonString;
 import org.bson.BsonValue;
 import org.bson.RawBsonDocument;
@@ -190,80 +194,72 @@ public final class SQLComparisonExpressionUtils {
       return isFieldOfType(fieldName, type, rawBsonDocument, comparisonValuesDocument);
     } else if (parseNode instanceof EqualParseNode) {
       final EqualParseNode equalParseNode = (EqualParseNode) parseNode;
-      final LiteralParseNode lhs = (LiteralParseNode) equalParseNode.getLHS();
+      Object lhs =
+        getLHS(rawBsonDocument, keyAliasDocument, sortedKeyNames, equalParseNode.getLHS());
       final LiteralParseNode rhs = (LiteralParseNode) equalParseNode.getRHS();
-      String fieldKey = (String) lhs.getValue();
-      fieldKey = replaceExpressionFieldNames(fieldKey, keyAliasDocument, sortedKeyNames);
       final String expectedFieldValue = (String) rhs.getValue();
-      return isEquals(fieldKey, expectedFieldValue, rawBsonDocument, comparisonValuesDocument);
+      return isEquals(lhs, expectedFieldValue, rawBsonDocument, comparisonValuesDocument);
     } else if (parseNode instanceof NotEqualParseNode) {
       final NotEqualParseNode notEqualParseNode = (NotEqualParseNode) parseNode;
-      final LiteralParseNode lhs = (LiteralParseNode) notEqualParseNode.getLHS();
+      Object lhs =
+        getLHS(rawBsonDocument, keyAliasDocument, sortedKeyNames, notEqualParseNode.getLHS());
       final LiteralParseNode rhs = (LiteralParseNode) notEqualParseNode.getRHS();
-      String fieldKey = (String) lhs.getValue();
-      fieldKey = replaceExpressionFieldNames(fieldKey, keyAliasDocument, sortedKeyNames);
       final String expectedFieldValue = (String) rhs.getValue();
-      return !isEquals(fieldKey, expectedFieldValue, rawBsonDocument, comparisonValuesDocument);
+      return !isEquals(lhs, expectedFieldValue, rawBsonDocument, comparisonValuesDocument);
     } else if (parseNode instanceof LessThanParseNode) {
       final LessThanParseNode lessThanParseNode = (LessThanParseNode) parseNode;
-      final LiteralParseNode lhs = (LiteralParseNode) lessThanParseNode.getLHS();
+      Object lhs =
+        getLHS(rawBsonDocument, keyAliasDocument, sortedKeyNames, lessThanParseNode.getLHS());
       final LiteralParseNode rhs = (LiteralParseNode) lessThanParseNode.getRHS();
-      String fieldKey = (String) lhs.getValue();
-      fieldKey = replaceExpressionFieldNames(fieldKey, keyAliasDocument, sortedKeyNames);
       final String expectedFieldValue = (String) rhs.getValue();
-      return lessThan(fieldKey, expectedFieldValue, rawBsonDocument, comparisonValuesDocument);
+      return lessThan(lhs, expectedFieldValue, rawBsonDocument, comparisonValuesDocument);
     } else if (parseNode instanceof LessThanOrEqualParseNode) {
       final LessThanOrEqualParseNode lessThanOrEqualParseNode =
         (LessThanOrEqualParseNode) parseNode;
-      final LiteralParseNode lhs = (LiteralParseNode) lessThanOrEqualParseNode.getLHS();
+      Object lhs = getLHS(rawBsonDocument, keyAliasDocument, sortedKeyNames,
+        lessThanOrEqualParseNode.getLHS());
       final LiteralParseNode rhs = (LiteralParseNode) lessThanOrEqualParseNode.getRHS();
-      String fieldKey = (String) lhs.getValue();
-      fieldKey = replaceExpressionFieldNames(fieldKey, keyAliasDocument, sortedKeyNames);
       final String expectedFieldValue = (String) rhs.getValue();
-      return lessThanOrEquals(fieldKey, expectedFieldValue, rawBsonDocument,
-        comparisonValuesDocument);
+      return lessThanOrEquals(lhs, expectedFieldValue, rawBsonDocument, comparisonValuesDocument);
     } else if (parseNode instanceof GreaterThanParseNode) {
       final GreaterThanParseNode greaterThanParseNode = (GreaterThanParseNode) parseNode;
-      final LiteralParseNode lhs = (LiteralParseNode) greaterThanParseNode.getLHS();
+      Object lhs =
+        getLHS(rawBsonDocument, keyAliasDocument, sortedKeyNames, greaterThanParseNode.getLHS());
       final LiteralParseNode rhs = (LiteralParseNode) greaterThanParseNode.getRHS();
-      String fieldKey = (String) lhs.getValue();
-      fieldKey = replaceExpressionFieldNames(fieldKey, keyAliasDocument, sortedKeyNames);
       final String expectedFieldValue = (String) rhs.getValue();
-      return greaterThan(fieldKey, expectedFieldValue, rawBsonDocument, comparisonValuesDocument);
+      return greaterThan(lhs, expectedFieldValue, rawBsonDocument, comparisonValuesDocument);
     } else if (parseNode instanceof GreaterThanOrEqualParseNode) {
       final GreaterThanOrEqualParseNode greaterThanOrEqualParseNode =
         (GreaterThanOrEqualParseNode) parseNode;
-      final LiteralParseNode lhs = (LiteralParseNode) greaterThanOrEqualParseNode.getLHS();
+      Object lhs = getLHS(rawBsonDocument, keyAliasDocument, sortedKeyNames,
+        greaterThanOrEqualParseNode.getLHS());
       final LiteralParseNode rhs = (LiteralParseNode) greaterThanOrEqualParseNode.getRHS();
-      String fieldKey = (String) lhs.getValue();
-      fieldKey = replaceExpressionFieldNames(fieldKey, keyAliasDocument, sortedKeyNames);
       final String expectedFieldValue = (String) rhs.getValue();
-      return greaterThanOrEquals(fieldKey, expectedFieldValue, rawBsonDocument,
+      return greaterThanOrEquals(lhs, expectedFieldValue, rawBsonDocument,
         comparisonValuesDocument);
     } else if (parseNode instanceof BetweenParseNode) {
       final BetweenParseNode betweenParseNode = (BetweenParseNode) parseNode;
-      final LiteralParseNode fieldKey = (LiteralParseNode) betweenParseNode.getChildren().get(0);
-      final LiteralParseNode lhs = (LiteralParseNode) betweenParseNode.getChildren().get(1);
-      final LiteralParseNode rhs = (LiteralParseNode) betweenParseNode.getChildren().get(2);
-      String fieldName = (String) fieldKey.getValue();
-      fieldName = replaceExpressionFieldNames(fieldName, keyAliasDocument, sortedKeyNames);
-      final String expectedFieldValue1 = (String) lhs.getValue();
-      final String expectedFieldValue2 = (String) rhs.getValue();
-      return betweenParseNode.isNegate() != between(fieldName, expectedFieldValue1,
-        expectedFieldValue2, rawBsonDocument, comparisonValuesDocument);
+      Object lhs = getLHS(rawBsonDocument, keyAliasDocument, sortedKeyNames,
+        betweenParseNode.getChildren().get(0));
+      final LiteralParseNode betweenParseNode1 =
+        (LiteralParseNode) betweenParseNode.getChildren().get(1);
+      final LiteralParseNode betweenParseNode2 =
+        (LiteralParseNode) betweenParseNode.getChildren().get(2);
+      final String expectedFieldValue1 = (String) betweenParseNode1.getValue();
+      final String expectedFieldValue2 = (String) betweenParseNode2.getValue();
+      return betweenParseNode.isNegate() != between(lhs, expectedFieldValue1, expectedFieldValue2,
+        rawBsonDocument, comparisonValuesDocument);
     } else if (parseNode instanceof InListParseNode) {
       final InListParseNode inListParseNode = (InListParseNode) parseNode;
       final List<ParseNode> childrenNodes = inListParseNode.getChildren();
-      final LiteralParseNode fieldKey = (LiteralParseNode) childrenNodes.get(0);
-      String fieldName = (String) fieldKey.getValue();
-      fieldName = replaceExpressionFieldNames(fieldName, keyAliasDocument, sortedKeyNames);
+      Object lhs = getLHS(rawBsonDocument, keyAliasDocument, sortedKeyNames, childrenNodes.get(0));
       final String[] inList = new String[childrenNodes.size() - 1];
       for (int i = 1; i < childrenNodes.size(); i++) {
         LiteralParseNode literalParseNode = (LiteralParseNode) childrenNodes.get(i);
         inList[i - 1] = ((String) literalParseNode.getValue());
       }
       return inListParseNode.isNegate()
-          != in(rawBsonDocument, comparisonValuesDocument, fieldName, inList);
+          != in(rawBsonDocument, comparisonValuesDocument, lhs, inList);
     } else if (parseNode instanceof AndParseNode) {
       AndParseNode andParseNode = (AndParseNode) parseNode;
       List<ParseNode> children = andParseNode.getChildren();
@@ -295,6 +291,65 @@ public final class SQLComparisonExpressionUtils {
     } else {
       throw new IllegalArgumentException(
         "ParseNode " + parseNode + " is not recognized for " + "document comparison");
+    }
+  }
+
+  /**
+   * Return the value for the given LHS ParseNode and replace any alias using the provided
+   * keyAliasDocument. The value can either be a literal or the size() function on a fieldKey in the
+   * provided document.
+   * @param doc              BSON Document value of the Cell.
+   * @param keyAliasDocument The BSON Document consisting of place-holder for keys.
+   * @param sortedKeyNames   The document key names in the descending sorted order of their string
+   *                         length.
+   * @param parseNode        ParseNode for either literal expression or size() function.
+   * @return Literal value if parseNode is LiteralParseNode or evaluate size() function if parseNode
+   *         is DocumentFieldSizeParseNode.
+   */
+  private static Object getLHS(final RawBsonDocument doc, final BsonDocument keyAliasDocument,
+    final List<String> sortedKeyNames, ParseNode parseNode) {
+    if (parseNode instanceof LiteralParseNode) {
+      String fieldKey = (String) ((LiteralParseNode) parseNode).getValue();
+      return replaceExpressionFieldNames(fieldKey, keyAliasDocument, sortedKeyNames);
+    } else if (parseNode instanceof DocumentFieldSizeParseNode) {
+      String fieldKey = (String) ((DocumentFieldSizeParseNode) parseNode).getValue();
+      fieldKey = replaceExpressionFieldNames(fieldKey, keyAliasDocument, sortedKeyNames);
+      return new BsonInt32(getSizeOfBsonValue(fieldKey, doc));
+    }
+    return null;
+  }
+
+  /**
+   * Returns the size of the field of the BsonDocument at the given key. If the field is not present
+   * in the document, returns 0. If the field is String, returns the length of the string. If the
+   * field is Binary, returns the length of the binary data. If the field is Set/Array/Document,
+   * returns the number of elements.
+   * @param fieldKey        The field key for which size has to be returned.
+   * @param rawBsonDocument Bson Document representing the cell value from which the field is to be
+   *                        retrieved.
+   */
+  private static Integer getSizeOfBsonValue(final String fieldKey,
+    final RawBsonDocument rawBsonDocument) {
+    BsonValue topLevelValue = rawBsonDocument.get(fieldKey);
+    BsonValue fieldValue = topLevelValue != null
+      ? topLevelValue
+      : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, rawBsonDocument);
+    if (fieldValue == null) {
+      return 0;
+    }
+    if (fieldValue instanceof BsonString) {
+      return ((BsonString) fieldValue).getValue().length();
+    } else if (fieldValue instanceof BsonBinary) {
+      return ((BsonBinary) fieldValue).getData().length;
+    } else if (fieldValue instanceof BsonArray) {
+      return ((BsonArray) fieldValue).size();
+    } else if (CommonComparisonExpressionUtils.isBsonSet(fieldValue)) {
+      return ((BsonArray) ((BsonDocument) fieldValue).get("$set")).size();
+    } else if (fieldValue instanceof BsonDocument) {
+      return ((BsonDocument) fieldValue).size();
+    } else {
+      throw new BsonConditionInvalidArgumentException("Unsupported type for size() function. "
+        + fieldValue.getClass() + ", supported types: String, Binary, Set, Array, Document.");
     }
   }
 
@@ -347,13 +402,18 @@ public final class SQLComparisonExpressionUtils {
    * @param comparisonValuesDocument Bson Document with values placeholder.
    * @return True if the comparison is successful, False otherwise.
    */
-  private static boolean compare(final String fieldKey, final String expectedFieldValue,
+  private static boolean compare(final Object fieldKey, final String expectedFieldValue,
     final CommonComparisonExpressionUtils.CompareOp compareOp,
     final RawBsonDocument rawBsonDocument, final BsonDocument comparisonValuesDocument) {
-    BsonValue topLevelValue = rawBsonDocument.get(fieldKey);
-    BsonValue value = topLevelValue != null
-      ? topLevelValue
-      : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, rawBsonDocument);
+    BsonValue value;
+    if (fieldKey instanceof BsonNumber) {
+      value = (BsonNumber) fieldKey;
+    } else {
+      BsonValue topLevelValue = rawBsonDocument.get((String) fieldKey);
+      value = topLevelValue != null
+        ? topLevelValue
+        : CommonComparisonExpressionUtils.getFieldFromDocument((String) fieldKey, rawBsonDocument);
+    }
     if (value != null) {
       BsonValue compareValue = comparisonValuesDocument.get(expectedFieldValue);
       return CommonComparisonExpressionUtils.compareValues(value, compareValue, compareOp);
@@ -380,17 +440,17 @@ public final class SQLComparisonExpressionUtils {
   /**
    * Returns true if the value of the field is less than the value represented by {@code
    * expectedFieldValue}. The comparison can happen only if the data type of both values match.
-   * @param fieldKey                 The field key for which value is compared against
-   *                                 expectedFieldValue.
+   * @param lhs                      LHS compared against expectedFieldValue. It can either be a
+   *                                 fieldKey in the document or size of a field.
    * @param expectedFieldValue       The literal value to compare against the field value.
    * @param rawBsonDocument          Bson Document representing the cell value on which the
    *                                 comparison is to be performed.
    * @param comparisonValuesDocument Bson Document with values placeholder.
    * @return True if the value of the field is less than expectedFieldValue.
    */
-  private static boolean lessThan(final String fieldKey, final String expectedFieldValue,
+  private static boolean lessThan(final Object lhs, final String expectedFieldValue,
     final RawBsonDocument rawBsonDocument, final BsonDocument comparisonValuesDocument) {
-    return compare(fieldKey, expectedFieldValue, CommonComparisonExpressionUtils.CompareOp.LESS,
+    return compare(lhs, expectedFieldValue, CommonComparisonExpressionUtils.CompareOp.LESS,
       rawBsonDocument, comparisonValuesDocument);
   }
 
@@ -398,35 +458,34 @@ public final class SQLComparisonExpressionUtils {
    * Returns true if the value of the field is less than or equal to the value represented by
    * {@code expectedFieldValue}. The comparison can happen only if the data type of both values
    * match.
-   * @param fieldKey                 The field key for which value is compared against
-   *                                 expectedFieldValue.
+   * @param lhs                      LHS compared against expectedFieldValue. It can either be a
+   *                                 fieldKey in the document or size of a field.
    * @param expectedFieldValue       The literal value to compare against the field value.
    * @param rawBsonDocument          Bson Document representing the cell value on which the
    *                                 comparison is to be performed.
    * @param comparisonValuesDocument Bson Document with values placeholder.
    * @return True if the value of the field is less than or equal to expectedFieldValue.
    */
-  private static boolean lessThanOrEquals(final String fieldKey, final String expectedFieldValue,
+  private static boolean lessThanOrEquals(final Object lhs, final String expectedFieldValue,
     final RawBsonDocument rawBsonDocument, final BsonDocument comparisonValuesDocument) {
-    return compare(fieldKey, expectedFieldValue,
-      CommonComparisonExpressionUtils.CompareOp.LESS_OR_EQUAL, rawBsonDocument,
-      comparisonValuesDocument);
+    return compare(lhs, expectedFieldValue, CommonComparisonExpressionUtils.CompareOp.LESS_OR_EQUAL,
+      rawBsonDocument, comparisonValuesDocument);
   }
 
   /**
    * Returns true if the value of the field is greater than the value represented by {@code
    * expectedFieldValue}. The comparison can happen only if the data type of both values match.
-   * @param fieldKey                 The field key for which value is compared against
-   *                                 expectedFieldValue.
+   * @param lhs                      LHS compared against expectedFieldValue. It can either be a
+   *                                 fieldKey in the document or size of a field.
    * @param expectedFieldValue       The literal value to compare against the field value.
    * @param rawBsonDocument          Bson Document representing the cell value on which the
    *                                 comparison is to be performed.
    * @param comparisonValuesDocument Bson Document with values placeholder.
    * @return True if the value of the field is greater than expectedFieldValue.
    */
-  private static boolean greaterThan(final String fieldKey, final String expectedFieldValue,
+  private static boolean greaterThan(final Object lhs, final String expectedFieldValue,
     final RawBsonDocument rawBsonDocument, final BsonDocument comparisonValuesDocument) {
-    return compare(fieldKey, expectedFieldValue, CommonComparisonExpressionUtils.CompareOp.GREATER,
+    return compare(lhs, expectedFieldValue, CommonComparisonExpressionUtils.CompareOp.GREATER,
       rawBsonDocument, comparisonValuesDocument);
   }
 
@@ -434,17 +493,17 @@ public final class SQLComparisonExpressionUtils {
    * Returns true if the value of the field is greater than or equal to the value represented by
    * {@code expectedFieldValue}. The comparison can happen only if the data type of both values
    * match.
-   * @param fieldKey                 The field key for which value is compared against
-   *                                 expectedFieldValue.
+   * @param lhs                      LHS compared against expectedFieldValue. It can either be a
+   *                                 fieldKey in the document or size of a field.
    * @param expectedFieldValue       The literal value to compare against the field value.
    * @param rawBsonDocument          Bson Document representing the cell value on which the
    *                                 comparison is to be performed.
    * @param comparisonValuesDocument Bson Document with values placeholder.
    * @return True if the value of the field is greater than or equal to expectedFieldValue.
    */
-  private static boolean greaterThanOrEquals(final String fieldKey, final String expectedFieldValue,
+  private static boolean greaterThanOrEquals(final Object lhs, final String expectedFieldValue,
     final RawBsonDocument rawBsonDocument, final BsonDocument comparisonValuesDocument) {
-    return compare(fieldKey, expectedFieldValue,
+    return compare(lhs, expectedFieldValue,
       CommonComparisonExpressionUtils.CompareOp.GREATER_OR_EQUAL, rawBsonDocument,
       comparisonValuesDocument);
   }
@@ -454,7 +513,8 @@ public final class SQLComparisonExpressionUtils {
    * {@code expectedFieldValue1} and less than or equal to the value represented by
    * {@code expectedFieldValue2}. The comparison can happen only if the data type of both values
    * match.
-   * @param fieldKey                 The field key for which value is compared against two values.
+   * @param lhs                      LHS which is compared against two values. It can either be a
+   *                                 fieldKey in the document or size of a field.
    * @param expectedFieldValue1      The first literal value to compare against the field value.
    * @param expectedFieldValue2      The second literal value to compare against the field value.
    * @param rawBsonDocument          Bson Document representing the cell value on which the
@@ -464,12 +524,11 @@ public final class SQLComparisonExpressionUtils {
    *         expectedFieldValue1 and less than or equal to the value represented by
    *         expectedFieldValue2.
    */
-  private static boolean between(final String fieldKey, final String expectedFieldValue1,
+  private static boolean between(final Object lhs, final String expectedFieldValue1,
     final String expectedFieldValue2, final RawBsonDocument rawBsonDocument,
     final BsonDocument comparisonValuesDocument) {
-    return greaterThanOrEquals(fieldKey, expectedFieldValue1, rawBsonDocument,
-      comparisonValuesDocument)
-      && lessThanOrEquals(fieldKey, expectedFieldValue2, rawBsonDocument, comparisonValuesDocument);
+    return greaterThanOrEquals(lhs, expectedFieldValue1, rawBsonDocument, comparisonValuesDocument)
+      && lessThanOrEquals(lhs, expectedFieldValue2, rawBsonDocument, comparisonValuesDocument);
   }
 
   /**
@@ -479,23 +538,28 @@ public final class SQLComparisonExpressionUtils {
    * @param rawBsonDocument          Bson Document representing the cell value on which the
    *                                 comparison is to be performed.
    * @param comparisonValuesDocument Bson Document with values placeholder.
-   * @param fieldKey                 The field key for which value is compared against
-   *                                 expectedInValues.
+   * @param lhs                      LHS which is compared against expectedInValues. It can either
+   *                                 be a fieldKey in the document or size of a field.
    * @param expectedInValues         The array of values for comparison, separated by comma.
    * @return True if the value of the field equals to any of the comma separated values represented
    *         by expectedInValues. The equality check is successful only if the value and the data
    *         type both match.
    */
   private static boolean in(final RawBsonDocument rawBsonDocument,
-    final BsonDocument comparisonValuesDocument, final String fieldKey,
+    final BsonDocument comparisonValuesDocument, final Object lhs,
     final String... expectedInValues) {
-    BsonValue topLevelValue = rawBsonDocument.get(fieldKey);
-    BsonValue value = topLevelValue != null
-      ? topLevelValue
-      : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, rawBsonDocument);
+    BsonValue value;
+    if (lhs instanceof BsonNumber) {
+      value = (BsonNumber) lhs;
+    } else {
+      BsonValue topLevelValue = rawBsonDocument.get((String) lhs);
+      value = topLevelValue != null
+        ? topLevelValue
+        : CommonComparisonExpressionUtils.getFieldFromDocument((String) lhs, rawBsonDocument);
+    }
     if (value != null) {
       for (String expectedInVal : expectedInValues) {
-        if (isEquals(fieldKey, expectedInVal, rawBsonDocument, comparisonValuesDocument)) {
+        if (isEquals(lhs, expectedInVal, rawBsonDocument, comparisonValuesDocument)) {
           return true;
         }
       }
@@ -507,17 +571,17 @@ public final class SQLComparisonExpressionUtils {
    * Returns true if the value of the field is equal to the value represented by {@code
    * expectedFieldValue}. The equality check is successful only if the value and the data type both
    * match.
-   * @param fieldKey                 The field key for which value is compared against
-   *                                 expectedFieldValue.
+   * @param lhs                      LHS compared against expectedFieldValue. It can either be a
+   *                                 fieldKey in the document or size of a field.
    * @param expectedFieldValue       The literal value to compare against the field value.
    * @param rawBsonDocument          Bson Document representing the cell value on which the
    *                                 comparison is to be performed.
    * @param comparisonValuesDocument Bson Document with values placeholder.
    * @return True if the value of the field is equal to expectedFieldValue.
    */
-  private static boolean isEquals(final String fieldKey, final String expectedFieldValue,
+  private static boolean isEquals(final Object lhs, final String expectedFieldValue,
     final RawBsonDocument rawBsonDocument, final BsonDocument comparisonValuesDocument) {
-    return compare(fieldKey, expectedFieldValue, CommonComparisonExpressionUtils.CompareOp.EQUALS,
+    return compare(lhs, expectedFieldValue, CommonComparisonExpressionUtils.CompareOp.EQUALS,
       rawBsonDocument, comparisonValuesDocument);
   }
 

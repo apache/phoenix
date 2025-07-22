@@ -270,6 +270,22 @@ public class Bson1IT extends ParallelStatsDisabledIT {
         + conditionDoc.toJson() + "')";
       rs = conn.createStatement().executeQuery(query);
       assertFalse(rs.next());
+
+      conditionExpression = "size(#Title) > :size3";
+
+      conditionDoc = new BsonDocument();
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", compareValuesDocument);
+      keyDoc = new BsonDocument();
+      keyDoc.put("#Title", new BsonString("Title"));
+      conditionDoc.put("$KEYS", keyDoc);
+
+      query = "SELECT * FROM " + tableName + " WHERE BSON_CONDITION_EXPRESSION(COL, '"
+        + conditionDoc.toJson() + "')";
+      rs = conn.createStatement().executeQuery(query);
+      assertTrue(rs.next());
+      assertEquals("pk0002", rs.getString(1));
+      assertFalse(rs.next());
     }
   }
 
@@ -282,7 +298,8 @@ public class Bson1IT extends ParallelStatsDisabledIT {
         + "  \":InPublication\" : false,\n" + "  \":NestedList1_xyz0123\" : \"xyz0123\",\n"
         + "  \":Attr5Value\" : \"str001\",\n" + "  \":NestedList1String\" : \"1234abcd\",\n"
         + "  \":NonExistentValue\" : \"does_not_exist\"\n" + "  \":L\" : \"L\"\n"
-        + "  \":NS\" : \"NS\"\n" + "}";
+        + "  \":NS\" : \"NS\"\n" + "  \":size3\" : 3\n" + "}";
+
     return RawBsonDocument.parse(json);
   }
 

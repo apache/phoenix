@@ -36,6 +36,7 @@ tokens
     CONTAINS = 'contains';
     FIELD_TYPE = 'field_type';
     ATTR_TYPE = 'attribute_type';
+    SIZE = 'size';
 }
 
 @parser::header {
@@ -250,6 +251,7 @@ value_expression returns [ParseNode ret]
 
 term returns [ParseNode ret]
     :   e=literal_or_bind { $ret = e; }
+    |   SIZE LPAREN t=literal RPAREN {$ret = factory.documentFieldSize(t); }
     |   LPAREN l=one_or_more_expressions RPAREN
     	{
     		if(l.size() == 1) {
