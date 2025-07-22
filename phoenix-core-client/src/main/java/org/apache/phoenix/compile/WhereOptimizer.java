@@ -2064,26 +2064,27 @@ public class WhereOptimizer {
       PColumn column = childPart.getColumn();
 
       List<KeyRange> keyRanges = new ArrayList<>();
-      for (int i = 1; i <= numElements; i++) {
-        arrayElemRefExpr.setIndex(i);
-        KeyRange keyRange = null;
-        try {
-          Expression coerceExpr = CoerceExpression.create(arrayElemRefExpr, column.getDataType(),
-            column.getSortOrder(), column.getMaxLength());
-          keyRange = childPart.getKeyRange(CompareOperator.EQUAL, coerceExpr);
-        } catch (SQLException e) {
-          LOGGER.warn(String.format("Error coercing array element with index %d to column type: %s",
-            i - 1, column.getDataType().getSqlTypeName()), e);
-          return super.visitLeave(node, childParts);
+      try {
+        Expression coerceExpr = CoerceExpression.create(arrayElemRefExpr, column.getDataType(),
+          column.getSortOrder(), column.getMaxLength());
+        for (int i = 1; i <= numElements; i++) {
+          arrayElemRefExpr.setIndex(i);
+          KeyRange keyRange = childPart.getKeyRange(CompareOperator.EQUAL, coerceExpr);
+          if (
+            keyRange == null || keyRange == KeyRange.EMPTY_RANGE
+              || keyRange == KeyRange.IS_NULL_RANGE
+          ) {
+            // Skip null range along with empty range as null check is done via IS NULL as
+            // per SQL standards
+            continue;
+          }
+          keyRanges.add(keyRange);
         }
-        if (
-          keyRange == null || keyRange == KeyRange.EMPTY_RANGE || keyRange == KeyRange.IS_NULL_RANGE
-        ) {
-          // Skip null range along with empty range as null check is done via IS NULL as
-          // per SQL standards
-          continue;
-        }
-        keyRanges.add(keyRange);
+      } catch (Exception e) {
+        LOGGER.warn(String.format(
+          "Failed to wrap ArrayElemRefExpression with CoerceExpression for column: %s and type: %s",
+          column.getName().getString(), column.getDataType().getSqlTypeName()), e);
+        return super.visitLeave(node, childParts);
       }
       if (keyRanges.isEmpty()) {
         return super.visitLeave(node, childParts);
