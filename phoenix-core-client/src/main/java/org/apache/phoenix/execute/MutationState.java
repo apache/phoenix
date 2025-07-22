@@ -25,8 +25,12 @@ import static org.apache.phoenix.monitoring.MetricType.UPSERT_AGGREGATE_FAILURE_
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_AGGREGATE_SUCCESS_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.NUM_METADATA_LOOKUP_FAILURES;
 import static org.apache.phoenix.query.QueryServices.INDEX_REGION_OBSERVER_ENABLED_ALL_TABLES_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SOURCE_OPERATION_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_INDEX_REGION_OBSERVER_ENABLED_ALL_TABLES;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_FAILED_COUNT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_SIZE;
@@ -34,8 +38,6 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_COMMIT_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_INDEX_COMMIT_FAILURE_COUNT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_SYSCAT_TIME;
-import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -184,6 +186,7 @@ public class MutationState implements SQLCloseable {
     private static boolean allDeletesMutations = true;
 
     private final boolean indexRegionObserverEnabledAllTables;
+    private final boolean serverSideImmutableIndexes;
 
     /**
      * Return result back to client. To be used when client needs to read the whole row
@@ -259,6 +262,10 @@ public class MutationState implements SQLCloseable {
                 this.connection.getQueryServices().getConfiguration().get(
                     INDEX_REGION_OBSERVER_ENABLED_ALL_TABLES_ATTRIB,
                     DEFAULT_INDEX_REGION_OBSERVER_ENABLED_ALL_TABLES));
+        this.serverSideImmutableIndexes =
+                this.connection.getQueryServices().getConfiguration().getBoolean(
+                        SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB,
+                        DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED);
     }
 
     public MutationState(TableRef table, MultiRowMutationState mutations, long sizeOffset,
@@ -1842,9 +1849,10 @@ public class MutationState implements SQLCloseable {
                 continue;
             }
             PTable logicalTable = tableInfo.getPTable();
-            if (tableInfo.getOrigTableRef().getTable().isImmutableRows() &&
-                (this.indexRegionObserverEnabledAllTables ||
-                 IndexUtil.isGlobalIndexCheckerEnabled(connection, tableInfo.getHTableName()))
+            if (!this.serverSideImmutableIndexes
+                    && tableInfo.getOrigTableRef().getTable().isImmutableRows()
+                    && (this.indexRegionObserverEnabledAllTables ||
+                        IndexUtil.isGlobalIndexCheckerEnabled(connection, tableInfo.getHTableName()))
             ) {
 
                 byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(logicalTable);

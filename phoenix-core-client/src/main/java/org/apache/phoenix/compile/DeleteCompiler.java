@@ -17,6 +17,8 @@
 package org.apache.phoenix.compile;
 
 import static org.apache.phoenix.execute.MutationState.RowTimestampColInfo.NULL_ROWTIMESTAMP_INFO;
+import static org.apache.phoenix.query.QueryServices.SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED;
 import static org.apache.phoenix.util.NumberUtil.add;
 
 import java.io.IOException;
@@ -206,7 +208,7 @@ public class DeleteCompiler {
                     // The data table is always the last one in the list if it's
                     // not chosen as the best of the possible plans.
                     dataTable = otherTableRefs.get(otherTableRefs.size()-1).getTable();
-                    if (!isMaintainedOnClient(table)) {
+                    if (!isMaintainedOnClient(table, connection)) {
                         // dataTable is a projected table and may not include all the indexed columns and so we need to get
                         // the actual data table
                         dataTable = connection.getTable(SchemaUtil
@@ -245,7 +247,7 @@ public class DeleteCompiler {
                 // When issuing deletes, we do not care about the row time ranges. Also, if the table had a row timestamp column, then the
                 // row key will already have its value.
                 // Check for otherTableRefs being empty required when deleting directly from the index
-                if (otherTableRefs.isEmpty() || isMaintainedOnClient(table)) {
+                if (otherTableRefs.isEmpty() || isMaintainedOnClient(table, connection)) {
                     mutations.put(rowKeyPtr, new RowMutationState(PRow.DELETE_MARKER, 0, statement.getConnection().getStatementExecutionCounter(), NULL_ROWTIMESTAMP_INFO, null));
                 }
                 for (int i = 0; i < otherTableRefs.size(); i++) {
@@ -350,7 +352,8 @@ public class DeleteCompiler {
         if (!table.getIndexes().isEmpty()) {
             List<PTable> nonDisabledIndexes = Lists.newArrayListWithExpectedSize(table.getIndexes().size());
             for (PTable index : table.getIndexes()) {
-                if (!index.getIndexState().isDisabled() && isMaintainedOnClient(index)) {
+                if (!index.getIndexState().isDisabled() &&
+                        isMaintainedOnClient(index, this.statement.getConnection())) {
                     nonDisabledIndexes.add(index);
                 }
             }
@@ -532,7 +535,7 @@ public class DeleteCompiler {
         // Project all non PK indexed columns so that we can do the proper index maintenance on the indexes for which
         // mutations are generated on the client side. Indexed columns are needed to identify index rows to be deleted
         for (PTable index : table.getIndexes()) {
-            if (isMaintainedOnClient(index)) {
+            if (isMaintainedOnClient(index, connection)) {
                 IndexMaintainer maintainer = index.getIndexMaintainer(table, connection);
                 // Go through maintainer as it handles functional indexes correctly
                 for (Pair<String, String> columnInfo : maintainer.getIndexedColumnInfo()) {
@@ -1070,10 +1073,20 @@ public class DeleteCompiler {
         }
     }
     
-    private static boolean isMaintainedOnClient(PTable table) {
+    private static boolean isMaintainedOnClient(PTable table, PhoenixConnection connection) {
         if (CDCUtil.isCDCIndex(table)) {
             return false;
         }
+
+        if (!table.isTransactional() &&
+                table.getIndexType() != IndexType.LOCAL
+                && connection.getQueryServices().getConfiguration().
+                getBoolean(SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB,
+                        DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED)
+        ) {
+            return false;
+        }
+
         // Test for not being local (rather than being GLOBAL) so that this doesn't fail
         // when tested with our projected table.
         return (table.getIndexType() != IndexType.LOCAL && (table.isTransactional() || table.isImmutableRows())) ||

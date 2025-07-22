@@ -67,7 +67,9 @@ import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider;
@@ -93,6 +95,7 @@ import org.junit.runners.Parameterized.Parameters;
 public class ImmutableIndexIT extends BaseTest {
 
     private final boolean localIndex;
+    private static boolean serverSideIndex;
     private final PhoenixTransactionProvider transactionProvider;
     private final String tableDDLOptions;
 
@@ -102,9 +105,11 @@ public class ImmutableIndexIT extends BaseTest {
     private static String INDEX_DDL;
     public static final AtomicInteger NUM_ROWS = new AtomicInteger(0);
 
-    public ImmutableIndexIT(boolean localIndex, boolean transactional, String transactionProvider, boolean columnEncoded) {
+    public ImmutableIndexIT(boolean localIndex, boolean transactional, String transactionProvider,
+                            boolean columnEncoded, boolean serverSideIndex) {
         StringBuilder optionBuilder = new StringBuilder("IMMUTABLE_ROWS=true");
         this.localIndex = localIndex;
+        ImmutableIndexIT.serverSideIndex = serverSideIndex;
         if (!columnEncoded) {
             optionBuilder.append(",COLUMN_ENCODED_BYTES=0,IMMUTABLE_STORAGE_SCHEME="+PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
         }
@@ -128,18 +133,73 @@ public class ImmutableIndexIT extends BaseTest {
         clientProps.put(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB, "true");
         clientProps.put(HConstants.HBASE_CLIENT_RETRIES_NUMBER, "1");
         clientProps.put(HConstants.HBASE_CLIENT_PAUSE, "1");
+        if (serverSideIndex) {
+            clientProps.put(QueryServices.SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB, "true");
+        }
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
 
     // name is used by failsafe as file name in reports
-    @Parameters(name="ImmutableIndexIT_localIndex={0},transactional={1},transactionProvider={2},columnEncoded={3}")
+    @Parameters(name="ImmutableIndexIT_localIndex={0},transactional={1},transactionProvider={2},columnEncoded={3}," +
+            "serverSideIndex={4}")
     public static synchronized Collection<Object[]> data() {
         return Arrays.asList(new Object[][] {
-            { false, false, null, false }, { false, false, null, true },
+                { false, false, null, false, false },
+                { false, false, null, false, true },
+                { false, false, null, true, false },
+                { false, false, null, true, true },
             // OMID does not support local indexes or column encoding
-            { false, true, "OMID", false },
-            { true, false, null, false }, { true, false, null, true },
+                { false, true, "OMID", false, false },
+                { true, false, null, false, false },
+                { true, false, null, true, false },
         });
+    }
+
+    private void assertNoClientSideIndexMutations(Connection conn) throws SQLException {
+        Iterator<Pair<byte[],List<Cell>>> iterator = PhoenixRuntime.getUncommittedDataIterator(conn);
+        if (iterator.hasNext()) {
+            byte[] tableName = iterator.next().getFirst();
+            PTable table = conn.unwrap(PhoenixConnection.class).getTable(Bytes.toString(tableName));
+            assertTrue(table.getType() == PTableType.TABLE); // should be data table
+        }
+    }
+    @Test
+    public void testNoClientSideIndexMutations() throws Exception {
+        if (!serverSideIndex) {
+            return;
+        }
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(false);
+            String ddl =
+                    "CREATE TABLE " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + tableDDLOptions;
+            Statement stmt = conn.createStatement();
+            stmt.execute(ddl);
+            ddl =
+                    "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON "
+                            + fullTableName + " (long_col1)";
+            stmt.execute(ddl);
+            upsertRows(conn, fullTableName, 3);
+            if (!localIndex && transactionProvider == null && serverSideIndex) {
+                assertNoClientSideIndexMutations(conn);
+            }
+            conn.commit();
+            ResultSet rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullTableName);
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(1));
+            rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullIndexName);
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(1));
+            String dml = "DELETE from " + fullTableName + " WHERE varchar_pk='varchar1'";
+            assertEquals(1, conn.createStatement().executeUpdate(dml));
+            if (!localIndex && transactionProvider == null && serverSideIndex) {
+                assertNoClientSideIndexMutations(conn);
+            }
+        }
     }
 
     @Test

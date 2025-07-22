@@ -360,6 +360,8 @@ public interface QueryServices extends SQLCloseable {
     public static final String GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB = "phoenix.global.index.row.age.threshold.to.delete.ms";
     // Enable the IndexRegionObserver Coprocessor
     public static final String INDEX_REGION_OBSERVER_ENABLED_ATTRIB = "phoenix.index.region.observer.enabled";
+    // Enable the IndexRegionObserver Coprocessor for immutable tables
+    public static final String SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB = "phoenix.server.side.immutable.indexes.enabled";
     // Whether IndexRegionObserver/GlobalIndexChecker is enabled for all tables
     public static final String INDEX_REGION_OBSERVER_ENABLED_ALL_TABLES_ATTRIB = "phoenix.index.region.observer.enabled.all.tables";
     // Enable Phoenix server paging

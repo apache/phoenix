@@ -117,6 +117,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.apache.phoenix.query.QueryServices.SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Lists.newArrayListWithCapacity;
 
@@ -599,9 +601,14 @@ public class UpsertCompiler {
                 // so we might be able to run it entirely on the server side.
                 // region space managed by region servers. So we bail out on executing on server side.
                 // Disable running upsert select on server side if a table has global mutable secondary indexes on it
-                boolean hasGlobalMutableIndexes = SchemaUtil.hasGlobalIndex(table) && !table.isImmutableRows();
+                boolean serverSideImmutableIndexes =
+                        connection.getQueryServices().getConfiguration().getBoolean(
+                                SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB,
+                                DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED);
+                boolean hasGlobalServerSideIndexes = SchemaUtil.hasGlobalIndex(table)
+                        && (serverSideImmutableIndexes || !table.isImmutableRows());
                 boolean hasWhereSubquery = select.getWhere() != null && select.getWhere().hasSubquery();
-                runOnServer = (sameTable || (serverUpsertSelectEnabled && !hasGlobalMutableIndexes)) && isAutoCommit 
+                runOnServer = (sameTable || (serverUpsertSelectEnabled && !hasGlobalServerSideIndexes)) && isAutoCommit
                         // We can run the upsert select for initial index population on server side for transactional
                         // tables since the writes do not need to be done transactionally, since we gate the index
                         // usage on successfully writing all data rows.

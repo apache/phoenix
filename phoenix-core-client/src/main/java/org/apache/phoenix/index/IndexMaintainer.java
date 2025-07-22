@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.index;
 
+import static org.apache.phoenix.query.QueryServices.SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 
 import java.io.ByteArrayInputStream;
@@ -193,13 +195,19 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         });
     }
 
-    public static Iterator<PTable> maintainedLocalOrGlobalIndexesWithoutMatchingStorageScheme(final PTable dataTable, Iterator<PTable> indexes) {
+    public static Iterator<PTable> maintainedLocalOrGlobalIndexesWithoutMatchingStorageScheme(
+            final PTable dataTable, Iterator<PTable> indexes, PhoenixConnection connection) throws SQLException {
         return Iterators.filter(indexes, new Predicate<PTable>() {
             @Override
             public boolean apply(PTable index) {
-                return sendIndexMaintainer(index) && ((index.getIndexType() == IndexType.GLOBAL
-                        && dataTable.getImmutableStorageScheme() != index.getImmutableStorageScheme())
-                        || index.getIndexType() == IndexType.LOCAL || CDCUtil.isCDCIndex(index));
+                return sendIndexMaintainer(index) &&
+                        ((index.getIndexType() == IndexType.GLOBAL &&
+                                (dataTable.getImmutableStorageScheme() != index.getImmutableStorageScheme() ||
+                                        connection.getQueryServices().getConfiguration().
+                                        getBoolean(SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB,
+                                                DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED))) ||
+                        index.getIndexType() == IndexType.LOCAL ||
+                        CDCUtil.isCDCIndex(index));
             }
         });
     }
@@ -231,7 +239,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         if (onlyLocalIndexes) {
             if (!dataTable.isTransactional()
                     || !dataTable.getTransactionProvider().getTransactionProvider().isUnsupported(Feature.MAINTAIN_LOCAL_INDEX_ON_SERVER)) {
-                indexesItr = maintainedLocalOrGlobalIndexesWithoutMatchingStorageScheme(dataTable, indexes.iterator());
+                indexesItr = maintainedLocalOrGlobalIndexesWithoutMatchingStorageScheme(dataTable, indexes.iterator(),
+                        connection);
             }
         } else {
             indexesItr = maintainedIndexes(indexes.iterator());
