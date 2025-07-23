@@ -2167,7 +2167,6 @@ public class Bson3IT extends ParallelStatsDisabledIT {
     String tableName = generateUniqueName();
 
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-      // Create table
       String ddl = "CREATE TABLE " + tableName + " (PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON"
         + " CONSTRAINT pk PRIMARY KEY(PK1)) "
         + (this.columnEncoded ? "" : "COLUMN_ENCODED_BYTES=0");
@@ -2183,9 +2182,7 @@ public class Bson3IT extends ParallelStatsDisabledIT {
       stmt.executeUpdate();
       conn.commit();
 
-      Object[][] testCases = {
-        // path, expected type, expected value
-        { "cold", PVarchar.INSTANCE.getSqlTypeName(), "method" },
+      Object[][] testCases = { { "cold", PVarchar.INSTANCE.getSqlTypeName(), "method" },
         { "hurry", PDouble.INSTANCE.getSqlTypeName(), -593264871.4436941 },
         { "press", PVarchar.INSTANCE.getSqlTypeName(), "beat" },
         { "browserling", PDouble.INSTANCE.getSqlTypeName(), -505169340.54880095 },
@@ -2214,18 +2211,14 @@ public class Bson3IT extends ParallelStatsDisabledIT {
         String expectedType = (String) testCase[1];
         Object expectedValue = testCase[2];
 
-        // Debug: Print the query we're about to execute
         String typeQuery =
           "SELECT BSON_VALUE_TYPE(COL, '" + path + "') FROM " + tableName + " WHERE PK1 = 'pk0001'";
-        System.out.println("Executing query: " + typeQuery);
 
-        // First get the type using BSON_VALUE_TYPE
         ResultSet rs = conn.createStatement().executeQuery(typeQuery);
         assertTrue("No result for path " + path, rs.next());
         String actualType = rs.getString(1);
         assertEquals("Wrong type for path " + path, expectedType, actualType);
 
-        // Then use that type with BSON_VALUE
         String valueQuery = "SELECT BSON_VALUE(COL, '" + path + "', '" + actualType + "') FROM "
           + tableName + " WHERE PK1 = 'pk0001'";
         System.out.println("Executing query: " + valueQuery);
@@ -2233,7 +2226,6 @@ public class Bson3IT extends ParallelStatsDisabledIT {
         rs = conn.createStatement().executeQuery(valueQuery);
         assertTrue("No result for path " + path, rs.next());
 
-        // Verify the value based on the type
         if (expectedType.equals(PVarchar.INSTANCE.getSqlTypeName())) {
           assertEquals("Wrong value for path " + path, expectedValue, rs.getString(1));
         } else if (expectedType.equals(PInteger.INSTANCE.getSqlTypeName())) {
@@ -2294,7 +2286,6 @@ public class Bson3IT extends ParallelStatsDisabledIT {
       assertTrue(rs.next());
       assertNull(rs.getString(1));
 
-      // Test case 6: Null path
       rs = conn.createStatement().executeQuery(
         "SELECT BSON_VALUE_TYPE(COL, NULL) FROM " + tableName + " WHERE PK1 = 'pk0001'");
       assertTrue(rs.next());
