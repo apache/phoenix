@@ -308,6 +308,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     private boolean returnResult;
     private boolean returnOldRow;
     private boolean hasConditionalTTL; // table has Conditional TTL
+    private boolean immutableRows;
 
     public BatchMutateContext() {
       this.clientVersion = 0;
@@ -1361,6 +1362,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private static void identifyIndexMaintainerTypes(PhoenixIndexMetaData indexMetaData,
     BatchMutateContext context) {
     for (IndexMaintainer indexMaintainer : indexMetaData.getIndexMaintainers()) {
+      if (indexMaintainer.isImmutableRows()) {
+        context.immutableRows = true;
+      }
       if (indexMaintainer instanceof TransformMaintainer) {
         context.hasTransform = true;
       } else if (indexMaintainer.isLocalIndex()) {
@@ -1557,9 +1561,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       context.dataRowStates =
         new HashMap<ImmutableBytesPtr, Pair<Put, Put>>(context.rowsToLock.size());
       if (
-        context.hasGlobalIndex || context.hasTransform || context.hasAtomic || context.returnResult
-          || context.hasRowDelete || context.hasConditionalTTL
-          || (context.hasUncoveredIndex
+        (!context.immutableRows && context.hasGlobalIndex) || context.hasTransform
+          || context.hasAtomic || context.returnResult || context.hasRowDelete
+          || context.hasConditionalTTL
+          || (!context.immutableRows && context.hasUncoveredIndex
             && isPartialUncoveredIndexMutation(indexMetaData, miniBatchOp))
       ) {
         getCurrentRowStates(c, context);

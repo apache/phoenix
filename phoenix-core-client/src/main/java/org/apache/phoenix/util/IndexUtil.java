@@ -761,13 +761,14 @@ public class IndexUtil {
     }
   }
 
-  public static List<PTable> getClientMaintainedIndexes(PTable table) {
+  public static List<PTable> getClientMaintainedIndexes(PTable table,
+    boolean serverSideImmutableIndex) {
     Iterator<PTable> indexIterator = // Only maintain tables with immutable rows through this
                                      // client-side mechanism
       (table.isTransactional() && table.getTransactionProvider().getTransactionProvider()
         .isUnsupported(Feature.MAINTAIN_LOCAL_INDEX_ON_SERVER))
         ? IndexMaintainer.maintainedIndexes(table.getIndexes().iterator())
-        : (table.isImmutableRows() || table.isTransactional()) ?
+        : ((table.isImmutableRows() && !serverSideImmutableIndex) || table.isTransactional()) ?
         // If the data table has a different storage scheme than index table, don't maintain this on
         // the client
         // For example, if the index is single cell but the data table is one_cell, if there is a
