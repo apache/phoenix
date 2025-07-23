@@ -18,7 +18,6 @@
 package org.apache.phoenix.expression.function;
 
 import java.util.List;
-
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.util.bson.CommonComparisonExpressionUtils;
@@ -35,7 +34,6 @@ import org.apache.phoenix.schema.types.PJson;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.bson.BsonArray;
 import org.bson.BsonBinary;
 import org.bson.BsonBoolean;
@@ -50,105 +48,102 @@ import org.bson.BsonString;
 import org.bson.BsonValue;
 import org.bson.RawBsonDocument;
 
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+
 /**
- * BSON_VALUE_TYPE function to retrieve the SQL data type name of any field in BSON.
- * This can be used for any top-level or nested Bson fields.
- * 1. The first argument represents BSON Object on which the function performs scan.
- * 2. The second argument represents the field key. The field key can represent any top level or
- * nested fields within the document. The caller should use "." notation for accessing nested
- * document elements and "[n]" notation for accessing nested array elements.
- * Top level fields do not require any additional character.
+ * BSON_VALUE_TYPE function to retrieve the SQL data type name of any field in BSON. This can be
+ * used for any top-level or nested Bson fields. 1. The first argument represents BSON Object on
+ * which the function performs scan. 2. The second argument represents the field key. The field key
+ * can represent any top level or nested fields within the document. The caller should use "."
+ * notation for accessing nested document elements and "[n]" notation for accessing nested array
+ * elements. Top level fields do not require any additional character.
  */
 @FunctionParseNode.BuiltInFunction(name = BsonValueTypeFunction.NAME,
     nodeClass = BsonValueTypeParseNode.class,
-    args =
-        {
-            @FunctionParseNode.Argument(
-                    allowedTypes = { PJson.class, PBson.class, PVarbinary.class }),
-            @FunctionParseNode.Argument(
-                    allowedTypes = { PVarchar.class }, isConstant = true),
-        })
+    args = {
+      @FunctionParseNode.Argument(allowedTypes = { PJson.class, PBson.class, PVarbinary.class }),
+      @FunctionParseNode.Argument(allowedTypes = { PVarchar.class }, isConstant = true), })
 public class BsonValueTypeFunction extends ScalarFunction {
 
-    public static final String NAME = "BSON_VALUE_TYPE";
+  public static final String NAME = "BSON_VALUE_TYPE";
 
-    public BsonValueTypeFunction() {
-        // no-op
+  public BsonValueTypeFunction() {
+    // no-op
+  }
+
+  public BsonValueTypeFunction(List<Expression> children) {
+    super(children);
+    Preconditions.checkNotNull(getChildren().get(1));
+  }
+
+  @Override
+  public String getName() {
+    return NAME;
+  }
+
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    if (!getChildren().get(0).evaluate(tuple, ptr)) {
+      return false;
+    }
+    if (ptr == null || ptr.getLength() == 0) {
+      return false;
     }
 
-    public BsonValueTypeFunction(List<Expression> children) {
-        super(children);
-        Preconditions.checkNotNull(getChildren().get(1));
+    Object object = PBson.INSTANCE.toObject(ptr, getChildren().get(0).getSortOrder());
+    RawBsonDocument rawBsonDocument = (RawBsonDocument) object;
+
+    if (!getChildren().get(1).evaluate(tuple, ptr)) {
+      return false;
+    }
+    if (ptr.getLength() == 0) {
+      return false;
     }
 
-    @Override
-    public String getName() {
-        return NAME;
+    String documentFieldKey =
+      (String) PVarchar.INSTANCE.toObject(ptr, getChildren().get(1).getSortOrder());
+    if (documentFieldKey == null) {
+      return false;
     }
 
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        if (!getChildren().get(0).evaluate(tuple, ptr)) {
-            return false;
-        }
-        if (ptr == null || ptr.getLength() == 0) {
-            return false;
-        }
-
-        Object object = PBson.INSTANCE.toObject(ptr, getChildren().get(0).getSortOrder());
-        RawBsonDocument rawBsonDocument = (RawBsonDocument) object;
-
-        if (!getChildren().get(1).evaluate(tuple, ptr)) {
-            return false;
-        }
-        if (ptr.getLength() == 0) {
-            return false;
-        }
-
-        String documentFieldKey =
-            (String) PVarchar.INSTANCE.toObject(ptr, getChildren().get(1).getSortOrder());
-        if (documentFieldKey == null) {
-            return false;
-        }
-
-        BsonValue bsonValue =
-            CommonComparisonExpressionUtils.getFieldFromDocument(documentFieldKey, rawBsonDocument);
-        if (bsonValue == null) {
-            ptr.set(PVarchar.INSTANCE.toBytes("NULL"));
-            return true;
-        }
-
-        String sqlTypeName = getValueType(bsonValue);
-        ptr.set(PVarchar.INSTANCE.toBytes(sqlTypeName));
-        return true;
+    BsonValue bsonValue =
+      CommonComparisonExpressionUtils.getFieldFromDocument(documentFieldKey, rawBsonDocument);
+    if (bsonValue == null) {
+      ptr.set(PVarchar.INSTANCE.toBytes("NULL"));
+      return true;
     }
 
-    private String getValueType(BsonValue bsonValue) {
-        if (bsonValue instanceof BsonString) {
-            return PVarchar.INSTANCE.getSqlTypeName();
-        } else if (bsonValue instanceof BsonInt32) {
-            return PInteger.INSTANCE.getSqlTypeName();
-        } else if (bsonValue instanceof BsonInt64) {
-            return PLong.INSTANCE.getSqlTypeName();
-        } else if (bsonValue instanceof BsonDouble || bsonValue instanceof BsonDecimal128) {
-            return PDouble.INSTANCE.getSqlTypeName();
-        } else if (bsonValue instanceof BsonBoolean) {
-            return PBoolean.INSTANCE.getSqlTypeName();
-        } else if (bsonValue instanceof BsonBinary) {
-            return PVarbinary.INSTANCE.getSqlTypeName();
-        } else if (bsonValue instanceof BsonDateTime) {
-            return PDate.INSTANCE.getSqlTypeName();
-        } else if (bsonValue instanceof BsonDocument || bsonValue instanceof BsonArray) {
-            return PBson.INSTANCE.getSqlTypeName();
-        } else if (bsonValue instanceof BsonNull) {
-            return "NULL";
-        } else {
-            return PVarchar.INSTANCE.getSqlTypeName();
-        }
-    }
+    String sqlTypeName = getValueType(bsonValue);
+    ptr.set(PVarchar.INSTANCE.toBytes(sqlTypeName));
+    return true;
+  }
 
-    @Override
-    public PDataType<?> getDataType() {
-        return PVarchar.INSTANCE;
+  private String getValueType(BsonValue bsonValue) {
+    if (bsonValue instanceof BsonString) {
+      return PVarchar.INSTANCE.getSqlTypeName();
+    } else if (bsonValue instanceof BsonInt32) {
+      return PInteger.INSTANCE.getSqlTypeName();
+    } else if (bsonValue instanceof BsonInt64) {
+      return PLong.INSTANCE.getSqlTypeName();
+    } else if (bsonValue instanceof BsonDouble || bsonValue instanceof BsonDecimal128) {
+      return PDouble.INSTANCE.getSqlTypeName();
+    } else if (bsonValue instanceof BsonBoolean) {
+      return PBoolean.INSTANCE.getSqlTypeName();
+    } else if (bsonValue instanceof BsonBinary) {
+      return PVarbinary.INSTANCE.getSqlTypeName();
+    } else if (bsonValue instanceof BsonDateTime) {
+      return PDate.INSTANCE.getSqlTypeName();
+    } else if (bsonValue instanceof BsonDocument || bsonValue instanceof BsonArray) {
+      return PBson.INSTANCE.getSqlTypeName();
+    } else if (bsonValue instanceof BsonNull) {
+      return "NULL";
+    } else {
+      return PVarchar.INSTANCE.getSqlTypeName();
     }
+  }
+
+  @Override
+  public PDataType<?> getDataType() {
+    return PVarchar.INSTANCE;
+  }
 }

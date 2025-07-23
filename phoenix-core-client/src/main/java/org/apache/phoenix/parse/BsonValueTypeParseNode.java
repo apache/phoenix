@@ -19,7 +19,6 @@ package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
 import java.util.List;
-
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.function.BsonValueTypeFunction;
@@ -30,17 +29,17 @@ import org.apache.phoenix.schema.types.PJson;
 
 public class BsonValueTypeParseNode extends FunctionParseNode {
 
-    public BsonValueTypeParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
-        super(name, children, info);
-    }
+  public BsonValueTypeParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
+    super(name, children, info);
+  }
 
-    @Override
-    public FunctionExpression create(List<Expression> children, StatementContext context)
-        throws SQLException {
-        PDataType<?> dataType = children.get(0).getDataType();
-        if (!dataType.isCoercibleTo(PJson.INSTANCE) && !dataType.isCoercibleTo(PBson.INSTANCE)) {
-            throw new SQLException(dataType + " type is unsupported for BSON_VALUE_TYPE().");
-        }
-        return new BsonValueTypeFunction(children);
+  @Override
+  public FunctionExpression create(List<Expression> children, StatementContext context)
+    throws SQLException {
+    PDataType<?> dataType = children.get(0).getDataType();
+    if (!dataType.isCoercibleTo(PJson.INSTANCE) && !dataType.isCoercibleTo(PBson.INSTANCE)) {
+      throw new SQLException(dataType + " type is unsupported for BSON_VALUE_TYPE().");
     }
+    return new BsonValueTypeFunction(children);
+  }
 }
