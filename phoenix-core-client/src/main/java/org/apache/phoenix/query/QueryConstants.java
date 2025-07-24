@@ -127,7 +127,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.QUERY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.QUERY_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.QUERY_STATUS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REF_GENERATION;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REGISTRY_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REMARKS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.RETURN_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ROW_KEY_MATCHER;
