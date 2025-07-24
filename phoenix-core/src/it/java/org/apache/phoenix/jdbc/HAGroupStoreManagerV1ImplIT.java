@@ -28,14 +28,16 @@ import org.junit.experimental.categories.Category;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
+import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.junit.Assert.assertFalse;
 
 
 @Category(NeedsOwnMiniClusterTest.class)
-public class HAGroupStoreManagerIT extends BaseTest {
+public class HAGroupStoreManagerV1ImplIT extends BaseTest {
     private final PhoenixHAAdmin haAdmin = new PhoenixHAAdmin(config);
     private static final Long ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS = 1000L;
 
@@ -57,7 +59,9 @@ public class HAGroupStoreManagerIT extends BaseTest {
 
     @Test
     public void testHAGroupStoreManagerWithSingleCRR() throws Exception {
-        HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(config);
+        Optional<HAGroupStoreManager> haGroupStoreManagerOptional = HAGroupStoreManagerFactory.getInstance(config, getLocalZkUrl(config));
+        assert haGroupStoreManagerOptional.isPresent();
+        HAGroupStoreManager haGroupStoreManager = haGroupStoreManagerOptional.get();
         // Setup initial CRRs
         ClusterRoleRecord crr1 = new ClusterRoleRecord("failover",
                 HighAvailabilityPolicy.FAILOVER, haAdmin.getZkUrl(), ClusterRoleRecord.ClusterRole.ACTIVE,
