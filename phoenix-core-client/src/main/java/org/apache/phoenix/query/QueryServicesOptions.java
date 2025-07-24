@@ -86,7 +86,6 @@ import static org.apache.phoenix.query.QueryServices.MIN_STATS_UPDATE_FREQ_MS_AT
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.NUM_RETRIES_FOR_SCHEMA_UPDATE_CHECK;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_ACLS_ENABLED;
-import static org.apache.phoenix.query.QueryServices.PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED;
 import static org.apache.phoenix.query.QueryServices.QUERY_SERVICES_NAME;
 import static org.apache.phoenix.query.QueryServices.QUEUE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.REGIONSERVER_INFO_PORT_ATTRIB;
@@ -184,7 +183,6 @@ public class QueryServicesOptions {
   public static final int DEFAULT_TRACING_TRACE_BUFFER_SIZE = 1000;
   public static final int DEFAULT_MAX_INDEXES_PER_TABLE = 10;
   public static final int DEFAULT_CLIENT_INDEX_ASYNC_THRESHOLD = 0;
-  public static final boolean DEFAULT_SERVER_SIDE_MASKING_ENABLED = false;
 
   public final static int DEFAULT_MUTATE_BATCH_SIZE = 100; // Batch size for UPSERT SELECT and
                                                            // DELETE
@@ -584,7 +582,6 @@ public class QueryServicesOptions {
       .setIfUnset("data.tx.pre.014.changeset.key", Boolean.FALSE.toString())
       .setIfUnset(CLIENT_METRICS_TAG, DEFAULT_CLIENT_METRICS_TAG)
       .setIfUnset(CLIENT_INDEX_ASYNC_THRESHOLD, DEFAULT_CLIENT_INDEX_ASYNC_THRESHOLD)
-      .setIfUnset(PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED, DEFAULT_SERVER_SIDE_MASKING_ENABLED)
       .setIfUnset(QUERY_SERVICES_NAME, DEFAULT_QUERY_SERVICES_NAME)
       .setIfUnset(INDEX_CREATE_DEFAULT_STATE, DEFAULT_CREATE_INDEX_STATE)
       .setIfUnset(CONNECTION_QUERY_SERVICE_HISTOGRAM_SIZE_RANGES,

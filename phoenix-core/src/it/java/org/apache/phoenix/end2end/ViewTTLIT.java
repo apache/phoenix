@@ -66,7 +66,6 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
@@ -1531,10 +1530,6 @@ public class ViewTTLIT extends BaseViewTTLIT {
       Assert.assertEquals("Should have atleast one element", 1, queryPlan.getScans().size());
       Assert.assertEquals("PhoenixTTL does not match", table.getCompiledTTLExpression(conn),
         ScanUtil.getTTLExpression(queryPlan.getScans().get(0).get(0)));
-      Assert.assertTrue("Masking attribute should be set",
-        ScanUtil.isMaskTTLExpiredRows(queryPlan.getScans().get(0).get(0)));
-      Assert.assertFalse("Delete Expired attribute should not set",
-        ScanUtil.isDeleteTTLExpiredRows(queryPlan.getScans().get(0).get(0)));
     }
 
     // Test setting delete expired rows property
@@ -1562,8 +1557,6 @@ public class ViewTTLIT extends BaseViewTTLIT {
         emptyColumnFamilyName);
       scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME,
         emptyColumnName);
-      scan.setAttribute(BaseScannerRegionObserverConstants.DELETE_PHOENIX_TTL_EXPIRED,
-        PDataType.TRUE_BYTES);
       scan.setAttribute(BaseScannerRegionObserverConstants.TTL,
         table.getCompiledTTLExpression(conn).serialize());
 
@@ -1573,10 +1566,6 @@ public class ViewTTLIT extends BaseViewTTLIT {
       Assert.assertEquals("Should have atleast one element", 1, queryPlan.getScans().size());
       Assert.assertEquals("PhoenixTTL does not match", table.getCompiledTTLExpression(conn),
         ScanUtil.getTTLExpression(queryPlan.getScans().get(0).get(0)));
-      Assert.assertFalse("Masking attribute should not be set",
-        ScanUtil.isMaskTTLExpiredRows(queryPlan.getScans().get(0).get(0)));
-      Assert.assertTrue("Delete Expired attribute should be set",
-        ScanUtil.isDeleteTTLExpiredRows(queryPlan.getScans().get(0).get(0)));
     }
   }
 

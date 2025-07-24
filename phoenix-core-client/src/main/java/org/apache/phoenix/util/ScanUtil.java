@@ -24,7 +24,6 @@ import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverCons
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_STOP_ROW_SUFFIX;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_TTL;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
@@ -93,7 +92,6 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.CompiledTTLExpression;
 import org.apache.phoenix.schema.IllegalDataException;
-import org.apache.phoenix.schema.LiteralTTLExpression;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
@@ -1170,15 +1168,6 @@ public class ScanUtil {
     scan.setAttribute(BaseScannerRegionObserverConstants.CLIENT_VERSION, Bytes.toBytes(version));
   }
 
-  public static boolean isServerSideMaskingEnabled(PhoenixConnection phoenixConnection) {
-    String isServerSideMaskingSet =
-      phoenixConnection.getClientInfo(QueryServices.PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED);
-    return (phoenixConnection.getQueryServices().getConfiguration().getBoolean(
-      QueryServices.PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED,
-      QueryServicesOptions.DEFAULT_SERVER_SIDE_MASKING_ENABLED)
-      || ((isServerSideMaskingSet != null) && (Boolean.parseBoolean(isServerSideMaskingSet))));
-  }
-
   public static boolean getStatsForParallelizationProp(PhoenixConnection conn, PTable table)
     throws SQLException {
     Boolean useStats = table.useStatsForParallelization();
@@ -1217,19 +1206,6 @@ public class ScanUtil {
       DEFAULT_USE_STATS_FOR_PARALLELIZATION);
   }
 
-  public static int getTTL(Scan scan) throws IOException {
-    byte[] phoenixTTL = scan.getAttribute(BaseScannerRegionObserverConstants.TTL);
-    if (phoenixTTL == null) {
-      return DEFAULT_TTL;
-    }
-    CompiledTTLExpression ttlExpression = TTLExpressionFactory.create(phoenixTTL);
-    if (ttlExpression instanceof LiteralTTLExpression) {
-      LiteralTTLExpression literal = (LiteralTTLExpression) ttlExpression;
-      return literal.getTTLValue();
-    }
-    return DEFAULT_TTL;
-  }
-
   public static CompiledTTLExpression getTTLExpression(Scan scan) throws IOException {
     byte[] phoenixTTL = scan.getAttribute(BaseScannerRegionObserverConstants.TTL);
     if (phoenixTTL == null) {
@@ -1243,22 +1219,6 @@ public class ScanUtil {
       QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED)
       && conf.getBoolean(QueryServices.PHOENIX_COMPACTION_ENABLED,
         QueryServicesOptions.DEFAULT_PHOENIX_COMPACTION_ENABLED);
-  }
-
-  public static boolean isMaskTTLExpiredRows(Scan scan) {
-    return scan.getAttribute(BaseScannerRegionObserverConstants.MASK_PHOENIX_TTL_EXPIRED) != null
-      && (Bytes.compareTo(
-        scan.getAttribute(BaseScannerRegionObserverConstants.MASK_PHOENIX_TTL_EXPIRED),
-        PDataType.TRUE_BYTES) == 0)
-      && scan.getAttribute(BaseScannerRegionObserverConstants.TTL) != null;
-  }
-
-  public static boolean isDeleteTTLExpiredRows(Scan scan) {
-    return scan.getAttribute(BaseScannerRegionObserverConstants.DELETE_PHOENIX_TTL_EXPIRED) != null
-      && (Bytes.compareTo(
-        scan.getAttribute(BaseScannerRegionObserverConstants.DELETE_PHOENIX_TTL_EXPIRED),
-        PDataType.TRUE_BYTES) == 0)
-      && scan.getAttribute(BaseScannerRegionObserverConstants.TTL) != null;
   }
 
   public static boolean isStrictTTL(Scan scan) {
@@ -1292,12 +1252,6 @@ public class ScanUtil {
       }
     }
     return maxTs;
-  }
-
-  public static boolean isTTLExpired(Cell cell, Scan scan, long nowTS) throws IOException {
-    long ts = cell.getTimestamp();
-    int ttl = ScanUtil.getTTL(scan);
-    return ts + ttl < nowTS;
   }
 
   /**
@@ -1564,17 +1518,11 @@ public class ScanUtil {
         table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS
           ? QueryConstants.EMPTY_COLUMN_BYTES
           : table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
-      scan.setAttribute(BaseScannerRegionObserverConstants.PHOENIX_TTL_SCAN_TABLE_NAME,
-        Bytes.toBytes(tableName));
       scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME,
         emptyColumnFamilyName);
       scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME,
         emptyColumnName);
       scan.setAttribute(BaseScannerRegionObserverConstants.TTL, ttlForScan);
-      if (!ScanUtil.isDeleteTTLExpiredRows(scan)) {
-        scan.setAttribute(BaseScannerRegionObserverConstants.MASK_PHOENIX_TTL_EXPIRED,
-          PDataType.TRUE_BYTES);
-      }
       if (ScanUtil.isLocalIndex(scan)) {
         byte[] actualStartRow = scan.getAttribute(SCAN_ACTUAL_START_ROW) != null
           ? scan.getAttribute(SCAN_ACTUAL_START_ROW)
