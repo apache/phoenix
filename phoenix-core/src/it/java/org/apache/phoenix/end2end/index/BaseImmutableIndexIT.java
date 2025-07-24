@@ -290,6 +290,15 @@ public abstract class BaseImmutableIndexIT extends BaseTest {
   }
 
   private boolean isServerSideIndex() {
+    // An index is a server-side index if its mutations are generated and applied on the server side, otherwise
+    // it is a client-side index
+    // 1. Non-transactional local indexes are server-side indexes
+    // 2. Transactional global indexes are client-side indexes
+    // 3. Transactional local indexes are server-side indexes unless the transaction provider does not support it
+    // 4. Non-transactional global mutable indexes are server-side indexes
+    // 5. If configured using QueryServices.SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB (that is,
+    //    when serverSideIndex = true), non-transactional immutable indexes are also server-side indexes, otherwise they
+    //    are client-side indexes
     if ((localIndex && transactionProvider != null &&
             transactionProvider.isUnsupported(Feature.MAINTAIN_LOCAL_INDEX_ON_SERVER)) ||
             (!localIndex && transactionProvider != null) ||
