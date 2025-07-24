@@ -343,7 +343,7 @@ public class HAGroupStoreRecordTest {
         assertEquals(HAGroupStoreRecord.HAGroupState.UNKNOWN,
                 HAGroupStoreRecord.HAGroupState.from("null".getBytes()));
         assertEquals(HAGroupStoreRecord.HAGroupState.UNKNOWN,
-                HAGroupStoreRecord.HAGroupState.from("ACTIV".getBytes())); // typo 
+                HAGroupStoreRecord.HAGroupState.from("ACTIV".getBytes())); // typo
         assertEquals(HAGroupStoreRecord.HAGroupState.UNKNOWN,
                 HAGroupStoreRecord.HAGroupState.from("ACTIVE_EXTRA".getBytes())); // extra text
         assertEquals(HAGroupStoreRecord.HAGroupState.UNKNOWN,

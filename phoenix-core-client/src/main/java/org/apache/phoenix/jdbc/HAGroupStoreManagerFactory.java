@@ -87,13 +87,13 @@ public class HAGroupStoreManagerFactory {
                 conf.get(HA_IMPLEMENTATION, DEFAULT_HA_IMPLEMENTATION));
         try {
             if (implClass == null) {
-                throw new IllegalArgumentException("Invalid HA implementation: " 
-                        + conf.get(HA_IMPLEMENTATION, DEFAULT_HA_IMPLEMENTATION) 
+                throw new IllegalArgumentException("Invalid HA implementation: "
+                        + conf.get(HA_IMPLEMENTATION, DEFAULT_HA_IMPLEMENTATION)
                         + ". Valid implementations are: " + IMPLEMENTATION_CLASSES.keySet());
             }
             // Validate that the class implements HAGroupStoreManager
             if (!HAGroupStoreManager.class.isAssignableFrom(implClass)) {
-                throw new IllegalArgumentException("Class " + implClass.getName() 
+                throw new IllegalArgumentException("Class " + implClass.getName()
                         + " does not implement HAGroupStoreManager interface");
             }
 

@@ -120,21 +120,21 @@ public class HAGroupStoreRecord {
             // This needs to be manually recovered by operator
             UNKNOWN.allowedTransitions = ImmutableSet.of();
             ACTIVE_TO_STANDBY.allowedTransitions = ImmutableSet.of(ABORT_TO_ACTIVE, STANDBY);
-            STANDBY_TO_ACTIVE.allowedTransitions = ImmutableSet.of(ABORT_TO_STANDBY, 
+            STANDBY_TO_ACTIVE.allowedTransitions = ImmutableSet.of(ABORT_TO_STANDBY,
                     ACTIVE_IN_SYNC);
             DEGRADED_STANDBY.allowedTransitions
                     = ImmutableSet.of(DEGRADED_STANDBY_FOR_READER, DEGRADED_STANDBY_FOR_WRITER);
-            DEGRADED_STANDBY_FOR_WRITER.allowedTransitions = ImmutableSet.of(STANDBY, 
+            DEGRADED_STANDBY_FOR_WRITER.allowedTransitions = ImmutableSet.of(STANDBY,
                     DEGRADED_STANDBY);
-            DEGRADED_STANDBY_FOR_READER.allowedTransitions = ImmutableSet.of(STANDBY, 
+            DEGRADED_STANDBY_FOR_READER.allowedTransitions = ImmutableSet.of(STANDBY,
                     DEGRADED_STANDBY);
             ACTIVE_WITH_OFFLINE_PEER.allowedTransitions = ImmutableSet.of(ACTIVE_IN_SYNC);
-            ABORT_TO_ACTIVE.allowedTransitions = ImmutableSet.of(ACTIVE_IN_SYNC, 
+            ABORT_TO_ACTIVE.allowedTransitions = ImmutableSet.of(ACTIVE_IN_SYNC,
                     ACTIVE_NOT_IN_SYNC);
             ABORT_TO_STANDBY.allowedTransitions = ImmutableSet.of(STANDBY);
-            ACTIVE_NOT_IN_SYNC_TO_STANDBY.allowedTransitions = ImmutableSet.of(ACTIVE_TO_STANDBY, 
+            ACTIVE_NOT_IN_SYNC_TO_STANDBY.allowedTransitions = ImmutableSet.of(ACTIVE_TO_STANDBY,
                     ACTIVE_NOT_IN_SYNC);
-            ACTIVE_NOT_IN_SYNC_WITH_OFFLINE_PEER.allowedTransitions = 
+            ACTIVE_NOT_IN_SYNC_WITH_OFFLINE_PEER.allowedTransitions =
                     ImmutableSet.of(ACTIVE_NOT_IN_SYNC);
         }
 

@@ -41,7 +41,7 @@ public interface HAGroupStoreManager {
     /**
      * Checks whether mutation is blocked or not for a specific HA group.
      *
-     * @param haGroupName name of the HA group, null for default HA group which tracks 
+     * @param haGroupName name of the HA group, null for default HA group which tracks
      *                   all HA groups.
      * @return true if mutation is blocked, false otherwise.
      * @throws IOException when HAGroupStoreClient is not healthy.
@@ -51,7 +51,7 @@ public interface HAGroupStoreManager {
     /**
      * Force rebuilds the HAGroupStoreClient instance for all HA groups.
      * If any HAGroupStoreClient instance is not created, it will be created.
-     * @param broadcastUpdate if true, the update will be broadcasted to all 
+     * @param broadcastUpdate if true, the update will be broadcasted to all
      *                       regionserver endpoints.
      * @throws Exception
      */
@@ -61,22 +61,22 @@ public interface HAGroupStoreManager {
      * Force rebuilds the HAGroupStoreClient for a specific HA group.
      *
      * @param haGroupName name of the HA group, null for default HA group and tracks all HA groups.
-     * @param broadcastUpdate if true, the update will be broadcasted to all 
+     * @param broadcastUpdate if true, the update will be broadcasted to all
      *                       regionserver endpoints.
      * @throws Exception
      */
-    void invalidateHAGroupStoreClient(String haGroupName, boolean broadcastUpdate) 
+    void invalidateHAGroupStoreClient(String haGroupName, boolean broadcastUpdate)
             throws Exception;
 
     /**
      * Returns the HAGroupStoreRecord for a specific HA group.
      *
      * @param haGroupName name of the HA group
-     * @return Optional HAGroupStoreRecord for the HA group, can be empty if the HA group 
+     * @return Optional HAGroupStoreRecord for the HA group, can be empty if the HA group
      *        is not found.
      * @throws IOException when HAGroupStoreClient is not healthy.
      */
-    Optional<HAGroupStoreRecord> getHAGroupStoreRecord(String haGroupName) 
+    Optional<HAGroupStoreRecord> getHAGroupStoreRecord(String haGroupName)
             throws IOException, SQLException;
 
     /**
@@ -85,8 +85,8 @@ public interface HAGroupStoreManager {
      * @param haGroupName name of the HA group
      * @throws IOException when HAGroupStoreClient is not healthy.
      */
-    void setHAGroupStatusToStoreAndForward(String haGroupName) throws IOException, 
-            StaleHAGroupStoreRecordVersionException, InvalidClusterRoleTransitionException, 
+    void setHAGroupStatusToStoreAndForward(String haGroupName) throws IOException,
+            StaleHAGroupStoreRecordVersionException, InvalidClusterRoleTransitionException,
             SQLException;
 
     /**
@@ -95,13 +95,13 @@ public interface HAGroupStoreManager {
      * @param haGroupName name of the HA group
      * @throws IOException when HAGroupStoreClient is not healthy.
      */
-    void setHAGroupStatusRecordToSync(String haGroupName) throws IOException, 
-            StaleHAGroupStoreRecordVersionException, InvalidClusterRoleTransitionException, 
+    void setHAGroupStatusRecordToSync(String haGroupName) throws IOException,
+            StaleHAGroupStoreRecordVersionException, InvalidClusterRoleTransitionException,
             SQLException;
 
     /**
      * Returns the ClusterRoleRecord for the cluster pair.
-     * If the peer cluster is not connected or peer cluster is not configured, it will 
+     * If the peer cluster is not connected or peer cluster is not configured, it will
      * return UNKNOWN for peer cluster.
      * Only implemented by HAGroupStoreManagerImpl.
      *

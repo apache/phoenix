@@ -55,7 +55,7 @@ public class HAGroupStoreClientV1 implements Closeable {
     private PhoenixHAAdmin phoenixHaAdmin;
     private static final Logger LOGGER = LoggerFactory.getLogger(HAGroupStoreClientV1.class);
     // Map contains <ClusterRole, Map<HAGroupName(String), ClusterRoleRecord>>
-    private final ConcurrentHashMap<ClusterRoleRecord.ClusterRole, 
+    private final ConcurrentHashMap<ClusterRoleRecord.ClusterRole,
             ConcurrentHashMap<String, ClusterRoleRecord>> clusterRoleToCRRMap
             = new ConcurrentHashMap<>();
     private PathChildrenCache pathChildrenCache;
@@ -89,12 +89,12 @@ public class HAGroupStoreClientV1 implements Closeable {
     }
 
     @VisibleForTesting
-    HAGroupStoreClientV1(final Configuration conf, 
+    HAGroupStoreClientV1(final Configuration conf,
             final PathChildrenCacheListener pathChildrenCacheListener) {
         try {
             this.phoenixHaAdmin = new PhoenixHAAdmin(conf);
             final PathChildrenCache pathChildrenCache;
-            pathChildrenCache = new PathChildrenCache(phoenixHaAdmin.getCurator(), 
+            pathChildrenCache = new PathChildrenCache(phoenixHaAdmin.getCurator(),
                     ZKPaths.PATH_SEPARATOR, true);
             final CountDownLatch latch = new CountDownLatch(1);
             if (pathChildrenCacheListener != null) {
@@ -113,15 +113,15 @@ public class HAGroupStoreClientV1 implements Closeable {
                             }
                             break;
                         case CHILD_REMOVED:
-                            // In case of CHILD_REMOVED, we get the old version of data that was 
+                            // In case of CHILD_REMOVED, we get the old version of data that was
                             // just deleted in event.
                             if (eventCRR != null && eventCRR.getHaGroupName() != null
                                     && !eventCRR.getHaGroupName().isEmpty()
                                     && eventCRR.getRole(phoenixHaAdmin.getZkUrl()) != null) {
                                 LOGGER.info("Received CHILD_REMOVED event, Removing CRR {} "
-                                        + "from existing CRR Map {}", eventCRR, 
+                                        + "from existing CRR Map {}", eventCRR,
                                         clusterRoleToCRRMap);
-                                final ClusterRoleRecord.ClusterRole role = 
+                                final ClusterRoleRecord.ClusterRole role =
                                         eventCRR.getRole(phoenixHaAdmin.getZkUrl());
                                 clusterRoleToCRRMap.putIfAbsent(role, new ConcurrentHashMap<>());
                                 clusterRoleToCRRMap.get(role).remove(eventCRR.getHaGroupName());
@@ -138,14 +138,14 @@ public class HAGroupStoreClientV1 implements Closeable {
                             isHealthy = true;
                             break;
                         default:
-                            LOGGER.warn("Unexpected event type {}, complete event {}", 
+                            LOGGER.warn("Unexpected event type {}, complete event {}",
                                     event.getType(), event);
                     }
                 });
             }
             pathChildrenCache.start(PathChildrenCache.StartMode.POST_INITIALIZED_EVENT);
             this.pathChildrenCache = pathChildrenCache;
-            isHealthy = latch.await(HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS, 
+            isHealthy = latch.await(HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS,
                     TimeUnit.MILLISECONDS);
             buildClusterRoleToCRRMap();
         } catch (Exception e) {
@@ -164,7 +164,7 @@ public class HAGroupStoreClientV1 implements Closeable {
     }
 
     private void updateClusterRoleRecordMap(final ClusterRoleRecord crr) {
-        if (crr != null && crr.getHaGroupName() != null && 
+        if (crr != null && crr.getHaGroupName() != null &&
                 crr.getRole(phoenixHaAdmin.getZkUrl()) != null) {
             ClusterRoleRecord.ClusterRole role = crr.getRole(phoenixHaAdmin.getZkUrl());
             LOGGER.info("Updating Existing CRR Map {} with new CRR {}", clusterRoleToCRRMap, crr);
@@ -174,7 +174,7 @@ public class HAGroupStoreClientV1 implements Closeable {
             // Remove any pre-existing mapping with any other role for this HAGroupName
             for (ClusterRoleRecord.ClusterRole mapRole : clusterRoleToCRRMap.keySet()) {
                 if (mapRole != role) {
-                    ConcurrentHashMap<String, ClusterRoleRecord> roleWiseMap = 
+                    ConcurrentHashMap<String, ClusterRoleRecord> roleWiseMap =
                             clusterRoleToCRRMap.get(mapRole);
                     if (roleWiseMap.containsKey(crr.getHaGroupName())) {
                         LOGGER.info("Removing any pre-existing mapping with role {} "
@@ -242,7 +242,7 @@ public class HAGroupStoreClientV1 implements Closeable {
         if (!isHealthy) {
             throw new IOException("HAGroupStoreClientV1 is not healthy");
         }
-        return ImmutableList.copyOf(clusterRoleToCRRMap.getOrDefault(clusterRole, 
+        return ImmutableList.copyOf(clusterRoleToCRRMap.getOrDefault(clusterRole,
                 new ConcurrentHashMap<>()).values());
     }
 }

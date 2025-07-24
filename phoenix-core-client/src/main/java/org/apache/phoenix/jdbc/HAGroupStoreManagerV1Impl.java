@@ -52,7 +52,7 @@ public class HAGroupStoreManagerV1Impl implements HAGroupStoreManager {
     /**
      * Checks whether mutation is blocked or not for a specific HA group.
      *
-     * @param haGroupName name of the HA group, null for default HA group which tracks 
+     * @param haGroupName name of the HA group, null for default HA group which tracks
      *                   all HA groups.
      * @return true if mutation is blocked, false otherwise.
      * @throws IOException when HAGroupStoreClient is not healthy.
@@ -87,7 +87,7 @@ public class HAGroupStoreManagerV1Impl implements HAGroupStoreManager {
      * @throws Exception
      */
     @Override
-    public void invalidateHAGroupStoreClient(String haGroupName, boolean forceUpdate) 
+    public void invalidateHAGroupStoreClient(String haGroupName, boolean forceUpdate)
             throws Exception {
         HAGroupStoreClientV1 haGroupStoreClient = HAGroupStoreClientV1.getInstance(conf);
         if (haGroupStoreClient != null) {
@@ -98,7 +98,7 @@ public class HAGroupStoreManagerV1Impl implements HAGroupStoreManager {
     }
 
     @Override
-    public Optional<HAGroupStoreRecord> getHAGroupStoreRecord(String haGroupName) 
+    public Optional<HAGroupStoreRecord> getHAGroupStoreRecord(String haGroupName)
             throws IOException {
         throw new UnsupportedOperationException("HAGroupStoreRecord not supported "
                 + "in HAGroupStoreManagerV1Impl");
@@ -117,7 +117,7 @@ public class HAGroupStoreManagerV1Impl implements HAGroupStoreManager {
     }
 
     @Override
-    public ClusterRoleRecord getClusterRoleRecord(String haGroupName) 
+    public ClusterRoleRecord getClusterRoleRecord(String haGroupName)
             throws IOException, SQLException {
         throw new UnsupportedOperationException("getClusterRoleRecord is not supported "
                 + "in HAGroupStoreManagerV1Impl");
