@@ -275,6 +275,15 @@ public class ClusterRoleRecordTest {
         assertNotEquals(record.toString(), record.toPrettyString());
     }
 
+    @Test
+    public void testClusterRoleFromInvalidBytes() {
+        ClusterRole role = ClusterRole.from(new byte[0]);
+        assertEquals(ClusterRole.UNKNOWN, role);
+
+        role = ClusterRole.from("random".getBytes());
+        assertEquals(ClusterRole.UNKNOWN, role);
+    }
+
     //Private Helper Methods
 
     private ClusterRoleRecord getClusterRoleRecord(String name, HighAvailabilityPolicy policy,

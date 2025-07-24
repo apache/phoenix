@@ -87,7 +87,7 @@ public class PhoenixHAAdminToolTest {
 
     @Before
     public void setup() throws Exception {
-        when(mockHighAvailibilityCuratorProvider.getCurator(Mockito.anyString(), any(Properties.class))).thenReturn(curator);
+        when(mockHighAvailibilityCuratorProvider.getCurator(Mockito.anyString(), any(Properties.class), anyString())).thenReturn(curator);
         haGroupName = testName.getMethodName();
         recordV1 = new ClusterRoleRecord(
                 haGroupName, HighAvailabilityPolicy.FAILOVER,

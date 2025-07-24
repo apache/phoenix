@@ -59,6 +59,7 @@ import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
+import org.apache.phoenix.exception.MutationBlockedIOException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.Expression;
@@ -85,6 +86,7 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
+import org.apache.phoenix.jdbc.HAGroupStoreManagerFactory;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -621,10 +623,16 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       }
       try {
           final Configuration conf = c.getEnvironment().getConfiguration();
-          final HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(conf);
-          if (haGroupStoreManager.isMutationBlocked()) {
-              throw new IOException("Blocking Mutation as Some CRRs are in ACTIVE_TO_STANDBY "
-                      + "state and CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
+          final Optional<HAGroupStoreManager> haGroupStoreManagerOptional
+                  = HAGroupStoreManagerFactory.getInstance(conf, null);
+          if (!haGroupStoreManagerOptional.isPresent()) {
+              throw new IOException("HAGroupStoreManager is null "
+                      + "for current cluster, check configuration");
+          }
+          if (haGroupStoreManagerOptional.get().isMutationBlocked()) {
+              throw new MutationBlockedIOException("Blocking Mutation as Some CRRs are in "
+                      + "ACTIVE_TO_STANDBY state and "
+                      + "CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
           }
           preBatchMutateWithExceptions(c, miniBatchOp);
           return;

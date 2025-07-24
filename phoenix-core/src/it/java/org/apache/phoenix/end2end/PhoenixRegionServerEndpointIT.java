@@ -164,7 +164,10 @@ public class PhoenixRegionServerEndpointIT extends BaseTest {
         assertNotNull(coprocessor);
         ServerRpcController controller = new ServerRpcController();
         RegionServerEndpointProtos.InvalidateHAGroupStoreClientRequest request
-                = RegionServerEndpointProtos.InvalidateHAGroupStoreClientRequest.newBuilder().build();
+                = RegionServerEndpointProtos.InvalidateHAGroupStoreClientRequest.newBuilder()
+                .setHaGroupName(ByteStringer.wrap(Bytes.toBytes("test")))
+                .setBroadcastUpdate(false)
+                .build();
         coprocessor.invalidateHAGroupStoreClient(controller, request, null);
         assertFalse(controller.failed());
     }
