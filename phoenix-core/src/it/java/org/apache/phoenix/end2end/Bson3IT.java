@@ -2221,7 +2221,6 @@ public class Bson3IT extends ParallelStatsDisabledIT {
 
         String valueQuery = "SELECT BSON_VALUE(COL, '" + path + "', '" + actualType + "') FROM "
           + tableName + " WHERE PK1 = 'pk0001'";
-        System.out.println("Executing query: " + valueQuery);
 
         rs = conn.createStatement().executeQuery(valueQuery);
         assertTrue("No result for path " + path, rs.next());
