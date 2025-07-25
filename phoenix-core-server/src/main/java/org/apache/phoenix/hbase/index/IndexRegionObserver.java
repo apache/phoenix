@@ -127,6 +127,7 @@ import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.MutationUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerIndexUtil;
@@ -925,7 +926,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             }
             Put put = lastContext.getNextDataRowState(rowKeyPtr);
             if (put != null) {
-              context.dataRowStates.put(rowKeyPtr, new Pair<>(put, new Put(put)));
+              // We have detected a concurrent update so do a deep copy of the
+              // previous update but we can skip the attributes
+              Put copy = MutationUtil.copyPut(put, true);
+              context.dataRowStates.put(rowKeyPtr, new Pair<>(copy, new Put(copy)));
             }
           } else {
             // The last batch for this row key failed. We cannot use the memory state.
