@@ -420,6 +420,7 @@ public class QueryServicesOptions {
   public static final long DEFAULT_GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS =
     7 * 24 * 60 * 60 * 1000; /* 7 days */
   public static final boolean DEFAULT_INDEX_REGION_OBSERVER_ENABLED = true;
+  public static final boolean DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED = false;
 
   public static final String DEFAULT_INDEX_REGION_OBSERVER_ENABLED_ALL_TABLES =
     Boolean.toString(true);
