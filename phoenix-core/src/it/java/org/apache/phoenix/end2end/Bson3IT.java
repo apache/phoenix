@@ -51,7 +51,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.*;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
@@ -2158,6 +2158,137 @@ public class Bson3IT extends ParallelStatsDisabledIT {
         3, nonePreImages);
     } finally {
       EnvironmentEdgeManager.reset();
+    }
+  }
+
+  @Test
+  public void testBsonValueWithBsonValueType() throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    String tableName = generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      String ddl = "CREATE TABLE " + tableName + " (PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON"
+        + " CONSTRAINT pk PRIMARY KEY(PK1)) "
+        + (this.columnEncoded ? "" : "COLUMN_ENCODED_BYTES=0");
+      conn.createStatement().execute(ddl);
+
+      String sample1 = getJsonString("json/sample_01.json");
+      BsonDocument bsonDocument1 = RawBsonDocument.parse(sample1);
+      PreparedStatement stmt =
+        conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
+      stmt.setString(1, "pk0001");
+      stmt.setString(2, "0002");
+      stmt.setObject(3, bsonDocument1);
+      stmt.executeUpdate();
+      conn.commit();
+
+      Object[][] testCases = { { "cold", PVarchar.INSTANCE.getSqlTypeName(), "method" },
+        { "hurry", PDouble.INSTANCE.getSqlTypeName(), -593264871.4436941 },
+        { "press", PVarchar.INSTANCE.getSqlTypeName(), "beat" },
+        { "browserling", PDouble.INSTANCE.getSqlTypeName(), -505169340.54880095 },
+        { "attention", PInteger.INSTANCE.getSqlTypeName(), 166583691 },
+        { "track[0].speed", PVarchar.INSTANCE.getSqlTypeName(), "sun" },
+        { "track[0].shot[2][0].character", PInteger.INSTANCE.getSqlTypeName(), 413968576 },
+        { "track[0].shot[2][0].earth", PVarchar.INSTANCE.getSqlTypeName(), "helpful" },
+        { "track[0].shot[2][0].money", PBoolean.INSTANCE.getSqlTypeName(), false },
+        { "track[0].shot[2][0].city.standard[5]", PVarchar.INSTANCE.getSqlTypeName(), "softly" },
+        { "track[0].shot[2][0].city.problem[2]", PDouble.INSTANCE.getSqlTypeName(),
+          1527061470.2690287 },
+        { "track[0].shot[2][0].city.problem[3].condition", PVarchar.INSTANCE.getSqlTypeName(),
+          "else" },
+        { "track[0].shot[2][0].city.problem[3].higher", PDouble.INSTANCE.getSqlTypeName(),
+          1462910924.088698 },
+        { "track[0].shot[2][0].city.problem[3].scene", PBoolean.INSTANCE.getSqlTypeName(), false },
+        { "track[0].shot[2][0].city.flame", PInteger.INSTANCE.getSqlTypeName(), 1066643931 },
+        { "track[0].shot[2][0].city.brought", PVarchar.INSTANCE.getSqlTypeName(), "rock" },
+        { "track[0].shot[2][0].height", PBoolean.INSTANCE.getSqlTypeName(), true },
+        { "track[0].disease", PVarchar.INSTANCE.getSqlTypeName(), "disease" },
+        { "track[1]", PVarchar.INSTANCE.getSqlTypeName(), "printed" },
+        { "symbol", PBoolean.INSTANCE.getSqlTypeName(), false } };
+
+      for (Object[] testCase : testCases) {
+        String path = (String) testCase[0];
+        String expectedType = (String) testCase[1];
+        Object expectedValue = testCase[2];
+
+        String typeQuery =
+          "SELECT BSON_VALUE_TYPE(COL, '" + path + "') FROM " + tableName + " WHERE PK1 = 'pk0001'";
+
+        ResultSet rs = conn.createStatement().executeQuery(typeQuery);
+        assertTrue("No result for path " + path, rs.next());
+        String actualType = rs.getString(1);
+        assertEquals("Wrong type for path " + path, expectedType, actualType);
+
+        String valueQuery = "SELECT BSON_VALUE(COL, '" + path + "', '" + actualType + "') FROM "
+          + tableName + " WHERE PK1 = 'pk0001'";
+
+        rs = conn.createStatement().executeQuery(valueQuery);
+        assertTrue("No result for path " + path, rs.next());
+
+        if (expectedType.equals(PVarchar.INSTANCE.getSqlTypeName())) {
+          assertEquals("Wrong value for path " + path, expectedValue, rs.getString(1));
+        } else if (expectedType.equals(PInteger.INSTANCE.getSqlTypeName())) {
+          assertEquals("Wrong value for path " + path, ((Number) expectedValue).intValue(),
+            rs.getInt(1));
+        } else if (expectedType.equals(PLong.INSTANCE.getSqlTypeName())) {
+          assertEquals("Wrong value for path " + path, ((Number) expectedValue).longValue(),
+            rs.getLong(1));
+        } else if (expectedType.equals(PDouble.INSTANCE.getSqlTypeName())) {
+          assertEquals("Wrong value for path " + path, ((Number) expectedValue).doubleValue(),
+            rs.getDouble(1), 0.000001);
+        } else if (expectedType.equals(PBoolean.INSTANCE.getSqlTypeName())) {
+          assertEquals("Wrong value for path " + path, expectedValue, rs.getBoolean(1));
+        } else if (expectedType.equals(PBson.INSTANCE.getSqlTypeName())) {
+          assertNotNull("Null value for path " + path, rs.getObject(1));
+        }
+
+        assertFalse("Too many results for path " + path, rs.next());
+      }
+    }
+  }
+
+  @Test
+  public void testBsonValueTypeNegativeScenarios() throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    String tableName = generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      String ddl = "CREATE TABLE " + tableName + " (PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON"
+        + " CONSTRAINT pk PRIMARY KEY(PK1)) "
+        + (this.columnEncoded ? "" : "COLUMN_ENCODED_BYTES=0");
+      conn.createStatement().execute(ddl);
+
+      String sample1 = getJsonString("json/sample_01.json");
+      BsonDocument bsonDocument1 = RawBsonDocument.parse(sample1);
+
+      PreparedStatement stmt =
+        conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
+      stmt.setString(1, "pk0001");
+      stmt.setString(2, "0002");
+      stmt.setObject(3, bsonDocument1);
+      stmt.executeUpdate();
+      conn.commit();
+
+      ResultSet rs = conn.createStatement()
+        .executeQuery("SELECT BSON_VALUE_TYPE(COL, 'non_existent_field') FROM " + tableName
+          + " WHERE PK1 = 'pk0001'");
+      assertTrue(rs.next());
+      assertEquals("NULL", rs.getString(1));
+
+      rs = conn.createStatement().executeQuery(
+        "SELECT BSON_VALUE_TYPE(COL, 'track[999]') FROM " + tableName + " WHERE PK1 = 'pk0001'");
+      assertTrue(rs.next());
+      assertEquals("NULL", rs.getString(1));
+
+      rs = conn.createStatement().executeQuery(
+        "SELECT BSON_VALUE_TYPE(COL, '') FROM " + tableName + " WHERE PK1 = 'pk0001'");
+      assertTrue(rs.next());
+      assertNull(rs.getString(1));
+
+      rs = conn.createStatement().executeQuery(
+        "SELECT BSON_VALUE_TYPE(COL, NULL) FROM " + tableName + " WHERE PK1 = 'pk0001'");
+      assertTrue(rs.next());
+      assertNull(rs.getString(1));
     }
   }
 

@@ -196,6 +196,7 @@ public enum ExpressionType {
   BsonConditionExpressionFunction(BsonConditionExpressionFunction.class),
   BsonUpdateExpressionFunction(BsonUpdateExpressionFunction.class),
   BsonValueFunction(BsonValueFunction.class),
+  BsonValueTypeFunction(BsonValueTypeFunction.class),
   PartitionIdFunction(PartitionIdFunction.class),
   DecodeBinaryFunction(DecodeBinaryFunction.class),
   EncodeBinaryFunction(EncodeBinaryFunction.class),
