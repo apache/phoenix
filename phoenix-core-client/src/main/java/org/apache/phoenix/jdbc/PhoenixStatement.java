@@ -43,6 +43,7 @@ import static org.apache.phoenix.monitoring.MetricType.UPSERT_FAILED_SQL_COUNTER
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_SQL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_SUCCESS_SQL_COUNTER;
+import static org.apache.phoenix.query.QueryServices.CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED;
 
 import java.io.File;
 import java.io.IOException;
@@ -65,11 +66,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
+import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
@@ -87,6 +92,7 @@ import org.apache.phoenix.compile.DeclareCursorCompiler;
 import org.apache.phoenix.compile.DeleteCompiler;
 import org.apache.phoenix.compile.DropSequenceCompiler;
 import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.ExpressionProjector;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.ListJarsQueryPlan;
@@ -292,6 +298,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
   private int maxRows;
   private int fetchSize = -1;
   private int queryTimeoutMillis;
+  private boolean explainPlanLoggingEnabled;
   // Caching per Statement
   protected final Calendar localCalendar = Calendar.getInstance();
   private boolean validateLastDdlTimestamp;
@@ -302,6 +309,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     this.queryTimeoutMillis = getDefaultQueryTimeoutMillis();
     this.validateLastDdlTimestamp =
       ValidateLastDDLTimestampUtil.getValidateLastDdlTimestampEnabled(this.connection);
+    this.explainPlanLoggingEnabled = connection.getQueryServices().getProps().getBoolean(CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED,
+            QueryServicesOptions.DEFAULT_CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED);
   }
 
   /**
@@ -416,6 +425,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
               String explainPlan = QueryUtil.getExplainPlan(resultIterator);
               LOGGER
                 .debug(LogUtil.addCustomAnnotations("Explain plan: " + explainPlan, connection));
+            }
+            if (explainPlanLoggingEnabled) {
+              updateExplainPlanInformation(plan);
             }
             context.setQueryLogger(queryLogger);
             if (queryLogger.isDebugEnabled()) {
@@ -2998,5 +3010,42 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
   public Calendar getLocalCalendar() {
     return localCalendar;
   }
+
+  private void updateExplainPlanInformation(QueryPlan plan) throws SQLException {
+    if ( plan == null || !getConnection().getActivityLogger().isLevelEnabled(ActivityLogInfo.EXPLAIN_PLAN.getLogLevel())) {
+      return;
+    }
+
+    ExplainPlan explainPlan = plan.getExplainPlan();
+    ExplainPlanAttributes explainPlanAttributes = explainPlan.getPlanStepsAsAttributes();
+
+    List<HRegionLocation> location = explainPlanAttributes.getRegionLocations();
+    String regionInfo = getRegionInfo(location);
+
+    String sb = Stream.of(
+                    explainPlanAttributes.getExplainScanType(),
+                    regionInfo)
+            .collect(Collectors.joining(","));
+    updateActivityOnConnection(ActivityLogInfo.EXPLAIN_PLAN, sb);
+  }
+
+  private String getRegionInfo(List<HRegionLocation> location) {
+    if (location == null || location.isEmpty()) {
+      return "";
+    }
+
+    String regions = location.stream()
+            .map(regionLocation -> regionLocation.getRegion().getEncodedName())
+            .collect(Collectors.joining(","));
+
+    String hostnames = location.stream()
+            .map(HRegionLocation::getHostname)
+            .collect(Collectors.joining(","));
+
+    return QueryUtil.REGIONS + "={" + regions + "}," +
+            QueryUtil.HOSTNAMES + "={" + hostnames + "}";
+  }
+
+
 
 }
