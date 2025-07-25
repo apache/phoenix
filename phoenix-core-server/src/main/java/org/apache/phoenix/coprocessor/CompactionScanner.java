@@ -164,6 +164,7 @@ public class CompactionScanner implements InternalScanner {
   private final boolean isCdcTtlEnabled;
   private final PTable table;
   private final int cdcTtlMutationMaxRetries;
+  private CDCCompactionUtil.CDCBatchProcessor cdcBatchProcessor;
 
   // Only for forcing minor compaction while testing
   private static boolean forceMinorCompaction = false;
@@ -215,6 +216,15 @@ public class CompactionScanner implements InternalScanner {
     cdcTtlMutationMaxRetries =
       env.getConfiguration().getInt(QueryServices.CDC_TTL_MUTATION_MAX_RETRIES,
         QueryServicesOptions.DEFAULT_CDC_TTL_MUTATION_MAX_RETRIES);
+
+    if (isCdcTtlEnabled) {
+      int cdcTtlMutationBatchSize =
+        env.getConfiguration().getInt(QueryServices.CDC_TTL_MUTATION_BATCH_SIZE,
+          QueryServicesOptions.DEFAULT_CDC_TTL_MUTATION_BATCH_SIZE);
+      cdcBatchProcessor =
+        CDCCompactionUtil.createBatchProcessor(table, env, region, compactionTimeBytes,
+          compactionTime, tableName, cdcTtlMutationMaxRetries, cdcTtlMutationBatchSize);
+    }
 
     // Initialize the tracker that computes the TTL for the compacting table.
     // The TTL tracker can be
@@ -414,9 +424,9 @@ public class CompactionScanner implements InternalScanner {
     CompiledConditionalTTLExpression ttlExpr =
       (CompiledConditionalTTLExpression) rowContext.ttlExprForRow;
     if (ttlExpr.isExpired(result, true)) {
-      if (isCdcTtlEnabled && !result.isEmpty()) {
+      if (isCdcTtlEnabled && cdcBatchProcessor != null && !result.isEmpty()) {
         CDCCompactionUtil.handleTTLRowExpiration(result, "conditional_ttl", tableName,
-          compactionTime, table, env, region, compactionTimeBytes, cdcTtlMutationMaxRetries);
+          cdcBatchProcessor);
       }
       // If the row is expired, purge the row
       result.clear();
@@ -452,10 +462,23 @@ public class CompactionScanner implements InternalScanner {
     LOGGER.info("Closing CompactionScanner for table " + tableName + " store " + columnFamilyName
       + (major ? " major " : " not major ") + "compaction retained " + outputCellCount + " of "
       + inputCellCount + " cells" + (phoenixLevelOnly ? " phoenix level only" : ""));
+
     if (forceMinorCompaction) {
       forceMinorCompaction = false;
     }
     storeScanner.close();
+
+    // Flush any remaining CDC mutations in the batch
+    if (cdcBatchProcessor != null) {
+      try {
+        cdcBatchProcessor.close();
+      } catch (Exception e) {
+        LOGGER.error("Error closing CDC batch processor for table {}", tableName, e);
+        throw new IOException("Failed to close CDC batch processor", e);
+      } finally {
+        CDCCompactionUtil.getSharedRowImageCache(env.getConfiguration()).cleanUp();
+      }
+    }
   }
 
   enum MatcherType {
@@ -2427,9 +2450,9 @@ public class CompactionScanner implements InternalScanner {
         // Only do this check for major compaction as for minor compactions we don't expire cells.
         // The row version should not be visible via the max lookback window. Nothing to do
 
-        if (isCdcTtlEnabled && !lastRow.isEmpty()) {
+        if (isCdcTtlEnabled && cdcBatchProcessor != null && !lastRow.isEmpty()) {
           CDCCompactionUtil.handleTTLRowExpiration(lastRow, "time_based_ttl", tableName,
-            compactionTime, table, env, region, compactionTimeBytes, cdcTtlMutationMaxRetries);
+            cdcBatchProcessor);
         }
         return;
       }
@@ -2521,9 +2544,9 @@ public class CompactionScanner implements InternalScanner {
           // store is not the empty column family store.
           return false;
         }
-        if (isCdcTtlEnabled && !lastRowVersion.isEmpty()) {
+        if (isCdcTtlEnabled && cdcBatchProcessor != null && !lastRowVersion.isEmpty()) {
           CDCCompactionUtil.handleTTLRowExpiration(lastRowVersion, "max_lookback_ttl", tableName,
-            compactionTime, table, env, region, compactionTimeBytes, cdcTtlMutationMaxRetries);
+            cdcBatchProcessor);
         }
         return true;
       }
@@ -2575,7 +2598,6 @@ public class CompactionScanner implements InternalScanner {
           lastRowVersion.clear();
           lastRowVersion.addAll(trimmedRow);
           trimmedEmptyColumn.clear();
-          ;
           for (Cell cell : emptyColumn) {
             if (cell.getTimestamp() >= minTimestamp) {
               trimmedEmptyColumn.add(cell);
