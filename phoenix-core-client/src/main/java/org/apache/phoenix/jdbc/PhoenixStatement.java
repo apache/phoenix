@@ -68,7 +68,6 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -309,8 +308,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     this.queryTimeoutMillis = getDefaultQueryTimeoutMillis();
     this.validateLastDdlTimestamp =
       ValidateLastDDLTimestampUtil.getValidateLastDdlTimestampEnabled(this.connection);
-    this.explainPlanLoggingEnabled = connection.getQueryServices().getProps().getBoolean(CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED,
-            QueryServicesOptions.DEFAULT_CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED);
+    this.explainPlanLoggingEnabled =
+      connection.getQueryServices().getProps().getBoolean(CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED,
+        QueryServicesOptions.DEFAULT_CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED);
   }
 
   /**
@@ -3012,7 +3012,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
   }
 
   private void updateExplainPlanInformation(QueryPlan plan) throws SQLException {
-    if ( plan == null || !getConnection().getActivityLogger().isLevelEnabled(ActivityLogInfo.EXPLAIN_PLAN.getLogLevel())) {
+    if (
+      plan == null || !getConnection().getActivityLogger()
+        .isLevelEnabled(ActivityLogInfo.EXPLAIN_PLAN.getLogLevel())
+    ) {
       return;
     }
 
@@ -3022,10 +3025,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     List<HRegionLocation> location = explainPlanAttributes.getRegionLocations();
     String regionInfo = getRegionInfo(location);
 
-    String sb = Stream.of(
-                    explainPlanAttributes.getExplainScanType(),
-                    regionInfo)
-            .collect(Collectors.joining(","));
+    String sb = Stream.of(explainPlanAttributes.getExplainScanType(), regionInfo)
+      .collect(Collectors.joining(","));
     updateActivityOnConnection(ActivityLogInfo.EXPLAIN_PLAN, sb);
   }
 
@@ -3034,18 +3035,14 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       return "";
     }
 
-    String regions = location.stream()
-            .map(regionLocation -> regionLocation.getRegion().getEncodedName())
-            .collect(Collectors.joining(","));
+    String regions =
+      location.stream().map(regionLocation -> regionLocation.getRegion().getEncodedName())
+        .collect(Collectors.joining(","));
 
-    String hostnames = location.stream()
-            .map(HRegionLocation::getHostname)
-            .collect(Collectors.joining(","));
+    String hostnames =
+      location.stream().map(HRegionLocation::getHostname).collect(Collectors.joining(","));
 
-    return QueryUtil.REGIONS + "={" + regions + "}," +
-            QueryUtil.HOSTNAMES + "={" + hostnames + "}";
+    return QueryUtil.REGIONS + "={" + regions + "}," + QueryUtil.HOSTNAMES + "={" + hostnames + "}";
   }
-
-
 
 }

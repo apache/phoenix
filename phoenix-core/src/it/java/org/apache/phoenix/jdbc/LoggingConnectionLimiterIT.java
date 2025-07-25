@@ -22,8 +22,8 @@ import static org.junit.Assert.*;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.Statement;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -190,18 +190,21 @@ public abstract class LoggingConnectionLimiterIT extends BaseTest {
   @Test
   public void testQueryExplainPlan() throws Exception {
 
-    String query = "SELECT * FROM " + tableName; //FULL SCAN
+    String query = "SELECT * FROM " + tableName; // FULL SCAN
 
-    if(getConnection() instanceof PhoenixConnection) {
-      try (PhoenixConnection pconn = getConnection().unwrap(PhoenixConnection.class); Statement stmt = pconn.createStatement()) {
+    if (getConnection() instanceof PhoenixConnection) {
+      try (PhoenixConnection pconn = getConnection().unwrap(PhoenixConnection.class);
+        Statement stmt = pconn.createStatement()) {
         ResultSet rs = stmt.executeQuery(query);
         while (rs.next()) {
-          //  do nothing
+          // do nothing
         }
         boolean queryPlanFound = false;
         String queryPlan = pconn.getActivityLogger().getExplainPlanInfo();
-        if (queryPlan != null && queryPlan.contains("FULL SCAN") &&
-                queryPlan.contains("regions=") && queryPlan.contains("hostnames=")) {
+        if (
+          queryPlan != null && queryPlan.contains("FULL SCAN") && queryPlan.contains("regions=")
+            && queryPlan.contains("hostnames=")
+        ) {
           queryPlanFound = true;
 
           // Extract regions and hostnames efficiently
@@ -220,7 +223,8 @@ public abstract class LoggingConnectionLimiterIT extends BaseTest {
         assertTrue("Query plan should be empty for non-query operations", queryPlan.isEmpty());
       }
     } else {
-      // for HA case, ignoring as parallelPhoenixConnection object doesn't have activity Logger object defined.
+      // for HA case, ignoring as parallelPhoenixConnection object doesn't have activity Logger
+      // object defined.
       assertTrue(getConnection() instanceof ParallelPhoenixConnection);
     }
 
