@@ -28,8 +28,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
@@ -780,6 +782,130 @@ public class TableTTLIT extends BaseTest {
 
   private void majorCompact(TableName table) throws Exception {
     TestUtil.majorCompact(getUtility(), table);
+  }
+
+  /**
+   * Test CDC batch mutations for TTL expired rows. This test creates a table with TTL and CDC
+   * index, inserts 82 rows (to test batching: 25+25+25+7), lets them expire via TTL, and verifies
+   * that all 82 rows have CDC TTL_DELETE events recorded with correct pre-image data.
+   */
+  @Test
+  public void testCDCBatchMutationsForTTLExpiredRows() throws Exception {
+    final int maxLookbackAge =
+      tableLevelMaxLookback != null ? tableLevelMaxLookback : MAX_LOOKBACK_AGE;
+    final int numRows = 182;
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String tableName = generateUniqueName();
+      String cdcName = generateUniqueName();
+      ObjectMapper mapper = new ObjectMapper();
+
+      createTable(tableName);
+      conn.createStatement().execute("ALTER TABLE " + tableName
+        + " SET \"phoenix.max.lookback.age.seconds\" = " + maxLookbackAge);
+
+      String cdcSql = "CREATE CDC " + cdcName + " ON " + tableName + " INCLUDE (PRE, POST)";
+      conn.createStatement().execute(cdcSql);
+      conn.commit();
+
+      String cdcFullName = SchemaUtil.getTableName(null, cdcName);
+
+      long startTime = System.currentTimeMillis() + 1000;
+      startTime = (startTime / 1000) * 1000;
+      EnvironmentEdgeManager.injectEdge(injectEdge);
+      injectEdge.setValue(startTime);
+
+      // Track post-images for each row to verify against pre-images later
+      Map<String, Map<String, Object>> lastPostImages = new HashMap<>();
+
+      for (int i = 1; i <= numRows; i++) {
+        String rowId = "row" + i;
+        updateRow(conn, tableName, rowId);
+        injectEdge.incrementValue(100);
+      }
+
+      // Get the post-images from the UPSERT events
+      String cdcQuery = "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName;
+      try (ResultSet rs = conn.createStatement().executeQuery(cdcQuery)) {
+        while (rs.next()) {
+          Map<String, Object> cdcEvent = mapper.readValue(rs.getString(3), HashMap.class);
+          assertEquals("Should be upsert event", CDC_UPSERT_EVENT_TYPE,
+            cdcEvent.get(CDC_EVENT_TYPE));
+
+          Map<String, Object> postImage = (Map<String, Object>) cdcEvent.get(CDC_POST_IMAGE);
+          String rowId = rs.getString(2);
+          lastPostImages.put(rowId, postImage);
+        }
+      }
+
+      assertEquals("Should have captured post-images for all " + numRows + " rows", numRows,
+        lastPostImages.size());
+
+      // Advance time past TTL to expire all rows
+      injectEdge.incrementValue((ttl + maxLookbackAge + 1) * 1000);
+
+      EnvironmentEdgeManager.reset();
+      flush(TableName.valueOf(tableName));
+      EnvironmentEdgeManager.injectEdge(injectEdge);
+
+      Timestamp ts = new Timestamp(injectEdge.currentTime());
+      majorCompact(TableName.valueOf(tableName));
+
+      // Verify all rows are expired from data table
+      String dataQuery = "SELECT COUNT(*) FROM " + tableName;
+      try (ResultSet rs = conn.createStatement().executeQuery(dataQuery)) {
+        assertTrue("Should have count result", rs.next());
+        assertEquals("All rows should be expired from data table", 0, rs.getInt(1));
+      }
+
+      // Verify all TTL_DELETE CDC events were generated
+      String ttlDeleteQuery = "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName
+        + " WHERE PHOENIX_ROW_TIMESTAMP() >= ?";
+
+      Map<String, Map<String, Object>> ttlDeletePreImages = new HashMap<>();
+      int ttlDeleteEventCount = 0;
+
+      try (PreparedStatement pst = conn.prepareStatement(ttlDeleteQuery)) {
+        pst.setTimestamp(1, ts);
+
+        try (ResultSet rs = pst.executeQuery(ttlDeleteQuery)) {
+          while (rs.next()) {
+            ttlDeleteEventCount++;
+            Map<String, Object> cdcEvent = mapper.readValue(rs.getString(3), HashMap.class);
+
+            assertEquals("Should be ttl_delete event", CDC_TTL_DELETE_EVENT_TYPE,
+              cdcEvent.get(CDC_EVENT_TYPE));
+
+            assertTrue("TTL delete should have pre-image", cdcEvent.containsKey(CDC_PRE_IMAGE));
+            Map<String, Object> preImage = (Map<String, Object>) cdcEvent.get(CDC_PRE_IMAGE);
+            assertNotNull("Pre-image should not be null", preImage);
+            assertFalse("Pre-image should not be empty", preImage.isEmpty());
+
+            String rowId = rs.getString(2);
+            ttlDeletePreImages.put(rowId, preImage);
+          }
+        }
+      }
+
+      assertEquals("Should have exactly " + numRows + " TTL_DELETE events", numRows,
+        ttlDeleteEventCount);
+      assertEquals("Should have pre-images for all " + numRows + " rows", numRows,
+        ttlDeletePreImages.size());
+
+      // Verify that pre-images in TTL_DELETE events match the last post-images from UPSERT events
+      for (String rowId : lastPostImages.keySet()) {
+        assertTrue("Should have TTL_DELETE pre-image for row " + rowId,
+          ttlDeletePreImages.containsKey(rowId));
+
+        Map<String, Object> lastPostImage = lastPostImages.get(rowId);
+        Map<String, Object> ttlDeletePreImage = ttlDeletePreImages.get(rowId);
+
+        assertEquals(
+          "Pre-image in TTL_DELETE should match last post-image from UPSERT for row " + rowId,
+          lastPostImage, ttlDeletePreImage);
+      }
+
+    }
   }
 
   private void deleteRow(Connection conn, String tableName, String id) throws SQLException {
