@@ -94,7 +94,6 @@ public class ReplicationReplayLogDiscovery extends ReplicationLogDiscovery {
 
     @Override
     protected void processFile(Path path) throws IOException {
-        System.out.println("Processing file " + path);
         ReplicationLogProcessor.get(getConf(), getHaGroupName()).processLogFile(getReplicationLogFileTracker().getFileSystem(), path);
     }
 

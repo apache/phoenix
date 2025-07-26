@@ -61,13 +61,7 @@ public class ReplicationLogDiscoveryServiceTest extends ParallelStatsDisabledIT 
 
     @Test
     public void test() throws IOException, InterruptedException {
-//        ReplicationLogReplayService replicationLogReplayService = ReplicationLogReplayService.getInstance(conf);
-//        replicationLogReplayService.init();
-//        replicationLogReplayService.start();
-//        ReplicationLogReplay replicationLogReplay = new ReplicationLogReplay(conf, testHAGroupId);
-//        replicationLogReplay.init();
-//        replicationLogReplay.replay();
-//        Thread.sleep(5 * 1000L * 60);
+
     }
 
 }
