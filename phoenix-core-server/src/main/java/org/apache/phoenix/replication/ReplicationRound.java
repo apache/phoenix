@@ -21,6 +21,11 @@ import com.google.common.base.Preconditions;
 
 import java.util.Objects;
 
+/**
+ * Represents a time-based replication round with a start and end timestamp.
+ * Used for grouping replication log files into time-based processing windows
+ * and managing file distribution across shard directories.
+ */
 public class ReplicationRound {
 
     private final long startTime;

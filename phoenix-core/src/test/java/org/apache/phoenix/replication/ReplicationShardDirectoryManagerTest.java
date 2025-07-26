@@ -21,8 +21,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.ServerName;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.junit.*;
 import org.junit.rules.TemporaryFolder;
 
@@ -509,6 +507,34 @@ public class ReplicationShardDirectoryManagerTest {
         assertEquals("Exact 30-second boundary should be validated and unchanged", exactBoundary, result2.getEndTime());
         assertEquals("Round start time should be end time - round duration", 
                    exactBoundary - roundDurationMs, result2.getStartTime());
+    }
+
+    @Test
+    public void testDefaultAndCustomConfigurationValues() {
+        // Test with default configuration (no custom values set)
+        ReplicationShardDirectoryManager defaultManager = new ReplicationShardDirectoryManager(conf, new Path(testFolder.getRoot().getAbsolutePath()));
+
+        // Validate default values
+        assertEquals("numShards should use default value when not configured",
+                ReplicationShardDirectoryManager.DEFAULT_REPLICATION_NUM_SHARDS, defaultManager.getNumShards());
+        assertEquals("replicationRoundDurationSeconds should use default value when not configured",
+                ReplicationShardDirectoryManager.DEFAULT_REPLICATION_ROUND_DURATION_SECONDS, defaultManager.getReplicationRoundDurationSeconds());
+
+        // Test with custom configuration values
+        Configuration customConf = new Configuration(conf);
+        int customNumShards = 64;
+        int customReplicationRoundDurationSeconds = 120;
+
+        customConf.setInt(ReplicationShardDirectoryManager.REPLICATION_NUM_SHARDS_KEY, customNumShards);
+        customConf.setInt(ReplicationShardDirectoryManager.PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY, customReplicationRoundDurationSeconds);
+
+        ReplicationShardDirectoryManager customManager = new ReplicationShardDirectoryManager(customConf, new Path(testFolder.getRoot().getAbsolutePath()));
+
+        // Validate custom values
+        assertEquals("numShards should use custom value when configured",
+                customNumShards, customManager.getNumShards());
+        assertEquals("replicationRoundDurationSeconds should use custom value when configured",
+                customReplicationRoundDurationSeconds, customManager.getReplicationRoundDurationSeconds());
     }
 
     @Test

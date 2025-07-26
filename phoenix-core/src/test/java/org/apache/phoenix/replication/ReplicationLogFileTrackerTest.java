@@ -52,17 +52,18 @@ public class ReplicationLogFileTrackerTest {
     private TestableReplicationLogFileTracker tracker;
     private Configuration conf;
     private FileSystem localFs;
+    private FileSystem mockFs;
     private URI rootURI;
     private String haGroupName;
 
     @Before
     public void setUp() throws IOException {
         conf = HBaseConfiguration.create();
-        localFs = FileSystem.getLocal(conf);
+        localFs = Mockito.spy(FileSystem.getLocal(conf));
+        mockFs = Mockito.spy(localFs);
         rootURI = new Path(testFolder.getRoot().toString()).toUri();
         haGroupName = "testGroup";
-        
-        tracker = new TestableReplicationLogFileTracker(conf, haGroupName, localFs, rootURI);
+        tracker = new TestableReplicationLogFileTracker(conf, haGroupName, mockFs, rootURI);
     }
 
     @After
@@ -77,7 +78,7 @@ public class ReplicationLogFileTrackerTest {
 
         // Verify in-progress path is set correctly
         Path actualInProgressPath = tracker.getInProgressDirPath();
-        Path expectedInProgressPath = new Path(new Path(rootURI.getPath(), "in_progress"), haGroupName);
+        Path expectedInProgressPath = new Path(new Path(rootURI.getPath(), haGroupName), "in_progress");
         assertNotNull("In-progress path should not be null", actualInProgressPath);
         assertEquals("In-progress path should be set correctly", expectedInProgressPath, actualInProgressPath);
 
@@ -90,34 +91,43 @@ public class ReplicationLogFileTrackerTest {
         assertNotNull("ReplicationShardDirectoryManager should not be null", shardManager);
         
         // Verify the shard directory path is correct
-        Path expectedShardDirectory = new Path(new Path(new Path(rootURI.getPath(), "in"), haGroupName), "shard");
+        Path expectedShardDirectory = new Path(new Path(new Path(rootURI.getPath(), haGroupName), "in"), "shard");
         assertEquals("Shard directory should be set correctly", expectedShardDirectory, shardManager.getShardDirectoryPath());
+
+        // Assert mkdir is called only once with expected parameter
+        Mockito.verify(mockFs, times(1)).mkdirs(Mockito.any(Path.class));
+        Mockito.verify(mockFs, times(1)).exists(Mockito.any(Path.class));
+        Mockito.verify(mockFs, times(1)).exists(expectedInProgressPath);
+        Mockito.verify(mockFs, times(1)).mkdirs(expectedInProgressPath);
     }
 
     @Test
     public void testInitWithDifferentHaGroupName() throws IOException {
         // Test with different HA group name
         String differentHaGroupName = "differentGroup";
-        tracker = new TestableReplicationLogFileTracker(conf, differentHaGroupName, localFs, rootURI);
+        tracker = new TestableReplicationLogFileTracker(conf, differentHaGroupName, mockFs, rootURI);
         
         // Call init method
         tracker.init();
         
         // Verify correct path was created
-        Path expectedInProgressPath = new Path(new Path(rootURI.getPath(), "in_progress"), differentHaGroupName);
+        Path expectedInProgressPath = new Path(new Path(rootURI.getPath(), differentHaGroupName), "in_progress");
         assertTrue("In-progress directory should exist for different HA group", localFs.exists(expectedInProgressPath));
         assertTrue("In-progress directory should be a directory", localFs.isDirectory(expectedInProgressPath));
         
         // Verify shard directory uses correct HA group name
         ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
-        Path expectedShardDirectory = new Path(new Path(new Path(rootURI.getPath(), "in"), differentHaGroupName), "shard");
+        Path expectedShardDirectory = new Path(new Path(new Path(rootURI.getPath(), differentHaGroupName), "in"), "shard");
         assertEquals("Shard directory should use correct HA group name", expectedShardDirectory, shardManager.getShardDirectoryPath());
+
+        // Assert mkdir is called only once with expected parameter
+        Mockito.verify(mockFs, times(1)).mkdirs(expectedInProgressPath);
     }
 
     @Test
     public void testInitIsIdempotent() throws IOException {
         // Create the directory manually first
-        Path expectedInProgressPath = new Path(new Path(rootURI.getPath(), "in_progress"), haGroupName);
+        Path expectedInProgressPath = new Path(new Path(rootURI.getPath(), haGroupName), "in_progress");
         localFs.mkdirs(expectedInProgressPath);
         assertTrue("Directory should exist before init", localFs.exists(expectedInProgressPath));
         
@@ -141,8 +151,11 @@ public class ReplicationLogFileTrackerTest {
         // Verify ReplicationShardDirectoryManager is still valid
         ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
         assertNotNull("ReplicationShardDirectoryManager should not be null after multiple init calls", shardManager);
-        Path expectedShardDirectory = new Path(new Path(new Path(rootURI.getPath(), "in"), haGroupName), "shard");
+        Path expectedShardDirectory = new Path(new Path(new Path(rootURI.getPath(), haGroupName), "in"), "shard");
         assertEquals("Shard directory should use correct HA group name", expectedShardDirectory, shardManager.getShardDirectoryPath());
+
+        // Assert mkdir is NOT called at all because directory already exist
+        Mockito.verify(mockFs, times(0)).mkdirs(expectedInProgressPath);
     }
 
     @Test
@@ -191,6 +204,11 @@ public class ReplicationLogFileTrackerTest {
         // Call getNewFilesForRound
         List<Path> result = tracker.getNewFilesForRound(targetRound);
 
+        // Verify file system operation counts
+        Mockito.verify(mockFs, Mockito.times(1)).listStatus(Mockito.any(Path.class));
+        Mockito.verify(mockFs, Mockito.times(1)).exists(Mockito.eq(shardDirectory));
+        Mockito.verify(mockFs, Mockito.times(1)).listStatus(Mockito.eq(shardDirectory));
+
         Set<String> expectedPaths = new HashSet<>();
         expectedPaths.add(fileInTargetRound1.toString());
         expectedPaths.add(fileInTargetRound2.toString());
@@ -223,6 +241,11 @@ public class ReplicationLogFileTrackerTest {
         // Call getNewFilesForRound
         List<Path> result = tracker.getNewFilesForRound(targetRound);
         
+        // Verify file system operation counts
+        Mockito.verify(mockFs, Mockito.times(1)).listStatus(Mockito.any(Path.class));
+        Mockito.verify(mockFs, Mockito.times(1)).exists(Mockito.eq(shardDirectory));
+        Mockito.verify(mockFs, Mockito.times(1)).listStatus(Mockito.eq(shardDirectory));
+        
         // Verify empty list is returned
         assertTrue("Should return empty list for empty directory", result.isEmpty());
     }
@@ -246,6 +269,10 @@ public class ReplicationLogFileTrackerTest {
         
         // Call getNewFilesForRound
         List<Path> result = tracker.getNewFilesForRound(targetRound);
+        
+        // Verify file system operation counts
+        Mockito.verify(mockFs, Mockito.times(1)).exists(Mockito.eq(shardDirectory));
+        Mockito.verify(mockFs, Mockito.times(0)).listStatus(Mockito.any(Path.class));
         
         // Verify empty list is returned
         assertTrue("Should return empty list for non-existent directory", result.isEmpty());
@@ -287,6 +314,11 @@ public class ReplicationLogFileTrackerTest {
         // Call getNewFilesForRound
         List<Path> result = tracker.getNewFilesForRound(targetRound);
         
+        // Verify file system operation counts
+        Mockito.verify(mockFs, Mockito.times(1)).listStatus(Mockito.any(Path.class));
+        Mockito.verify(mockFs, Mockito.times(1)).exists(Mockito.eq(shardDirectory));
+        Mockito.verify(mockFs, Mockito.times(1)).listStatus(Mockito.eq(shardDirectory));
+        
         // Prepare expected set of valid file paths
         Set<String> expectedPaths = new HashSet<>();
         expectedPaths.add(validFile1.toString());
@@ -327,6 +359,12 @@ public class ReplicationLogFileTrackerTest {
         // Call getInProgressFiles
         List<Path> result = tracker.getInProgressFiles();
         
+        // Verify file system operation counts
+        Mockito.verify(mockFs, Mockito.times(1)).listStatus(Mockito.any(Path.class));
+        // exists should be called twice for in-progress directory, first during init and second during getInProgressFiles
+        Mockito.verify(mockFs, Mockito.times(2)).exists(Mockito.eq(inProgressDir));
+        Mockito.verify(mockFs, Mockito.times(1)).listStatus(Mockito.eq(inProgressDir));
+        
         // Prepare expected set of valid file paths
         Set<String> expectedPaths = new HashSet<>();
         expectedPaths.add(validFile1.toString());
@@ -337,7 +375,7 @@ public class ReplicationLogFileTrackerTest {
         Set<String> actualPaths = result.stream().map(path -> path.toUri().getPath()).collect(Collectors.toSet());
         
         // Verify only valid files are returned
-//        assertEquals("Should return exactly 3 valid files", expectedPaths.size(), actualPaths.size());
+        assertEquals("Should return exactly 3 valid files", expectedPaths.size(), actualPaths.size());
         assertEquals("File paths do not match", expectedPaths, actualPaths);
     }
 
@@ -355,6 +393,12 @@ public class ReplicationLogFileTrackerTest {
         
         // Call getInProgressFiles
         List<Path> result = tracker.getInProgressFiles();
+        
+        // Verify file system operation counts
+        Mockito.verify(mockFs, Mockito.times(1)).listStatus(Mockito.any(Path.class));
+        // exists should be called twice for in-progress directory, first during init and second during getInProgressFiles
+        Mockito.verify(mockFs, Mockito.times(2)).exists(Mockito.eq(inProgressDir));
+        Mockito.verify(mockFs, Mockito.times(1)).listStatus(Mockito.eq(inProgressDir));
         
         // Verify empty list is returned
         assertTrue("Should return empty list for empty directory", result.isEmpty());
@@ -374,6 +418,12 @@ public class ReplicationLogFileTrackerTest {
         
         // Call getInProgressFiles
         List<Path> result = tracker.getInProgressFiles();
+        
+        // Verify file system operation counts
+        // listStatus() should not be called when directory doesn't exist
+        Mockito.verify(mockFs, Mockito.times(0)).listStatus(Mockito.any(Path.class));
+        // exists should be called twice for in-progress directory, first during init and second during getInProgressFiles
+        Mockito.verify(mockFs, Mockito.times(2)).exists(Mockito.eq(inProgressDir));
         
         // Verify empty list is returned
         assertTrue("Should return empty list for non-existent directory", result.isEmpty());
@@ -427,6 +477,26 @@ public class ReplicationLogFileTrackerTest {
         // Call getNewFiles
         List<Path> result = tracker.getNewFiles();
         
+        // Verify file system operation counts
+        // getNewFiles calls exists() and listStatus() for each shard path
+        // There are 3 shards for which directory is created, so exists() should be called once for each shard and once for in-progress directory during creation
+        Mockito.verify(mockFs, Mockito.times(ReplicationShardDirectoryManager.DEFAULT_REPLICATION_NUM_SHARDS + 1)).exists(Mockito.any(Path.class));
+        // listStatus() should be called only for 3 shards
+        Mockito.verify(mockFs, Mockito.times(3)).listStatus(Mockito.any(Path.class));
+
+        for(int i = 0; i < 3; i++) {
+            Path shardPath = allShardPaths.get(i);
+            // Verify file system operations for each shard path
+            Mockito.verify(mockFs, Mockito.times(1)).exists(Mockito.eq(shardPath));
+            Mockito.verify(mockFs, Mockito.times(1)).listStatus(Mockito.eq(shardPath));
+        }
+
+        for(int i = 4; i < ReplicationShardDirectoryManager.DEFAULT_REPLICATION_NUM_SHARDS; i++) {
+            Path shardPath = allShardPaths.get(i);
+            // Verify file system operations for each shard path
+            Mockito.verify(mockFs, Mockito.times(1)).exists(Mockito.eq(shardPath));
+        }
+        
         // Prepare expected set of valid file paths
         Set<String> expectedPaths = new HashSet<>();
         expectedPaths.add(validFile1.toString());
@@ -460,6 +530,20 @@ public class ReplicationLogFileTrackerTest {
         // Call getNewFiles
         List<Path> result = tracker.getNewFiles();
         
+        // Verify file system operation counts
+        // getNewFiles calls exists() and listStatus() for each shard path
+        // All shard directories exist but are empty, so exists() should be called for all shards and once for in-progress directory during creation
+        Mockito.verify(mockFs, Mockito.times(ReplicationShardDirectoryManager.DEFAULT_REPLICATION_NUM_SHARDS + 1)).exists(Mockito.any(Path.class));
+        // listStatus() should be called for all shards
+        Mockito.verify(mockFs, Mockito.times(ReplicationShardDirectoryManager.DEFAULT_REPLICATION_NUM_SHARDS)).listStatus(Mockito.any(Path.class));
+
+        for(int i = 0; i < ReplicationShardDirectoryManager.DEFAULT_REPLICATION_NUM_SHARDS; i++) {
+            Path shardPath = allShardPaths.get(i);
+            // Verify file system operations for each shard path
+            Mockito.verify(mockFs, Mockito.times(1)).exists(Mockito.eq(shardPath));
+            Mockito.verify(mockFs, Mockito.times(1)).listStatus(Mockito.eq(shardPath));
+        }
+        
         // Verify empty list is returned
         assertTrue("Should return empty list for empty shards", result.isEmpty());
     }
@@ -481,8 +565,22 @@ public class ReplicationLogFileTrackerTest {
         // Call getNewFiles
         List<Path> result = tracker.getNewFiles();
         
+        // Verify file system operation counts
+        // getNewFiles calls exists() for each shard path
+        // All shard directories don't exist, so exists() should be called for all shards and once for in-progress directory during creation
+        Mockito.verify(mockFs, Mockito.times(ReplicationShardDirectoryManager.DEFAULT_REPLICATION_NUM_SHARDS + 1)).exists(Mockito.any(Path.class));
+        // listStatus() should not be called when directories don't exist
+        Mockito.verify(mockFs, Mockito.times(0)).listStatus(Mockito.any(Path.class));
+
+        for(int i = 0; i < ReplicationShardDirectoryManager.DEFAULT_REPLICATION_NUM_SHARDS; i++) {
+            Path shardPath = allShardPaths.get(i);
+            // Verify file system operations for each shard path
+            Mockito.verify(mockFs, Mockito.times(1)).exists(Mockito.eq(shardPath));
+            // listStatus() should not be called for non-existent directories
+        }
+        
         // Verify empty list is returned
-                assertTrue("Should return empty list for non-existent shards", result.isEmpty());
+        assertTrue("Should return empty list for non-existent shards", result.isEmpty());
     }
 
     @Test
@@ -506,11 +604,19 @@ public class ReplicationLogFileTrackerTest {
         // Call markInProgress
         Optional<Path> result = tracker.markInProgress(originalFile);
         
+        // Verify file system operation counts
+        // markInProgress involves moving file from shard directory to in-progress directory
+        // It should call exists() for only in progress directory (during init), rename() to move file
+        Mockito.verify(mockFs, Mockito.times(1)).exists(Mockito.any(Path.class));
+        Mockito.verify(mockFs, Mockito.times(1)).exists(Mockito.eq(tracker.getInProgressDirPath()));
+        Mockito.verify(mockFs, Mockito.times(1)).rename(Mockito.any(Path.class), Mockito.any(Path.class));
+        Mockito.verify(mockFs, Mockito.times(1)).rename(Mockito.eq(originalFile), Mockito.any(Path.class));
+        // Ensure no listStatus() is called
+        Mockito.verify(mockFs, Mockito.times(0)).listStatus(Mockito.any(Path.class));
+        
         // Verify operation was successful
         assertTrue("markInProgress should be successful", result.isPresent());
 
-        // TODO: Assert that new file has same prefix as original file and it's in in-progress directory
-        
         // Verify original file no longer exists
         assertFalse("Original file should no longer exist", localFs.exists(originalFile));
         
@@ -519,9 +625,20 @@ public class ReplicationLogFileTrackerTest {
         FileStatus[] files = localFs.listStatus(inProgressDir);
         assertEquals("Should have exactly one file in in-progress directory", 1, files.length);
         
-        // Verify the new file has UUID format
+        // Verify the new file has UUID format and is in in-progress directory
         String newFileName = files[0].getPath().getName();
         assertTrue("New file should have UUID suffix", newFileName.matches("1704153600000_rs1_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\\.plog"));
+        
+        // Assert that renamed file is in in-progress directory
+        Path renamedFile = files[0].getPath();
+        assertTrue("Renamed file should be in in-progress directory", 
+                  renamedFile.getParent().toUri().getPath().equals(tracker.getInProgressDirPath().toString()));
+        
+        // Assert that renamed file has same prefix as original file
+        String originalFileName = originalFile.getName();
+        String originalPrefix = originalFileName.substring(0, originalFileName.lastIndexOf('.'));
+        assertTrue("Renamed file should have same prefix as original file", 
+                  newFileName.startsWith(originalPrefix + "_"));
     }
 
     @Test
@@ -540,28 +657,37 @@ public class ReplicationLogFileTrackerTest {
         
         // Call markInProgress
         Optional<Path> result = tracker.markInProgress(originalFile);
+
+        // Verify file system operation counts
+        // markInProgress involves re-naming file int the in-progress directory
+        // It should call exists() for only in progress directory (during init), rename() to move file
+        Mockito.verify(mockFs, Mockito.times(1)).exists(Mockito.any(Path.class));
+        Mockito.verify(mockFs, Mockito.times(1)).exists(Mockito.eq(tracker.getInProgressDirPath()));
+        Mockito.verify(mockFs, Mockito.times(1)).rename(Mockito.any(Path.class), Mockito.any(Path.class));
+        Mockito.verify(mockFs, Mockito.times(1)).rename(Mockito.eq(originalFile), Mockito.any(Path.class));
+        // Ensure no listStatus() is called
+        Mockito.verify(mockFs, Mockito.times(0)).listStatus(Mockito.any(Path.class));
         
         // Verify operation was successful
         assertTrue("markInProgress should be successful", result.isPresent());
 
-        // TODO: Assert that new file has same prefix as original file and it's in in-progress directory
-        
         // Verify original file no longer exists
         assertFalse("Original file should no longer exist", localFs.exists(originalFile));
         
         // Verify new file exists in same directory with new UUID
         FileStatus[] files = localFs.listStatus(inProgressDir);
         assertEquals("Should have exactly one file in in-progress directory", 1, files.length);
-
-        System.out.println("Find files: " + files.length);
-        for(FileStatus fileStatus : files) {
-            System.out.println(fileStatus.getPath());
-        }
         
         // Verify the new file has different UUID
         String newFileName = files[0].getPath().getName();
         assertTrue("New file should have UUID suffix", newFileName.matches("1704153600000_rs1_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\\.plog"));
         assertFalse("New file should have different UUID", newFileName.contains(existingUUID));
+        
+        // Assert that renamed file has same prefix as original file
+        String originalFileName = originalFile.getName();
+        String originalPrefix = originalFileName.substring(0, originalFileName.lastIndexOf('_'));
+        assertTrue("Renamed file should have same prefix as original file", 
+                  newFileName.startsWith(originalPrefix + "_"));
     }
 
     @Test
@@ -577,6 +703,13 @@ public class ReplicationLogFileTrackerTest {
         
         // Call markInProgress
         Optional<Path> result = tracker.markInProgress(nonExistentFile);
+        
+        // Verify file system operation counts
+        Mockito.verify(mockFs, Mockito.times(1)).exists(Mockito.any(Path.class));
+        Mockito.verify(mockFs, Mockito.times(1)).exists(Mockito.eq(tracker.getInProgressDirPath()));
+        Mockito.verify(mockFs, Mockito.times(1)).rename(Mockito.any(Path.class), Mockito.any(Path.class));
+        // Ensure no listStatus() is called
+        Mockito.verify(mockFs, Mockito.times(0)).listStatus(Mockito.any(Path.class));
         
         // Verify operation failed
         assertFalse("markInProgress should return false for non-existent file", result.isPresent());
@@ -596,6 +729,16 @@ public class ReplicationLogFileTrackerTest {
         
         // Call markCompleted on the original file
         boolean result = tracker.markCompleted(originalFile);
+        
+        // Verify file system operation counts
+        // markCompleted involves deleting the file from in-progress directory
+        // It should call exists() for in-progress directory (during init), delete() to remove file
+        Mockito.verify(mockFs, Mockito.times(1)).exists(Mockito.any(Path.class));
+        Mockito.verify(mockFs, Mockito.times(1)).exists(Mockito.eq(tracker.getInProgressDirPath()));
+        Mockito.verify(mockFs, Mockito.times(1)).delete(Mockito.any(Path.class), Mockito.eq(false));
+        Mockito.verify(mockFs, Mockito.times(1)).delete(Mockito.eq(originalFile), Mockito.eq(false));
+        // Ensure no listStatus() is called
+        Mockito.verify(mockFs, Mockito.times(0)).listStatus(Mockito.any(Path.class));
         
         // Verify operation was successful
         assertTrue("markCompleted should return true for successful deletion", result);
@@ -629,12 +772,21 @@ public class ReplicationLogFileTrackerTest {
 
         // Call markCompleted on the original file
         boolean result = mockTracker.markCompleted(originalFile);
-
+        
+        // Verify file system operation counts
+        // markCompleted with intermittent failure involves retrying delete operations
+        // It should call exists() for in-progress directory (during init), and 2 times while fetching in progress files
+        Mockito.verify(mockFs, Mockito.times(3)).exists(Mockito.any(Path.class));
+        Mockito.verify(mockFs, Mockito.times(3)).exists(Mockito.eq(mockTracker.getInProgressDirPath()));
+        // delete() should be called 3 times (2 failures + 1 success)
+        Mockito.verify(mockFs, Mockito.times(3)).delete(Mockito.any(Path.class), Mockito.eq(false));
+        Mockito.verify(mockFs, Mockito.times(3)).delete(Mockito.argThat(path -> path.getName().equals(originalFile.getName())), Mockito.eq(false));
+        // Ensure listStatus() is called exactly twice on in progress directory
+        Mockito.verify(mockFs, Mockito.times(2)).listStatus(Mockito.any(Path.class));
+        Mockito.verify(mockFs, Mockito.times(2)).listStatus(Mockito.eq(mockTracker.getInProgressDirPath()));
+        
         // Verify operation was successful after retries
         assertTrue("markCompleted should return true after successful retry", result);
-
-        // Verify that delete was called exactly 3 times (2 failures + 1 success)
-        verify(mockFs, times(3)).delete(Mockito.argThat(path -> path.getName().equals(originalFile.getName())), Mockito.eq(false));
     }
 
     @Test
@@ -660,19 +812,27 @@ public class ReplicationLogFileTrackerTest {
 
         // Create the file using the spy filesystem
         mockFs.create(originalFile, true).close();
-
-        // Verify original file exists
-        assertTrue("Original file should exist", mockFs.exists(originalFile));
         
         // Call markCompleted on the original file
         boolean result = mockTracker.markCompleted(originalFile);
+        
+        // Verify file system operation counts
+        // markCompleted with persistent failure involves retrying delete operations until all retries exhausted
+        // It should call exists() for in-progress directory (during init), and 3 times while fetching in progress files during retries
+        Mockito.verify(mockFs, Mockito.times(4)).exists(Mockito.any(Path.class));
+        Mockito.verify(mockFs, Mockito.times(4)).exists(Mockito.eq(mockTracker.getInProgressDirPath()));
+        // delete() should be called 4 times (1 initial + 3 retries, all failures)
+        Mockito.verify(mockFs, Mockito.times(4)).delete(Mockito.any(Path.class), Mockito.eq(false));
+        Mockito.verify(mockFs, Mockito.times(4)).delete(Mockito.argThat(path -> path.getName().equals(originalFile.getName())), Mockito.eq(false));
+        // Ensure listStatus() is called exactly 3 times during retries on in progress directory
+        Mockito.verify(mockFs, Mockito.times(3)).listStatus(Mockito.any(Path.class));
+        Mockito.verify(mockFs, Mockito.times(3)).listStatus(Mockito.eq(mockTracker.getInProgressDirPath()));
+
+        // Verify original file exists
+        assertTrue("Original file should exist", mockFs.exists(originalFile));
 
         // Verify operation failed after all retries
         assertFalse("markCompleted should return false after all retries fail", result);
-
-        // Verify that delete was called exactly 4 times (all attempts failed)
-        // Default retries is 3, so total attempts = 1 + 3 = 4
-        verify(mockFs, times(4)).delete(Mockito.any(), Mockito.eq(false));
     }
 
     @Test
@@ -700,6 +860,18 @@ public class ReplicationLogFileTrackerTest {
         // Since the file is already deleted, it should search for other files with same prefix
         // but find none, so it should return true (assuming file was deleted by another process)
         boolean result = tracker.markCompleted(fileToBeDeleted);
+        
+        // Verify file system operation counts
+        // markCompleted when file is already deleted involves checking in-progress directory for matching files
+        // It should call exists() for in-progress directory (during init), and once while fetching in progress files
+        Mockito.verify(mockFs, Mockito.times(2)).exists(Mockito.any(Path.class));
+        Mockito.verify(mockFs, Mockito.times(2)).exists(Mockito.eq(tracker.getInProgressDirPath()));
+        // No delete() operations should be performed only once on input file
+        Mockito.verify(mockFs, Mockito.times(1)).delete(Mockito.any(Path.class), Mockito.eq(false));
+        Mockito.verify(mockFs, Mockito.times(1)).delete(Mockito.eq(fileToBeDeleted), Mockito.eq(false));
+        // Ensure listStatus() is called exactly once to check for matching files
+        Mockito.verify(mockFs, Mockito.times(1)).listStatus(Mockito.any(Path.class));
+        Mockito.verify(mockFs, Mockito.times(1)).listStatus(Mockito.eq(tracker.getInProgressDirPath()));
         
         // Verify operation was successful (no matching files found)
         assertTrue("markCompleted should return true when file is already deleted and no matching files found", result);
@@ -737,7 +909,19 @@ public class ReplicationLogFileTrackerTest {
         // Call markCompleted on the original file
         // Should return false due to multiple matching files during retries
         boolean result = tracker.markCompleted(originalFile);
-
+        
+        // Verify file system operation counts
+        // markCompleted with multiple matching files involves checking in-progress directory for matching files
+        // It should call exists() for in-progress directory (during init), and once while fetching in progress files
+        Mockito.verify(mockFs, Mockito.times(2)).exists(Mockito.any(Path.class));
+        Mockito.verify(mockFs, Mockito.times(2)).exists(Mockito.eq(tracker.getInProgressDirPath()));
+        // delete() should be called once on input file
+        Mockito.verify(mockFs, Mockito.times(1)).delete(Mockito.any(Path.class), Mockito.eq(false));
+        Mockito.verify(mockFs, Mockito.times(1)).delete(Mockito.eq(originalFile), Mockito.eq(false));
+        // Ensure listStatus() is called exactly once to check for matching files
+        Mockito.verify(mockFs, Mockito.times(1)).listStatus(Mockito.any(Path.class));
+        Mockito.verify(mockFs, Mockito.times(1)).listStatus(Mockito.eq(tracker.getInProgressDirPath()));
+        
         // Verify operation failed
         assertFalse("markCompleted should return false for multiple matching files", result);
 
@@ -864,6 +1048,17 @@ public class ReplicationLogFileTrackerTest {
         @Override
         protected String getNewLogSubDirectoryName() {
             return "in";
+        }
+        
+        public void setFileSystem(FileSystem fileSystem) {
+            // Use reflection to set the fileSystem field
+            try {
+                java.lang.reflect.Field field = ReplicationLogFileTracker.class.getDeclaredField("fileSystem");
+                field.setAccessible(true);
+                field.set(this, fileSystem);
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to set fileSystem", e);
+            }
         }
     }
 }

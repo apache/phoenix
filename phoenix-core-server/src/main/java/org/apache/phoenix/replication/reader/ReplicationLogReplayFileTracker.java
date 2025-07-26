@@ -23,6 +23,10 @@ import org.apache.phoenix.replication.ReplicationLogFileTracker;
 
 import java.net.URI;
 
+/**
+ * Concrete implementation of ReplicationLogFileTracker for replay operations.
+ * Tracks and manages replication log files in the "in" subdirectory for replay purposes.
+ */
 public class ReplicationLogReplayFileTracker extends ReplicationLogFileTracker {
 
     public ReplicationLogReplayFileTracker(final Configuration conf, final String haGroupName, final FileSystem fileSystem, final URI rootURI) {
