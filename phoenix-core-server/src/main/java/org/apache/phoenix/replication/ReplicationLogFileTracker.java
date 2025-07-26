@@ -30,17 +30,34 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+/**
+ * Abstract base class for tracking and managing replication log files across different states.
+ * Handles file lifecycle management including new files, in-progress files, and completed files.
+ *
+ * This will be extended by specific implementations for tracking IN and OUT directory files.
+ */
 public abstract class ReplicationLogFileTracker {
 
     private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogFileTracker.class);
-    
-    // Singleton instances per haGroupName
-    private static final Map<String, ReplicationLogFileTracker> instances = new ConcurrentHashMap<>();
-    
-    // Configuration keys for file operations
+
+    /**
+     * Configuration key for number of retries when deleting files
+     */
     private static final String FILE_DELETE_RETRIES_KEY = "phoenix.replication.file.delete.retries";
+
+    /**
+     * Default number of retries for file deletion operations
+     */
     private static final int DEFAULT_FILE_DELETE_RETRIES = 3;
-    private static final String FILE_DELETE_RETRY_DELAY_MS_KEY = "phoenix.replication.file.delete.retry.delay.ms";
+
+    /**
+     * Configuration key for delay between file deletion retry attempts
+     */
+     private static final String FILE_DELETE_RETRY_DELAY_MS_KEY = "phoenix.replication.file.delete.retry.delay.ms";
+
+     /**
+     * Default delay in milliseconds between file deletion retry attempts
+     */
     private static final long DEFAULT_FILE_DELETE_RETRY_DELAY_MS = 1000L;
 
     private final Configuration conf;
@@ -63,13 +80,23 @@ public abstract class ReplicationLogFileTracker {
         return getNewLogSubDirectoryName() + "_progress";
     }
 
+    /**
+     * Initializes the file tracker by setting up new files directory and in-progress directory.
+     * Creates the in-progress directory (rootURI/<group-name>/[in/out]_progress) if it doesn't exist.
+     */
     public void init() throws IOException {
-        Path newFilesDirectory = new Path(new Path(rootURI.getPath(), getNewLogSubDirectoryName()), haGroupName);
+        Path newFilesDirectory = new Path(new Path(rootURI.getPath(), haGroupName), getNewLogSubDirectoryName());
         this.replicationShardDirectoryManager = new ReplicationShardDirectoryManager(conf, newFilesDirectory);
-        this.inProgressDirPath = new Path(new Path(rootURI.getPath(), getInProgressLogSubDirectoryName()), this.haGroupName);
+        this.inProgressDirPath = new Path(new Path(rootURI.getPath(), haGroupName), getInProgressLogSubDirectoryName());
         createDirectoryIfNotExists(inProgressDirPath);
     }
 
+    /**
+     * Retrieves new replication log files that belong to a specific replication round. It skips the invalid files (if any)
+     * @param replicationRound - The replication round for which to retrieve files
+     * @return List of valid log file paths that belong to the specified replication round
+     * @throws IOException if there's an error accessing the file system
+     */
     protected List<Path> getNewFilesForRound(ReplicationRound replicationRound) throws IOException {
         Path roundDirectory = replicationShardDirectoryManager.getShardDirectory(replicationRound);
         System.out.println("Getting new files for round: " + replicationRound.getStartTime() + " - " + roundDirectory.toString());
@@ -103,12 +130,17 @@ public abstract class ReplicationLogFileTracker {
         return filesInRound;
     }
 
+    /**
+     * Retrieves all valid log files currently in the in-progress directory.
+     * @return List of valid log file paths in the in-progress directory, empty list if directory doesn't exist
+     * @throws IOException if there's an error accessing the file system
+     */
     protected List<Path> getInProgressFiles() throws IOException {
-        if (!fileSystem.exists(inProgressDirPath)) {
+        if (!fileSystem.exists(getInProgressDirPath())) {
             return Collections.emptyList();
         }
 
-        FileStatus[] fileStatuses = fileSystem.listStatus(inProgressDirPath);
+        FileStatus[] fileStatuses = fileSystem.listStatus(getInProgressDirPath());
         List<Path> inProgressFiles = new ArrayList<>();
 
         for (FileStatus status : fileStatuses) {
@@ -120,6 +152,11 @@ public abstract class ReplicationLogFileTracker {
         return inProgressFiles;
     }
 
+    /**
+     * Retrieves all valid log files from all shard directories.
+     * @return List of all valid log file paths from all shard directories
+     * @throws IOException if there's an error accessing the file system
+     */
     protected List<Path> getNewFiles() throws IOException {
         List<Path> shardPaths = replicationShardDirectoryManager.getAllShardPaths();
         List<Path> newFiles = new ArrayList<>();
@@ -136,12 +173,18 @@ public abstract class ReplicationLogFileTracker {
         return newFiles;
     }
 
+    /**
+     * Marks a file as completed by deleting it from the file system. Uses retry logic with configurable retry count and delay.
+     * During retry attempts, it fetches the file with same prefix (instead of re-using the same file) because it would likely
+     * be re-named by some other process
+     * @param file - The file path to mark as completed
+     * @return true if file was successfully deleted, false otherwise
+     */
     protected boolean markCompleted(final Path file) {
         System.out.println("Mark Completed Method Called for " + file.toString());
         
         int maxRetries = conf.getInt(FILE_DELETE_RETRIES_KEY, DEFAULT_FILE_DELETE_RETRIES);
         long retryDelayMs = conf.getLong(FILE_DELETE_RETRY_DELAY_MS_KEY, DEFAULT_FILE_DELETE_RETRY_DELAY_MS);
-
 
         Path fileToDelete = file;
         final String filePrefix = getFilePrefix(fileToDelete);
@@ -200,6 +243,12 @@ public abstract class ReplicationLogFileTracker {
         return false;
     }
 
+    /**
+     * Marks a file as in-progress by renaming it with a UUID and moving to in-progress directory.
+     * If file is already in in-progress directory, only updates the UUID.
+     * @param file - The file path to mark as in progress
+     * @return Optional value of renamed path if file rename was successful, else Optional.empty()
+     */
     protected Optional<Path> markInProgress(final Path file) {
         System.out.println("Mark In Progress Method Called for " + file.toString());
         try {
@@ -208,7 +257,7 @@ public abstract class ReplicationLogFileTracker {
             Path targetDirectory;
             
             // Check if file is already in in-progress directory
-            if(file.getParent().toUri().getPath().equals(inProgressDirPath.toString())) {
+            if(file.getParent().toUri().getPath().equals(getInProgressDirPath().toString())) {
                 // File is already in in-progress directory, replace UUID with a new one (stay in same directory)
                 String[] parts = fileName.split("_");
                 // Remove the last part (UUID) and add new UUID
@@ -228,7 +277,7 @@ public abstract class ReplicationLogFileTracker {
                 String baseName = fileName.substring(0, fileName.lastIndexOf("."));
                 String extension = fileName.substring(fileName.lastIndexOf("."));
                 newFileName = baseName + "_" + UUID.randomUUID().toString() + extension;
-                targetDirectory = inProgressDirPath;
+                targetDirectory = getInProgressDirPath();
             }
             
             Path newPath = new Path(targetDirectory, newFileName);
@@ -245,18 +294,35 @@ public abstract class ReplicationLogFileTracker {
         }
     }
 
-    protected boolean isValidLogFile(Path path) {
-        final String fileName = path.getName();
+    /**
+     * Validates if a file is a valid log file by checking if it ends with ".plog" extension.
+     * @param file - The file path to validate.
+     * @return true if file format is correct, else false
+     */
+    protected boolean isValidLogFile(Path file) {
+        final String fileName = file.getName();
         return fileName.endsWith(".plog");
     }
 
-    protected long getFileTimestamp(Path path) throws NumberFormatException {
-        String[] parts = path.getName().split("_");
+    /**
+     * Extracts the timestamp from a log file name.
+     * Assumes timestamp is the first part of the filename separated by underscore.
+     * @param file - The file path to extract timestamp from.
+     * return the timestamp from the file name
+     */
+    protected long getFileTimestamp(Path file) throws NumberFormatException {
+        String[] parts = file.getName().split("_");
         return Long.parseLong(parts[0]);
     }
 
-    protected Optional<String> getFileUUID(Path path) throws NumberFormatException {
-        String[] parts = path.getName().split("_");
+    /**
+     * Extracts the UUID from a log file name.
+     * Assumes UUID is the last part of the filename before the extension.
+     * @param file - The file path to extract UUID from.
+     * @return Optional of UUID if file was in progress, else Optional.empty()
+     */
+    protected Optional<String> getFileUUID(Path file) throws NumberFormatException {
+        String[] parts = file.getName().split("_");
         if(parts.length < 3) {
             return Optional.empty();
         }
@@ -267,9 +333,10 @@ public abstract class ReplicationLogFileTracker {
      * Extracts everything except the UUID (last part) from a file path.
      * For example, from "1704153600000_rs1_12345678-1234-1234-1234-123456789abc.plog"
      * returns "1704153600000_rs1"
+     * @param file - The file path to extract prefix from.
      */
-    protected String getFilePrefix(Path path) {
-        String fileName = path.getName();
+    protected String getFilePrefix(Path file) {
+        String fileName = file.getName();
         String[] parts = fileName.split("_");
         if (parts.length < 2) {
             return fileName; // Return full filename if no underscore found
@@ -287,6 +354,11 @@ public abstract class ReplicationLogFileTracker {
         return prefix.toString();
     }
 
+    /**
+     * No op implementation for marking a file as failed
+     * @param file - The file which needs to be marked as failed
+     * @return - true if marked as failed, false otherwise
+     */
     public boolean markFailed(final Path file) {
         return true;
     }
@@ -311,6 +383,9 @@ public abstract class ReplicationLogFileTracker {
         return inProgressDirPath;
     }
 
+    /**
+     * Creates a directory if it doesn't exist.
+     */
     private void createDirectoryIfNotExists(Path directoryPath) throws IOException {
         if (!fileSystem.exists(directoryPath)) {
             LOG.info("Creating directory {}", directoryPath);

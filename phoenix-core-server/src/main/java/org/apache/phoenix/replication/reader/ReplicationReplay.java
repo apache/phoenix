@@ -28,15 +28,24 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * Manages replication replay operations for a specific HA group. Provides singleton instances per group name and orchestrates the initialization
+ * of file system, file tracker, state tracker, and log discovery components. It also handles starting and stopping replay operations through the log discovery service.
+ */
 public class ReplicationReplay {
 
     private static final Logger LOG = LoggerFactory.getLogger(ReplicationReplay.class);
 
-    /** The path on the HDFS where log files are to be read. */
+    /**
+     * The path on the HDFS where log files are to be read.
+     */
     public static final String REPLICATION_LOG_REPLAY_HDFS_URL_KEY =
             "phoenix.replication.log.replay.hdfs.url";
 
-    // Singleton instances per group name
+    /**
+     * Singleton instances per group name
+     */
     private static final ConcurrentHashMap<String, ReplicationReplay> instances = new ConcurrentHashMap<>();
 
     private final Configuration conf;
@@ -45,7 +54,7 @@ public class ReplicationReplay {
     private URI rootURI;
     private ReplicationReplayLogDiscovery replicationReplayLogDiscovery;
 
-    private ReplicationReplay(final Configuration conf, final String haGroupName) {
+    protected ReplicationReplay(final Configuration conf, final String haGroupName) {
         this.conf = conf;
         this.haGroupName = haGroupName;
     }
@@ -69,14 +78,27 @@ public class ReplicationReplay {
         });
     }
 
+    /**
+     * Delegate the start replay task to the {@link ReplicationReplayLogDiscovery}
+     * @throws IOException - in case the start operation fails
+     */
     public void startReplay() throws IOException {
         replicationReplayLogDiscovery.start();
     }
 
+    /**
+     * Delegate the stop replay task to the {@link ReplicationReplayLogDiscovery}
+     * @throws IOException - in case the stop operation fails
+     */
     public void stopReplay() throws IOException {
         replicationReplayLogDiscovery.stop();
     }
 
+    /**
+     * Initializes the replication replay components including file system, file tracker,
+     * state tracker, and log discovery service. Sets up the complete replay components for the HA group.
+     * @throws IOException if there's an error during initialization
+     */
     protected void init() throws IOException {
         initializeFileSystem();
         ReplicationLogReplayFileTracker replicationLogReplayFileTracker = new ReplicationLogReplayFileTracker(conf, haGroupName, fileSystem, rootURI);
@@ -87,18 +109,18 @@ public class ReplicationReplay {
     }
 
     /** Initializes the filesystem and creates root log directory. */
-    protected void initializeFileSystem() throws IOException {
+    private void initializeFileSystem() throws IOException {
         String uriString = conf.get(REPLICATION_LOG_REPLAY_HDFS_URL_KEY);
-        if (uriString == null) {
+        if (uriString == null || uriString.isEmpty()) {
             throw new IOException(REPLICATION_LOG_REPLAY_HDFS_URL_KEY + " is not configured");
         }
         try {
             this.rootURI = new URI(uriString);
             this.fileSystem = FileSystem.get(rootURI, conf);
-            Path logDirectoryPath = new Path(rootURI.getPath());
-            if (!fileSystem.exists(logDirectoryPath)) {
-                LOG.info("Creating directory {}", logDirectoryPath);
-                if (!fileSystem.mkdirs(logDirectoryPath)) {
+            Path haGroupFilesPath = new Path(rootURI.getPath(), haGroupName);
+            if (!fileSystem.exists(haGroupFilesPath)) {
+                LOG.info("Creating directory {}", haGroupFilesPath);
+                if (!fileSystem.mkdirs(haGroupFilesPath)) {
                     throw new IOException("Failed to create directory: " + uriString);
                 }
             }
@@ -109,5 +131,13 @@ public class ReplicationReplay {
 
     protected ReplicationReplayLogDiscovery getReplicationReplayLogDiscovery() {
         return this.replicationReplayLogDiscovery;
+    }
+
+    protected FileSystem getFileSystem() {
+        return this.fileSystem;
+    }
+
+    protected URI getRootURI() {
+        return this.rootURI;
     }
 }

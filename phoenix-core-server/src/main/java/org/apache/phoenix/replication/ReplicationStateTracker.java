@@ -23,6 +23,9 @@ import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import java.io.IOException;
 import java.util.List;
 
+/**
+ * This class tracks the last successfully processed replication round for single HA Group
+ */
 public class ReplicationStateTracker {
 
     private ReplicationRound lastSuccessfullyProcessedReplicationRound;

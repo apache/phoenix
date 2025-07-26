@@ -17,26 +17,64 @@
  */
 package org.apache.phoenix.replication.reader;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-import org.apache.phoenix.replication.ReplicationLogDiscovery;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class ReplicationLogReplayService {
 
+    private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogReplayService.class);
+
+    /**
+     * Configuration key for enabling/disabling replication replay service
+     */
+    public static final String PHOENIX_REPLICATION_REPLAY_ENABLED = "phoenix.replication.replay.enabled";
+
+    /**
+     * Default value for replication replay service enabled flag
+     */
+    public static final boolean DEFAULT_REPLICATION_REPLAY_ENABLED = false;
+
+    /**
+     * Number of threads in the executor pool for the replication replay service
+     */
+    public static final int REPLICATION_REPLAY_SERVICE_EXECUTOR_THREAD_COUNT = 1;
+
+    /**
+     * Configuration key for executor thread frequency in seconds
+     */
+    public static final String REPLICATION_REPLAY_SERVICE_EXECUTOR_THREAD_FREQUENCY_SECONDS_KEY = "phoenix.replication.replay.service.executor.frequency.seconds";
+
+    /**
+     * Default frequency in seconds for executor thread execution
+     */
+    public static final int DEFAULT_REPLICATION_REPLAY_SERVICE_EXECUTOR_THREAD_FREQUENCY_SECONDS = 60;
+
+    /**
+     * Configuration key for executor shutdown timeout in seconds
+     */
+    public static final String REPLICATION_REPLAY_SERVICE_EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS_KEY = "phoenix.replication.replay.service.executor.shutdown.timeout.seconds";
+
+    /**
+     * Default shutdown timeout in seconds for graceful executor shutdown
+     */
+    public static final int DEFAULT_REPLICATION_REPLAY_SERVICE_EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS = 30;
+
     private static volatile ReplicationLogReplayService instance;
+
     private final Configuration conf;
+    private ScheduledExecutorService scheduler;
+    private volatile boolean isRunning = false;
 
     private ReplicationLogReplayService(final Configuration conf) {
-        // TODO Check if replication replay service is enabled via config
         this.conf = conf;
     }
 
@@ -59,24 +97,98 @@ public class ReplicationLogReplayService {
         return instance;
     }
 
+    /**
+     * Starts the replication log replay service by initializing the scheduler and scheduling periodic replay operations for each HA Group.
+     * @throws IOException if there's an error during initialization
+     */
     public void start() throws IOException {
-        // TODO: Ensure service is not already started
+        boolean isEnabled = conf.getBoolean(PHOENIX_REPLICATION_REPLAY_ENABLED, DEFAULT_REPLICATION_REPLAY_ENABLED);
+        if (!isEnabled) {
+            LOG.info("Replication replay service is disabled. Skipping start operation.");
+            return;
+        }
+        synchronized (this) {
+            if (isRunning) {
+                LOG.debug("ReplicationLogReplayService is already running");
+                return;
+            }
+            int executorFrequencySeconds = conf.getInt(REPLICATION_REPLAY_SERVICE_EXECUTOR_THREAD_FREQUENCY_SECONDS_KEY, DEFAULT_REPLICATION_REPLAY_SERVICE_EXECUTOR_THREAD_FREQUENCY_SECONDS);
+            // Initialize and schedule the executors
+            scheduler = Executors.newScheduledThreadPool(REPLICATION_REPLAY_SERVICE_EXECUTOR_THREAD_COUNT, new ThreadFactoryBuilder()
+                    .setNameFormat("ReplicationLogReplayService-%d").build());
+            scheduler.scheduleAtFixedRate(() -> {
+                try {
+                    startReplicationReplay();
+                } catch (IOException e) {
+                    LOG.error("Error during trigger of start replication replay", e);
+                }
+            }, 0, executorFrequencySeconds, TimeUnit.SECONDS);
+            isRunning = true;
+            LOG.info("ReplicationLogReplayService started ");
+        }
+    }
+
+    /**
+     * Stops the replication log replay service by shutting down the scheduler gracefully.
+     * Waits for the configured shutdown timeout before forcing shutdown if necessary.
+     * @throws IOException if there's an error during shutdown
+     */
+    public void stop() throws IOException {
+        boolean isEnabled = conf.getBoolean(PHOENIX_REPLICATION_REPLAY_ENABLED, DEFAULT_REPLICATION_REPLAY_ENABLED);
+        if (!isEnabled) {
+            LOG.info("Replication replay service is disabled. Skipping stop operation.");
+            return;
+        }
+        ScheduledExecutorService schedulerToShutdown = null;
+        synchronized (this) {
+            if (!isRunning) {
+                LOG.warn("ReplicationLogReplayService is not running");
+                return;
+            }
+            isRunning = false;
+            schedulerToShutdown = scheduler;
+        }
+        int executorShutdownTimeoutSeconds = conf.getInt(REPLICATION_REPLAY_SERVICE_EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS_KEY, DEFAULT_REPLICATION_REPLAY_SERVICE_EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS);
+        if (schedulerToShutdown != null && !schedulerToShutdown.isShutdown()) {
+            schedulerToShutdown.shutdown();
+            try {
+                if (!schedulerToShutdown.awaitTermination(executorShutdownTimeoutSeconds, TimeUnit.SECONDS)) {
+                    schedulerToShutdown.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                schedulerToShutdown.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
+        stopReplicationReplay();
+        LOG.info("ReplicationLogReplayService stopped successfully");
+    }
+
+    /**
+     * Start Replication Replay for all the HA groups
+     */
+    protected void startReplicationReplay() throws IOException {
         List<String> replicationGroups = getReplicationGroups();
         for(String replicationGroup : replicationGroups) {
             ReplicationReplay.get(conf, replicationGroup).startReplay();
         }
     }
 
-    public void stop() throws IOException {
-        // Stop log replay for all groups
+    /**
+     * Stops Replication Replay for all the HA groups
+     */
+    protected void stopReplicationReplay() throws IOException {
         List<String> replicationGroups = getReplicationGroups();
         for(String replicationGroup : replicationGroups) {
             ReplicationReplay.get(conf, replicationGroup).stopReplay();
         }
     }
 
+    /**
+     * @return the list of HA groups on the cluster
+     */
     protected List<String> getReplicationGroups() {
         // TODO: Return list of replication groups using HAGroupStoreClient
-        return new ArrayList<>();
+        return Collections.singletonList("DEFAULT_HA_GROUP");
     }
 }

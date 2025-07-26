@@ -27,32 +27,48 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Manage any shard based directory (IN or OUT)
- * rootURI = /phoenix/replication/
- * groupName = "default"
- * numShards = 128
- * roundTimeSeconds = 60
- * shardDirectory = /phoenix/replication/<group-id>/shard/000
- * shardDirectory = /phoenix/replication/<group-id>/shard/001
-
+ * Manages shard-based directory structure for Phoenix replication log files.
+ *
+ * This class manages mapping between replication log files and different shard directories based on timestamp.
+ * The root directory could be IN (on standby cluster) or OUT(on active cluster) and it manages shard interaction within given root directory.
+ * <p><strong>Directory Structure:</strong></p>
+ * <pre>
+ * /phoenix/replication/<group-id>/in/shard/
+ * ├── 000/  (files from 00:00:00-00:01:00)
+ * ├── 001/  (files from 00:01:00-00:02:00)
+ * ├── 002/  (files from 00:02:00-00:03:00)
+ * └── ...   (continues for numShards directories)
+ * </pre>
  */
 public class ReplicationShardDirectoryManager {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ReplicationShardDirectoryManager.class);
-
     /**
      * The number of shards (subfolders) to maintain in the "IN" / "OUT" directory.
-     * <p>
-     * Shard directories have the format N, e.g. 0, 1, 2, etc.
      */
     public static final String REPLICATION_NUM_SHARDS_KEY = "phoenix.replication.log.shards";
 
+    /**
+     * Default number of shard directories. Assuming 400 workers on standby writing replication log files every 1 min,
+     * and a lag of 2 days, number of files would be 400 * 2 * 24 * 60 = 1152000 files. Each shard will have
+     * (1152000 / 128) = 9000 files which is very well manageable for single HDFS directory
+     */
     public static final int DEFAULT_REPLICATION_NUM_SHARDS = 128;
 
+    /**
+     * Format string for shard directory names. Uses 3-digit zero-padded format (e.g., "000", "001", "002").
+     */
     public static final String SHARD_DIR_FORMAT = "%03d";
 
+    /**
+     * Configuration key for the duration of each replication round in seconds.
+     */
     public static final String PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY = "phoenix.replication.round.duration.seconds";
 
+    /**
+     * Default duration of each replication round in seconds.
+     * Files with timestamps within the same 60-second window will be placed in the same shard directory.
+     * This provides a good balance between file distribution and processing efficiency.
+     */
     public static final int DEFAULT_REPLICATION_ROUND_DURATION_SECONDS = 60;
 
     private static final String REPLICATION_SHARD_SUB_DIRECTORY_NAME = "shard";
@@ -96,31 +112,39 @@ public class ReplicationShardDirectoryManager {
         return new Path(shardDirectoryPath, shardDirName);
     }
 
+    /**
+     * Returns the shard directory to which file with given replication round belongs to.
+     * @param replicationRound The replication round for which to get the shard directory
+     * @return The shard directory path for the given replication round
+     */
     public Path getShardDirectory(ReplicationRound replicationRound) {
         return getShardDirectory(replicationRound.getStartTime());
     }
 
-    public long getNearestRoundStartTimestamp(long timestamp) {
-        // Convert round time from seconds to milliseconds
-        long roundTimeMs = replicationRoundDurationSeconds * 1000L;
-        
-        // Calculate the nearest round start timestamp
-        // This rounds down to the nearest multiple of round time
-        return (timestamp / roundTimeMs) * roundTimeMs;
-    }
 
+    /**
+     * Returns a ReplicationRound object based on the given round start time, calculating the end time as start time + round duration.
+     * @param roundStartTime - start time of the given round.
+     * @return The round to which input roundStartTime belongs to
+     */
     public ReplicationRound getReplicationRoundFromStartTime(long roundStartTime) {
         long validRoundStartTime = getNearestRoundStartTimestamp(roundStartTime);
         long validRoundEndTime = validRoundStartTime + replicationRoundDurationSeconds * 1000L;
         return new ReplicationRound(validRoundStartTime, validRoundEndTime);
     }
 
+    /**
+     * Returns a ReplicationRound object based on the given round end time, calculating the start time as end time - round duration.
+     * @param roundEndTime - end time of the given round.
+     * @return The round to which input roundEndTime belongs to
+     */
     public ReplicationRound getReplicationRoundFromEndTime(long roundEndTime) {
         long validRoundEndTime = getNearestRoundStartTimestamp(roundEndTime);
         long validRoundStartTime = validRoundEndTime - replicationRoundDurationSeconds * 1000L;
         return new ReplicationRound(validRoundStartTime, validRoundEndTime);
     }
 
+    /** Returns a list of all shard directory paths, formatted with 3-digit zero-padded shard numbers. */
     public List<Path> getAllShardPaths() {
         List<Path> shardPaths = new ArrayList<>();
         for (int i = 0; i < numShards; i++) {
@@ -131,11 +155,29 @@ public class ReplicationShardDirectoryManager {
         return shardPaths;
     }
 
-    public long getReplicationRoundDurationSeconds() {
-        return replicationRoundDurationSeconds;
+    public int getReplicationRoundDurationSeconds() {
+        return this.replicationRoundDurationSeconds;
     }
 
     public Path getShardDirectoryPath() {
-        return shardDirectoryPath;
+        return this.shardDirectoryPath;
+    }
+
+    public int getNumShards() {
+        return this.numShards;
+    }
+
+    /**
+     * Returns the nearest replication round start timestamp for the given timestamp.
+     * @param timestamp The timestamp in milliseconds since epoch
+     * @return The nearest replication round start timestamp
+     */
+    protected long getNearestRoundStartTimestamp(long timestamp) {
+        // Convert round time from seconds to milliseconds
+        long roundTimeMs = replicationRoundDurationSeconds * 1000L;
+
+        // Calculate the nearest round start timestamp
+        // This rounds down to the nearest multiple of round time
+        return (timestamp / roundTimeMs) * roundTimeMs;
     }
 }

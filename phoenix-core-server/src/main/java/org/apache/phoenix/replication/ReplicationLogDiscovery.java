@@ -28,23 +28,45 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.Random;
 import java.util.concurrent.*;
 
+/**
+ * Abstract base class for discovering and processing replication log files.
+ * Manages the lifecycle of replication log processing including starting/stopping the discovery service,
+ * scheduling periodic replay operations, and processing files from both new and in-progress directories.
+ */
 public abstract class ReplicationLogDiscovery {
 
     private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogDiscovery.class);
 
+    /**
+     * Default number of threads in the executor pool for processing replication logs
+     */
     private static final int DEFAULT_EXECUTOR_THREAD_COUNT = 1;
 
+    /**
+     * Default thread name format for executor threads
+     */
     private static final String DEFAULT_EXECUTOR_THREAD_NAME_FORMAT = "ReplicationLogDiscovery-%d";
 
+    /**
+     * Default interval in seconds between replay operations
+     */
     private static final long DEFAULT_REPLAY_INTERVAL_SECONDS = 10;
 
+    /**
+     * Default timeout in seconds for graceful shutdown of the executor service
+     */
     private static final long DEFAULT_SHUTDOWN_TIMEOUT_SECONDS = 30;
 
+    /**
+     * Default probability (in percentage) for processing files from in-progress directory
+     */
     private static final double DEFAULT_IN_PROGRESS_DIRECTORY_PROCESSING_PROBABILITY = 5.0;
 
+    /**
+     * Default buffer percentage for waiting time between processing rounds
+     */
     private static final double DEFAULT_WAITING_BUFFER_PERCENTAGE = 15.0;
 
     protected final Configuration conf;
@@ -61,6 +83,11 @@ public abstract class ReplicationLogDiscovery {
         this.conf = replicationLogFileTracker.getConf();
     }
 
+    /**
+     * Starts the replication log discovery service by initializing the scheduler and scheduling periodic replay operations.
+     * Creates a thread pool with configured thread count and schedules replay tasks at fixed intervals.
+     * @throws IOException if there's an error during initialization
+     */
     public void start() throws IOException {
         synchronized (this) {
             if (isRunning) {
@@ -83,6 +110,11 @@ public abstract class ReplicationLogDiscovery {
         }
     }
 
+    /**
+     * Stops the replication log discovery service by shutting down the scheduler gracefully.
+     * Waits for the configured shutdown timeout before forcing shutdown if necessary.
+     * @throws IOException if there's an error during shutdown
+     */
     public void stop() throws IOException {
         ScheduledExecutorService schedulerToShutdown = null;
         
@@ -111,6 +143,10 @@ public abstract class ReplicationLogDiscovery {
         LOG.info("ReplicationLogDiscovery stopped for group: {}", haGroupName);
     }
 
+    /**
+     * Executes a replay operation for next set of rounds. Retrieves rounds to process and processes each round sequentially.
+     * @throws IOException if there's an error during replay processing
+     */
     public void replay() throws IOException {
         System.out.println("Starting replay");
         List<ReplicationRound> replicationRoundList = getRoundsToProcess();
@@ -120,6 +156,10 @@ public abstract class ReplicationLogDiscovery {
         }
     }
 
+    /**
+     * Determines which replication rounds need to be processed based on current time and last processed round.
+     * @return List of replication rounds that need to be processed
+     */
     protected List<ReplicationRound> getRoundsToProcess() {
         long currentTime = EnvironmentEdgeManager.currentTimeMillis();
         long previousRoundEndTime = replicationStateTracker.getLastSuccessfullyProcessedRound().getEndTime();
@@ -132,59 +172,87 @@ public abstract class ReplicationLogDiscovery {
         return replicationRounds;
     }
 
+    /**
+     * Processes a single replication round by handling new files and optionally in-progress files.
+     * Always processes new files for the round, and conditionally processes in-progress files based on probability.
+     * @param replicationRound - The replication round to process
+     * @throws IOException if there's an error during round processing
+     */
     protected void processRound(ReplicationRound replicationRound) throws IOException {
         System.out.println("Starting to process round: startTime:" + replicationRound.getStartTime() + " and endTime: " + replicationRound.getEndTime());
-        // Process IN directory for a round
+        // Process new files for the round
         processNewFilesForRound(replicationRound);
         if(shouldProcessInProgressDirectory()) {
+            // Conditionally process the in progress files for the round
             processInProgressDirectory();
         }
     }
 
+    /**
+     * Determines whether to process in-progress directory files based on configured probability.
+     * Uses random number generation to decide if in-progress files should be processed in this cycle.
+     * @return true if in-progress directory should be processed, false otherwise
+     */
     protected boolean shouldProcessInProgressDirectory() {
         return ThreadLocalRandom.current().nextDouble(100.0) < getInProgressDirectoryProcessProbability();
     }
 
+    /**
+     * Processes all new files for a specific replication round.
+     * Continuously processes files until no new files remain for the round.
+     * @param replicationRound - The replication round for which to process new files
+     * @throws IOException if there's an error during file processing
+     */
     protected void processNewFilesForRound(ReplicationRound replicationRound) throws IOException {
         List<Path> files = replicationLogFileTracker.getNewFilesForRound(replicationRound);
         System.out.println("Number of new files for round: " + files.size());
         while(!files.isEmpty()) {
-            // Pick a random file and process it
-            Path file = files.get(new Random().nextInt(files.size()));
-            try {
-                Optional<Path> optionalInProgressFilePath = replicationLogFileTracker.markInProgress(file);
-                if(optionalInProgressFilePath.isPresent()) {
-                    processFile(file);
-                    replicationLogFileTracker.markCompleted(optionalInProgressFilePath.get());
-                }
-            } catch (IOException exception) {
-                LOG.error("Failed to process the file " + file, exception);
-                replicationLogFileTracker.markFailed(file);
-            }
+            processOneRandomFile(files);
             files = replicationLogFileTracker.getNewFilesForRound(replicationRound);
         }
     }
 
+    /**
+     * Processes all files in the in-progress directory.
+     * Continuously processes files until no in-progress files remain.
+     * @throws IOException if there's an error during file processing
+     */
     protected void processInProgressDirectory() throws IOException {
         List<Path> files = replicationLogFileTracker.getInProgressFiles();
         System.out.println("Number of new files for in_progress: " + files.size());
         while(!files.isEmpty()) {
-            // Pick a random file and process it
-            Path file = files.get(new Random().nextInt(files.size()));
-            try {
-                Optional<Path> optionalInProgressFilePath = replicationLogFileTracker.markInProgress(file);
-                if(optionalInProgressFilePath.isPresent()) {
-                    processFile(file);
-                    replicationLogFileTracker.markCompleted(optionalInProgressFilePath.get());
-                }
-            } catch (IOException exception) {
-                LOG.error("Failed to process the file " + file, exception);
-                replicationLogFileTracker.markFailed(file);
-            }
+            processOneRandomFile(files);
             files = replicationLogFileTracker.getInProgressFiles();
         }
     }
 
+    /**
+     * Processes a single random file from the provided list.
+     * Marks the file as in-progress, processes it, and marks it as completed or failed.
+     * @param files - List of files from which to select and process one randomly
+     */
+    private void processOneRandomFile(final List<Path> files) {
+        // Pick a random file and process it
+        Path file = files.get(ThreadLocalRandom.current().nextInt(files.size()));
+        Optional<Path> optionalInProgressFilePath = Optional.empty();
+        try {
+            optionalInProgressFilePath = replicationLogFileTracker.markInProgress(file);
+            if(optionalInProgressFilePath.isPresent()) {
+                processFile(file);
+                replicationLogFileTracker.markCompleted(optionalInProgressFilePath.get());
+            }
+        } catch (IOException exception) {
+            LOG.error("Failed to process the file {}", file, exception);
+            optionalInProgressFilePath.ifPresent(replicationLogFileTracker::markFailed);
+        }
+    }
+
+    /**
+     * Processes a single file.
+     * Subclasses must implement this method to provide custom file processing logic.
+     * @param path - The file to be processed
+     * @throws IOException if there's an error during file processing
+     */
     protected abstract void processFile(Path path) throws IOException;
 
     public ReplicationStateTracker getReplicationStateTracker() {

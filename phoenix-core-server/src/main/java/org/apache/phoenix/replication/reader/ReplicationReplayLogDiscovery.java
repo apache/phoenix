@@ -23,9 +23,15 @@ import org.apache.phoenix.replication.ReplicationStateTracker;
 
 import java.io.IOException;
 
+/**
+ * Concrete implementation of ReplicationLogDiscovery for replay operations.
+ * Handles the discovery and processing of replication log files for replay purposes,
+ * using ReplicationLogProcessor to process individual files and providing configurable
+ * replay-specific settings for intervals, thread counts, and processing probabilities.
+ */
 public class ReplicationReplayLogDiscovery extends ReplicationLogDiscovery {
 
-    private static final String EXECUTOR_THREAD_NAME_FORMAT = "Phoenix-Replication-Replay-%d";
+    public static final String EXECUTOR_THREAD_NAME_FORMAT = "Phoenix-Replication-Replay-%d";
 
     /**
      * Configuration key for replay interval in seconds
@@ -56,33 +62,31 @@ public class ReplicationReplayLogDiscovery extends ReplicationLogDiscovery {
      */
     public static final String REPLICATION_REPLAY_WAITING_BUFFER_PERCENTAGE_KEY = 
             "phoenix.replication.replay.waiting.buffer.percentage";
-
-    // Default values (same as parent class)
     
     /**
      * Default replay interval in seconds. Controls how frequently the replay process runs.
      */
-    private static final long DEFAULT_REPLAY_INTERVAL_SECONDS = 60;
+    public static final long DEFAULT_REPLAY_INTERVAL_SECONDS = 60;
     
     /**
      * Default shutdown timeout in seconds. Maximum time to wait for executor service to shutdown gracefully.
      */
-    private static final long DEFAULT_SHUTDOWN_TIMEOUT_SECONDS = 30;
+    public static final long DEFAULT_SHUTDOWN_TIMEOUT_SECONDS = 30;
     
     /**
      * Default number of executor threads for processing replication log files.
      */
-    private static final int DEFAULT_EXECUTOR_THREAD_COUNT = 1;
+    public static final int DEFAULT_EXECUTOR_THREAD_COUNT = 1;
     
     /**
      * Default probability (in percentage) for processing in-progress directory during each replay cycle.
      */
-    private static final double DEFAULT_IN_PROGRESS_DIRECTORY_PROCESSING_PROBABILITY = 5.0;
+    public static final double DEFAULT_IN_PROGRESS_DIRECTORY_PROCESSING_PROBABILITY = 5.0;
     
     /**
      * Default waiting buffer percentage. Buffer time is calculated as this percentage of round time.
      */
-    private static final double DEFAULT_WAITING_BUFFER_PERCENTAGE = 15.0;
+    public static final double DEFAULT_WAITING_BUFFER_PERCENTAGE = 15.0;
 
     public ReplicationReplayLogDiscovery(final ReplicationLogReplayFileTracker replicationLogReplayFileTracker, final ReplicationStateTracker replicationStateTracker) {
         super(replicationLogReplayFileTracker, replicationStateTracker);
