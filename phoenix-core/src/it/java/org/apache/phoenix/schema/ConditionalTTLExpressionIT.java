@@ -551,7 +551,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
       // Trigger TTL expiration again
       injectEdge.incrementValue(ttl);
 
-      Thread.sleep(500);
+      Thread.sleep(700);
       cleanUpSharedTtlImageCache();
       doMajorCompaction(tableName);
 
