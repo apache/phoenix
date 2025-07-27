@@ -26,7 +26,7 @@ import static org.apache.phoenix.query.QueryServices.CALL_QUEUE_PRODUCER_ATTRIB_
 import static org.apache.phoenix.query.QueryServices.CALL_QUEUE_ROUND_ROBIN_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.CDC_TTL_MUTATION_BATCH_SIZE;
 import static org.apache.phoenix.query.QueryServices.CDC_TTL_MUTATION_MAX_RETRIES;
-import static org.apache.phoenix.query.QueryServices.CDC_TTL_SHARED_CACHE_EXPIRY_MINUTES;
+import static org.apache.phoenix.query.QueryServices.CDC_TTL_SHARED_CACHE_EXPIRY_SECONDS;
 import static org.apache.phoenix.query.QueryServices.CLIENT_INDEX_ASYNC_THRESHOLD;
 import static org.apache.phoenix.query.QueryServices.CLIENT_METRICS_TAG;
 import static org.apache.phoenix.query.QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB;
@@ -494,7 +494,7 @@ public class QueryServicesOptions {
   public static final Boolean DEFAULT_CQSI_THREAD_POOL_METRICS_ENABLED = false;
   public static final int DEFAULT_CDC_TTL_MUTATION_MAX_RETRIES = 5;
   public static final int DEFAULT_CDC_TTL_MUTATION_BATCH_SIZE = 50;
-  public static final int DEFAULT_CDC_TTL_SHARED_CACHE_EXPIRY_MINUTES = 20;
+  public static final int DEFAULT_CDC_TTL_SHARED_CACHE_EXPIRY_SECONDS = 1200;
 
   public static final long DEFAULT_PHOENIX_CDC_STREAM_PARTITION_EXPIRY_MIN_AGE_MS =
     30 * 60 * 60 * 1000; // 30 hours
@@ -615,7 +615,7 @@ public class QueryServicesOptions {
       .setIfUnset(CQSI_THREAD_POOL_METRICS_ENABLED, DEFAULT_CQSI_THREAD_POOL_METRICS_ENABLED)
       .setIfUnset(CDC_TTL_MUTATION_MAX_RETRIES, DEFAULT_CDC_TTL_MUTATION_MAX_RETRIES)
       .setIfUnset(CDC_TTL_MUTATION_BATCH_SIZE, DEFAULT_CDC_TTL_MUTATION_BATCH_SIZE)
-      .setIfUnset(CDC_TTL_SHARED_CACHE_EXPIRY_MINUTES, DEFAULT_CDC_TTL_SHARED_CACHE_EXPIRY_MINUTES);
+      .setIfUnset(CDC_TTL_SHARED_CACHE_EXPIRY_SECONDS, DEFAULT_CDC_TTL_SHARED_CACHE_EXPIRY_SECONDS);
 
     // HBase sets this to 1, so we reset it to something more appropriate.
     // Hopefully HBase will change this, because we can't know if a user set

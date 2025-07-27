@@ -67,7 +67,7 @@ public final class CDCCompactionUtil {
   private static final Logger LOGGER = LoggerFactory.getLogger(CDCCompactionUtil.class);
 
   // Shared cache for row images across all CompactionScanner instances in the JVM.
-  // Entries expire after 20 minutes by default.
+  // Entries expire after 1200 seconds (20 minutes) by default.
   // The JVM level cache helps merge the pre-image for the row with multiple CFs.
   // The key of the cache contains (regionId + data table rowkey).
   // The value contains pre-image that needs to be directly inserted in the CDC index.
@@ -87,12 +87,12 @@ public final class CDCCompactionUtil {
     if (sharedTtlImageCache == null) {
       synchronized (CDCCompactionUtil.class) {
         if (sharedTtlImageCache == null) {
-          int expiryMinutes = config.getInt(QueryServices.CDC_TTL_SHARED_CACHE_EXPIRY_MINUTES,
-            QueryServicesOptions.DEFAULT_CDC_TTL_SHARED_CACHE_EXPIRY_MINUTES);
+          int expirySeconds = config.getInt(QueryServices.CDC_TTL_SHARED_CACHE_EXPIRY_SECONDS,
+            QueryServicesOptions.DEFAULT_CDC_TTL_SHARED_CACHE_EXPIRY_SECONDS);
           sharedTtlImageCache =
-            CacheBuilder.newBuilder().expireAfterWrite(expiryMinutes, TimeUnit.MINUTES).build();
-          LOGGER.info("Initialized shared CDC row image cache with expiry of {} minutes",
-            expiryMinutes);
+            CacheBuilder.newBuilder().expireAfterWrite(expirySeconds, TimeUnit.SECONDS).build();
+          LOGGER.info("Initialized shared CDC row image cache with expiry of {} seconds",
+            expirySeconds);
         }
       }
     }
