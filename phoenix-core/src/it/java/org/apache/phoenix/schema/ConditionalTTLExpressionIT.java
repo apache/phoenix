@@ -543,6 +543,15 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
 
       // Trigger TTL expiration again
       injectEdge.incrementValue(ttl);
+
+      // Split the table so that major compaction happens on new region, so the cached
+      // row image for previously expired row will not be re-used.
+      // This is needed because even if we use ManualEnvironmentEdge to advance the time,
+      // it does not affect the time duration of Guava cache: sharedTtlImageCache.
+      EnvironmentEdgeManager.reset();
+      TestUtil.splitTable(conn, tableName, Bytes.toBytes("a"));
+      EnvironmentEdgeManager.injectEdge(injectEdge);
+
       doMajorCompaction(tableName);
 
       // Verify all rows are expired from data table
