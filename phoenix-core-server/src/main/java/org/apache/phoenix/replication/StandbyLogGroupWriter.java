@@ -76,7 +76,6 @@ public class StandbyLogGroupWriter extends ReplicationLogGroupWriter {
 
     @Override
     protected void initializeReplicationShardDirectoryManager() {
-        System.out.println("Calling initializeReplicationShardDirectoryManager");
         this.haGroupLogFilesPath = new Path(new Path(standbyUrl.getPath(), logGroup.getHaGroupName()), ReplicationLogReplayFileTracker.IN_SUBDIRECTORY);
         this.replicationShardDirectoryManager = new ReplicationShardDirectoryManager(logGroup.getConfiguration(), haGroupLogFilesPath);
     }
@@ -87,9 +86,7 @@ public class StandbyLogGroupWriter extends ReplicationLogGroupWriter {
      */
     protected Path makeWriterPath(FileSystem fs) throws IOException {
         long timestamp = EnvironmentEdgeManager.currentTimeMillis();
-        System.out.println("Getting shard path for timestamp: " + timestamp + " from " + replicationShardDirectoryManager);
         Path shardPath = replicationShardDirectoryManager.getShardDirectory(timestamp);
-        System.out.println("Shard path " + shardPath);
         // Ensure the shard directory exists. We track which shard directories we have probed or
         // created to avoid a round trip to the namenode for repeats.
         IOException[] exception = new IOException[1];

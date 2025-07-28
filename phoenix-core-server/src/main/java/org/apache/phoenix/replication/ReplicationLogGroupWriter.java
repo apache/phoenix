@@ -177,7 +177,6 @@ public abstract class ReplicationLogGroupWriter {
 
     /** Initialize the writer. */
     public void init() throws IOException {
-        System.out.println("Inside ReplicationLogGroupWriter init method and calling initializeFileSystems");
         initializeFileSystems();
         initializeReplicationShardDirectoryManager();
         // Start time based rotation.
@@ -252,6 +251,9 @@ public abstract class ReplicationLogGroupWriter {
     /** Initialize file systems needed by this writer implementation. */
     protected abstract void initializeFileSystems() throws IOException;
 
+    /**
+     * Initialize the {@link ReplicationShardDirectoryManager} to manage file to shard directory mapping
+     */
     protected abstract void initializeReplicationShardDirectoryManager();
 
     /**

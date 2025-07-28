@@ -19,6 +19,8 @@ package org.apache.phoenix.replication;
 
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.List;
@@ -27,6 +29,8 @@ import java.util.List;
  * This class tracks the last successfully processed replication round for single HA Group
  */
 public class ReplicationStateTracker {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ReplicationStateTracker.class);
 
     private ReplicationRound lastSuccessfullyProcessedReplicationRound;
 
@@ -39,7 +43,6 @@ public class ReplicationStateTracker {
         List<Path> inProgressFiles = replicationLogFileTracker.getInProgressFiles();
         if (!inProgressFiles.isEmpty()) {
             long minTimestamp = getMinTimestampFromFiles(replicationLogFileTracker, inProgressFiles);
-            System.out.println("Found inprogress minTimestamp as " + minTimestamp);
             this.lastSuccessfullyProcessedReplicationRound = replicationLogFileTracker.getReplicationShardDirectoryManager().getReplicationRoundFromEndTime(minTimestamp);
             return;
         }
@@ -49,13 +52,14 @@ public class ReplicationStateTracker {
         List<Path> newFiles = replicationLogFileTracker.getNewFiles();
         if (!newFiles.isEmpty()) {
             long minTimestamp = getMinTimestampFromFiles(replicationLogFileTracker, newFiles);
-            System.out.println("Found in minTimestamp as " + minTimestamp);
             this.lastSuccessfullyProcessedReplicationRound = replicationLogFileTracker.getReplicationShardDirectoryManager().getReplicationRoundFromEndTime(minTimestamp);
             return;
         }
 
         // If no files found, set it to current time
         this.lastSuccessfullyProcessedReplicationRound = replicationLogFileTracker.getReplicationShardDirectoryManager().getReplicationRoundFromEndTime(EnvironmentEdgeManager.currentTime());
+
+        LOG.info("Initialized lastSuccessfullyProcessedReplicationRound as {}", lastSuccessfullyProcessedReplicationRound);
     }
 
     private long getMinTimestampFromFiles(ReplicationLogFileTracker replicationLogFileTracker, List<Path> files) {
