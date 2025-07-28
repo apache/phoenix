@@ -22,6 +22,10 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscovery;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogFileTracker;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogReplayFileTrackerImpl;
+import org.apache.phoenix.replication.metrics.MetricsReplicationReplayLogFileDiscoveryImpl;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import com.google.common.base.Preconditions;
 import org.junit.After;
@@ -79,6 +83,10 @@ public class ReplicationLogDiscoveryTest {
     public void tearDown() throws IOException {
         if (discovery != null) {
             discovery.stop();
+            discovery.close();
+        }
+        if(fileTracker != null) {
+            fileTracker.close();
         }
         localFs.delete(new Path(testFolder.getRoot().toURI()), true);
     }
@@ -559,7 +567,10 @@ public class ReplicationLogDiscoveryTest {
         // Verify that markFailed was called for each specific file with correct paths
         for (Path failedFile : newFilesForRound) {
             Mockito.verify(fileTracker, Mockito.times(1)).markFailed(
-                Mockito.argThat(path -> path.toUri().getPath().equals(failedFile.toUri().getPath())));
+                Mockito.argThat(path -> {
+                    System.out.println("Checking for " + fileTracker.getFilePrefix(path) + " and " + fileTracker.getFilePrefix(failedFile));
+                    return fileTracker.getFilePrefix(path).equals(fileTracker.getFilePrefix(failedFile));
+                }));
         }
     }
 
@@ -671,23 +682,22 @@ public class ReplicationLogDiscoveryTest {
 
         // Verify that markFailed was called once ONLY for failed files
         Mockito.verify(fileTracker, Mockito.times(1)).markFailed(
-                Mockito.argThat(path -> path.getName().startsWith(allInProgressFiles.get(1).getName().split("\\.")[0])));
+                Mockito.argThat(path -> fileTracker.getFilePrefix(path).equals(fileTracker.getFilePrefix(allInProgressFiles.get(1)))));
         Mockito.verify(fileTracker, Mockito.times(1)).markFailed(
-                Mockito.argThat(path -> path.getName().startsWith(allInProgressFiles.get(3).getName().split("\\.")[0])));
+                Mockito.argThat(path -> fileTracker.getFilePrefix(path).equals(fileTracker.getFilePrefix(allInProgressFiles.get(3)))));
 
         // Verify that markFailed was NOT called for files processed successfully in first iteration
         Mockito.verify(fileTracker, Mockito.never()).markFailed(
-                Mockito.argThat(path -> path.getName().startsWith(allInProgressFiles.get(0).getName().split("\\.")[0])));
+                Mockito.argThat(path -> fileTracker.getFilePrefix(path).equals(fileTracker.getFilePrefix(allInProgressFiles.get(0)))));
         Mockito.verify(fileTracker, Mockito.never()).markFailed(
-                Mockito.argThat(path -> path.getName().startsWith(allInProgressFiles.get(2).getName().split("\\.")[0])));
+                Mockito.argThat(path -> fileTracker.getFilePrefix(path).equals(fileTracker.getFilePrefix(allInProgressFiles.get(2)))));
         Mockito.verify(fileTracker, Mockito.never()).markFailed(
-                Mockito.argThat(path -> path.getName().startsWith(allInProgressFiles.get(4).getName().split("\\.")[0])));
+                Mockito.argThat(path -> fileTracker.getFilePrefix(path).equals(fileTracker.getFilePrefix(allInProgressFiles.get(4)))));
 
         // Verify that markCompleted was called for each successfully processed file with correct paths
         for (Path expectedFile : allInProgressFiles) {
-            System.out.println("Checking for " + expectedFile.getName().split("\\.")[0]);
             Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
-                    Mockito.argThat(path -> path.getName().startsWith(fileTracker.getFilePrefix(expectedFile))));
+                    Mockito.argThat(path -> fileTracker.getFilePrefix(path).equals(fileTracker.getFilePrefix(expectedFile))));
         }
     }
 
@@ -701,7 +711,7 @@ public class ReplicationLogDiscoveryTest {
         localFs.mkdirs(shardPath);
         List<Path> newFiles = new ArrayList<>();
         for(int i = 0; i < fileCount; i++) {
-            Path file = new Path(shardPath, replicationRound.getStartTime() + (2000L * i) + "_rs_" + i + ".plog");
+            Path file = new Path(shardPath, replicationRound.getStartTime() + (2000L * i) + "_rs-" + i + ".plog");
             localFs.create(file, true).close();
             newFiles.add(file);
         }
@@ -715,7 +725,7 @@ public class ReplicationLogDiscoveryTest {
         List<Path> inProgressFiles = new ArrayList<>();
         for (int i = 0; i < count; i++) {
             String uuid = "12345678-1234-1234-1234-123456789abc" + i;
-            Path inProgressFile = new Path(inProgressDir, timestamp + "_rs_" + i + "_" + uuid + ".plog");
+            Path inProgressFile = new Path(inProgressDir, timestamp + "_rs-" + i + "_" + uuid + ".plog");
             localFs.create(inProgressFile, true).close();
             inProgressFiles.add(inProgressFile);
         }
@@ -733,6 +743,11 @@ public class ReplicationLogDiscoveryTest {
         protected String getNewLogSubDirectoryName() {
             return "in";
         }
+
+        @Override
+        protected MetricsReplicationLogFileTracker createMetricsSource() {
+            return new MetricsReplicationLogReplayFileTrackerImpl(haGroupName);
+        }
     }
 
     private static class TestableReplicationLogDiscovery extends ReplicationLogDiscovery {
@@ -748,6 +763,11 @@ public class ReplicationLogDiscoveryTest {
         protected void processFile(Path path) throws IOException {
             // Simulate file processing
             processedFiles.add(path);
+        }
+
+        @Override
+        protected MetricsReplicationLogDiscovery createMetricsSource() {
+            return new MetricsReplicationReplayLogFileDiscoveryImpl(haGroupName);
         }
 
         @Override

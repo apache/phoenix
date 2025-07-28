@@ -20,6 +20,8 @@ package org.apache.phoenix.replication.reader;
 import org.apache.hadoop.fs.Path;
 import org.apache.phoenix.replication.ReplicationLogDiscovery;
 import org.apache.phoenix.replication.ReplicationStateTracker;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscovery;
+import org.apache.phoenix.replication.metrics.MetricsReplicationReplayLogFileDiscoveryImpl;
 
 import java.io.IOException;
 
@@ -95,6 +97,11 @@ public class ReplicationReplayLogDiscovery extends ReplicationLogDiscovery {
     @Override
     protected void processFile(Path path) throws IOException {
         ReplicationLogProcessor.get(getConf(), getHaGroupName()).processLogFile(getReplicationLogFileTracker().getFileSystem(), path);
+    }
+
+    @Override
+    protected MetricsReplicationLogDiscovery createMetricsSource() {
+        return new MetricsReplicationReplayLogFileDiscoveryImpl(haGroupName);
     }
 
     @Override

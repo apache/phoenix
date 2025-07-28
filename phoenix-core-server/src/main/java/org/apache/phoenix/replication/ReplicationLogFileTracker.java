@@ -21,6 +21,11 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogFileTracker;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogProcessor;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogProcessorImpl;
+import org.apache.phoenix.replication.metrics.ReplicationLogFileTrackerMetricValues;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,12 +65,13 @@ public abstract class ReplicationLogFileTracker {
      */
     private static final long DEFAULT_FILE_DELETE_RETRY_DELAY_MS = 1000L;
 
-    private final Configuration conf;
-    private final String haGroupName;
     private final URI rootURI;
     private final FileSystem fileSystem;
     private Path inProgressDirPath;
     private ReplicationShardDirectoryManager replicationShardDirectoryManager;
+    protected final Configuration conf;
+    protected final String haGroupName;
+    protected MetricsReplicationLogFileTracker metrics;
 
     protected ReplicationLogFileTracker(final Configuration conf, final String haGroupName, final FileSystem fileSystem, final URI rootURI) {
         this.conf = conf;
@@ -75,6 +81,9 @@ public abstract class ReplicationLogFileTracker {
     }
 
     protected abstract String getNewLogSubDirectoryName();
+
+    /** Creates a new metrics source for monitoring operations. */
+    protected abstract MetricsReplicationLogFileTracker createMetricsSource();
 
     protected String getInProgressLogSubDirectoryName() {
         return getNewLogSubDirectoryName() + "_progress";
@@ -89,6 +98,13 @@ public abstract class ReplicationLogFileTracker {
         this.replicationShardDirectoryManager = new ReplicationShardDirectoryManager(conf, newFilesDirectory);
         this.inProgressDirPath = new Path(new Path(rootURI.getPath(), haGroupName), getInProgressLogSubDirectoryName());
         createDirectoryIfNotExists(inProgressDirPath);
+        this.metrics = createMetricsSource();
+    }
+
+    public void close() {
+        if(this.metrics != null) {
+            this.metrics.close();
+        }
     }
 
     /**
@@ -182,7 +198,12 @@ public abstract class ReplicationLogFileTracker {
      */
     protected boolean markCompleted(final Path file) {
         System.out.println("Mark Completed Method Called for " + file.toString());
-        
+
+        long startTime = EnvironmentEdgeManager.currentTimeMillis();
+
+        // Increment the metrics count
+        getMetrics().incrementMarkFileCompletedRequestCount();
+
         int maxRetries = conf.getInt(FILE_DELETE_RETRIES_KEY, DEFAULT_FILE_DELETE_RETRIES);
         long retryDelayMs = conf.getLong(FILE_DELETE_RETRY_DELAY_MS_KEY, DEFAULT_FILE_DELETE_RETRY_DELAY_MS);
 
@@ -195,6 +216,8 @@ public abstract class ReplicationLogFileTracker {
                 if (fileSystem.delete(fileToDelete, false)) {
                     System.out.println("Successfully deleted completed file: " + fileToDelete);
                     LOG.info("Successfully deleted completed file: {}", fileToDelete);
+                    long endTime = EnvironmentEdgeManager.currentTimeMillis();
+                    getMetrics().updateMarkFileCompletedTime(endTime - startTime);
                     return true;
                 } else {
                     LOG.warn("Failed to delete file (attempt {}): {}", attempt + 1, fileToDelete);
@@ -202,8 +225,11 @@ public abstract class ReplicationLogFileTracker {
             } catch (IOException e) {
                 LOG.warn("IOException while deleting file (attempt {}): {}", attempt + 1, fileToDelete, e);
             }
-            
-            // If deletion fails and it's not the last attempt, sleep first then try to find matching in-progress file
+
+            // Increment the deletion failure count
+            getMetrics().incrementMarkFileCompletedRequestFailedCount();
+
+            // If deletion failed and it's not the last attempt, sleep first then try to find matching in-progress file
             if (attempt < maxRetries) {
                 // Sleep before next retry
                 try {
@@ -228,9 +254,13 @@ public abstract class ReplicationLogFileTracker {
                         fileToDelete = matchingFile;
                     } else if (matchingFiles.size() > 1) {
                         LOG.warn("Multiple matching in-progress files found for prefix {}: {}", filePrefix, matchingFiles);
+                        long endTime = EnvironmentEdgeManager.currentTimeMillis();
+                        getMetrics().updateMarkFileCompletedTime(endTime - startTime);
                         return false;
                     } else {
                         LOG.warn("No matching in-progress file found for prefix: {}. File must have been deleted by some other process.", filePrefix);
+                        long endTime = EnvironmentEdgeManager.currentTimeMillis();
+                        getMetrics().updateMarkFileCompletedTime(endTime - startTime);
                         return true;
                     }
                 } catch (IOException e) {
@@ -238,7 +268,10 @@ public abstract class ReplicationLogFileTracker {
                 }
             }
         }
-        
+
+        long endTime = EnvironmentEdgeManager.currentTimeMillis();
+        getMetrics().updateMarkFileCompletedTime(endTime - startTime);
+
         LOG.error("Failed to delete file after {} attempts: {}", maxRetries + 1, fileToDelete);
         return false;
     }
@@ -251,11 +284,13 @@ public abstract class ReplicationLogFileTracker {
      */
     protected Optional<Path> markInProgress(final Path file) {
         System.out.println("Mark In Progress Method Called for " + file.toString());
+        long startTime = EnvironmentEdgeManager.currentTimeMillis();
         try {
-            String fileName = file.getName();
-            String newFileName;
-            Path targetDirectory;
-            
+
+            final String fileName = file.getName();
+            final String newFileName;
+            final Path targetDirectory;
+
             // Check if file is already in in-progress directory
             if(file.getParent().toUri().getPath().equals(getInProgressDirPath().toString())) {
                 // File is already in in-progress directory, replace UUID with a new one (stay in same directory)
@@ -291,6 +326,11 @@ public abstract class ReplicationLogFileTracker {
         } catch (IOException e) {
             LOG.error("IOException while marking file as in progress: {}", file, e);
             return Optional.empty();
+        } finally {
+            // Update the metrics
+            getMetrics().incrementMarkFileInProgressRequestCount();
+            long endTime =  EnvironmentEdgeManager.currentTimeMillis();
+            getMetrics().updateMarkFileInProgressTime(endTime - startTime);
         }
     }
 
@@ -338,8 +378,8 @@ public abstract class ReplicationLogFileTracker {
     protected String getFilePrefix(Path file) {
         String fileName = file.getName();
         String[] parts = fileName.split("_");
-        if (parts.length < 2) {
-            return fileName; // Return full filename if no underscore found
+        if (parts.length < 3) {
+            return fileName.split("\\.")[0]; // Return full filename if no underscore found
         }
         
         // Return everything except the last part (UUID)
@@ -360,6 +400,7 @@ public abstract class ReplicationLogFileTracker {
      * @return - true if marked as failed, false otherwise
      */
     public boolean markFailed(final Path file) {
+        getMetrics().incrementMarkFileFailedRequestCount();
         return true;
     }
 
@@ -380,7 +421,11 @@ public abstract class ReplicationLogFileTracker {
     }
 
     protected Path getInProgressDirPath() {
-        return inProgressDirPath;
+        return this.inProgressDirPath;
+    }
+
+    protected MetricsReplicationLogFileTracker getMetrics() {
+        return this.metrics;
     }
 
     /**

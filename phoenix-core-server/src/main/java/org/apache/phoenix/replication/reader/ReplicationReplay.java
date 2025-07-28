@@ -46,7 +46,7 @@ public class ReplicationReplay {
     /**
      * Singleton instances per group name
      */
-    private static final ConcurrentHashMap<String, ReplicationReplay> instances = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, ReplicationReplay> INSTANCES = new ConcurrentHashMap<>();
 
     private final Configuration conf;
     private final String haGroupName;
@@ -66,7 +66,7 @@ public class ReplicationReplay {
      * @return The singleton instance for the group
      */
     public static ReplicationReplay get(final Configuration conf, final String haGroupName) {
-        return instances.computeIfAbsent(haGroupName, groupName -> {
+        return INSTANCES.computeIfAbsent(haGroupName, groupName -> {
             try {
                 ReplicationReplay instance = new ReplicationReplay(conf, groupName);
                 instance.init();
@@ -106,6 +106,14 @@ public class ReplicationReplay {
         ReplicationStateTracker replicationStateTracker = new ReplicationStateTracker();
         replicationStateTracker.init(replicationLogReplayFileTracker);
         this.replicationReplayLogDiscovery = new ReplicationReplayLogDiscovery(replicationLogReplayFileTracker, replicationStateTracker);
+        this.replicationReplayLogDiscovery.init();
+    }
+
+    public void close() {
+        replicationReplayLogDiscovery.getReplicationLogFileTracker().close();
+        replicationReplayLogDiscovery.close();
+        // Remove the instance from cache
+        INSTANCES.remove(haGroupName);
     }
 
     /** Initializes the filesystem and creates root log directory. */

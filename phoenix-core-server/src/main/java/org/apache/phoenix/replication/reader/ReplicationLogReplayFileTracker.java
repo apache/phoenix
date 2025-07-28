@@ -20,6 +20,9 @@ package org.apache.phoenix.replication.reader;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.phoenix.replication.ReplicationLogFileTracker;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogProcessorImpl;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogReplayFileTrackerImpl;
+import org.apache.phoenix.replication.metrics.ReplicationLogFileTrackerMetricValues;
 
 import java.net.URI;
 
@@ -38,5 +41,10 @@ public class ReplicationLogReplayFileTracker extends ReplicationLogFileTracker {
     @Override
     protected String getNewLogSubDirectoryName() {
         return IN_SUBDIRECTORY;
+    }
+
+    @Override
+    protected MetricsReplicationLogReplayFileTrackerImpl createMetricsSource() {
+        return new MetricsReplicationLogReplayFileTrackerImpl(haGroupName);
     }
 }

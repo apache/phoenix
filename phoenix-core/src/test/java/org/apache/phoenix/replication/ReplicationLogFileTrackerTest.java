@@ -22,6 +22,8 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogFileTracker;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogReplayFileTrackerImpl;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -68,6 +70,9 @@ public class ReplicationLogFileTrackerTest {
 
     @After
     public void tearDown() throws IOException {
+        if(tracker != null) {
+            tracker.close();
+        }
         localFs.delete(new Path(testFolder.getRoot().toURI()), true);
     }
 
@@ -137,9 +142,11 @@ public class ReplicationLogFileTrackerTest {
         
         // Call init method multiple times
         tracker.init();
+        tracker.close();
         tracker.init();
+        tracker.close();
         tracker.init();
-        
+
         // Verify directory still exists and is valid
         assertTrue("In-progress directory should still exist", localFs.exists(expectedInProgressPath));
         assertTrue("In-progress directory should still be a directory", localFs.isDirectory(expectedInProgressPath));
@@ -767,23 +774,24 @@ public class ReplicationLogFileTrackerTest {
                 .when(mockFs).delete(Mockito.argThat(path -> path.getName().equals(originalFile.getName())), Mockito.eq(false));
 
         // Replace the tracker's filesystem with our mock
-        TestableReplicationLogFileTracker mockTracker = new TestableReplicationLogFileTracker(conf, haGroupName, mockFs, rootURI);
-        mockTracker.init();
+        tracker.close();
+        tracker = new TestableReplicationLogFileTracker(conf, haGroupName, mockFs, rootURI);
+        tracker.init();
 
         // Call markCompleted on the original file
-        boolean result = mockTracker.markCompleted(originalFile);
+        boolean result = tracker.markCompleted(originalFile);
         
         // Verify file system operation counts
         // markCompleted with intermittent failure involves retrying delete operations
         // It should call exists() for in-progress directory (during init), and 2 times while fetching in progress files
         Mockito.verify(mockFs, Mockito.times(3)).exists(Mockito.any(Path.class));
-        Mockito.verify(mockFs, Mockito.times(3)).exists(Mockito.eq(mockTracker.getInProgressDirPath()));
+        Mockito.verify(mockFs, Mockito.times(3)).exists(Mockito.eq(tracker.getInProgressDirPath()));
         // delete() should be called 3 times (2 failures + 1 success)
         Mockito.verify(mockFs, Mockito.times(3)).delete(Mockito.any(Path.class), Mockito.eq(false));
         Mockito.verify(mockFs, Mockito.times(3)).delete(Mockito.argThat(path -> path.getName().equals(originalFile.getName())), Mockito.eq(false));
         // Ensure listStatus() is called exactly twice on in progress directory
         Mockito.verify(mockFs, Mockito.times(2)).listStatus(Mockito.any(Path.class));
-        Mockito.verify(mockFs, Mockito.times(2)).listStatus(Mockito.eq(mockTracker.getInProgressDirPath()));
+        Mockito.verify(mockFs, Mockito.times(2)).listStatus(Mockito.eq(tracker.getInProgressDirPath()));
         
         // Verify operation was successful after retries
         assertTrue("markCompleted should return true after successful retry", result);
@@ -796,11 +804,11 @@ public class ReplicationLogFileTrackerTest {
         FileSystem mockFs = spy(localFs);
 
         // Replace the tracker's filesystem with our spy
-        TestableReplicationLogFileTracker mockTracker = new TestableReplicationLogFileTracker(conf, haGroupName, mockFs, rootURI);
-        mockTracker.init();
+        tracker = new TestableReplicationLogFileTracker(conf, haGroupName, mockFs, rootURI);
+        tracker.init();
 
         // Create original file in in-progress directory with UUID
-        Path originalFile = new Path(mockTracker.getInProgressDirPath(), "1704153600000_rs1_12345678-1234-1234-1234-123456789def.plog");
+        Path originalFile = new Path(tracker.getInProgressDirPath(), "1704153600000_rs1_12345678-1234-1234-1234-123456789def.plog");
 
         // Set up the mock BEFORE creating the file
         // Mock delete for any file with the same name to throw IOException
@@ -814,19 +822,19 @@ public class ReplicationLogFileTrackerTest {
         mockFs.create(originalFile, true).close();
         
         // Call markCompleted on the original file
-        boolean result = mockTracker.markCompleted(originalFile);
+        boolean result = tracker.markCompleted(originalFile);
         
         // Verify file system operation counts
         // markCompleted with persistent failure involves retrying delete operations until all retries exhausted
         // It should call exists() for in-progress directory (during init), and 3 times while fetching in progress files during retries
         Mockito.verify(mockFs, Mockito.times(4)).exists(Mockito.any(Path.class));
-        Mockito.verify(mockFs, Mockito.times(4)).exists(Mockito.eq(mockTracker.getInProgressDirPath()));
+        Mockito.verify(mockFs, Mockito.times(4)).exists(Mockito.eq(tracker.getInProgressDirPath()));
         // delete() should be called 4 times (1 initial + 3 retries, all failures)
         Mockito.verify(mockFs, Mockito.times(4)).delete(Mockito.any(Path.class), Mockito.eq(false));
         Mockito.verify(mockFs, Mockito.times(4)).delete(Mockito.argThat(path -> path.getName().equals(originalFile.getName())), Mockito.eq(false));
         // Ensure listStatus() is called exactly 3 times during retries on in progress directory
         Mockito.verify(mockFs, Mockito.times(3)).listStatus(Mockito.any(Path.class));
-        Mockito.verify(mockFs, Mockito.times(3)).listStatus(Mockito.eq(mockTracker.getInProgressDirPath()));
+        Mockito.verify(mockFs, Mockito.times(3)).listStatus(Mockito.eq(tracker.getInProgressDirPath()));
 
         // Verify original file exists
         assertTrue("Original file should exist", mockFs.exists(originalFile));
@@ -1049,16 +1057,10 @@ public class ReplicationLogFileTrackerTest {
         protected String getNewLogSubDirectoryName() {
             return "in";
         }
-        
-        public void setFileSystem(FileSystem fileSystem) {
-            // Use reflection to set the fileSystem field
-            try {
-                java.lang.reflect.Field field = ReplicationLogFileTracker.class.getDeclaredField("fileSystem");
-                field.setAccessible(true);
-                field.set(this, fileSystem);
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to set fileSystem", e);
-            }
+
+        @Override
+        protected MetricsReplicationLogFileTracker createMetricsSource() {
+            return new MetricsReplicationLogReplayFileTrackerImpl(haGroupName);
         }
     }
 }
