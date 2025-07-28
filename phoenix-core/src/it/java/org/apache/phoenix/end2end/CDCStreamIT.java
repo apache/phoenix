@@ -137,8 +137,12 @@ public class CDCStreamIT extends CDCBaseIT {
       verifyPreAndPostImages(conn, sql, expiry);
 
       injectEdge.incrementValue(TimeUnit.DAYS.toMillis(1));
-      TestUtil.doMajorCompaction(conn, tableName);
-      TestUtil.doMajorCompaction(conn, CDCUtil.getCDCIndexName(cdcName));
+      EnvironmentEdgeManager.reset();
+      TestUtil.flush(getUtility(), TableName.valueOf(tableName));
+      TestUtil.flush(getUtility(), TableName.valueOf(CDCUtil.getCDCIndexName(cdcName)));
+      EnvironmentEdgeManager.injectEdge(injectEdge);
+      TestUtil.majorCompact(getUtility(), TableName.valueOf(tableName));
+      TestUtil.majorCompact(getUtility(), TableName.valueOf(CDCUtil.getCDCIndexName(cdcName)));
 
       // first compaction will expire initial insert event as we are already past
       // (3 days + 100 sec + 24 hr), however this should not generate ttl expired event yet,
@@ -146,8 +150,12 @@ public class CDCStreamIT extends CDCBaseIT {
       verifyImagesAfterFirstCompaction(conn, sql, expiry);
 
       injectEdge.incrementValue(TimeUnit.HOURS.toMillis(3) + TimeUnit.SECONDS.toMillis(1));
-      TestUtil.doMajorCompaction(conn, tableName);
-      TestUtil.doMajorCompaction(conn, CDCUtil.getCDCIndexName(cdcName));
+      EnvironmentEdgeManager.reset();
+      TestUtil.flush(getUtility(), TableName.valueOf(tableName));
+      TestUtil.flush(getUtility(), TableName.valueOf(CDCUtil.getCDCIndexName(cdcName)));
+      EnvironmentEdgeManager.injectEdge(injectEdge);
+      TestUtil.majorCompact(getUtility(), TableName.valueOf(tableName));
+      TestUtil.majorCompact(getUtility(), TableName.valueOf(CDCUtil.getCDCIndexName(cdcName)));
 
       // The compaction after (3 days + 100 sec + 24 hr + 3 hr + 1 sec) should expire the
       // row, which was last updated (24 hr + 3 hr + 1 sec) in the past.
@@ -214,7 +222,10 @@ public class CDCStreamIT extends CDCBaseIT {
       verifyPreAndPostImages(conn, sql, expiry);
 
       injectEdge.incrementValue(TimeUnit.DAYS.toMillis(1));
-      TestUtil.doMajorCompaction(conn, CDCUtil.getCDCIndexName(cdcName));
+      EnvironmentEdgeManager.reset();
+      TestUtil.flush(getUtility(), TableName.valueOf(CDCUtil.getCDCIndexName(cdcName)));
+      EnvironmentEdgeManager.injectEdge(injectEdge);
+      TestUtil.majorCompact(getUtility(), TableName.valueOf(CDCUtil.getCDCIndexName(cdcName)));
 
       // compaction will expire all rows from CDC index because the maxLookback of
       // CDC index is no longer 27 hr, but it has been altered to 50 sec
