@@ -630,9 +630,9 @@ public class HAGroupStoreClient implements Closeable {
             if (currentHAGroupState == HAGroupState.ACTIVE_NOT_IN_SYNC
                     && newHAGroupState == HAGroupState.ACTIVE_IN_SYNC) {
                 waitTime = waitTimeForSyncModeInMs;
-            } else if ((currentHAGroupState == HAGroupState.ACTIVE_IN_SYNC
-                    || currentHAGroupState == HAGroupState.ACTIVE_NOT_IN_SYNC)
+            } else if (currentHAGroupState == HAGroupState.ACTIVE_NOT_IN_SYNC 
             && newHAGroupState == HAGroupState.ACTIVE_NOT_IN_SYNC) {
+                //This is to avoid extra requests to ZK for updates.
                 waitTime = waitTimeForStoreAndForwardModeInMs;
             }
         } else {

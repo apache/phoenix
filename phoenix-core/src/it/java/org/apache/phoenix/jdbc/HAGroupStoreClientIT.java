@@ -55,6 +55,7 @@ import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_NAMESP
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_HA_GROUP_NAME;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_HA_SYNC_MODE_REFRESH_INTERVAL_MS;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_ZK;
 import static org.junit.Assert.assertFalse;
@@ -539,8 +540,10 @@ public class HAGroupStoreClientIT extends BaseTest {
 
         // Create initial record with current timestamp
         HAGroupStoreRecord initialRecord = new HAGroupStoreRecord("v1.0", haGroupName,
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+                HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC);
         createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, initialRecord);
+        Stat initialRecordInZKStat = haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName).getRight();
+        int initialRecordVersion = initialRecordInZKStat.getVersion();
 
         HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstance(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
 
@@ -554,7 +557,11 @@ public class HAGroupStoreClientIT extends BaseTest {
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         // Verify no update occurred
         HAGroupStoreRecord afterRecord = haGroupStoreClient.getHAGroupStoreRecord();
-        assertEquals("State should not change", HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, afterRecord.getHAGroupState());
+        Stat afterRecordInZKStat = haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName).getRight();
+        int afterRecordVersion = afterRecordInZKStat.getVersion();
+
+        assertEquals(initialRecordVersion, afterRecordVersion);
+        assertEquals("State should not change", HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC, afterRecord.getHAGroupState());
     }
 
     @Test
@@ -562,19 +569,19 @@ public class HAGroupStoreClientIT extends BaseTest {
         String haGroupName = testName.getMethodName();
         // Create initial record
         HAGroupStoreRecord initialRecord = new HAGroupStoreRecord("v1.0", haGroupName,
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+                HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC);
         createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, initialRecord);
 
         HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstance(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
-        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS + DEFAULT_HA_SYNC_MODE_REFRESH_INTERVAL_MS);
 
-        // Update to ACTIVE_NOT_IN_SYNC (should succeed due to old timestamp)
-        haGroupStoreClient.setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC);
+        // Update should succeed as more than DEFAULT_HA_SYNC_MODE_REFRESH_INTERVAL_MS time has passed.
+        haGroupStoreClient.setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Verify the record was updated
         HAGroupStoreRecord updatedRecord = haGroupStoreClient.getHAGroupStoreRecord();
-        assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC, updatedRecord.getHAGroupState());
+        assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, updatedRecord.getHAGroupState());
     }
 
     @Test
