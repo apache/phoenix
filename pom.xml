@@ -48,7 +48,6 @@
     <module>phoenix-hbase-compat-2.6.0</module>
     <module>phoenix-hbase-compat-2.5.4</module>
     <module>phoenix-hbase-compat-2.5.0</module>
-    <module>phoenix-hbase-compat-2.4.1</module>
     <module>phoenix-core-client</module>
     <module>phoenix-core-server</module>
     <module>phoenix-core</module>
@@ -73,9 +72,8 @@
     <hbase.suffix>hbase-${hbase.profile}</hbase.suffix>
 
     <!-- This is used by the release script only -->
-    <hbase.profile.list>2.4 2.5.0 2.5 2.6</hbase.profile.list>
+    <hbase.profile.list>2.5.0 2.5 2.6</hbase.profile.list>
     <!-- The default hbase versions to build with (override with hbase.version) -->
-    <hbase-2.4.runtime.version>2.4.18</hbase-2.4.runtime.version>
     <hbase-2.5.0.runtime.version>2.5.3-hadoop3</hbase-2.5.0.runtime.version>
     <hbase-2.5.4.runtime.version>2.5.10-hadoop3</hbase-2.5.4.runtime.version>
     <hbase-2.5.runtime.version>2.5.11-hadoop3</hbase-2.5.runtime.version>
@@ -248,11 +246,6 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-client-embedded-hbase-2.4</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-client-embedded-hbase-2.5.0</artifactId>
         <version>${project.version}</version>
       </dependency>
@@ -274,11 +267,6 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-client-embedded-hbase-2.6.0</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-client-lite-hbase-2.4</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -308,11 +296,6 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-server-hbase-2.4</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-server-hbase-2.5.0</artifactId>
         <version>${project.version}</version>
       </dependency>
@@ -334,11 +317,6 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-server-hbase-2.6</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-mapreduce-byo-shaded-hbase-hbase-2.4</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -380,11 +358,6 @@
         <groupId>org.apache.phoenix.thirdparty</groupId>
         <artifactId>phoenix-shaded-guava</artifactId>
         <version>${phoenix.thirdparty.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-hbase-compat-2.4.1</artifactId>
-        <version>${project.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
@@ -2111,22 +2084,6 @@
         <hbase.profile>2.5</hbase.profile>
         <hbase.compat.version>2.5.4</hbase.compat.version>
         <hbase.version>${hbase-2.5.runtime.version}</hbase.version>
-      </properties>
-    </profile>
-    <profile>
-      <!-- PHOENIX-5993 This won't work with the public HBase artifacts -->
-      <id>phoenix-hbase-compat-2.4.1</id>
-      <activation>
-        <property>
-          <name>hbase.profile</name>
-          <value>2.4</value>
-        </property>
-      </activation>
-      <properties>
-        <hbase.profile>2.4</hbase.profile>
-        <hbase.compat.version>2.4.1</hbase.compat.version>
-        <hadoop.version>3.1.4</hadoop.version>
-        <hbase.version>${hbase-2.4.runtime.version}</hbase.version>
       </properties>
     </profile>
     <profile>
