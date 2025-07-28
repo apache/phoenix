@@ -180,7 +180,9 @@ public class ReplicationLogReplayService {
     protected void stopReplicationReplay() throws IOException {
         List<String> replicationGroups = getReplicationGroups();
         for(String replicationGroup : replicationGroups) {
-            ReplicationReplay.get(conf, replicationGroup).stopReplay();
+            ReplicationReplay replicationReplay = ReplicationReplay.get(conf, replicationGroup);
+            replicationReplay.stopReplay();
+            replicationReplay.close();
         }
     }
 

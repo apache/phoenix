@@ -20,6 +20,8 @@ package org.apache.phoenix.replication;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscovery;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogFileTracker;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -75,12 +77,23 @@ public abstract class ReplicationLogDiscovery {
     protected final ReplicationStateTracker replicationStateTracker;
     protected ScheduledExecutorService scheduler;
     protected volatile boolean isRunning = false;
+    protected MetricsReplicationLogDiscovery metrics;
 
     public ReplicationLogDiscovery(final ReplicationLogFileTracker replicationLogFileTracker, final ReplicationStateTracker replicationStateTracker) {
         this.replicationLogFileTracker = replicationLogFileTracker;
         this.replicationStateTracker = replicationStateTracker;
         this.haGroupName = replicationLogFileTracker.getHaGroupName();
         this.conf = replicationLogFileTracker.getConf();
+    }
+
+    public void init() {
+        this.metrics = createMetricsSource();
+    }
+
+    public void close() {
+        if(this.metrics != null) {
+            this.metrics.close();
+        }
     }
 
     /**
@@ -180,6 +193,9 @@ public abstract class ReplicationLogDiscovery {
      */
     protected void processRound(ReplicationRound replicationRound) throws IOException {
         System.out.println("Starting to process round: startTime:" + replicationRound.getStartTime() + " and endTime: " + replicationRound.getEndTime());
+        // Increment the number of rounds processed
+        getMetrics().incrementNumRoundsProcessed();
+
         // Process new files for the round
         processNewFilesForRound(replicationRound);
         if(shouldProcessInProgressDirectory()) {
@@ -204,12 +220,19 @@ public abstract class ReplicationLogDiscovery {
      * @throws IOException if there's an error during file processing
      */
     protected void processNewFilesForRound(ReplicationRound replicationRound) throws IOException {
+        long startTime = EnvironmentEdgeManager.currentTimeMillis();
         List<Path> files = replicationLogFileTracker.getNewFilesForRound(replicationRound);
         System.out.println("Number of new files for round: " + files.size());
         while(!files.isEmpty()) {
-            processOneRandomFile(files);
+            try {
+                processOneRandomFile(files);
+            } catch (IOException exception) {
+                LOG.error("Failed to process the file for round with start time {} and end time {}", replicationRound.getStartTime(), replicationRound.getEndTime(), exception);
+            }
             files = replicationLogFileTracker.getNewFilesForRound(replicationRound);
         }
+        long endTime = EnvironmentEdgeManager.currentTimeMillis();
+        getMetrics().updateTimeToProcessNewFiles(endTime - startTime);
     }
 
     /**
@@ -218,12 +241,21 @@ public abstract class ReplicationLogDiscovery {
      * @throws IOException if there's an error during file processing
      */
     protected void processInProgressDirectory() throws IOException {
+        // Increase the count for number of times in progress directory is processed
+        getMetrics().incrementNumInProgressDirectoryProcessed();
+        long startTime = EnvironmentEdgeManager.currentTimeMillis();
         List<Path> files = replicationLogFileTracker.getInProgressFiles();
         System.out.println("Number of new files for in_progress: " + files.size());
         while(!files.isEmpty()) {
-            processOneRandomFile(files);
+            try {
+                processOneRandomFile(files);
+            } catch (IOException exception) {
+                LOG.error("Failed to process the file for in progress directory", exception);
+            }
             files = replicationLogFileTracker.getInProgressFiles();
         }
+        long endTime = EnvironmentEdgeManager.currentTimeMillis();
+        getMetrics().updateTimeToProcessInProgressFiles(endTime - startTime);
     }
 
     /**
@@ -231,7 +263,7 @@ public abstract class ReplicationLogDiscovery {
      * Marks the file as in-progress, processes it, and marks it as completed or failed.
      * @param files - List of files from which to select and process one randomly
      */
-    private void processOneRandomFile(final List<Path> files) {
+    private void processOneRandomFile(final List<Path> files) throws IOException {
         // Pick a random file and process it
         Path file = files.get(ThreadLocalRandom.current().nextInt(files.size()));
         Optional<Path> optionalInProgressFilePath = Optional.empty();
@@ -244,6 +276,7 @@ public abstract class ReplicationLogDiscovery {
         } catch (IOException exception) {
             LOG.error("Failed to process the file {}", file, exception);
             optionalInProgressFilePath.ifPresent(replicationLogFileTracker::markFailed);
+            throw exception;
         }
     }
 
@@ -254,6 +287,9 @@ public abstract class ReplicationLogDiscovery {
      * @throws IOException if there's an error during file processing
      */
     protected abstract void processFile(Path path) throws IOException;
+
+    /** Creates a new metrics source for monitoring operations. */
+    protected abstract MetricsReplicationLogDiscovery createMetricsSource();
 
     public ReplicationStateTracker getReplicationStateTracker() {
         return this.replicationStateTracker;
@@ -310,5 +346,9 @@ public abstract class ReplicationLogDiscovery {
 
     public boolean isRunning() {
         return isRunning;
+    }
+
+    public MetricsReplicationLogDiscovery getMetrics() {
+        return this.metrics;
     }
 }
