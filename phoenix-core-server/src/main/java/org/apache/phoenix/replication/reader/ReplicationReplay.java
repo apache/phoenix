@@ -148,4 +148,8 @@ public class ReplicationReplay {
     protected URI getRootURI() {
         return this.rootURI;
     }
+
+    protected String getHaGroupName() {
+        return this.haGroupName;
+    }
 }

@@ -57,4 +57,12 @@ public class ReplicationRound {
     public int hashCode() {
         return Objects.hash(startTime, endTime);
     }
+
+    @Override
+    public String toString() {
+        return "ReplicationRound{" +
+                "startTime=" + startTime +
+                ", endTime=" + endTime +
+                '}';
+    }
 }

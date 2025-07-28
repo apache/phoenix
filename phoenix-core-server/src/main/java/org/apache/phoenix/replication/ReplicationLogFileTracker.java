@@ -115,14 +115,14 @@ public abstract class ReplicationLogFileTracker {
      */
     protected List<Path> getNewFilesForRound(ReplicationRound replicationRound) throws IOException {
         Path roundDirectory = replicationShardDirectoryManager.getShardDirectory(replicationRound);
-        System.out.println("Getting new files for round: " + replicationRound.getStartTime() + " - " + roundDirectory.toString());
+        LOG.info("Getting new files for round {} from shard {}", replicationRound, roundDirectory);
         if (!fileSystem.exists(roundDirectory)) {
             return Collections.emptyList();
         }
 
         // List the files in roundDirectory
         FileStatus[] fileStatuses = fileSystem.listStatus(roundDirectory);
-        System.out.println("Number of files found " + fileStatuses.length);
+        LOG.info("Number of new files found {}", fileStatuses.length);
         List<Path> filesInRound = new ArrayList<>();
 
         // Filter the files belonging to current round
@@ -197,10 +197,7 @@ public abstract class ReplicationLogFileTracker {
      * @return true if file was successfully deleted, false otherwise
      */
     protected boolean markCompleted(final Path file) {
-        System.out.println("Mark Completed Method Called for " + file.toString());
-
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
-
         // Increment the metrics count
         getMetrics().incrementMarkFileCompletedRequestCount();
 
@@ -211,10 +208,8 @@ public abstract class ReplicationLogFileTracker {
         final String filePrefix = getFilePrefix(fileToDelete);
 
         for (int attempt = 0; attempt <= maxRetries; attempt++) {
-            System.out.println("For attempt " + attempt + " deleting " + fileToDelete.toUri());
             try {
                 if (fileSystem.delete(fileToDelete, false)) {
-                    System.out.println("Successfully deleted completed file: " + fileToDelete);
                     LOG.info("Successfully deleted completed file: {}", fileToDelete);
                     long endTime = EnvironmentEdgeManager.currentTimeMillis();
                     getMetrics().updateMarkFileCompletedTime(endTime - startTime);
@@ -233,9 +228,7 @@ public abstract class ReplicationLogFileTracker {
             if (attempt < maxRetries) {
                 // Sleep before next retry
                 try {
-                    System.out.println("Starting sleep");
                     Thread.sleep(retryDelayMs);
-                    System.out.println("Stopping sleep");
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     LOG.warn("Interrupted while waiting to retry file deletion: {}", file);
@@ -253,7 +246,7 @@ public abstract class ReplicationLogFileTracker {
                         // Update fileToDelete to the matching file for subsequent retries
                         fileToDelete = matchingFile;
                     } else if (matchingFiles.size() > 1) {
-                        LOG.warn("Multiple matching in-progress files found for prefix {}: {}", filePrefix, matchingFiles);
+                        LOG.warn("Multiple matching in-progress files found for prefix {}: {}", filePrefix, matchingFiles.size());
                         long endTime = EnvironmentEdgeManager.currentTimeMillis();
                         getMetrics().updateMarkFileCompletedTime(endTime - startTime);
                         return false;
@@ -283,7 +276,6 @@ public abstract class ReplicationLogFileTracker {
      * @return Optional value of renamed path if file rename was successful, else Optional.empty()
      */
     protected Optional<Path> markInProgress(final Path file) {
-        System.out.println("Mark In Progress Method Called for " + file.toString());
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
         try {
 

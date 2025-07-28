@@ -90,4 +90,29 @@ public class ReplicationReplayTest {
         assertSame("Cached instance should be returned", group2Instance2, group2Instance1);
     }
 
+    @Test
+    public void testReplicationReplayCacheRemovalOnClose() throws Exception {
+        final String haGroupName = "testHAGroup";
+
+        // Get initial instance
+        ReplicationReplay group1Instance1 = ReplicationReplay.get(conf, haGroupName);
+        assertNotNull("ReplicationReplay should not be null", group1Instance1);
+
+        // Verify cached instance is returned
+        ReplicationReplay group1Instance2 = ReplicationReplay.get(conf, haGroupName);
+        assertSame("Same instance should be returned before close", group1Instance2, group1Instance1);
+
+        // Close the replay instance
+        group1Instance1.close();
+
+        // Get instance after close - should be a new instance
+        ReplicationReplay group1Instance3 = ReplicationReplay.get(conf, haGroupName);
+        assertNotNull("ReplicationReplay should not be null after close", group1Instance3);
+        assertNotSame("New instance should be created after close", group1Instance1, group1Instance3);
+        assertEquals("HA Group ID should match", haGroupName, group1Instance3.getHaGroupName());
+
+        // Clean up
+        group1Instance3.close();
+    }
+
 }

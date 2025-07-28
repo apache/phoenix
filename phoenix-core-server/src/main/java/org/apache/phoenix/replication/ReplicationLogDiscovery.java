@@ -161,9 +161,8 @@ public abstract class ReplicationLogDiscovery {
      * @throws IOException if there's an error during replay processing
      */
     public void replay() throws IOException {
-        System.out.println("Starting replay");
         List<ReplicationRound> replicationRoundList = getRoundsToProcess();
-        System.out.println("Number of rounds to process: " + replicationRoundList.size());
+        LOG.info("Number of rounds to process: {}", replicationRoundList.size());
         for(ReplicationRound replicationRound : replicationRoundList) {
             processRound(replicationRound);
         }
@@ -192,7 +191,7 @@ public abstract class ReplicationLogDiscovery {
      * @throws IOException if there's an error during round processing
      */
     protected void processRound(ReplicationRound replicationRound) throws IOException {
-        System.out.println("Starting to process round: startTime:" + replicationRound.getStartTime() + " and endTime: " + replicationRound.getEndTime());
+        LOG.info("Starting to process round: {}", replicationRound);
         // Increment the number of rounds processed
         getMetrics().incrementNumRoundsProcessed();
 
@@ -202,6 +201,7 @@ public abstract class ReplicationLogDiscovery {
             // Conditionally process the in progress files for the round
             processInProgressDirectory();
         }
+        LOG.info("Finished processing round: {}", replicationRound);
     }
 
     /**
@@ -220,9 +220,10 @@ public abstract class ReplicationLogDiscovery {
      * @throws IOException if there's an error during file processing
      */
     protected void processNewFilesForRound(ReplicationRound replicationRound) throws IOException {
+        LOG.info("Starting new files processing for round: {}", replicationRound);
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
         List<Path> files = replicationLogFileTracker.getNewFilesForRound(replicationRound);
-        System.out.println("Number of new files for round: " + files.size());
+        LOG.trace("Number of new files for round {} is {}", replicationRound, files.size());
         while(!files.isEmpty()) {
             try {
                 processOneRandomFile(files);
@@ -231,8 +232,9 @@ public abstract class ReplicationLogDiscovery {
             }
             files = replicationLogFileTracker.getNewFilesForRound(replicationRound);
         }
-        long endTime = EnvironmentEdgeManager.currentTimeMillis();
-        getMetrics().updateTimeToProcessNewFiles(endTime - startTime);
+        long duration = EnvironmentEdgeManager.currentTimeMillis() - startTime;
+        LOG.info("Finished new files processing for round: {} in {}ms", replicationRound, duration);
+        getMetrics().updateTimeToProcessNewFiles(duration);
     }
 
     /**
@@ -243,9 +245,10 @@ public abstract class ReplicationLogDiscovery {
     protected void processInProgressDirectory() throws IOException {
         // Increase the count for number of times in progress directory is processed
         getMetrics().incrementNumInProgressDirectoryProcessed();
+        LOG.info("Starting in progress directory processing");
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
         List<Path> files = replicationLogFileTracker.getInProgressFiles();
-        System.out.println("Number of new files for in_progress: " + files.size());
+        LOG.info("Number of new files for in_progress: {}", files.size());
         while(!files.isEmpty()) {
             try {
                 processOneRandomFile(files);
@@ -254,8 +257,9 @@ public abstract class ReplicationLogDiscovery {
             }
             files = replicationLogFileTracker.getInProgressFiles();
         }
-        long endTime = EnvironmentEdgeManager.currentTimeMillis();
-        getMetrics().updateTimeToProcessInProgressFiles(endTime - startTime);
+        long duration = EnvironmentEdgeManager.currentTimeMillis() - startTime;
+        LOG.info("Starting in progress directory processing in {}ms", duration);
+        getMetrics().updateTimeToProcessInProgressFiles(duration);
     }
 
     /**
