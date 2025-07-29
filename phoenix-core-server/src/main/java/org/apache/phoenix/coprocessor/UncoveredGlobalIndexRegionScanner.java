@@ -27,6 +27,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -57,6 +58,10 @@ import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.hbase.thirdparty.com.google.common.cache.Cache;
+import org.apache.hbase.thirdparty.com.google.common.cache.CacheBuilder;
+import org.apache.hbase.thirdparty.com.google.common.cache.RemovalListener;
+
 /**
  * This is an index table region scanner which scans index table rows locally and then extracts data
  * table row keys from them. Using the data table row keys, the data table rows are scanned using
@@ -77,12 +82,34 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
   protected final TaskRunner pool;
   protected String exceptionMessage;
   protected final HTableFactory hTableFactory;
+  private static volatile Cache<Region, TaskRunner> regionThreadPoolCache;
 
   // This relies on Hadoop Configuration to handle warning about deprecated configs and
   // to set the correct non-deprecated configs when an old one shows up.
   static {
     Configuration.addDeprecation("index.threads.max", NUM_CONCURRENT_INDEX_THREADS_CONF_KEY);
     Configuration.addDeprecation("index.row.count.per.task", INDEX_ROW_COUNTS_PER_TASK_CONF_KEY);
+  }
+
+  static Cache<Region, TaskRunner> getRegionThreadPoolCache() {
+    if (regionThreadPoolCache == null) {
+      synchronized (UncoveredGlobalIndexRegionScanner.class) {
+        if (regionThreadPoolCache == null) {
+          regionThreadPoolCache = CacheBuilder.newBuilder().expireAfterAccess(30, TimeUnit.HOURS)
+            .removalListener((RemovalListener<Region, TaskRunner>) notification -> {
+              TaskRunner pool = notification.getValue();
+              if (pool != null) {
+                pool
+                  .stop("Thread Pool for UncoveredGlobalIndexRegionScanner is closing for region: "
+                    + notification.getKey());
+              }
+            }).build();
+          LOGGER.info(
+            "Initialized region level thread pool cache for UncoveredGlobalIndexRegionScanner.");
+        }
+      }
+    }
+    return regionThreadPoolCache;
   }
 
   public UncoveredGlobalIndexRegionScanner(final RegionScanner innerScanner, final Region region,
@@ -97,10 +124,16 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
     rowCountPerTask =
       config.getInt(INDEX_ROW_COUNTS_PER_TASK_CONF_KEY, DEFAULT_INDEX_ROW_COUNTS_PER_TASK);
 
-    pool = new WaitForCompletionTaskRunner(ThreadPoolManager
-      .getExecutor(new ThreadPoolBuilder("Uncovered Global Index", env.getConfiguration())
-        .setMaxThread(NUM_CONCURRENT_INDEX_THREADS_CONF_KEY, DEFAULT_CONCURRENT_INDEX_THREADS)
-        .setCoreTimeout(INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env));
+    try {
+      pool = getRegionThreadPoolCache().get(region,
+        () -> new WaitForCompletionTaskRunner(ThreadPoolManager
+          .getExecutor(new ThreadPoolBuilder("Uncovered Global Index", env.getConfiguration())
+            .setMaxThread(NUM_CONCURRENT_INDEX_THREADS_CONF_KEY, DEFAULT_CONCURRENT_INDEX_THREADS)
+            .setCoreTimeout(INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env)));
+    } catch (ExecutionException e) {
+      throw new IOException("Failed to create thread pool for UncoveredGlobalIndexRegionScanner",
+        e.getCause());
+    }
     byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
     dataHTable = hTableFactory.getTable(new ImmutableBytesPtr(dataTableName));
     regionEndKeys =
@@ -121,7 +154,6 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
     if (dataHTable != null) {
       dataHTable.close();
     }
-    this.pool.stop("UncoveredGlobalIndexRegionScanner is closing");
   }
 
   protected void scanDataRows(Collection<byte[]> dataRowKeys, long startTime) throws IOException {
