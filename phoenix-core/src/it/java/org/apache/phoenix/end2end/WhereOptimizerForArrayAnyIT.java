@@ -35,10 +35,14 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.HashMap;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.bson.RawBsonDocument;
@@ -69,8 +73,8 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
           assertEquals("x", rs.getString(2));
           assertEquals("a", rs.getString(3));
         }
+        assertPointLookupsAreNotGenerated(stmt);
       }
-      assertPointLookupsAreNotGenerated(selectSql, conn, arr);
     }
   }
 
@@ -90,8 +94,8 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
           assertEquals("x", rs.getString(2));
           assertEquals("a", rs.getString(3));
         }
+        assertPointLookupsAreNotGenerated(stmt);
       }
-      assertPointLookupsAreNotGenerated(selectSql, conn, arr);
     }
   }
 
@@ -111,8 +115,8 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
           assertEquals("x", rs.getString(2));
           assertEquals("a", rs.getString(3));
         }
+        assertPointLookupsAreGenerated(stmt, 2);
       }
-      assertPointLookupsAreGenerated(selectSql, conn, arr);
     }
   }
 
@@ -131,8 +135,8 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
           assertEquals("x", rs.getString(2));
           assertEquals("a", rs.getString(3));
         }
+        assertPointLookupsAreGenerated(stmt, selectSql, 2);
       }
-      assertPointLookupsAreGenerated(selectSql, conn, null);
     }
   }
 
@@ -161,8 +165,8 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
           assertEquals("y", rs.getString(2));
           assertEquals("b", rs.getString(3));
         }
+        assertPointLookupsAreGenerated(stmt, 3);
       }
-      assertPointLookupsAreGenerated(selectSql, conn, arr);
     }
   }
 
@@ -190,8 +194,8 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
           assertEquals("y", rs.getString(2));
           assertEquals("b", rs.getString(3));
         }
+        assertPointLookupsAreGenerated(stmt, 3);
       }
-      assertPointLookupsAreGenerated(selectSql, conn, arr);
     }
   }
 
@@ -209,8 +213,9 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
         try (ResultSet rs = stmt.executeQuery()) {
           assertFalse(rs.next());
         }
+        // 2 point lookups are generated instead of 3 as the null is not considered as a value
+        assertPointLookupsAreGenerated(stmt, 2);
       }
-      assertPointLookupsAreGenerated(selectSql, conn, arr);
 
       selectSql = "SELECT * FROM " + tableName + " WHERE pk1 = 2 AND pk2 = ANY(?)";
       try (PreparedStatement stmt = conn.prepareStatement(selectSql)) {
@@ -221,8 +226,8 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
           assertEquals("y", rs.getString(2));
           assertEquals("b", rs.getString(3));
         }
+        assertPointLookupsAreGenerated(stmt, 2);
       }
-      assertPointLookupsAreGenerated(selectSql, conn, arr);
     }
   }
 
@@ -248,8 +253,9 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
         try (ResultSet rs = stmt.executeQuery()) {
           assertFalse(rs.next());
         }
+        // 2 point lookups are generated instead of 3 as the null is not considered as a value
+        assertPointLookupsAreGenerated(stmt, 2);
       }
-      assertPointLookupsAreGenerated(selectSql, conn, arr);
 
       selectSql = "SELECT * FROM " + tableName + " WHERE pk1 = 2 AND pk2 = ANY(?)";
       try (PreparedStatement stmt = conn.prepareStatement(selectSql)) {
@@ -260,8 +266,8 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
           assertEquals("y", rs.getString(2));
           assertEquals("b", rs.getString(3));
         }
+        assertPointLookupsAreGenerated(stmt, 2);
       }
-      assertPointLookupsAreGenerated(selectSql, conn, arr);
     }
   }
 
@@ -297,8 +303,10 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
           assertEquals("b", rs.getString(2));
           assertEquals("c", rs.getString(3));
         }
+        // 3 point lookups are generated though one of the array values is null as CHAR type pads it
+        // and the value is a string consisting only of pad characrters
+        assertPointLookupsAreGenerated(stmt, 3);
       }
-      assertPointLookupsAreGenerated(selectSql, conn, arr);
     }
   }
 
@@ -335,8 +343,8 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
           assertEquals("x", rs.getString(2));
           assertEquals("a", rs.getString(3));
         }
+        assertPointLookupsAreGenerated(stmt, 3);
       }
-      assertPointLookupsAreGenerated(selectSql, conn, arr);
     }
   }
 
@@ -373,8 +381,8 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
           assertEquals("x", rs.getString(2));
           assertEquals("a", rs.getString(3));
         }
+        assertPointLookupsAreGenerated(stmt, 3);
       }
-      assertPointLookupsAreGenerated(selectSql, conn, arr);
     }
   }
 
@@ -427,23 +435,15 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
           assertEquals(DateUtil.parseTime(pk2Value), rs.getTime(2));
           assertEquals(DateUtil.parseDate(pk3Value), rs.getDate(3));
         }
-      }
-      try (PreparedStatement stmt = conn.prepareStatement("EXPLAIN " + selectSql)) {
-        stmt.setArray(1, timestampArr);
-        stmt.setArray(2, timeArr);
-        stmt.setArray(3, dateArr);
-        try (ResultSet rs = stmt.executeQuery()) {
-          String explainPlan = QueryUtil.getExplainPlan(rs);
-          assertTrue(explainPlan.contains("POINT LOOKUP ON"));
-        }
+        assertPointLookupsAreGenerated(stmt, 3 * 3 * 3);
       }
 
       // Use literal arrays to test the point lookup optimization.
       String timestampLiteralArr = "ARRAY[" + "TO_TIMESTAMP('" + pk1Value + "'), "
         + "TO_TIMESTAMP('" + pk2Value + "'), " + "TO_TIMESTAMP('" + pk3Value + "')]";
-      String timeLiteralArr = "ARRAY[" + "TO_TIME('" + pk2Value + "'), " + "TO_TIME('" + pk2Value
-        + "'), " + "TO_TIME('" + pk2Value + "')]";
-      String dateLiteralArr = "ARRAY[" + "TO_DATE('" + pk3Value + "'), " + "TO_DATE('" + pk3Value
+      String timeLiteralArr = "ARRAY[" + "TO_TIME('" + pk1Value + "'), " + "TO_TIME('" + pk2Value
+        + "'), " + "TO_TIME('" + pk3Value + "')]";
+      String dateLiteralArr = "ARRAY[" + "TO_DATE('" + pk1Value + "'), " + "TO_DATE('" + pk2Value
         + "'), " + "TO_DATE('" + pk3Value + "')]";
       selectSql = "SELECT * FROM " + tableName + " WHERE pk1 = ANY(" + timestampLiteralArr + ") "
         + "AND pk2 = ANY(" + timeLiteralArr + ")" + "AND pk3 = ANY(" + dateLiteralArr + ")";
@@ -454,8 +454,8 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
           assertEquals(DateUtil.parseTime(pk2Value), rs.getTime(2));
           assertEquals(DateUtil.parseDate(pk3Value), rs.getDate(3));
         }
+        assertPointLookupsAreGenerated(stmt, selectSql, 3 * 3 * 3);
       }
-      assertPointLookupsAreGenerated(selectSql, conn, null);
     }
   }
 
@@ -497,8 +497,8 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
           assertEquals(DateUtil.parseDate(pk2Value), rs.getDate(2));
           assertEquals("a", rs.getString(3));
         }
+        assertPointLookupsAreGenerated(stmt, selectSql, 3 * 3);
       }
-      assertPointLookupsAreGenerated(selectSql, conn, null);
     }
   }
 
@@ -548,15 +548,7 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
           assertBinaryValue(pk3Value.getBytes(), rs.getBytes(3));
           assertEquals(col1Value, rs.getString(4));
         }
-      }
-      try (PreparedStatement stmt = conn.prepareStatement("EXPLAIN " + selectSql)) {
-        stmt.setArray(1, binaryArr);
-        stmt.setArray(2, varbinaryArr);
-        stmt.setArray(3, varbinaryArr);
-        try (ResultSet rs = stmt.executeQuery()) {
-          String explainPlan = QueryUtil.getExplainPlan(rs);
-          assertTrue(explainPlan.contains("POINT LOOKUP ON"));
-        }
+        assertPointLookupsAreGenerated(stmt, 3 * 3 * 3);
       }
     }
   }
@@ -606,15 +598,7 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
           assertBinaryValue(pk3Value.getBytes(), rs.getBytes(3));
           assertEquals(col1Value, rs.getString(4));
         }
-      }
-      try (PreparedStatement stmt = conn.prepareStatement("EXPLAIN " + selectSql)) {
-        stmt.setArray(1, binaryArr);
-        stmt.setArray(2, binaryArr);
-        stmt.setArray(3, binaryArr);
-        try (ResultSet rs = stmt.executeQuery()) {
-          String explainPlan = QueryUtil.getExplainPlan(rs);
-          assertTrue(explainPlan.contains("POINT LOOKUP ON"));
-        }
+        assertPointLookupsAreGenerated(stmt, 3 * 3 * 3);
       }
     }
   }
@@ -658,8 +642,8 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
           assertEquals(pk1Value, actualPk1Value);
           assertEquals("a", rs.getString(2));
         }
+        assertPointLookupsAreGenerated(stmt, 2);
       }
-      assertPointLookupsAreGenerated(selectSql, conn, bsonArr);
     }
   }
 
@@ -690,8 +674,8 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
           assertEquals(2, rs.getInt(1));
           assertEquals(2, rs.getInt(2));
         }
+        assertPointLookupsAreGenerated(stmt, 3);
       }
-      assertPointLookupsAreGenerated(selectSql, conn, arr);
     }
   }
 
@@ -702,33 +686,32 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
     }
   }
 
-  private void assertPointLookupsAreNotGenerated(String selectSql, Connection conn, Array arr)
-    throws SQLException {
-    try (PreparedStatement stmt = conn.prepareStatement("EXPLAIN " + selectSql)) {
-      if (arr != null) {
-        stmt.setArray(1, arr);
-      }
-      try (ResultSet rs = stmt.executeQuery()) {
-        String explainPlan = QueryUtil.getExplainPlan(rs);
-        System.out.println("EXPLAIN PLAN: " + explainPlan);
-        assertTrue(explainPlan.contains("FULL SCAN"));
-        assertFalse(explainPlan.contains("POINT LOOKUP ON"));
-      }
-    }
+  private void assertPointLookupsAreNotGenerated(PreparedStatement stmt) throws SQLException {
+    ExplainPlan explain =
+      stmt.unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
+    ExplainPlanAttributes planAttributes = explain.getPlanStepsAsAttributes();
+    assertEquals("FULL SCAN ", planAttributes.getExplainScanType());
   }
 
-  private void assertPointLookupsAreGenerated(String selectSql, Connection conn, Array arr)
+  private void assertPointLookupsAreGenerated(PreparedStatement stmt, int noOfPointLookups)
     throws SQLException {
-    try (PreparedStatement stmt = conn.prepareStatement("EXPLAIN " + selectSql)) {
-      if (arr != null) {
-        stmt.setArray(1, arr);
-      }
-      try (ResultSet rs = stmt.executeQuery()) {
-        String explainPlan = QueryUtil.getExplainPlan(rs);
-        System.out.println("EXPLAIN PLAN: " + explainPlan);
-        assertTrue(explainPlan.contains("POINT LOOKUP ON"));
-      }
-    }
+    QueryPlan queryPlan = stmt.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
+    assertPointLookupsAreGenerated(queryPlan, noOfPointLookups);
+  }
+
+  private void assertPointLookupsAreGenerated(Statement stmt, String selectSql,
+    int noOfPointLookups) throws SQLException {
+    QueryPlan queryPlan = stmt.unwrap(PhoenixStatement.class).optimizeQuery(selectSql);
+    assertPointLookupsAreGenerated(queryPlan, noOfPointLookups);
+  }
+
+  private void assertPointLookupsAreGenerated(QueryPlan queryPlan, int noOfPointLookups)
+    throws SQLException {
+    ExplainPlan explain = queryPlan.getExplainPlan();
+    ExplainPlanAttributes planAttributes = explain.getPlanStepsAsAttributes();
+    String expectedScanType =
+      "POINT LOOKUP ON " + noOfPointLookups + " KEY" + (noOfPointLookups > 1 ? "S " : " ");
+    assertEquals(expectedScanType, planAttributes.getExplainScanType());
   }
 
   private void createTableASCPkColumns(String tableName) throws SQLException {

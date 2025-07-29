@@ -2081,9 +2081,9 @@ public class WhereOptimizer {
           keyRanges.add(keyRange);
         }
       } catch (Exception e) {
-        LOGGER.warn(String.format(
-          "Failed to wrap ArrayElemRefExpression with CoerceExpression for column: %s and type: %s",
-          column.getName().getString(), column.getDataType().getSqlTypeName()), e);
+        LOGGER.warn(
+          "Failed to wrap ArrayElemRefExpression with CoerceExpression for column: {} and type: {}",
+          column.getName().getString(), column.getDataType().getSqlTypeName(), e);
         return super.visitLeave(node, childParts);
       }
       if (keyRanges.isEmpty()) {
