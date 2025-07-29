@@ -59,8 +59,9 @@ import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
 
 /**
  * Utility class for CDC (Change Data Capture) operations during compaction. This class contains
- * utilities for handling TTL row expiration events and generating CDC events with pre-image data
- * that are written directly to CDC index tables using batch mutations.
+ * utilities for handling TTL row expiration events and generating CDC events with pre-image data.
+ * CDC mutations are accumulated during compaction and written to CDC index tables in batches only
+ * when compaction completes.
  */
 public final class CDCCompactionUtil {
 
@@ -100,8 +101,9 @@ public final class CDCCompactionUtil {
   }
 
   /**
-   * Batch processor for CDC mutations during compaction. This class manages accumulating mutations
-   * and maintaining in-memory image tracking for the duration of the compaction operation.
+   * Batch processor for CDC mutations during compaction. This class accumulates all mutations
+   * during the compaction operation and writes them to the CDC index in batches only when the
+   * compaction is complete.
    */
   public static class CDCBatchProcessor {
 
@@ -135,7 +137,8 @@ public final class CDCCompactionUtil {
 
     /**
      * Adds a CDC event for the specified expired row. If the row already exists in memory, merges
-     * the image with the existing image. Accumulates mutations for batching.
+     * the image with the existing image. Accumulates mutations in memory for batch processing
+     * during close() instead of immediately writing to the CDC index.
      * @param expiredRow The expired row.
      * @throws Exception If something goes wrong.
      */
@@ -195,17 +198,14 @@ public final class CDCCompactionUtil {
       Put cdcIndexPut = buildCDCIndexPut(eventTimestamp, cdcEventBytes, rowKey, cdcIndexMaintainer);
 
       pendingMutations.put(cacheKeyPtr, cdcIndexPut);
-
-      if (pendingMutations.size() >= batchSize) {
-        flushBatch();
-      }
     }
 
     /**
-     * Flushes any pending mutations in the current batch.
+     * Flushes a specific list of mutations to the CDC index table.
+     * @param mutations List of mutations to flush
      */
-    public void flushBatch() throws Exception {
-      if (pendingMutations.isEmpty()) {
+    private void flushMutations(List<Put> mutations) throws Exception {
+      if (mutations.isEmpty()) {
         return;
       }
 
@@ -213,16 +213,16 @@ public final class CDCCompactionUtil {
       for (int retryCount = 0; retryCount < cdcTtlMutationMaxRetries; retryCount++) {
         try (Table cdcIndexTable =
           env.getConnection().getTable(TableName.valueOf(cdcIndex.getPhysicalName().getBytes()))) {
-          cdcIndexTable.put(new ArrayList<>(pendingMutations.values()));
+          cdcIndexTable.put(mutations);
           lastException = null;
           LOGGER.debug("Successfully flushed batch of {} CDC mutations for table {}",
-            pendingMutations.size(), tableName);
+            mutations.size(), tableName);
           break;
         } catch (Exception e) {
           lastException = e;
           long backoffMs = 100;
           LOGGER.warn("CDC batch mutation attempt {}/{} failed, retrying in {}ms. Batch size: {}",
-            retryCount + 1, cdcTtlMutationMaxRetries, backoffMs, pendingMutations.size(), e);
+            retryCount + 1, cdcTtlMutationMaxRetries, backoffMs, mutations.size(), e);
           try {
             Thread.sleep(backoffMs);
           } catch (InterruptedException ie) {
@@ -237,20 +237,43 @@ public final class CDCCompactionUtil {
           "Failed to flush CDC batch after {} attempts for table {}, index {}. {} "
             + "events are missed.",
           cdcTtlMutationMaxRetries, tableName, cdcIndex.getPhysicalName().getString(),
-          pendingMutations.size(), lastException);
+          mutations.size(), lastException);
       }
-
-      pendingMutations.clear();
     }
 
     /**
-     * Finalizes the batch processor by flushing any remaining mutations.
+     * Finalizes the batch processor by flushing all accumulated mutations in batches. This method
+     * processes all accumulated mutations and writes them to the CDC index in batches of the
+     * configured batch size.
      */
     public void close() throws Exception {
-      flushBatch();
+      if (pendingMutations.isEmpty()) {
+        LOGGER.trace("No CDC mutations to flush for table {}", tableName);
+        return;
+      }
+
+      int totalMutations = pendingMutations.size();
+      LOGGER.info("Flushing {} accumulated CDC mutations for table {} in batches of {}",
+        totalMutations, tableName, batchSize);
+
+      List<Put> allMutations = new ArrayList<>(pendingMutations.values());
+
+      for (int i = 0; i < allMutations.size(); i += batchSize) {
+        int endIndex = Math.min(i + batchSize, allMutations.size());
+        List<Put> batch = allMutations.subList(i, endIndex);
+        flushMutations(batch);
+        LOGGER.debug("Flushed CDC batch {}/{} for table {} (mutations {}-{} of {})",
+          (i / batchSize) + 1, (allMutations.size() + batchSize - 1) / batchSize, tableName, i + 1,
+          endIndex, totalMutations);
+      }
+
+      pendingMutations.clear();
+
       Cache<ImmutableBytesPtr, Map<String, Object>> cache = getSharedRowImageCache(config);
-      LOGGER.debug("CDC batch processor closed for table {}. Shared cache size: {}", tableName,
-        cache.size());
+      LOGGER.info(
+        "CDC batch processor closed for table {}. Processed {} mutations in {} batches."
+          + " Shared cache size: {}",
+        tableName, totalMutations, (totalMutations + batchSize - 1) / batchSize, cache.size());
     }
   }
 
