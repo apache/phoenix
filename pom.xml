@@ -91,7 +91,7 @@
     <hbase-2.4.0.runtime.version>2.4.0</hbase-2.4.0.runtime.version>
     <hbase-2.4.runtime.version>2.4.18</hbase-2.4.runtime.version>
     <hbase-2.5.0.runtime.version>2.5.3-hadoop3</hbase-2.5.0.runtime.version>
-    <hbase-2.5.runtime.version>2.5.10-hadoop3</hbase-2.5.runtime.version>
+    <hbase-2.5.runtime.version>2.5.12-hadoop3</hbase-2.5.runtime.version>
 
     <compileSource>1.8</compileSource>
     <maven.compiler.source>${compileSource}</maven.compiler.source>
