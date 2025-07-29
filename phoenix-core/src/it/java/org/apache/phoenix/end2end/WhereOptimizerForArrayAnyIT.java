@@ -213,7 +213,8 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
         try (ResultSet rs = stmt.executeQuery()) {
           assertFalse(rs.next());
         }
-        // 2 point lookups are generated instead of 3 as the null is not considered as a value
+        // 2 point lookups are generated instead of 3 as the null is not considered as a value for
+        // VARCHAR type column
         assertPointLookupsAreGenerated(stmt, 2);
       }
 
@@ -253,7 +254,8 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
         try (ResultSet rs = stmt.executeQuery()) {
           assertFalse(rs.next());
         }
-        // 2 point lookups are generated instead of 3 as the null is not considered as a value
+        // 2 point lookups are generated instead of 3 as the null is not considered as a value for
+        // VARCHAR type column
         assertPointLookupsAreGenerated(stmt, 2);
       }
 
@@ -304,7 +306,7 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
           assertEquals("c", rs.getString(3));
         }
         // 3 point lookups are generated though one of the array values is null as CHAR type pads it
-        // and the value is a string consisting only of pad characrters
+        // and the value is a string consisting only of pad characters
         assertPointLookupsAreGenerated(stmt, 3);
       }
     }
