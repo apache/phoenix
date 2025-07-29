@@ -2036,11 +2036,15 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
      */
     @Override
     public int[] executeBatch() throws SQLException {
+        String queryId = SQLLogger.logQueryStart("BATCH_EXECUTION");
+        long startTime = System.currentTimeMillis();
+        
         int i = 0;
         int[] returnCodes = new int [batch.size()];
         Arrays.fill(returnCodes, -1);
         boolean autoCommit = connection.getAutoCommit();
         connection.setAutoCommit(false);
+        
         try {
             for (i = 0; i < returnCodes.length; i++) {
                 PhoenixPreparedStatement statement = batch.get(i);
@@ -2054,8 +2058,24 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             if (autoCommit) {
                 connection.commit();
             }
+            
+            // 计算总影响行数
+            int totalRows = 0;
+            for (int result : returnCodes) {
+                if (result > 0) {
+                    totalRows += result;
+                }
+            }
+            
+            long endTime = System.currentTimeMillis();
+            long executionTime = endTime - startTime;
+            
+            SQLLogger.logQueryEnd(queryId, totalRows, true);
+            SQLLogger.logBatchOperation("BATCH_EXECUTION", batch.size(), executionTime);
+            
             return returnCodes;
         } catch (SQLException t) {
+            SQLLogger.logQueryException(queryId, t);
             if (i == returnCodes.length) {
                 // Exception after for loop, perhaps in commit(), discard returnCodes.
                 throw new BatchUpdateException(t);
@@ -2214,26 +2234,52 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                     "Execute query: " + sql, connection));
         }
         
-        CompilableStatement stmt = parseStatement(sql);
-        if (stmt.getOperation().isMutation()) {
-            throw new ExecuteQueryNotApplicableException(sql);
+        String queryId = SQLLogger.logQueryStart(sql);
+        
+        try {
+            CompilableStatement stmt = parseStatement(sql);
+            if (stmt.getOperation().isMutation()) {
+                throw new ExecuteQueryNotApplicableException(sql);
+            }
+            ResultSet resultSet = executeQuery(stmt, createQueryLogger(stmt, sql));
+            
+            // 获取结果集行数（如果可能）
+            int rowCount = 0;
+            if (resultSet instanceof PhoenixResultSet) {
+                // 这里可以尝试获取行数，但可能需要遍历结果集
+                // 为了性能考虑，我们暂时不计算行数
+            }
+            
+            SQLLogger.logQueryEnd(queryId, rowCount, true);
+            return resultSet;
+        } catch (SQLException e) {
+            SQLLogger.logQueryException(queryId, e);
+            throw e;
         }
-        return executeQuery(stmt, createQueryLogger(stmt, sql));
     }
 
     @Override
     public int executeUpdate(String sql) throws SQLException {
-        CompilableStatement stmt = parseStatement(sql);
-        if (!stmt.getOperation().isMutation) {
-            throw new ExecuteUpdateNotApplicableException(sql);
+        String queryId = SQLLogger.logQueryStart(sql);
+        
+        try {
+            CompilableStatement stmt = parseStatement(sql);
+            if (!stmt.getOperation().isMutation) {
+                throw new ExecuteUpdateNotApplicableException(sql);
+            }
+            if (!batch.isEmpty()) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
+                .build().buildException();
+            }
+            int updateCount = executeMutation(stmt, createAuditQueryLogger(stmt, sql));
+            flushIfNecessary();
+            
+            SQLLogger.logQueryEnd(queryId, updateCount, true);
+            return updateCount;
+        } catch (SQLException e) {
+            SQLLogger.logQueryException(queryId, e);
+            throw e;
         }
-        if (!batch.isEmpty()) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
-            .build().buildException();
-        }
-        int updateCount = executeMutation(stmt, createAuditQueryLogger(stmt, sql));
-        flushIfNecessary();
-        return updateCount;
     }
 
     private void flushIfNecessary() throws SQLException {
@@ -2244,19 +2290,29 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     
     @Override
     public boolean execute(String sql) throws SQLException {
-        CompilableStatement stmt = parseStatement(sql);
-        if (stmt.getOperation().isMutation()) {
-            if (!batch.isEmpty()) {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
-                .build().buildException();
-            }
-            executeMutation(stmt, createAuditQueryLogger(stmt, sql));
-            flushIfNecessary();
-            return false;
-        }
+        String queryId = SQLLogger.logQueryStart(sql);
         
-        executeQuery(stmt, createQueryLogger(stmt, sql));
-        return true;
+        try {
+            CompilableStatement stmt = parseStatement(sql);
+            if (stmt.getOperation().isMutation()) {
+                if (!batch.isEmpty()) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
+                    .build().buildException();
+                }
+                int updateCount = executeMutation(stmt, createAuditQueryLogger(stmt, sql));
+                flushIfNecessary();
+                
+                SQLLogger.logQueryEnd(queryId, updateCount, true);
+                return false;
+            }
+            
+            executeQuery(stmt, createQueryLogger(stmt, sql));
+            SQLLogger.logQueryEnd(queryId, 0, true);
+            return true;
+        } catch (SQLException e) {
+            SQLLogger.logQueryException(queryId, e);
+            throw e;
+        }
     }
 
     @Override
