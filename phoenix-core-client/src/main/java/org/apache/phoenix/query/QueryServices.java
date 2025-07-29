@@ -347,6 +347,8 @@ public interface QueryServices extends SQLCloseable {
     "phoenix.internal.connection.max.allowed.connections";
   public static final String CONNECTION_ACTIVITY_LOGGING_ENABLED =
     "phoenix.connection.activity.logging.enabled";
+  String CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED =
+    "phoenix.connection.activity.logging.explain.plan.enabled";
   public static final String CONNECTION_ACTIVITY_LOGGING_INTERVAL =
     "phoenix.connection.activity.logging.interval";
   public static final String DEFAULT_COLUMN_ENCODED_BYTES_ATRRIB =

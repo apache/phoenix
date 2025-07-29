@@ -154,4 +154,13 @@ public class ConnectionActivityLogger {
       ? logLevel.ordinal() <= this.logLevel.ordinal()
       : false;
   }
+
+  /**
+   * Get the Explain plan information.
+   */
+  public String getExplainPlanInfo() {
+    return isLevelEnabled(ActivityLogInfo.EXPLAIN_PLAN.getLogLevel())
+      ? activityList.get(ActivityLogInfo.EXPLAIN_PLAN.ordinal())
+      : null;
+  }
 }
