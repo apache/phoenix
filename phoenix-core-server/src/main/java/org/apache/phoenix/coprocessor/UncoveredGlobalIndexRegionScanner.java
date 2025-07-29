@@ -132,7 +132,7 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
             .setCoreTimeout(INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env)));
     } catch (ExecutionException e) {
       throw new IOException("Failed to create thread pool for UncoveredGlobalIndexRegionScanner",
-        e.getCause());
+        e);
     }
     byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
     dataHTable = hTableFactory.getTable(new ImmutableBytesPtr(dataTableName));
