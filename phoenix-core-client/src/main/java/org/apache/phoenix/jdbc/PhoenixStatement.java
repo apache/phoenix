@@ -300,8 +300,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     public PhoenixStatement(PhoenixConnection connection) {
         this.connection = connection;
         this.queryTimeoutMillis = getDefaultQueryTimeoutMillis();
-        this.explainPlanLoggingEnabled =
-                connection.getQueryServices().getProps().getBoolean(CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED,
+        this.explainPlanLoggingEnabled = connection.getQueryServices().getProps()
+                .getBoolean(CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED,
                         QueryServicesOptions.DEFAULT_CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED);
     }
 
@@ -2645,10 +2645,12 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                 location.stream().map(regionLocation -> regionLocation.getRegion().getEncodedName())
                         .collect(Collectors.joining(","));
 
-        String hostnames =
-                location.stream().map(HRegionLocation::getHostname).collect(Collectors.joining(","));
+        String hostnames = location.stream()
+                .map(HRegionLocation::getHostname)
+                .collect(Collectors.joining(","));
 
-        return QueryUtil.REGIONS + "={" + regions + "}," + QueryUtil.HOSTNAMES + "={" + hostnames + "}";
+        return QueryUtil.REGIONS + "={" + regions + "}," + 
+                QueryUtil.HOSTNAMES + "={" + hostnames + "}";
     }
 
 }
