@@ -503,6 +503,12 @@ public interface QueryServices extends SQLCloseable {
   // CDC TTL mutation retry configuration
   String CDC_TTL_MUTATION_MAX_RETRIES = "phoenix.cdc.ttl.mutation.max.retries";
 
+  // CDC TTL mutation batch size configuration
+  String CDC_TTL_MUTATION_BATCH_SIZE = "phoenix.cdc.ttl.mutation.batch.size";
+
+  // CDC TTL shared cache expiration time in seconds
+  String CDC_TTL_SHARED_CACHE_EXPIRY_SECONDS = "phoenix.cdc.ttl.shared.cache.expiry.seconds";
+
   // This config is used to move (copy and delete) the child links from the SYSTEM.CATALOG to
   // SYSTEM.CHILD_LINK table.
   // As opposed to a copy and async (out of band) delete.

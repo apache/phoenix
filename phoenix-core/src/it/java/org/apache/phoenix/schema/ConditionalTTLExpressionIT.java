@@ -39,6 +39,8 @@ import static org.junit.Assert.fail;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -57,14 +59,17 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.CounterGroup;
+import org.apache.phoenix.coprocessor.CDCCompactionUtil;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.mapreduce.index.IndexTool;
@@ -101,6 +106,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
@@ -158,6 +164,7 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
       Integer.toString(0));
     props.put("hbase.procedure.remote.dispatcher.delay.msec", "0");
     props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
+    props.put(QueryServices.CDC_TTL_SHARED_CACHE_EXPIRY_SECONDS, Integer.toString(1));
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
   }
 
@@ -543,6 +550,9 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
 
       // Trigger TTL expiration again
       injectEdge.incrementValue(ttl);
+
+      Thread.sleep(700);
+      cleanUpSharedTtlImageCache();
       doMajorCompaction(tableName);
 
       // Verify all rows are expired from data table
@@ -1468,6 +1478,16 @@ public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
         throw e;
       }
     }
+  }
+
+  private void cleanUpSharedTtlImageCache()
+    throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+    Method getSharedCacheMethod =
+      CDCCompactionUtil.class.getDeclaredMethod("getSharedRowImageCache", Configuration.class);
+    getSharedCacheMethod.setAccessible(true);
+    Cache<ImmutableBytesPtr, Map<String, Object>> cache = (Cache<ImmutableBytesPtr,
+      Map<String, Object>>) getSharedCacheMethod.invoke(null, (Configuration) null);
+    cache.cleanUp();
   }
 
   private void doMajorCompaction(String tableName) throws IOException, InterruptedException {
