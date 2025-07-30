@@ -24,7 +24,6 @@ import com.google.protobuf.Service;
 
 import java.io.IOException;
 import java.util.Collections;
-import java.util.Optional;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
@@ -37,7 +36,6 @@ import org.apache.phoenix.coprocessorclient.metrics.MetricsMetadataCachingSource
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
 import org.apache.phoenix.jdbc.ClusterRoleRecord;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
-import org.apache.phoenix.jdbc.HAGroupStoreManagerFactory;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -128,10 +126,10 @@ public class PhoenixRegionServerEndpoint
             RpcCallback<RegionServerEndpointProtos.InvalidateHAGroupStoreClientResponse> done) {
         LOGGER.info("PhoenixRegionServerEndpoint invalidating HAGroupStoreClient");
         try {
-            Optional<HAGroupStoreManager> haGroupStoreManagerOptional
-                    = HAGroupStoreManagerFactory.getInstance(conf, zkUrl);
-            if (haGroupStoreManagerOptional.isPresent()) {
-                haGroupStoreManagerOptional.get()
+            HAGroupStoreManager haGroupStoreManager
+                    = HAGroupStoreManager.getInstance(conf);
+            if (haGroupStoreManager != null) {
+                haGroupStoreManager
                         .invalidateHAGroupStoreClient(request.getHaGroupName().toStringUtf8(),
                         request.getBroadcastUpdate());
             } else {
@@ -152,10 +150,10 @@ public class PhoenixRegionServerEndpoint
             RegionServerEndpointProtos.GetClusterRoleRecordRequest request,
             RpcCallback<RegionServerEndpointProtos.GetClusterRoleRecordResponse> done) {
         try {
-            Optional<HAGroupStoreManager> haGroupStoreManagerOptional
-                    = HAGroupStoreManagerFactory.getInstance(conf, zkUrl);
-            if (haGroupStoreManagerOptional.isPresent()) {
-                ClusterRoleRecord clusterRoleRecord = haGroupStoreManagerOptional.get()
+            HAGroupStoreManager haGroupStoreManager
+                    = HAGroupStoreManager.getInstance(conf);
+            if (haGroupStoreManager != null) {
+                ClusterRoleRecord clusterRoleRecord = haGroupStoreManager
                         .getClusterRoleRecord(request.getHaGroupName().toStringUtf8());
                 RegionServerEndpointProtos.GetClusterRoleRecordResponse.Builder responseBuilder
                         = RegionServerEndpointProtos.GetClusterRoleRecordResponse.newBuilder();

@@ -17,13 +17,14 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_NAMESPACE;
+import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.List;
 import java.util.Map;
@@ -33,16 +34,21 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.MutationBlockedIOException;
 import org.apache.phoenix.execute.CommitException;
 import org.apache.phoenix.jdbc.ClusterRoleRecord;
-import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
+import org.apache.phoenix.jdbc.HAGroupStoreRecord;
+import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixHAAdmin;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.HAGroupStoreTestUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.junit.rules.TestName;
 
 /**
  * Integration test for mutation blocking functionality in IndexRegionObserver.preBatchMutate()
@@ -54,6 +60,10 @@ public class IndexRegionObserverMutationBlockingIT extends BaseTest {
 
     private static final Long ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS = 1000L;
     private PhoenixHAAdmin haAdmin;
+    private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS = new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();
+
+    @Rule
+    public TestName testName = new TestName();
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -63,37 +73,27 @@ public class IndexRegionObserverMutationBlockingIT extends BaseTest {
         // No retries so that tests fail faster.
         props.put("hbase.client.retries.number", "0");
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        CLUSTERS.start();
     }
 
     @Before
     public void setUp() throws Exception {
-        haAdmin = new PhoenixHAAdmin(config);
-
-        // Clean up all existing CRRs before each test
-        List<ClusterRoleRecord> crrs = haAdmin.listAllClusterRoleRecordsOnZookeeper();
-        for (ClusterRoleRecord crr : crrs) {
-            haAdmin.getCurator().delete().forPath(toPath(crr.getHaGroupName()));
-        }
+        haAdmin = new PhoenixHAAdmin(config, ZK_CONSISTENT_HA_NAMESPACE);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-    }
-
-    @After
-    public void tearDown() throws Exception {
-        // Clean up CRRs after each test
-        if (haAdmin != null) {
-            List<ClusterRoleRecord> crrs = haAdmin.listAllClusterRoleRecordsOnZookeeper();
-            for (ClusterRoleRecord crr : crrs) {
-                haAdmin.getCurator().delete().forPath(toPath(crr.getHaGroupName()));
-            }
-        }
+        String zkUrl = getLocalZkUrl(config);
+        String peerZkUrl = CLUSTERS.getZkUrl2();
+        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(), zkUrl, peerZkUrl,
+                ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
     }
 
     @Test
     public void testMutationBlockedOnDataTableWithIndex() throws Exception {
         String dataTableName = generateUniqueName();
         String indexName = generateUniqueName();
+        String haGroupName = testName.getMethodName();
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+            conn.setHAGroupName(haGroupName);
             // Create data table and index
             conn.createStatement().execute("CREATE TABLE " + dataTableName +
                     " (id VARCHAR PRIMARY KEY, name VARCHAR, age INTEGER)");
@@ -105,15 +105,11 @@ public class IndexRegionObserverMutationBlockingIT extends BaseTest {
                     " VALUES ('1', 'John', 25)");
             conn.commit();
 
-            // Set up CRR that will block mutations (ACTIVE_TO_STANDBY state)
-            ClusterRoleRecord blockingCrr = new ClusterRoleRecord("failover_test",
-                    HighAvailabilityPolicy.FAILOVER,
-                    haAdmin.getZkUrl(),
-                    ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
-                    "standby-zk-url",
-                    ClusterRoleRecord.ClusterRole.STANDBY,
-                    1L);
-            haAdmin.createOrUpdateDataOnZookeeper(blockingCrr);
+            // Set up HAGroupStoreRecord that will block mutations (ACTIVE_TO_STANDBY state)
+            HAGroupStoreRecord haGroupStoreRecord 
+                    = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, 
+                    haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_TO_STANDBY);
+            haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, haGroupStoreRecord, -1);
 
             // Wait for the event to propagate
             Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
@@ -138,24 +134,13 @@ public class IndexRegionObserverMutationBlockingIT extends BaseTest {
         String dataTableName = generateUniqueName();
         String indexName = generateUniqueName();
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+            conn.setHAGroupName(testName.getMethodName());
             // Create data table and index
             conn.createStatement().execute("CREATE TABLE " + dataTableName +
                     " (id VARCHAR PRIMARY KEY, name VARCHAR, age INTEGER)");
             conn.createStatement().execute("CREATE INDEX " + indexName +
                     " ON " + dataTableName + "(name)");
-
-            // Set up CRR in ACTIVE state (should not block)
-            ClusterRoleRecord nonBlockingCrr = new ClusterRoleRecord("active_test",
-                    HighAvailabilityPolicy.FAILOVER,
-                    haAdmin.getZkUrl(),
-                    ClusterRoleRecord.ClusterRole.ACTIVE,
-                    "standby-zk-url",
-                    ClusterRoleRecord.ClusterRole.STANDBY,
-                    1L);
-            haAdmin.createOrUpdateDataOnZookeeper(nonBlockingCrr);
-
-            Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
             // Mutations should work fine
             conn.createStatement().execute("UPSERT INTO " + dataTableName +
@@ -177,39 +162,26 @@ public class IndexRegionObserverMutationBlockingIT extends BaseTest {
     public void testMutationBlockingTransition() throws Exception {
         String dataTableName = generateUniqueName();
         String indexName = generateUniqueName();
+        String haGroupName = testName.getMethodName();
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+            conn.setHAGroupName(testName.getMethodName());
             // Create data table and index
             conn.createStatement().execute("CREATE TABLE " + dataTableName +
                     " (id VARCHAR PRIMARY KEY, name VARCHAR, age INTEGER)");
             conn.createStatement().execute("CREATE INDEX " + indexName +
                     " ON " + dataTableName + "(name)");
 
-            // Initially set up non-blocking CRR
-            ClusterRoleRecord crr = new ClusterRoleRecord("transition_test",
-                    HighAvailabilityPolicy.FAILOVER,
-                    haAdmin.getZkUrl(),
-                    ClusterRoleRecord.ClusterRole.ACTIVE,
-                    "standby-zk-url",
-                    ClusterRoleRecord.ClusterRole.STANDBY,
-                    1L);
-            haAdmin.createOrUpdateDataOnZookeeper(crr);
-            Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-
             // Mutation should work
             conn.createStatement().execute("UPSERT INTO " + dataTableName +
                     " VALUES ('1', 'David', 40)");
             conn.commit();
-
-            // Transition to ACTIVE_TO_STANDBY (blocking state)
-            crr = new ClusterRoleRecord("transition_test",
-                    HighAvailabilityPolicy.FAILOVER,
-                    haAdmin.getZkUrl(),
-                    ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
-                    "standby-zk-url",
-                    ClusterRoleRecord.ClusterRole.STANDBY,
-                    2L);
-            haAdmin.createOrUpdateDataOnZookeeper(crr);
+            
+            // Set up HAGroupStoreRecord that will block mutations (ACTIVE_TO_STANDBY state)
+            HAGroupStoreRecord haGroupStoreRecord
+                    = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
+                    haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_TO_STANDBY);
+            haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, haGroupStoreRecord, -1);
             Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
             // Now mutations should be blocked
@@ -224,14 +196,11 @@ public class IndexRegionObserverMutationBlockingIT extends BaseTest {
             }
 
             // Transition back to ACTIVE (non-blocking state) and peer cluster is in ATS state
-            crr = new ClusterRoleRecord("transition_test",
-                    HighAvailabilityPolicy.FAILOVER,
-                    haAdmin.getZkUrl(),
-                    ClusterRoleRecord.ClusterRole.ACTIVE,
-                    "standby-zk-url",
-                    ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
-                    3L);
-            haAdmin.createOrUpdateDataOnZookeeper(crr);
+            // Set up HAGroupStoreRecord that will block mutations (ACTIVE_TO_STANDBY state)
+            haGroupStoreRecord
+                    = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
+                    haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+            haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, haGroupStoreRecord, -1);
             Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
             // Mutations should work again

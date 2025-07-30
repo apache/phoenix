@@ -49,7 +49,6 @@ import static org.apache.phoenix.query.QueryServices.GLOBAL_METRICS_ENABLED;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_MAX_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILLABLE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILL_FILES_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.HA_IMPLEMENTATION;
 import static org.apache.phoenix.query.QueryServices.HA_STORE_AND_FORWARD_MODE_REFRESH_INTERVAL_MS;
 import static org.apache.phoenix.query.QueryServices.HA_SYNC_MODE_REFRESH_INTERVAL_MS;
 import static org.apache.phoenix.query.QueryServices.HBASE_CLIENT_SCANNER_TIMEOUT_ATTRIB;
@@ -478,11 +477,6 @@ public class QueryServicesOptions {
     //  and time it takes for an update to reach regionserver cache.
     public static final long DEFAULT_HA_STORE_AND_FORWARD_MODE_REFRESH_INTERVAL_MS = 1500L;
     public static final long DEFAULT_HA_SYNC_MODE_REFRESH_INTERVAL_MS = 3000L; // 3 seconds
-    // Default HA implementation is V1, which is the old implementation.
-    // We will keep it as default for backward compatibility.
-    public static final String DEFAULT_HA_IMPLEMENTATION = "DEFAULT";
-    // Consistent HA implementation.
-    public static final String CONSISTENT_HA_IMPLEMENTATION = "CONSISTENT";
 
     private final Configuration config;
 
@@ -594,7 +588,6 @@ public class QueryServicesOptions {
                     DEFAULT_HA_STORE_AND_FORWARD_MODE_REFRESH_INTERVAL_MS)
             .setIfUnset(HA_SYNC_MODE_REFRESH_INTERVAL_MS,
                     DEFAULT_HA_SYNC_MODE_REFRESH_INTERVAL_MS)
-            .setIfUnset(HA_IMPLEMENTATION, DEFAULT_HA_IMPLEMENTATION)
             .setIfUnset(CQSI_THREAD_POOL_ENABLED, DEFAULT_CQSI_THREAD_POOL_ENABLED)
             .setIfUnset(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS,
                     DEFAULT_CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS)

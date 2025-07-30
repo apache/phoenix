@@ -31,8 +31,6 @@ import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility;
 import org.apache.phoenix.jdbc.PhoenixHAAdmin;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
 import org.apache.phoenix.query.BaseTest;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.HAGroupStoreTestUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -65,7 +63,6 @@ public class PhoenixRegionServerEndpointITWithConsistentFailover extends BaseTes
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        props.put(QueryServices.HA_IMPLEMENTATION, QueryServicesOptions.CONSISTENT_HA_IMPLEMENTATION);
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
         CLUSTERS.start();
     }

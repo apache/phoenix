@@ -21,7 +21,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.query.BaseTest;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.HAGroupStoreTestUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -35,22 +34,20 @@ import org.junit.rules.TestName;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_NAMESPACE;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
-import static org.apache.phoenix.query.QueryServicesOptions.CONSISTENT_HA_IMPLEMENTATION;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
- * Integration tests for {@link HAGroupStoreManagerImpl}.
+ * Integration tests for {@link HAGroupStoreManager}.
  */
 @Category(NeedsOwnMiniClusterTest.class)
-public class HAGroupStoreManagerImplIT extends BaseTest {
+public class HAGroupStoreManagerIT extends BaseTest {
 
     @Rule
     public TestName testName = new TestName();
@@ -65,7 +62,6 @@ public class HAGroupStoreManagerImplIT extends BaseTest {
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
         props.put(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, "true");
-        props.put(QueryServices.HA_IMPLEMENTATION, CONSISTENT_HA_IMPLEMENTATION);
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
         CLUSTERS.start();
     }
@@ -87,25 +83,12 @@ public class HAGroupStoreManagerImplIT extends BaseTest {
         }
         HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(), zkUrl, peerZKUrl,
                 ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
-        // Clear instance cache in HAGroupStoreManagerFactory
-        // This is needed in case we need to test with a different config in a running cluster.
-        HAGroupStoreManagerFactory.INSTANCES = new ConcurrentHashMap<>();
-    }
-
-    @Test
-    public void testHAGroupStoreManagerCreation() throws Exception {
-        Optional<HAGroupStoreManager> managerOpt = HAGroupStoreManagerFactory.getInstance(config, zkUrl);
-
-        assertTrue(managerOpt.isPresent());
-        assertTrue(managerOpt.get() instanceof HAGroupStoreManagerImpl);
     }
 
     @Test
     public void testMutationBlockingWithSingleHAGroup() throws Exception {
         String haGroupName = testName.getMethodName();
-        Optional<HAGroupStoreManager> managerOpt = HAGroupStoreManagerFactory.getInstance(config, zkUrl);
-        assertTrue(managerOpt.isPresent());
-        HAGroupStoreManager haGroupStoreManager = managerOpt.get();
+        HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(config);
 
         // Initially no mutation should be blocked
         assertFalse(haGroupStoreManager.isMutationBlocked(haGroupName));
@@ -125,9 +108,7 @@ public class HAGroupStoreManagerImplIT extends BaseTest {
     public void testMutationBlockingWithMultipleHAGroups() throws Exception {
         String haGroupName1 = testName.getMethodName() + "_1";
         String haGroupName2 = testName.getMethodName() + "_2";
-        Optional<HAGroupStoreManager> managerOpt = HAGroupStoreManagerFactory.getInstance(config, zkUrl);
-        assertTrue(managerOpt.isPresent());
-        HAGroupStoreManager haGroupStoreManager = managerOpt.get();
+        HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(config);
 
         // Create two HA groups with ACTIVE and ACTIVE_NOT_IN_SYNC roles
         HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName1, zkUrl,
@@ -158,9 +139,7 @@ public class HAGroupStoreManagerImplIT extends BaseTest {
     @Test
     public void testGetHAGroupStoreRecord() throws Exception {
         String haGroupName = testName.getMethodName();
-        Optional<HAGroupStoreManager> managerOpt = HAGroupStoreManagerFactory.getInstance(config, zkUrl);
-        assertTrue(managerOpt.isPresent());
-        HAGroupStoreManager haGroupStoreManager = managerOpt.get();
+        HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(config);
 
         // Get record from HAGroupStoreManager
         Optional<HAGroupStoreRecord> recordOpt = haGroupStoreManager.getHAGroupStoreRecord(haGroupName);
@@ -197,9 +176,7 @@ public class HAGroupStoreManagerImplIT extends BaseTest {
     @Test
     public void testInvalidateHAGroupStoreClient() throws Exception {
         String haGroupName = testName.getMethodName();
-        Optional<HAGroupStoreManager> managerOpt = HAGroupStoreManagerFactory.getInstance(config, zkUrl);
-        assertTrue(managerOpt.isPresent());
-        HAGroupStoreManager haGroupStoreManager = managerOpt.get();
+        HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(config);
 
         // Create a HAGroupStoreRecord first
         HAGroupStoreRecord record = new HAGroupStoreRecord(
@@ -234,12 +211,9 @@ public class HAGroupStoreManagerImplIT extends BaseTest {
         // Create configuration with mutation block disabled
         Configuration conf = new Configuration();
         conf.set(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, "false");
-        conf.set(QueryServices.HA_IMPLEMENTATION, CONSISTENT_HA_IMPLEMENTATION);
         conf.set(HConstants.ZOOKEEPER_QUORUM, getLocalZkUrl(config));
-
-        Optional<HAGroupStoreManager> managerOpt = HAGroupStoreManagerFactory.getInstance(conf, zkUrl);
-        assertTrue(managerOpt.isPresent());
-        HAGroupStoreManager haGroupStoreManager = managerOpt.get();
+        
+        HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(config);
 
         // Create HAGroupStoreRecord with ACTIVE_TO_STANDBY role
         HAGroupStoreRecord transitionRecord = new HAGroupStoreRecord(
@@ -255,9 +229,7 @@ public class HAGroupStoreManagerImplIT extends BaseTest {
     @Test
     public void testSetHAGroupStatusToStoreAndForward() throws Exception {
         String haGroupName = testName.getMethodName();
-        Optional<HAGroupStoreManager> managerOpt = HAGroupStoreManagerFactory.getInstance(config, zkUrl);
-        assertTrue(managerOpt.isPresent());
-        HAGroupStoreManager haGroupStoreManager = managerOpt.get();
+        HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(config);
 
         // Create an initial HAGroupStoreRecord with ACTIVE status
         HAGroupStoreRecord initialRecord = new HAGroupStoreRecord(
@@ -280,9 +252,7 @@ public class HAGroupStoreManagerImplIT extends BaseTest {
     @Test
     public void testSetHAGroupStatusRecordToSync() throws Exception {
         String haGroupName = testName.getMethodName();
-        Optional<HAGroupStoreManager> managerOpt = HAGroupStoreManagerFactory.getInstance(config, zkUrl);
-        assertTrue(managerOpt.isPresent());
-        HAGroupStoreManager haGroupStoreManager = managerOpt.get();
+        HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(config);
 
         // Create an initial HAGroupStoreRecord with ACTIVE_NOT_IN_SYNC status
         HAGroupStoreRecord initialRecord = new HAGroupStoreRecord(

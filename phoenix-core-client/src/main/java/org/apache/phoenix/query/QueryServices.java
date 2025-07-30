@@ -140,7 +140,6 @@ public interface QueryServices extends SQLCloseable {
     public static final String MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB = "phoenix.coprocessor.maxMetaDataCacheTimeToLiveMs";
     public static final String MAX_SERVER_METADATA_CACHE_SIZE_ATTRIB = "phoenix.coprocessor.maxMetaDataCacheSize";
     public static final String MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB = "phoenix.client.maxMetaDataCacheSize";
-    public static final String HA_IMPLEMENTATION = "phoenix.ha.implementation";
     // TODO: Revisit this default value based on standard ZK update time
     // and time it takes for an update to reach regionserver cache.
     // Refresh interval for store and forward mode status updates in milliseconds

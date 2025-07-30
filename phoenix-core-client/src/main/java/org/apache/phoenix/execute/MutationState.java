@@ -55,6 +55,7 @@ import java.util.Set;
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.Immutable;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
@@ -640,8 +641,8 @@ public class MutationState implements SQLCloseable {
             final MultiRowMutationState values, final long mutationTimestamp, final long serverTimestamp,
             boolean includeAllIndexes, final boolean sendAll) {
         final PTable table = tableRef.getTable();
-        final List<PTable> indexList = includeAllIndexes ? 
-                Lists.newArrayList(IndexMaintainer.maintainedIndexes(table.getIndexes().iterator())) : 
+        final List<PTable> indexList = includeAllIndexes ?
+                Lists.newArrayList(IndexMaintainer.maintainedIndexes(table.getIndexes().iterator())) :
                     IndexUtil.getClientMaintainedIndexes(table);
         final Iterator<PTable> indexes = indexList.iterator();
         final List<Mutation> mutationList = Lists.newArrayListWithExpectedSize(values.size());
@@ -864,7 +865,8 @@ public class MutationState implements SQLCloseable {
                 Bytes.toBytes(table.getExternalSchemaId()) : null;
         byte[] lastDDLTimestamp =
                 table.getLastDDLTimestamp() != null ? Bytes.toBytes(table.getLastDDLTimestamp()) : null;
-        WALAnnotationUtil.annotateMutation(mutation, tenantId, schemaName, tableName, tableType, lastDDLTimestamp);
+        byte[] haGroupName = StringUtils.isNotBlank(connection.getHAGroupName()) ? Bytes.toBytes(connection.getHAGroupName()) : null;
+        WALAnnotationUtil.annotateMutation(mutation, tenantId, schemaName, tableName, tableType, lastDDLTimestamp, haGroupName);
     }
 
     /**
