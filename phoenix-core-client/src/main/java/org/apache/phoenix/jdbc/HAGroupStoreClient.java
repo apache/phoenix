@@ -158,6 +158,9 @@ public class HAGroupStoreClient implements Closeable {
 
     /**
      * Get the list of HAGroupNames from system table.
+     * We can also get the list of HAGroupNames from the system table by providing the zkUrl in
+     * where clause but we need to match the formatted zkUrl with the zkUrl in the system table so
+     * that matching is done correctly.
      *
      * @param zkUrl for connecting to Table
      * @return the list of HAGroupNames
@@ -165,14 +168,22 @@ public class HAGroupStoreClient implements Closeable {
      */
     public static List<String> getHAGroupNames(String zkUrl) throws SQLException {
         List<String> result = new ArrayList<>();
-        String queryString = String.format("SELECT %s FROM %s", HA_GROUP_NAME,
-                SYSTEM_HA_GROUP_NAME);
+        String queryString = String.format("SELECT %s,%s,%s FROM %s", HA_GROUP_NAME, ZK_URL_1,
+                ZK_URL_2, SYSTEM_HA_GROUP_NAME);
         try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(
                 JDBC_PROTOCOL_ZK + JDBC_PROTOCOL_SEPARATOR + zkUrl);
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(queryString)) {
             while (rs.next()) {
-                result.add(rs.getString(HA_GROUP_NAME));
+                String zkUrl1 = rs.getString(ZK_URL_1);
+                String zkUrl2 = rs.getString(ZK_URL_2);
+                String formattedZkUrl1 = JDBCUtil.formatUrl(zkUrl1, RegistryType.ZK);
+                String formattedZkUrl2 = JDBCUtil.formatUrl(zkUrl2, RegistryType.ZK);
+                String formattedZkUrl = JDBCUtil.formatUrl(zkUrl, RegistryType.ZK);
+                if (StringUtils.equals(formattedZkUrl1, formattedZkUrl) ||
+                        StringUtils.equals(formattedZkUrl2, formattedZkUrl)) {
+                    result.add(rs.getString(HA_GROUP_NAME));
+                }
             }
         }
         return result;
@@ -630,7 +641,7 @@ public class HAGroupStoreClient implements Closeable {
             if (currentHAGroupState == HAGroupState.ACTIVE_NOT_IN_SYNC
                     && newHAGroupState == HAGroupState.ACTIVE_IN_SYNC) {
                 waitTime = waitTimeForSyncModeInMs;
-            } else if (currentHAGroupState == HAGroupState.ACTIVE_NOT_IN_SYNC 
+            } else if (currentHAGroupState == HAGroupState.ACTIVE_NOT_IN_SYNC
             && newHAGroupState == HAGroupState.ACTIVE_NOT_IN_SYNC) {
                 //This is to avoid extra requests to ZK for updates.
                 waitTime = waitTimeForStoreAndForwardModeInMs;

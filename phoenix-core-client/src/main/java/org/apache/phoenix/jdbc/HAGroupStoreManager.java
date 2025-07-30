@@ -39,24 +39,22 @@ import static org.apache.phoenix.query.QueryServicesOptions
  * Manages all HAGroupStoreClient instances.
  */
 public class HAGroupStoreManager {
+    private static volatile HAGroupStoreManager haGroupStoreManagerInstance;
     private static final Logger LOGGER = LoggerFactory.getLogger(HAGroupStoreManager.class);
     private final boolean mutationBlockEnabled;
     private final String zkUrl;
     private final Configuration conf;
 
-    // Singleton instance
-    private static HAGroupStoreManager instance = null;
-
     // This is a singleton class and we want to ensure that only one instance is created.
     public static HAGroupStoreManager getInstance(final Configuration conf) {
-        if (instance == null) {
+        if (haGroupStoreManagerInstance == null) {
             synchronized (HAGroupStoreManager.class) {
-                if (instance == null) {
-                    instance = new HAGroupStoreManager(conf);
+                if (haGroupStoreManagerInstance == null) {
+                    haGroupStoreManagerInstance = new HAGroupStoreManager(conf);
                 }
             }
         }
-        return instance;
+        return haGroupStoreManagerInstance;
     }
 
     private HAGroupStoreManager(final Configuration conf) {
@@ -64,6 +62,15 @@ public class HAGroupStoreManager {
                 DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED);
         this.zkUrl = getLocalZkUrl(conf);
         this.conf = conf;
+    }
+
+    /**
+     * Returns the list of all HA group names.
+     * @return list of all HA group names.
+     * @throws SQLException if there is an error with querying the table.
+     */
+    public List<String> getHAGroupNames() throws SQLException {
+        return HAGroupStoreClient.getHAGroupNames(this.zkUrl);
     }
 
 

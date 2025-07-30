@@ -816,6 +816,7 @@ public class HAGroupStoreClientIT extends BaseTest {
         String haGroupName1 = testName.getMethodName() + "_1";
         String haGroupName2 = testName.getMethodName() + "_2";
         String haGroupName3 = testName.getMethodName() + "_3";
+        String haGroupName4 = testName.getMethodName() + "_4";
 
         // Insert multiple HA group records
         HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName1, this.zkUrl, this.peerZKUrl,
@@ -824,6 +825,8 @@ public class HAGroupStoreClientIT extends BaseTest {
                 ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE, null);
         HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName3, this.zkUrl, this.peerZKUrl,
                 ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
+        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName4, "bad_zk_url", this.peerZKUrl,
+                ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, this.zkUrl);
 
         List<String> haGroupNames = HAGroupStoreClient.getHAGroupNames(zkUrl);
 
@@ -831,6 +834,7 @@ public class HAGroupStoreClientIT extends BaseTest {
         assertTrue("HA group names list should contain haGroupName1", haGroupNames.contains(haGroupName1));
         assertTrue("HA group names list should contain haGroupName2", haGroupNames.contains(haGroupName2));
         assertTrue("HA group names list should contain haGroupName3", haGroupNames.contains(haGroupName3));
+        assertTrue("HA group names list should not contain haGroupName4", !haGroupNames.contains(haGroupName4));
         assertEquals(3, haGroupNames.size());
 
 

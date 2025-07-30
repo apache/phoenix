@@ -34,6 +34,7 @@ import org.junit.rules.TestName;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_NAMESPACE;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
@@ -212,7 +213,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         Configuration conf = new Configuration();
         conf.set(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, "false");
         conf.set(HConstants.ZOOKEEPER_QUORUM, getLocalZkUrl(config));
-        
+
         HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(config);
 
         // Create HAGroupStoreRecord with ACTIVE_TO_STANDBY role
@@ -271,4 +272,82 @@ public class HAGroupStoreManagerIT extends BaseTest {
         HAGroupStoreRecord updatedRecord = updatedRecordOpt.get();
         assertEquals(ClusterRoleRecord.ClusterRole.ACTIVE, updatedRecord.getClusterRole());
     }
+
+    @Test
+    public void testGetHAGroupNamesFiltersCorrectlyByZkUrl() throws Exception {
+        HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(config);
+
+        List<String> initialHAGroupNames = haGroupStoreManager.getHAGroupNames();
+
+        // Create HA groups with current zkUrl as ZK_URL_1
+        String haGroupWithCurrentZkUrl = testName.getMethodName() + "_current_zk";
+        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupWithCurrentZkUrl, zkUrl, this.peerZKUrl,
+                ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
+
+        // Create HA group with current zkUrl as ZK_URL_2 (swapped)
+        String haGroupWithCurrentZkUrlAsPeer = testName.getMethodName() + "_current_as_peer";
+        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupWithCurrentZkUrlAsPeer, this.peerZKUrl, zkUrl,
+                ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE, zkUrl);
+
+        // Create HA group with different zkUrl (should not appear in results)
+        String differentZkUrl = "localhost:2182:/different";
+        String haGroupWithDifferentZkUrl = testName.getMethodName() + "_different_zk";
+        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupWithDifferentZkUrl, differentZkUrl, "localhost:2183:/other",
+                ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, zkUrl);
+
+        // Get HA group names - should only return groups where current zkUrl matches ZK_URL_1 or ZK_URL_2
+        List<String> filteredHAGroupNames = haGroupStoreManager.getHAGroupNames();
+
+        // Extract only new groups from filteredHAGroupNames
+        List<String> newHAGroupNames = filteredHAGroupNames.stream()
+        .filter(name -> !initialHAGroupNames.contains(name))
+        .collect(Collectors.toList());
+
+        // Check size of filteredHAGroupNames
+        assertEquals(2, newHAGroupNames.size());
+
+
+        // Should contain groups where current zkUrl is involved
+        assertTrue("Should contain HA group with current zkUrl as ZK_URL_1",
+                newHAGroupNames.contains(haGroupWithCurrentZkUrl));
+        assertTrue("Should contain HA group with current zkUrl as ZK_URL_2",
+                newHAGroupNames.contains(haGroupWithCurrentZkUrlAsPeer));
+        // Should NOT contain HA group with different zkUrl
+        assertFalse("Should NOT contain HA group with different zkUrl",
+                newHAGroupNames.contains(haGroupWithDifferentZkUrl));
+
+
+        // Clean up
+        HAGroupStoreTestUtil.deleteHAGroupRecordInSystemTable(haGroupWithCurrentZkUrl, zkUrl);
+        HAGroupStoreTestUtil.deleteHAGroupRecordInSystemTable(haGroupWithCurrentZkUrlAsPeer, zkUrl);
+        HAGroupStoreTestUtil.deleteHAGroupRecordInSystemTable(haGroupWithDifferentZkUrl, zkUrl);
+    }
+
+    @Test
+    public void testGetHAGroupNamesWhenNoMatchingZkUrl() throws Exception {
+        HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(config);
+
+        // Clean up existing HA group created in before()
+        String testHAGroupName = testName.getMethodName();
+        HAGroupStoreTestUtil.deleteHAGroupRecordInSystemTable(testHAGroupName, zkUrl);
+
+        // Create HA groups with completely different zkUrls
+        String differentZkUrl1 = "localhost:2182:/different1";
+        String differentZkUrl2 = "localhost:2183:/different2";
+        String haGroupWithDifferentZkUrls = testName.getMethodName() + "_different";
+        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupWithDifferentZkUrls, differentZkUrl1, differentZkUrl2,
+                ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, zkUrl);
+
+        // Get HA group names - should not contain the group with different zkUrls
+        List<String> filteredHAGroupNames = haGroupStoreManager.getHAGroupNames();
+
+        // Should NOT contain the HA group with different zkUrls
+        assertFalse("Should NOT contain HA group with different zkUrls",
+                filteredHAGroupNames.contains(haGroupWithDifferentZkUrls));
+
+        // Clean up
+        HAGroupStoreTestUtil.deleteHAGroupRecordInSystemTable(haGroupWithDifferentZkUrls, zkUrl);
+
+    }
+
 }
