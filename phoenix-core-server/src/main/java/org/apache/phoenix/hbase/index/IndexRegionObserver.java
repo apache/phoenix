@@ -128,6 +128,7 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -649,13 +650,15 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         "Somehow didn't return an index update but also didn't propagate the failure to the client!");
   }
 
-  private Set<String> extractHAGroupNameAttribute(MiniBatchOperationInProgress<Mutation> miniBatchOp) {
+  private Set<String> extractHAGroupNameAttribute(
+          MiniBatchOperationInProgress<Mutation> miniBatchOp) {
       Set<String> haGroupNames = new HashSet<>();
       for (int i = 0; i < miniBatchOp.size(); i++) {
           Mutation m = miniBatchOp.getOperation(i);
-          byte[] haGroupName = m.getAttribute(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
+          byte[] haGroupName = m.getAttribute(
+                  BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
           if (haGroupName != null) {
-              haGroupNames.add(new String(haGroupName));
+              haGroupNames.add(new String(haGroupName, StandardCharsets.UTF_8));
           }
       }
       return haGroupNames;

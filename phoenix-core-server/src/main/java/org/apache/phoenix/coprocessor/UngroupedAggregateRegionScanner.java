@@ -797,7 +797,8 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                 scan.getAttribute(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
 
         for (Mutation m : mutationsList) {
-            annotateMutation(m, tenantId, schemaName, logicalTableName, tableType, ddlTimestamp, haGroupName);
+            annotateMutation(m, tenantId, schemaName, logicalTableName, 
+                    tableType, ddlTimestamp, haGroupName);
         }
     }
 

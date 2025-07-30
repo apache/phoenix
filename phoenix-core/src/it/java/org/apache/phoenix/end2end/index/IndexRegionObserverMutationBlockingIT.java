@@ -106,8 +106,8 @@ public class IndexRegionObserverMutationBlockingIT extends BaseTest {
             conn.commit();
 
             // Set up HAGroupStoreRecord that will block mutations (ACTIVE_TO_STANDBY state)
-            HAGroupStoreRecord haGroupStoreRecord 
-                    = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, 
+            HAGroupStoreRecord haGroupStoreRecord
+                    = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
                     haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_TO_STANDBY);
             haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, haGroupStoreRecord, -1);
 
@@ -176,7 +176,6 @@ public class IndexRegionObserverMutationBlockingIT extends BaseTest {
             conn.createStatement().execute("UPSERT INTO " + dataTableName +
                     " VALUES ('1', 'David', 40)");
             conn.commit();
-            
             // Set up HAGroupStoreRecord that will block mutations (ACTIVE_TO_STANDBY state)
             HAGroupStoreRecord haGroupStoreRecord
                     = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,

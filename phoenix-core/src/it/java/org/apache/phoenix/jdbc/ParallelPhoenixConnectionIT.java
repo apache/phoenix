@@ -87,6 +87,7 @@ import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.HAGroupStoreTestUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.AfterClass;
@@ -370,8 +371,18 @@ public class ParallelPhoenixConnectionIT {
      */
     @Test
     public void testBothClusterATSRole() throws Exception {
-        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.ACTIVE_TO_STANDBY);
-        try (Connection conn = getParallelConnection()) {
+        String zkUrl1 = CLUSTERS.getZkUrl1();
+        String zkUrl2 = CLUSTERS.getZkUrl2();
+        String haGroupName = testName.getMethodName();
+        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl1, zkUrl2,
+                ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.ACTIVE_TO_STANDBY, null);
+        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl2, zkUrl1,
+                ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.ACTIVE_TO_STANDBY, null);
+        try (ParallelPhoenixConnection conn = (ParallelPhoenixConnection) getParallelConnection()) {
+            PhoenixConnection conn1 = conn.futureConnection1.get();
+            PhoenixConnection conn2 = conn.futureConnection2.get();
+            conn1.setHAGroupName(haGroupName);
+            conn2.setHAGroupName(haGroupName);
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
             fail("Expected MutationBlockedIOException to be thrown");
         } catch (SQLException e) {
