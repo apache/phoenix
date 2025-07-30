@@ -1985,7 +1985,7 @@ public class WhereOptimizer {
      *                       are to be extracted
      * @return true if the scan ranges can be extracted, false otherwise
      */
-    private boolean prepareForArrayAnyComparisonKeySlots(ArrayAnyComparisonExpression node,
+    private boolean shouldExtractKeyRangesForArrayAnyExpr(ArrayAnyComparisonExpression node,
       List<Expression> keyExpressions) {
       // {@link ArrayAnyComparisonExpression} has two children, and the second child is
       // comparison expression
@@ -2023,6 +2023,8 @@ public class WhereOptimizer {
         }
         // Capture {@link RowKeyColumnExpression} for the generation of key slots.
         keyExpressions.add(rhs);
+      } else {
+        return false;
       }
       return true;
     }
@@ -2030,7 +2032,7 @@ public class WhereOptimizer {
     @Override
     public Iterator<Expression> visitEnter(ArrayAnyComparisonExpression node) {
       ArrayList<Expression> keyExpressions = new ArrayList<>();
-      if (prepareForArrayAnyComparisonKeySlots(node, keyExpressions)) {
+      if (shouldExtractKeyRangesForArrayAnyExpr(node, keyExpressions)) {
         return keyExpressions.iterator();
       }
       // If the scan ranges cannot be extracted, we return an empty iterator
@@ -2043,7 +2045,7 @@ public class WhereOptimizer {
         return null;
       }
       // Doing type casting is safe here as we won't have reached here unless the expression
-      // tree is of the form expected by the method prepareForArrayAnyComparisonKeySlots.
+      // tree is of the form expected by the method shouldExtractKeyRangesForArrayAnyExpr.
       Expression arrayExpr = node.getChildren().get(0);
       PhoenixArray arr = (PhoenixArray) ((LiteralExpression) arrayExpr).getValue();
       int numElements = arr.getDimensions();

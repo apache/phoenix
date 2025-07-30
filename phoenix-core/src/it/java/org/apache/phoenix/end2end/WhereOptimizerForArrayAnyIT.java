@@ -681,6 +681,95 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
     }
   }
 
+  @Test
+  public void testArrayAnyComparisonWithIndexPKColumn() throws Exception {
+    String tableName = generateUniqueName();
+    String createTableDdl = "CREATE TABLE " + tableName + " (" + "pk1 INTEGER NOT NULL, "
+      + "pk2 VARCHAR(3), " + "col1 VARCHAR, " + "CONSTRAINT pk PRIMARY KEY (pk1, pk2)" + ")";
+    String createIndexDdl = "CREATE INDEX idx_pk1 ON " + tableName + " (col1)";
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute(createTableDdl);
+        conn.commit();
+        stmt.execute(createIndexDdl);
+        conn.commit();
+      }
+    }
+    insertData(tableName, 1, "a", "b");
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String selectSql = "SELECT * FROM " + tableName + " WHERE col1 = ANY(?)";
+      Array arr = conn.createArrayOf("VARCHAR", new String[] { "a", "b", "c" });
+      try (PreparedStatement stmt = conn.prepareStatement(selectSql)) {
+        stmt.setArray(1, arr);
+        try (ResultSet rs = stmt.executeQuery()) {
+          assertTrue(rs.next());
+          assertEquals(1, rs.getInt(1));
+          assertEquals("a", rs.getString(2));
+          assertEquals("b", rs.getString(3));
+        }
+        assertSkipScanIsGenerated(stmt, 3);
+      }
+    }
+  }
+
+  @Test
+  public void testArrayAnyComparisonWithRowKeyPrefix() throws Exception {
+    String tableName = generateUniqueName();
+    String ddl = "CREATE TABLE " + tableName + " (" + "pk1 INTEGER NOT NULL, " + "pk2 VARCHAR(3), "
+      + "col1 VARCHAR, " + "CONSTRAINT pk PRIMARY KEY (pk1, pk2)" + ")";
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute(ddl);
+        conn.commit();
+      }
+    }
+    insertData(tableName, 1, "a", "b");
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String selectSql = "SELECT * FROM " + tableName + " WHERE pk1 = ANY(?)";
+      Array arr = conn.createArrayOf("INTEGER", new Integer[] { 1, 2, 3 });
+      try (PreparedStatement stmt = conn.prepareStatement(selectSql)) {
+        stmt.setArray(1, arr);
+        try (ResultSet rs = stmt.executeQuery()) {
+          assertTrue(rs.next());
+          assertEquals(1, rs.getInt(1));
+          assertEquals("a", rs.getString(2));
+          assertEquals("b", rs.getString(3));
+        }
+        assertSkipScanIsGenerated(stmt, 3);
+      }
+    }
+  }
+
+  @Test
+  public void testArrayAnyComparisonWhenRowKeyColumnExpressionIsNotTopLevelExpression()
+    throws Exception {
+    String tableName = generateUniqueName();
+    String ddl = "CREATE TABLE " + tableName + " (" + "pk1 INTEGER NOT NULL, " + "pk2 VARCHAR(3), "
+      + "col1 VARCHAR, " + "CONSTRAINT pk PRIMARY KEY (pk1, pk2)" + ")";
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute(ddl);
+        conn.commit();
+      }
+    }
+    insertData(tableName, 1, "a", "b");
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String selectSql =
+        "SELECT * FROM " + tableName + " WHERE CAST (pk1 as BIGINT) = ANY(?) AND pk2 = 'a'";
+      Array arr = conn.createArrayOf("BIGINT", new Long[] { 1L, 2L, 3L });
+      try (PreparedStatement stmt = conn.prepareStatement(selectSql)) {
+        stmt.setArray(1, arr);
+        try (ResultSet rs = stmt.executeQuery()) {
+          assertTrue(rs.next());
+          assertEquals(1, rs.getInt(1));
+          assertEquals("a", rs.getString(2));
+          assertEquals("b", rs.getString(3));
+        }
+        assertPointLookupsAreNotGenerated(stmt);
+      }
+    }
+  }
+
   private void assertBinaryValue(byte[] expected, byte[] actual) {
     int expectedLength = expected.length;
     for (int i = 0; i < expectedLength; i++) {
@@ -705,6 +794,16 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
     int noOfPointLookups) throws SQLException {
     QueryPlan queryPlan = stmt.unwrap(PhoenixStatement.class).optimizeQuery(selectSql);
     assertPointLookupsAreGenerated(queryPlan, noOfPointLookups);
+  }
+
+  private void assertSkipScanIsGenerated(PreparedStatement stmt, int skipListSize)
+    throws SQLException {
+    QueryPlan queryPlan = stmt.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
+    ExplainPlan explain = queryPlan.getExplainPlan();
+    ExplainPlanAttributes planAttributes = explain.getPlanStepsAsAttributes();
+    String expectedScanType =
+      "SKIP SCAN ON " + skipListSize + " KEY" + (skipListSize > 1 ? "S " : " ");
+    assertEquals(expectedScanType, planAttributes.getExplainScanType());
   }
 
   private void assertPointLookupsAreGenerated(QueryPlan queryPlan, int noOfPointLookups)
