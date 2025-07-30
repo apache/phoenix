@@ -45,7 +45,12 @@ public class HAGroupStoreManager {
     private final String zkUrl;
     private final Configuration conf;
 
-    // This is a singleton class and we want to ensure that only one instance is created.
+    /**
+     * Creates/gets an instance of HAGroupStoreManager.
+     *
+     * @param conf configuration
+     * @return HAGroupStoreManager instance
+     */
     public static HAGroupStoreManager getInstance(final Configuration conf) {
         if (haGroupStoreManagerInstance == null) {
             synchronized (HAGroupStoreManager.class) {
