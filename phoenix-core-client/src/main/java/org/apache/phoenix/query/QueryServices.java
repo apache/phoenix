@@ -304,6 +304,8 @@ public interface QueryServices extends SQLCloseable {
             "phoenix.connection.activity.logging.enabled";
     public static final String CONNECTION_ACTIVITY_LOGGING_INTERVAL =
             "phoenix.connection.activity.logging.interval";
+    String CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED =
+            "phoenix.connection.activity.logging.explain.plan.enabled";
     public static final String DEFAULT_COLUMN_ENCODED_BYTES_ATRRIB  = "phoenix.default.column.encoded.bytes.attrib";
     public static final String DEFAULT_IMMUTABLE_STORAGE_SCHEME_ATTRIB  = "phoenix.default.immutable.storage.scheme";
     public static final String DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME_ATTRIB  = "phoenix.default.multitenant.immutable.storage.scheme";
