@@ -87,6 +87,8 @@ public class StatementContext {
   private TableRef cdcDataTableRef;
   private AtomicBoolean hasFirstValidResult;
   private Set<StatementContext> subStatementContexts;
+  private boolean totalSegmentsFunction = false;
+  private Integer totalSegmentsValue;
 
   public StatementContext(PhoenixStatement statement) {
     this(statement, new Scan());
@@ -117,6 +119,8 @@ public class StatementContext {
     this.isUncoveredIndex = context.isUncoveredIndex;
     this.hasFirstValidResult = new AtomicBoolean(context.getHasFirstValidResult());
     this.subStatementContexts = Sets.newHashSet();
+    this.totalSegmentsFunction = context.totalSegmentsFunction;
+    this.totalSegmentsValue = context.totalSegmentsValue;
   }
 
   /**
@@ -434,5 +438,21 @@ public class StatementContext {
 
   public Set<StatementContext> getSubStatementContexts() {
     return subStatementContexts;
+  }
+
+  public boolean hasTotalSegmentsFunction() {
+    return totalSegmentsFunction;
+  }
+
+  public void setTotalSegmentsFunction(boolean totalSegmentsFunction) {
+    this.totalSegmentsFunction = totalSegmentsFunction;
+  }
+
+  public Integer getTotalSegmentsValue() {
+    return totalSegmentsValue;
+  }
+
+  public void setTotalSegmentsValue(Integer totalSegmentsValue) {
+    this.totalSegmentsValue = totalSegmentsValue;
   }
 }

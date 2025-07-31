@@ -46,6 +46,7 @@ import org.apache.phoenix.execute.HashJoinPlan.HashSubPlan;
 import org.apache.phoenix.execute.HashJoinPlan.WhereClauseSubPlan;
 import org.apache.phoenix.execute.LiteralResultIterationPlan;
 import org.apache.phoenix.execute.ScanPlan;
+import org.apache.phoenix.execute.SegmentInfoPlan;
 import org.apache.phoenix.execute.SortMergeJoinPlan;
 import org.apache.phoenix.execute.TupleProjectionPlan;
 import org.apache.phoenix.execute.TupleProjector;
@@ -892,6 +893,14 @@ public class QueryCompiler {
     if (plan instanceof BaseQueryPlan) {
       ((BaseQueryPlan) plan).setApplicable(isApplicable);
     }
+
+    // Check if TOTAL_SEGMENTS function was used - if so, replace with a client-side plan that
+    // returns segment info
+    if (context.hasTotalSegmentsFunction()) {
+      plan = new SegmentInfoPlan(context, planSelect, tableRef, projector,
+        context.getTotalSegmentsValue());
+    }
+
     return plan;
   }
 }

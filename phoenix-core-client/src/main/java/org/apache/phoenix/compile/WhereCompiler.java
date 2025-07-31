@@ -38,6 +38,7 @@ import java.util.Set;
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
@@ -75,7 +76,11 @@ import org.apache.phoenix.expression.SubtractExpression;
 import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.function.ScalarFunction;
+import org.apache.phoenix.expression.function.ScanEndKeyFunction;
+import org.apache.phoenix.expression.function.ScanStartKeyFunction;
 import org.apache.phoenix.expression.function.SingleAggregateFunction;
+import org.apache.phoenix.expression.function.TotalSegmentsFunction;
+import org.apache.phoenix.expression.visitor.CloneExpressionVisitor;
 import org.apache.phoenix.expression.visitor.KeyValueExpressionVisitor;
 import org.apache.phoenix.expression.visitor.TraverseAllExpressionVisitor;
 import org.apache.phoenix.filter.MultiCFCQKeyValueComparisonFilter;
@@ -85,6 +90,7 @@ import org.apache.phoenix.filter.RowKeyComparisonFilter;
 import org.apache.phoenix.filter.SingleCFCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.SingleCQKeyValueComparisonFilter;
 import org.apache.phoenix.parse.ColumnParseNode;
+import org.apache.phoenix.parse.ComparisonParseNode;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.ParseNode;
@@ -188,10 +194,25 @@ public class WhereCompiler {
     }
 
     Set<Expression> extractedNodes = Sets.<Expression> newHashSet();
-    WhereExpressionCompiler whereCompiler = new WhereExpressionCompiler(context);
+    ScanBoundaryExtractingCompiler whereCompiler = new ScanBoundaryExtractingCompiler(context);
     Expression expression = where == null
       ? LiteralExpression.newConstant(true, PBoolean.INSTANCE, Determinism.ALWAYS)
       : where.accept(whereCompiler);
+
+    if (whereCompiler.getScanStartKey() != null || whereCompiler.getScanEndKey() != null) {
+      // Remove scan boundary functions from the expression
+      ScanBoundaryRemovalVisitor removalVisitor = new ScanBoundaryRemovalVisitor();
+      expression = expression.accept(removalVisitor);
+    }
+
+    // Check for TOTAL_SEGMENTS function
+    if (whereCompiler.hasTotalSegments()) {
+      context.setTotalSegmentsFunction(true);
+      context.setTotalSegmentsValue(whereCompiler.getTotalSegmentsValue());
+      // Remove TOTAL_SEGMENTS function from the expression
+      ScanBoundaryRemovalVisitor removalVisitor = new ScanBoundaryRemovalVisitor();
+      expression = expression.accept(removalVisitor);
+    }
     if (whereCompiler.isAggregate()) {
       throw new SQLExceptionInfo.Builder(SQLExceptionCode.AGGREGATE_IN_WHERE).build()
         .buildException();
@@ -222,13 +243,22 @@ public class WhereCompiler {
       expression = WhereOptimizer.pushKeyExpressionsToScan(context, hints, expression,
         extractedNodes, minOffset);
     }
+    if (whereCompiler.getScanStartKey() != null || whereCompiler.getScanEndKey() != null) {
+      Scan scan = context.getScan();
+      if (scan.getStartRow().length == 0 && whereCompiler.getScanStartKey() != null) {
+        scan.withStartRow(whereCompiler.getScanStartKey());
+      }
+      if (scan.getStopRow().length == 0 && whereCompiler.getScanEndKey() != null) {
+        scan.withStopRow(whereCompiler.getScanEndKey());
+      }
+    }
     setScanFilter(context, statement, expression, whereCompiler.disambiguateWithFamily);
 
     return expression;
   }
 
   public static class WhereExpressionCompiler extends ExpressionCompiler {
-    private boolean disambiguateWithFamily;
+    protected boolean disambiguateWithFamily;
 
     public WhereExpressionCompiler(StatementContext context) {
       super(context, true);
@@ -291,6 +321,147 @@ public class WhereCompiler {
         }
       }
       return ref;
+    }
+  }
+
+  private static final class ScanBoundaryExtractingCompiler extends WhereExpressionCompiler {
+
+    private byte[] scanStartKey;
+    private byte[] scanEndKey;
+    private boolean hasTotalSegments = false;
+    private Integer totalSegmentsValue;
+
+    public ScanBoundaryExtractingCompiler(StatementContext context) {
+      super(context);
+    }
+
+    @Override
+    public Expression visitLeave(ComparisonParseNode node, List<Expression> children)
+      throws SQLException {
+      boolean hasScanFunctionWithEquals = false;
+      if (node.getFilterOp() == CompareOperator.EQUAL && children.size() == 2) {
+        Expression lhs = children.get(0);
+        Expression rhs = children.get(1);
+
+        if (lhs instanceof ScanStartKeyFunction && rhs instanceof LiteralExpression) {
+          scanStartKey = extractBytes((LiteralExpression) rhs);
+          hasScanFunctionWithEquals = true;
+        } else if (rhs instanceof ScanStartKeyFunction && lhs instanceof LiteralExpression) {
+          scanStartKey = extractBytes((LiteralExpression) lhs);
+          hasScanFunctionWithEquals = true;
+        }
+
+        if (lhs instanceof ScanEndKeyFunction && rhs instanceof LiteralExpression) {
+          scanEndKey = extractBytes((LiteralExpression) rhs);
+          hasScanFunctionWithEquals = true;
+        } else if (rhs instanceof ScanEndKeyFunction && lhs instanceof LiteralExpression) {
+          scanEndKey = extractBytes((LiteralExpression) lhs);
+          hasScanFunctionWithEquals = true;
+        }
+
+        if (lhs instanceof TotalSegmentsFunction && rhs instanceof LiteralExpression) {
+          hasTotalSegments = true;
+          totalSegmentsValue = getTotalSegmentsVal((LiteralExpression) rhs);
+        } else if (rhs instanceof TotalSegmentsFunction && lhs instanceof LiteralExpression) {
+          hasTotalSegments = true;
+          totalSegmentsValue = getTotalSegmentsVal((LiteralExpression) lhs);
+        }
+      }
+      if (hasScanFunctionWithEquals) {
+        Expression expression = super.visitLeave(node, children);
+        if (
+          expression instanceof LiteralExpression && LiteralExpression.isBooleanNull(expression)
+        ) {
+          return LiteralExpression.newConstant(true, PBoolean.INSTANCE, Determinism.ALWAYS);
+        }
+        return expression;
+      }
+      return super.visitLeave(node, children);
+    }
+
+    private byte[] extractBytes(LiteralExpression literal) {
+      ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+      if (literal.evaluate(null, ptr)) {
+        return ptr.copyBytes();
+      }
+      return null;
+    }
+
+    private Integer getTotalSegmentsVal(LiteralExpression literal) {
+      ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+      if (literal.evaluate(null, ptr)) {
+        return (Integer) literal.getDataType().toObject(ptr);
+      }
+      return null;
+    }
+
+    public byte[] getScanStartKey() {
+      return scanStartKey;
+    }
+
+    public byte[] getScanEndKey() {
+      return scanEndKey;
+    }
+
+    public boolean hasTotalSegments() {
+      return hasTotalSegments;
+    }
+
+    public Integer getTotalSegmentsValue() {
+      return totalSegmentsValue;
+    }
+  }
+
+  /**
+   * Visitor to remove scan boundary function comparisons from the expression tree since they've
+   * already been used to set the scan boundaries.
+   */
+  private static class ScanBoundaryRemovalVisitor extends CloneExpressionVisitor {
+    @Override
+    public Expression visitLeave(ComparisonExpression node, List<Expression> children) {
+
+      Expression lhs = children.get(0);
+      Expression rhs = children.get(1);
+
+      // Remove scan boundary function comparisons
+      if (node.getFilterOp() == CompareOperator.EQUAL) {
+        if (
+          lhs instanceof ScanStartKeyFunction || rhs instanceof ScanStartKeyFunction
+            || lhs instanceof ScanEndKeyFunction || rhs instanceof ScanEndKeyFunction
+            || lhs instanceof TotalSegmentsFunction || rhs instanceof TotalSegmentsFunction
+        ) {
+          try {
+            return LiteralExpression.newConstant(true, PBoolean.INSTANCE, Determinism.ALWAYS);
+          } catch (SQLException e) {
+            throw new RuntimeException(e);
+          }
+        }
+      }
+
+      return super.visitLeave(node, children);
+    }
+
+    @Override
+    public Expression visitLeave(AndExpression node, List<Expression> children) {
+      List<Expression> filteredChildren = Lists.newArrayListWithCapacity(children.size());
+      for (Expression child : children) {
+        if (!LiteralExpression.isTrue(child)) {
+          filteredChildren.add(child);
+        }
+      }
+      if (filteredChildren.isEmpty()) {
+        try {
+          return LiteralExpression.newConstant(true, PBoolean.INSTANCE, Determinism.ALWAYS);
+        } catch (SQLException e) {
+          throw new RuntimeException(e);
+        }
+      } else {
+        try {
+          return AndExpression.create(filteredChildren);
+        } catch (SQLException e) {
+          throw new RuntimeException(e);
+        }
+      }
     }
   }
 
