@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assume.assumeTrue;
 
 import java.sql.Connection;
@@ -158,5 +159,38 @@ public class ConnectionIT {
             assertEquals(conn1.getQueryServices(), conn2.getQueryServices());
         }
 
+    }
+
+    @Test
+    public void testQueryPlanIsNullByDefault() throws SQLException {
+        // Test that query plan is null by default even after data operations
+        String tableName = "TEST_QUERY_PLAN_" + tableCounter++;
+
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection("jdbc:phoenix")) {
+            // Initially, query plan should be null (disabled by default)
+            String initialQueryPlan = conn.getActivityLogger().getExplainPlanInfo();
+            assertNull("Query plan should be null by default (disabled)", initialQueryPlan);
+
+            // Create table and load data
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("CREATE TABLE " + tableName + " (id INTEGER PRIMARY KEY, name VARCHAR)");
+                stmt.execute("UPSERT INTO " + tableName + " VALUES (1, 'test1')");
+                stmt.execute("UPSERT INTO " + tableName + " VALUES (2, 'test2')");
+                conn.commit();
+            }
+
+            // Execute a query - query plan should still be null since it's disabled by default
+            try (Statement stmt = conn.createStatement()) {
+                ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName);
+                while (rs.next()) {
+                    // Consume the result set
+                }
+
+                // Query plan should still be null since it's disabled by default
+                String queryPlan = conn.getActivityLogger().getExplainPlanInfo();
+                assertNull("Query plan should be null after query execution (disabled by default)",
+                        queryPlan);
+            }
+        }
     }
 }
