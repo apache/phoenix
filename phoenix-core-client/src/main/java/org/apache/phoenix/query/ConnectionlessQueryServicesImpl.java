@@ -21,6 +21,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE_BYTES;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -214,6 +215,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     protected String getCDCStreamDDL() {
         return setSystemDDLProperties(QueryConstants.CREATE_CDC_STREAM_METADATA);
+    }
+
+    protected String getHAGroupDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_HA_GROUP_METADATA);
     }
 
     private String setSystemDDLProperties(String ddl) {
@@ -430,22 +435,22 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                 String globalUrl = JDBCUtil.removeProperty(url, PhoenixRuntime.TENANT_ID_ATTRIB);
                 metaConnection = new PhoenixConnection(this, globalUrl, scnProps);
                 metaConnection.setRunningUpgrade(true);
-                try {
-                    metaConnection.createStatement().executeUpdate(getSystemCatalogTableDDL());
+                try (Statement stmt = metaConnection.createStatement()) {
+                    stmt.executeUpdate(getSystemCatalogTableDDL());
                 } catch (TableAlreadyExistsException ignore) {
                     // Ignore, as this will happen if the SYSTEM.TABLE already exists at this fixed timestamp.
                     // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
                 }
-                try {
+                try (Statement stmt = metaConnection.createStatement()) {
                     int nSaltBuckets = getSequenceSaltBuckets();
                     String createTableStatement = getSystemSequenceTableDDL(nSaltBuckets);
-                   metaConnection.createStatement().executeUpdate(createTableStatement);
+                    stmt.executeUpdate(createTableStatement);
                 } catch (NewerTableAlreadyExistsException ignore) {
                     // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed timestamp.
                     // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
                 }
-                try {
-                    metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_STATS_TABLE_METADATA);
+                try (Statement stmt = metaConnection.createStatement()) {
+                    stmt.executeUpdate(QueryConstants.CREATE_STATS_TABLE_METADATA);
                 } catch (NewerTableAlreadyExistsException ignore) {
                     // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed
                     // timestamp.
@@ -453,39 +458,41 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                     // fixed timestamp.
                 }
                 
-                try {
-                    metaConnection.createStatement().executeUpdate(getFunctionTableDDL());
+                try (Statement stmt = metaConnection.createStatement()) {
+                    stmt.executeUpdate(getFunctionTableDDL());
                 } catch (NewerTableAlreadyExistsException ignore) {
                 }
-                try {
-                    metaConnection.createStatement().executeUpdate(getLogTableDDL());
+                try (Statement stmt = metaConnection.createStatement()) {
+                    stmt.executeUpdate(getLogTableDDL());
                 } catch (NewerTableAlreadyExistsException ignore) {}
-                try {
-                    metaConnection.createStatement()
-                            .executeUpdate(getChildLinkDDL());
+                try (Statement stmt = metaConnection.createStatement()) {
+                    stmt.executeUpdate(getChildLinkDDL());
                 } catch (NewerTableAlreadyExistsException ignore) {
                 }
-                try {
-                    metaConnection.createStatement()
-                            .executeUpdate(getMutexDDL());
+                try (Statement stmt = metaConnection.createStatement()) {
+                    stmt.executeUpdate(getMutexDDL());
                 } catch (NewerTableAlreadyExistsException ignore) {
                 }
-                try {
-                    metaConnection.createStatement()
-                            .executeUpdate(getTaskDDL());
+                try (Statement stmt = metaConnection.createStatement()) {
+                    stmt.executeUpdate(getTaskDDL());
                 } catch (NewerTableAlreadyExistsException ignore) {
                 }
-                try {
-                    metaConnection.createStatement()
-                            .executeUpdate(getTransformDDL());
+                try (Statement stmt = metaConnection.createStatement()) {
+                    stmt.executeUpdate(getTransformDDL());
                 } catch (NewerTableAlreadyExistsException ignore) {
                 }
-                try {
-                    metaConnection.createStatement().executeUpdate(getCDCStreamStatusDDL());
-                } catch (TableAlreadyExistsException ignore) {}
-                try {
-                    metaConnection.createStatement().executeUpdate(getCDCStreamDDL());
-                } catch (TableAlreadyExistsException ignore) {}
+                try (Statement stmt = metaConnection.createStatement()) {
+                    stmt.executeUpdate(getCDCStreamStatusDDL());
+                } catch (TableAlreadyExistsException ignore) {
+                }
+                try (Statement stmt = metaConnection.createStatement()) {
+                    stmt.executeUpdate(getCDCStreamDDL());
+                } catch (TableAlreadyExistsException ignore) {
+                }
+                try (Statement stmt = metaConnection.createStatement()) {
+                    stmt.executeUpdate(getHAGroupDDL());
+                } catch (TableAlreadyExistsException ignore) {
+                }
             } catch (SQLException e) {
                 sqlE = e;
             } finally {

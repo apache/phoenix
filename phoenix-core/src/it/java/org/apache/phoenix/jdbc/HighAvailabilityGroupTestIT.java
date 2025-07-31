@@ -302,8 +302,9 @@ public class HighAvailabilityGroupTestIT {
         // Make ZK connectable and the cluster role record be missing
         CuratorFramework curator = mock(CuratorFramework.class);
         when(curator.blockUntilConnected(anyInt(), any(TimeUnit.class))).thenReturn(true);
-        HighAvailabilityGroup.CURATOR_CACHE.put(ZK2, curator);
-        HighAvailabilityGroup.CURATOR_CACHE.put(ZK1, curator);
+        // Use proper cache keys with default namespace
+        HighAvailabilityGroup.CURATOR_CACHE.put(HighAvailabilityGroup.generateCacheKey(ZK2, null), curator);
+        HighAvailabilityGroup.CURATOR_CACHE.put(HighAvailabilityGroup.generateCacheKey(ZK1, null), curator);
 
         ExistsBuilder eb = mock(ExistsBuilder.class);
         when(eb.forPath(anyString())).thenReturn(null);

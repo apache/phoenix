@@ -36,6 +36,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_PARALL
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_PARALLEL_POOL2_TASK_REJECTED_COUNTER;
 import static org.apache.phoenix.query.BaseTest.extractThreadPoolExecutorFromCQSI;
 import static org.apache.phoenix.query.QueryServices.AUTO_COMMIT_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT;
 import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_CORE_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ENABLED;
@@ -51,14 +52,17 @@ import static org.junit.Assert.fail;
 import static org.junit.Assume.assumeTrue;
 import static org.mockito.Mockito.doAnswer;
 
-import java.lang.reflect.Field;
 import java.sql.Connection;
+import java.lang.reflect.Field;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -66,9 +70,11 @@ import java.util.concurrent.ThreadPoolExecutor;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.exception.MutationBlockedIOException;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
@@ -81,6 +87,7 @@ import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.HAGroupStoreTestUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.AfterClass;
@@ -118,6 +125,8 @@ public class ParallelPhoenixConnectionIT {
 
     @BeforeClass
     public static void setUpBeforeClass() throws Exception {
+        CLUSTERS.getHBaseCluster1().getConfiguration().setBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, true);
+        CLUSTERS.getHBaseCluster2().getConfiguration().setBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, true);
         CLUSTERS.start();
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
         DriverManager.registerDriver(new PhoenixTestDriver());
@@ -131,6 +140,7 @@ public class ParallelPhoenixConnectionIT {
         GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_MAX_QUEUE, String.valueOf(23));
         GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT,
             String.valueOf(true));
+        GLOBAL_PROPERTIES.setProperty("hbase.client.retries.number", "0");
         GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_METRICS_ENABLED, String.valueOf(true));
     }
 
@@ -354,6 +364,77 @@ public class ParallelPhoenixConnectionIT {
         try (Connection conn = getParallelConnection()) {
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
         }
+    }
+
+    /**
+     * Test Phoenix connection creation and basic operations with HBase both cluster is ACTIVE_TO_STANDBY role.
+     */
+    @Test
+    public void testBothClusterATSRole() throws Exception {
+        String zkUrl1 = CLUSTERS.getZkUrl1();
+        String zkUrl2 = CLUSTERS.getZkUrl2();
+        String haGroupName = testName.getMethodName();
+        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl1, zkUrl2,
+                ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.ACTIVE_TO_STANDBY, null);
+        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl2, zkUrl1,
+                ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.ACTIVE_TO_STANDBY, null);
+        try (ParallelPhoenixConnection conn = (ParallelPhoenixConnection) getParallelConnection()) {
+            PhoenixConnection conn1 = conn.futureConnection1.get();
+            PhoenixConnection conn2 = conn.futureConnection2.get();
+            conn1.setHAGroupName(haGroupName);
+            conn2.setHAGroupName(haGroupName);
+            doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
+            fail("Expected MutationBlockedIOException to be thrown");
+        } catch (SQLException e) {
+            assertTrue(containsMutationBlockedException(e));
+        } finally {
+            CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE, ClusterRole.STANDBY);
+        }
+    }
+
+    /**
+     * Test Phoenix connection creation and
+     * basic operations with HBase one cluster is ACTIVE_TO_STANDBY role
+     * and other in ACTIVE role.
+     */
+    @Test
+    public void testOneClusterATSRoleWithActive() throws Exception {
+        testOneClusterATSRole(ClusterRole.ACTIVE);
+    }
+
+    /**
+     * Test Phoenix connection creation and
+     * basic operations with HBase one cluster is ACTIVE_TO_STANDBY role
+     * and other in STANDBY role.
+     */
+    @Test
+    public void testOneClusterATSRoleWithStandby() throws Exception {
+        testOneClusterATSRole(ClusterRole.STANDBY);
+    }
+
+    private void testOneClusterATSRole(ClusterRole otherRole) throws Exception {
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, otherRole);
+        try (Connection conn = getParallelConnection()) {
+            doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
+        } catch (SQLException e) {
+            fail("Expected no exception to be thrown as one cluster is "
+                    + "in ACTIVE_TO_STANDBY and other in " + otherRole);
+        } finally {
+            CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE, ClusterRole.STANDBY);
+        }
+    }
+
+    private boolean containsMutationBlockedException(SQLException e) {
+        Throwable cause = e.getCause();
+        // Recursively check for MutationBlockedIOException buried in exception stack.
+        while (cause != null) {
+            if (cause instanceof RetriesExhaustedWithDetailsException) {
+                RetriesExhaustedWithDetailsException re = (RetriesExhaustedWithDetailsException) cause;
+                return re.getCause(0) instanceof MutationBlockedIOException;
+            }
+            cause = cause.getCause();
+        }
+        return false;
     }
 
     /**

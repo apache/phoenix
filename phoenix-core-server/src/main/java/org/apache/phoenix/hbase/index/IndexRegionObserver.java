@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.hbase.index;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
@@ -59,6 +60,7 @@ import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
+import org.apache.phoenix.exception.MutationBlockedIOException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.Expression;
@@ -126,6 +128,7 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -621,10 +624,22 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       }
       try {
           final Configuration conf = c.getEnvironment().getConfiguration();
-          final HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(conf);
-          if (haGroupStoreManager.isMutationBlocked()) {
-              throw new IOException("Blocking Mutation as Some CRRs are in ACTIVE_TO_STANDBY "
-                      + "state and CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
+          final HAGroupStoreManager haGroupStoreManager
+                  = HAGroupStoreManager.getInstance(conf);
+          if (haGroupStoreManager == null) {
+              throw new IOException("HAGroupStoreManager is null "
+                      + "for current cluster, check configuration");
+          }
+          // Extract HAGroupName from the mutations
+          final Set<String> haGroupNames = extractHAGroupNameAttribute(miniBatchOp);
+          // Check if mutation is blocked for any of the HAGroupNames
+          for (String haGroupName : haGroupNames) {
+              if (StringUtils.isNotBlank(haGroupName)
+                      && haGroupStoreManager.isMutationBlocked(haGroupName)) {
+                  throw new MutationBlockedIOException("Blocking Mutation as Some CRRs are in "
+                          + "ACTIVE_TO_STANDBY state and "
+                          + "CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
+              }
           }
           preBatchMutateWithExceptions(c, miniBatchOp);
           return;
@@ -634,6 +649,20 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       throw new RuntimeException(
         "Somehow didn't return an index update but also didn't propagate the failure to the client!");
   }
+
+  private Set<String> extractHAGroupNameAttribute(
+          MiniBatchOperationInProgress<Mutation> miniBatchOp) {
+      Set<String> haGroupNames = new HashSet<>();
+      for (int i = 0; i < miniBatchOp.size(); i++) {
+          Mutation m = miniBatchOp.getOperation(i);
+          byte[] haGroupName = m.getAttribute(
+                  BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
+          if (haGroupName != null) {
+              haGroupNames.add(new String(haGroupName, StandardCharsets.UTF_8));
+          }
+      }
+      return haGroupNames;
+    }
 
     @Override
     public void preWALRestore(
