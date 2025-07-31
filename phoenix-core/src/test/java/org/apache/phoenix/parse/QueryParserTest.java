@@ -18,6 +18,7 @@
 package org.apache.phoenix.parse;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -30,6 +31,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.hadoop.yarn.webapp.hamlet2.Hamlet.P;
 import org.apache.phoenix.exception.PhoenixParserException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
@@ -704,6 +706,76 @@ public class QueryParserTest {
   public void testValidUpsertSelectHint() throws Exception {
     String sql = (("upsert /*+ NO_INDEX */ into t select k from t where k in ( 1,2 )"));
     parseQuery(sql);
+  }
+
+  @Test
+  public void testPlainUpsertReturningRow() throws Exception {
+    String sql = "upsert into t (k, v) values ( 1, 2 ) RETURNING *";
+    UpsertStatement stmt = parseQuery(sql, UpsertStatement.class);
+    assertTrue(stmt.isReturningRow());
+  }
+
+  @Test
+  public void testPlainUpsertNotReturningRow() throws Exception {
+    String sql = "upsert into t (k, v) values ( 1, 2 )";
+    UpsertStatement stmt = parseQuery(sql, UpsertStatement.class);
+    assertFalse(stmt.isReturningRow());
+  }
+
+  @Test
+  public void testUpsertWithOnDuplicateKey() throws Exception {
+    String sql = "upsert into t (k, v) values ( 1, 2 ) "
+      + "ON DUPLICATE KEY UPDATE k = k + 1";
+    parseQuery(sql);
+  }
+
+  @Test
+  public void testUpsertInvalidReturningProjections() throws Exception {
+    String sql = "upsert into t (k, v) values ( 1, 2 ) "
+      + "ON DUPLICATE KEY UPDATE k = k + 1 RETURNING k";
+    try {
+      parseQuery(sql);
+      fail();
+    } catch (PhoenixParserException e) {
+      assertEquals(SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode(), e.getErrorCode());
+    }
+  }
+
+  @Test
+  public void testUpsertReturningRow() throws Exception {
+    String sql = "upsert into t (k, v) values ( 1, 2 ) "
+      + "ON DUPLICATE KEY UPDATE k = k + 1 RETURNING *";
+    UpsertStatement stmt = parseQuery(sql, UpsertStatement.class);
+    assertTrue(stmt.isReturningRow());
+  }
+
+  @Test
+  public void testDeleteReturningRow() throws Exception {
+    String sql = "delete from t RETURNING *";
+    parseQuery(sql);
+  }
+
+  @Test
+  public void testDeleteWhereReturningRow() throws Exception {
+    String sql = "DELETE FROM T WHERE PK1 = ? AND PK2 = ? RETURNING *";
+    parseQuery(sql);
+  }
+
+  @Test
+  public void testDeleteWithOrderLimitWhereReturningRow() throws Exception {
+    String sql = "DELETE FROM T WHERE PK1 = ? AND PK2 = ? ORDER BY PK2 LIMIT 1 RETURNING *";
+    parseQuery(sql);
+  }
+
+  @Test
+  public void testDeleteInvalidReturningRow() throws Exception {
+    String sql = "DELETE FROM T RETURNING PK1";
+    try {
+      parseQuery(sql);
+      fail();
+    } catch (PhoenixParserException e) {
+      assertEquals(SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode(), e.getErrorCode());
+    }
   }
 
   @Test

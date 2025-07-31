@@ -125,7 +125,9 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
     conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a',10)");
 
     int actualReturnValue = conn.createStatement()
-      .executeUpdate("UPSERT INTO " + tableName + " VALUES('a',0) ON DUPLICATE KEY IGNORE");
+      .executeUpdate("UPSERT INTO " + tableName + " VALUES('a',0) ON DUPLICATE KEY IGNORE " +
+              "" +
+        "RETURNING *");
     assertEquals(0, actualReturnValue);
 
     conn.close();
@@ -159,7 +161,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
       validateAtomicUpsertReturnRow(tableName, conn, bsonDocument1, bsonDocument2);
 
       PreparedStatement ps = conn
-        .prepareStatement("DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ?");
+        .prepareStatement("DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? "
+          + "RETURNING *");
       ps.setString(1, "pk000");
       ps.setDouble(2, -123.98);
       ps.setString(3, "pk003");
@@ -200,7 +203,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
       verifyIndexRow(conn, tableName, false);
 
       PreparedStatement ps = conn.prepareStatement(
-        "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ?");
+        "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ? "
+          + "RETURNING *");
       ps.setString(1, "pk000");
       ps.setDouble(2, -123.98);
       ps.setString(3, "pk003");
@@ -208,7 +212,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
       validateReturnedRowAfterDelete(ps, "col2_001", true, false, bsonDocument2, 234);
 
       ps = conn.prepareStatement(
-        "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ?");
+        "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ? "
+          + "RETURNING *");
       ps.setString(1, "pk000");
       ps.setDouble(2, -123.98);
       ps.setString(3, "pk003");
@@ -253,7 +258,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
       validateAtomicUpsertReturnRow(tableName, conn, bsonDocument1, bsonDocument2);
 
       PreparedStatement ps = conn.prepareStatement(
-        "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ?");
+        "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ? "
+          + "RETURNING *");
       ps.setString(1, "pk000");
       ps.setDouble(2, -123.98);
       ps.setString(3, "pk003");
@@ -261,7 +267,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
       validateReturnedRowAfterDelete(ps, "col2_001", true, false, bsonDocument2, 234);
 
       ps = conn.prepareStatement(
-        "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ?");
+        "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ? "
+          + "RETURNING *");
       ps.setString(1, "pk000");
       ps.setDouble(2, -123.98);
       ps.setString(3, "pk003");
@@ -305,7 +312,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
       validateAtomicUpsertOnlyReturnRow(tableName, conn, bsonDocument1, bsonDocument2);
 
       PreparedStatement ps = conn.prepareStatement(
-        "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ?");
+        "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ? "
+          + "RETURNING *");
       ps.setString(1, "pk000");
       ps.setDouble(2, -123.98);
       ps.setString(3, "pk003");
@@ -313,7 +321,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
       validateReturnedRowAfterDelete(ps, "col2_001", true, false, bsonDocument2, 234);
 
       ps = conn.prepareStatement(
-        "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ?");
+        "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ? "
+          + "RETURNING *");
       ps.setString(1, "pk000");
       ps.setDouble(2, -123.98);
       ps.setString(3, "pk003");
@@ -357,7 +366,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
       validateAtomicUpsertReturnRow(tableName, conn, bsonDocument1, bsonDocument2);
 
       PreparedStatement ps = conn
-        .prepareStatement("DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ?");
+        .prepareStatement("DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? "
+          + "RETURNING *");
       ps.setString(1, "pk000");
       ps.setDouble(2, -123.98);
       ps.setString(3, "pk003");
@@ -396,12 +406,13 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
     addRows(tableName, conn);
 
     PreparedStatement ps =
-      conn.prepareStatement("DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ?");
+      conn.prepareStatement("DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ? "
+          + "RETURNING *");
     ps.setString(1, "pk001");
     ps.setDouble(2, 122.34);
     validateReturnedRowAfterDelete(ps, "col2_001", false, false, bsonDocument2, 234);
 
-    ps = conn.prepareStatement("DELETE FROM " + tableName);
+    ps = conn.prepareStatement("DELETE FROM " + tableName + " RETURNING *");
     validateReturnedRowAfterDelete(ps, "col2_001", false, false, bsonDocument2, 234);
 
     ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
@@ -410,7 +421,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
     addRows(tableName, conn);
 
     ps = conn.prepareStatement(
-      "DELETE FROM " + tableName + " WHERE PK1 IN (?) AND PK2 IN (?) AND PK3 IN (?, ?)");
+      "DELETE FROM " + tableName + " WHERE PK1 IN (?) AND PK2 IN (?) AND PK3 IN (?, ?) "
+          + "RETURNING *");
     ps.setString(1, "pk001");
     ps.setDouble(2, 122.34);
     ps.setString(3, "pk004");
@@ -421,12 +433,14 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
   private static void validateAtomicUpsertReturnRow(String tableName, Connection conn,
     BsonDocument bsonDocument1, BsonDocument bsonDocument2) throws SQLException {
     String upsertSql = "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1, COL3, COL4)"
-      + " VALUES('pk000', -123.98, 'pk003', 1011.202, ?, 123) ON DUPLICATE KEY " + "IGNORE";
+      + " VALUES('pk000', -123.98, 'pk003', 1011.202, ?, 123) ON DUPLICATE KEY " + "IGNORE "
+      + "RETURNING *";
     validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 1011.202, null, true, bsonDocument1,
       bsonDocument1, 123);
 
     upsertSql = "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1) "
-      + "VALUES('pk000', -123.98, 'pk003', 0) ON DUPLICATE KEY IGNORE";
+      + "VALUES('pk000', -123.98, 'pk003', 0) ON DUPLICATE KEY IGNORE "
+      + "RETURNING *";
     validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 1011.202, null, false, null,
       bsonDocument1, 123);
 
@@ -440,14 +454,15 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
       + " (PK1, PK2, PK3) VALUES('pk000', -123.98, 'pk003') ON DUPLICATE KEY UPDATE "
       + "COUNTER1 = CASE WHEN COUNTER1 < 2000 THEN COUNTER1 + 1999.99 ELSE COUNTER1" + " END, "
       + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 " + "END, "
-      + "COL3 = ?, " + "COL4 = 234";
+      + "COL3 = ?, " + "COL4 = 234 RETURNING *";
     validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 2233.99, "col2_001", true,
       bsonDocument2, bsonDocument2, 234);
 
     upsertSql = "UPSERT INTO " + tableName
       + " (PK1, PK2, PK3) VALUES('pk000', -123.98, 'pk003') ON DUPLICATE KEY UPDATE "
       + "COUNTER1 = CASE WHEN COUNTER1 < 2000 THEN COUNTER1 + 1999.99 ELSE COUNTER1" + " END,"
-      + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 " + "END";
+      + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 " + "END "
+      + "RETURNING *";
     validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 2233.99, "col2_001", false, null,
       bsonDocument2, 234);
   }
@@ -455,12 +470,14 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
   private static void validateAtomicUpsertOnlyReturnRow(String tableName, Connection conn,
     BsonDocument bsonDocument1, BsonDocument bsonDocument2) throws SQLException {
     String upsertSql = "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1, COL3, COL4)"
-      + " VALUES('pk000', -123.98, 'pk003', 1011.202, ?, 123) ON DUPLICATE KEY " + "IGNORE";
+      + " VALUES('pk000', -123.98, 'pk003', 1011.202, ?, 123) ON DUPLICATE KEY " + "IGNORE "
+      + "RETURNING *";
     validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 1011.202, null, true, bsonDocument1,
       bsonDocument1, 123);
 
     upsertSql = "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1) "
-      + "VALUES('pk000', -123.98, 'pk003', 0) ON DUPLICATE KEY IGNORE";
+      + "VALUES('pk000', -123.98, 'pk003', 0) ON DUPLICATE KEY IGNORE "
+      + "RETURNING *";
     validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 1011.202, null, false, null,
       bsonDocument1, 123);
 
@@ -474,14 +491,15 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
       + " (PK1, PK2, PK3) VALUES('pk000', -123.98, 'pk003') ON DUPLICATE KEY UPDATE_ONLY "
       + "COUNTER1 = CASE WHEN COUNTER1 < 2000 THEN COUNTER1 + 1999.99 ELSE COUNTER1" + " END, "
       + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 " + "END, "
-      + "COL3 = ?, " + "COL4 = 234";
+      + "COL3 = ?, " + "COL4 = 234 RETURNING *";
     validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 2233.99, "col2_001", true,
       bsonDocument2, bsonDocument2, 234);
 
     upsertSql = "UPSERT INTO " + tableName
       + " (PK1, PK2, PK3) VALUES('pk000', -123.98, 'pk003') ON DUPLICATE KEY UPDATE_ONLY "
       + "COUNTER1 = CASE WHEN COUNTER1 < 2000 THEN COUNTER1 + 1999.99 ELSE COUNTER1" + " END,"
-      + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 " + "END";
+      + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 " + "END "
+      + "RETURNING *";
     validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 2233.99, "col2_001", false, null,
       bsonDocument2, 234);
   }
@@ -505,12 +523,14 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
   private static void validateReturnedRowAfterDelete(PreparedStatement ps, String col2,
     boolean isSinglePointLookup, boolean atomicDeleteSuccessful, BsonDocument expectedDoc,
     Integer col4) throws SQLException {
-    final Pair<Integer, ResultSet> resultPair =
-      ps.unwrap(PhoenixPreparedStatement.class).executeAtomicUpdateReturnRow();
-    ResultSet resultSet = resultPair.getSecond();
+    ps.executeUpdate();
+    ResultSet resultSet = ps.getResultSet();
     if (!isSinglePointLookup) {
       assertNull(resultSet);
       return;
+    }
+    if (resultSet != null) {
+      assertTrue(resultSet.next());
     }
     if (!atomicDeleteSuccessful) {
       assertTrue(resultSet == null || resultSet.getObject(4) == null);
@@ -553,8 +573,9 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
       resultSet = stmt.execute(upsertSql) ? stmt.getResultSet() : null;
       updateCount = stmt.getUpdateCount();
     }
-    boolean isOnDuplicateKey = upsertSql.toUpperCase().contains("ON DUPLICATE KEY");
-    if (conn.getAutoCommit() && isOnDuplicateKey) {
+    boolean isReturningRow = upsertSql.toUpperCase().contains("RETURNING *");
+    if (conn.getAutoCommit() && isReturningRow) {
+      assertTrue(resultSet.next());
       assertEquals(success ? 1 : 0, updateCount);
       assertEquals("pk000", resultSet.getString(1));
       assertEquals(-123.98, resultSet.getDouble(2), 0.0);
@@ -591,8 +612,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
       updateCount = resultPair.getFirst();
       resultSet = resultPair.getSecond();
     }
-    boolean isOnDuplicateKey = upsertSql.toUpperCase().contains("ON DUPLICATE KEY");
-    if (conn.getAutoCommit() && isOnDuplicateKey) {
+    boolean isReturningRow = upsertSql.toUpperCase().contains("RETURNING *");
+    if (conn.getAutoCommit() && isReturningRow) {
       assertEquals(success ? 1 : 0, updateCount);
       if (resultSet != null) {
         assertEquals("pk000", resultSet.getString(1));

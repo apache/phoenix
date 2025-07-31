@@ -179,6 +179,7 @@ import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
+import org.apache.phoenix.parse.RowReturningDMLStatement;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.ShowCreateTable;
@@ -580,15 +581,15 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     return target;
   }
 
-  private boolean isResultSetExpected(final CompilableStatement stmt) {
-    return stmt instanceof ExecutableUpsertStatement
-      && ((ExecutableUpsertStatement) stmt).getOnDupKeyPairs() != null;
+	private boolean isReturningRowStatement(final CompilableStatement stmt) {
+		return stmt instanceof RowReturningDMLStatement &&
+			((RowReturningDMLStatement) stmt).isReturningRow();
   }
 
   protected int executeMutation(final CompilableStatement stmt, final AuditQueryLogger queryLogger)
     throws SQLException {
     return executeMutation(stmt, true, queryLogger,
-      isResultSetExpected(stmt) ? ReturnResult.NEW_ROW_ON_SUCCESS : null).getFirst();
+      isReturningRowStatement(stmt) ? ReturnResult.NEW_ROW_ON_SUCCESS : null).getFirst();
   }
 
   Pair<Integer, ResultSet> executeMutation(final CompilableStatement stmt,
@@ -695,7 +696,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                 : (isDelete ? ((ExecutableDeleteStatement) stmt).getTable().getName() : null);
               ResultSet rs = result == null || result.isEmpty()
                 ? null
-                : TupleUtil.getResultSet(new ResultTuple(result), tableNameVal, connection);
+                : TupleUtil.getResultSet(new ResultTuple(result), tableNameVal, connection,
+                  ! isReturningRowStatement(stmt));
               setLastResultSet(rs);
               return new Pair<>(lastUpdateCount, rs);
             }
@@ -1181,9 +1183,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     private ExecutableUpsertStatement(NamedTableNode table, HintNode hintNode,
       List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount,
       Map<String, UDFParseNode> udfParseNodes, List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
-      OnDuplicateKeyType onDupKeyType) {
+      OnDuplicateKeyType onDupKeyType,
+      boolean returningRow) {
       super(table, hintNode, columns, values, select, bindCount, udfParseNodes, onDupKeyPairs,
-        onDupKeyType);
+        onDupKeyType, returningRow);
     }
 
     @SuppressWarnings("unchecked")
@@ -1204,8 +1207,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     implements CompilableStatement {
     private ExecutableDeleteStatement(NamedTableNode table, HintNode hint, ParseNode whereNode,
       List<OrderByNode> orderBy, LimitNode limit, int bindCount,
-      Map<String, UDFParseNode> udfParseNodes) {
-      super(table, hint, whereNode, orderBy, limit, bindCount, udfParseNodes);
+      Map<String, UDFParseNode> udfParseNodes, boolean returningRow) {
+      super(table, hint, whereNode, orderBy, limit, bindCount, udfParseNodes, returningRow);
     }
 
     @SuppressWarnings("unchecked")
@@ -2126,9 +2129,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     public ExecutableUpsertStatement upsert(NamedTableNode table, HintNode hintNode,
       List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount,
       Map<String, UDFParseNode> udfParseNodes, List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
-      UpsertStatement.OnDuplicateKeyType onDupKeyType) {
+      UpsertStatement.OnDuplicateKeyType onDupKeyType, boolean returningRow) {
       return new ExecutableUpsertStatement(table, hintNode, columns, values, select, bindCount,
-        udfParseNodes, onDupKeyPairs, onDupKeyType);
+        udfParseNodes, onDupKeyPairs, onDupKeyType, returningRow);
     }
 
     @Override
@@ -2155,9 +2158,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     @Override
     public ExecutableDeleteStatement delete(NamedTableNode table, HintNode hint,
       ParseNode whereNode, List<OrderByNode> orderBy, LimitNode limit, int bindCount,
-      Map<String, UDFParseNode> udfParseNodes) {
+      Map<String, UDFParseNode> udfParseNodes, boolean returningRow) {
       return new ExecutableDeleteStatement(table, hint, whereNode, orderBy, limit, bindCount,
-        udfParseNodes);
+        udfParseNodes, returningRow);
     }
 
     @Override
@@ -2667,7 +2670,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       }
       executeMutation(stmt, createAuditQueryLogger(stmt, sql));
       flushIfNecessary();
-      return isResultSetExpected(stmt);
+      return isReturningRowStatement(stmt);
     }
 
     executeQuery(stmt, createQueryLogger(stmt, sql));

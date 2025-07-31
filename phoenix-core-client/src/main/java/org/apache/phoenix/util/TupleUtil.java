@@ -229,11 +229,13 @@ public class TupleUtil {
    * @param toProject Tuple to be projected.
    * @param tableName Table name.
    * @param conn      Phoenix Connection object.
+   * @param withPrefetch When {@code true}, the returned ResultSet is prefetched, otherwise one
+   *   needs to call next() on it.
    * @return ResultSet for the give single row.
    * @throws SQLException If any SQL operation fails.
    */
-  public static ResultSet getResultSet(Tuple toProject, TableName tableName, Connection conn)
-    throws SQLException {
+  public static ResultSet getResultSet(Tuple toProject, TableName tableName, Connection conn,
+    boolean withPrefetch) throws SQLException {
     if (tableName == null) {
       return null;
     }
@@ -268,7 +270,9 @@ public class TupleUtil {
       ResultSet newResultSet = new PhoenixPrefetchedResultSet(resultSet.getRowProjector(),
         resultSet.getContext(), Collections
           .singletonList(new ResultTuple(Result.create(Collections.singletonList(newCell)))));
-      newResultSet.next();
+      if (withPrefetch) {
+        newResultSet.next();
+      }
       return newResultSet;
     }
   }
