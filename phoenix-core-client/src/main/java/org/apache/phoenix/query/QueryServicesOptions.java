@@ -495,6 +495,8 @@ public class QueryServicesOptions {
   public static final long DEFAULT_PHOENIX_CDC_STREAM_PARTITION_EXPIRY_MIN_AGE_MS =
     30 * 60 * 60 * 1000; // 30 hours
 
+  public static final int DEFAULT_PHOENIX_UNCOVERED_INDEX_MAX_POOL_SIZE = 256;
+
   private final Configuration config;
 
   private QueryServicesOptions(Configuration config) {

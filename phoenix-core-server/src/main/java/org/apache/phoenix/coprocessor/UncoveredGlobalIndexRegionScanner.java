@@ -27,7 +27,6 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -51,16 +50,14 @@ import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import org.apache.hbase.thirdparty.com.google.common.cache.Cache;
-import org.apache.hbase.thirdparty.com.google.common.cache.CacheBuilder;
-import org.apache.hbase.thirdparty.com.google.common.cache.RemovalListener;
 
 /**
  * This is an index table region scanner which scans index table rows locally and then extracts data
@@ -71,7 +68,6 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
   private static final Logger LOGGER =
     LoggerFactory.getLogger(UncoveredGlobalIndexRegionScanner.class);
   public static final String NUM_CONCURRENT_INDEX_THREADS_CONF_KEY = "phoenix.index.threads.max";
-  public static final int DEFAULT_CONCURRENT_INDEX_THREADS = 16;
   public static final String INDEX_ROW_COUNTS_PER_TASK_CONF_KEY =
     "phoenix.index.row.count.per.task";
   public static final int DEFAULT_INDEX_ROW_COUNTS_PER_TASK = 2048;
@@ -79,10 +75,9 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
   protected byte[][] regionEndKeys;
   protected final Table dataHTable;
   protected final int rowCountPerTask;
-  protected final TaskRunner pool;
+  protected static volatile TaskRunner pool;
   protected String exceptionMessage;
   protected final HTableFactory hTableFactory;
-  private static volatile Cache<Region, TaskRunner> regionThreadPoolCache;
 
   // This relies on Hadoop Configuration to handle warning about deprecated configs and
   // to set the correct non-deprecated configs when an old one shows up.
@@ -91,25 +86,20 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
     Configuration.addDeprecation("index.row.count.per.task", INDEX_ROW_COUNTS_PER_TASK_CONF_KEY);
   }
 
-  static Cache<Region, TaskRunner> getRegionThreadPoolCache() {
-    if (regionThreadPoolCache == null) {
+  static void initThreadPool(final RegionCoprocessorEnvironment env) {
+    if (pool == null) {
       synchronized (UncoveredGlobalIndexRegionScanner.class) {
-        if (regionThreadPoolCache == null) {
-          regionThreadPoolCache = CacheBuilder.newBuilder().expireAfterAccess(30, TimeUnit.HOURS)
-            .removalListener((RemovalListener<Region, TaskRunner>) notification -> {
-              TaskRunner pool = notification.getValue();
-              if (pool != null) {
-                pool
-                  .stop("Thread Pool for UncoveredGlobalIndexRegionScanner is closing for region: "
-                    + notification.getKey());
-              }
-            }).build();
+        if (pool == null) {
+          pool = new WaitForCompletionTaskRunner(ThreadPoolManager
+            .getExecutor(new ThreadPoolBuilder("Uncovered Global Index", env.getConfiguration())
+              .setMaxThread(QueryServices.PHOENIX_UNCOVERED_INDEX_MAX_POOL_SIZE,
+                QueryServicesOptions.DEFAULT_PHOENIX_UNCOVERED_INDEX_MAX_POOL_SIZE)
+              .setCoreTimeout(INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env));
           LOGGER.info(
             "Initialized region level thread pool cache for UncoveredGlobalIndexRegionScanner.");
         }
       }
     }
-    return regionThreadPoolCache;
   }
 
   public UncoveredGlobalIndexRegionScanner(final RegionScanner innerScanner, final Region region,
@@ -123,17 +113,7 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
     hTableFactory = IndexWriterUtils.getDefaultDelegateHTableFactory(env);
     rowCountPerTask =
       config.getInt(INDEX_ROW_COUNTS_PER_TASK_CONF_KEY, DEFAULT_INDEX_ROW_COUNTS_PER_TASK);
-
-    try {
-      pool = getRegionThreadPoolCache().get(region,
-        () -> new WaitForCompletionTaskRunner(ThreadPoolManager
-          .getExecutor(new ThreadPoolBuilder("Uncovered Global Index", env.getConfiguration())
-            .setMaxThread(NUM_CONCURRENT_INDEX_THREADS_CONF_KEY, DEFAULT_CONCURRENT_INDEX_THREADS)
-            .setCoreTimeout(INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env)));
-    } catch (ExecutionException e) {
-      throw new IOException("Failed to create thread pool for UncoveredGlobalIndexRegionScanner",
-        e);
-    }
+    initThreadPool(env);
     byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
     dataHTable = hTableFactory.getTable(new ImmutableBytesPtr(dataTableName));
     regionEndKeys =

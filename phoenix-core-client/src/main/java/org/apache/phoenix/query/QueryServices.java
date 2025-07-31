@@ -619,6 +619,8 @@ public interface QueryServices extends SQLCloseable {
   String PHOENIX_CDC_STREAM_PARTITION_EXPIRY_MIN_AGE_MS =
     "phoenix.cdc.stream.partition.expiry.min.age.ms";
 
+  String PHOENIX_UNCOVERED_INDEX_MAX_POOL_SIZE = "phoenix.uncovered.index.threads.max";
+
   /**
    * Get executor service used for parallel scans
    */
