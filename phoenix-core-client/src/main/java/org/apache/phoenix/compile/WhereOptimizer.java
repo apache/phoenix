@@ -1753,7 +1753,7 @@ public class WhereOptimizer {
             }
             return newKeyParts(childSlot, node, new ArrayList<KeyRange>(ranges));
         }
-        
+
         /**
          * If {@link ArrayAnyComparisonExpression} is of the form:
          *
@@ -1792,114 +1792,116 @@ public class WhereOptimizer {
          * @return true if the scan ranges can be extracted, false otherwise
          */
         private boolean shouldExtractKeyRangesForArrayAnyExpr(ArrayAnyComparisonExpression node,
-          List<Expression> keyExpressions) {
-          // {@link ArrayAnyComparisonExpression} has two children, and the second child is
-          // comparison expression
-          Expression childExpr = node.getChildren().get(1);
-          if (!(childExpr instanceof ComparisonExpression)) {
-            return false;
-          }
-          ComparisonExpression comparisonExpr = (ComparisonExpression) childExpr;
-
-          // Replacing IN() with =ANY() is only valid if the comparison operator is EQUAL
-          if (comparisonExpr.getFilterOp() != CompareOperator.EQUAL) {
-            return false;
-          }
-
-          // {@link ComparisonExpression} will have two children in this case, we need to make
-          // sure that one of them is a {@link RowKeyColumnExpression} and the other is a {@link
-          // ArrayElemRefExpression}. Further, the first child of {@link ArrayElemRefExpression}
-          // must be a {@link LiteralExpression}. The first child of {@link
-          // ArrayElemRefExpression} is same as the first child of {@link
-          // ArrayAnyComparisonExpression}.
-          Expression lhs = comparisonExpr.getChildren().get(0);
-          Expression rhs = comparisonExpr.getChildren().get(1);
-          if (lhs instanceof RowKeyColumnExpression && rhs instanceof ArrayElemRefExpression) {
-            ArrayElemRefExpression arrayElemRefExpr = (ArrayElemRefExpression) rhs;
-            if (!(arrayElemRefExpr.getChildren().get(0) instanceof LiteralExpression)) {
-              return false;
+            List<Expression> keyExpressions) {
+            // {@link ArrayAnyComparisonExpression} has two children, and the second child is
+            // comparison expression
+            Expression childExpr = node.getChildren().get(1);
+            if (!(childExpr instanceof ComparisonExpression)) {
+                return false;
             }
-            // Capture {@link RowKeyColumnExpression} for the generation of key slots.
-            keyExpressions.add(lhs);
+            ComparisonExpression comparisonExpr = (ComparisonExpression) childExpr;
 
-          } else if (lhs instanceof ArrayElemRefExpression && rhs instanceof RowKeyColumnExpression) {
-            ArrayElemRefExpression arrayElemRefExpr = (ArrayElemRefExpression) lhs;
-            if (!(arrayElemRefExpr.getChildren().get(0) instanceof LiteralExpression)) {
-              return false;
+            // Replacing IN() with =ANY() is only valid if the comparison operator is EQUAL
+            if (comparisonExpr.getFilterOp() != CompareOperator.EQUAL) {
+                return false;
             }
-            // Capture {@link RowKeyColumnExpression} for the generation of key slots.
-            keyExpressions.add(rhs);
-          } else {
-            return false;
-          }
-          return true;
+
+            // {@link ComparisonExpression} will have two children in this case, we need to make
+            // sure that one of them is a {@link RowKeyColumnExpression} and the other is a {@link
+            // ArrayElemRefExpression}. Further, the first child of {@link ArrayElemRefExpression}
+            // must be a {@link LiteralExpression}. The first child of {@link
+            // ArrayElemRefExpression} is same as the first child of {@link
+            // ArrayAnyComparisonExpression}.
+            Expression lhs = comparisonExpr.getChildren().get(0);
+            Expression rhs = comparisonExpr.getChildren().get(1);
+            if (lhs instanceof RowKeyColumnExpression && rhs instanceof ArrayElemRefExpression) {
+                ArrayElemRefExpression arrayElemRefExpr = (ArrayElemRefExpression) rhs;
+                if (!(arrayElemRefExpr.getChildren().get(0) instanceof LiteralExpression)) {
+                    return false;
+                }
+                // Capture {@link RowKeyColumnExpression} for the generation of key slots.
+                keyExpressions.add(lhs);
+
+            } else if (
+                lhs instanceof ArrayElemRefExpression && rhs instanceof RowKeyColumnExpression
+            ) {
+                ArrayElemRefExpression arrayElemRefExpr = (ArrayElemRefExpression) lhs;
+                if (!(arrayElemRefExpr.getChildren().get(0) instanceof LiteralExpression)) {
+                    return false;
+                }
+                // Capture {@link RowKeyColumnExpression} for the generation of key slots.
+                keyExpressions.add(rhs);
+            } else {
+                return false;
+            }
+            return true;
         }
 
         @Override
         public Iterator<Expression> visitEnter(ArrayAnyComparisonExpression node) {
-          ArrayList<Expression> keyExpressions = new ArrayList<>();
-          if (shouldExtractKeyRangesForArrayAnyExpr(node, keyExpressions)) {
-            return keyExpressions.iterator();
-          }
-          // If the scan ranges cannot be extracted, we return an empty iterator
-          return Collections.emptyIterator();
+            ArrayList<Expression> keyExpressions = new ArrayList<>();
+            if (shouldExtractKeyRangesForArrayAnyExpr(node, keyExpressions)) {
+                return keyExpressions.iterator();
+            }
+            // If the scan ranges cannot be extracted, we return an empty iterator
+            return Collections.emptyIterator();
         }
 
         @Override
         public KeySlots visitLeave(ArrayAnyComparisonExpression node, List<KeySlots> childParts) {
-          if (childParts == null || childParts.isEmpty()) {
-            return null;
-          }
-          // Doing type casting is safe here as we won't have reached here unless the expression
-          // tree is of the form expected by the method shouldExtractKeyRangesForArrayAnyExpr.
-          Expression arrayExpr = node.getChildren().get(0);
-          PhoenixArray arr = (PhoenixArray) ((LiteralExpression) arrayExpr).getValue();
-          int numElements = arr.getDimensions();
-
-          ComparisonExpression comparisonExpr = (ComparisonExpression) node.getChildren().get(1);
-          Expression lhsExpr = comparisonExpr.getChildren().get(0);
-          Expression rhsExpr = comparisonExpr.getChildren().get(1);
-          ArrayElemRefExpression arrayElemRefExpr;
-          if (lhsExpr instanceof ArrayElemRefExpression) {
-            arrayElemRefExpr = (ArrayElemRefExpression) lhsExpr;
-          } else {
-            arrayElemRefExpr = (ArrayElemRefExpression) rhsExpr;
-          }
-
-          KeySlots childSlots = childParts.get(0);
-          KeySlot childSlot = childSlots.getSlots().get(0);
-          KeyPart childPart = childSlot.getKeyPart();
-          PColumn column = childPart.getColumn();
-
-          List<KeyRange> keyRanges = new ArrayList<>();
-          try {
-            Expression coerceExpr = CoerceExpression.create(arrayElemRefExpr, column.getDataType(),
-              column.getSortOrder(), column.getMaxLength());
-            for (int i = 1; i <= numElements; i++) {
-              arrayElemRefExpr.setIndex(i);
-              KeyRange keyRange = childPart.getKeyRange(CompareOperator.EQUAL, coerceExpr);
-              if (
-                keyRange == null || keyRange == KeyRange.EMPTY_RANGE
-                  || keyRange == KeyRange.IS_NULL_RANGE
-              ) {
-                // Skip null range along with empty range as null check is done via IS NULL as
-                // per SQL standards
-                continue;
-              }
-              keyRanges.add(keyRange);
+            if (childParts == null || childParts.isEmpty()) {
+                return null;
             }
-          } catch (Exception e) {
-            LOGGER.warn(
-              "Failed to wrap ArrayElemRefExpression with CoerceExpression for column: {} and type: {}",
-              column.getName().getString(), column.getDataType().getSqlTypeName(), e);
-            return super.visitLeave(node, childParts);
-          }
-          if (keyRanges.isEmpty()) {
-            return super.visitLeave(node, childParts);
-          }
-          return newKeyParts(childSlot, node, keyRanges);
-        }
+            // Doing type casting is safe here as we won't have reached here unless the expression
+            // tree is of the form expected by the method shouldExtractKeyRangesForArrayAnyExpr.
+            Expression arrayExpr = node.getChildren().get(0);
+            PhoenixArray arr = (PhoenixArray) ((LiteralExpression) arrayExpr).getValue();
+            int numElements = arr.getDimensions();
 
+            ComparisonExpression comparisonExpr = (ComparisonExpression) node.getChildren().get(1);
+            Expression lhsExpr = comparisonExpr.getChildren().get(0);
+            Expression rhsExpr = comparisonExpr.getChildren().get(1);
+            ArrayElemRefExpression arrayElemRefExpr;
+            if (lhsExpr instanceof ArrayElemRefExpression) {
+                arrayElemRefExpr = (ArrayElemRefExpression) lhsExpr;
+            } else {
+                arrayElemRefExpr = (ArrayElemRefExpression) rhsExpr;
+            }
+
+            KeySlots childSlots = childParts.get(0);
+            KeySlot childSlot = childSlots.getSlots().get(0);
+            KeyPart childPart = childSlot.getKeyPart();
+            PColumn column = childPart.getColumn();
+
+            List<KeyRange> keyRanges = new ArrayList<>();
+            try {
+                Expression coerceExpr = CoerceExpression.create(arrayElemRefExpr,
+                    column.getDataType(), column.getSortOrder(), column.getMaxLength());
+                for (int i = 1; i <= numElements; i++) {
+                    arrayElemRefExpr.setIndex(i);
+                    KeyRange keyRange = childPart.getKeyRange(CompareOperator.EQUAL, coerceExpr);
+                    if (
+                        keyRange == null || keyRange == KeyRange.EMPTY_RANGE
+                            || keyRange == KeyRange.IS_NULL_RANGE
+                    ) {
+                        // Skip null range along with empty range as null check is done via IS NULL
+                        // as
+                        // per SQL standards
+                        continue;
+                    }
+                    keyRanges.add(keyRange);
+                }
+            } catch (Exception e) {
+                LOGGER.warn(
+                    "Failed to wrap ArrayElemRefExpression with CoerceExpression for column: {} and type: {}",
+                    column.getName().getString(), column.getDataType().getSqlTypeName(), e);
+                return super.visitLeave(node, childParts);
+            }
+            if (keyRanges.isEmpty()) {
+                return super.visitLeave(node, childParts);
+            }
+            return newKeyParts(childSlot, node, keyRanges);
+        }
 
         @Override
         public Iterator<Expression> visitEnter(IsNullExpression node) {
