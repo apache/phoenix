@@ -2649,8 +2649,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                 .map(HRegionLocation::getHostname)
                 .collect(Collectors.joining(","));
 
-        return QueryUtil.REGIONS + "={" + regions + "}," + 
-                QueryUtil.HOSTNAMES + "={" + hostnames + "}";
+        return QueryUtil.REGIONS + "={" + regions + "},"
+                + QueryUtil.HOSTNAMES + "={" + hostnames + "}";
     }
 
 }
