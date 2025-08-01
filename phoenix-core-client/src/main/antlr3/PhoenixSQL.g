@@ -160,6 +160,7 @@ tokens
     UNCOVERED = 'uncovered';
     REGIONS = 'regions';
     NOVERIFY = 'noverify';
+    RETURNING = 'returning';
 }
 
 
@@ -866,9 +867,13 @@ finally{ contextStack.pop(); }
 upsert_node returns [UpsertStatement ret]
     :   UPSERT (hint=hintClause)? INTO t=from_table_name
         (LPAREN p=upsert_column_refs RPAREN)?
-        ((VALUES LPAREN v=one_or_more_expressions RPAREN ( ON DUPLICATE KEY ( ig=IGNORE |
-         ( upd=UPDATE pairs=update_column_pairs ) | ( updo=UPDATE_ONLY upopairs=update_column_pairs ) ) )? )
-          | s=select_node)
+        ((VALUES LPAREN v=one_or_more_expressions RPAREN (
+            ON DUPLICATE KEY (
+                ig=IGNORE
+              | ( upd=UPDATE pairs=update_column_pairs )
+              | ( updo=UPDATE_ONLY upopairs=update_column_pairs )
+            ) )? )
+          | s=select_node) rc=( RETURNING ASTERISK )?
         {ret = factory.upsert(
             factory.namedTable(null,t,p == null ? null : p.getFirst()), 
             hint, p == null ? null : p.getSecond(), 
@@ -879,7 +884,8 @@ upsert_node returns [UpsertStatement ret]
             ig != null ? UpsertStatement.OnDuplicateKeyType.IGNORE :
             upd != null ? UpsertStatement.OnDuplicateKeyType.UPDATE :
             updo != null ? UpsertStatement.OnDuplicateKeyType.UPDATE_ONLY
-             : UpsertStatement.OnDuplicateKeyType.NONE); }
+             : UpsertStatement.OnDuplicateKeyType.NONE,
+            rc != null ? true : false); }
     ;
   
 update_column_pairs returns [ List<Pair<ColumnName,ParseNode>> ret]
@@ -924,7 +930,9 @@ delete_node returns [DeleteStatement ret]
         (WHERE v=expression)?
         (ORDER BY order=order_by)?
         (LIMIT l=limit)?
-        {ret = factory.delete(factory.namedTable(null,t), hint, v, order, l, getBindCount(), new HashMap<String, UDFParseNode>(udfParseNodes)); }
+        rc=(RETURNING ASTERISK)?
+        {ret = factory.delete(factory.namedTable(null,t), hint, v, order, l, getBindCount(), new
+        HashMap<String, UDFParseNode>(udfParseNodes), rc != null ? true : false); }
     ;
 
 limit returns [LimitNode ret]
