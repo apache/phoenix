@@ -114,8 +114,8 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
     props.put("hbase.rpc.timeout", "6000000");
     Connection conn = DriverManager.getConnection(getUrl(), props);
     conn.setAutoCommit(true);
-    PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName +
-        " (inst,host,\"DATE\") VALUES(?,'b',CURRENT_DATE()) RETURNING *");
+    PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName
+      + " (inst,host,\"DATE\") VALUES(?,'b',CURRENT_DATE()) RETURNING *");
     stmt.setString(1, "a");
     stmt.execute();
     ResultSet rs = stmt.getResultSet();
@@ -1013,8 +1013,8 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
       tenantConn.setAutoCommit(true);
 
       Statement executeUpdateStatement = tenantConn.createStatement();
-      String sql = String.format("UPSERT INTO %s (SEQUENCE_NUMBER) VALUES " +
-        "(NEXT VALUE FOR %s)", tableName, sequenceName);
+      String sql = String.format("UPSERT INTO %s (SEQUENCE_NUMBER) VALUES " + "(NEXT VALUE FOR %s)",
+        tableName, sequenceName);
       if (withReturningRow) {
         sql += " RETURNING *";
       }
@@ -1023,8 +1023,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
       ResultSet rs;
       if (withReturningRow) {
         rs = executeUpdateStatement.getResultSet();
-      }
-      else {
+      } else {
         rs = executeUpdateStatement.executeQuery("select * from " + tableName);
       }
       assertNotNull(rs);

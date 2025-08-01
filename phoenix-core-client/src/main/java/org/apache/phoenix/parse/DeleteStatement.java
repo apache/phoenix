@@ -22,13 +22,13 @@ import java.util.List;
 import java.util.Map;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 
-public class DeleteStatement extends DMLStatement implements FilterableStatement,
-  RowReturningDMLStatement {
+public class DeleteStatement extends DMLStatement
+  implements FilterableStatement, RowReturningDMLStatement {
   private final ParseNode whereNode;
   private final List<OrderByNode> orderBy;
   private final LimitNode limit;
   private final HintNode hint;
-    private final boolean returningRow;
+  private final boolean returningRow;
 
   public DeleteStatement(NamedTableNode table, HintNode hint, ParseNode whereNode,
     List<OrderByNode> orderBy, LimitNode limit, int bindCount,
@@ -38,7 +38,7 @@ public class DeleteStatement extends DMLStatement implements FilterableStatement
     this.orderBy = orderBy == null ? Collections.<OrderByNode> emptyList() : orderBy;
     this.limit = limit;
     this.hint = hint == null ? HintNode.EMPTY_HINT_NODE : hint;
-        this.returningRow = returningRow;
+    this.returningRow = returningRow;
   }
 
   @Override

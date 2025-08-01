@@ -37,7 +37,7 @@ public class UpsertStatement extends DMLStatement implements RowReturningDMLStat
   private final HintNode hint;
   private final List<Pair<ColumnName, ParseNode>> onDupKeyPairs;
   private final OnDuplicateKeyType onDupKeyType;
-    private final boolean returningRow;
+  private final boolean returningRow;
 
   public UpsertStatement(NamedTableNode table, HintNode hint, List<ColumnName> columns,
     List<ParseNode> values, SelectStatement select, int bindCount,
@@ -50,7 +50,7 @@ public class UpsertStatement extends DMLStatement implements RowReturningDMLStat
     this.hint = hint == null ? HintNode.EMPTY_HINT_NODE : hint;
     this.onDupKeyPairs = onDupKeyPairs;
     this.onDupKeyType = onDupKeyType;
-        this.returningRow = returningRow;
+    this.returningRow = returningRow;
   }
 
   public List<ColumnName> getColumns() {

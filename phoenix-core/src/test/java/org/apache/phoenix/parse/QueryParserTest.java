@@ -31,7 +31,6 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.hadoop.yarn.webapp.hamlet2.Hamlet.P;
 import org.apache.phoenix.exception.PhoenixParserException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
@@ -724,15 +723,14 @@ public class QueryParserTest {
 
   @Test
   public void testUpsertWithOnDuplicateKey() throws Exception {
-    String sql = "upsert into t (k, v) values ( 1, 2 ) "
-      + "ON DUPLICATE KEY UPDATE k = k + 1";
+    String sql = "upsert into t (k, v) values ( 1, 2 ) " + "ON DUPLICATE KEY UPDATE k = k + 1";
     parseQuery(sql);
   }
 
   @Test
   public void testUpsertInvalidReturningProjections() throws Exception {
-    String sql = "upsert into t (k, v) values ( 1, 2 ) "
-      + "ON DUPLICATE KEY UPDATE k = k + 1 RETURNING k";
+    String sql =
+      "upsert into t (k, v) values ( 1, 2 ) " + "ON DUPLICATE KEY UPDATE k = k + 1 RETURNING k";
     try {
       parseQuery(sql);
       fail();
@@ -743,8 +741,8 @@ public class QueryParserTest {
 
   @Test
   public void testUpsertReturningRow() throws Exception {
-    String sql = "upsert into t (k, v) values ( 1, 2 ) "
-      + "ON DUPLICATE KEY UPDATE k = k + 1 RETURNING *";
+    String sql =
+      "upsert into t (k, v) values ( 1, 2 ) " + "ON DUPLICATE KEY UPDATE k = k + 1 RETURNING *";
     UpsertStatement stmt = parseQuery(sql, UpsertStatement.class);
     assertTrue(stmt.isReturningRow());
   }

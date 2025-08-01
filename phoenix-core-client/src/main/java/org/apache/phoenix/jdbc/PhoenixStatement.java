@@ -581,9 +581,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     return target;
   }
 
-	private boolean isReturningRowStatement(final CompilableStatement stmt) {
-		return stmt instanceof RowReturningDMLStatement &&
-			((RowReturningDMLStatement) stmt).isReturningRow();
+  private boolean isReturningRowStatement(final CompilableStatement stmt) {
+    return stmt instanceof RowReturningDMLStatement
+      && ((RowReturningDMLStatement) stmt).isReturningRow();
   }
 
   protected int executeMutation(final CompilableStatement stmt, final AuditQueryLogger queryLogger)
@@ -697,7 +697,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
               ResultSet rs = result == null || result.isEmpty()
                 ? null
                 : TupleUtil.getResultSet(new ResultTuple(result), tableNameVal, connection,
-                  ! isReturningRowStatement(stmt));
+                  !isReturningRowStatement(stmt));
               setLastResultSet(rs);
               return new Pair<>(lastUpdateCount, rs);
             }
@@ -1183,8 +1183,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     private ExecutableUpsertStatement(NamedTableNode table, HintNode hintNode,
       List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount,
       Map<String, UDFParseNode> udfParseNodes, List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
-      OnDuplicateKeyType onDupKeyType,
-      boolean returningRow) {
+      OnDuplicateKeyType onDupKeyType, boolean returningRow) {
       super(table, hintNode, columns, values, select, bindCount, udfParseNodes, onDupKeyPairs,
         onDupKeyType, returningRow);
     }

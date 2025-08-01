@@ -226,11 +226,11 @@ public class TupleUtil {
   /**
    * Convert the given Tuple containing list of Cells to ResultSet with similar effect as if SELECT
    * * FROM <table-name> is queried.
-   * @param toProject Tuple to be projected.
-   * @param tableName Table name.
-   * @param conn      Phoenix Connection object.
+   * @param toProject    Tuple to be projected.
+   * @param tableName    Table name.
+   * @param conn         Phoenix Connection object.
    * @param withPrefetch When {@code true}, the returned ResultSet is prefetched, otherwise one
-   *   needs to call next() on it.
+   *                     needs to call next() on it.
    * @return ResultSet for the give single row.
    * @throws SQLException If any SQL operation fails.
    */
