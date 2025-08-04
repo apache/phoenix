@@ -17,6 +17,11 @@
  */
 package org.apache.phoenix.monitoring.connectionqueryservice;
 
+import static org.apache.phoenix.monitoring.MetricType.OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.OPEN_PHOENIX_CONNECTIONS_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTION_CREATION_DURATION_MS;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -25,11 +30,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.monitoring.ConnectionQueryServicesMetric;
 import org.apache.phoenix.monitoring.ConnectionQueryServicesMetricImpl;
 import org.apache.phoenix.monitoring.MetricType;
-
-import static org.apache.phoenix.monitoring.MetricType.OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER;
-import static org.apache.phoenix.monitoring.MetricType.OPEN_PHOENIX_CONNECTIONS_COUNTER;
-import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
-import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTION_CREATION_TIME_MS;
 
 /**
  * Class for Connection Query Service Metrics.
@@ -44,7 +44,7 @@ public class ConnectionQueryServicesMetrics {
       OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER),
     CONNECTION_QUERY_SERVICE_PHOENIX_CONNECTIONS_THROTTLED_COUNTER(
       PHOENIX_CONNECTIONS_THROTTLED_COUNTER),
-    CONNECTION_QUERY_SERVICE_CREATION_TIME(PHOENIX_CONNECTION_CREATION_TIME_MS);
+    CONNECTION_QUERY_SERVICE_CREATION_TIME(PHOENIX_CONNECTION_CREATION_DURATION_MS);
 
     private MetricType metricType;
     private ConnectionQueryServicesMetric metric;

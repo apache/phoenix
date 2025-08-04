@@ -25,8 +25,12 @@ import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasic
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
 import static org.apache.phoenix.query.QueryServices.CONNECTION_QUERY_SERVICE_METRICS_ENABLED;
 import static org.apache.phoenix.util.PhoenixRuntime.clearAllConnectionQueryServiceMetrics;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.junit.Assume.assumeTrue;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
@@ -603,10 +607,11 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
   }
 
   private void validateConnectionCreationTime(Connection connection) {
-    Map<String, List<ConnectionQueryServicesMetric>> metrics = PhoenixRuntime.getAllConnectionQueryServicesMetrics();
+    Map<String, List<ConnectionQueryServicesMetric>> metrics =
+      PhoenixRuntime.getAllConnectionQueryServicesMetrics();
     assertNotNull(connection);
     for (ConnectionQueryServicesMetric metric : metrics.get(PRINCIPAL)) {
-      if (metric.getMetricType().equals(MetricType.PHOENIX_CONNECTION_CREATION_TIME_MS)) {
+      if (metric.getMetricType().equals(MetricType.PHOENIX_CONNECTION_CREATION_DURATION_MS)) {
         assertNotEquals(0, metric.getValue());
       }
     }

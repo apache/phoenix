@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.util;
 
-import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTION_CREATION_TIME_MS;
 import static org.apache.phoenix.schema.types.PDataType.ARRAY_TYPE_SUFFIX;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 
