@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -30,202 +30,196 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
-
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 
 @Category(ParallelStatsDisabledTest.class)
 public class RegexpSplitFunctionIT extends ParallelStatsDisabledIT {
 
-    private String tableName;
+  private String tableName;
 
-    private void initTable(Connection conn, String val) throws SQLException {
-        initTable(conn, val, ",");
+  private void initTable(Connection conn, String val) throws SQLException {
+    initTable(conn, val, ",");
+  }
+
+  private void initTable(Connection conn, String val, String separator) throws SQLException {
+    tableName = generateUniqueName();
+    String ddl = "CREATE TABLE " + tableName + " (" + "ID INTEGER NOT NULL PRIMARY KEY,"
+      + "VAL VARCHAR," + "SEP VARCHAR," + "ARR VARCHAR ARRAY)";
+    conn.createStatement().execute(ddl);
+    String dml = "UPSERT INTO " + tableName + " (ID, SEP, VAL) VALUES (?, ?, ?)";
+    PreparedStatement stmt = conn.prepareStatement(dml);
+    stmt.setInt(1, 1);
+    if (separator == null) {
+      stmt.setNull(2, Types.VARCHAR);
+    } else {
+      stmt.setString(2, separator);
+    }
+    if (val == null) {
+      stmt.setNull(3, Types.VARCHAR);
+    } else {
+      stmt.setString(3, val);
+    }
+    stmt.execute();
+    conn.commit();
+  }
+
+  @Test
+  public void testSplit_ArrayReference() throws SQLException {
+    Connection conn = DriverManager.getConnection(getUrl());
+    initTable(conn, "ONE,TWO,THREE");
+
+    ResultSet rs =
+      conn.createStatement().executeQuery("SELECT REGEXP_SPLIT(VAL, ',')[1] FROM " + tableName);
+    assertTrue(rs.next());
+    assertEquals("ONE", rs.getString(1));
+    assertFalse(rs.next());
+  }
+
+  @Test
+  public void testArrayLenWithRegExpSplit() throws SQLException {
+    Connection conn = DriverManager.getConnection(getUrl());
+    String val = "T";
+    for (int i = 1; i < Short.MAX_VALUE + 500; i++) {
+      val += ",T";
     }
 
-    private void initTable(Connection conn, String val, String separator) throws SQLException {
-        tableName = generateUniqueName();
-        String ddl = "CREATE TABLE " + tableName + " (" +
-                "ID INTEGER NOT NULL PRIMARY KEY," +
-                "VAL VARCHAR," +
-                "SEP VARCHAR," +
-                "ARR VARCHAR ARRAY)";
-            conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO " + tableName + " (ID, SEP, VAL) VALUES (?, ?, ?)";
-        PreparedStatement stmt = conn.prepareStatement(dml);
-        stmt.setInt(1, 1);
-        if (separator == null) {
-            stmt.setNull(2, Types.VARCHAR);
-        } else {
-            stmt.setString(2, separator);
-        }
-        if (val == null) {
-            stmt.setNull(3, Types.VARCHAR);
-        } else {
-            stmt.setString(3, val);
-        }
-        stmt.execute();
-        conn.commit();
-    }
+    initTable(conn, val);
 
-    @Test
-    public void testSplit_ArrayReference() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
-        initTable(conn, "ONE,TWO,THREE");
+    ResultSet rs = conn.createStatement()
+      .executeQuery("SELECT array_length(REGEXP_SPLIT(VAL, ',')) FROM " + tableName);
+    assertTrue(rs.next());
+    assertEquals(33267, rs.getInt(1));
+    assertFalse(rs.next());
+  }
 
-        ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT REGEXP_SPLIT(VAL, ',')[1] FROM " + tableName);
-        assertTrue(rs.next());
-        assertEquals("ONE", rs.getString(1));
-        assertFalse(rs.next());
-    }
+  @Test
+  public void testSplit_InFilter() throws SQLException {
+    Connection conn = DriverManager.getConnection(getUrl());
+    initTable(conn, "ONE,TWO,THREE");
 
-    @Test
-    public void testArrayLenWithRegExpSplit() throws SQLException {
-    	Connection conn = DriverManager.getConnection(getUrl());
-    	String val = "T";
-    	for(int i = 1; i < Short.MAX_VALUE + 500; i++) {
-    		val += ",T";
-    	}
-    	
-        initTable(conn, val);
+    ResultSet rs = conn.createStatement()
+      .executeQuery("SELECT ID FROM " + tableName + " WHERE (REGEXP_SPLIT(VAL, ','))[1] = 'ONE'");
+    assertTrue(rs.next());
+    assertEquals(1, rs.getInt(1));
+    assertFalse(rs.next());
+  }
 
-        ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT array_length(REGEXP_SPLIT(VAL, ',')) FROM " + tableName);
-        assertTrue(rs.next());
-        assertEquals(33267, rs.getInt(1));
-        assertFalse(rs.next());
-    }
+  @Test
+  public void testSplit_Upsert() throws SQLException {
+    Connection conn = DriverManager.getConnection(getUrl());
+    initTable(conn, "ONE,TWO,THREE");
 
-    @Test
-    public void testSplit_InFilter() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
-        initTable(conn, "ONE,TWO,THREE");
+    conn.createStatement().executeUpdate("UPSERT INTO " + tableName + " (ID, ARR) SELECT ID, "
+      + "REGEXP_SPLIT(VAL, ',') FROM " + tableName);
+    conn.commit();
 
-        ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT ID FROM " + tableName + " WHERE (REGEXP_SPLIT(VAL, ','))[1] = 'ONE'");
-        assertTrue(rs.next());
-        assertEquals(1, rs.getInt(1));
-        assertFalse(rs.next());
-    }
+    ResultSet rs = conn.createStatement().executeQuery("SELECT ARR FROM " + tableName);
+    assertTrue(rs.next());
+    Array array = rs.getArray(1);
+    String[] values = (String[]) array.getArray();
+    assertArrayEquals(new String[] { "ONE", "TWO", "THREE" }, values);
+  }
 
-    @Test
-    public void testSplit_Upsert() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
-        initTable(conn, "ONE,TWO,THREE");
+  @Test
+  public void testSplit_AlternateSeparator() throws SQLException {
+    Connection conn = DriverManager.getConnection(getUrl());
+    initTable(conn, "ONE:TWO:THREE");
 
-        conn.createStatement().executeUpdate(
-            "UPSERT INTO " + tableName + " (ID, ARR) SELECT ID, " + "REGEXP_SPLIT(VAL, ',') FROM "
-                + tableName);
-        conn.commit();
+    ResultSet rs =
+      conn.createStatement().executeQuery("SELECT REGEXP_SPLIT(VAL, ':') FROM " + tableName);
+    assertTrue(rs.next());
+    Array array = rs.getArray(1);
+    String[] values = (String[]) array.getArray();
+    assertArrayEquals(new String[] { "ONE", "TWO", "THREE" }, values);
+  }
 
-        ResultSet rs = conn.createStatement().executeQuery("SELECT ARR FROM " + tableName);
-        assertTrue(rs.next());
-        Array array = rs.getArray(1);
-        String[] values = (String[]) array.getArray();
-        assertArrayEquals(new String[]{ "ONE", "TWO", "THREE" }, values);
-    }
+  @Test
+  public void testSplit_DynamicPattern() throws SQLException {
+    Connection conn = DriverManager.getConnection(getUrl());
+    initTable(conn, "ONE,TWO,THREE");
 
-    @Test
-    public void testSplit_AlternateSeparator() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
-        initTable(conn, "ONE:TWO:THREE");
+    ResultSet rs =
+      conn.createStatement().executeQuery("SELECT REGEXP_SPLIT(VAL, SEP) FROM " + tableName);
+    assertTrue(rs.next());
+    Array array = rs.getArray(1);
+    String[] values = (String[]) array.getArray();
+    assertArrayEquals(new String[] { "ONE", "TWO", "THREE" }, values);
+  }
 
-        ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT REGEXP_SPLIT(VAL, ':') FROM " + tableName);
-        assertTrue(rs.next());
-        Array array = rs.getArray(1);
-        String[] values = (String[]) array.getArray();
-        assertArrayEquals(new String[] { "ONE", "TWO", "THREE" }, values);
-    }
+  @Test
+  public void testSplit_NoSplitString() throws SQLException {
+    Connection conn = DriverManager.getConnection(getUrl());
+    initTable(conn, "CANNOT BE SPLIT");
 
-    @Test
-    public void testSplit_DynamicPattern() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
-        initTable(conn, "ONE,TWO,THREE");
+    ResultSet rs =
+      conn.createStatement().executeQuery("SELECT REGEXP_SPLIT(VAL, ',') FROM " + tableName);
+    assertTrue(rs.next());
+    Array array = rs.getArray(1);
+    String[] values = (String[]) array.getArray();
+    assertArrayEquals(new String[] { "CANNOT BE SPLIT" }, values);
+  }
 
-        ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT REGEXP_SPLIT(VAL, SEP) FROM " + tableName);
-        assertTrue(rs.next());
-        Array array = rs.getArray(1);
-        String[] values = (String[]) array.getArray();
-        assertArrayEquals(new String[] { "ONE", "TWO", "THREE" }, values);
-    }
+  @Test
+  public void testSplit_PatternBasedSplit() throws SQLException {
+    Connection conn = DriverManager.getConnection(getUrl());
+    initTable(conn, "ONE!:TWO:::!THREE::!:FOUR");
 
-    @Test
-    public void testSplit_NoSplitString() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
-        initTable(conn, "CANNOT BE SPLIT");
+    ResultSet rs =
+      conn.createStatement().executeQuery("SELECT REGEXP_SPLIT(VAL, '[:!]+') FROM " + tableName);
+    assertTrue(rs.next());
+    Array array = rs.getArray(1);
+    String[] values = (String[]) array.getArray();
+    assertArrayEquals(new String[] { "ONE", "TWO", "THREE", "FOUR" }, values);
+  }
 
-        ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT REGEXP_SPLIT(VAL, ',') FROM " + tableName);
-        assertTrue(rs.next());
-        Array array = rs.getArray(1);
-        String[] values = (String[]) array.getArray();
-        assertArrayEquals(new String[] { "CANNOT BE SPLIT" }, values);
-    }
+  @Test
+  public void testSplit_PatternEscape() throws SQLException {
+    Connection conn = DriverManager.getConnection(getUrl());
+    initTable(conn, "ONE|TWO|THREE");
 
-    @Test
-    public void testSplit_PatternBasedSplit() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
-        initTable(conn, "ONE!:TWO:::!THREE::!:FOUR");
+    ResultSet rs =
+      conn.createStatement().executeQuery("SELECT REGEXP_SPLIT(VAL, '\\\\|') FROM " + tableName);
+    assertTrue(rs.next());
+    Array array = rs.getArray(1);
+    String[] values = (String[]) array.getArray();
+    assertArrayEquals(new String[] { "ONE", "TWO", "THREE" }, values);
+  }
 
-        ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT REGEXP_SPLIT(VAL, '[:!]+') FROM " + tableName);
-        assertTrue(rs.next());
-        Array array = rs.getArray(1);
-        String[] values = (String[]) array.getArray();
-        assertArrayEquals(new String[] { "ONE", "TWO", "THREE", "FOUR" }, values);
-    }
+  @Test
+  public void testSplit_NullString() throws SQLException {
+    Connection conn = DriverManager.getConnection(getUrl());
+    initTable(conn, null);
 
-    @Test
-    public void testSplit_PatternEscape() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
-        initTable(conn, "ONE|TWO|THREE");
+    ResultSet rs =
+      conn.createStatement().executeQuery("SELECT REGEXP_SPLIT(VAL, ',') FROM " + tableName);
+    assertTrue(rs.next());
+    assertNull(rs.getString(1));
+    assertFalse(rs.next());
+  }
 
-        ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT REGEXP_SPLIT(VAL, '\\\\|') FROM " + tableName);
-        assertTrue(rs.next());
-        Array array = rs.getArray(1);
-        String[] values = (String[]) array.getArray();
-        assertArrayEquals(new String[] { "ONE", "TWO", "THREE" }, values);
-    }
+  @Test
+  public void testSplit_NullSeparator() throws SQLException {
+    Connection conn = DriverManager.getConnection(getUrl());
+    initTable(conn, "ONE,TWO,THREE");
 
-    @Test
-    public void testSplit_NullString() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
-        initTable(conn, null);
+    ResultSet rs =
+      conn.createStatement().executeQuery("SELECT REGEXP_SPLIT(VAL, NULL) FROM " + tableName);
+    assertTrue(rs.next());
+    assertNull(rs.getString(1));
+    assertFalse(rs.next());
+  }
 
-        ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT REGEXP_SPLIT(VAL, ',') FROM " + tableName);
-        assertTrue(rs.next());
-        assertNull(rs.getString(1));
-        assertFalse(rs.next());
-    }
+  @Test
+  public void testSplit_NullDynamicSeparator() throws SQLException {
+    Connection conn = DriverManager.getConnection(getUrl());
+    initTable(conn, "ONE,TWO,THREE", null);
 
-    @Test
-    public void testSplit_NullSeparator() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
-        initTable(conn, "ONE,TWO,THREE");
-
-        ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT REGEXP_SPLIT(VAL, NULL) FROM " + tableName);
-        assertTrue(rs.next());
-        assertNull(rs.getString(1));
-        assertFalse(rs.next());
-    }
-
-    @Test
-    public void testSplit_NullDynamicSeparator() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
-        initTable(conn, "ONE,TWO,THREE", null);
-
-        ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT REGEXP_SPLIT(VAL, SEP) FROM " + tableName);
-        assertTrue(rs.next());
-        assertNull(rs.getString(1));
-        assertFalse(rs.next());
-    }
+    ResultSet rs =
+      conn.createStatement().executeQuery("SELECT REGEXP_SPLIT(VAL, SEP) FROM " + tableName);
+    assertTrue(rs.next());
+    assertNull(rs.getString(1));
+    assertFalse(rs.next());
+  }
 
 }

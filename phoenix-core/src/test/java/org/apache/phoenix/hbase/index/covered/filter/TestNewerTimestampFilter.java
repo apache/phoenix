@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,7 +22,6 @@ import static org.junit.Assert.assertEquals;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.filter.Filter.ReturnCode;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.hbase.index.covered.filter.NewerTimestampFilter;
 import org.junit.Test;
 
 public class TestNewerTimestampFilter {
@@ -37,7 +36,8 @@ public class TestNewerTimestampFilter {
     NewerTimestampFilter filter = new NewerTimestampFilter(ts);
 
     KeyValue kv = new KeyValue(row, fam, qual, ts, val);
-    assertEquals("Didn't accept kv with matching ts", ReturnCode.INCLUDE, filter.filterKeyValue(kv));
+    assertEquals("Didn't accept kv with matching ts", ReturnCode.INCLUDE,
+      filter.filterKeyValue(kv));
 
     kv = new KeyValue(row, fam, qual, ts + 1, val);
     assertEquals("Didn't skip kv with greater ts", ReturnCode.SKIP, filter.filterKeyValue(kv));

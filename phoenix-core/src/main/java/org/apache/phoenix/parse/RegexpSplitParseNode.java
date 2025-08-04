@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,6 @@ package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
 import java.util.List;
-
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.function.ByteBasedRegexpSplitFunction;
@@ -35,21 +34,20 @@ import org.apache.phoenix.query.QueryServicesOptions;
  */
 public class RegexpSplitParseNode extends FunctionParseNode {
 
-    RegexpSplitParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
-        super(name, children, info);
-    }
+  RegexpSplitParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
+    super(name, children, info);
+  }
 
-    @Override
-    public Expression create(List<Expression> children, StatementContext context)
-            throws SQLException {
-        QueryServices services = context.getConnection().getQueryServices();
-        boolean useByteBasedRegex =
-                services.getProps().getBoolean(QueryServices.USE_BYTE_BASED_REGEX_ATTRIB,
-                    QueryServicesOptions.DEFAULT_USE_BYTE_BASED_REGEX);
-        if (useByteBasedRegex) {
-            return new ByteBasedRegexpSplitFunction(children);
-        } else {
-            return new StringBasedRegexpSplitFunction(children);
-        }
+  @Override
+  public Expression create(List<Expression> children, StatementContext context)
+    throws SQLException {
+    QueryServices services = context.getConnection().getQueryServices();
+    boolean useByteBasedRegex = services.getProps().getBoolean(
+      QueryServices.USE_BYTE_BASED_REGEX_ATTRIB, QueryServicesOptions.DEFAULT_USE_BYTE_BASED_REGEX);
+    if (useByteBasedRegex) {
+      return new ByteBasedRegexpSplitFunction(children);
+    } else {
+      return new StringBasedRegexpSplitFunction(children);
     }
+  }
 }

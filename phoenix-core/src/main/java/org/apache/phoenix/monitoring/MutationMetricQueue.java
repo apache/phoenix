@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,135 +17,147 @@
  */
 package org.apache.phoenix.monitoring;
 
+import static org.apache.phoenix.monitoring.MetricType.INDEX_COMMIT_FAILURE_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_FAILED_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BYTES;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_COMMIT_TIME;
-import static org.apache.phoenix.monitoring.MetricType.INDEX_COMMIT_FAILURE_SIZE;
 
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 
-
 /**
  * Queue that tracks various writes/mutations related phoenix request metrics.
  */
 public class MutationMetricQueue {
-    
-    // Map of table name -> mutation metric
-    private Map<String, MutationMetric> tableMutationMetric = new HashMap<>();
-    
+
+  // Map of table name -> mutation metric
+  private Map<String, MutationMetric> tableMutationMetric = new HashMap<>();
+
+  public void addMetricsForTable(String tableName, MutationMetric metric) {
+    MutationMetric tableMetric = tableMutationMetric.get(tableName);
+    if (tableMetric == null) {
+      tableMutationMetric.put(tableName, metric);
+    } else {
+      tableMetric.combineMetric(metric);
+    }
+  }
+
+  public void combineMetricQueues(MutationMetricQueue other) {
+    Map<String, MutationMetric> tableMetricMap = other.tableMutationMetric;
+    for (Entry<String, MutationMetric> entry : tableMetricMap.entrySet()) {
+      addMetricsForTable(entry.getKey(), entry.getValue());
+    }
+  }
+
+  /**
+   * Publish the metrics to wherever you want them published. The internal state is cleared out
+   * after every publish.
+   * @return map of table {@code name -> list } of pair of (metric name, metric value)
+   */
+  public Map<String, Map<MetricType, Long>> aggregate() {
+    Map<String, Map<MetricType, Long>> publishedMetrics = new HashMap<>();
+    for (Entry<String, MutationMetric> entry : tableMutationMetric.entrySet()) {
+      String tableName = entry.getKey();
+      MutationMetric metric = entry.getValue();
+      Map<MetricType, Long> publishedMetricsForTable = publishedMetrics.get(tableName);
+      if (publishedMetricsForTable == null) {
+        publishedMetricsForTable = new HashMap<>();
+        publishedMetrics.put(tableName, publishedMetricsForTable);
+      }
+      publishedMetricsForTable.put(metric.getNumMutations().getMetricType(),
+        metric.getNumMutations().getValue());
+      publishedMetricsForTable.put(metric.getMutationsSizeBytes().getMetricType(),
+        metric.getMutationsSizeBytes().getValue());
+      publishedMetricsForTable.put(metric.getCommitTimeForMutations().getMetricType(),
+        metric.getCommitTimeForMutations().getValue());
+      publishedMetricsForTable.put(metric.getNumFailedMutations().getMetricType(),
+        metric.getNumFailedMutations().getValue());
+      publishedMetricsForTable.put(metric.getNumOfIndexCommitFailedMutations().getMetricType(),
+        metric.getNumOfIndexCommitFailedMutations().getValue());
+    }
+    return publishedMetrics;
+  }
+
+  public void clearMetrics() {
+    tableMutationMetric.clear(); // help gc
+  }
+
+  /**
+   * Class that holds together the various metrics associated with mutations.
+   */
+  public static class MutationMetric {
+    private final CombinableMetric numMutations = new CombinableMetricImpl(MUTATION_BATCH_SIZE);
+    private final CombinableMetric mutationsSizeBytes = new CombinableMetricImpl(MUTATION_BYTES);
+    private final CombinableMetric totalCommitTimeForMutations =
+      new CombinableMetricImpl(MUTATION_COMMIT_TIME);
+    private final CombinableMetric numFailedMutations =
+      new CombinableMetricImpl(MUTATION_BATCH_FAILED_SIZE);
+    private final CombinableMetric numOfIndexCommitFailMutations =
+      new CombinableMetricImpl(INDEX_COMMIT_FAILURE_SIZE);
+
+    public MutationMetric(long numMutations, long mutationsSizeBytes, long commitTimeForMutations,
+      long numFailedMutations, long numOfPhase3Failed) {
+      this.numMutations.change(numMutations);
+      this.mutationsSizeBytes.change(mutationsSizeBytes);
+      this.totalCommitTimeForMutations.change(commitTimeForMutations);
+      this.numFailedMutations.change(numFailedMutations);
+      this.numOfIndexCommitFailMutations.change(numOfPhase3Failed);
+    }
+
+    public CombinableMetric getCommitTimeForMutations() {
+      return totalCommitTimeForMutations;
+    }
+
+    public CombinableMetric getNumMutations() {
+      return numMutations;
+    }
+
+    public CombinableMetric getMutationsSizeBytes() {
+      return mutationsSizeBytes;
+    }
+
+    public CombinableMetric getNumFailedMutations() {
+      return numFailedMutations;
+    }
+
+    public CombinableMetric getNumOfIndexCommitFailedMutations() {
+      return numOfIndexCommitFailMutations;
+    }
+
+    public void combineMetric(MutationMetric other) {
+      this.numMutations.combine(other.numMutations);
+      this.mutationsSizeBytes.combine(other.mutationsSizeBytes);
+      this.totalCommitTimeForMutations.combine(other.totalCommitTimeForMutations);
+      this.numFailedMutations.combine(other.numFailedMutations);
+      this.numOfIndexCommitFailMutations.combine(other.numOfIndexCommitFailMutations);
+    }
+
+  }
+
+  /**
+   * Class to represent a no-op mutation metric. Used in places where request level metric tracking
+   * for mutations is not needed or desired.
+   */
+  public static class NoOpMutationMetricsQueue extends MutationMetricQueue {
+
+    public static final NoOpMutationMetricsQueue NO_OP_MUTATION_METRICS_QUEUE =
+      new NoOpMutationMetricsQueue();
+
+    private NoOpMutationMetricsQueue() {
+    }
+
+    @Override
     public void addMetricsForTable(String tableName, MutationMetric metric) {
-        MutationMetric tableMetric = tableMutationMetric.get(tableName);
-        if (tableMetric == null) {
-            tableMutationMetric.put(tableName, metric);
-        } else {
-            tableMetric.combineMetric(metric);
-        }
     }
 
-    public void combineMetricQueues(MutationMetricQueue other) {
-        Map<String, MutationMetric> tableMetricMap = other.tableMutationMetric;
-        for (Entry<String, MutationMetric> entry : tableMetricMap.entrySet()) {
-            addMetricsForTable(entry.getKey(), entry.getValue());
-        }
-    }
-    
-    /**
-     * Publish the metrics to wherever you want them published. The internal state is cleared out after every publish.
-     * @return map of table {@code name -> list } of pair of (metric name, metric value)
-     */
+    @Override
     public Map<String, Map<MetricType, Long>> aggregate() {
-        Map<String, Map<MetricType, Long>> publishedMetrics = new HashMap<>();
-        for (Entry<String, MutationMetric> entry : tableMutationMetric.entrySet()) {
-            String tableName = entry.getKey();
-            MutationMetric metric = entry.getValue();
-            Map<MetricType, Long> publishedMetricsForTable = publishedMetrics.get(tableName);
-            if (publishedMetricsForTable == null) {
-                publishedMetricsForTable = new HashMap<>();
-                publishedMetrics.put(tableName, publishedMetricsForTable);
-            }
-            publishedMetricsForTable.put(metric.getNumMutations().getMetricType(), metric.getNumMutations().getValue());
-            publishedMetricsForTable.put(metric.getMutationsSizeBytes().getMetricType(), metric.getMutationsSizeBytes().getValue());
-            publishedMetricsForTable.put(metric.getCommitTimeForMutations().getMetricType(), metric.getCommitTimeForMutations().getValue());
-            publishedMetricsForTable.put(metric.getNumFailedMutations().getMetricType(), metric.getNumFailedMutations().getValue());
-            publishedMetricsForTable.put(metric.getNumOfIndexCommitFailedMutations().getMetricType(), metric.getNumOfIndexCommitFailedMutations().getValue());
-        }
-        return publishedMetrics;
-    }
-    
-    public void clearMetrics() {
-        tableMutationMetric.clear(); // help gc
-    }
-    
-    /**
-     * Class that holds together the various metrics associated with mutations.
-     */
-    public static class MutationMetric {
-        private final CombinableMetric numMutations = new CombinableMetricImpl(MUTATION_BATCH_SIZE);
-        private final CombinableMetric mutationsSizeBytes = new CombinableMetricImpl(MUTATION_BYTES);
-        private final CombinableMetric totalCommitTimeForMutations = new CombinableMetricImpl(MUTATION_COMMIT_TIME);
-        private final CombinableMetric numFailedMutations = new CombinableMetricImpl(MUTATION_BATCH_FAILED_SIZE);
-        private final CombinableMetric numOfIndexCommitFailMutations = new CombinableMetricImpl(
-                INDEX_COMMIT_FAILURE_SIZE);
-
-        public MutationMetric(long numMutations, long mutationsSizeBytes, long commitTimeForMutations, long numFailedMutations, long numOfPhase3Failed) {
-            this.numMutations.change(numMutations);
-            this.mutationsSizeBytes.change(mutationsSizeBytes);
-            this.totalCommitTimeForMutations.change(commitTimeForMutations);
-            this.numFailedMutations.change(numFailedMutations);
-            this.numOfIndexCommitFailMutations.change(numOfPhase3Failed);
-        }
-
-        public CombinableMetric getCommitTimeForMutations() {
-            return totalCommitTimeForMutations;
-        }
-
-        public CombinableMetric getNumMutations() {
-            return numMutations;
-        }
-
-        public CombinableMetric getMutationsSizeBytes() {
-            return mutationsSizeBytes;
-        }
-        
-        public CombinableMetric getNumFailedMutations() {
-            return numFailedMutations;
-        }
-
-        public CombinableMetric getNumOfIndexCommitFailedMutations() {
-            return numOfIndexCommitFailMutations;
-        }
-
-        public void combineMetric(MutationMetric other) {
-            this.numMutations.combine(other.numMutations);
-            this.mutationsSizeBytes.combine(other.mutationsSizeBytes);
-            this.totalCommitTimeForMutations.combine(other.totalCommitTimeForMutations);
-            this.numFailedMutations.combine(other.numFailedMutations);
-            this.numOfIndexCommitFailMutations.combine(other.numOfIndexCommitFailMutations);
-        }
-
+      return Collections.emptyMap();
     }
 
-    /**
-     * Class to represent a no-op mutation metric. Used in places where request level metric tracking for mutations is not
-     * needed or desired.
-     */
-    public static class NoOpMutationMetricsQueue extends MutationMetricQueue {
-
-        public static final NoOpMutationMetricsQueue NO_OP_MUTATION_METRICS_QUEUE = new NoOpMutationMetricsQueue();
-
-        private NoOpMutationMetricsQueue() {}
-
-        @Override
-        public void addMetricsForTable(String tableName, MutationMetric metric) {}
-
-        @Override
-        public Map<String, Map<MetricType, Long>> aggregate() { return Collections.emptyMap(); }
-        
-        
-    }
+  }
 
 }

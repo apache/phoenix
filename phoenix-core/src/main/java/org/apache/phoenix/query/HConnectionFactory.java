@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,33 +18,29 @@
 package org.apache.phoenix.query;
 
 import java.io.IOException;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 
 /**
  * Factory for creating HConnection
- *
- * 
  */
 public interface HConnectionFactory {
 
-    /**
-     * Creates HConnection to access HBase clusters.
-     * 
-     * @param conf object
-     * @return A HConnection instance
-     */
-    Connection createConnection(Configuration conf) throws IOException;
+  /**
+   * Creates HConnection to access HBase clusters.
+   * @param conf object
+   * @return A HConnection instance
+   */
+  Connection createConnection(Configuration conf) throws IOException;
 
-    /**
-     * Default implementation.  Uses standard HBase HConnections.
-     */
-    static class HConnectionFactoryImpl implements HConnectionFactory {
-        @Override
-        public Connection createConnection(Configuration conf) throws IOException {
-            return ConnectionFactory.createConnection(conf);
-        }
+  /**
+   * Default implementation. Uses standard HBase HConnections.
+   */
+  static class HConnectionFactoryImpl implements HConnectionFactory {
+    @Override
+    public Connection createConnection(Configuration conf) throws IOException {
+      return ConnectionFactory.createConnection(conf);
     }
+  }
 }

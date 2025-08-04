@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,33 +21,28 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
-
-
 /**
- * 
  * Node representing modulus in a SQL expression
- *
- * 
  * @since 0.1
  */
 public class ModulusParseNode extends ArithmeticParseNode {
-    public static final String OPERATOR = "%";
+  public static final String OPERATOR = "%";
 
-    @Override
-    public String getOperator() {
-        return OPERATOR;
-    }
+  @Override
+  public String getOperator() {
+    return OPERATOR;
+  }
 
-    ModulusParseNode(List<ParseNode> children) {
-        super(children);
-    }
+  ModulusParseNode(List<ParseNode> children) {
+    super(children);
+  }
 
-    @Override
-    public <T> T accept(ParseNodeVisitor<T> visitor) throws SQLException {
-        List<T> l = Collections.emptyList();
-        if (visitor.visitEnter(this)) {
-            l = acceptChildren(visitor);
-        }
-        return visitor.visitLeave(this, l);
+  @Override
+  public <T> T accept(ParseNodeVisitor<T> visitor) throws SQLException {
+    List<T> l = Collections.emptyList();
+    if (visitor.visitEnter(this)) {
+      l = acceptChildren(visitor);
     }
+    return visitor.visitLeave(this, l);
+  }
 }

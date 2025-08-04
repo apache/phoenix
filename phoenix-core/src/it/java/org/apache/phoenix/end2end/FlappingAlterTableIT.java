@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,7 +23,6 @@ import static org.junit.Assert.assertEquals;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.Properties;
-
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
@@ -38,63 +37,55 @@ import org.junit.experimental.categories.Category;
 
 @Category(ParallelStatsDisabledTest.class)
 public class FlappingAlterTableIT extends ParallelStatsDisabledIT {
-    private String dataTableFullName;
-    
-    @Before
-    public void setupTableNames() throws Exception {
-        String schemaName = "";
-        String dataTableName = generateUniqueName();
-        dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
-    }
+  private String dataTableFullName;
 
-    @Test
-    public void testAddColumnForNewColumnFamily() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        String ddl = "CREATE TABLE " + dataTableFullName + " (\n"
-                +"ID1 VARCHAR(15) NOT NULL,\n"
-                +"ID2 VARCHAR(15) NOT NULL,\n"
-                +"CREATED_DATE DATE,\n"
-                +"CREATION_TIME BIGINT,\n"
-                +"LAST_USED DATE,\n"
-                +"CONSTRAINT PK PRIMARY KEY (ID1, ID2))";
-        Connection conn1 = DriverManager.getConnection(getUrl(), props);
-        conn1.createStatement().execute(ddl);
-        ddl = "ALTER TABLE " + dataTableFullName + " ADD CF.STRING VARCHAR";
-        conn1.createStatement().execute(ddl);
-        try (Admin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-            ColumnFamilyDescriptor[] columnFamilies = admin.getDescriptor(TableName.valueOf(dataTableFullName)).getColumnFamilies();
-            assertEquals(2, columnFamilies.length);
-            assertEquals("0", columnFamilies[0].getNameAsString());
-            assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_TTL, columnFamilies[0].getTimeToLive());
-            assertEquals("CF", columnFamilies[1].getNameAsString());
-            assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_TTL, columnFamilies[1].getTimeToLive());
-        }
-    }
+  @Before
+  public void setupTableNames() throws Exception {
+    String schemaName = "";
+    String dataTableName = generateUniqueName();
+    dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+  }
 
-    @Test
-    public void testNewColumnFamilyInheritsTTLOfEmptyCF() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        String ddl = "CREATE TABLE " + dataTableFullName + " (\n"
-                +"ID1 VARCHAR(15) NOT NULL,\n"
-                +"ID2 VARCHAR(15) NOT NULL,\n"
-                +"CREATED_DATE DATE,\n"
-                +"CREATION_TIME BIGINT,\n"
-                +"LAST_USED DATE,\n"
-                +"CONSTRAINT PK PRIMARY KEY (ID1, ID2)) TTL = 1000";
-        Connection conn1 = DriverManager.getConnection(getUrl(), props);
-        conn1.createStatement().execute(ddl);
-        ddl = "ALTER TABLE " + dataTableFullName + " ADD CF.STRING VARCHAR";
-        conn1.createStatement().execute(ddl);
-        try (Admin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-            TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(dataTableFullName));
-            ColumnFamilyDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
-            assertEquals(2, columnFamilies.length);
-            assertEquals("0", columnFamilies[0].getNameAsString());
-            assertEquals(1000, columnFamilies[0].getTimeToLive());
-            assertEquals("CF", columnFamilies[1].getNameAsString());
-            assertEquals(1000, columnFamilies[1].getTimeToLive());
-        }
+  @Test
+  public void testAddColumnForNewColumnFamily() throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    String ddl = "CREATE TABLE " + dataTableFullName + " (\n" + "ID1 VARCHAR(15) NOT NULL,\n"
+      + "ID2 VARCHAR(15) NOT NULL,\n" + "CREATED_DATE DATE,\n" + "CREATION_TIME BIGINT,\n"
+      + "LAST_USED DATE,\n" + "CONSTRAINT PK PRIMARY KEY (ID1, ID2))";
+    Connection conn1 = DriverManager.getConnection(getUrl(), props);
+    conn1.createStatement().execute(ddl);
+    ddl = "ALTER TABLE " + dataTableFullName + " ADD CF.STRING VARCHAR";
+    conn1.createStatement().execute(ddl);
+    try (Admin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+      ColumnFamilyDescriptor[] columnFamilies =
+        admin.getDescriptor(TableName.valueOf(dataTableFullName)).getColumnFamilies();
+      assertEquals(2, columnFamilies.length);
+      assertEquals("0", columnFamilies[0].getNameAsString());
+      assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_TTL, columnFamilies[0].getTimeToLive());
+      assertEquals("CF", columnFamilies[1].getNameAsString());
+      assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_TTL, columnFamilies[1].getTimeToLive());
     }
+  }
 
+  @Test
+  public void testNewColumnFamilyInheritsTTLOfEmptyCF() throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    String ddl = "CREATE TABLE " + dataTableFullName + " (\n" + "ID1 VARCHAR(15) NOT NULL,\n"
+      + "ID2 VARCHAR(15) NOT NULL,\n" + "CREATED_DATE DATE,\n" + "CREATION_TIME BIGINT,\n"
+      + "LAST_USED DATE,\n" + "CONSTRAINT PK PRIMARY KEY (ID1, ID2)) TTL = 1000";
+    Connection conn1 = DriverManager.getConnection(getUrl(), props);
+    conn1.createStatement().execute(ddl);
+    ddl = "ALTER TABLE " + dataTableFullName + " ADD CF.STRING VARCHAR";
+    conn1.createStatement().execute(ddl);
+    try (Admin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+      TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(dataTableFullName));
+      ColumnFamilyDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
+      assertEquals(2, columnFamilies.length);
+      assertEquals("0", columnFamilies[0].getNameAsString());
+      assertEquals(1000, columnFamilies[0].getTimeToLive());
+      assertEquals("CF", columnFamilies[1].getNameAsString());
+      assertEquals(1000, columnFamilies[1].getTimeToLive());
+    }
+  }
 
 }

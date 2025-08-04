@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,17 +15,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.hbase.index.covered;
 
 import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
-
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
@@ -38,25 +33,23 @@ import org.apache.phoenix.hbase.index.covered.update.IndexedColumnGroup;
  */
 public interface TableState {
 
-  /**
-   * @return the current timestamp up-to-which we are releasing table state.
-   */
+  /** Returns the current timestamp up-to-which we are releasing table state. */
   public long getCurrentTimestamp();
 
   /**
    * Get a getter interface for the state of the index row
-   * @param indexedColumns list of indexed columns.
- * @param ignoreNewerMutations ignore mutations newer than m when determining current state. Useful
-   *        when replaying mutation state for partial index rebuild where writes succeeded to the data
-   *        table, but not to the index table.
- * @param indexMetaData TODO
+   * @param indexedColumns       list of indexed columns.
+   * @param ignoreNewerMutations ignore mutations newer than m when determining current state.
+   *                             Useful when replaying mutation state for partial index rebuild
+   *                             where writes succeeded to the data table, but not to the index
+   *                             table.
+   * @param indexMetaData        TODO
    */
   Pair<ValueGetter, IndexUpdate> getIndexUpdateState(
-      Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations, boolean returnNullScannerIfRowNotFound, IndexMetaData indexMetaData) throws IOException;
+    Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations,
+    boolean returnNullScannerIfRowNotFound, IndexMetaData indexMetaData) throws IOException;
 
-  /**
-   * @return the row key for the current row for which we are building an index update.
-   */
+  /** Returns the row key for the current row for which we are building an index update. */
   byte[] getCurrentRowKey();
 
   /**

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,27 +20,23 @@ package org.apache.phoenix.parse;
 import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 
-
 /**
- * 
  * Node representing the less than operator {@code (<) } in SQL
- *
- * 
  * @since 0.1
  */
 public class LessThanParseNode extends ComparisonParseNode {
 
-    LessThanParseNode(ParseNode lhs, ParseNode rhs) {
-        super(lhs, rhs);
-    }
+  LessThanParseNode(ParseNode lhs, ParseNode rhs) {
+    super(lhs, rhs);
+  }
 
-    @Override
-    public CompareOp getFilterOp() {
-        return CompareFilter.CompareOp.LESS;
-    }
+  @Override
+  public CompareOp getFilterOp() {
+    return CompareFilter.CompareOp.LESS;
+  }
 
-    @Override
-    public CompareOp getInvertFilterOp() {
-        return CompareOp.GREATER;
-    }
+  @Override
+  public CompareOp getInvertFilterOp() {
+    return CompareOp.GREATER;
+  }
 }

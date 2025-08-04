@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,129 +23,126 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-
 import org.apache.hadoop.io.WritableUtils;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 
-
 public abstract class BaseCompoundExpression extends BaseExpression {
-    protected List<Expression> children;
-    private boolean isNullable;
-    private boolean isStateless;
-    private Determinism determinism;
-    private boolean requiresFinalEvaluation;
-    private boolean cloneExpression;
-   
-    public BaseCompoundExpression() {
-        init(Collections.<Expression>emptyList());
-    }
-    
-    public BaseCompoundExpression(List<Expression> children) {
-        init(children);
-    }
-    
-    private void init(List<Expression> children) {
-        this.children = ImmutableList.copyOf(children);
-        boolean isStateless = true;
-        boolean isNullable = false;
-        boolean requiresFinalEvaluation = false;
-        boolean cloneExpression = false;
-        this.determinism = Determinism.ALWAYS;
-        for (int i = 0; i < children.size(); i++) {
-            Expression child = children.get(i);
-            isNullable |= child.isNullable();
-            isStateless &= child.isStateless();
-            this.determinism = this.determinism.combine(child.getDeterminism());
-            requiresFinalEvaluation |= child.requiresFinalEvaluation();
-            cloneExpression |= child.isCloneExpression();
-        }
-        this.isStateless = isStateless;
-        this.isNullable = isNullable;
-        this.requiresFinalEvaluation = requiresFinalEvaluation;
-        this.cloneExpression = cloneExpression;
-    }
-    
-    @Override
-    public List<Expression> getChildren() {
-        return children;
-    }
-    
-    
-    @Override
-    public Determinism getDeterminism() {
-        return determinism;
-    }
+  protected List<Expression> children;
+  private boolean isNullable;
+  private boolean isStateless;
+  private Determinism determinism;
+  private boolean requiresFinalEvaluation;
+  private boolean cloneExpression;
 
-    @Override
-    public boolean isCloneExpression() {
-        return this.cloneExpression;
-    }
+  public BaseCompoundExpression() {
+    init(Collections.<Expression> emptyList());
+  }
 
-    @Override
-    public boolean isStateless() {
-        return isStateless;
-    }
+  public BaseCompoundExpression(List<Expression> children) {
+    init(children);
+  }
 
-    @Override
-    public boolean isNullable() {
-        return isNullable;
+  private void init(List<Expression> children) {
+    this.children = ImmutableList.copyOf(children);
+    boolean isStateless = true;
+    boolean isNullable = false;
+    boolean requiresFinalEvaluation = false;
+    boolean cloneExpression = false;
+    this.determinism = Determinism.ALWAYS;
+    for (int i = 0; i < children.size(); i++) {
+      Expression child = children.get(i);
+      isNullable |= child.isNullable();
+      isStateless &= child.isStateless();
+      this.determinism = this.determinism.combine(child.getDeterminism());
+      requiresFinalEvaluation |= child.requiresFinalEvaluation();
+      cloneExpression |= child.isCloneExpression();
     }
+    this.isStateless = isStateless;
+    this.isNullable = isNullable;
+    this.requiresFinalEvaluation = requiresFinalEvaluation;
+    this.cloneExpression = cloneExpression;
+  }
 
-    @Override
-    public int hashCode() {
-        final int prime = 31;
-        int result = 1;
-        result = prime * result + children.hashCode();
-        return result;
-    }
+  @Override
+  public List<Expression> getChildren() {
+    return children;
+  }
 
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null) return false;
-        if (getClass() != obj.getClass()) return false;
-        BaseCompoundExpression other = (BaseCompoundExpression)obj;
-        if (!children.equals(other.children)) return false;
-        return true;
-    }
+  @Override
+  public Determinism getDeterminism() {
+    return determinism;
+  }
 
-    @Override
-    public void readFields(DataInput input) throws IOException {
-        int len = WritableUtils.readVInt(input);
-        List<Expression>children = new ArrayList<Expression>(len);
-        for (int i = 0; i < len; i++) {
-            Expression child = ExpressionType.values()[WritableUtils.readVInt(input)].newInstance();
-            child.readFields(input);
-            children.add(child);
-        }
-        init(children);
-    }
+  @Override
+  public boolean isCloneExpression() {
+    return this.cloneExpression;
+  }
 
-    @Override
-    public void write(DataOutput output) throws IOException {
-        WritableUtils.writeVInt(output, children.size());
-        for (int i = 0; i < children.size(); i++) {
-            Expression child = children.get(i);
-            WritableUtils.writeVInt(output, ExpressionType.valueOf(child).ordinal());
-            child.write(output);
-        }
-    }
+  @Override
+  public boolean isStateless() {
+    return isStateless;
+  }
 
-    @Override
-    public void reset() {
-        for (int i = 0; i < children.size(); i++) {
-            children.get(i).reset();
-        }
+  @Override
+  public boolean isNullable() {
+    return isNullable;
+  }
+
+  @Override
+  public int hashCode() {
+    final int prime = 31;
+    int result = 1;
+    result = prime * result + children.hashCode();
+    return result;
+  }
+
+  @Override
+  public boolean equals(Object obj) {
+    if (this == obj) return true;
+    if (obj == null) return false;
+    if (getClass() != obj.getClass()) return false;
+    BaseCompoundExpression other = (BaseCompoundExpression) obj;
+    if (!children.equals(other.children)) return false;
+    return true;
+  }
+
+  @Override
+  public void readFields(DataInput input) throws IOException {
+    int len = WritableUtils.readVInt(input);
+    List<Expression> children = new ArrayList<Expression>(len);
+    for (int i = 0; i < len; i++) {
+      Expression child = ExpressionType.values()[WritableUtils.readVInt(input)].newInstance();
+      child.readFields(input);
+      children.add(child);
     }
-    
-    @Override
-    public String toString() {
-        return this.getClass().getName() + " [children=" + children + "]";
+    init(children);
+  }
+
+  @Override
+  public void write(DataOutput output) throws IOException {
+    WritableUtils.writeVInt(output, children.size());
+    for (int i = 0; i < children.size(); i++) {
+      Expression child = children.get(i);
+      WritableUtils.writeVInt(output, ExpressionType.valueOf(child).ordinal());
+      child.write(output);
     }
-    
-    @Override
-    public boolean requiresFinalEvaluation() {
-        return requiresFinalEvaluation;
+  }
+
+  @Override
+  public void reset() {
+    for (int i = 0; i < children.size(); i++) {
+      children.get(i).reset();
     }
+  }
+
+  @Override
+  public String toString() {
+    return this.getClass().getName() + " [children=" + children + "]";
+  }
+
+  @Override
+  public boolean requiresFinalEvaluation() {
+    return requiresFinalEvaluation;
+  }
 }

@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.pherf.configuration;
 
 import javax.xml.bind.annotation.XmlAttribute;
@@ -24,24 +23,24 @@ import javax.xml.bind.annotation.XmlType;
 @XmlType
 public class IdleTime {
 
-    private String id;
-    private long idleTime = 0;
+  private String id;
+  private long idleTime = 0;
 
-    @XmlAttribute
-    public String getId() {
-        return id;
-    }
+  @XmlAttribute
+  public String getId() {
+    return id;
+  }
 
-    public void setId(String id) {
-        this.id = id;
-    }
+  public void setId(String id) {
+    this.id = id;
+  }
 
-    @XmlAttribute
-    public long getIdleTime() {
-        return idleTime;
-    }
+  @XmlAttribute
+  public long getIdleTime() {
+    return idleTime;
+  }
 
-    public void setIdleTime(long idleTime) {
-        this.idleTime = idleTime;
-    }
+  public void setIdleTime(long idleTime) {
+    this.idleTime = idleTime;
+  }
 }

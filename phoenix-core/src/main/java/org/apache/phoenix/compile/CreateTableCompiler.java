@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,7 +24,6 @@ import java.util.BitSet;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
-
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
@@ -66,374 +65,377 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Iterators;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
+import org.apache.phoenix.thirdparty.com.google.common.collect.Iterators;
 
 public class CreateTableCompiler {
-    private static final PDatum VARBINARY_DATUM = new VarbinaryDatum();
-    private final PhoenixStatement statement;
-    private final Operation operation;
-    
-    public CreateTableCompiler(PhoenixStatement statement, Operation operation) {
-        this.statement = statement;
-        this.operation = operation;
+  private static final PDatum VARBINARY_DATUM = new VarbinaryDatum();
+  private final PhoenixStatement statement;
+  private final Operation operation;
+
+  public CreateTableCompiler(PhoenixStatement statement, Operation operation) {
+    this.statement = statement;
+    this.operation = operation;
+  }
+
+  public MutationPlan compile(CreateTableStatement create) throws SQLException {
+    final PhoenixConnection connection = statement.getConnection();
+    ColumnResolver resolver = FromCompiler.getResolverForCreation(create, connection);
+    PTableType type = create.getTableType();
+    PTable parentToBe = null;
+    ViewType viewTypeToBe = null;
+    Scan scan = new Scan();
+    final StatementContext context =
+      new StatementContext(statement, resolver, scan, new SequenceManager(statement));
+    // TODO: support any statement for a VIEW instead of just a WHERE clause
+    ParseNode whereNode = create.getWhereClause();
+    String viewStatementToBe = null;
+    byte[][] viewColumnConstantsToBe = null;
+    BitSet isViewColumnReferencedToBe = null;
+    // Check whether column families having local index column family suffix or not if present
+    // don't allow creating table.
+    // Also validate the default values expressions.
+    List<ColumnDef> columnDefs = create.getColumnDefs();
+    List<ColumnDef> overideColumnDefs = null;
+    PrimaryKeyConstraint pkConstraint = create.getPrimaryKeyConstraint();
+    for (int i = 0; i < columnDefs.size(); i++) {
+      ColumnDef columnDef = columnDefs.get(i);
+      if (
+        columnDef.getColumnDefName().getFamilyName() != null && columnDef.getColumnDefName()
+          .getFamilyName().contains(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)
+      ) {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNALLOWED_COLUMN_FAMILY).build()
+          .buildException();
+      }
+      // False means we do not need the default (because it evaluated to null)
+      if (!columnDef.validateDefault(context, pkConstraint)) {
+        if (overideColumnDefs == null) {
+          overideColumnDefs = new ArrayList<>(columnDefs);
+        }
+        overideColumnDefs.set(i, new ColumnDef(columnDef, null));
+      }
+    }
+    if (overideColumnDefs != null) {
+      create = new CreateTableStatement(create, overideColumnDefs);
+    }
+    final CreateTableStatement finalCreate = create;
+
+    if (type == PTableType.VIEW) {
+      TableRef tableRef = resolver.getTables().get(0);
+      int nColumns = tableRef.getTable().getColumns().size();
+      isViewColumnReferencedToBe = new BitSet(nColumns);
+      // Used to track column references in a view
+      ExpressionCompiler expressionCompiler =
+        new ColumnTrackingExpressionCompiler(context, isViewColumnReferencedToBe);
+      parentToBe = tableRef.getTable();
+
+      // Disallow creating views on top of SYSTEM tables. See PHOENIX-5386
+      if (parentToBe.getType() == PTableType.SYSTEM) {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CREATE_VIEWS_ON_SYSTEM_TABLES)
+          .build().buildException();
+      }
+      viewTypeToBe =
+        parentToBe.getViewType() == ViewType.MAPPED ? ViewType.MAPPED : ViewType.UPDATABLE;
+      if (whereNode == null) {
+        viewStatementToBe = parentToBe.getViewStatement();
+        if (parentToBe.getViewType() == ViewType.READ_ONLY) {
+          viewTypeToBe = ViewType.READ_ONLY;
+        }
+      } else {
+        whereNode = StatementNormalizer.normalize(whereNode, resolver);
+        if (whereNode.isStateless()) {
+          throw new SQLExceptionInfo.Builder(SQLExceptionCode.VIEW_WHERE_IS_CONSTANT).build()
+            .buildException();
+        }
+        // If our parent has a VIEW statement, combine it with this one
+        if (parentToBe.getViewStatement() != null) {
+          SelectStatement select =
+            new SQLParser(parentToBe.getViewStatement()).parseQuery().combine(whereNode);
+          whereNode = select.getWhere();
+        }
+        Expression where = whereNode.accept(expressionCompiler);
+        if (where != null && !LiteralExpression.isTrue(where)) {
+          TableName baseTableName = create.getBaseTableName();
+          StringBuilder buf = new StringBuilder();
+          whereNode.toSQL(resolver, buf);
+          viewStatementToBe = QueryUtil.getViewStatement(baseTableName.getSchemaName(),
+            baseTableName.getTableName(), buf.toString());
+        }
+        if (viewTypeToBe != ViewType.MAPPED) {
+          viewColumnConstantsToBe = new byte[nColumns][];
+          ViewWhereExpressionVisitor visitor =
+            new ViewWhereExpressionVisitor(parentToBe, viewColumnConstantsToBe);
+          where.accept(visitor);
+          // If view is not updatable, viewColumnConstants should be empty. We will still
+          // inherit our parent viewConstants, but we have no additional ones.
+          viewTypeToBe = visitor.isUpdatable() ? ViewType.UPDATABLE : ViewType.READ_ONLY;
+          if (viewTypeToBe != ViewType.UPDATABLE) {
+            viewColumnConstantsToBe = null;
+          }
+        }
+      }
+      if (viewTypeToBe == ViewType.MAPPED && parentToBe.getPKColumns().isEmpty()) {
+        validateCreateViewCompilation(connection, parentToBe, columnDefs, pkConstraint);
+      }
+    }
+    final ViewType viewType = viewTypeToBe;
+    final String viewStatement = viewStatementToBe;
+    final byte[][] viewColumnConstants = viewColumnConstantsToBe;
+    final BitSet isViewColumnReferenced = isViewColumnReferencedToBe;
+    List<ParseNode> splitNodes = create.getSplitNodes();
+    final byte[][] splits = new byte[splitNodes.size()][];
+    ImmutableBytesWritable ptr = context.getTempPtr();
+    ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
+    for (int i = 0; i < splits.length; i++) {
+      ParseNode node = splitNodes.get(i);
+      if (node instanceof BindParseNode) {
+        context.getBindManager().addParamMetaData((BindParseNode) node, VARBINARY_DATUM);
+      }
+      if (node.isStateless()) {
+        Expression expression = node.accept(expressionCompiler);
+        if (expression.evaluate(null, ptr)) {
+          ;
+          splits[i] = ByteUtil.copyKeyBytesIfNecessary(ptr);
+          continue;
+        }
+      }
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.SPLIT_POINT_NOT_CONSTANT)
+        .setMessage("Node: " + node).build().buildException();
+    }
+    final MetaDataClient client = new MetaDataClient(connection);
+    final PTable parent = parentToBe;
+
+    return new CreateTableMutationPlan(context, client, finalCreate, splits, parent, viewStatement,
+      viewType, viewColumnConstants, isViewColumnReferenced, connection);
+  }
+
+  /**
+   * Validate View creation compilation. 1. If view creation syntax does not specify primary key,
+   * the method throws SQLException with PRIMARY_KEY_MISSING code. 2. If parent table does not
+   * exist, the method throws TNFE.
+   * @param connection   The client connection
+   * @param parentToBe   To be parent for given view
+   * @param columnDefs   List of column defs
+   * @param pkConstraint PrimaryKey constraint retrieved from CreateTable statement
+   * @throws SQLException If view creation validation fails
+   */
+  private void validateCreateViewCompilation(final PhoenixConnection connection,
+    final PTable parentToBe, final List<ColumnDef> columnDefs,
+    final PrimaryKeyConstraint pkConstraint) throws SQLException {
+    boolean isPKMissed = true;
+    if (pkConstraint.getColumnNames().size() > 0) {
+      isPKMissed = false;
+    } else {
+      for (ColumnDef columnDef : columnDefs) {
+        if (columnDef.isPK()) {
+          isPKMissed = false;
+          break;
+        }
+      }
+    }
+    PName fullTableName = SchemaUtil.getPhysicalHBaseTableName(parentToBe.getSchemaName(),
+      parentToBe.getTableName(), parentToBe.isNamespaceMapped());
+    // getTableIfExists will throw TNFE if table does not exist
+    try (Table ignored = connection.getQueryServices().getTableIfExists(fullTableName.getBytes())) {
+      // empty try block
+    } catch (IOException e) {
+      throw new SQLException(e);
+    }
+    if (isPKMissed) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.PRIMARY_KEY_MISSING).build()
+        .buildException();
+    }
+  }
+
+  public static class ColumnTrackingExpressionCompiler extends ExpressionCompiler {
+    private final BitSet isColumnReferenced;
+
+    public ColumnTrackingExpressionCompiler(StatementContext context, BitSet isColumnReferenced) {
+      super(context, true);
+      this.isColumnReferenced = isColumnReferenced;
     }
 
-    public MutationPlan compile(CreateTableStatement create) throws SQLException {
-        final PhoenixConnection connection = statement.getConnection();
-        ColumnResolver resolver = FromCompiler.getResolverForCreation(create, connection);
-        PTableType type = create.getTableType();
-        PTable parentToBe = null;
-        ViewType viewTypeToBe = null;
-        Scan scan = new Scan();
-        final StatementContext context = new StatementContext(statement, resolver, scan, new SequenceManager(statement));
-        // TODO: support any statement for a VIEW instead of just a WHERE clause
-        ParseNode whereNode = create.getWhereClause();
-        String viewStatementToBe = null;
-        byte[][] viewColumnConstantsToBe = null;
-        BitSet isViewColumnReferencedToBe = null;
-        // Check whether column families having local index column family suffix or not if present
-        // don't allow creating table.
-        // Also validate the default values expressions.
-        List<ColumnDef> columnDefs = create.getColumnDefs();
-        List<ColumnDef> overideColumnDefs = null;
-        PrimaryKeyConstraint pkConstraint = create.getPrimaryKeyConstraint();
-        for (int i = 0; i < columnDefs.size(); i++) {
-            ColumnDef columnDef = columnDefs.get(i);
-            if (columnDef.getColumnDefName().getFamilyName()!=null && columnDef.getColumnDefName().getFamilyName().contains(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNALLOWED_COLUMN_FAMILY)
-                        .build().buildException();
-            }
-            // False means we do not need the default (because it evaluated to null)
-            if (!columnDef.validateDefault(context, pkConstraint)) {
-                if (overideColumnDefs == null) {
-                    overideColumnDefs = new ArrayList<>(columnDefs);
-                }
-                overideColumnDefs.set(i, new ColumnDef(columnDef, null));
-            }
-        }
-        if (overideColumnDefs != null) {
-            create = new CreateTableStatement(create,overideColumnDefs);
-        }
-        final CreateTableStatement finalCreate = create;
-        
-        if (type == PTableType.VIEW) {
-            TableRef tableRef = resolver.getTables().get(0);
-            int nColumns = tableRef.getTable().getColumns().size();
-            isViewColumnReferencedToBe = new BitSet(nColumns);
-            // Used to track column references in a view
-            ExpressionCompiler expressionCompiler = new ColumnTrackingExpressionCompiler(context, isViewColumnReferencedToBe);
-            parentToBe = tableRef.getTable();
+    @Override
+    protected ColumnRef resolveColumn(ColumnParseNode node) throws SQLException {
+      ColumnRef ref = super.resolveColumn(node);
+      isColumnReferenced.set(ref.getColumn().getPosition());
+      return ref;
+    }
+  }
 
-            // Disallow creating views on top of SYSTEM tables. See PHOENIX-5386
-            if (parentToBe.getType() == PTableType.SYSTEM) {
-                throw new SQLExceptionInfo
-                        .Builder(SQLExceptionCode.CANNOT_CREATE_VIEWS_ON_SYSTEM_TABLES)
-                        .build().buildException();
-            }
-            viewTypeToBe = parentToBe.getViewType() == ViewType.MAPPED ? ViewType.MAPPED : ViewType.UPDATABLE;
-            if (whereNode == null) {
-                viewStatementToBe = parentToBe.getViewStatement();
-                if (parentToBe.getViewType() == ViewType.READ_ONLY) {
-                    viewTypeToBe = ViewType.READ_ONLY;
-                }
-            } else {
-                whereNode = StatementNormalizer.normalize(whereNode, resolver);
-                if (whereNode.isStateless()) {
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.VIEW_WHERE_IS_CONSTANT)
-                        .build().buildException();
-                }
-                // If our parent has a VIEW statement, combine it with this one
-                if (parentToBe.getViewStatement() != null) {
-                    SelectStatement select = new SQLParser(parentToBe.getViewStatement()).parseQuery().combine(whereNode);
-                    whereNode = select.getWhere();
-                }
-                Expression where = whereNode.accept(expressionCompiler);
-                if (where != null && !LiteralExpression.isTrue(where)) {
-                    TableName baseTableName = create.getBaseTableName();
-                    StringBuilder buf = new StringBuilder();
-                    whereNode.toSQL(resolver, buf);
-                    viewStatementToBe = QueryUtil.getViewStatement(baseTableName.getSchemaName(), baseTableName.getTableName(), buf.toString());
-                }
-                if (viewTypeToBe != ViewType.MAPPED) {
-                    viewColumnConstantsToBe = new byte[nColumns][];
-                    ViewWhereExpressionVisitor visitor = new ViewWhereExpressionVisitor(parentToBe, viewColumnConstantsToBe);
-                    where.accept(visitor);
-                    // If view is not updatable, viewColumnConstants should be empty. We will still
-                    // inherit our parent viewConstants, but we have no additional ones.
-                    viewTypeToBe = visitor.isUpdatable() ? ViewType.UPDATABLE : ViewType.READ_ONLY;
-                    if (viewTypeToBe != ViewType.UPDATABLE) {
-                        viewColumnConstantsToBe = null;
-                    }
-                }
-            }
-            if (viewTypeToBe == ViewType.MAPPED
-                    && parentToBe.getPKColumns().isEmpty()) {
-                validateCreateViewCompilation(connection, parentToBe,
-                    columnDefs, pkConstraint);
-            }
-        }
-        final ViewType viewType = viewTypeToBe;
-        final String viewStatement = viewStatementToBe;
-        final byte[][] viewColumnConstants = viewColumnConstantsToBe;
-        final BitSet isViewColumnReferenced = isViewColumnReferencedToBe;
-        List<ParseNode> splitNodes = create.getSplitNodes();
-        final byte[][] splits = new byte[splitNodes.size()][];
-        ImmutableBytesWritable ptr = context.getTempPtr();
-        ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
-        for (int i = 0; i < splits.length; i++) {
-            ParseNode node = splitNodes.get(i);
-            if (node instanceof BindParseNode) {
-                context.getBindManager().addParamMetaData((BindParseNode) node, VARBINARY_DATUM);
-            }
-            if (node.isStateless()) {
-                Expression expression = node.accept(expressionCompiler);
-                if (expression.evaluate(null, ptr)) {;
-                    splits[i] = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                    continue;
-                }
-            }
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.SPLIT_POINT_NOT_CONSTANT)
-                .setMessage("Node: " + node).build().buildException();
-        }
-        final MetaDataClient client = new MetaDataClient(connection);
-        final PTable parent = parentToBe;
+  public static class ViewWhereExpressionVisitor
+    extends StatelessTraverseNoExpressionVisitor<Boolean> {
+    private boolean isUpdatable = true;
+    private final PTable table;
+    private int position;
+    private final byte[][] columnValues;
+    private final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 
-        return new CreateTableMutationPlan(context, client, finalCreate, splits, parent,
-            viewStatement, viewType, viewColumnConstants, isViewColumnReferenced, connection);
+    public ViewWhereExpressionVisitor(PTable table, byte[][] columnValues) {
+      this.table = table;
+      this.columnValues = columnValues;
     }
 
-    /**
-     * Validate View creation compilation.
-     * 1. If view creation syntax does not specify primary key, the method
-     * throws SQLException with PRIMARY_KEY_MISSING code.
-     * 2. If parent table does not exist, the method throws TNFE.
-     *
-     * @param connection The client connection
-     * @param parentToBe To be parent for given view
-     * @param columnDefs List of column defs
-     * @param pkConstraint PrimaryKey constraint retrieved from CreateTable
-     *     statement
-     * @throws SQLException If view creation validation fails
-     */
-    private void validateCreateViewCompilation(
-            final PhoenixConnection connection, final PTable parentToBe,
-            final List<ColumnDef> columnDefs,
-            final PrimaryKeyConstraint pkConstraint) throws SQLException {
-        boolean isPKMissed = true;
-        if (pkConstraint.getColumnNames().size() > 0) {
-            isPKMissed = false;
-        } else {
-            for (ColumnDef columnDef : columnDefs) {
-                if (columnDef.isPK()) {
-                    isPKMissed = false;
-                    break;
-                }
-            }
-        }
-        PName fullTableName = SchemaUtil.getPhysicalHBaseTableName(
-            parentToBe.getSchemaName(), parentToBe.getTableName(),
-            parentToBe.isNamespaceMapped());
-        // getTableIfExists will throw TNFE if table does not exist
-        try (Table ignored =
-               connection.getQueryServices().getTableIfExists(
-                 fullTableName.getBytes())) {
-            // empty try block
-        } catch (IOException e) {
-            throw new SQLException(e);
-        }
-        if (isPKMissed) {
-            throw new SQLExceptionInfo
-                .Builder(SQLExceptionCode.PRIMARY_KEY_MISSING)
-                .build().buildException();
-        }
+    public boolean isUpdatable() {
+      return isUpdatable;
     }
 
-    public static class ColumnTrackingExpressionCompiler extends ExpressionCompiler {
-        private final BitSet isColumnReferenced;
-        
-        public ColumnTrackingExpressionCompiler(StatementContext context, BitSet isColumnReferenced) {
-            super(context, true);
-            this.isColumnReferenced = isColumnReferenced;
-        }
-        
-        @Override
-        protected ColumnRef resolveColumn(ColumnParseNode node) throws SQLException {
-            ColumnRef ref = super.resolveColumn(node);
-            isColumnReferenced.set(ref.getColumn().getPosition());
-            return ref;
-        }
-    }
-    
-    public static class ViewWhereExpressionVisitor extends StatelessTraverseNoExpressionVisitor<Boolean> {
-        private boolean isUpdatable = true;
-        private final PTable table;
-        private int position;
-        private final byte[][] columnValues;
-        private final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-
-        public ViewWhereExpressionVisitor (PTable table, byte[][] columnValues) {
-            this.table = table;
-            this.columnValues = columnValues;
-        }
-        
-        public boolean isUpdatable() {
-            return isUpdatable;
-        }
-
-        @Override
-        public Boolean defaultReturn(Expression node, List<Boolean> l) {
-            // We only hit this if we're trying to traverse somewhere
-            // in which we don't have a visitLeave that returns non null
-            isUpdatable = false;
-            return null;
-        }
-
-        @Override
-        public Iterator<Expression> visitEnter(AndExpression node) {
-            return node.getChildren().iterator();
-        }
-
-        @Override
-        public Boolean visitLeave(AndExpression node, List<Boolean> l) {
-            return l.isEmpty() ? null : Boolean.TRUE;
-        }
-
-        @Override
-        public Iterator<Expression> visitEnter(ComparisonExpression node) {
-            if (node.getFilterOp() == CompareOp.EQUAL && node.getChildren().get(1).isStateless() 
-            		&& node.getChildren().get(1).getDeterminism() == Determinism.ALWAYS ) {
-                return Iterators.singletonIterator(node.getChildren().get(0));
-            }
-            return super.visitEnter(node);
-        }
-
-        @Override
-        public Boolean visitLeave(ComparisonExpression node, List<Boolean> l) {
-            if (l.isEmpty()) {
-                return null;
-            }
-            
-            node.getChildren().get(1).evaluate(null, ptr);
-            // Set the columnValue at the position of the column to the
-            // constant with which it is being compared.
-            // We always strip the last byte so that we can recognize null
-            // as a value with a single byte.
-            columnValues[position] = new byte [ptr.getLength() + 1];
-            System.arraycopy(ptr.get(), ptr.getOffset(), columnValues[position], 0, ptr.getLength());
-            return Boolean.TRUE;
-        }
-
-        @Override
-        public Iterator<Expression> visitEnter(IsNullExpression node) {
-            return node.isNegate() ? super.visitEnter(node) : node.getChildren().iterator();
-        }
-        
-        @Override
-        public Boolean visitLeave(IsNullExpression node, List<Boolean> l) {
-            // Nothing to do as we've already set the position to an empty byte array
-            return l.isEmpty() ? null : Boolean.TRUE;
-        }
-        
-        @Override
-        public Boolean visit(RowKeyColumnExpression node) {
-            this.position = table.getPKColumns().get(node.getPosition()).getPosition();
-            return Boolean.TRUE;
-        }
-
-        @Override
-        public Boolean visit(KeyValueColumnExpression node) {
-            try {
-                this.position = table.getColumnFamily(node.getColumnFamily()).getPColumnForColumnQualifier(node.getColumnQualifier()).getPosition();
-            } catch (SQLException e) {
-                throw new RuntimeException(e); // Impossible
-            }
-            return Boolean.TRUE;
-        }
-        
-        @Override
-        public Boolean visit(SingleCellColumnExpression node) {
-            return visit(node.getKeyValueExpression());
-        }
-        
-    }
-    private static class VarbinaryDatum implements PDatum {
-
-        @Override
-        public boolean isNullable() {
-            return false;
-        }
-
-        @Override
-        public PDataType getDataType() {
-            return PVarbinary.INSTANCE;
-        }
-
-        @Override
-        public Integer getMaxLength() {
-            return null;
-        }
-
-        @Override
-        public Integer getScale() {
-            return null;
-        }
-
-        @Override
-        public SortOrder getSortOrder() {
-            return SortOrder.getDefault();
-        }
-        
+    @Override
+    public Boolean defaultReturn(Expression node, List<Boolean> l) {
+      // We only hit this if we're trying to traverse somewhere
+      // in which we don't have a visitLeave that returns non null
+      isUpdatable = false;
+      return null;
     }
 
-    private class CreateTableMutationPlan extends BaseMutationPlan {
-
-        private final MetaDataClient client;
-        private final CreateTableStatement finalCreate;
-        private final byte[][] splits;
-        private final PTable parent;
-        private final String viewStatement;
-        private final ViewType viewType;
-        private final byte[][] viewColumnConstants;
-        private final BitSet isViewColumnReferenced;
-        private final PhoenixConnection connection;
-
-        private CreateTableMutationPlan(StatementContext context, MetaDataClient client,
-                CreateTableStatement finalCreate, byte[][] splits, PTable parent,
-                String viewStatement, ViewType viewType, byte[][] viewColumnConstants,
-                BitSet isViewColumnReferenced, PhoenixConnection connection) {
-            super(context, CreateTableCompiler.this.operation);
-            this.client = client;
-            this.finalCreate = finalCreate;
-            this.splits = splits;
-            this.parent = parent;
-            this.viewStatement = viewStatement;
-            this.viewType = viewType;
-            this.viewColumnConstants = viewColumnConstants;
-            this.isViewColumnReferenced = isViewColumnReferenced;
-            this.connection = connection;
-        }
-
-        @Override
-        public MutationState execute() throws SQLException {
-            try {
-                return client.createTable(finalCreate, splits, parent, viewStatement,
-                    viewType, MetaDataUtil.getViewIndexIdDataType(), viewColumnConstants,
-                    isViewColumnReferenced);
-            } finally {
-                if (client.getConnection() != connection) {
-                    client.getConnection().close();
-                }
-            }
-        }
-
-        @Override
-        public ExplainPlan getExplainPlan() throws SQLException {
-            return new ExplainPlan(Collections.singletonList("CREATE TABLE"));
-        }
+    @Override
+    public Iterator<Expression> visitEnter(AndExpression node) {
+      return node.getChildren().iterator();
     }
+
+    @Override
+    public Boolean visitLeave(AndExpression node, List<Boolean> l) {
+      return l.isEmpty() ? null : Boolean.TRUE;
+    }
+
+    @Override
+    public Iterator<Expression> visitEnter(ComparisonExpression node) {
+      if (
+        node.getFilterOp() == CompareOp.EQUAL && node.getChildren().get(1).isStateless()
+          && node.getChildren().get(1).getDeterminism() == Determinism.ALWAYS
+      ) {
+        return Iterators.singletonIterator(node.getChildren().get(0));
+      }
+      return super.visitEnter(node);
+    }
+
+    @Override
+    public Boolean visitLeave(ComparisonExpression node, List<Boolean> l) {
+      if (l.isEmpty()) {
+        return null;
+      }
+
+      node.getChildren().get(1).evaluate(null, ptr);
+      // Set the columnValue at the position of the column to the
+      // constant with which it is being compared.
+      // We always strip the last byte so that we can recognize null
+      // as a value with a single byte.
+      columnValues[position] = new byte[ptr.getLength() + 1];
+      System.arraycopy(ptr.get(), ptr.getOffset(), columnValues[position], 0, ptr.getLength());
+      return Boolean.TRUE;
+    }
+
+    @Override
+    public Iterator<Expression> visitEnter(IsNullExpression node) {
+      return node.isNegate() ? super.visitEnter(node) : node.getChildren().iterator();
+    }
+
+    @Override
+    public Boolean visitLeave(IsNullExpression node, List<Boolean> l) {
+      // Nothing to do as we've already set the position to an empty byte array
+      return l.isEmpty() ? null : Boolean.TRUE;
+    }
+
+    @Override
+    public Boolean visit(RowKeyColumnExpression node) {
+      this.position = table.getPKColumns().get(node.getPosition()).getPosition();
+      return Boolean.TRUE;
+    }
+
+    @Override
+    public Boolean visit(KeyValueColumnExpression node) {
+      try {
+        this.position = table.getColumnFamily(node.getColumnFamily())
+          .getPColumnForColumnQualifier(node.getColumnQualifier()).getPosition();
+      } catch (SQLException e) {
+        throw new RuntimeException(e); // Impossible
+      }
+      return Boolean.TRUE;
+    }
+
+    @Override
+    public Boolean visit(SingleCellColumnExpression node) {
+      return visit(node.getKeyValueExpression());
+    }
+
+  }
+
+  private static class VarbinaryDatum implements PDatum {
+
+    @Override
+    public boolean isNullable() {
+      return false;
+    }
+
+    @Override
+    public PDataType getDataType() {
+      return PVarbinary.INSTANCE;
+    }
+
+    @Override
+    public Integer getMaxLength() {
+      return null;
+    }
+
+    @Override
+    public Integer getScale() {
+      return null;
+    }
+
+    @Override
+    public SortOrder getSortOrder() {
+      return SortOrder.getDefault();
+    }
+
+  }
+
+  private class CreateTableMutationPlan extends BaseMutationPlan {
+
+    private final MetaDataClient client;
+    private final CreateTableStatement finalCreate;
+    private final byte[][] splits;
+    private final PTable parent;
+    private final String viewStatement;
+    private final ViewType viewType;
+    private final byte[][] viewColumnConstants;
+    private final BitSet isViewColumnReferenced;
+    private final PhoenixConnection connection;
+
+    private CreateTableMutationPlan(StatementContext context, MetaDataClient client,
+      CreateTableStatement finalCreate, byte[][] splits, PTable parent, String viewStatement,
+      ViewType viewType, byte[][] viewColumnConstants, BitSet isViewColumnReferenced,
+      PhoenixConnection connection) {
+      super(context, CreateTableCompiler.this.operation);
+      this.client = client;
+      this.finalCreate = finalCreate;
+      this.splits = splits;
+      this.parent = parent;
+      this.viewStatement = viewStatement;
+      this.viewType = viewType;
+      this.viewColumnConstants = viewColumnConstants;
+      this.isViewColumnReferenced = isViewColumnReferenced;
+      this.connection = connection;
+    }
+
+    @Override
+    public MutationState execute() throws SQLException {
+      try {
+        return client.createTable(finalCreate, splits, parent, viewStatement, viewType,
+          MetaDataUtil.getViewIndexIdDataType(), viewColumnConstants, isViewColumnReferenced);
+      } finally {
+        if (client.getConnection() != connection) {
+          client.getConnection().close();
+        }
+      }
+    }
+
+    @Override
+    public ExplainPlan getExplainPlan() throws SQLException {
+      return new ExplainPlan(Collections.singletonList("CREATE TABLE"));
+    }
+  }
 }

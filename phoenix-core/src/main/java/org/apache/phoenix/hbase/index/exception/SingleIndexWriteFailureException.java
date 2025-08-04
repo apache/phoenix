@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,10 +20,9 @@ package org.apache.phoenix.hbase.index.exception;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
 import org.apache.hadoop.hbase.client.Mutation;
+
 import org.apache.phoenix.thirdparty.com.google.common.base.MoreObjects;
-import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
 
 /**
  * Exception thrown if we cannot successfully write to an index table.
@@ -37,7 +36,7 @@ public class SingleIndexWriteFailureException extends IndexWriteException {
 
   /**
    * Cannot reach the index, but not sure of the table or the mutations that caused the failure
-   * @param msg more description of what happened
+   * @param msg   more description of what happened
    * @param cause original cause
    */
   public SingleIndexWriteFailureException(String msg, Throwable cause) {
@@ -47,28 +46,28 @@ public class SingleIndexWriteFailureException extends IndexWriteException {
   /**
    * Failed to write the passed mutations to an index table for some reason.
    * @param targetTableName index table to which we attempted to write
-   * @param mutations mutations that were attempted
-   * @param cause underlying reason for the failure
+   * @param mutations       mutations that were attempted
+   * @param cause           underlying reason for the failure
    */
   public SingleIndexWriteFailureException(String targetTableName, List<Mutation> mutations,
-      Exception cause, boolean disableIndexOnFailure) {
+    Exception cause, boolean disableIndexOnFailure) {
     super(cause, disableIndexOnFailure);
     this.table = targetTableName;
     this.mutationsMsg = mutations.toString();
   }
 
   /**
-   * This constructor used to rematerialize this exception when receiving
-   * an rpc exception from the server
+   * This constructor used to rematerialize this exception when receiving an rpc exception from the
+   * server
    * @param msg detail message
    */
   public SingleIndexWriteFailureException(String msg) {
-      super(IndexWriteException.parseDisableIndexOnFailure(msg));
-      Pattern pattern = Pattern.compile(FAILED_MSG + ".* table: ([\\S]*)\\s.*", Pattern.DOTALL);
-      Matcher m = pattern.matcher(msg);
-      if (m.find()) {
-          this.table = m.group(1);
-      }
+    super(IndexWriteException.parseDisableIndexOnFailure(msg));
+    Pattern pattern = Pattern.compile(FAILED_MSG + ".* table: ([\\S]*)\\s.*", Pattern.DOTALL);
+    Matcher m = pattern.matcher(msg);
+    if (m.find()) {
+      this.table = m.group(1);
+    }
   }
 
   /**
@@ -80,8 +79,10 @@ public class SingleIndexWriteFailureException extends IndexWriteException {
   }
 
   @Override
-    public String getMessage() {
-      return MoreObjects.firstNonNull(super.getMessage(), "") + " " + FAILED_MSG + "\n\t table: " + this.table + "\n\t edits: " + mutationsMsg
-      + "\n\tcause: " + getCause() == null ? "UNKNOWN" : getCause().getMessage();
-    }
+  public String getMessage() {
+    return MoreObjects.firstNonNull(super.getMessage(), "") + " " + FAILED_MSG + "\n\t table: "
+      + this.table + "\n\t edits: " + mutationsMsg + "\n\tcause: " + getCause() == null
+        ? "UNKNOWN"
+        : getCause().getMessage();
+  }
 }

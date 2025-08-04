@@ -15,9 +15,7 @@
   See the License for the specific language governing permissions and
   limitations under the License.
 -->
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.phoenix</groupId>
@@ -121,8 +119,8 @@
       <artifactId>commons-lang3</artifactId>
     </dependency>
     <dependency>
-        <groupId>commons-io</groupId>
-        <artifactId>commons-io</artifactId>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.commons</groupId>
@@ -168,8 +166,8 @@
     <dependency>
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-hbase-compat-${hbase.compat.version}</artifactId>
-      <optional>false</optional>
       <scope>test</scope>
+      <optional>false</optional>
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
@@ -261,38 +259,18 @@
         <artifactId>maven-dependency-plugin</artifactId>
         <configuration>
           <ignoredUnusedDeclaredDependencies>
-            <ignoredUnusedDeclaredDependency>
-              org.apache.hbase.thirdparty:hbase-shaded-miscellaneous
-            </ignoredUnusedDeclaredDependency>
-            <ignoredUnusedDeclaredDependency>
-              javax.activation:activation
-            </ignoredUnusedDeclaredDependency>
-            <ignoredUnusedDeclaredDependency>
-              javax.xml.bind:jaxb-api
-            </ignoredUnusedDeclaredDependency>
-            <ignoredUnusedDeclaredDependency>
-              org.glassfish.jaxb:jax-runtime
-            </ignoredUnusedDeclaredDependency>
-            <ignoredUnusedDeclaredDependency>
-              org.apache.hbase:hbase-it
-            </ignoredUnusedDeclaredDependency>
-            <ignoredUnusedDeclaredDependency>
-              org.apache.phoenix:phoenix-hbase-compat-${hbase.compat.version}
-            </ignoredUnusedDeclaredDependency>
-            <ignoredUnusedDeclaredDependency>
-              org.apache.hbase:hbase-testing-util
-            </ignoredUnusedDeclaredDependency>
-            <ignoredUnusedDeclaredDependency>
-              org.apache.logging.log4j:log4j-api
-            </ignoredUnusedDeclaredDependency>
-            <ignoredUnusedDeclaredDependency>
-               org.apache.logging.log4j:log4j-core
-            </ignoredUnusedDeclaredDependency>
+            <ignoredUnusedDeclaredDependency>org.apache.hbase.thirdparty:hbase-shaded-miscellaneous</ignoredUnusedDeclaredDependency>
+            <ignoredUnusedDeclaredDependency>javax.activation:activation</ignoredUnusedDeclaredDependency>
+            <ignoredUnusedDeclaredDependency>javax.xml.bind:jaxb-api</ignoredUnusedDeclaredDependency>
+            <ignoredUnusedDeclaredDependency>org.glassfish.jaxb:jax-runtime</ignoredUnusedDeclaredDependency>
+            <ignoredUnusedDeclaredDependency>org.apache.hbase:hbase-it</ignoredUnusedDeclaredDependency>
+            <ignoredUnusedDeclaredDependency>org.apache.phoenix:phoenix-hbase-compat-${hbase.compat.version}</ignoredUnusedDeclaredDependency>
+            <ignoredUnusedDeclaredDependency>org.apache.hbase:hbase-testing-util</ignoredUnusedDeclaredDependency>
+            <ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-api</ignoredUnusedDeclaredDependency>
+            <ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-core</ignoredUnusedDeclaredDependency>
           </ignoredUnusedDeclaredDependencies>
           <ignoredUsedUndeclaredDependencies>
-            <ignoredUsedUndeclaredDependency>
-              jakarta.xml.bind:jakarta.xml.bind-api
-            </ignoredUsedUndeclaredDependency>
+            <ignoredUsedUndeclaredDependency>jakarta.xml.bind:jakarta.xml.bind-api</ignoredUsedUndeclaredDependency>
           </ignoredUsedUndeclaredDependencies>
         </configuration>
       </plugin>
@@ -318,29 +296,25 @@
         <artifactId>maven-shade-plugin</artifactId>
         <executions>
           <execution>
-            <phase>package</phase>
             <goals>
               <goal>shade</goal>
             </goals>
+            <phase>package</phase>
             <configuration>
               <promoteTransitiveDependencies>false</promoteTransitiveDependencies>
               <shadeTestJar>false</shadeTestJar>
               <dependencyReducedPomLocation>${basedir}/target/pom.xml</dependencyReducedPomLocation>
               <transformers>
-                <transformer
-                  implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
-                <transformer
-                  implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
                   <resource>README.md</resource>
                   <file>${project.basedir}/../README.md</file>
                 </transformer>
-                <transformer
-                  implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
+                <transformer implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
                   <resource>LICENSE.txt</resource>
                   <file>${project.basedir}/../LICENSE</file>
                 </transformer>
-                <transformer
-                  implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
+                <transformer implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
                   <resource>NOTICE</resource>
                   <file>${project.basedir}/../NOTICE</file>
                 </transformer>
@@ -349,7 +323,7 @@
                 <includes>
                   <include>org.apache.phoenix:phoenix-pherf</include>
                   <include>com.google.code.gson:gson</include>
-                  <includ> org.apache.hbase.thirdparty:hbase-shaded-miscellaneous</includ>
+                  <includ>org.apache.hbase.thirdparty:hbase-shaded-miscellaneous</includ>
                   <include>org.apache.phoenix.thirdparty:phoenix-shaded-guava</include>
                   <include>com.googlecode.java-diff-utils:diffutils</include>
                   <include>org.apache.commons:commons-lang3</include>
@@ -382,30 +356,30 @@
   </build>
   <profiles>
     <profile>
-        <id>phoenix-hbase-compat-2.5.0</id>
-        <!-- keep dependency plugin happy -->
-        <activation>
-            <property>
-                <name>hbase.profile</name>
-                <value>2.5</value>
-            </property>
-        </activation>
-        <properties>
-            <hbase.profile>2.5</hbase.profile>
-        </properties>
-        <dependencies>
-            <!-- log4j2 for Hbase 2.5 minicluster -->
-            <dependency>
-                <groupId>org.apache.logging.log4j</groupId>
-                <artifactId>log4j-api</artifactId>
-                <scope>test</scope>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.logging.log4j</groupId>
-                <artifactId>log4j-core</artifactId>
-                <scope>test</scope>
-            </dependency>
-        </dependencies>
+      <id>phoenix-hbase-compat-2.5.0</id>
+      <!-- keep dependency plugin happy -->
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.5</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>2.5</hbase.profile>
+      </properties>
+      <dependencies>
+        <!-- log4j2 for Hbase 2.5 minicluster -->
+        <dependency>
+          <groupId>org.apache.logging.log4j</groupId>
+          <artifactId>log4j-api</artifactId>
+          <scope>test</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.logging.log4j</groupId>
+          <artifactId>log4j-core</artifactId>
+          <scope>test</scope>
+        </dependency>
+      </dependencies>
     </profile>
   </profiles>
 </project>

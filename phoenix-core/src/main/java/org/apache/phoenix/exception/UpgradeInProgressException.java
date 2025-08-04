@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,15 +17,16 @@
  */
 package org.apache.phoenix.exception;
 
-
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 
 public class UpgradeInProgressException extends RetriableUpgradeException {
-    public UpgradeInProgressException(String upgradeFrom, String upgradeTo) {
-        super((upgradeFrom.equals(MetaDataProtocol.MIGRATION_IN_PROGRESS) ?
-                "System Tables are concurrently being migrated to system namespace" :
-                "Cluster is being concurrently upgraded from " + upgradeFrom + " to " + upgradeTo)
-                + ". Please retry establishing connection.", SQLExceptionCode.CONCURRENT_UPGRADE_IN_PROGRESS
-                .getSQLState(), SQLExceptionCode.CONCURRENT_UPGRADE_IN_PROGRESS.getErrorCode());
-    }
+  public UpgradeInProgressException(String upgradeFrom, String upgradeTo) {
+    super(
+      (upgradeFrom.equals(MetaDataProtocol.MIGRATION_IN_PROGRESS)
+        ? "System Tables are concurrently being migrated to system namespace"
+        : "Cluster is being concurrently upgraded from " + upgradeFrom + " to " + upgradeTo)
+        + ". Please retry establishing connection.",
+      SQLExceptionCode.CONCURRENT_UPGRADE_IN_PROGRESS.getSQLState(),
+      SQLExceptionCode.CONCURRENT_UPGRADE_IN_PROGRESS.getErrorCode());
+  }
 }

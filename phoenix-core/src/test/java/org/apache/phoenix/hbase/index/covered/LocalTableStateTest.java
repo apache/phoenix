@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,7 +23,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
@@ -45,7 +44,6 @@ import org.apache.phoenix.util.ScanUtil;
 import org.junit.Test;
 import org.mockito.Mockito;
 
-
 public class LocalTableStateTest {
 
   private static final byte[] row = Bytes.toBytes("row");
@@ -57,17 +55,17 @@ public class LocalTableStateTest {
 
     @Override
     public ReplayWrite getReplayWrite() {
-        return null;
+      return null;
     }
 
     @Override
     public boolean requiresPriorRowState(Mutation m) {
-        return true;
+      return true;
     }
-      
+
     @Override
     public int getClientVersion() {
-        return ScanUtil.UNKNOWN_CLIENT_VERSION;
+      return ScanUtil.UNKNOWN_CLIENT_VERSION;
     }
 
   };
@@ -86,50 +84,51 @@ public class LocalTableStateTest {
     Mockito.when(env.getRegion()).thenReturn(region);
     final byte[] stored = Bytes.toBytes("stored-value");
 
-
     KeyValue kv = new KeyValue(row, fam, qual, ts, Type.Put, stored);
     kv.setSequenceId(0);
     HashMap<ImmutableBytesPtr, List<Cell>> rowKeyPtrToCells =
-            new  HashMap<ImmutableBytesPtr, List<Cell>>();
-    rowKeyPtrToCells.put(new ImmutableBytesPtr(row), Collections.singletonList((Cell)kv));
+      new HashMap<ImmutableBytesPtr, List<Cell>>();
+    rowKeyPtrToCells.put(new ImmutableBytesPtr(row), Collections.singletonList((Cell) kv));
     CachedLocalTable cachedLocalTable = CachedLocalTable.build(rowKeyPtrToCells);
     LocalTableState table = new LocalTableState(cachedLocalTable, m);
-    //add the kvs from the mutation
+    // add the kvs from the mutation
     table.addPendingUpdates(m.get(fam, qual));
 
     // setup the lookup
     ColumnReference col = new ColumnReference(fam, qual);
     table.setCurrentTimestamp(ts);
-    //check that our value still shows up first on scan, even though this is a lazy load
-    Pair<CoveredDeleteScanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
+    // check that our value still shows up first on scan, even though this is a lazy load
+    Pair<CoveredDeleteScanner, IndexUpdate> p =
+      table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
     Scanner s = p.getFirst();
-    assertEquals("Didn't get the pending mutation's value first", m.get(fam, qual).get(0), s.next());
+    assertEquals("Didn't get the pending mutation's value first", m.get(fam, qual).get(0),
+      s.next());
   }
 
   public static final class ScannerCreatedException extends RuntimeException {
-      ScannerCreatedException(String msg) {
-          super(msg);
-      }
+    ScannerCreatedException(String msg) {
+      super(msg);
+    }
   }
 
   @Test
   public void testNoScannerForImmutableRows() throws Exception {
-      IndexMetaData indexMetaData = new IndexMetaData() {
+    IndexMetaData indexMetaData = new IndexMetaData() {
 
-          @Override
-          public ReplayWrite getReplayWrite() {
-              return null;
-          }
+      @Override
+      public ReplayWrite getReplayWrite() {
+        return null;
+      }
 
-        @Override
-        public boolean requiresPriorRowState(Mutation m) {
-            return false;
-        }
-            
-        @Override
-        public int getClientVersion() {
-            return ScanUtil.UNKNOWN_CLIENT_VERSION;
-        }
+      @Override
+      public boolean requiresPriorRowState(Mutation m) {
+        return false;
+      }
+
+      @Override
+      public int getClientVersion() {
+        return ScanUtil.UNKNOWN_CLIENT_VERSION;
+      }
 
     };
     Put m = new Put(row);
@@ -144,21 +143,22 @@ public class LocalTableStateTest {
 
     CachedLocalTable cachedLocalTable = CachedLocalTable.build(null);
     LocalTableState table = new LocalTableState(cachedLocalTable, m);
-    //add the kvs from the mutation
+    // add the kvs from the mutation
     table.addPendingUpdates(m.get(fam, qual));
 
     // setup the lookup
     ColumnReference col = new ColumnReference(fam, qual);
     table.setCurrentTimestamp(ts);
-    //check that our value still shows up first on scan, even though this is a lazy load
-    Pair<CoveredDeleteScanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
+    // check that our value still shows up first on scan, even though this is a lazy load
+    Pair<CoveredDeleteScanner, IndexUpdate> p =
+      table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
     Scanner s = p.getFirst();
-    assertEquals("Didn't get the pending mutation's value first", m.get(fam, qual).get(0), s.next());
+    assertEquals("Didn't get the pending mutation's value first", m.get(fam, qual).get(0),
+      s.next());
   }
 
   /**
    * Test that we correctly rollback the state of keyvalue
-   * @throws Exception
    */
   @Test
   @SuppressWarnings("unchecked")
@@ -175,8 +175,8 @@ public class LocalTableStateTest {
     storedKv.setSequenceId(2);
 
     HashMap<ImmutableBytesPtr, List<Cell>> rowKeyPtrToCells =
-            new  HashMap<ImmutableBytesPtr, List<Cell>>();
-    rowKeyPtrToCells.put(new ImmutableBytesPtr(row), Collections.singletonList((Cell)storedKv));
+      new HashMap<ImmutableBytesPtr, List<Cell>>();
+    rowKeyPtrToCells.put(new ImmutableBytesPtr(row), Collections.singletonList((Cell) storedKv));
     CachedLocalTable cachedLocalTable = CachedLocalTable.build(rowKeyPtrToCells);
     LocalTableState table = new LocalTableState(cachedLocalTable, m);
 
@@ -189,7 +189,8 @@ public class LocalTableStateTest {
     ColumnReference col = new ColumnReference(fam, qual);
     table.setCurrentTimestamp(ts);
     // check that the value is there
-    Pair<CoveredDeleteScanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
+    Pair<CoveredDeleteScanner, IndexUpdate> p =
+      table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
     Scanner s = p.getFirst();
     assertEquals("Didn't get the pending mutation's value first", kv, s.next());
 
@@ -209,24 +210,23 @@ public class LocalTableStateTest {
     Region region = Mockito.mock(Region.class);
     Mockito.when(env.getRegion()).thenReturn(region);
     final KeyValue storedKv =
-        new KeyValue(row, fam, qual, ts, Type.Put, Bytes.toBytes("stored-value"));
+      new KeyValue(row, fam, qual, ts, Type.Put, Bytes.toBytes("stored-value"));
     storedKv.setSequenceId(2);
-
 
     Put pendingUpdate = new Put(row);
     pendingUpdate.addColumn(fam, qual, ts, val);
     HashMap<ImmutableBytesPtr, List<Cell>> rowKeyPtrToCells =
-            new  HashMap<ImmutableBytesPtr, List<Cell>>();
-    rowKeyPtrToCells.put(new ImmutableBytesPtr(row), Collections.singletonList((Cell)storedKv));
+      new HashMap<ImmutableBytesPtr, List<Cell>>();
+    rowKeyPtrToCells.put(new ImmutableBytesPtr(row), Collections.singletonList((Cell) storedKv));
     CachedLocalTable cachedLocalTable = CachedLocalTable.build(rowKeyPtrToCells);
     LocalTableState table = new LocalTableState(cachedLocalTable, pendingUpdate);
-
 
     // do the lookup for the given column
     ColumnReference col = new ColumnReference(fam, qual);
     table.setCurrentTimestamp(ts);
     // check that the value is there
-    Pair<CoveredDeleteScanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
+    Pair<CoveredDeleteScanner, IndexUpdate> p =
+      table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
     Scanner s = p.getFirst();
     // make sure it read the table the one time
     assertEquals("Didn't get the stored keyvalue!", storedKv, s.next());

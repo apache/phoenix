@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,7 +25,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Properties;
-
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Table;
@@ -43,54 +42,62 @@ import org.junit.experimental.categories.Category;
 @Category(ParallelStatsDisabledTest.class)
 public class DisableLocalIndexIT extends ParallelStatsDisabledIT {
 
-    @Test
-    public void testDisabledLocalIndexes() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        props.setProperty(QueryServices.ALLOW_LOCAL_INDEX_ATTRIB, Boolean.FALSE.toString());
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.setAutoCommit(true);
-        String baseName = generateUniqueName();
-        String tableName = baseName+ "_TABLE";
-        String viewName = baseName + "_VIEW";
-        String indexName1 = baseName + "_INDEX1";
-        String indexName2 = baseName + "_INDEX2";
-        conn.createStatement().execute("CREATE TABLE " + tableName + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT PK PRIMARY KEY(K1,K2)) MULTI_TENANT=true");
-        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('t1','x')");
-        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('t2','y')");
-        Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-        assertFalse(admin.tableExists(TableName.valueOf(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + tableName)));
-        admin.close();
-        try {
-            Table t = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + tableName));
-            t.getTableDescriptor(); // Exception no longer thrown by getTable, but instead need to force an RPC
-            fail("Local index table should not have been created");
-        } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-            //expected
-        } finally {
-            admin.close();
-        }
-        
-        Properties tsconnProps = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        tsconnProps.setProperty(QueryServices.ALLOW_LOCAL_INDEX_ATTRIB, Boolean.FALSE.toString());
-        tsconnProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "t1");
-        Connection tsconn = DriverManager.getConnection(getUrl(), tsconnProps);
-        
-        tsconn.createStatement().execute("CREATE VIEW " + viewName + "(V1 VARCHAR) AS SELECT * FROM " + tableName);
-        tsconn.createStatement().execute("CREATE INDEX " + indexName1 + " ON " + viewName + "(V1)");
-        tsconn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX + tableName));
-
-        try {
-            conn.createStatement().execute("CREATE LOCAL INDEX " + indexName2 + " ON " + tableName + "(k2)");
-            fail("Should not allow creation of local index");
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.UNALLOWED_LOCAL_INDEXES.getErrorCode(), e.getErrorCode());
-        }
-        try {
-            tsconn.createStatement().execute("CREATE LOCAL INDEX " + indexName2 + " ON " + viewName + "(k2, v1)");
-            fail("Should not allow creation of local index");
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.UNALLOWED_LOCAL_INDEXES.getErrorCode(), e.getErrorCode());
-        }
+  @Test
+  public void testDisabledLocalIndexes() throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+    props.setProperty(QueryServices.ALLOW_LOCAL_INDEX_ATTRIB, Boolean.FALSE.toString());
+    Connection conn = DriverManager.getConnection(getUrl(), props);
+    conn.setAutoCommit(true);
+    String baseName = generateUniqueName();
+    String tableName = baseName + "_TABLE";
+    String viewName = baseName + "_VIEW";
+    String indexName1 = baseName + "_INDEX1";
+    String indexName2 = baseName + "_INDEX2";
+    conn.createStatement().execute("CREATE TABLE " + tableName
+      + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT PK PRIMARY KEY(K1,K2)) MULTI_TENANT=true");
+    conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('t1','x')");
+    conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('t2','y')");
+    Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+    assertFalse(
+      admin.tableExists(TableName.valueOf(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + tableName)));
+    admin.close();
+    try {
+      Table t = conn.unwrap(PhoenixConnection.class).getQueryServices()
+        .getTable(Bytes.toBytes(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + tableName));
+      t.getTableDescriptor(); // Exception no longer thrown by getTable, but instead need to force
+                              // an RPC
+      fail("Local index table should not have been created");
+    } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
+      // expected
+    } finally {
+      admin.close();
     }
+
+    Properties tsconnProps = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+    tsconnProps.setProperty(QueryServices.ALLOW_LOCAL_INDEX_ATTRIB, Boolean.FALSE.toString());
+    tsconnProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "t1");
+    Connection tsconn = DriverManager.getConnection(getUrl(), tsconnProps);
+
+    tsconn.createStatement()
+      .execute("CREATE VIEW " + viewName + "(V1 VARCHAR) AS SELECT * FROM " + tableName);
+    tsconn.createStatement().execute("CREATE INDEX " + indexName1 + " ON " + viewName + "(V1)");
+    tsconn.unwrap(PhoenixConnection.class).getQueryServices()
+      .getTable(Bytes.toBytes(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX + tableName));
+
+    try {
+      conn.createStatement()
+        .execute("CREATE LOCAL INDEX " + indexName2 + " ON " + tableName + "(k2)");
+      fail("Should not allow creation of local index");
+    } catch (SQLException e) {
+      assertEquals(SQLExceptionCode.UNALLOWED_LOCAL_INDEXES.getErrorCode(), e.getErrorCode());
+    }
+    try {
+      tsconn.createStatement()
+        .execute("CREATE LOCAL INDEX " + indexName2 + " ON " + viewName + "(k2, v1)");
+      fail("Should not allow creation of local index");
+    } catch (SQLException e) {
+      assertEquals(SQLExceptionCode.UNALLOWED_LOCAL_INDEXES.getErrorCode(), e.getErrorCode());
+    }
+  }
 
 }

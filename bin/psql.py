@@ -40,7 +40,7 @@ java_cmd = phoenix_utils.java + ' ' + phoenix_utils.jvm_module_flags + \
     os.pathsep + phoenix_utils.phoenix_client_embedded_jar + \
     ('' if '-Dlog4j2.configurationFile' in opts else ' -Dlog4j2.configurationFile=file:'
         + os.path.join(phoenix_utils.current_dir, "log4j2.properties")) + \
-    " org.apache.phoenix.util.PhoenixRuntime " + args 
+    " org.apache.phoenix.util.PhoenixRuntime " + args
 
 print(java_cmd)
 

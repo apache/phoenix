@@ -1,15 +1,20 @@
-
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more contributor license
- * agreements. See the NOTICE file distributed with this work for additional information regarding
- * copyright ownership. The ASF licenses this file to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance with the License. You may obtain a
- * copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable
- * law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
- * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
- * for the specific language governing permissions and limitations under the License.
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
-
 package org.apache.phoenix.util;
 
 import static org.junit.Assert.assertTrue;
@@ -20,7 +25,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
@@ -43,7 +47,7 @@ import org.slf4j.LoggerFactory;
 public class CoprocessorHConnectionTableFactoryIT extends BaseTest {
   private static String ORG_PREFIX = "ORG";
   private static final Logger LOGGER =
-          LoggerFactory.getLogger(CoprocessorHConnectionTableFactoryIT.class);
+    LoggerFactory.getLogger(CoprocessorHConnectionTableFactoryIT.class);
 
   @BeforeClass
   public static synchronized final void doSetup() throws Exception {
@@ -67,7 +71,7 @@ public class CoprocessorHConnectionTableFactoryIT extends BaseTest {
       Statement stmt = conn.createStatement();
       for (int i = 0; i < 10; i++) {
         stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('" + orgId + "'," + i + ","
-            + (i + 1) + "," + (i + 2) + ")");
+          + (i + 1) + "," + (i + 2) + ")");
 
       }
       conn.commit();
@@ -96,8 +100,8 @@ public class CoprocessorHConnectionTableFactoryIT extends BaseTest {
     flag.set(false);
     // create table and indices
     String createTableSql = "CREATE TABLE " + tableName
-        + "(org_id VARCHAR NOT NULL PRIMARY KEY, v1 INTEGER, v2 INTEGER, v3 INTEGER) VERSIONS=1 SPLIT ON ('"
-        + ORG_PREFIX + "-" + noOfOrgs / 2 + "')";
+      + "(org_id VARCHAR NOT NULL PRIMARY KEY, v1 INTEGER, v2 INTEGER, v3 INTEGER) VERSIONS=1 SPLIT ON ('"
+      + ORG_PREFIX + "-" + noOfOrgs / 2 + "')";
     conn.createStatement().execute(createTableSql);
     conn.createStatement().execute("CREATE INDEX " + index1Name + " ON " + tableName + "(v1)");
     List<HRegionInfo> regions = admin.getTableRegions(TableName.valueOf(tableName));
@@ -107,10 +111,11 @@ public class CoprocessorHConnectionTableFactoryIT extends BaseTest {
     int beforeRegionCloseCount = getActiveConnections(regionServer, conf);
     int regionsCount = admin.getOnlineRegions(regionServer.getServerName()).size();
     admin.unassign(regionInfo.getEncodedNameAsBytes(), true);
-    while(!(admin.getOnlineRegions(regionServer.getServerName()).size() < regionsCount));
+    while (!(admin.getOnlineRegions(regionServer.getServerName()).size() < regionsCount))
+      ;
     int afterRegionCloseCount = getActiveConnections(regionServer, conf);
     assertTrue("Cached connections not closed when region closes: ",
-    afterRegionCloseCount == beforeRegionCloseCount && afterRegionCloseCount > 0);
+      afterRegionCloseCount == beforeRegionCloseCount && afterRegionCloseCount > 0);
 
   }
 

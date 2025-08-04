@@ -15,8 +15,7 @@
   See the License for the specific language governing permissions and
   limitations under the License.
 -->
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.phoenix</groupId>
@@ -26,227 +25,6 @@
   <artifactId>phoenix-core</artifactId>
   <name>Phoenix Core</name>
   <description>Core Phoenix codebase</description>
-
-  <build>
-    <plugins>
-      <!-- Add the ant-generated sources to the source path -->
-     <plugin>
-       <groupId>org.apache.maven.plugins</groupId>
-       <artifactId>maven-site-plugin</artifactId>
-     </plugin>
-     <!-- If this is configured in the top-level dependencyManagement,
-     it will run on the compat module even if the plugin is not enabled.
-     Sounds like another maven bug -->
-     <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-enforcer-plugin</artifactId>
-          <configuration>
-            <rules>
-              <evaluateBeanshell>
-                <condition>
-                  import java.util.regex.Pattern;
-                  import java.lang.Integer;
-
-                  versionPattern = Pattern.compile("(\\d+)\\.(\\d+)\\.(\\d+)[^.]*$");
-                  versionMatcher = versionPattern.matcher("${hbase.version}");
-                  versionMatcher.find();
-
-                  hbaseMajor = Integer.parseInt(versionMatcher.group(1));
-                  hbaseMinor = Integer.parseInt(versionMatcher.group(2));
-                  hbasePatch = Integer.parseInt(versionMatcher.group(3));
-
-                  hbaseMajor == 2 &amp;&amp; (
-                    ("${hbase.compat.version}".equals("2.1.6")
-                      &amp;&amp; hbaseMinor == 1
-                      &amp;&amp; hbasePatch &gt;=6)
-                    || ("${hbase.compat.version}".equals("2.2.5")
-                      &amp;&amp; hbaseMinor == 2
-                      &amp;&amp; hbasePatch &gt;=5)
-                    || ("${hbase.compat.version}".equals("2.3.0")
-                      &amp;&amp; hbaseMinor == 3
-                      &amp;&amp; hbasePatch &gt;=0)
-                    || ("${hbase.compat.version}".equals("2.4.0")
-                      &amp;&amp; hbaseMinor == 4
-                      &amp;&amp; hbasePatch == 0)
-                    || ("${hbase.compat.version}".equals("2.4.1")
-                      &amp;&amp; hbaseMinor == 4
-                      &amp;&amp; hbasePatch &gt;=1)
-                    || ("${hbase.compat.version}".equals("2.5.0")
-                      &amp;&amp; hbaseMinor == 5
-                      &amp;&amp; hbasePatch &gt;=0)
-                    || ("${hbase.compat.version}".equals("2.5.4")
-                      &amp;&amp; hbaseMinor == 5
-                      &amp;&amp; hbasePatch &gt;=4)
-                  )
-                </condition>
-              </evaluateBeanshell>
-            </rules>
-          </configuration>
-          <executions>
-         <execution>
-           <id>check-hbase-compatibility</id>
-           <phase>validate</phase>
-           <goals>
-             <goal>enforce</goal>
-           </goals>
-         </execution>
-       </executions>
-     </plugin>
-      <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>build-helper-maven-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>add-source</id>
-            <phase>generate-sources</phase>
-            <goals>
-              <goal>add-source</goal>
-            </goals>
-            <configuration>
-              <sources>
-                <source>${antlr-output.dir}</source>
-                <source>${antlr-input.dir}</source>
-              </sources>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
-      <!-- Compile the antlr sources -->
-      <plugin>
-        <groupId>org.antlr</groupId>
-        <artifactId>antlr3-maven-plugin</artifactId>
-        <executions>
-          <execution>
-            <goals>
-              <goal>antlr</goal>
-            </goals>
-          </execution>
-        </executions>
-        <configuration>
-          <outputDirectory>${antlr-output.dir}/org/apache/phoenix/parse</outputDirectory>
-        </configuration>
-      </plugin>
-      <!-- Run with -Dmaven.test.skip.exec=true to build -tests.jar without running 
-        tests (this is needed for upstream projects whose tests need this jar simply for 
-        compilation) -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-jar-plugin</artifactId>
-        <executions>
-          <execution>
-            <phase>prepare-package
-            </phase>
-            <goals>
-              <goal>test-jar</goal>
-            </goals>
-            <configuration>
-              <archive>
-                <manifest>
-                  <mainClass>org.apache.phoenix.util.GeneratePerformanceData</mainClass>
-                </manifest>
-              </archive>
-            </configuration>
-          </execution>
-        </executions>
-        <configuration>
-          <!-- Exclude these 2 packages, because their dependency _binary_ files 
-            include the sources, and Maven 2.2 appears to add them to the sources to compile, 
-            weird -->
-          <excludes>
-            <exclude>org/apache/jute/**</exclude>
-            <exclude>org/apache/zookeeper/**</exclude>
-            <exclude>**/*.jsp</exclude>
-            <exclude>log4j.properties</exclude>
-          </excludes>
-        </configuration>
-      </plugin>
-      <!-- Setup eclipse -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-eclipse-plugin</artifactId>
-        <configuration>
-          <buildcommands>
-            <buildcommand>org.jamon.project.templateBuilder</buildcommand>
-            <buildcommand>org.eclipse.jdt.core.javabuilder</buildcommand>
-          </buildcommands>
-        </configuration>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-failsafe-plugin</artifactId>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-dependency-plugin</artifactId>
-        <executions>
-          <execution>
-            <!-- generates the file that will be used by the sandbox script in the dev env -->
-            <id>create-phoenix-generated-classpath</id>
-            <goals>
-              <goal>build-classpath</goal>
-            </goals>
-            <configuration>
-              <outputFile>${project.build.directory}/cached_classpath.txt</outputFile>
-            </configuration>
-          </execution>
-          <!-- copies libraries for use by sqlline when it is started from source dir -->
-          <execution>
-            <id>copy-for-sqlline</id>
-            <goals>
-              <goal>copy</goal>
-            </goals>
-            <configuration>
-              <artifactItems>
-                <artifactItem>
-                  <groupId>ch.qos.reload4j</groupId>
-                  <artifactId>reload4j</artifactId>
-                </artifactItem>
-                <artifactItem>
-                  <groupId>org.slf4j</groupId>
-                  <artifactId>slf4j-reload4j</artifactId>
-                </artifactItem>
-                <artifactItem>
-                  <groupId>sqlline</groupId>
-                  <artifactId>sqlline</artifactId>
-                  <classifier>jar-with-dependencies</classifier>
-                </artifactItem>
-              </artifactItems>
-              <outputDirectory>${project.basedir}/../lib</outputDirectory>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.rat</groupId>
-        <artifactId>apache-rat-plugin</artifactId>
-        <configuration>
-          <excludes>
-            <exclude>src/main/java/org/apache/phoenix/coprocessor/generated/*.java</exclude>
-            <exclude>src/main/resources/META-INF/services/java.sql.Driver</exclude>
-          </excludes>
-        </configuration>
-      </plugin>
-      <plugin>
-        <groupId>org.xolstice.maven.plugins</groupId>
-        <artifactId>protobuf-maven-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>compile-protoc</id>
-            <phase>generate-sources</phase>
-            <goals>
-              <goal>compile</goal>
-            </goals>
-            <configuration>
-              <protocArtifact>${protobuf.group}:protoc:${protoc.version}:exe:${protoc.arch}</protocArtifact>
-              <protoSourceRoot>${basedir}/src/main/protobuf/</protoSourceRoot>
-              <clearOutputDirectory>false</clearOutputDirectory>
-              <checkStaleness>true</checkStaleness>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
-    </plugins>
-  </build>
 
   <dependencies>
     <!-- shaded thirdparty dependencies -->
@@ -293,8 +71,8 @@
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-hdfs</artifactId>
-      <type>test-jar</type>
       <classifier>tests</classifier>
+      <type>test-jar</type>
       <scope>test</scope>
     </dependency>
 
@@ -417,8 +195,8 @@
     <dependency>
       <groupId>org.apache.omid</groupId>
       <artifactId>omid-tso-server</artifactId>
-      <scope>test</scope>
       <type>test-jar</type>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>com.google.inject</groupId>
@@ -529,7 +307,7 @@
       <artifactId>joni</artifactId>
     </dependency>
     <dependency>
-      <groupId> org.jruby.jcodings</groupId>
+      <groupId>org.jruby.jcodings</groupId>
       <artifactId>jcodings</artifactId>
     </dependency>
 
@@ -552,169 +330,387 @@
 
   </dependencies>
 
-<profiles>
-  <profile>
-    <id>exclude-tephra</id>
-    <activation>
-      <property>
-        <name>without.tephra</name>
-      </property>
-    </activation>
-    <dependencies>
-      <dependency>
-        <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-api</artifactId>
-        <scope>provided</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-core-shaded</artifactId>
-        <scope>provided</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-hbase-compat-${tephra.hbase.compat.version}</artifactId>
-        <classifier>shaded</classifier>
-        <scope>provided</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.thrift</groupId>
-        <artifactId>libthrift</artifactId>
-        <scope>provided</scope>
-      </dependency>
-    </dependencies>
-  </profile>
-  <profile>
-    <id>include-tephra</id>
-    <activation>
-      <property>
-        <name>!without.tephra</name>
-      </property>
-    </activation>
-    <dependencies>
-      <dependency>
-        <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-api</artifactId>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-core-shaded</artifactId>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-hbase-compat-${tephra.hbase.compat.version}</artifactId>
-        <classifier>shaded</classifier>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.thrift</groupId>
-        <artifactId>libthrift</artifactId>
-      </dependency>
-    </dependencies>
-  </profile>
-  <profile>
-    <id>phoenix-hbase-compat-2.3.0</id>
-    <!-- keep dependency plugin happy -->
-    <activation>
-      <property>
-        <name>hbase.profile</name>
-        <value>2.3</value>
-      </property>
-    </activation>
-    <properties>
-      <hbase.profile>2.3</hbase.profile>
-    </properties>
-    <dependencies>
-      <dependency>
-        <groupId>org.apache.zookeeper</groupId>
-        <artifactId>zookeeper-jute</artifactId>
-      </dependency>
-    </dependencies>
-  </profile>
-  <profile>
-    <id>phoenix-hbase-compat-2.4.0</id>
-    <!-- keep dependency plugin happy -->
-    <activation>
-      <property>
-        <name>hbase.profile</name>
-        <value>2.4.0</value>
-      </property>
-    </activation>
-    <properties>
-      <hbase.profile>2.4.0</hbase.profile>
-    </properties>
-    <dependencies>
-      <dependency>
-        <groupId>org.apache.zookeeper</groupId>
-        <artifactId>zookeeper-jute</artifactId>
-      </dependency>
-    </dependencies>
-  </profile>
-  <profile>
-    <id>phoenix-hbase-compat-2.4.1</id>
-    <!-- keep dependency plugin happy -->
-    <activation>
-      <property>
-        <name>hbase.profile</name>
-        <value>2.4</value>
-      </property>
-    </activation>
-    <properties>
-      <hbase.profile>2.4</hbase.profile>
-    </properties>
-    <dependencies>
-      <dependency>
-        <groupId>org.apache.zookeeper</groupId>
-        <artifactId>zookeeper-jute</artifactId>
-      </dependency>
-    </dependencies>
-  </profile>
-  <profile>
-    <id>phoenix-hbase-compat-2.5.0</id>
-    <!-- keep dependency plugin happy -->
-    <activation>
-      <property>
-        <name>hbase.profile</name>
-        <value>2.5</value>
-      </property>
-    </activation>
-    <properties>
-      <hbase.profile>2.5</hbase.profile>
-    </properties>
-    <dependencies>
-      <dependency>
-        <groupId>org.apache.zookeeper</groupId>
-        <artifactId>zookeeper-jute</artifactId>
-      </dependency>
-      <!-- log4j2 for Hbase 2.5 minicluster -->
-      <dependency>
-        <groupId>org.apache.logging.log4j</groupId>
-        <artifactId>log4j-api</artifactId>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.logging.log4j</groupId>
-        <artifactId>log4j-core</artifactId>
-        <scope>test</scope>
-      </dependency>
-    </dependencies>
-  </profile>
-  <profile>
-    <id>phoenix-hbase-compat-2.4.1-default</id>
-    <!-- keep dependency plugin happy -->
-    <activation>
-      <property>
-        <name>!hbase.profile</name>
-      </property>
-    </activation>
-    <properties>
-      <hbase.profile>2.4</hbase.profile>
-    </properties>
-    <dependencies>
-      <dependency>
-        <groupId>org.apache.zookeeper</groupId>
-        <artifactId>zookeeper-jute</artifactId>
-      </dependency>
-    </dependencies>
-  </profile>
-</profiles>
+  <build>
+    <plugins>
+      <!-- Add the ant-generated sources to the source path -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-site-plugin</artifactId>
+      </plugin>
+      <!-- If this is configured in the top-level dependencyManagement,
+     it will run on the compat module even if the plugin is not enabled.
+     Sounds like another maven bug -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <configuration>
+          <rules>
+            <evaluateBeanshell>
+              <condition>import java.util.regex.Pattern;
+                  import java.lang.Integer;
+
+                  versionPattern = Pattern.compile("(\\d+)\\.(\\d+)\\.(\\d+)[^.]*$");
+                  versionMatcher = versionPattern.matcher("${hbase.version}");
+                  versionMatcher.find();
+
+                  hbaseMajor = Integer.parseInt(versionMatcher.group(1));
+                  hbaseMinor = Integer.parseInt(versionMatcher.group(2));
+                  hbasePatch = Integer.parseInt(versionMatcher.group(3));
+
+                  hbaseMajor == 2 &amp;&amp; (
+                    ("${hbase.compat.version}".equals("2.1.6")
+                      &amp;&amp; hbaseMinor == 1
+                      &amp;&amp; hbasePatch &gt;=6)
+                    || ("${hbase.compat.version}".equals("2.2.5")
+                      &amp;&amp; hbaseMinor == 2
+                      &amp;&amp; hbasePatch &gt;=5)
+                    || ("${hbase.compat.version}".equals("2.3.0")
+                      &amp;&amp; hbaseMinor == 3
+                      &amp;&amp; hbasePatch &gt;=0)
+                    || ("${hbase.compat.version}".equals("2.4.0")
+                      &amp;&amp; hbaseMinor == 4
+                      &amp;&amp; hbasePatch == 0)
+                    || ("${hbase.compat.version}".equals("2.4.1")
+                      &amp;&amp; hbaseMinor == 4
+                      &amp;&amp; hbasePatch &gt;=1)
+                    || ("${hbase.compat.version}".equals("2.5.0")
+                      &amp;&amp; hbaseMinor == 5
+                      &amp;&amp; hbasePatch &gt;=0)
+                    || ("${hbase.compat.version}".equals("2.5.4")
+                      &amp;&amp; hbaseMinor == 5
+                      &amp;&amp; hbasePatch &gt;=4)
+                  )</condition>
+            </evaluateBeanshell>
+          </rules>
+        </configuration>
+        <executions>
+          <execution>
+            <id>check-hbase-compatibility</id>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <phase>validate</phase>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>add-source</id>
+            <goals>
+              <goal>add-source</goal>
+            </goals>
+            <phase>generate-sources</phase>
+            <configuration>
+              <sources>
+                <source>${antlr-output.dir}</source>
+                <source>${antlr-input.dir}</source>
+              </sources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <!-- Compile the antlr sources -->
+      <plugin>
+        <groupId>org.antlr</groupId>
+        <artifactId>antlr3-maven-plugin</artifactId>
+        <configuration>
+          <outputDirectory>${antlr-output.dir}/org/apache/phoenix/parse</outputDirectory>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>antlr</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <!-- Run with -Dmaven.test.skip.exec=true to build -tests.jar without running
+        tests (this is needed for upstream projects whose tests need this jar simply for
+        compilation) -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <configuration>
+          <!-- Exclude these 2 packages, because their dependency _binary_ files
+            include the sources, and Maven 2.2 appears to add them to the sources to compile,
+            weird -->
+          <excludes>
+            <exclude>org/apache/jute/**</exclude>
+            <exclude>org/apache/zookeeper/**</exclude>
+            <exclude>**/*.jsp</exclude>
+            <exclude>log4j.properties</exclude>
+          </excludes>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>test-jar</goal>
+            </goals>
+            <phase>prepare-package</phase>
+            <configuration>
+              <archive>
+                <manifest>
+                  <mainClass>org.apache.phoenix.util.GeneratePerformanceData</mainClass>
+                </manifest>
+              </archive>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <!-- Setup eclipse -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-eclipse-plugin</artifactId>
+        <configuration>
+          <buildcommands>
+            <buildcommand>org.jamon.project.templateBuilder</buildcommand>
+            <buildcommand>org.eclipse.jdt.core.javabuilder</buildcommand>
+          </buildcommands>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <!-- generates the file that will be used by the sandbox script in the dev env -->
+            <id>create-phoenix-generated-classpath</id>
+            <goals>
+              <goal>build-classpath</goal>
+            </goals>
+            <configuration>
+              <outputFile>${project.build.directory}/cached_classpath.txt</outputFile>
+            </configuration>
+          </execution>
+          <!-- copies libraries for use by sqlline when it is started from source dir -->
+          <execution>
+            <id>copy-for-sqlline</id>
+            <goals>
+              <goal>copy</goal>
+            </goals>
+            <configuration>
+              <artifactItems>
+                <artifactItem>
+                  <groupId>ch.qos.reload4j</groupId>
+                  <artifactId>reload4j</artifactId>
+                </artifactItem>
+                <artifactItem>
+                  <groupId>org.slf4j</groupId>
+                  <artifactId>slf4j-reload4j</artifactId>
+                </artifactItem>
+                <artifactItem>
+                  <groupId>sqlline</groupId>
+                  <artifactId>sqlline</artifactId>
+                  <classifier>jar-with-dependencies</classifier>
+                </artifactItem>
+              </artifactItems>
+              <outputDirectory>${project.basedir}/../lib</outputDirectory>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.rat</groupId>
+        <artifactId>apache-rat-plugin</artifactId>
+        <configuration>
+          <excludes>
+            <exclude>src/main/java/org/apache/phoenix/coprocessor/generated/*.java</exclude>
+            <exclude>src/main/resources/META-INF/services/java.sql.Driver</exclude>
+          </excludes>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.xolstice.maven.plugins</groupId>
+        <artifactId>protobuf-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>compile-protoc</id>
+            <goals>
+              <goal>compile</goal>
+            </goals>
+            <phase>generate-sources</phase>
+            <configuration>
+              <protocArtifact>${protobuf.group}:protoc:${protoc.version}:exe:${protoc.arch}</protocArtifact>
+              <protoSourceRoot>${basedir}/src/main/protobuf/</protoSourceRoot>
+              <clearOutputDirectory>false</clearOutputDirectory>
+              <checkStaleness>true</checkStaleness>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <profile>
+      <id>exclude-tephra</id>
+      <activation>
+        <property>
+          <name>without.tephra</name>
+        </property>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.tephra</groupId>
+          <artifactId>tephra-api</artifactId>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.tephra</groupId>
+          <artifactId>tephra-core-shaded</artifactId>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.tephra</groupId>
+          <artifactId>tephra-hbase-compat-${tephra.hbase.compat.version}</artifactId>
+          <classifier>shaded</classifier>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.thrift</groupId>
+          <artifactId>libthrift</artifactId>
+          <scope>provided</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>include-tephra</id>
+      <activation>
+        <property>
+          <name>!without.tephra</name>
+        </property>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.tephra</groupId>
+          <artifactId>tephra-api</artifactId>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.tephra</groupId>
+          <artifactId>tephra-core-shaded</artifactId>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.tephra</groupId>
+          <artifactId>tephra-hbase-compat-${tephra.hbase.compat.version}</artifactId>
+          <classifier>shaded</classifier>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.thrift</groupId>
+          <artifactId>libthrift</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>phoenix-hbase-compat-2.3.0</id>
+      <!-- keep dependency plugin happy -->
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.3</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>2.3</hbase.profile>
+      </properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.zookeeper</groupId>
+          <artifactId>zookeeper-jute</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>phoenix-hbase-compat-2.4.0</id>
+      <!-- keep dependency plugin happy -->
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.4.0</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>2.4.0</hbase.profile>
+      </properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.zookeeper</groupId>
+          <artifactId>zookeeper-jute</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>phoenix-hbase-compat-2.4.1</id>
+      <!-- keep dependency plugin happy -->
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.4</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>2.4</hbase.profile>
+      </properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.zookeeper</groupId>
+          <artifactId>zookeeper-jute</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>phoenix-hbase-compat-2.5.0</id>
+      <!-- keep dependency plugin happy -->
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.5</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>2.5</hbase.profile>
+      </properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.zookeeper</groupId>
+          <artifactId>zookeeper-jute</artifactId>
+        </dependency>
+        <!-- log4j2 for Hbase 2.5 minicluster -->
+        <dependency>
+          <groupId>org.apache.logging.log4j</groupId>
+          <artifactId>log4j-api</artifactId>
+          <scope>test</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.logging.log4j</groupId>
+          <artifactId>log4j-core</artifactId>
+          <scope>test</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>phoenix-hbase-compat-2.4.1-default</id>
+      <!-- keep dependency plugin happy -->
+      <activation>
+        <property>
+          <name>!hbase.profile</name>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>2.4</hbase.profile>
+      </properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.zookeeper</groupId>
+          <artifactId>zookeeper-jute</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
 </project>

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,9 +17,10 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import static org.apache.phoenix.util.ScanUtil.getPhoenixPagedFilter;
+
 import java.io.IOException;
 import java.util.List;
-
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.PackagePrivateFieldAccessor;
 import org.apache.hadoop.hbase.client.Scan;
@@ -32,40 +33,40 @@ import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.apache.phoenix.util.ScanUtil.getPhoenixPagedFilter;
-
 /**
- *  PagedRegionScanner works with PagedFilter to make sure that the time between two rows returned by the HBase region
- *  scanner should not exceed the configured page size in ms (on PagedFilter). When the page size is reached (because
- *  there are too many cells/rows to be filtered out), PagedFilter stops the HBase region scanner and sets its state
- *  to STOPPED. In this case, the HBase region scanner next() returns false and PagedFilter#isStopped() returns true.
- *  PagedRegionScanner is responsible for detecting PagedFilter has stopped the scanner, and then closing the current
- *  HBase region scanner, starting a new one to resume the scan operation and returning a dummy result to signal to
- *  Phoenix client to resume the scan operation by skipping this dummy result and calling ResultScanner#next().
+ * PagedRegionScanner works with PagedFilter to make sure that the time between two rows returned by
+ * the HBase region scanner should not exceed the configured page size in ms (on PagedFilter). When
+ * the page size is reached (because there are too many cells/rows to be filtered out), PagedFilter
+ * stops the HBase region scanner and sets its state to STOPPED. In this case, the HBase region
+ * scanner next() returns false and PagedFilter#isStopped() returns true. PagedRegionScanner is
+ * responsible for detecting PagedFilter has stopped the scanner, and then closing the current HBase
+ * region scanner, starting a new one to resume the scan operation and returning a dummy result to
+ * signal to Phoenix client to resume the scan operation by skipping this dummy result and calling
+ * ResultScanner#next().
  */
 public class PagedRegionScanner extends BaseRegionScanner {
-    protected Region region;
-    protected Scan scan;
-    protected PagedFilter pageFilter;
+  protected Region region;
+  protected Scan scan;
+  protected PagedFilter pageFilter;
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(PagedRegionScanner.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(PagedRegionScanner.class);
 
-	public PagedRegionScanner(Region region, RegionScanner scanner, Scan scan) {
-	    super(scanner);
-	    this.region = region;
-	    this.scan = scan;
-	    pageFilter = getPhoenixPagedFilter(scan);
-	    if (pageFilter != null) {
-	        pageFilter.init();
-        }
-	}
+  public PagedRegionScanner(Region region, RegionScanner scanner, Scan scan) {
+    super(scanner);
+    this.region = region;
+    this.scan = scan;
+    pageFilter = getPhoenixPagedFilter(scan);
+    if (pageFilter != null) {
+      pageFilter.init();
+    }
+  }
 
   private boolean next(List<Cell> results, boolean raw) throws IOException {
     try {
       byte[] adjustedStartRowKey =
-          scan.getAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY);
+        scan.getAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY);
       byte[] adjustedStartRowKeyIncludeBytes =
-          scan.getAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY_INCLUDE);
+        scan.getAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY_INCLUDE);
       // If scanners at higher level needs to re-scan the data that were already scanned
       // earlier, they can provide adjusted new start rowkey for the scan and whether to
       // include it.
@@ -77,8 +78,7 @@ public class PagedRegionScanner extends BaseRegionScanner {
       if (adjustedStartRowKey != null && adjustedStartRowKeyIncludeBytes != null) {
         long mvccReadPoint = delegate.getMvccReadPoint();
         delegate.close();
-        scan.withStartRow(adjustedStartRowKey,
-            Bytes.toBoolean(adjustedStartRowKeyIncludeBytes));
+        scan.withStartRow(adjustedStartRowKey, Bytes.toBoolean(adjustedStartRowKeyIncludeBytes));
         PackagePrivateFieldAccessor.setMvccReadPoint(scan, mvccReadPoint);
         delegate = region.getScanner(scan);
         scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY, null);
@@ -98,14 +98,15 @@ public class PagedRegionScanner extends BaseRegionScanner {
           if (results.isEmpty()) {
             byte[] rowKey = pageFilter.getCurrentRowKeyToBeExcluded();
             LOGGER.info("Page filter stopped, generating dummy key {} ",
-                Bytes.toStringBinary(rowKey));
+              Bytes.toStringBinary(rowKey));
             ScanUtil.getDummyResult(rowKey, results);
           }
           return true;
         }
         return false;
       } else {
-        // We got a row from the HBase scanner within the configured time (i.e., the page size). We need to
+        // We got a row from the HBase scanner within the configured time (i.e., the page size). We
+        // need to
         // start a new page on the next next() call.
         return true;
       }
@@ -117,18 +118,18 @@ public class PagedRegionScanner extends BaseRegionScanner {
     }
   }
 
-    @Override
-    public boolean next(List<Cell> results) throws IOException {
-	   return next(results, false);
-    }
+  @Override
+  public boolean next(List<Cell> results) throws IOException {
+    return next(results, false);
+  }
 
-    @Override
-    public boolean nextRaw(List<Cell> results) throws IOException {
-        return next(results, true);
-    }
+  @Override
+  public boolean nextRaw(List<Cell> results) throws IOException {
+    return next(results, true);
+  }
 
-    @Override
-    public RegionScanner getNewRegionScanner(Scan scan) throws IOException {
-        return new PagedRegionScanner(region, region.getScanner(scan), scan);
-    }
+  @Override
+  public RegionScanner getNewRegionScanner(Scan scan) throws IOException {
+    return new PagedRegionScanner(region, region.getScanner(scan), scan);
+  }
 }

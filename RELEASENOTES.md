@@ -220,7 +220,7 @@ We no longer have generated protobuf Java files available in source code. These 
 * [PHOENIX-6086](https://issues.apache.org/jira/browse/PHOENIX-6086) | *Critical* | **Take a snapshot of all SYSTEM tables before attempting to upgrade them**
 
 While upgrading System tables, all system tables where we perform some significant DDL operations, we start taking snapshots of them:
- 
+
 1. SYSTEM.CATALOG (was already covered before this Jira)
 2. SYSTEM.CHILD\_LINK
 3. SYSTEM.SEQUENCE
@@ -308,6 +308,3 @@ Phoenix now supports HBase 2.1  (HBase 2.1.6 and later) and HBase 2.2 (HBase 2.2
 * [PHOENIX-3655](https://issues.apache.org/jira/browse/PHOENIX-3655) | *Major* | **Global Phoenix Client Metrics for PQS**
 
 **WARNING: No release note provided for this change.**
-
-
-

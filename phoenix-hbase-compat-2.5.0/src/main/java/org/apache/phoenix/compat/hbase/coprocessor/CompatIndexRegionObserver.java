@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,24 +17,23 @@
  */
 package org.apache.phoenix.compat.hbase.coprocessor;
 
+import java.util.HashMap;
+import java.util.Map;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.wal.WALKey;
 
-import java.util.HashMap;
-import java.util.Map;
-
 public class CompatIndexRegionObserver implements RegionObserver {
 
-    public static void appendToWALKey(WALKey key, String attrKey, byte[] attrValue) {
-        key.addExtendedAttribute(attrKey, attrValue);
-    }
+  public static void appendToWALKey(WALKey key, String attrKey, byte[] attrValue) {
+    key.addExtendedAttribute(attrKey, attrValue);
+  }
 
-    public static byte[] getAttributeValueFromWALKey(WALKey key, String attrKey) {
-        return key.getExtendedAttribute(attrKey);
-    }
+  public static byte[] getAttributeValueFromWALKey(WALKey key, String attrKey) {
+    return key.getExtendedAttribute(attrKey);
+  }
 
-    public static Map<String, byte[]> getAttributeValuesFromWALKey(WALKey key) {
-        return new HashMap<String, byte[]>(key.getExtendedAttributes());
-    }
+  public static Map<String, byte[]> getAttributeValuesFromWALKey(WALKey key) {
+    return new HashMap<String, byte[]>(key.getExtendedAttributes());
+  }
 
 }

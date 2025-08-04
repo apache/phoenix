@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -50,13 +50,13 @@ public class PDataTypeFactory {
       public int compare(PDataType o1, PDataType o2) {
         return Integer.compare(o1.ordinal(), o2.ordinal());
       }
-    });    // TODO: replace with ServiceLoader or some other plugin system
+    }); // TODO: replace with ServiceLoader or some other plugin system
     unsignedtypes = new TreeSet<>(new Comparator<PDataType>() {
-        @Override
-        public int compare(PDataType o1, PDataType o2) {
-          return Integer.compare(o1.ordinal(), o2.ordinal());
-        }
-      });    // TODO: replace with ServiceLoader or some other plugin system
+      @Override
+      public int compare(PDataType o1, PDataType o2) {
+        return Integer.compare(o1.ordinal(), o2.ordinal());
+      }
+    }); // TODO: replace with ServiceLoader or some other plugin system
     types.add(PBinary.INSTANCE);
     types.add(PBinaryArray.INSTANCE);
     types.add(PChar.INSTANCE);
@@ -130,15 +130,15 @@ public class PDataTypeFactory {
     }
     javaClassToInstance = new HashMap<>(types.size());
     for (PDataType t : types) {
-        Class javaClass = t.getJavaClass();
-        // The first match
-        javaClassToInstance.putIfAbsent(javaClass, t);
+      Class javaClass = t.getJavaClass();
+      // The first match
+      javaClassToInstance.putIfAbsent(javaClass, t);
     }
     javaClassToUnsignedInstance = new HashMap<>(types.size());
     for (PDataType t : unsignedtypes) {
-        Class javaClass = t.getJavaClass();
-        // The first match
-        javaClassToInstance.putIfAbsent(javaClass, t);
+      Class javaClass = t.getJavaClass();
+      // The first match
+      javaClassToInstance.putIfAbsent(javaClass, t);
     }
     orderedTypes = types.toArray(new PDataType[types.size()]);
   }
@@ -156,10 +156,10 @@ public class PDataTypeFactory {
   }
 
   public PDataType instanceFromJavaClass(Class clazz, PDataType actualType) {
-      if (unsignedtypes.contains(actualType)) {
-          return javaClassToUnsignedInstance.get(clazz);
-      } else {
-          return javaClassToInstance.get(clazz);
-      }
+    if (unsignedtypes.contains(actualType)) {
+      return javaClassToUnsignedInstance.get(clazz);
+    } else {
+      return javaClassToInstance.get(clazz);
+    }
   }
 }

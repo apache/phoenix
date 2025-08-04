@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.compat.hbase;
 
+import java.io.IOException;
+import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -48,162 +50,149 @@ import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.security.access.PermissionStorage;
 import org.apache.hadoop.hbase.util.ChecksumType;
 import org.apache.hadoop.hbase.util.CommonFSUtils;
-import org.apache.hbase.thirdparty.com.google.common.collect.ListMultimap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.util.List;
-
+import org.apache.hbase.thirdparty.com.google.common.collect.ListMultimap;
 
 public class CompatUtil {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(
-        CompatUtil.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(CompatUtil.class);
 
-    private CompatUtil() {
-        //Not to be instantiated
-    }
+  private CompatUtil() {
+    // Not to be instantiated
+  }
 
-    public static int getCellSerializedSize(Cell cell) {
-        return cell.getSerializedSize();
-    }
+  public static int getCellSerializedSize(Cell cell) {
+    return cell.getSerializedSize();
+  }
 
-    public static ListMultimap<String, ? extends Permission> readPermissions(
-            byte[] data, Configuration conf) throws DeserializationException {
-        return PermissionStorage.readPermissions(data, conf);
-    }
+  public static ListMultimap<String, ? extends Permission> readPermissions(byte[] data,
+    Configuration conf) throws DeserializationException {
+    return PermissionStorage.readPermissions(data, conf);
+  }
 
-    public static HFileContext createHFileContext(Configuration conf, Algorithm compression,
-            Integer blockSize, DataBlockEncoding encoding, CellComparator comparator) {
+  public static HFileContext createHFileContext(Configuration conf, Algorithm compression,
+    Integer blockSize, DataBlockEncoding encoding, CellComparator comparator) {
 
-        return new HFileContextBuilder()
-            .withCompression(compression)
-            .withChecksumType(HStore.getChecksumType(conf))
-            .withBytesPerCheckSum(HStore.getBytesPerChecksum(conf))
-            .withBlockSize(blockSize)
-            .withDataBlockEncoding(encoding)
-            .build();
-    }
+    return new HFileContextBuilder().withCompression(compression)
+      .withChecksumType(HStore.getChecksumType(conf))
+      .withBytesPerCheckSum(HStore.getBytesPerChecksum(conf)).withBlockSize(blockSize)
+      .withDataBlockEncoding(encoding).build();
+  }
 
-    public static HFileContextBuilder withComparator(HFileContextBuilder contextBuilder,
-            CellComparatorImpl cellComparator) {
-        return contextBuilder.withCellComparator(cellComparator);
-    }
+  public static HFileContextBuilder withComparator(HFileContextBuilder contextBuilder,
+    CellComparatorImpl cellComparator) {
+    return contextBuilder.withCellComparator(cellComparator);
+  }
 
-    public static StoreFileWriter.Builder withComparator(StoreFileWriter.Builder builder,
-            CellComparatorImpl cellComparator) {
-        return builder;
-    }
+  public static StoreFileWriter.Builder withComparator(StoreFileWriter.Builder builder,
+    CellComparatorImpl cellComparator) {
+    return builder;
+  }
 
-    public static Scan getScanForTableName(Connection conn, TableName tableName) {
-        return MetaTableAccessor.getScanForTableName(conn.getConfiguration(), tableName);
-    }
+  public static Scan getScanForTableName(Connection conn, TableName tableName) {
+    return MetaTableAccessor.getScanForTableName(conn.getConfiguration(), tableName);
+  }
 
-
-    /**
-     * HBase 2.3+ has storeRefCount available in RegionMetrics
-     *
-     * @param admin Admin instance
-     * @return true if any region has refCount leakage
-     * @throws IOException if something went wrong while connecting to Admin
-     */
-    public synchronized static boolean isAnyStoreRefCountLeaked(Admin admin)
-            throws IOException {
-        int retries = 5;
-        while (retries > 0) {
-            boolean isStoreRefCountLeaked = isStoreRefCountLeaked(admin);
-            if (!isStoreRefCountLeaked) {
-                return false;
-            }
-            retries--;
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                LOGGER.error("Interrupted while sleeping", e);
-                break;
-            }
-        }
-        return true;
-    }
-
-    private static boolean isStoreRefCountLeaked(Admin admin)
-            throws IOException {
-        for (ServerName serverName : admin.getRegionServers()) {
-            for (RegionMetrics regionMetrics : admin.getRegionMetrics(serverName)) {
-                if (regionMetrics.getNameAsString().
-                    contains(TableName.META_TABLE_NAME.getNameAsString())) {
-                    // Just because something is trying to read from hbase:meta in the background
-                    // doesn't mean we leaked a scanner, so skip this
-                    continue;
-                }
-                int regionTotalRefCount = regionMetrics.getStoreRefCount();
-                if (regionTotalRefCount > 0) {
-                    LOGGER.error("Region {} has refCount leak. Total refCount"
-                            + " of all storeFiles combined for the region: {}",
-                        regionMetrics.getNameAsString(), regionTotalRefCount);
-                    return true;
-                }
-            }
-        }
+  /**
+   * HBase 2.3+ has storeRefCount available in RegionMetrics
+   * @param admin Admin instance
+   * @return true if any region has refCount leakage
+   * @throws IOException if something went wrong while connecting to Admin
+   */
+  public synchronized static boolean isAnyStoreRefCountLeaked(Admin admin) throws IOException {
+    int retries = 5;
+    while (retries > 0) {
+      boolean isStoreRefCountLeaked = isStoreRefCountLeaked(admin);
+      if (!isStoreRefCountLeaked) {
         return false;
+      }
+      retries--;
+      try {
+        Thread.sleep(1000);
+      } catch (InterruptedException e) {
+        LOGGER.error("Interrupted while sleeping", e);
+        break;
+      }
     }
+    return true;
+  }
 
-    public static ChecksumType getChecksumType(Configuration conf) {
-        return HStore.getChecksumType(conf);
+  private static boolean isStoreRefCountLeaked(Admin admin) throws IOException {
+    for (ServerName serverName : admin.getRegionServers()) {
+      for (RegionMetrics regionMetrics : admin.getRegionMetrics(serverName)) {
+        if (regionMetrics.getNameAsString().contains(TableName.META_TABLE_NAME.getNameAsString())) {
+          // Just because something is trying to read from hbase:meta in the background
+          // doesn't mean we leaked a scanner, so skip this
+          continue;
+        }
+        int regionTotalRefCount = regionMetrics.getStoreRefCount();
+        if (regionTotalRefCount > 0) {
+          LOGGER.error(
+            "Region {} has refCount leak. Total refCount"
+              + " of all storeFiles combined for the region: {}",
+            regionMetrics.getNameAsString(), regionTotalRefCount);
+          return true;
+        }
+      }
     }
+    return false;
+  }
 
-    public static int getBytesPerChecksum(Configuration conf) {
-        return HStore.getBytesPerChecksum(conf);
-    }
+  public static ChecksumType getChecksumType(Configuration conf) {
+    return HStore.getChecksumType(conf);
+  }
 
-    public static Connection createShortCircuitConnection(final Configuration configuration,
-            final RegionCoprocessorEnvironment env) throws IOException {
-        //Short Circuit connections are broken before 2.4.12
-        return org.apache.hadoop.hbase.client.ConnectionFactory.createConnection(configuration);
-    }
+  public static int getBytesPerChecksum(Configuration conf) {
+    return HStore.getBytesPerChecksum(conf);
+  }
 
-    public static List<RegionInfo> getMergeRegions(Connection conn, RegionInfo regionInfo)
-            throws IOException {
-        return MetaTableAccessor.getMergeRegions(conn, regionInfo.getRegionName());
-    }
+  public static Connection createShortCircuitConnection(final Configuration configuration,
+    final RegionCoprocessorEnvironment env) throws IOException {
+    // Short Circuit connections are broken before 2.4.12
+    return org.apache.hadoop.hbase.client.ConnectionFactory.createConnection(configuration);
+  }
 
-    /**
-     * Initialize region for snapshot scanner utility. This is client side region initialization and
-     * hence it should follow the same region init pattern as the one used by hbase
-     * ClientSideRegionScanner.
-     *
-     * @param conf The configuration.
-     * @param fs The filesystem instance.
-     * @param rootDir Restored region root dir.
-     * @param htd The table descriptor instance used to retrieve the region root dir.
-     * @param hri The region info.
-     * @throws IOException If region init throws IOException.
-     */
-    public static HRegion initRegionForSnapshotScanner(Configuration conf, FileSystem fs,
-            Path rootDir, TableDescriptor htd, RegionInfo hri) throws IOException {
-        HRegion region =
-                HRegion.newHRegion(CommonFSUtils.getTableDir(rootDir, htd.getTableName()), null, fs,
-                    conf, hri, htd, null);
-        region.setRestoredRegion(true);
-        // non RS process does not have a block cache, and this a client side scanner,
-        // create one for MapReduce jobs to cache the INDEX block by setting to use
-        // IndexOnlyLruBlockCache and set a value to HBASE_CLIENT_SCANNER_BLOCK_CACHE_SIZE_KEY
-        conf.set(BlockCacheFactory.BLOCKCACHE_POLICY_KEY, "IndexOnlyLRU");
-        // HConstants.HFILE_ONHEAP_BLOCK_CACHE_FIXED_SIZE_KEY is only available from 2.4.6
-        // We are using the string directly here to let Phoenix compile with earlier versions.
-        // Note that it won't do anything before HBase 2.4.6
-        conf.setIfUnset("hfile.onheap.block.cache.fixed.size", String.valueOf(32 * 1024 * 1024L));
-        // don't allow L2 bucket cache for non RS process to avoid unexpected disk usage.
-        conf.unset(HConstants.BUCKET_CACHE_IOENGINE_KEY);
-        region.setBlockCache(BlockCacheFactory.createBlockCache(conf));
-        // we won't initialize the MobFileCache when not running in RS process. so provided an
-        // initialized cache. Consider the case: an CF was set from an mob to non-mob. if we only
-        // initialize cache for MOB region, NPE from HMobStore will still happen. So Initialize the
-        // cache for every region although it may hasn't any mob CF, BTW the cache is very
-        // light-weight.
-        region.setMobFileCache(new MobFileCache(conf));
-        region.initialize();
-        return region;
-    }
+  public static List<RegionInfo> getMergeRegions(Connection conn, RegionInfo regionInfo)
+    throws IOException {
+    return MetaTableAccessor.getMergeRegions(conn, regionInfo.getRegionName());
+  }
+
+  /**
+   * Initialize region for snapshot scanner utility. This is client side region initialization and
+   * hence it should follow the same region init pattern as the one used by hbase
+   * ClientSideRegionScanner.
+   * @param conf    The configuration.
+   * @param fs      The filesystem instance.
+   * @param rootDir Restored region root dir.
+   * @param htd     The table descriptor instance used to retrieve the region root dir.
+   * @param hri     The region info.
+   * @throws IOException If region init throws IOException.
+   */
+  public static HRegion initRegionForSnapshotScanner(Configuration conf, FileSystem fs,
+    Path rootDir, TableDescriptor htd, RegionInfo hri) throws IOException {
+    HRegion region = HRegion.newHRegion(CommonFSUtils.getTableDir(rootDir, htd.getTableName()),
+      null, fs, conf, hri, htd, null);
+    region.setRestoredRegion(true);
+    // non RS process does not have a block cache, and this a client side scanner,
+    // create one for MapReduce jobs to cache the INDEX block by setting to use
+    // IndexOnlyLruBlockCache and set a value to HBASE_CLIENT_SCANNER_BLOCK_CACHE_SIZE_KEY
+    conf.set(BlockCacheFactory.BLOCKCACHE_POLICY_KEY, "IndexOnlyLRU");
+    // HConstants.HFILE_ONHEAP_BLOCK_CACHE_FIXED_SIZE_KEY is only available from 2.4.6
+    // We are using the string directly here to let Phoenix compile with earlier versions.
+    // Note that it won't do anything before HBase 2.4.6
+    conf.setIfUnset("hfile.onheap.block.cache.fixed.size", String.valueOf(32 * 1024 * 1024L));
+    // don't allow L2 bucket cache for non RS process to avoid unexpected disk usage.
+    conf.unset(HConstants.BUCKET_CACHE_IOENGINE_KEY);
+    region.setBlockCache(BlockCacheFactory.createBlockCache(conf));
+    // we won't initialize the MobFileCache when not running in RS process. so provided an
+    // initialized cache. Consider the case: an CF was set from an mob to non-mob. if we only
+    // initialize cache for MOB region, NPE from HMobStore will still happen. So Initialize the
+    // cache for every region although it may hasn't any mob CF, BTW the cache is very
+    // light-weight.
+    region.setMobFileCache(new MobFileCache(conf));
+    region.initialize();
+    return region;
+  }
 }

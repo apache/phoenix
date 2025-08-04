@@ -17,7 +17,7 @@
 # limitations under the License.
 ###########################################################################
 
-# This script is intended to run the sql queries in a file with the given client version 
+# This script is intended to run the sql queries in a file with the given client version
 
 zk_url=$1
 client_version=$2

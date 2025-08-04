@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,7 +18,6 @@
 package org.apache.phoenix.compat.hbase;
 
 import java.io.IOException;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.security.User;
@@ -31,42 +30,42 @@ import org.apache.hadoop.hbase.zookeeper.ZKWatcher;
 
 public class CompatPermissionUtil {
 
-    private CompatPermissionUtil() {
-        //Not to be instantiated
-    }
+  private CompatPermissionUtil() {
+    // Not to be instantiated
+  }
 
-    public static AccessChecker newAccessChecker(final Configuration conf, ZKWatcher zk) {
-        return new AccessChecker(conf, zk);
-    }
+  public static AccessChecker newAccessChecker(final Configuration conf, ZKWatcher zk) {
+    return new AccessChecker(conf, zk);
+  }
 
-    public static void stopAccessChecker(AccessChecker accessChecker) throws IOException {
-        if (accessChecker.getAuthManager() != null) {
-            TableAuthManager.release(accessChecker.getAuthManager());
+  public static void stopAccessChecker(AccessChecker accessChecker) throws IOException {
+    if (accessChecker.getAuthManager() != null) {
+      TableAuthManager.release(accessChecker.getAuthManager());
+    }
+  }
+
+  public static String getUserFromUP(UserPermission userPermission) {
+    return Bytes.toString(userPermission.getUser());
+  }
+
+  public static Permission getPermissionFromUP(UserPermission userPermission) {
+    return userPermission;
+  }
+
+  public static boolean authorizeUserTable(AccessChecker accessChecker, User user, TableName table,
+    Permission.Action action) {
+    if (accessChecker.getAuthManager().userHasAccess(user, table, action)) {
+      return true;
+    }
+    String[] groupNames = user.getGroupNames();
+    if (groupNames != null) {
+      for (String group : groupNames) {
+        if (accessChecker.getAuthManager().groupHasAccess(group, table, action)) {
+          return true;
         }
+      }
     }
-
-    public static String getUserFromUP(UserPermission userPermission) {
-        return Bytes.toString(userPermission.getUser());
-    }
-
-    public static Permission getPermissionFromUP(UserPermission userPermission) {
-        return userPermission;
-    }
-
-    public static boolean authorizeUserTable(AccessChecker accessChecker, User user, 
-            TableName table, Permission.Action action) {
-        if(accessChecker.getAuthManager().userHasAccess(user, table, action)) {
-            return true;
-        }
-        String[] groupNames = user.getGroupNames();
-        if (groupNames != null) {
-          for (String group : groupNames) {
-            if(accessChecker.getAuthManager().groupHasAccess(group, table, action)) {
-                return true;
-            }
-          }
-        }
-        return false;
-    }
+    return false;
+  }
 
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,40 +17,37 @@
  */
 package org.apache.phoenix.end2end;
 
-import org.junit.Test;
-import org.junit.experimental.categories.Category;
+import static org.hamcrest.CoreMatchers.is;
+import static org.junit.Assert.assertThat;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
-
-import static org.hamcrest.CoreMatchers.is;
-import static org.junit.Assert.assertThat;
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 @Category(ParallelStatsDisabledTest.class)
 public class SumFunctionIT extends ParallelStatsDisabledIT {
-    @Test
-    public void testSumFunctionWithCaseWhenStatement() throws Exception {
-        String tableName = generateUniqueName();
+  @Test
+  public void testSumFunctionWithCaseWhenStatement() throws Exception {
+    String tableName = generateUniqueName();
 
-        try (Connection c = DriverManager.getConnection(getUrl());
-          Statement s = c.createStatement()) {
-            s.execute("create table " + tableName + " (id varchar primary key, col1 varchar, "
-              + "col2 integer)");
-            s.execute("upsert into " + tableName + " values('id1', 'aaa', 2)");
-            s.execute("upsert into " + tableName + " values('id2', null, 1)");
-            c.commit();
+    try (Connection c = DriverManager.getConnection(getUrl()); Statement s = c.createStatement()) {
+      s.execute(
+        "create table " + tableName + " (id varchar primary key, col1 varchar, " + "col2 integer)");
+      s.execute("upsert into " + tableName + " values('id1', 'aaa', 2)");
+      s.execute("upsert into " + tableName + " values('id2', null, 1)");
+      c.commit();
 
-            try (ResultSet rs = s.executeQuery(
-              "select sum(case when col1 is null then col2 else 0 end), "
-                + "sum(case when col1 is not null then col2 else 0 end) from " + tableName)) {
+      try (ResultSet rs = s.executeQuery("select sum(case when col1 is null then col2 else 0 end), "
+        + "sum(case when col1 is not null then col2 else 0 end) from " + tableName)) {
 
-                assertThat(rs.next(), is(true));
-                assertThat(rs.getInt(1), is(1));
-                assertThat(rs.getInt(2), is(2));
-                assertThat(rs.next(), is(false));
-            }
-        }
+        assertThat(rs.next(), is(true));
+        assertThat(rs.getInt(1), is(1));
+        assertThat(rs.getInt(2), is(2));
+        assertThat(rs.next(), is(false));
+      }
     }
+  }
 }

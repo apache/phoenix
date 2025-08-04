@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,38 +20,38 @@ package org.apache.phoenix.compile;
 import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.Set;
-
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.schema.TableRef;
 
-
 public interface StatementPlan {
-    StatementContext getContext();
-    /**
-     * Returns the ParameterMetaData for the statement
-     */
-    ParameterMetaData getParameterMetaData();
-    
-    ExplainPlan getExplainPlan() throws SQLException;
-    public Set<TableRef> getSourceRefs();
-    Operation getOperation();
+  StatementContext getContext();
 
-    /**
-     * @return estimated number of rows that will be scanned when this statement plan is been executed.
-     *         Returns null if the estimate cannot be provided.
-     * @throws SQLException
-     */
-    public Long getEstimatedRowsToScan() throws SQLException;
+  /**
+   * Returns the ParameterMetaData for the statement
+   */
+  ParameterMetaData getParameterMetaData();
 
-    /**
-     * @return estimated number of bytes that will be scanned when this statement plan is been executed.
-     *         Returns null if the estimate cannot be provided.
-     */
-    public Long getEstimatedBytesToScan() throws SQLException;
+  ExplainPlan getExplainPlan() throws SQLException;
 
-    /**
-     * @return timestamp at which the estimate information (estimated bytes and estimated rows) was
-     *         computed. executed. Returns null if the information cannot be provided.
-     */
-    public Long getEstimateInfoTimestamp() throws SQLException;
+  public Set<TableRef> getSourceRefs();
+
+  Operation getOperation();
+
+  /**
+   * @return estimated number of rows that will be scanned when this statement plan is been
+   *         executed. Returns null if the estimate cannot be provided.
+   */
+  public Long getEstimatedRowsToScan() throws SQLException;
+
+  /**
+   * @return estimated number of bytes that will be scanned when this statement plan is been
+   *         executed. Returns null if the estimate cannot be provided.
+   */
+  public Long getEstimatedBytesToScan() throws SQLException;
+
+  /**
+   * @return timestamp at which the estimate information (estimated bytes and estimated rows) was
+   *         computed. executed. Returns null if the information cannot be provided.
+   */
+  public Long getEstimateInfoTimestamp() throws SQLException;
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,120 +20,121 @@ package org.apache.phoenix.compat.hbase.test;
 import org.apache.hadoop.hbase.Cell;
 
 public class DelegateCell implements Cell {
-    private final Cell delegate;
-    private final String name;
-    public DelegateCell(Cell delegate, String name) {
-        this.delegate = delegate;
-        this.name = name;
-    }
+  private final Cell delegate;
+  private final String name;
 
-    @Override
-    public int getValueOffset() {
-        return delegate.getValueOffset();
-    }
+  public DelegateCell(Cell delegate, String name) {
+    this.delegate = delegate;
+    this.name = name;
+  }
 
-    @Override
-    public int getValueLength() {
-        return delegate.getValueLength();
-    }
+  @Override
+  public int getValueOffset() {
+    return delegate.getValueOffset();
+  }
 
-    @Override
-    public byte[] getValueArray() {
-        return delegate.getValueArray();
-    }
+  @Override
+  public int getValueLength() {
+    return delegate.getValueLength();
+  }
 
-    @Override
-    public byte getTypeByte() {
-        return delegate.getTypeByte();
-    }
+  @Override
+  public byte[] getValueArray() {
+    return delegate.getValueArray();
+  }
 
-    @Override
-    public long getTimestamp() {
-        return delegate.getTimestamp();
-    }
+  @Override
+  public byte getTypeByte() {
+    return delegate.getTypeByte();
+  }
 
-    @Override
-    public int getTagsOffset() {
-        return delegate.getTagsOffset();
-    }
+  @Override
+  public long getTimestamp() {
+    return delegate.getTimestamp();
+  }
 
-    @Override
-    public byte[] getTagsArray() {
-        return delegate.getTagsArray();
-    }
+  @Override
+  public int getTagsOffset() {
+    return delegate.getTagsOffset();
+  }
 
-    @Override
-    public int getRowOffset() {
-        return delegate.getRowOffset();
-    }
+  @Override
+  public byte[] getTagsArray() {
+    return delegate.getTagsArray();
+  }
 
-    @Override
-    public short getRowLength() {
-        return delegate.getRowLength();
-    }
+  @Override
+  public int getRowOffset() {
+    return delegate.getRowOffset();
+  }
 
-    @Override
-    public byte[] getRowArray() {
-        return delegate.getRowArray();
-    }
+  @Override
+  public short getRowLength() {
+    return delegate.getRowLength();
+  }
 
-    @Override
-    public int getQualifierOffset() {
-        return delegate.getQualifierOffset();
-    }
+  @Override
+  public byte[] getRowArray() {
+    return delegate.getRowArray();
+  }
 
-    @Override
-    public int getQualifierLength() {
-        return delegate.getQualifierLength();
-    }
+  @Override
+  public int getQualifierOffset() {
+    return delegate.getQualifierOffset();
+  }
 
-    @Override
-    public byte[] getQualifierArray() {
-        return delegate.getQualifierArray();
-    }
+  @Override
+  public int getQualifierLength() {
+    return delegate.getQualifierLength();
+  }
 
-    @Override
-    public int getFamilyOffset() {
-        return delegate.getFamilyOffset();
-    }
+  @Override
+  public byte[] getQualifierArray() {
+    return delegate.getQualifierArray();
+  }
 
-    @Override
-    public byte getFamilyLength() {
-        return delegate.getFamilyLength();
-    }
+  @Override
+  public int getFamilyOffset() {
+    return delegate.getFamilyOffset();
+  }
 
-    @Override
-    public byte[] getFamilyArray() {
-        return delegate.getFamilyArray();
-    }
+  @Override
+  public byte getFamilyLength() {
+    return delegate.getFamilyLength();
+  }
 
-    @Override
-    public String toString() {
-        return name;
-    }
+  @Override
+  public byte[] getFamilyArray() {
+    return delegate.getFamilyArray();
+  }
 
-    @Override
-    public long getSequenceId() {
-        return delegate.getSequenceId();
-    }
+  @Override
+  public String toString() {
+    return name;
+  }
 
-    @Override
-    public int getTagsLength() {
-        return delegate.getTagsLength();
-    }
+  @Override
+  public long getSequenceId() {
+    return delegate.getSequenceId();
+  }
 
-    @Override
-    public Type getType() {
-        return delegate.getType();
-    }
+  @Override
+  public int getTagsLength() {
+    return delegate.getTagsLength();
+  }
 
-    @Override
-    public long heapSize() {
-        return delegate.heapSize();
-    }
+  @Override
+  public Type getType() {
+    return delegate.getType();
+  }
 
-    @Override
-    public int getSerializedSize() {
-        return delegate.getSerializedSize();
-    }
+  @Override
+  public long heapSize() {
+    return delegate.heapSize();
+  }
+
+  @Override
+  public int getSerializedSize() {
+    return delegate.getSerializedSize();
+  }
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,6 @@ package org.apache.phoenix.compat.hbase;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -33,16 +32,16 @@ import org.apache.hadoop.hbase.regionserver.StoreFileReader;
 
 public class CompatStoreFileReader extends StoreFileReader {
 
-    public CompatStoreFileReader(final FileSystem fs, final Path p,
-            final FSDataInputStreamWrapper in, long size, final CacheConfig cacheConf,
-            boolean primaryReplicaStoreFile, AtomicInteger refCount, final Configuration conf)
-            throws IOException {
-        super(new ReaderContext(p, in, size, new HFileSystem(fs), primaryReplicaStoreFile,
-                ReaderType.STREAM),
-                new HFileInfo(new ReaderContext(p, in, size, new HFileSystem(fs),
-                        primaryReplicaStoreFile, ReaderType.STREAM), conf),
-                cacheConf, refCount, conf);
-        getHFileReader().getHFileInfo().initMetaAndIndex(getHFileReader());
-    }
+  public CompatStoreFileReader(final FileSystem fs, final Path p, final FSDataInputStreamWrapper in,
+    long size, final CacheConfig cacheConf, boolean primaryReplicaStoreFile, AtomicInteger refCount,
+    final Configuration conf) throws IOException {
+    super(
+      new ReaderContext(p, in, size, new HFileSystem(fs), primaryReplicaStoreFile,
+        ReaderType.STREAM),
+      new HFileInfo(new ReaderContext(p, in, size, new HFileSystem(fs), primaryReplicaStoreFile,
+        ReaderType.STREAM), conf),
+      cacheConf, refCount, conf);
+    getHFileReader().getHFileInfo().initMetaAndIndex(getHFileReader());
+  }
 
 }
