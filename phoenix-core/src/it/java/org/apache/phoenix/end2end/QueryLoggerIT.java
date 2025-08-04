@@ -60,6 +60,7 @@ import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestClock;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -80,19 +81,6 @@ public class QueryLoggerIT extends BaseTest {
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
         // need the non-test driver for some tests that check number of hconnections, etc.
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
-    } 
-    
-    private static class MyClock extends EnvironmentEdge {
-        public volatile long time;
-
-        public MyClock (long time) {
-            this.time = time;
-        }
-
-        @Override
-        public long currentTime() {
-            return time;
-        }
     }
     
 
@@ -279,7 +267,7 @@ public class QueryLoggerIT extends BaseTest {
         props.setProperty(QueryServices.LOG_LEVEL, loglevel.name());
         Connection conn = DriverManager.getConnection(getUrl(),props);
         assertEquals(conn.unwrap(PhoenixConnection.class).getLogLevel(),loglevel);
-        final MyClock clock = new MyClock(100);
+        final TestClock clock = new TestClock(100);
         EnvironmentEdgeManager.injectEdge(clock);
         try{
             String query = "SELECT * FROM " + tableName +" where V = ?";

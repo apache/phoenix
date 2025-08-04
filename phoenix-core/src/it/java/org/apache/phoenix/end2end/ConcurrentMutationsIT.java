@@ -22,33 +22,18 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Properties;
-import java.util.Random;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
-import org.apache.hadoop.hbase.DoNotRetryIOException;
-import org.apache.hadoop.hbase.HBaseIOException;
-import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.coprocessor.ObserverContext;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
-import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexScrutiny;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.Repeat;
 import org.apache.phoenix.util.RunUntilFailure;
+import org.apache.phoenix.util.TestClock;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -59,33 +44,11 @@ import org.junit.runner.RunWith;
 @RunWith(RunUntilFailure.class)
 public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
 
-
-    private static class MyClock extends EnvironmentEdge {
-        public volatile long time;
-        boolean shouldAdvance = true;
-
-        public MyClock (long time) {
-            this.time = time;
-        }
-
-        @Override
-        public long currentTime() {
-            if (shouldAdvance) {
-                return time++;
-            } else {
-                return time;
-            }
-        }
-        public void setAdvance(boolean val) {
-            shouldAdvance = val;
-        }
-    }
-
     @Test
     @Ignore("PHOENIX-4058 Generate correct index updates when DeleteColumn processed before Put with same timestamp")
     public void testSetIndexedColumnToNullAndValueAtSameTS() throws Exception {
         try {
-            final MyClock clock = new MyClock(1000);
+            final TestClock clock = new TestClock(1000, 1, true);
             EnvironmentEdgeManager.injectEdge(clock);
             String tableName = generateUniqueName();
             String indexName = generateUniqueName();
@@ -106,7 +69,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
             conn.close();
 
             Timestamp expectedTimestamp;
-            clock.setAdvance(false);
+            clock.shouldAdvance(false);
             conn = DriverManager.getConnection(getUrl(), props);
             stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, null)");
             expectedTimestamp = null;
@@ -116,7 +79,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
             stmt.setTimestamp(1, new Timestamp(3000L));
             stmt.executeUpdate();
             conn.commit();
-            clock.setAdvance(true);
+            clock.shouldAdvance(true);
             conn.close();
 
             conn = DriverManager.getConnection(getUrl(), props);
@@ -144,7 +107,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
     @Test
     public void testSetIndexedColumnToNullAndValueAtSameTSWithStoreNulls1() throws Exception {
         try {
-            final MyClock clock = new MyClock(1000);
+            final TestClock clock = new TestClock(1000, 1, true);
             EnvironmentEdgeManager.injectEdge(clock);
             String tableName = generateUniqueName();
             String indexName = generateUniqueName();
@@ -165,7 +128,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
             conn.close();
 
             Timestamp expectedTimestamp;
-            clock.setAdvance(false);
+            clock.shouldAdvance(false);
             conn = DriverManager.getConnection(getUrl(), props);
             stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, null)");
             expectedTimestamp = null;
@@ -175,7 +138,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
             expectedTimestamp = new Timestamp(3000L);
             stmt.setTimestamp(1, expectedTimestamp);
             stmt.executeUpdate();
-            clock.setAdvance(true);
+            clock.shouldAdvance(true);
             conn.commit();
             conn.close();
 
@@ -204,25 +167,22 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
     @Test
     public void testSetIndexedColumnToNullAndValueAtSameTSWithStoreNulls2() throws Exception {
         try {
-            final MyClock clock = new MyClock(1000);
+            final TestClock clock = new TestClock(1000, 1, true);
             EnvironmentEdgeManager.injectEdge(clock);
             String tableName = generateUniqueName();
             String indexName = generateUniqueName();
             Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-            long ts = 1000;
-            clock.time = ts;
+            clock.setCurrentTime(1000);
             Connection conn = DriverManager.getConnection(getUrl(), props);     
             conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 CHAR(2) NOT NULL, k2 CHAR(2) NOT NULL, ts TIMESTAMP, V VARCHAR, V2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2)) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true");
             conn.close();
 
-            ts = 1010;
-            clock.time = ts;
+            clock.setCurrentTime(1010);
             conn = DriverManager.getConnection(getUrl(), props);
             conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(k2,k1,ts) INCLUDE (V, v2)");
             conn.close();
 
-            ts = 1020;
-            clock.time = ts;
+            clock.setCurrentTime(1020);
             conn = DriverManager.getConnection(getUrl(), props);        
             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, '0')");
             stmt.setTimestamp(1, new Timestamp(1000L));
@@ -231,8 +191,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
             conn.close();
 
             Timestamp expectedTimestamp;
-            ts = 1040;
-            clock.time = ts;
+            clock.setCurrentTime(1040);
             conn = DriverManager.getConnection(getUrl(), props);
             stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, null)");
             expectedTimestamp = new Timestamp(3000L);
@@ -245,8 +204,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
             conn.commit();
             conn.close();
 
-            ts = 1050;
-            clock.time = ts;
+            clock.setCurrentTime(1050);
             conn = DriverManager.getConnection(getUrl(), props);
 
             IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);        
@@ -273,13 +231,12 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
     @Test
     public void testDeleteRowAndUpsertValueAtSameTS1() throws Exception {
         try {
-            final MyClock clock = new MyClock(1000);
+            final TestClock clock = new TestClock(1000, 1, true);
             EnvironmentEdgeManager.injectEdge(clock);
             String tableName = generateUniqueName();
             String indexName = generateUniqueName();
             Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-            long ts = 1000;
-            clock.time = ts;
+            clock.setCurrentTime(1000);
             Connection conn = DriverManager.getConnection(getUrl(), props);     
             conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 CHAR(2) NOT NULL, k2 CHAR(2) NOT NULL, ts TIMESTAMP, A.V VARCHAR, B.V2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2)) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true");
             conn.close();
@@ -294,7 +251,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
             conn.close();
 
             Timestamp expectedTimestamp;
-            clock.setAdvance(false);
+            clock.shouldAdvance(false);
             conn = DriverManager.getConnection(getUrl(), props);
             stmt = conn.prepareStatement("DELETE FROM " + tableName + " WHERE (K1,K2) = ('aa','aa')");
             stmt.executeUpdate();
@@ -304,7 +261,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
             stmt.setTimestamp(1, expectedTimestamp);
             stmt.executeUpdate();
             conn.commit();
-            clock.setAdvance(true);
+            clock.shouldAdvance(true);
             conn.close();
 
             conn = DriverManager.getConnection(getUrl(), props);
@@ -321,7 +278,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
     @Test
     public void testDeleteRowAndUpsertValueAtSameTS2() throws Exception {
         try {
-            final MyClock clock = new MyClock(1000);
+            final TestClock clock = new TestClock(1000, 1, true);
             EnvironmentEdgeManager.injectEdge(clock);
             String tableName = generateUniqueName();
             String indexName = generateUniqueName();
@@ -342,7 +299,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
             conn.close();
 
             Timestamp expectedTimestamp;
-            clock.setAdvance(false);
+            clock.shouldAdvance(false);
             conn = DriverManager.getConnection(getUrl(), props);
             expectedTimestamp = new Timestamp(3000L);
             stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, null)");
@@ -352,7 +309,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
             stmt = conn.prepareStatement("DELETE FROM " + tableName + " WHERE (K1,K2) = ('aa','aa')");
             stmt.executeUpdate();
             conn.commit();
-            clock.setAdvance(true);
+            clock.shouldAdvance(true);
             conn.close();
             conn = DriverManager.getConnection(getUrl(), props);
 

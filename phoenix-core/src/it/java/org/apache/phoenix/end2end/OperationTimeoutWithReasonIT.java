@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.TestClock;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -37,23 +38,6 @@ import static org.junit.Assert.fail;
 
 @Category(ParallelStatsDisabledTest.class)
 public class OperationTimeoutWithReasonIT extends ParallelStatsDisabledIT {
-
-    private static final class MyClock extends EnvironmentEdge {
-        private long time;
-        private final long delay;
-
-        public MyClock (long time, long delay) {
-            this.time = time;
-            this.delay = delay;
-        }
-
-        @Override
-        public long currentTime() {
-            long currentTime = this.time;
-            this.time += this.delay;
-            return currentTime;
-        }
-    }
 
     @Test
     public void testOperationTimeout() throws SQLException {
@@ -81,7 +65,7 @@ public class OperationTimeoutWithReasonIT extends ParallelStatsDisabledIT {
             ResultSet rs = stmt.executeQuery(String.format("SELECT * FROM %s",
                 tableName));
             // Use custom EnvironmentEdge to timeout query with a longer delay in ms
-            MyClock clock = new MyClock(10, 10000);
+            TestClock clock = new TestClock(10, 10000, true);
             EnvironmentEdgeManager.injectEdge(clock);
             try {
                 rs.next();
