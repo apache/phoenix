@@ -22,12 +22,10 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscovery;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogFileTracker;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogReplayFileTrackerImpl;
-import org.apache.phoenix.replication.metrics.MetricsReplicationReplayLogFileDiscoveryImpl;
+import org.apache.phoenix.replication.reader.ReplicationLogReplayFileTracker;
+import org.apache.phoenix.replication.reader.ReplicationReplayLogDiscovery;
+import org.apache.phoenix.replication.reader.ReplicationReplayStateTracker;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import com.google.common.base.Preconditions;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.ClassRule;
@@ -43,7 +41,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 
 import static org.junit.Assert.*;
@@ -73,7 +70,7 @@ public class ReplicationLogDiscoveryTest {
         fileTracker = Mockito.spy(new TestableReplicationLogFileTracker(conf, haGroupName, localFs, rootURI));
         fileTracker.init();
 
-        stateTracker = Mockito.spy(new ReplicationStateTracker());
+        stateTracker = Mockito.spy(new ReplicationReplayStateTracker());
         stateTracker.init(fileTracker);
 
         discovery = Mockito.spy(new TestableReplicationLogDiscovery(fileTracker, stateTracker));
@@ -171,7 +168,7 @@ public class ReplicationLogDiscoveryTest {
         // Case 1: getLastSuccessfullyProcessedRound returns a round with end time in the past
         // This should result in non-empty rounds to process
         ReplicationRound pastRound = new ReplicationRound(1704153600000L, 1704153660000L);
-        Mockito.when(stateTracker.getLastSuccessfullyProcessedRound()).thenReturn(pastRound);
+        Mockito.when(stateTracker.getLastRoundInSync()).thenReturn(pastRound);
         
         List<ReplicationRound> rounds = discovery.getRoundsToProcess();
         assertFalse("Should have found rounds to process when last processed round is in the past", rounds.isEmpty());
@@ -180,7 +177,7 @@ public class ReplicationLogDiscoveryTest {
         // This should result in empty rounds to process
         long lastRoundEndTime = EnvironmentEdgeManager.currentTimeMillis() - discovery.getReplayIntervalSeconds() * 1000L; // 1 round before (but not far enough to account for buffer)
         ReplicationRound lastRound = new ReplicationRound(lastRoundEndTime - discovery.getReplayIntervalSeconds() * 1000L, lastRoundEndTime);
-        Mockito.when(stateTracker.getLastSuccessfullyProcessedRound()).thenReturn(lastRound);
+        Mockito.when(stateTracker.getLastRoundInSync()).thenReturn(lastRound);
         
         rounds = discovery.getRoundsToProcess();
         assertTrue("Should have empty rounds", rounds.isEmpty());
@@ -189,7 +186,7 @@ public class ReplicationLogDiscoveryTest {
         // This should result in empty rounds to process
         lastRoundEndTime = EnvironmentEdgeManager.currentTimeMillis() - (discovery.getReplayIntervalSeconds()  * 1000L) / 5; // 12 seconds in past (less than round time)
         lastRound = new ReplicationRound(lastRoundEndTime - discovery.getReplayIntervalSeconds() * 1000L, lastRoundEndTime);
-        Mockito.when(stateTracker.getLastSuccessfullyProcessedRound()).thenReturn(lastRound);
+        Mockito.when(stateTracker.getLastRoundInSync()).thenReturn(lastRound);
 
         rounds = discovery.getRoundsToProcess();
         assertTrue("Should have empty rounds", rounds.isEmpty());
@@ -734,28 +731,18 @@ public class ReplicationLogDiscoveryTest {
 
 
 
-    private static class TestableReplicationLogFileTracker extends ReplicationLogFileTracker {
+    private static class TestableReplicationLogFileTracker extends ReplicationLogReplayFileTracker {
         public TestableReplicationLogFileTracker(final Configuration conf, final String haGroupName, final FileSystem fileSystem, final URI rootURI) {
             super(conf, haGroupName, fileSystem, rootURI);
         }
-
-        @Override
-        protected String getNewLogSubDirectoryName() {
-            return "in";
-        }
-
-        @Override
-        protected MetricsReplicationLogFileTracker createMetricsSource() {
-            return new MetricsReplicationLogReplayFileTrackerImpl(haGroupName);
-        }
     }
 
-    private static class TestableReplicationLogDiscovery extends ReplicationLogDiscovery {
+    private static class TestableReplicationLogDiscovery extends ReplicationReplayLogDiscovery {
         private final List<Path> processedFiles = new ArrayList<>();
         private final List<ReplicationRound> processedRounds = new ArrayList<>();
         private List<ReplicationRound> mockRoundsToProcess = null;
 
-        public TestableReplicationLogDiscovery(ReplicationLogFileTracker fileTracker, ReplicationStateTracker stateTracker) {
+        public TestableReplicationLogDiscovery(ReplicationLogReplayFileTracker fileTracker, ReplicationStateTracker stateTracker) {
             super(fileTracker, stateTracker);
         }
 
@@ -763,11 +750,6 @@ public class ReplicationLogDiscoveryTest {
         protected void processFile(Path path) throws IOException {
             // Simulate file processing
             processedFiles.add(path);
-        }
-
-        @Override
-        protected MetricsReplicationLogDiscovery createMetricsSource() {
-            return new MetricsReplicationReplayLogFileDiscoveryImpl(haGroupName);
         }
 
         @Override
@@ -780,9 +762,9 @@ public class ReplicationLogDiscoveryTest {
 
         @Override
         protected void processRound(ReplicationRound replicationRound) throws IOException {
+            super.processRound(replicationRound);
             // Track processed rounds
             processedRounds.add(replicationRound);
-            super.processRound(replicationRound);
         }
 
         public List<Path> getProcessedFiles() {
@@ -821,10 +803,6 @@ public class ReplicationLogDiscoveryTest {
 
         public void resetProcessedFiles() {
             processedFiles.clear();
-        }
-
-        public double getInProgressDirectoryProcessProbability() {
-            return super.getInProgressDirectoryProcessProbability();
         }
     }
 }

@@ -19,6 +19,7 @@ package org.apache.phoenix.replication.reader;
 
 import org.apache.hadoop.fs.Path;
 import org.apache.phoenix.replication.ReplicationLogDiscovery;
+import org.apache.phoenix.replication.ReplicationRound;
 import org.apache.phoenix.replication.ReplicationStateTracker;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscovery;
 import org.apache.phoenix.replication.metrics.MetricsReplicationReplayLogFileDiscoveryImpl;
@@ -97,6 +98,12 @@ public class ReplicationReplayLogDiscovery extends ReplicationLogDiscovery {
     @Override
     protected void processFile(Path path) throws IOException {
         ReplicationLogProcessor.get(getConf(), getHaGroupName()).processLogFile(getReplicationLogFileTracker().getFileSystem(), path);
+    }
+
+    @Override
+    protected void updateStatePostRoundCompletion(final ReplicationRound replicationRound) throws IOException {
+        // TODO: update last round in sync conditionally, i.e. ONLY when cluster is not in DEGRADED_STANBY_FOR_WRITER state
+        replicationStateTracker.setLastRoundInSync(replicationRound);
     }
 
     @Override

@@ -4,18 +4,13 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
-import org.apache.phoenix.replication.ReplicationLogFileTracker;
 import org.apache.phoenix.replication.ReplicationLogGroup;
-import org.apache.phoenix.replication.ReplicationShardDirectoryManager;
 import org.apache.phoenix.replication.ReplicationStateTracker;
 import org.junit.*;
 import org.junit.rules.TemporaryFolder;
-import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.net.URI;
-import java.util.Collections;
 
 import static org.junit.Assert.assertEquals;
 
@@ -45,7 +40,7 @@ public class ReplicationReplayLogDiscoveryTest {
     public void testGetExecutorThreadNameFormat() {
         // Create ReplicationReplayLogDiscovery instance
         ReplicationLogReplayFileTracker fileTracker = new ReplicationLogReplayFileTracker(conf, "testGroup", localFs, standbyUri);
-        ReplicationStateTracker stateTracker = new ReplicationStateTracker();
+        ReplicationStateTracker stateTracker = new ReplicationReplayStateTracker();
         ReplicationReplayLogDiscovery discovery = new ReplicationReplayLogDiscovery(fileTracker, stateTracker);
         
         // Test that it returns the expected constant value
@@ -58,7 +53,7 @@ public class ReplicationReplayLogDiscoveryTest {
     public void testGetReplayIntervalSeconds() {
         // Create ReplicationReplayLogDiscovery instance
         ReplicationLogReplayFileTracker fileTracker = new ReplicationLogReplayFileTracker(conf, "testGroup", localFs, standbyUri);
-        ReplicationStateTracker stateTracker = new ReplicationStateTracker();
+        ReplicationStateTracker stateTracker = new ReplicationReplayStateTracker();
         ReplicationReplayLogDiscovery discovery = new ReplicationReplayLogDiscovery(fileTracker, stateTracker);
         
         // Test default value when no custom config is set
@@ -77,7 +72,7 @@ public class ReplicationReplayLogDiscoveryTest {
     public void testGetShutdownTimeoutSeconds() {
         // Create ReplicationReplayLogDiscovery instance
         ReplicationLogReplayFileTracker fileTracker = new ReplicationLogReplayFileTracker(conf, "testGroup", localFs, standbyUri);
-        ReplicationStateTracker stateTracker = new ReplicationStateTracker();
+        ReplicationStateTracker stateTracker = new ReplicationReplayStateTracker();
         ReplicationReplayLogDiscovery discovery = new ReplicationReplayLogDiscovery(fileTracker, stateTracker);
         
         // Test default value when no custom config is set
@@ -96,7 +91,7 @@ public class ReplicationReplayLogDiscoveryTest {
     public void testGetExecutorThreadCount() {
         // Create ReplicationReplayLogDiscovery instance
         ReplicationLogReplayFileTracker fileTracker = new ReplicationLogReplayFileTracker(conf, "testGroup", localFs, standbyUri);
-        ReplicationStateTracker stateTracker = new ReplicationStateTracker();
+        ReplicationStateTracker stateTracker = new ReplicationReplayStateTracker();
         ReplicationReplayLogDiscovery discovery = new ReplicationReplayLogDiscovery(fileTracker, stateTracker);
         
         // Test default value when no custom config is set
@@ -115,7 +110,7 @@ public class ReplicationReplayLogDiscoveryTest {
     public void testGetInProgressDirectoryProcessProbability() {
         // Create ReplicationReplayLogDiscovery instance
         ReplicationLogReplayFileTracker fileTracker = new ReplicationLogReplayFileTracker(conf, "testGroup", localFs, standbyUri);
-        ReplicationStateTracker stateTracker = new ReplicationStateTracker();
+        ReplicationStateTracker stateTracker = new ReplicationReplayStateTracker();
         ReplicationReplayLogDiscovery discovery = new ReplicationReplayLogDiscovery(fileTracker, stateTracker);
         
         // Test default value when no custom config is set
@@ -134,7 +129,7 @@ public class ReplicationReplayLogDiscoveryTest {
     public void testGetWaitingBufferPercentage() {
         // Create ReplicationReplayLogDiscovery instance
         ReplicationLogReplayFileTracker fileTracker = new ReplicationLogReplayFileTracker(conf, "testGroup", localFs, standbyUri);
-        ReplicationStateTracker stateTracker = new ReplicationStateTracker();
+        ReplicationStateTracker stateTracker = new ReplicationReplayStateTracker();
         ReplicationReplayLogDiscovery discovery = new ReplicationReplayLogDiscovery(fileTracker, stateTracker);
         
         // Test default value when no custom config is set

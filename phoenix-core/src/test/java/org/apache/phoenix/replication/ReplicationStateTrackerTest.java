@@ -20,311 +20,190 @@ package org.apache.phoenix.replication;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.util.EnvironmentEdge;
-import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.junit.ClassRule;
+import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
+import java.util.Optional;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.ArgumentMatchers.any;
+import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 public class ReplicationStateTrackerTest {
 
     @ClassRule
     public static TemporaryFolder testFolder = new TemporaryFolder();
 
-    private ReplicationStateTracker stateTracker;
+    private TestableReplicationStateTracker stateTracker;
     private ReplicationLogFileTracker mockTracker;
-    private Path rootPath;
+    private Configuration conf;
 
     @Before
-    public void setUp() {
-        stateTracker = new ReplicationStateTracker();
-        
-        // Create real shard manager with default configuration
-        Configuration conf = HBaseConfiguration.create();
-        this.rootPath = new Path(testFolder.getRoot().getAbsolutePath());
-        ReplicationShardDirectoryManager realShardManager = new ReplicationShardDirectoryManager(conf, rootPath);
-        
-        // Create mock of ReplicationLogFileTracker
-        mockTracker = mock(ReplicationLogFileTracker.class);
-        
-        // Return real ReplicationShardDirectoryManager when getReplicationShardDirectoryManager is called
-        when(mockTracker.getReplicationShardDirectoryManager()).thenReturn(realShardManager);
-        
-        // Setup getFileTimestamp to return timestamp from filename
-        doAnswer(invocation -> {
-            Path path = invocation.getArgument(0);
-            String[] parts = path.getName().split("_");
-            return Long.parseLong(parts[0]);
-        }).when(mockTracker).getFileTimestamp(any(Path.class));
+    public void setUp() throws IOException {
+        conf = HBaseConfiguration.create();
+        mockTracker = Mockito.mock(ReplicationLogFileTracker.class);
+        stateTracker = new TestableReplicationStateTracker();
     }
 
     @Test
-    public void testInitLastSuccessfullyProcessedRound_MultipleInProgressFiles_NoNewFiles() throws IOException {
-        // Create multiple in-progress files with timestamps
-        Path inProgressFile1 = new Path(rootPath, "1704067200000_rs1.plog"); // 2024-01-01 00:00:00
-        Path inProgressFile2 = new Path(rootPath, "1704067260000_rs2.plog"); // 2024-01-01 00:01:00
-        Path inProgressFile3 = new Path(rootPath, "1704067320000_rs3.plog"); // 2024-01-01 00:02:00
-        
-        List<Path> inProgressFiles = Arrays.asList(inProgressFile1, inProgressFile2, inProgressFile3);
-        
-        // Mock the tracker to return in-progress files and empty new files
-        when(mockTracker.getInProgressFiles()).thenReturn(inProgressFiles);
-        when(mockTracker.getNewFiles()).thenReturn(Collections.emptyList());
-        
-        // Call the method
-        stateTracker.init(mockTracker);
-        
-        // Verify the result
-        ReplicationRound result = stateTracker.getLastSuccessfullyProcessedRound();
-        assertNotNull("Last successfully processed round should not be null", result);
-        
-        // Verify the round uses the minimum timestamp (1704067200000L)
-        long expectedEndTime = (1704067200000L / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1); // Round down to nearest 60-second boundary
-        long expectedStartTime = expectedEndTime - TimeUnit.MINUTES.toMillis(1); // Start time is 60 seconds less than end time
-        assertEquals("Should use minimum timestamp from in-progress files", expectedStartTime, result.getStartTime());
-        assertEquals("End time must be rounded down to nearest 60-second boundary", expectedEndTime, result.getEndTime());
-    }
-
-    @Test
-    public void testInitLastSuccessfullyProcessedRound_MultipleInProgressFiles_OneNewFile() throws IOException {
-        // Create multiple in-progress files with timestamps
-        Path inProgressFile1 = new Path(rootPath, "1704153600000_rs1.plog"); // 2024-01-02 00:00:00
-        Path inProgressFile2 = new Path(rootPath, "1704153660000_rs2.plog"); // 2024-01-02 00:01:00
-        Path inProgressFile3 = new Path(rootPath, "1704153720000_rs3.plog"); // 2024-01-02 00:02:00
-        
-        List<Path> inProgressFiles = Arrays.asList(inProgressFile1, inProgressFile2, inProgressFile3);
-        
-        // Create one new file with later timestamp
-        Path newFile = new Path(rootPath, "1704153780000_rs4.plog"); // 2024-01-02 00:03:00
-        List<Path> newFiles = Arrays.asList(newFile);
-        
-        // Mock the tracker to return in-progress files and one new file
-        when(mockTracker.getInProgressFiles()).thenReturn(inProgressFiles);
-        when(mockTracker.getNewFiles()).thenReturn(newFiles);
-        
-        // Call the method
-        stateTracker.init(mockTracker);
-        
-        // Verify the result - should use minimum timestamp from in-progress files
-        ReplicationRound result = stateTracker.getLastSuccessfullyProcessedRound();
-        assertNotNull("Last successfully processed round should not be null", result);
-        
-        long expectedEndTime = (1704153600000L / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1); // Round down to nearest 60-second boundary
-        long expectedStartTime = expectedEndTime - TimeUnit.MINUTES.toMillis(1); // Start time is 60 seconds less than end time
-        assertEquals("Should use minimum timestamp from in-progress files", expectedStartTime, result.getStartTime());
-        assertEquals("End time must be rounded down to nearest 60-second boundary", expectedEndTime, result.getEndTime());
-    }
-
-    @Test
-    public void testInitLastSuccessfullyProcessedRound_MultipleInProgressFiles_MultipleNewFiles() throws IOException {
-        // Create multiple in-progress files with timestamps
-        Path inProgressFile1 = new Path(rootPath, "1704240000000_rs1.plog"); // 2024-01-03 00:00:00
-        Path inProgressFile2 = new Path(rootPath, "1704240060000_rs2.plog"); // 2024-01-03 00:01:00
-        Path inProgressFile3 = new Path(rootPath, "1704240120000_rs3.plog"); // 2024-01-03 00:02:00
-        
-        List<Path> inProgressFiles = Arrays.asList(inProgressFile1, inProgressFile2, inProgressFile3);
-        
-        // Create multiple new files with later timestamps
-        Path newFile1 = new Path(rootPath, "1704240180000_rs4.plog"); // 2024-01-03 00:03:00
-        Path newFile2 = new Path(rootPath, "1704240240000_rs5.plog"); // 2024-01-03 00:04:00
-        List<Path> newFiles = Arrays.asList(newFile1, newFile2);
-        
-        // Mock the tracker to return in-progress files and multiple new files
-        when(mockTracker.getInProgressFiles()).thenReturn(inProgressFiles);
-        when(mockTracker.getNewFiles()).thenReturn(newFiles);
-        
-        // Call the method
-        stateTracker.init(mockTracker);
-        
-        // Verify the result - should use minimum timestamp from in-progress files
-        ReplicationRound result = stateTracker.getLastSuccessfullyProcessedRound();
-        assertNotNull("Last successfully processed round should not be null", result);
-        
-        long expectedEndTime = (1704240000000L / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1); // Round down to nearest 60-second boundary
-        long expectedStartTime = expectedEndTime - TimeUnit.MINUTES.toMillis(1); // Start time is 60 seconds less than end time
-        assertEquals("Should use minimum timestamp from in-progress files", expectedStartTime, result.getStartTime());
-        assertEquals("End time must be rounded down to nearest 60-second boundary", expectedEndTime, result.getEndTime());
-    }
-
-    @Test
-    public void testInitLastSuccessfullyProcessedRound_OneInProgressFile_NoNewFiles() throws IOException {
-        // Create single in-progress file
-        Path inProgressFile = new Path(rootPath, "1704326400000_rs1.plog"); // 2024-01-04 00:00:00
-        List<Path> inProgressFiles = Arrays.asList(inProgressFile);
-        
-        // Mock the tracker to return single in-progress file and empty new files
-        when(mockTracker.getInProgressFiles()).thenReturn(inProgressFiles);
-        when(mockTracker.getNewFiles()).thenReturn(Collections.emptyList());
-        
-        // Call the method
-        stateTracker.init(mockTracker);
-        
-        // Verify the result
-        ReplicationRound result = stateTracker.getLastSuccessfullyProcessedRound();
-        assertNotNull("Last successfully processed round should not be null", result);
-        
-        long expectedEndTime = (1704326400000L / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1); // Round down to nearest 60-second boundary
-        long expectedStartTime = expectedEndTime - TimeUnit.MINUTES.toMillis(1); // Start time is 60 seconds less than end time
-        assertEquals("Should use timestamp from single in-progress file", expectedStartTime, result.getStartTime());
-        assertEquals("End time must be rounded down to nearest 60-second boundary", expectedEndTime, result.getEndTime());
-    }
-
-    @Test
-    public void testInitLastSuccessfullyProcessedRound_OneInProgressFile_OneNewFile() throws IOException {
-        // Create single in-progress file
-        Path inProgressFile = new Path(rootPath, "1704412800000_rs1.plog"); // 2024-01-05 00:00:00
-        List<Path> inProgressFiles = Arrays.asList(inProgressFile);
-        
-        // Create one new file with later timestamp
-        Path newFile = new Path(rootPath, "1704412860000_rs2.plog"); // 2024-01-05 00:01:00
-        List<Path> newFiles = Arrays.asList(newFile);
-        
-        // Mock the tracker to return single in-progress file and one new file
-        when(mockTracker.getInProgressFiles()).thenReturn(inProgressFiles);
-        when(mockTracker.getNewFiles()).thenReturn(newFiles);
-        
-        // Call the method
-        stateTracker.init(mockTracker);
-        
-        // Verify the result - should use timestamp from in-progress file
-        ReplicationRound result = stateTracker.getLastSuccessfullyProcessedRound();
-        assertNotNull("Last successfully processed round should not be null", result);
-        
-        long expectedEndTime = (1704412800000L / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1); // Round down to nearest 60-second boundary
-        long expectedStartTime = expectedEndTime - TimeUnit.MINUTES.toMillis(1); // Start time is 60 seconds less than end time
-        assertEquals("Should use timestamp from in-progress file", expectedStartTime, result.getStartTime());
-        assertEquals("End time must be rounded down to nearest 60-second boundary", expectedEndTime, result.getEndTime());
-    }
-
-    @Test
-    public void testInitLastSuccessfullyProcessedRound_OneInProgressFile_MultipleNewFiles() throws IOException {
-        // Create single in-progress file
-        Path inProgressFile = new Path(rootPath, "1704499200000_rs1.plog"); // 2024-01-06 00:00:00
-        List<Path> inProgressFiles = Arrays.asList(inProgressFile);
-        
-        // Create multiple new files with later timestamps
-        Path newFile1 = new Path(rootPath, "1704499260000_rs2.plog"); // 2024-01-06 00:01:00
-        Path newFile2 = new Path(rootPath, "1704499320000_rs3.plog"); // 2024-01-06 00:02:00
-        List<Path> newFiles = Arrays.asList(newFile1, newFile2);
-        
-        // Mock the tracker to return single in-progress file and multiple new files
-        when(mockTracker.getInProgressFiles()).thenReturn(inProgressFiles);
-        when(mockTracker.getNewFiles()).thenReturn(newFiles);
-        
-        // Call the method
-        stateTracker.init(mockTracker);
-        
-        // Verify the result - should use timestamp from in-progress file
-        ReplicationRound result = stateTracker.getLastSuccessfullyProcessedRound();
-        assertNotNull("Last successfully processed round should not be null", result);
-        
-        long expectedEndTime = (1704499200000L / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1); // Round down to nearest 60-second boundary
-        long expectedStartTime = expectedEndTime - TimeUnit.MINUTES.toMillis(1); // Start time is 60 seconds less than end time
-        assertEquals("Should use timestamp from in-progress file", expectedStartTime, result.getStartTime());
-        assertEquals("End time must be rounded down to nearest 60-second boundary", expectedEndTime, result.getEndTime());
-    }
-
-    @Test
-    public void testInitLastSuccessfullyProcessedRound_NoInProgressFiles_MultipleNewFiles() throws IOException {
-        // Mock empty in-progress files
+    public void testGetMinTimestampFromInProgressFilesEmptyList() throws IOException {
+        // Mock empty list of in-progress files
         when(mockTracker.getInProgressFiles()).thenReturn(Collections.emptyList());
-        
-        // Create multiple new files with timestamps
-        Path newFile1 = new Path(rootPath, "1704585600000_rs1.plog"); // 2024-01-07 00:00:00
-        Path newFile2 = new Path(rootPath, "1704585660000_rs2.plog"); // 2024-01-07 00:01:00
-        Path newFile3 = new Path(rootPath, "1704585720000_rs3.plog"); // 2024-01-07 00:02:00
-        List<Path> newFiles = Arrays.asList(newFile1, newFile2, newFile3);
-        
-        // Mock the tracker to return empty in-progress files and multiple new files
-        when(mockTracker.getNewFiles()).thenReturn(newFiles);
-        
+
         // Call the method
-        stateTracker.init(mockTracker);
-        
-        // Verify the result
-        ReplicationRound result = stateTracker.getLastSuccessfullyProcessedRound();
-        assertNotNull("Last successfully processed round should not be null", result);
-        
-        // Verify the round uses the minimum timestamp from new files (1704585600000L)
-        long expectedEndTime = (1704585600000L / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1); // Round down to nearest 60-second boundary
-        long expectedStartTime = expectedEndTime - TimeUnit.MINUTES.toMillis(1); // Start time is 60 seconds less than end time
-        assertEquals("Should use minimum timestamp from new files when no in-progress files", expectedStartTime, result.getStartTime());
-        assertEquals("End time must be rounded down to nearest 60-second boundary", expectedEndTime, result.getEndTime());
+        Optional<Long> result = stateTracker.getMinTimestampFromInProgressFiles(mockTracker);
+
+        // Verify result is empty
+        assertFalse("Result should be empty for empty file list", result.isPresent());
+
+        // Verify getInProgressFiles was called once
+        verify(mockTracker, times(1)).getInProgressFiles();
     }
 
     @Test
-    public void testInitLastSuccessfullyProcessedRound_NoInProgressFiles_OneNewFile() throws IOException {
-        // Mock empty in-progress files
-        when(mockTracker.getInProgressFiles()).thenReturn(Collections.emptyList());
+    public void testGetMinTimestampFromInProgressFilesSingleFile() throws IOException {
+        // Create a single file path
+        Path filePath = new Path("/test/1704153600000_rs1.plog");
         
-        // Create single new file
-        Path newFile = new Path(rootPath, "1704672000000_rs1.plog"); // 2024-01-08 00:00:00
-        List<Path> newFiles = Arrays.asList(newFile);
-        
-        // Mock the tracker to return empty in-progress files and one new file
-        when(mockTracker.getNewFiles()).thenReturn(newFiles);
-        
+        // Mock single file list
+        when(mockTracker.getInProgressFiles()).thenReturn(Arrays.asList(filePath));
+        when(mockTracker.getFileTimestamp(filePath)).thenReturn(1704153600000L);
+
         // Call the method
-        stateTracker.init(mockTracker);
-        
-        // Verify the result
-        ReplicationRound result = stateTracker.getLastSuccessfullyProcessedRound();
-        assertNotNull("Last successfully processed round should not be null", result);
-        
-        long expectedEndTime = (1704672000000L / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1); // Round down to nearest 60-second boundary
-        long expectedStartTime = expectedEndTime - TimeUnit.MINUTES.toMillis(1); // Start time is 60 seconds less than end time
-        assertEquals("Should use timestamp from single new file when no in-progress files", expectedStartTime, result.getStartTime());
-        assertEquals("End time must be rounded down to nearest 60-second boundary", expectedEndTime, result.getEndTime());
+        Optional<Long> result = stateTracker.getMinTimestampFromInProgressFiles(mockTracker);
+
+        // Verify result contains the timestamp
+        assertTrue("Result should be present for single file", result.isPresent());
+        assertEquals("Should return the timestamp of the single file", 
+            Long.valueOf(1704153600000L), result.get());
+
+        // Verify method calls
+        verify(mockTracker, times(1)).getInProgressFiles();
+        verify(mockTracker, times(1)).getFileTimestamp(filePath);
     }
 
     @Test
-    public void testInitLastSuccessfullyProcessedRound_NoInProgressFiles_NoNewFiles() throws IOException {
-        // Mock empty in-progress files
-        when(mockTracker.getInProgressFiles()).thenReturn(Collections.emptyList());
+    public void testGetMinTimestampFromInProgressFilesMultipleFiles() throws IOException {
+        // Create multiple file paths with different timestamps
+        Path file1 = new Path("/test/1704153660000_rs2.plog");
+        Path file2 = new Path("/test/1704153600000_rs1.plog");
+        Path file3 = new Path("/test/1704153720000_rs3.plog");
         
-        // Mock empty new files
+        List<Path> files = Arrays.asList(file1, file2, file3);
+        
+        // Mock file list and timestamps
+        when(mockTracker.getInProgressFiles()).thenReturn(files);
+        when(mockTracker.getFileTimestamp(file1)).thenReturn(1704153660000L);
+        when(mockTracker.getFileTimestamp(file2)).thenReturn(1704153600000L);
+        when(mockTracker.getFileTimestamp(file3)).thenReturn(1704153720000L);
+
+        // Call the method
+        Optional<Long> result = stateTracker.getMinTimestampFromInProgressFiles(mockTracker);
+
+        // Verify result contains the minimum timestamp
+        assertTrue("Result should be present for multiple files", result.isPresent());
+        assertEquals("Should return the minimum timestamp", 
+            Long.valueOf(1704153600000L), result.get());
+
+        // Verify method calls
+        verify(mockTracker, times(1)).getInProgressFiles();
+        verify(mockTracker, times(1)).getFileTimestamp(file1);
+        verify(mockTracker, times(1)).getFileTimestamp(file2);
+        verify(mockTracker, times(1)).getFileTimestamp(file3);
+    }
+
+    @Test
+    public void testGetMinTimestampFromNewFilesEmptyList() throws IOException {
+        // Mock empty list of new files
         when(mockTracker.getNewFiles()).thenReturn(Collections.emptyList());
+
+        // Call the method
+        Optional<Long> result = stateTracker.getMinTimestampFromNewFiles(mockTracker);
+
+        // Verify result is empty
+        assertFalse("Result should be empty for empty file list", result.isPresent());
+
+        // Verify getNewFiles was called once
+        verify(mockTracker, times(1)).getNewFiles();
+    }
+
+    @Test
+    public void testGetMinTimestampFromNewFilesSingleFile() throws IOException {
+        // Create a single file path
+        Path filePath = new Path("/test/1704153600000_rs1.plog");
         
-        // Set custom time using EnvironmentEdgeManager
-        EnvironmentEdge customEdge = new EnvironmentEdge() {
-            @Override
-            public long currentTime() {
-                return 1704758400000L; // 2024-01-09 00:00:00
-            }
-        };
-        EnvironmentEdgeManager.injectEdge(customEdge);
+        // Mock single file list
+        when(mockTracker.getNewFiles()).thenReturn(Arrays.asList(filePath));
+        when(mockTracker.getFileTimestamp(filePath)).thenReturn(1704153600000L);
+
+        // Call the method
+        Optional<Long> result = stateTracker.getMinTimestampFromNewFiles(mockTracker);
+
+        // Verify result contains the timestamp
+        assertTrue("Result should be present for single file", result.isPresent());
+        assertEquals("Should return the timestamp of the single file", 
+            Long.valueOf(1704153600000L), result.get());
+
+        // Verify method calls
+        verify(mockTracker, times(1)).getNewFiles();
+        verify(mockTracker, times(1)).getFileTimestamp(filePath);
+    }
+
+    @Test
+    public void testGetMinTimestampFromNewFilesMultipleFiles() throws IOException {
+        // Create multiple file paths with different timestamps
+        Path file1 = new Path("/test/1704153660000_rs2.plog");
+        Path file2 = new Path("/test/1704153600000_rs1.plog");
+        Path file3 = new Path("/test/1704153720000_rs3.plog");
         
-        try {
-            // Call the method
-            stateTracker.init(mockTracker);
-            
-            // Verify the result
-            ReplicationRound result = stateTracker.getLastSuccessfullyProcessedRound();
-            assertNotNull("Last successfully processed round should not be null", result);
-            
-            // Verify the round uses the custom time
-            long expectedEndTime = (1704758400000L / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1); // Round down to nearest 60-second boundary
-            long expectedStartTime = expectedEndTime - TimeUnit.MINUTES.toMillis(1); // Start time is 60 seconds less than end time
-            assertEquals("Should use custom time when no files are found", expectedStartTime, result.getStartTime());
-            assertEquals("End time must be rounded down to nearest 60-second boundary", expectedEndTime, result.getEndTime());
-        } finally {
-            // Reset EnvironmentEdgeManager to default
-            EnvironmentEdgeManager.reset();
+        List<Path> files = Arrays.asList(file1, file2, file3);
+        
+        // Mock file list and timestamps
+        when(mockTracker.getNewFiles()).thenReturn(files);
+        when(mockTracker.getFileTimestamp(file1)).thenReturn(1704153660000L);
+        when(mockTracker.getFileTimestamp(file2)).thenReturn(1704153600000L);
+        when(mockTracker.getFileTimestamp(file3)).thenReturn(1704153720000L);
+
+        // Call the method
+        Optional<Long> result = stateTracker.getMinTimestampFromNewFiles(mockTracker);
+
+        // Verify result contains the minimum timestamp
+        assertTrue("Result should be present for multiple files", result.isPresent());
+        assertEquals("Should return the minimum timestamp", 
+            Long.valueOf(1704153600000L), result.get());
+
+        // Verify method calls
+        verify(mockTracker, times(1)).getNewFiles();
+        verify(mockTracker, times(1)).getFileTimestamp(file1);
+        verify(mockTracker, times(1)).getFileTimestamp(file2);
+        verify(mockTracker, times(1)).getFileTimestamp(file3);
+    }
+
+
+    /**
+     * Testable implementation of ReplicationStateTracker for testing
+     */
+    private static class TestableReplicationStateTracker extends ReplicationStateTracker {
+        
+        @Override
+        public void init(ReplicationLogFileTracker replicationLogFileTracker) throws IOException {
+            // No-op implementation for testing
+        }
+        
+        // Expose the protected method for testing
+        public Optional<Long> getMinTimestampFromInProgressFiles(ReplicationLogFileTracker replicationLogFileTracker) throws IOException {
+            return super.getMinTimestampFromInProgressFiles(replicationLogFileTracker);
+        }
+        
+        // Expose the protected method for testing
+        public Optional<Long> getMinTimestampFromNewFiles(ReplicationLogFileTracker replicationLogFileTracker) throws IOException {
+            return super.getMinTimestampFromNewFiles(replicationLogFileTracker);
         }
     }
-
 }

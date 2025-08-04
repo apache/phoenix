@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.replication;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -342,7 +343,7 @@ public abstract class ReplicationLogFileTracker {
      * @param file - The file path to extract timestamp from.
      * return the timestamp from the file name
      */
-    protected long getFileTimestamp(Path file) throws NumberFormatException {
+    public long getFileTimestamp(Path file) throws NumberFormatException {
         String[] parts = file.getName().split("_");
         return Long.parseLong(parts[0]);
     }
@@ -400,7 +401,7 @@ public abstract class ReplicationLogFileTracker {
         return this.fileSystem;
     }
 
-    protected ReplicationShardDirectoryManager getReplicationShardDirectoryManager() {
+    public ReplicationShardDirectoryManager getReplicationShardDirectoryManager() {
         return this.replicationShardDirectoryManager;
     }
 
