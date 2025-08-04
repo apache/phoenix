@@ -148,8 +148,6 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
       if (haGroup.isPresent()) {
         connection = haGroup.get().connect(augmentedInfo, haurlInfo);
         queryServiceName = haurlInfo.getPrincipal();
-        // We are overwriting connection creation time metrics if the connection is created via
-        // DriverManager.getConnection()
         setConnectionCreationDurationMetric(queryServiceName, connectionCreationStartTime,
           connection);
         return connection;
