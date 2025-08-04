@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,7 +21,6 @@ import java.sql.SQLException;
 import java.util.Comparator;
 import java.util.List;
 import java.util.PriorityQueue;
-
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.schema.tuple.Tuple;
 
@@ -30,72 +29,75 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * @since 1.2
  */
 public abstract class MergeSortResultIterator implements PeekingResultIterator {
-    protected final ResultIterators resultIterators;
-    protected final ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
-    private PriorityQueue<MaterializedComparableResultIterator> minHeap;
-    private final IteratorComparator itrComparator = new IteratorComparator();
+  protected final ResultIterators resultIterators;
+  protected final ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
+  private PriorityQueue<MaterializedComparableResultIterator> minHeap;
+  private final IteratorComparator itrComparator = new IteratorComparator();
 
-    public MergeSortResultIterator(ResultIterators iterators) {
-        this.resultIterators = iterators;
+  public MergeSortResultIterator(ResultIterators iterators) {
+    this.resultIterators = iterators;
+  }
+
+  @Override
+  public void close() throws SQLException {
+    resultIterators.close();
+  }
+
+  abstract protected int compare(Tuple t1, Tuple t2);
+
+  @Override
+  public Tuple peek() throws SQLException {
+    MaterializedComparableResultIterator iterator = minIterator();
+    if (iterator == null) {
+      return null;
     }
+    return iterator.peek();
+  }
 
+  @Override
+  public Tuple next() throws SQLException {
+    MaterializedComparableResultIterator iterator = minIterator();
+    if (iterator == null) {
+      close();
+      return null;
+    }
+    Tuple next = iterator.next();
+    minHeap.poll();
+    if (iterator.peek() != null) {
+      minHeap.add(iterator);
+    } else {
+      iterator.close();
+    }
+    return next;
+  }
+
+  private PriorityQueue<MaterializedComparableResultIterator> getMinHeap() throws SQLException {
+    if (minHeap == null) {
+      List<PeekingResultIterator> iterators = resultIterators.getIterators();
+      minHeap =
+        new PriorityQueue<MaterializedComparableResultIterator>(Math.max(1, iterators.size()));
+      for (PeekingResultIterator itr : iterators) {
+        if (itr.peek() == null) {
+          itr.close();
+          continue;
+        }
+        minHeap.add(new MaterializedComparableResultIterator(itr, itrComparator));
+      }
+    }
+    return minHeap;
+  }
+
+  private class IteratorComparator implements Comparator<Tuple> {
     @Override
-    public void close() throws SQLException {
-        resultIterators.close();
+    public int compare(Tuple c1, Tuple c2) {
+      return MergeSortResultIterator.this.compare(c1, c2);
     }
+  }
 
-    abstract protected int compare(Tuple t1, Tuple t2);
-
-    @Override
-    public Tuple peek() throws SQLException {
-        MaterializedComparableResultIterator iterator = minIterator();
-        if (iterator == null) { return null; }
-        return iterator.peek();
-    }
-
-    @Override
-    public Tuple next() throws SQLException {
-        MaterializedComparableResultIterator iterator = minIterator();
-        if (iterator == null) {
-            close();
-            return null;
-        }
-        Tuple next = iterator.next();
-        minHeap.poll();
-        if (iterator.peek() != null) {
-            minHeap.add(iterator);
-        } else {
-            iterator.close();
-        }
-        return next;
-    }
-
-    private PriorityQueue<MaterializedComparableResultIterator> getMinHeap() throws SQLException {
-        if (minHeap == null) {
-            List<PeekingResultIterator> iterators = resultIterators.getIterators();
-            minHeap = new PriorityQueue<MaterializedComparableResultIterator>(Math.max(1, iterators.size()));
-            for (PeekingResultIterator itr : iterators) {
-                if (itr.peek() == null) {
-                    itr.close();
-                    continue;
-                }
-                minHeap.add(new MaterializedComparableResultIterator(itr, itrComparator));
-            }
-        }
-        return minHeap;
-    }
-
-    private class IteratorComparator implements Comparator<Tuple> {
-        @Override
-        public int compare(Tuple c1, Tuple c2) {
-            return MergeSortResultIterator.this.compare(c1, c2);
-        }
-    }
-
-    private MaterializedComparableResultIterator minIterator() throws SQLException {
-        PriorityQueue<MaterializedComparableResultIterator> minHeap = getMinHeap();
-        MaterializedComparableResultIterator minIterator = minHeap.peek();
-        return minIterator;
-    }
+  private MaterializedComparableResultIterator minIterator() throws SQLException {
+    PriorityQueue<MaterializedComparableResultIterator> minHeap = getMinHeap();
+    MaterializedComparableResultIterator minIterator = minHeap.peek();
+    return minIterator;
+  }
 
 }

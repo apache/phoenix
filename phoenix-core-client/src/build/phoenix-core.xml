@@ -29,10 +29,10 @@
     <format>jar</format>
   </formats>
   <includeBaseDirectory>false</includeBaseDirectory>
-  
+
   <dependencySets>
     <dependencySet>
-      <!-- Unpack all the dependencies to class files, since java doesn't support 
+      <!-- Unpack all the dependencies to class files, since java doesn't support
         jar of jars for running -->
       <unpack>true</unpack>
       <!-- save these dependencies to the top-level -->

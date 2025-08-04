@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,12 +22,11 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
-
-import org.apache.hbase.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.monitoring.HTableThreadPoolHistograms;
 import org.apache.phoenix.monitoring.HTableThreadPoolMetricsManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 
+import org.apache.hbase.thirdparty.com.google.common.base.Preconditions;
 
 /**
  * <b>External User-Facing API</b>
@@ -83,60 +82,57 @@ import org.apache.phoenix.util.PhoenixRuntime;
  */
 public class HTableThreadPoolWithUtilizationStats extends ThreadPoolExecutor {
 
-    private final String htableThreadPoolHistogramsName;
-    private final Supplier<HTableThreadPoolHistograms> hTableThreadPoolHistogramsSupplier;
+  private final String htableThreadPoolHistogramsName;
+  private final Supplier<HTableThreadPoolHistograms> hTableThreadPoolHistogramsSupplier;
 
-    /**
-     * Creates a new HTable thread pool executor with built-in utilization statistics collection.
-     * <p>
-     * This constructor accepts all the standard {@link ThreadPoolExecutor} parameters plus
-     * additional parameters specific to HTable thread pool monitoring. The thread pool will
-     * automatically collect utilization metrics (active thread count and queue size) during task
-     * execution. To retrieve the collected metrics, use
-     * {@link PhoenixRuntime#getHTableThreadPoolHistograms()}.
-     * </p>
-     * @param htableThreadPoolHistogramsName Unique identifier for this thread pool's metrics. This
-     *                                       name serves as the key in the metrics map returned by
-     *                                       {@link PhoenixRuntime#getHTableThreadPoolHistograms()}.
-     *                                       Choose a descriptive name that identifies the purpose
-     *                                       of this thread pool.
-     * @param supplier                       Idempotent supplier that provides the
-     *                                       {@link HTableThreadPoolHistograms} instance for metrics
-     *                                       collection. This supplier will be called only the first
-     *                                       time a metric is recorded for the given
-     *                                       htableThreadPoolHistogramsName. Subsequent metric
-     *                                       recordings will reuse the same histogram instance.
-     *                                       <b>Pass null to disable metrics collection
-     *                                       entirely</b>, which eliminates monitoring overhead but
-     *                                       provides no utilization statistics.
-     * @see ThreadPoolExecutor#ThreadPoolExecutor(int, int, long, TimeUnit, BlockingQueue,
-     *      ThreadFactory)
-     * @see HTableThreadPoolHistograms
-     * @see PhoenixRuntime#getHTableThreadPoolHistograms()
-     */
-    public HTableThreadPoolWithUtilizationStats(int corePoolSize, int maximumPoolSize,
-                                                long keepAliveTime, TimeUnit unit,
-                                                BlockingQueue<Runnable> workQueue,
-                                                ThreadFactory threadFactory,
-                                                String htableThreadPoolHistogramsName,
-                                                Supplier<HTableThreadPoolHistograms> supplier) {
-        super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue, threadFactory);
-        this.htableThreadPoolHistogramsName = htableThreadPoolHistogramsName;
-        this.hTableThreadPoolHistogramsSupplier = supplier;
-    }
+  /**
+   * Creates a new HTable thread pool executor with built-in utilization statistics collection.
+   * <p>
+   * This constructor accepts all the standard {@link ThreadPoolExecutor} parameters plus additional
+   * parameters specific to HTable thread pool monitoring. The thread pool will automatically
+   * collect utilization metrics (active thread count and queue size) during task execution. To
+   * retrieve the collected metrics, use {@link PhoenixRuntime#getHTableThreadPoolHistograms()}.
+   * </p>
+   * @param htableThreadPoolHistogramsName Unique identifier for this thread pool's metrics. This
+   *                                       name serves as the key in the metrics map returned by
+   *                                       {@link PhoenixRuntime#getHTableThreadPoolHistograms()}.
+   *                                       Choose a descriptive name that identifies the purpose of
+   *                                       this thread pool.
+   * @param supplier                       Idempotent supplier that provides the
+   *                                       {@link HTableThreadPoolHistograms} instance for metrics
+   *                                       collection. This supplier will be called only the first
+   *                                       time a metric is recorded for the given
+   *                                       htableThreadPoolHistogramsName. Subsequent metric
+   *                                       recordings will reuse the same histogram instance.
+   *                                       <b>Pass null to disable metrics collection entirely</b>,
+   *                                       which eliminates monitoring overhead but provides no
+   *                                       utilization statistics.
+   * @see ThreadPoolExecutor#ThreadPoolExecutor(int, int, long, TimeUnit, BlockingQueue,
+   *      ThreadFactory)
+   * @see HTableThreadPoolHistograms
+   * @see PhoenixRuntime#getHTableThreadPoolHistograms()
+   */
+  public HTableThreadPoolWithUtilizationStats(int corePoolSize, int maximumPoolSize,
+    long keepAliveTime, TimeUnit unit, BlockingQueue<Runnable> workQueue,
+    ThreadFactory threadFactory, String htableThreadPoolHistogramsName,
+    Supplier<HTableThreadPoolHistograms> supplier) {
+    super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue, threadFactory);
+    this.htableThreadPoolHistogramsName = htableThreadPoolHistogramsName;
+    this.hTableThreadPoolHistogramsSupplier = supplier;
+  }
 
-    public void execute(Runnable runnable) {
-        Preconditions.checkNotNull(runnable);
-        if (hTableThreadPoolHistogramsSupplier != null) {
-            HTableThreadPoolMetricsManager.updateActiveThreads(htableThreadPoolHistogramsName,
-                    this.getActiveCount(), hTableThreadPoolHistogramsSupplier);
-            // Should we offset queue size by available threads if CorePoolSize == MaxPoolSize?
-            // Tasks will first be put into thread pool's queue and will be consumed by a worker
-            // thread waiting for tasks to arrive in queue. But while a task is in queue, queue
-            // size > 0 though active no. of threads might be less than MaxPoolSize.
-            HTableThreadPoolMetricsManager.updateQueueSize(htableThreadPoolHistogramsName,
-                    this.getQueue().size(), hTableThreadPoolHistogramsSupplier);
-        }
-        super.execute(runnable);
+  public void execute(Runnable runnable) {
+    Preconditions.checkNotNull(runnable);
+    if (hTableThreadPoolHistogramsSupplier != null) {
+      HTableThreadPoolMetricsManager.updateActiveThreads(htableThreadPoolHistogramsName,
+        this.getActiveCount(), hTableThreadPoolHistogramsSupplier);
+      // Should we offset queue size by available threads if CorePoolSize == MaxPoolSize?
+      // Tasks will first be put into thread pool's queue and will be consumed by a worker
+      // thread waiting for tasks to arrive in queue. But while a task is in queue, queue
+      // size > 0 though active no. of threads might be less than MaxPoolSize.
+      HTableThreadPoolMetricsManager.updateQueueSize(htableThreadPoolHistogramsName,
+        this.getQueue().size(), hTableThreadPoolHistogramsSupplier);
     }
+    super.execute(runnable);
+  }
 }

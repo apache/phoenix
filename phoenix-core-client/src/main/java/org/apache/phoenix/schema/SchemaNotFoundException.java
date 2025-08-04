@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,25 +22,25 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 
 public class SchemaNotFoundException extends MetaDataEntityNotFoundException {
-    private static final long serialVersionUID = 1L;
-    private static SQLExceptionCode code = SQLExceptionCode.SCHEMA_NOT_FOUND;
-    private final long timestamp;
+  private static final long serialVersionUID = 1L;
+  private static SQLExceptionCode code = SQLExceptionCode.SCHEMA_NOT_FOUND;
+  private final long timestamp;
 
-    public SchemaNotFoundException(SchemaNotFoundException e, long timestamp) {
-        this(e.getSchemaName(), timestamp);
-    }
+  public SchemaNotFoundException(SchemaNotFoundException e, long timestamp) {
+    this(e.getSchemaName(), timestamp);
+  }
 
-    public SchemaNotFoundException(String schemaName) {
-        this(schemaName, HConstants.LATEST_TIMESTAMP);
-    }
+  public SchemaNotFoundException(String schemaName) {
+    this(schemaName, HConstants.LATEST_TIMESTAMP);
+  }
 
-    public SchemaNotFoundException(String schemaName, long timestamp) {
-        super(new SQLExceptionInfo.Builder(code).setSchemaName(schemaName).build().toString(), code.getSQLState(),
-                code.getErrorCode(), schemaName, null, null);
-        this.timestamp = timestamp;
-    }
+  public SchemaNotFoundException(String schemaName, long timestamp) {
+    super(new SQLExceptionInfo.Builder(code).setSchemaName(schemaName).build().toString(),
+      code.getSQLState(), code.getErrorCode(), schemaName, null, null);
+    this.timestamp = timestamp;
+  }
 
-    public long getTimeStamp() {
-        return timestamp;
-    }
+  public long getTimeStamp() {
+    return timestamp;
+  }
 }

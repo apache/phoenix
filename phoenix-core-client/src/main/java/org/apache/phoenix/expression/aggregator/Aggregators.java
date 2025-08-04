@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,110 +25,107 @@ import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.SizedUtil;
 
-
 /**
- * 
  * Represents an ordered list of Aggregators
- *
- * 
  * @since 0.1
  */
 abstract public class Aggregators {
-    protected final int estimatedByteSize;
-    protected final KeyValueSchema schema;
-    protected final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-    protected final ValueBitSet valueSet;
-    protected final Aggregator[] aggregators;
-    protected final SingleAggregateFunction[] functions;
-    
-    public int getEstimatedByteSize() {
-        return estimatedByteSize;
-    }
-    
-    public Aggregators(SingleAggregateFunction[] functions, Aggregator[] aggregators, int minNullableIndex) {
-        this.functions = functions;
-        this.aggregators = aggregators;
-        this.estimatedByteSize = calculateSize(aggregators);
-        this.schema = newValueSchema(aggregators, minNullableIndex);
-        this.valueSet = ValueBitSet.newInstance(schema);
-    }
-    
-    public KeyValueSchema getValueSchema() {
-        return schema;
-    }
-    
-    public int getMinNullableIndex() {
-        return schema.getMinNullable();
-    }
-    
-    @Override
-    public String toString() {
-        StringBuilder buf = new StringBuilder(this.getClass().getName() + " [" + functions.length + "]:");
-        for (int i = 0; i < functions.length; i++) {
-            SingleAggregateFunction function = functions[i];
-            buf.append("\t" + i + ") " + function );
-        }
-        return buf.toString();
-    }
-    
-    /**
-     * Return the aggregate functions
-     */
-    public SingleAggregateFunction[] getFunctions() {
-        return functions;
-    }
-    
-    /**
-     * Aggregate over aggregators
-     * @param result the single row Result from scan iteration
-     */
-    abstract public void aggregate(Aggregator[] aggregators, Tuple result);
+  protected final int estimatedByteSize;
+  protected final KeyValueSchema schema;
+  protected final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+  protected final ValueBitSet valueSet;
+  protected final Aggregator[] aggregators;
+  protected final SingleAggregateFunction[] functions;
 
-    protected static int calculateSize(Aggregator[] aggregators) {
-        
-        int size = SizedUtil.ARRAY_SIZE /*aggregators[]*/  + (SizedUtil.POINTER_SIZE  * aggregators.length);
-        for (Aggregator aggregator : aggregators) {
-            size += aggregator.getSize();
-        }
-        return size;
-    }
-    
-    /**
-     * Get the ValueSchema for the Aggregators
-     */
-    private static KeyValueSchema newValueSchema(Aggregator[] aggregators, int minNullableIndex) {
-        KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(minNullableIndex);
-        for (int i = 0; i < aggregators.length; i++) {
-            Aggregator aggregator = aggregators[i];
-            builder.addField(aggregator);
-        }
-        return builder.build();
-    }
+  public int getEstimatedByteSize() {
+    return estimatedByteSize;
+  }
 
-    /**
-     * @return byte representation of the ValueSchema
-     */
-    public byte[] toBytes(Aggregator[] aggregators) {
-        return schema.toBytes(aggregators, valueSet, ptr);
-    }
-    
-    public int getAggregatorCount() {
-        return aggregators.length;
-    }
+  public Aggregators(SingleAggregateFunction[] functions, Aggregator[] aggregators,
+    int minNullableIndex) {
+    this.functions = functions;
+    this.aggregators = aggregators;
+    this.estimatedByteSize = calculateSize(aggregators);
+    this.schema = newValueSchema(aggregators, minNullableIndex);
+    this.valueSet = ValueBitSet.newInstance(schema);
+  }
 
-    public Aggregator[] getAggregators() {
-        return aggregators;
+  public KeyValueSchema getValueSchema() {
+    return schema;
+  }
+
+  public int getMinNullableIndex() {
+    return schema.getMinNullable();
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder buf =
+      new StringBuilder(this.getClass().getName() + " [" + functions.length + "]:");
+    for (int i = 0; i < functions.length; i++) {
+      SingleAggregateFunction function = functions[i];
+      buf.append("\t" + i + ") " + function);
     }
-    
-    abstract public Aggregator[] newAggregators();
-    
-    public void reset(Aggregator[] aggregators) {
-        for (int i = 0; i < aggregators.length; i++) {
-            aggregators[i].reset();
-        }
+    return buf.toString();
+  }
+
+  /**
+   * Return the aggregate functions
+   */
+  public SingleAggregateFunction[] getFunctions() {
+    return functions;
+  }
+
+  /**
+   * Aggregate over aggregators
+   * @param result the single row Result from scan iteration
+   */
+  abstract public void aggregate(Aggregator[] aggregators, Tuple result);
+
+  protected static int calculateSize(Aggregator[] aggregators) {
+
+    int size =
+      SizedUtil.ARRAY_SIZE /* aggregators[] */ + (SizedUtil.POINTER_SIZE * aggregators.length);
+    for (Aggregator aggregator : aggregators) {
+      size += aggregator.getSize();
     }
-    
-    protected Aggregator getAggregator(int position) {
-        return aggregators[position];
+    return size;
+  }
+
+  /**
+   * Get the ValueSchema for the Aggregators
+   */
+  private static KeyValueSchema newValueSchema(Aggregator[] aggregators, int minNullableIndex) {
+    KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(minNullableIndex);
+    for (int i = 0; i < aggregators.length; i++) {
+      Aggregator aggregator = aggregators[i];
+      builder.addField(aggregator);
     }
+    return builder.build();
+  }
+
+  /** Returns byte representation of the ValueSchema */
+  public byte[] toBytes(Aggregator[] aggregators) {
+    return schema.toBytes(aggregators, valueSet, ptr);
+  }
+
+  public int getAggregatorCount() {
+    return aggregators.length;
+  }
+
+  public Aggregator[] getAggregators() {
+    return aggregators;
+  }
+
+  abstract public Aggregator[] newAggregators();
+
+  public void reset(Aggregator[] aggregators) {
+    for (int i = 0; i < aggregators.length; i++) {
+      aggregators[i].reset();
+    }
+  }
+
+  protected Aggregator getAggregator(int position) {
+    return aggregators[position];
+  }
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,24 +22,24 @@ import static org.junit.Assert.assertFalse;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
-
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 @Category(ParallelStatsDisabledTest.class)
 public class DropTableIT extends ParallelStatsDisabledIT {
 
-    @Test
-    public void testRepeatedDropTable() throws Exception {
-      final String tableName = generateUniqueName();
-      final String url = getUrl();
-      try (final Connection conn = DriverManager.getConnection(url);
-          final Statement stmt = conn.createStatement()) {
-        assertFalse(stmt.execute(String.format("CREATE TABLE %s(pk varchar not null primary key)", tableName)));
-        String dropTable = String.format("DROP TABLE IF EXISTS %s", tableName);
-        for (int i = 0; i < 5; i++) {
-          assertFalse(stmt.execute(dropTable));
-        }
+  @Test
+  public void testRepeatedDropTable() throws Exception {
+    final String tableName = generateUniqueName();
+    final String url = getUrl();
+    try (final Connection conn = DriverManager.getConnection(url);
+      final Statement stmt = conn.createStatement()) {
+      assertFalse(
+        stmt.execute(String.format("CREATE TABLE %s(pk varchar not null primary key)", tableName)));
+      String dropTable = String.format("DROP TABLE IF EXISTS %s", tableName);
+      for (int i = 0; i < 5; i++) {
+        assertFalse(stmt.execute(dropTable));
       }
     }
+  }
 }

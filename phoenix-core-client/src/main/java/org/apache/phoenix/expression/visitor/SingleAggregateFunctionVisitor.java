@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,21 +18,15 @@
 package org.apache.phoenix.expression.visitor;
 
 import java.util.Iterator;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.function.SingleAggregateFunction;
 
-
-
 /**
- * 
- * Implementation of ExpressionVisitor where only SingleAggregateFunction
- * instances are visited
- *
- * 
+ * Implementation of ExpressionVisitor where only SingleAggregateFunction instances are visited
  * @since 0.1
  */
-public abstract class SingleAggregateFunctionVisitor extends StatelessTraverseAllExpressionVisitor<Void> {
-    @Override
-    abstract public Iterator<Expression> visitEnter(SingleAggregateFunction node);
+public abstract class SingleAggregateFunctionVisitor
+  extends StatelessTraverseAllExpressionVisitor<Void> {
+  @Override
+  abstract public Iterator<Expression> visitEnter(SingleAggregateFunction node);
 }

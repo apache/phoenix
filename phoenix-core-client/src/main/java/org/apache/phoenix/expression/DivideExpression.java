@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,78 +18,72 @@
 package org.apache.phoenix.expression;
 
 import java.util.List;
-
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.types.PDataType;
 
-
 /**
- * 
  * Divide expression implementation
- *
- * 
  * @since 0.1
  */
 public abstract class DivideExpression extends ArithmeticExpression {
-    private Integer maxLength;
-    private Integer scale;
+  private Integer maxLength;
+  private Integer scale;
 
-    public DivideExpression() {
-    }
+  public DivideExpression() {
+  }
 
-    public DivideExpression(List<Expression> children) {
-        super(children);
-        Expression firstChild = children.get(0);
-        maxLength = getPrecision(firstChild);
-        scale = getScale(firstChild);
-        for (int i=1; i<children.size(); i++) {
-            Expression childExpr = children.get(i);
-            maxLength = getPrecision(maxLength, getPrecision(childExpr), scale, getScale(childExpr));
-            scale = getScale(maxLength, getPrecision(childExpr), scale, getScale(childExpr));
-        }
+  public DivideExpression(List<Expression> children) {
+    super(children);
+    Expression firstChild = children.get(0);
+    maxLength = getPrecision(firstChild);
+    scale = getScale(firstChild);
+    for (int i = 1; i < children.size(); i++) {
+      Expression childExpr = children.get(i);
+      maxLength = getPrecision(maxLength, getPrecision(childExpr), scale, getScale(childExpr));
+      scale = getScale(maxLength, getPrecision(childExpr), scale, getScale(childExpr));
     }
+  }
 
-    @Override
-    public final <T> T accept(ExpressionVisitor<T> visitor) {
-        List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
-        T t = visitor.visitLeave(this, l);
-        if (t == null) {
-            t = visitor.defaultReturn(this, l);
-        }
-        return t;
+  @Override
+  public final <T> T accept(ExpressionVisitor<T> visitor) {
+    List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
+    T t = visitor.visitLeave(this, l);
+    if (t == null) {
+      t = visitor.defaultReturn(this, l);
     }
+    return t;
+  }
 
-    @Override
-    public String getOperatorString() {
-        return " / ";
-    }
-    
-    private static Integer getPrecision(Integer lp, Integer rp, Integer ls, Integer rs) {
-        if (ls == null || rs == null) {
-            return PDataType.MAX_PRECISION;
-        }
-        int val = getScale(lp, rp, ls, rs) + lp - ls + rp;
-        return Math.min(PDataType.MAX_PRECISION, val);
-    }
+  @Override
+  public String getOperatorString() {
+    return " / ";
+  }
 
-    private static Integer getScale(Integer lp, Integer rp, Integer ls, Integer rs) {
-        // If we are adding a decimal with scale and precision to a decimal
-        // with no precision nor scale, the scale system does not apply.
-        if (ls == null || rs == null) {
-            return null;
-        }
-        int val = Math.max(PDataType.MAX_PRECISION - lp + ls - rs, 0);
-        return Math.min(PDataType.MAX_PRECISION, val);
+  private static Integer getPrecision(Integer lp, Integer rp, Integer ls, Integer rs) {
+    if (ls == null || rs == null) {
+      return PDataType.MAX_PRECISION;
     }
+    int val = getScale(lp, rp, ls, rs) + lp - ls + rp;
+    return Math.min(PDataType.MAX_PRECISION, val);
+  }
 
-
-    @Override
-    public Integer getScale() {
-        return scale;
+  private static Integer getScale(Integer lp, Integer rp, Integer ls, Integer rs) {
+    // If we are adding a decimal with scale and precision to a decimal
+    // with no precision nor scale, the scale system does not apply.
+    if (ls == null || rs == null) {
+      return null;
     }
+    int val = Math.max(PDataType.MAX_PRECISION - lp + ls - rs, 0);
+    return Math.min(PDataType.MAX_PRECISION, val);
+  }
 
-    @Override
-    public Integer getMaxLength() {
-        return maxLength;
-    }
+  @Override
+  public Integer getScale() {
+    return scale;
+  }
+
+  @Override
+  public Integer getMaxLength() {
+    return maxLength;
+  }
 }

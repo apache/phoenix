@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.pherf.workload.mt.operations;
 
 import org.apache.phoenix.pherf.configuration.Upsert;
@@ -25,5 +24,5 @@ import org.apache.phoenix.pherf.configuration.Upsert;
  * @see {@link OperationType#UPSERT}
  */
 public interface UpsertOperation extends Operation {
-    Upsert getUpsert();
+  Upsert getUpsert();
 }

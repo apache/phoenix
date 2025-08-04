@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,12 +19,9 @@ package org.apache.phoenix.mapreduce;
 
 import static junit.framework.TestCase.assertTrue;
 import static junit.framework.TestCase.fail;
-import static org.apache.phoenix.mapreduce.util.
-        PhoenixConfigurationUtil.MAPREDUCE_MULTI_INPUT_MAPPER_SPLIT_SIZE;
-import static org.apache.phoenix.mapreduce.util.
-        PhoenixConfigurationUtil.MAPREDUCE_MULTI_INPUT_SPLIT_STRATEGY_CLAZZ;
-import static org.apache.phoenix.mapreduce.util.
-        PhoenixConfigurationUtil.MAPREDUCE_MULTI_INPUT_STRATEGY_CLAZZ;
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MAPREDUCE_MULTI_INPUT_MAPPER_SPLIT_SIZE;
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MAPREDUCE_MULTI_INPUT_SPLIT_STRATEGY_CLAZZ;
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MAPREDUCE_MULTI_INPUT_STRATEGY_CLAZZ;
 import static org.apache.phoenix.util.PhoenixRuntime.CONNECTIONLESS;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
@@ -38,63 +35,61 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.junit.Test;
 import org.mockito.Mockito;
 
-
 public class PhoenixMultiViewInputFormatTest {
 
-    private static String CONNECTIONLESS_URL =
-            JDBC_PROTOCOL_ZK + JDBC_PROTOCOL_SEPARATOR + CONNECTIONLESS + JDBC_PROTOCOL_TERMINATOR
-                    + PHOENIX_TEST_DRIVER_URL_PARAM + JDBC_PROTOCOL_TERMINATOR;
+  private static String CONNECTIONLESS_URL =
+    JDBC_PROTOCOL_ZK + JDBC_PROTOCOL_SEPARATOR + CONNECTIONLESS + JDBC_PROTOCOL_TERMINATOR
+      + PHOENIX_TEST_DRIVER_URL_PARAM + JDBC_PROTOCOL_TERMINATOR;
 
-    @Test
-    public void testDefaultConfig() throws Exception {
-        PhoenixMultiViewInputFormat multiViewInputFormat = new PhoenixMultiViewInputFormat();
+  @Test
+  public void testDefaultConfig() throws Exception {
+    PhoenixMultiViewInputFormat multiViewInputFormat = new PhoenixMultiViewInputFormat();
 
-        Configuration config = new Configuration();
-        config.set(MAPREDUCE_MULTI_INPUT_MAPPER_SPLIT_SIZE, "10");
-        PhoenixConfigurationUtil.setInputClusterUrl(config, CONNECTIONLESS_URL);
-        JobContext mockContext = Mockito.mock(JobContext.class);
-        when(mockContext.getConfiguration()).thenReturn(config);
+    Configuration config = new Configuration();
+    config.set(MAPREDUCE_MULTI_INPUT_MAPPER_SPLIT_SIZE, "10");
+    PhoenixConfigurationUtil.setInputClusterUrl(config, CONNECTIONLESS_URL);
+    JobContext mockContext = Mockito.mock(JobContext.class);
+    when(mockContext.getConfiguration()).thenReturn(config);
 
-        // default run should not raise error
-        multiViewInputFormat.getSplits(mockContext);
+    // default run should not raise error
+    multiViewInputFormat.getSplits(mockContext);
+  }
+
+  @Test
+  public void testCustomizedInputStrategyClassNotExists() {
+    PhoenixMultiViewInputFormat multiViewInputFormat = new PhoenixMultiViewInputFormat();
+
+    Configuration config = new Configuration();
+    config.set(MAPREDUCE_MULTI_INPUT_MAPPER_SPLIT_SIZE, "10");
+    config.set(MAPREDUCE_MULTI_INPUT_STRATEGY_CLAZZ, "dummy.path");
+    PhoenixConfigurationUtil.setInputClusterUrl(config, CONNECTIONLESS_URL);
+    JobContext mockContext = Mockito.mock(JobContext.class);
+    when(mockContext.getConfiguration()).thenReturn(config);
+
+    try {
+      multiViewInputFormat.getSplits(mockContext);
+      fail();
+    } catch (Exception e) {
+      assertTrue(e.getMessage().contains("ClassNotFoundException"));
     }
+  }
 
+  @Test
+  public void testCustomizedInputSplitClassNotExists() {
+    PhoenixMultiViewInputFormat multiViewInputFormat = new PhoenixMultiViewInputFormat();
 
-    @Test
-    public void testCustomizedInputStrategyClassNotExists() {
-        PhoenixMultiViewInputFormat multiViewInputFormat = new PhoenixMultiViewInputFormat();
+    Configuration config = new Configuration();
+    config.set(MAPREDUCE_MULTI_INPUT_MAPPER_SPLIT_SIZE, "10");
+    config.set(MAPREDUCE_MULTI_INPUT_SPLIT_STRATEGY_CLAZZ, "dummy.path");
+    PhoenixConfigurationUtil.setInputClusterUrl(config, CONNECTIONLESS_URL);
+    JobContext mockContext = Mockito.mock(JobContext.class);
+    when(mockContext.getConfiguration()).thenReturn(config);
 
-        Configuration config = new Configuration();
-        config.set(MAPREDUCE_MULTI_INPUT_MAPPER_SPLIT_SIZE, "10");
-        config.set(MAPREDUCE_MULTI_INPUT_STRATEGY_CLAZZ, "dummy.path");
-        PhoenixConfigurationUtil.setInputClusterUrl(config, CONNECTIONLESS_URL);
-        JobContext mockContext = Mockito.mock(JobContext.class);
-        when(mockContext.getConfiguration()).thenReturn(config);
-
-        try {
-            multiViewInputFormat.getSplits(mockContext);
-            fail();
-        } catch (Exception e) {
-            assertTrue(e.getMessage().contains("ClassNotFoundException"));
-        }
+    try {
+      multiViewInputFormat.getSplits(mockContext);
+      fail();
+    } catch (Exception e) {
+      assertTrue(e.getMessage().contains("ClassNotFoundException"));
     }
-
-    @Test
-    public void testCustomizedInputSplitClassNotExists() {
-        PhoenixMultiViewInputFormat multiViewInputFormat = new PhoenixMultiViewInputFormat();
-
-        Configuration config = new Configuration();
-        config.set(MAPREDUCE_MULTI_INPUT_MAPPER_SPLIT_SIZE, "10");
-        config.set(MAPREDUCE_MULTI_INPUT_SPLIT_STRATEGY_CLAZZ, "dummy.path");
-        PhoenixConfigurationUtil.setInputClusterUrl(config, CONNECTIONLESS_URL);
-        JobContext mockContext = Mockito.mock(JobContext.class);
-        when(mockContext.getConfiguration()).thenReturn(config);
-
-        try {
-            multiViewInputFormat.getSplits(mockContext);
-            fail();
-        } catch (Exception e) {
-            assertTrue(e.getMessage().contains("ClassNotFoundException"));
-        }
-    }
+  }
 }

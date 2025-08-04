@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,7 +25,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Properties;
-
 import org.apache.phoenix.query.QueryServices;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -33,21 +32,20 @@ import org.junit.experimental.categories.Category;
 @Category(ParallelStatsDisabledTest.class)
 public class StoreNullsPropIT extends ParallelStatsDisabledIT {
 
-    @Test
-    public void testSetStoreNullsDefaultViaConfig() throws SQLException {
-        Properties props = new Properties();
-        props.setProperty(QueryServices.DEFAULT_STORE_NULLS_ATTRIB, "true");
-        Connection storeNullsConn = DriverManager.getConnection(getUrl(), props);
+  @Test
+  public void testSetStoreNullsDefaultViaConfig() throws SQLException {
+    Properties props = new Properties();
+    props.setProperty(QueryServices.DEFAULT_STORE_NULLS_ATTRIB, "true");
+    Connection storeNullsConn = DriverManager.getConnection(getUrl(), props);
 
-        Statement stmt = storeNullsConn.createStatement();
-        stmt.execute("CREATE TABLE with_nulls_default (" +
-                "id smallint primary key," +
-                "name varchar)");
+    Statement stmt = storeNullsConn.createStatement();
+    stmt
+      .execute("CREATE TABLE with_nulls_default (" + "id smallint primary key," + "name varchar)");
 
-        ResultSet rs = stmt.executeQuery("SELECT store_nulls FROM \"SYSTEM\".CATALOG " +
-                "WHERE table_name = 'WITH_NULLS_DEFAULT' AND store_nulls is not null");
-        assertTrue(rs.next());
-        assertTrue(rs.getBoolean(1));
-    }
-    
+    ResultSet rs = stmt.executeQuery("SELECT store_nulls FROM \"SYSTEM\".CATALOG "
+      + "WHERE table_name = 'WITH_NULLS_DEFAULT' AND store_nulls is not null");
+    assertTrue(rs.next());
+    assertTrue(rs.getBoolean(1));
+  }
+
 }

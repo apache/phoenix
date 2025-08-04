@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,11 +18,9 @@
 package org.apache.phoenix.iterate;
 
 import java.sql.SQLException;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.QueryPlan;
@@ -35,50 +33,52 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 public class DelayedTableResultIteratorFactory implements TableResultIteratorFactory {
-    
-    private final long delay;
-    
-    public DelayedTableResultIteratorFactory(long delay) {
-        this.delay = delay;
-    }
-    
-    @Override
-    public TableResultIterator newIterator(MutationState mutationState, TableRef tableRef,
-            Scan scan, ScanMetricsHolder scanMetricsHolder, long renewLeaseThreshold,
-            QueryPlan plan, ParallelScanGrouper scanGrouper, Map<ImmutableBytesPtr,ServerCache> caches,
-            long maxQueryEndTime) throws SQLException {
-        return new DelayedTableResultIterator(mutationState, tableRef, scan, scanMetricsHolder,
-                renewLeaseThreshold, plan, scanGrouper, caches, maxQueryEndTime);
+
+  private final long delay;
+
+  public DelayedTableResultIteratorFactory(long delay) {
+    this.delay = delay;
+  }
+
+  @Override
+  public TableResultIterator newIterator(MutationState mutationState, TableRef tableRef, Scan scan,
+    ScanMetricsHolder scanMetricsHolder, long renewLeaseThreshold, QueryPlan plan,
+    ParallelScanGrouper scanGrouper, Map<ImmutableBytesPtr, ServerCache> caches,
+    long maxQueryEndTime) throws SQLException {
+    return new DelayedTableResultIterator(mutationState, tableRef, scan, scanMetricsHolder,
+      renewLeaseThreshold, plan, scanGrouper, caches, maxQueryEndTime);
+  }
+
+  private class DelayedTableResultIterator extends TableResultIterator {
+    public DelayedTableResultIterator(MutationState mutationState, TableRef tableRef, Scan scan,
+      ScanMetricsHolder scanMetricsHolder, long renewLeaseThreshold, QueryPlan plan,
+      ParallelScanGrouper scanGrouper, Map<ImmutableBytesPtr, ServerCache> caches,
+      long maxQueryEndTime) throws SQLException {
+      super(mutationState, scan, scanMetricsHolder, renewLeaseThreshold, plan, scanGrouper, caches,
+        maxQueryEndTime);
     }
 
-    private class DelayedTableResultIterator extends TableResultIterator {
-        public DelayedTableResultIterator(MutationState mutationState, TableRef tableRef, Scan scan,
-                ScanMetricsHolder scanMetricsHolder, long renewLeaseThreshold, QueryPlan plan,
-                ParallelScanGrouper scanGrouper, Map<ImmutableBytesPtr,ServerCache> caches, long maxQueryEndTime) throws SQLException {
-            super(mutationState, scan, scanMetricsHolder, renewLeaseThreshold, plan, scanGrouper, caches, maxQueryEndTime);
-        }
-        
-        @Override
-        public synchronized void initScanner() throws SQLException {
-            super.initScanner();
-        }
-        
-        @Override
-        public Tuple next() throws SQLException {
-            delay();
-            return super.next();
-        }
-        
-        private void delay() throws SQLException {
-            try {
-                new CountDownLatch(1).await(delay, TimeUnit.MILLISECONDS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION).setRootCause(e).build().buildException();
-            }
-        }
-        
-        
+    @Override
+    public synchronized void initScanner() throws SQLException {
+      super.initScanner();
     }
+
+    @Override
+    public Tuple next() throws SQLException {
+      delay();
+      return super.next();
+    }
+
+    private void delay() throws SQLException {
+      try {
+        new CountDownLatch(1).await(delay, TimeUnit.MILLISECONDS);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION).setRootCause(e)
+          .build().buildException();
+      }
+    }
+
+  }
 
 }

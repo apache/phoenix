@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.pherf.workload.mt.operations;
 
 import org.apache.phoenix.pherf.configuration.Query;
@@ -25,5 +24,5 @@ import org.apache.phoenix.pherf.configuration.Query;
  * @see {@link OperationType#SELECT}
  */
 public interface QueryOperation extends Operation {
-    Query getQuery();
+  Query getQuery();
 }
