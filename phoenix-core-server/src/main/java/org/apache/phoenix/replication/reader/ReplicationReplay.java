@@ -103,7 +103,7 @@ public class ReplicationReplay {
         initializeFileSystem();
         ReplicationLogReplayFileTracker replicationLogReplayFileTracker = new ReplicationLogReplayFileTracker(conf, haGroupName, fileSystem, rootURI);
         replicationLogReplayFileTracker.init();
-        ReplicationStateTracker replicationStateTracker = new ReplicationStateTracker();
+        ReplicationReplayStateTracker replicationStateTracker = new ReplicationReplayStateTracker();
         replicationStateTracker.init(replicationLogReplayFileTracker);
         this.replicationReplayLogDiscovery = new ReplicationReplayLogDiscovery(replicationLogReplayFileTracker, replicationStateTracker);
         this.replicationReplayLogDiscovery.init();

@@ -21,7 +21,6 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscovery;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogFileTracker;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -165,6 +164,7 @@ public abstract class ReplicationLogDiscovery {
         LOG.info("Number of rounds to process: {}", replicationRoundList.size());
         for(ReplicationRound replicationRound : replicationRoundList) {
             processRound(replicationRound);
+            updateStatePostRoundCompletion(replicationRound);
         }
     }
 
@@ -174,7 +174,7 @@ public abstract class ReplicationLogDiscovery {
      */
     protected List<ReplicationRound> getRoundsToProcess() {
         long currentTime = EnvironmentEdgeManager.currentTimeMillis();
-        long previousRoundEndTime = replicationStateTracker.getLastSuccessfullyProcessedRound().getEndTime();
+        long previousRoundEndTime = replicationStateTracker.getLastRoundInSync().getEndTime();
         long roundTimeMills = replicationLogFileTracker.getReplicationShardDirectoryManager().getReplicationRoundDurationSeconds() * 1000L;
         long bufferMillis = (long) (roundTimeMills * getWaitingBufferPercentage() / 100.0);
         final List<ReplicationRound> replicationRounds = new ArrayList<>();
@@ -225,11 +225,7 @@ public abstract class ReplicationLogDiscovery {
         List<Path> files = replicationLogFileTracker.getNewFilesForRound(replicationRound);
         LOG.trace("Number of new files for round {} is {}", replicationRound, files.size());
         while(!files.isEmpty()) {
-            try {
-                processOneRandomFile(files);
-            } catch (IOException exception) {
-                LOG.error("Failed to process the file for round with start time {} and end time {}", replicationRound.getStartTime(), replicationRound.getEndTime(), exception);
-            }
+            processOneRandomFile(files);
             files = replicationLogFileTracker.getNewFilesForRound(replicationRound);
         }
         long duration = EnvironmentEdgeManager.currentTimeMillis() - startTime;
@@ -250,11 +246,7 @@ public abstract class ReplicationLogDiscovery {
         List<Path> files = replicationLogFileTracker.getInProgressFiles();
         LOG.info("Number of new files for in_progress: {}", files.size());
         while(!files.isEmpty()) {
-            try {
-                processOneRandomFile(files);
-            } catch (IOException exception) {
-                LOG.error("Failed to process the file for in progress directory", exception);
-            }
+            processOneRandomFile(files);
             files = replicationLogFileTracker.getInProgressFiles();
         }
         long duration = EnvironmentEdgeManager.currentTimeMillis() - startTime;
@@ -291,6 +283,8 @@ public abstract class ReplicationLogDiscovery {
      * @throws IOException if there's an error during file processing
      */
     protected abstract void processFile(Path path) throws IOException;
+
+    protected abstract void updateStatePostRoundCompletion(ReplicationRound replicationRound) throws IOException;
 
     /** Creates a new metrics source for monitoring operations. */
     protected abstract MetricsReplicationLogDiscovery createMetricsSource();

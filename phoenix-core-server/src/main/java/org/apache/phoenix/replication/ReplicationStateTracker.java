@@ -19,47 +19,34 @@ package org.apache.phoenix.replication;
 
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 
 /**
- * This class tracks the last successfully processed replication round for single HA Group
+ * This class tracks the last round in sync for replication.
  */
-public class ReplicationStateTracker {
+public abstract class ReplicationStateTracker {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ReplicationStateTracker.class);
+    protected ReplicationRound lastRoundInSync;
 
-    private ReplicationRound lastSuccessfullyProcessedReplicationRound;
+    public abstract void init(ReplicationLogFileTracker replicationLogFileTracker) throws IOException;
 
-    public void init(ReplicationLogFileTracker replicationLogFileTracker) throws IOException {
-        initLastSuccessfullyProcessedRound(replicationLogFileTracker);
+    protected Optional<Long> getMinTimestampFromInProgressFiles(final ReplicationLogFileTracker replicationLogFileTracker) throws IOException {
+        List<Path> inProgressFiles = replicationLogFileTracker.getInProgressFiles();
+        if(inProgressFiles.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(getMinTimestampFromFiles(replicationLogFileTracker, inProgressFiles));
     }
 
-    protected void initLastSuccessfullyProcessedRound(final ReplicationLogFileTracker replicationLogFileTracker) throws IOException {
-        // First check in-progress directory
-        List<Path> inProgressFiles = replicationLogFileTracker.getInProgressFiles();
-        if (!inProgressFiles.isEmpty()) {
-            long minTimestamp = getMinTimestampFromFiles(replicationLogFileTracker, inProgressFiles);
-            this.lastSuccessfullyProcessedReplicationRound = replicationLogFileTracker.getReplicationShardDirectoryManager().getReplicationRoundFromEndTime(minTimestamp);
-            return;
-        }
-
-        // If no in-progress files, check IN directory
-        // Get files from all shard directories in the IN directory
+    protected Optional<Long> getMinTimestampFromNewFiles(final ReplicationLogFileTracker replicationLogFileTracker) throws IOException {
         List<Path> newFiles = replicationLogFileTracker.getNewFiles();
-        if (!newFiles.isEmpty()) {
-            long minTimestamp = getMinTimestampFromFiles(replicationLogFileTracker, newFiles);
-            this.lastSuccessfullyProcessedReplicationRound = replicationLogFileTracker.getReplicationShardDirectoryManager().getReplicationRoundFromEndTime(minTimestamp);
-            return;
+        if(newFiles.isEmpty()) {
+            return Optional.empty();
         }
-
-        // If no files found, set it to current time
-        this.lastSuccessfullyProcessedReplicationRound = replicationLogFileTracker.getReplicationShardDirectoryManager().getReplicationRoundFromEndTime(EnvironmentEdgeManager.currentTime());
-
-        LOG.info("Initialized lastSuccessfullyProcessedReplicationRound as {}", lastSuccessfullyProcessedReplicationRound);
+        return Optional.of(getMinTimestampFromFiles(replicationLogFileTracker, newFiles));
     }
 
     private long getMinTimestampFromFiles(ReplicationLogFileTracker replicationLogFileTracker, List<Path> files) {
@@ -70,7 +57,11 @@ public class ReplicationStateTracker {
         return minTimestamp;
     }
 
-    public ReplicationRound getLastSuccessfullyProcessedRound() {
-        return lastSuccessfullyProcessedReplicationRound;
+    public ReplicationRound getLastRoundInSync() {
+        return lastRoundInSync;
+    }
+
+    public void setLastRoundInSync(final ReplicationRound replicationRound) {
+        this.lastRoundInSync = replicationRound;
     }
 }
