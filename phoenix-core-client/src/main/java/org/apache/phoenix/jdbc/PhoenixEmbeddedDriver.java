@@ -162,8 +162,6 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
     queryServiceName = ((PhoenixConnection) connection).getQueryServices().getConfiguration()
       .get(QUERY_SERVICES_NAME);
     setConnectionCreationDurationMetric(queryServiceName, connectionCreationStartTime, connection);
-    Map<String, List<ConnectionQueryServicesMetric>> metrics =
-      ConnectionQueryServicesMetricsManager.getAllConnectionQueryServicesMetrics();
     return connection;
   }
 
