@@ -331,7 +331,7 @@ public class WhereCompiler {
     private boolean hasTotalSegments = false;
     private Integer totalSegmentsValue;
 
-    public ScanBoundaryExtractingCompiler(StatementContext context) {
+    private ScanBoundaryExtractingCompiler(StatementContext context) {
       super(context);
     }
 

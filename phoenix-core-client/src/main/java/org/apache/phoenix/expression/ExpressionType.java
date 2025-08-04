@@ -18,8 +18,10 @@
 package org.apache.phoenix.expression;
 
 import java.util.Map;
+import java.util.Set;
 import org.apache.phoenix.expression.function.*;
 
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSet;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
@@ -209,6 +211,10 @@ public enum ExpressionType {
   ExpressionType(Class<? extends Expression> clazz) {
     this.clazz = clazz;
   }
+
+  public static final Set<Class<? extends Expression>> EXPRESSION_TYPES_NOT_SUPPORTED_AT_SERVER =
+    ImmutableSet.of(ScanStartKeyFunction.getExpressionClass(),
+      ScanEndKeyFunction.getExpressionClass(), TotalSegmentsFunction.getExpressionClass());
 
   public Class<? extends Expression> getExpressionClass() {
     return clazz;
