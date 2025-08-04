@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTION_CREATION_TIME_MS;
+import static org.apache.phoenix.query.QueryServices.QUERY_SERVICES_NAME;
 import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 
 import java.sql.Connection;
@@ -24,17 +26,22 @@ import java.sql.Driver;
 import java.sql.DriverPropertyInfo;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.logging.Logger;
 import javax.annotation.concurrent.Immutable;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
+import org.apache.phoenix.monitoring.ConnectionQueryServicesMetric;
+import org.apache.phoenix.monitoring.connectionqueryservice.ConnectionQueryServicesMetricsManager;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
 
@@ -119,31 +126,52 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
 
   @Override
   public Connection connect(String url, Properties info) throws SQLException {
+    long connectionCreationStartTime = EnvironmentEdgeManager.currentTimeMillis();
     if (!acceptsURL(url)) {
       return null;
     }
 
-    return createConnection(url, info);
+    return createConnection(url, info, connectionCreationStartTime);
   }
 
-  protected final Connection createConnection(String url, Properties info) throws SQLException {
+  protected final Connection createConnection(String url, Properties info, long connectionCreationStartTime) throws SQLException {
     Properties augmentedInfo = PropertiesUtil.deepCopy(info);
     augmentedInfo.putAll(getDefaultProps().asMap());
+    Connection connection = null;
+    String queryServiceName = null;
     if (url.contains("|")) {
       // Get HAURLInfo to pass it to connection creation
       HAURLInfo haurlInfo = HighAvailabilityGroup.getUrlInfo(url, augmentedInfo);
       // High availability connection using two clusters
       Optional<HighAvailabilityGroup> haGroup = HighAvailabilityGroup.get(url, augmentedInfo);
       if (haGroup.isPresent()) {
-        return haGroup.get().connect(augmentedInfo, haurlInfo);
+        connection = haGroup.get().connect(augmentedInfo, haurlInfo);
+        queryServiceName = haurlInfo.getPrincipal();
+        // We are overwriting connection creation time metrics if the connection is created via
+        // DriverManager.getConnection()
+        setConnectionCreationDurationMetric(queryServiceName, connectionCreationStartTime, connection);
+        return connection;
       } else {
         // If empty HA group is returned, fall back to single cluster.
         url = HighAvailabilityGroup.getFallbackCluster(url, info).orElseThrow(
-          () -> new SQLException("HA group can not be initialized, fallback to single cluster"));
+            () -> new SQLException("HA group can not be initialized, fallback to single cluster"));
       }
     }
     ConnectionQueryServices cqs = getConnectionQueryServices(url, augmentedInfo);
-    return cqs.connect(url, augmentedInfo);
+    connection = cqs.connect(url, augmentedInfo);
+    queryServiceName =
+        ((PhoenixConnection) connection).getQueryServices().getConfiguration()
+            .get(QUERY_SERVICES_NAME);
+    setConnectionCreationDurationMetric(queryServiceName, connectionCreationStartTime, connection);
+    Map<String, List<ConnectionQueryServicesMetric>> metrics =
+        ConnectionQueryServicesMetricsManager.getAllConnectionQueryServicesMetrics();
+    return connection;
+  }
+
+  private void setConnectionCreationDurationMetric(String queryServiceName, long connectionCreationTime, Connection connection) {
+    ConnectionQueryServicesMetricsManager.updateMetrics(queryServiceName,
+        PHOENIX_CONNECTION_CREATION_TIME_MS,
+        EnvironmentEdgeManager.currentTimeMillis() - connectionCreationTime);
   }
 
   /**

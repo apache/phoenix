@@ -19,13 +19,14 @@ package org.apache.phoenix.jdbc;
 
 import static org.apache.hadoop.test.GenericTestUtils.waitFor;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
+import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair.PRINCIPAL;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair.doTestWhenOneHBaseDown;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithConnection;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.apache.phoenix.query.QueryServices.CONNECTION_QUERY_SERVICE_METRICS_ENABLED;
+import static org.apache.phoenix.util.PhoenixRuntime.clearAllConnectionQueryServiceMetrics;
+import static org.junit.Assert.*;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assume.assumeTrue;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
@@ -37,11 +38,18 @@ import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.RegistryType;
+import org.apache.phoenix.monitoring.ConnectionQueryServicesMetric;
+import org.apache.phoenix.monitoring.MetricType;
+import org.apache.phoenix.query.ConfigurationFactory;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
+import org.apache.phoenix.util.InstanceResolver;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -88,6 +96,24 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
   public static void setUpBeforeClass() throws Exception {
     CLUSTERS.start();
     DriverManager.registerDriver(PhoenixDriver.INSTANCE);
+    InstanceResolver.clearSingletons();
+    InstanceResolver.getSingleton(ConfigurationFactory.class, new ConfigurationFactory() {
+      @Override
+      public Configuration getConfiguration() {
+        Configuration conf = HBaseConfiguration.create();
+        conf.set(CONNECTION_QUERY_SERVICE_METRICS_ENABLED, String.valueOf(true));
+        return conf;
+      }
+
+      @Override
+      public Configuration getConfiguration(Configuration confToClone) {
+        Configuration conf = HBaseConfiguration.create();
+        conf.set(CONNECTION_QUERY_SERVICE_METRICS_ENABLED, String.valueOf(true));
+        Configuration copy = new Configuration(conf);
+        copy.addResource(confToClone);
+        return copy;
+      }
+    });
   }
 
   @AfterClass
@@ -563,6 +589,26 @@ public class HAConnectionWithMasterAndRPCRegistryIT {
       assertFalse(PhoenixDriver.INSTANCE.checkIfCQSIIsInCache(connInfoP));
     } catch (Exception e) {
       fail("Should have thrown on IllegalStateException as cqsi should be closed");
+    }
+  }
+
+  @Test
+  public void testConnectionCreationDuration() throws SQLException {
+    clearAllConnectionQueryServiceMetrics();
+    Connection conn = getParallelConnection();
+    validateConnectionCreationTime(conn);
+
+    conn = getFailoverConnection();
+    validateConnectionCreationTime(conn);
+  }
+
+  private void validateConnectionCreationTime(Connection connection) {
+    Map<String, List<ConnectionQueryServicesMetric>> metrics = PhoenixRuntime.getAllConnectionQueryServicesMetrics();
+    assertNotNull(connection);
+    for (ConnectionQueryServicesMetric metric : metrics.get(PRINCIPAL)) {
+      if (metric.getMetricType().equals(MetricType.PHOENIX_CONNECTION_CREATION_TIME_MS)) {
+        assertNotEquals(0, metric.getValue());
+      }
     }
   }
 
