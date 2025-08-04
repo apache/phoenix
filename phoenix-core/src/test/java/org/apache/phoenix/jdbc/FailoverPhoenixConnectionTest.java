@@ -59,15 +59,18 @@ public class FailoverPhoenixConnectionTest {
     @Mock HighAvailabilityGroup haGroup;
 
     final HAGroupInfo haGroupInfo = new HAGroupInfo("fake", "zk1", "zk2");
+    final HAURLInfo haURLInfo = new HAURLInfo("fake");
+    FailoverPhoenixContext context;
     FailoverPhoenixConnection failoverConnection; // this connection itself is not mocked or spied.
+
 
     @Before
     public void init() throws SQLException {
         MockitoAnnotations.initMocks(this);
         when(haGroup.getGroupInfo()).thenReturn(haGroupInfo);
-        when(haGroup.connectActive(any(Properties.class))).thenReturn(connection1);
-
-        failoverConnection = new FailoverPhoenixConnection(haGroup, new Properties());
+        when(haGroup.connectActive(any(Properties.class), any(HAURLInfo.class))).thenReturn(connection1);
+        context = new FailoverPhoenixContext(new Properties(), haGroup, haURLInfo);
+        failoverConnection = new FailoverPhoenixConnection(context);
     }
 
     /**
@@ -92,7 +95,7 @@ public class FailoverPhoenixConnectionTest {
     @Test
     public void testFailover() throws SQLException {
         // Make HAGroup return a different phoenix connection when it gets called next time
-        when(haGroup.connectActive(any(Properties.class))).thenReturn(connection2);
+        when(haGroup.connectActive(any(Properties.class), any(HAURLInfo.class))).thenReturn(connection2);
 
         // explicit call failover
         failoverConnection.failover(1000L);
@@ -128,7 +131,7 @@ public class FailoverPhoenixConnectionTest {
     public void testActiveFailoverIsNoOp() throws SQLException {
         when(haGroup.isActive(connection1)).thenReturn(true);
         // Make HAGroup return a different phoenix connection when it gets called next time
-        when(haGroup.connectActive(any(Properties.class))).thenReturn(connection2);
+        when(haGroup.connectActive(any(Properties.class), any(HAURLInfo.class))).thenReturn(connection2);
 
         failoverConnection.failover(1000L);
 
@@ -145,11 +148,12 @@ public class FailoverPhoenixConnectionTest {
         Properties properties = new Properties();
         properties.setProperty(FailoverPolicy.PHOENIX_HA_FAILOVER_POLICY_ATTR,
                 FailoverPolicy.FailoverToActivePolicy.NAME);
-        failoverConnection = new FailoverPhoenixConnection(haGroup, properties);
+        FailoverPhoenixContext context = new FailoverPhoenixContext(properties, haGroup, haURLInfo);
+        failoverConnection = new FailoverPhoenixConnection(context);
 
         LOG.info("Close the wrapped phoenix connection due to failover...");
         // Make HAGroup return a different phoenix connection when it gets called next time
-        when(haGroup.connectActive(any(Properties.class))).thenReturn(connection2);
+        when(haGroup.connectActive(any(Properties.class), any(HAURLInfo.class))).thenReturn(connection2);
         // Mimic wrapped phoenix connection gets closed by HA group
         doThrow(new FailoverSQLException("", "", new Exception())).when(connection1).commit();
 
@@ -204,8 +208,8 @@ public class FailoverPhoenixConnectionTest {
     @Test
     public void testCheckConnection() throws SQLException {
         // Make the wrapped phoenix connection null. This could happen if HAGroup is failing.
-        when(haGroup.connectActive(any(Properties.class))).thenReturn(null);
-        failoverConnection = new FailoverPhoenixConnection(haGroup, new Properties());
+        when(haGroup.connectActive(any(Properties.class), any(HAURLInfo.class))).thenReturn(null);
+        failoverConnection = new FailoverPhoenixConnection(context);
         assertNull(failoverConnection.getWrappedConnection());
 
         try {
