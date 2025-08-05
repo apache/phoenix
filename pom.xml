@@ -2066,6 +2066,41 @@
         </plugins>
       </build>
     </profile>
+    <!-- Duplicate the functionality of MPOM-451 for our older ASF parent pom -->
+    <profile>
+      <id>dont-use-apache-snapshots</id>
+      <activation>
+        <property>
+          <name>!apache.snapshots</name>
+        </property>
+      </activation>
+      <repositories>
+        <repository>
+          <releases>
+            <enabled>false</enabled>
+          </releases>
+          <snapshots>
+            <enabled>false</enabled>
+          </snapshots>
+          <id>apache.snapshots</id>
+          <name>Apache Snapshot Repository</name>
+          <url>https://repository.apache.org/snapshots</url>
+        </repository>
+      </repositories>
+      <pluginRepositories>
+        <pluginRepository>
+          <releases>
+            <enabled>false</enabled>
+          </releases>
+          <snapshots>
+            <enabled>false</enabled>
+          </snapshots>
+          <id>apache.snapshots</id>
+          <name>Apache Snapshot Repository</name>
+          <url>https://repository.apache.org/snapshots</url>
+        </pluginRepository>
+      </pluginRepositories>
+    </profile>
     <!-- See BUILDING.md for profile selection-->
     <!-- The dependencies should be defined only in phoenix-core
     ,but maven doesn't seem to support that -->
