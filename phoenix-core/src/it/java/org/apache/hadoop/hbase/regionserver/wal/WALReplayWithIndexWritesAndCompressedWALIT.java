@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.hadoop.hbase.regionserver.wal;
 
 import static org.junit.Assert.assertEquals;
@@ -26,7 +25,6 @@ import static org.mockito.Mockito.when;
 
 import java.io.IOException;
 import java.util.List;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -79,7 +77,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * For pre-0.94.9 instances, this class tests correctly deserializing WALEdits w/o compression. Post
- * 0.94.9 we can support a custom  {@link WALCellCodec} which handles reading/writing the compressed
+ * 0.94.9 we can support a custom {@link WALCellCodec} which handles reading/writing the compressed
  * edits.
  * <p>
  * Most of the underlying work (creating/splitting the WAL, etc) is from
@@ -94,7 +92,7 @@ import org.slf4j.LoggerFactory;
 public class WALReplayWithIndexWritesAndCompressedWALIT {
 
   public static final Logger LOGGER =
-          LoggerFactory.getLogger(WALReplayWithIndexWritesAndCompressedWALIT.class);
+    LoggerFactory.getLogger(WALReplayWithIndexWritesAndCompressedWALIT.class);
   @Rule
   public IndexTableName table = new IndexTableName();
   private String INDEX_TABLE_NAME = table.getTableNameString() + "_INDEX";
@@ -157,14 +155,12 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
 
   @After
   public void tearDown() throws Exception {
-    boolean refCountLeaked = BaseTest.isAnyStoreRefCountLeaked(
-        UTIL.getAdmin());
+    boolean refCountLeaked = BaseTest.isAnyStoreRefCountLeaked(UTIL.getAdmin());
     UTIL.shutdownMiniHBaseCluster();
     UTIL.shutdownMiniDFSCluster();
     UTIL.shutdownMiniZKCluster();
     assertFalse("refCount leaked", refCountLeaked);
   }
-
 
   private void deleteDir(final Path p) throws IOException {
     if (this.fs.exists(p)) {
@@ -179,18 +175,16 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
    * seqids.
    * @throws Exception on failure
    */
-@Test
+  @Test
   public void testReplayEditsWrittenViaHRegion() throws Exception {
-      final String tableNameStr = "testReplayEditsWrittenViaHRegion";
-      final RegionInfo hri =
-              RegionInfoBuilder.newBuilder(TableName.valueOf(tableNameStr))
-                      .setSplit(false).build();
-      final Path basedir =
-              CommonFSUtils.getTableDir(hbaseRootDir, TableName.valueOf(tableNameStr));
-      deleteDir(basedir);
-      final TableDescriptor htd = createBasic3FamilyHTD(tableNameStr);
-    
-    //setup basic indexing for the table
+    final String tableNameStr = "testReplayEditsWrittenViaHRegion";
+    final RegionInfo hri =
+      RegionInfoBuilder.newBuilder(TableName.valueOf(tableNameStr)).setSplit(false).build();
+    final Path basedir = CommonFSUtils.getTableDir(hbaseRootDir, TableName.valueOf(tableNameStr));
+    deleteDir(basedir);
+    final TableDescriptor htd = createBasic3FamilyHTD(tableNameStr);
+
+    // setup basic indexing for the table
     // enable indexing to a non-existant index table
     byte[] family = new byte[] { 'a' };
     ColumnGroup fam1 = new ColumnGroup(INDEX_TABLE_NAME);
@@ -202,7 +196,8 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
 
     WAL wal = createWAL(this.conf, walFactory);
     // create the region + its WAL
-    HRegion region0 = HRegion.createHRegion(hri, hbaseRootDir, this.conf, htd, wal); // FIXME: Uses private type
+    HRegion region0 = HRegion.createHRegion(hri, hbaseRootDir, this.conf, htd, wal); // FIXME: Uses
+                                                                                     // private type
     region0.close();
     region0.getWAL().close();
 
@@ -214,9 +209,10 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     ServerName mockServerName = Mockito.mock(ServerName.class);
     when(mockServerName.getServerName()).thenReturn(tableNameStr + ",1234");
     when(mockRS.getServerName()).thenReturn(mockServerName);
-    HRegion region = spy(HRegion.createHRegion(hri, hbaseRootDir, this.conf, htd, wal, true, mockRS));
+    HRegion region =
+      spy(HRegion.createHRegion(hri, hbaseRootDir, this.conf, htd, wal, true, mockRS));
 
-    //make an attempted write to the primary that should also be indexed
+    // make an attempted write to the primary that should also be indexed
     byte[] rowkey = Bytes.toBytes("indexed_row_key");
     Put p = new Put(rowkey);
     p.addColumn(family, Bytes.toBytes("qual"), Bytes.toBytes("value"));
@@ -235,7 +231,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     HRegion region1 = HRegion.createHRegion(hri, hbaseRootDir, this.conf, htd, wal, true, mockRS);
 
     org.apache.hadoop.hbase.client.Connection hbaseConn =
-            ConnectionFactory.createConnection(UTIL.getConfiguration());
+      ConnectionFactory.createConnection(UTIL.getConfiguration());
 
     // now check to ensure that we wrote to the index table
     Table index = hbaseConn.getTable(TableName.valueOf(INDEX_TABLE_NAME));
@@ -255,11 +251,11 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
   /**
    * Create simple HTD with three families: 'a', 'b', and 'c'
    * @param tableName name of the table descriptor
-   * @return
    */
   private TableDescriptor createBasic3FamilyHTD(final String tableName) {
-    TableDescriptorBuilder tableBuilder = TableDescriptorBuilder.newBuilder(TableName.valueOf(tableName));
-    ColumnFamilyDescriptor  a = ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("a"));
+    TableDescriptorBuilder tableBuilder =
+      TableDescriptorBuilder.newBuilder(TableName.valueOf(tableName));
+    ColumnFamilyDescriptor a = ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("a"));
     tableBuilder.setColumnFamily(a);
     ColumnFamilyDescriptor b = ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("b"));
     tableBuilder.setColumnFamily(b);
@@ -269,9 +265,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
   }
 
   /*
-   * @param c
    * @return WAL with retries set down from 5 to 1 only.
-   * @throws IOException
    */
   private WAL createWAL(final Configuration c, WALFactory walFactory) throws IOException {
     WAL wal = walFactory.getWAL(null);
@@ -284,15 +278,13 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
 
   /*
    * Run the split. Verify only single split file made.
-   * @param c
    * @return The single split file made
-   * @throws IOException
    */
   private Path runWALSplit(final Configuration c, WALFactory walFactory) throws IOException {
     FileSystem fs = FileSystem.get(c);
-    
-    List<Path> splits = WALSplitter.split(this.hbaseRootDir, new Path(this.logDir, "localhost,1234"),
-        this.oldLogDir, fs, c, walFactory);
+
+    List<Path> splits = WALSplitter.split(this.hbaseRootDir,
+      new Path(this.logDir, "localhost,1234"), this.oldLogDir, fs, c, walFactory);
     // Split should generate only 1 file since there's only 1 region
     assertEquals("splits=" + splits, 1, splits.size());
     // Make sure the file exists
@@ -302,7 +294,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
   }
 
   @SuppressWarnings("deprecation")
-private int getKeyValueCount(Table table) throws IOException {
+  private int getKeyValueCount(Table table) throws IOException {
     Scan scan = new Scan();
     scan.setMaxVersions(Integer.MAX_VALUE - 1);
 

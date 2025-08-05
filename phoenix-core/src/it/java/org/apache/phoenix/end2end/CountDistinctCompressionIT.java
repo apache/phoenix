@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -29,7 +29,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Map;
 import java.util.Properties;
-
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -37,36 +36,37 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class CountDistinctCompressionIT extends BaseTest {
-    @BeforeClass
-    public static synchronized void doSetup() throws Exception {
-        Map<String, String> props = Maps.newHashMapWithExpectedSize(3);
-        // Must update config before starting server
-        props.put(QueryServices.DISTINCT_VALUE_COMPRESS_THRESHOLD_ATTRIB, Long.toString(1));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+  @BeforeClass
+  public static synchronized void doSetup() throws Exception {
+    Map<String, String> props = Maps.newHashMapWithExpectedSize(3);
+    // Must update config before starting server
+    props.put(QueryServices.DISTINCT_VALUE_COMPRESS_THRESHOLD_ATTRIB, Long.toString(1));
+    setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+  }
+
+  @Test
+  public void testDistinctCountOnColumn() throws Exception {
+    String tenantId = getOrganizationId();
+    String tableName = initATableValues(null, tenantId, getDefaultSplits(tenantId), (Date) null,
+      null, getUrl(), null);
+
+    String query = "SELECT count(DISTINCT A_STRING) FROM " + tableName;
+
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    Connection conn = DriverManager.getConnection(getUrl(), props);
+    try {
+      PreparedStatement statement = conn.prepareStatement(query);
+      ResultSet rs = statement.executeQuery();
+      assertTrue(rs.next());
+      assertEquals(3, rs.getLong(1));
+      assertFalse(rs.next());
+    } finally {
+      conn.close();
     }
-
-    @Test
-    public void testDistinctCountOnColumn() throws Exception {
-        String tenantId = getOrganizationId();
-        String tableName = initATableValues(null, tenantId, getDefaultSplits(tenantId), (Date)null, null, getUrl(), null);
-
-        String query = "SELECT count(DISTINCT A_STRING) FROM " + tableName;
-
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            PreparedStatement statement = conn.prepareStatement(query);
-            ResultSet rs = statement.executeQuery();
-            assertTrue(rs.next());
-            assertEquals(3, rs.getLong(1));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-    }
+  }
 }

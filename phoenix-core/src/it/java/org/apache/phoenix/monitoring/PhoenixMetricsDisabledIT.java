@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,7 +17,13 @@
  */
 package org.apache.phoenix.monitoring;
 
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import static org.apache.phoenix.monitoring.NoOpGlobalMetricImpl.NO_SAMPLES;
+import static org.apache.phoenix.monitoring.NoOpGlobalMetricImpl.NO_VALUE;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+import java.sql.DriverManager;
+import java.util.Map;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
@@ -32,51 +38,46 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-import java.sql.DriverManager;
-import java.util.Map;
-
-import static org.apache.phoenix.monitoring.NoOpGlobalMetricImpl.NO_SAMPLES;
-import static org.apache.phoenix.monitoring.NoOpGlobalMetricImpl.NO_VALUE;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class PhoenixMetricsDisabledIT extends BaseTest {
 
-    @BeforeClass
-    public static synchronized void doSetup() throws Exception {
-        final Configuration conf = HBaseConfiguration.create();
-        conf.set(QueryServices.GLOBAL_METRICS_ENABLED, String.valueOf(false));
-        conf.set(QueryServices.RENEW_LEASE_ENABLED, String.valueOf(false));
-        // Clear the cached singletons so we can inject our own.
-        InstanceResolver.clearSingletons();
-        // Make sure the ConnectionInfo doesn't try to pull a default Configuration
-        InstanceResolver.getSingleton(ConfigurationFactory.class, new ConfigurationFactory() {
-            @Override
-            public Configuration getConfiguration() {
-                return conf;
-            }
-            @Override
-            public Configuration getConfiguration(Configuration confToClone) {
-                Configuration copy = new Configuration(conf);
-                copy.addResource(confToClone);
-                return copy;
-            }
-        });
+  @BeforeClass
+  public static synchronized void doSetup() throws Exception {
+    final Configuration conf = HBaseConfiguration.create();
+    conf.set(QueryServices.GLOBAL_METRICS_ENABLED, String.valueOf(false));
+    conf.set(QueryServices.RENEW_LEASE_ENABLED, String.valueOf(false));
+    // Clear the cached singletons so we can inject our own.
+    InstanceResolver.clearSingletons();
+    // Make sure the ConnectionInfo doesn't try to pull a default Configuration
+    InstanceResolver.getSingleton(ConfigurationFactory.class, new ConfigurationFactory() {
+      @Override
+      public Configuration getConfiguration() {
+        return conf;
+      }
 
-        Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+      @Override
+      public Configuration getConfiguration(Configuration confToClone) {
+        Configuration copy = new Configuration(conf);
+        copy.addResource(confToClone);
+        return copy;
+      }
+    });
 
-        DriverManager.registerDriver(PhoenixDriver.INSTANCE);
+    Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+    setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+
+    DriverManager.registerDriver(PhoenixDriver.INSTANCE);
+  }
+
+  @Test
+  public void testResetGlobalPhoenixMetrics() {
+    for (GlobalMetric m : PhoenixRuntime.getGlobalPhoenixClientMetrics()) {
+      assertTrue(m instanceof NoOpGlobalMetricImpl);
+      assertEquals(NO_VALUE, m.getValue());
+      assertEquals(NO_SAMPLES, m.getNumberOfSamples());
     }
-
-    @Test
-    public void testResetGlobalPhoenixMetrics() {
-        for (GlobalMetric m : PhoenixRuntime.getGlobalPhoenixClientMetrics()) {
-            assertTrue(m instanceof NoOpGlobalMetricImpl);
-            assertEquals(NO_VALUE, m.getValue());
-            assertEquals(NO_SAMPLES, m.getNumberOfSamples());
-        }
-    }
+  }
 
 }

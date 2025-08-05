@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -32,7 +32,7 @@ public class TestThreadPoolBuilder {
   @Test
   public void testCoreThreadTimeoutNonZero() {
     Configuration conf = new Configuration(false);
-    String key = name.getTableNameString()+"-key";
+    String key = name.getTableNameString() + "-key";
     ThreadPoolBuilder builder = new ThreadPoolBuilder(name.getTableNameString(), conf);
     assertTrue("core threads not set, but failed return", builder.getKeepAliveTime() > 0);
     // set an negative value
@@ -45,11 +45,11 @@ public class TestThreadPoolBuilder {
     builder.setCoreTimeout(key);
     assertTrue("core threads not set, but failed return", builder.getKeepAliveTime() > 0);
   }
-  
+
   @Test
   public void testMaxThreadsNonZero() {
     Configuration conf = new Configuration(false);
-    String key = name.getTableNameString()+"-key";
+    String key = name.getTableNameString() + "-key";
     ThreadPoolBuilder builder = new ThreadPoolBuilder(name.getTableNameString(), conf);
     assertTrue("core threads not set, but failed return", builder.getMaxThreads() > 0);
     // set an negative value

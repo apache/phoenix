@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,73 +24,75 @@ import java.util.Queue;
 
 public abstract class SizeBoundQueue<T> extends AbstractQueue<T> implements SizeAwareQueue<T> {
 
-    private long maxSizeBytes;
-    private Queue<T> delegate;
-    private long currentSize;
+  private long maxSizeBytes;
+  private Queue<T> delegate;
+  private long currentSize;
 
-    public SizeBoundQueue(long maxSizeBytes, Queue<T> delegate) {
-        assert maxSizeBytes > 0;
-        this.maxSizeBytes = maxSizeBytes;
-        this.delegate = delegate;
+  public SizeBoundQueue(long maxSizeBytes, Queue<T> delegate) {
+    assert maxSizeBytes > 0;
+    this.maxSizeBytes = maxSizeBytes;
+    this.delegate = delegate;
+  }
+
+  abstract public long sizeOf(T e);
+
+  @Override
+  public boolean offer(T e) {
+    boolean success = false;
+    long elementSize = sizeOf(e);
+    if ((currentSize + elementSize) < maxSizeBytes) {
+      success = delegate.offer(e);
+      if (success) {
+        currentSize += elementSize;
+      }
     }
+    return success;
+  }
 
-    abstract public long sizeOf(T e);
-
-    @Override
-    public boolean offer(T e) {
-        boolean success = false;
-        long elementSize = sizeOf(e);
-        if ((currentSize + elementSize) < maxSizeBytes) {
-            success = delegate.offer(e);
-            if (success) {
-                currentSize += elementSize;
-            }
-        }
-        return success;
+  @Override
+  public boolean add(T e) {
+    try {
+      return super.add(e);
+    } catch (IllegalStateException ex) {
+      throw new IllegalStateException(
+        "Queue full. Consider increasing memory threshold or spooling to disk. Max size: "
+          + maxSizeBytes + ", Current size: " + currentSize + ", Number of elements:" + size(),
+        ex);
     }
+  }
 
-    @Override
-    public boolean add(T e) {
-        try {
-            return super.add(e);
-        } catch (IllegalStateException ex) {
-            throw new IllegalStateException(
-                    "Queue full. Consider increasing memory threshold or spooling to disk. Max size: " + maxSizeBytes + ", Current size: " + currentSize + ", Number of elements:" + size(), ex);
-        }
+  @Override
+  public T poll() {
+    T e = delegate.poll();
+    if (e != null) {
+      currentSize -= sizeOf(e);
     }
+    return e;
+  }
 
-    @Override
-    public T poll() {
-        T e = delegate.poll();
-        if (e != null) {
-            currentSize -= sizeOf(e);
-        }
-        return e;
-    }
+  @Override
+  public T peek() {
+    return delegate.peek();
+  }
 
-    @Override
-    public T peek() {
-        return delegate.peek();
-    }
+  @Override
+  public void close() throws IOException {
+    delegate.clear();
+  }
 
-    @Override
-    public void close() throws IOException {
-        delegate.clear();
-    }
+  @Override
+  public long getByteSize() {
+    return currentSize;
+  }
 
-    @Override
-    public long getByteSize() {
-        return currentSize;
-    }
+  @Override
+  public Iterator<T> iterator() {
+    return delegate.iterator();
+  }
 
-    @Override
-    public Iterator<T> iterator() {
-        return delegate.iterator();
-    }
-
-    @Override
-    public int size() {
-        return delegate.size();
-    }
+  @Override
+  public int size() {
+    return delegate.size();
+  }
 
 }

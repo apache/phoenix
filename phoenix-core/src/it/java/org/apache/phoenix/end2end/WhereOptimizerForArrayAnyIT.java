@@ -506,8 +506,8 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
   public void testArrayAnyComparisonForBinaryColumn() throws Exception {
     String tableName = generateUniqueName();
     String ddl = "CREATE TABLE " + tableName + " (" + "pk1 BINARY(3) NOT NULL, "
-      + "pk2 VARBINARY(3) NOT NULL, " + "col1 VARCHAR, "
-      + "CONSTRAINT pk PRIMARY KEY (pk1, pk2)" + ")";
+      + "pk2 VARBINARY(3) NOT NULL, " + "col1 VARCHAR, " + "CONSTRAINT pk PRIMARY KEY (pk1, pk2)"
+      + ")";
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       try (Statement stmt = conn.createStatement()) {
         stmt.execute(ddl);
@@ -529,10 +529,8 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
     }
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       TestUtil.dumpTable(conn, TableName.valueOf(tableName));
-      String selectSql =
-        "SELECT * FROM " + tableName + " WHERE pk1 = ANY(?) AND pk2 = ANY(?)";
-      byte[][] nativeByteArr =
-        new byte[][] { pk1Value.getBytes(), pk2Value.getBytes() };
+      String selectSql = "SELECT * FROM " + tableName + " WHERE pk1 = ANY(?) AND pk2 = ANY(?)";
+      byte[][] nativeByteArr = new byte[][] { pk1Value.getBytes(), pk2Value.getBytes() };
       Array binaryArr = conn.createArrayOf("BINARY", nativeByteArr);
       Array varbinaryArr = conn.createArrayOf("VARBINARY", nativeByteArr);
       try (PreparedStatement stmt = conn.prepareStatement(selectSql)) {
@@ -576,10 +574,8 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
     }
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       TestUtil.dumpTable(conn, TableName.valueOf(tableName));
-      String selectSql =
-        "SELECT * FROM " + tableName + " WHERE pk1 = ANY(?) AND pk2 = ANY(?)";
-      byte[][] nativeByteArr =
-        new byte[][] { pk1Value.getBytes(), pk2Value.getBytes() };
+      String selectSql = "SELECT * FROM " + tableName + " WHERE pk1 = ANY(?) AND pk2 = ANY(?)";
+      byte[][] nativeByteArr = new byte[][] { pk1Value.getBytes(), pk2Value.getBytes() };
       Array binaryArr = conn.createArrayOf("BINARY", nativeByteArr);
       try (PreparedStatement stmt = conn.prepareStatement(selectSql)) {
         stmt.setArray(1, binaryArr);

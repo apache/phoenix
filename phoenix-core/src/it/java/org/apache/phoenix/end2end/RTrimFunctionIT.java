@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,50 +26,49 @@ import java.sql.ResultSet;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
-
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
 @Category(ParallelStatsDisabledTest.class)
 public class RTrimFunctionIT extends ParallelStatsDisabledIT {
-    
-    @Test
-    public void testWithFixedLengthAscPK() throws Exception {
-        testWithFixedLengthPK(SortOrder.ASC, Arrays.<Object>asList("b", "b ", "b  "));
-    }
-    
-    @Test
-    public void testWithFixedLengthDescPK() throws Exception {
-        testWithFixedLengthPK(SortOrder.DESC, Arrays.<Object>asList("b  ", "b ", "b"));
-    }
-    
-    private void testWithFixedLengthPK(SortOrder sortOrder, List<Object> expectedResults) throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateUniqueName();
-        conn.createStatement().execute(
-            "CREATE TABLE " + tableName + " ( k VARCHAR PRIMARY KEY " + (sortOrder == SortOrder.DESC ? "DESC" : "") + ")");
 
-        conn.createStatement().execute("upsert into " + tableName + " (k) values ('a')");
-        conn.createStatement().execute("upsert into " + tableName + " (k) values ('b')");
-        conn.createStatement().execute("upsert into " + tableName + " (k) values ('b ')");
-        conn.createStatement().execute("upsert into " + tableName + " (k) values ('b  ')");
-        conn.createStatement().execute("upsert into " + tableName + " (k) values ('b  a')");
-        conn.createStatement().execute("upsert into " + tableName + " (k) values (' b  ')");
-        conn.createStatement().execute("upsert into " + tableName + " (k) values ('c')");
-        conn.commit();
+  @Test
+  public void testWithFixedLengthAscPK() throws Exception {
+    testWithFixedLengthPK(SortOrder.ASC, Arrays.<Object> asList("b", "b ", "b  "));
+  }
 
-        String query = "select k from " + tableName + " WHERE rtrim(k)='b'";
-        ResultSet rs = conn.createStatement().executeQuery(query);
-        assertValueEqualsResultSet(rs, expectedResults);
-        
-        rs = conn.createStatement().executeQuery("explain " + query);
-        assertTrue(QueryUtil.getExplainPlan(rs).contains("RANGE SCAN OVER " + tableName));
-        
-        conn.close();
-    }
+  @Test
+  public void testWithFixedLengthDescPK() throws Exception {
+    testWithFixedLengthPK(SortOrder.DESC, Arrays.<Object> asList("b  ", "b ", "b"));
+  }
+
+  private void testWithFixedLengthPK(SortOrder sortOrder, List<Object> expectedResults)
+    throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    Connection conn = DriverManager.getConnection(getUrl(), props);
+    String tableName = generateUniqueName();
+    conn.createStatement().execute("CREATE TABLE " + tableName + " ( k VARCHAR PRIMARY KEY "
+      + (sortOrder == SortOrder.DESC ? "DESC" : "") + ")");
+
+    conn.createStatement().execute("upsert into " + tableName + " (k) values ('a')");
+    conn.createStatement().execute("upsert into " + tableName + " (k) values ('b')");
+    conn.createStatement().execute("upsert into " + tableName + " (k) values ('b ')");
+    conn.createStatement().execute("upsert into " + tableName + " (k) values ('b  ')");
+    conn.createStatement().execute("upsert into " + tableName + " (k) values ('b  a')");
+    conn.createStatement().execute("upsert into " + tableName + " (k) values (' b  ')");
+    conn.createStatement().execute("upsert into " + tableName + " (k) values ('c')");
+    conn.commit();
+
+    String query = "select k from " + tableName + " WHERE rtrim(k)='b'";
+    ResultSet rs = conn.createStatement().executeQuery(query);
+    assertValueEqualsResultSet(rs, expectedResults);
+
+    rs = conn.createStatement().executeQuery("explain " + query);
+    assertTrue(QueryUtil.getExplainPlan(rs).contains("RANGE SCAN OVER " + tableName));
+
+    conn.close();
+  }
 }

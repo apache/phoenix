@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,66 +20,67 @@ package org.apache.phoenix.parse;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 
 public class DeleteStatement extends DMLStatement implements FilterableStatement {
-    private final ParseNode whereNode;
-    private final List<OrderByNode> orderBy;
-    private final LimitNode limit;
-    private final HintNode hint;
-    
-    public DeleteStatement(NamedTableNode table, HintNode hint, ParseNode whereNode, List<OrderByNode> orderBy, LimitNode limit, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
-        super(table, bindCount, udfParseNodes);
-        this.whereNode = whereNode;
-        this.orderBy = orderBy == null ? Collections.<OrderByNode>emptyList() : orderBy;
-        this.limit = limit;
-        this.hint = hint == null ? HintNode.EMPTY_HINT_NODE : hint;
-    }
+  private final ParseNode whereNode;
+  private final List<OrderByNode> orderBy;
+  private final LimitNode limit;
+  private final HintNode hint;
 
-    @Override
-    public ParseNode getWhere() {
-        return whereNode;
-    }
+  public DeleteStatement(NamedTableNode table, HintNode hint, ParseNode whereNode,
+    List<OrderByNode> orderBy, LimitNode limit, int bindCount,
+    Map<String, UDFParseNode> udfParseNodes) {
+    super(table, bindCount, udfParseNodes);
+    this.whereNode = whereNode;
+    this.orderBy = orderBy == null ? Collections.<OrderByNode> emptyList() : orderBy;
+    this.limit = limit;
+    this.hint = hint == null ? HintNode.EMPTY_HINT_NODE : hint;
+  }
 
-    @Override
-    public List<OrderByNode> getOrderBy() {
-        return orderBy;
-    }
+  @Override
+  public ParseNode getWhere() {
+    return whereNode;
+  }
 
-    @Override
-    public LimitNode getLimit() {
-        return limit;
-    }
+  @Override
+  public List<OrderByNode> getOrderBy() {
+    return orderBy;
+  }
 
-    @Override
-    public HintNode getHint() {
-        return hint;
-    }
+  @Override
+  public LimitNode getLimit() {
+    return limit;
+  }
 
-    @Override
-    public boolean isDistinct() {
-        return false;
-    }
+  @Override
+  public HintNode getHint() {
+    return hint;
+  }
 
-    @Override
-    public boolean isAggregate() {
-        return false;
-    }
+  @Override
+  public boolean isDistinct() {
+    return false;
+  }
 
-    @Override
-    public Operation getOperation() {
-        return Operation.DELETE;
-    }
+  @Override
+  public boolean isAggregate() {
+    return false;
+  }
 
-    @Override
-    public OffsetNode getOffset() {
-        return null;
-    }
-    
-    @Override
-    public Double getTableSamplingRate(){
-    	throw new UnsupportedOperationException("Table sampling is not allowd for Deletion");
-    }
+  @Override
+  public Operation getOperation() {
+    return Operation.DELETE;
+  }
+
+  @Override
+  public OffsetNode getOffset() {
+    return null;
+  }
+
+  @Override
+  public Double getTableSamplingRate() {
+    throw new UnsupportedOperationException("Table sampling is not allowd for Deletion");
+  }
 
 }

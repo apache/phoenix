@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,7 +20,6 @@ package org.apache.phoenix.expression.function;
 import java.io.DataInput;
 import java.io.IOException;
 import java.util.List;
-
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
@@ -36,165 +35,171 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
 
-
 /**
- * 
- * Implementation of {@code REGEXP_SUBSTR(<source>, <pattern>, <offset>) } built-in function,
- * where {@code <offset> } is the offset from the start of {@code <string> }. Positive offset is treated as 1-based,
- * a zero offset is treated as 0-based, and a negative offset starts from the end of the string 
- * working backwards. The {@code <pattern> } is the pattern we would like to search for in the {@code <source> } string.
- * The function returns the first occurrence of any substring in the {@code <source> } string that matches
- * the {@code <pattern> } input as a VARCHAR. 
- * 
- * 
+ * Implementation of {@code REGEXP_SUBSTR(<source>, <pattern>, <offset>) } built-in function, where
+ * {@code <offset> } is the offset from the start of {@code <string> }. Positive offset is treated
+ * as 1-based, a zero offset is treated as 0-based, and a negative offset starts from the end of the
+ * string working backwards. The {@code <pattern> } is the pattern we would like to search for in
+ * the {@code <source> } string. The function returns the first occurrence of any substring in the
+ * {@code <source> } string that matches the {@code <pattern> } input as a VARCHAR.
  * @since 0.1
  */
-@BuiltInFunction(name=RegexpSubstrFunction.NAME,
-    nodeClass = RegexpSubstrParseNode.class, args={
-    @Argument(allowedTypes={PVarchar.class}),
-    @Argument(allowedTypes={PVarchar.class}),
-    @Argument(allowedTypes={PLong.class}, defaultValue="1")},
-    classType = FunctionParseNode.FunctionClassType.ABSTRACT,
-    derivedFunctions = {ByteBasedRegexpSubstrFunction.class, StringBasedRegexpSubstrFunction.class})
+@BuiltInFunction(name = RegexpSubstrFunction.NAME, nodeClass = RegexpSubstrParseNode.class,
+    args = { @Argument(allowedTypes = { PVarchar.class }),
+      @Argument(allowedTypes = { PVarchar.class }),
+      @Argument(allowedTypes = { PLong.class }, defaultValue = "1") },
+    classType = FunctionParseNode.FunctionClassType.ABSTRACT, derivedFunctions = {
+      ByteBasedRegexpSubstrFunction.class, StringBasedRegexpSubstrFunction.class })
 public abstract class RegexpSubstrFunction extends PrefixFunction {
-    public static final String NAME = "REGEXP_SUBSTR";
+  public static final String NAME = "REGEXP_SUBSTR";
 
-    private AbstractBasePattern pattern;
-    private Integer offset;
-    private Integer maxLength;
+  private AbstractBasePattern pattern;
+  private Integer offset;
+  private Integer maxLength;
 
-    private static final PDataType TYPE = PVarchar.INSTANCE;
-    
-    public RegexpSubstrFunction() { }
+  private static final PDataType TYPE = PVarchar.INSTANCE;
 
-    public RegexpSubstrFunction(List<Expression> children) {
-        super(children);
-        init();
+  public RegexpSubstrFunction() {
+  }
+
+  public RegexpSubstrFunction(List<Expression> children) {
+    super(children);
+    init();
+  }
+
+  protected abstract AbstractBasePattern compilePatternSpec(String value);
+
+  private void init() {
+    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    Expression patternExpr = getPatternExpression();
+    if (
+      patternExpr.isStateless() && patternExpr.getDeterminism() == Determinism.ALWAYS
+        && patternExpr.evaluate(null, ptr)
+    ) {
+      String patternStr =
+        (String) patternExpr.getDataType().toObject(ptr, patternExpr.getSortOrder());
+      if (patternStr != null) {
+        pattern = compilePatternSpec(patternStr);
+      }
     }
-
-    protected abstract AbstractBasePattern compilePatternSpec(String value);
-
-    private void init() {
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        Expression patternExpr = getPatternExpression();
-        if (patternExpr.isStateless() && patternExpr.getDeterminism() == Determinism.ALWAYS && patternExpr.evaluate(null, ptr)) {
-            String patternStr = (String) patternExpr.getDataType().toObject(ptr, patternExpr.getSortOrder());
-            if (patternStr != null) {
-                pattern = compilePatternSpec(patternStr);
-            }
+    // If the source string has a fixed width, then the max length would be the length
+    // of the source string minus the offset, or the absolute value of the offset if
+    // it's negative. Offset number is a required argument. However, if the source string
+    // is not fixed width, the maxLength would be null.
+    Expression offsetExpr = getOffsetExpression();
+    if (
+      offsetExpr.isStateless() && offsetExpr.getDeterminism() == Determinism.ALWAYS
+        && offsetExpr.evaluate(null, ptr)
+    ) {
+      offset = (Integer) PInteger.INSTANCE.toObject(ptr, offsetExpr.getDataType(),
+        offsetExpr.getSortOrder());
+      if (offset != null) {
+        PDataType type = getSourceStrExpression().getDataType();
+        if (type.isFixedWidth()) {
+          if (offset >= 0) {
+            Integer maxLength = getSourceStrExpression().getMaxLength();
+            this.maxLength = maxLength - offset - (offset == 0 ? 0 : 1);
+          } else {
+            this.maxLength = -offset;
+          }
         }
-        // If the source string has a fixed width, then the max length would be the length 
-        // of the source string minus the offset, or the absolute value of the offset if 
-        // it's negative. Offset number is a required argument. However, if the source string
-        // is not fixed width, the maxLength would be null.
-        Expression offsetExpr = getOffsetExpression();
-        if (offsetExpr.isStateless() && offsetExpr.getDeterminism() == Determinism.ALWAYS && offsetExpr.evaluate(null, ptr)) {
-            offset = (Integer)PInteger.INSTANCE.toObject(ptr, offsetExpr.getDataType(), offsetExpr.getSortOrder());
-            if (offset != null) {
-                PDataType type = getSourceStrExpression().getDataType();
-                if (type.isFixedWidth()) {
-                    if (offset >= 0) {
-                        Integer maxLength = getSourceStrExpression().getMaxLength();
-                        this.maxLength = maxLength - offset - (offset == 0 ? 0 : 1);
-                    } else {
-                        this.maxLength = -offset;
-                    }
-                }
-            }
-        }
+      }
     }
+  }
 
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        AbstractBasePattern pattern = this.pattern;
-        if (pattern == null) {
-            Expression patternExpr = getPatternExpression();
-            if (!patternExpr.evaluate(tuple, ptr)) {
-                return false;
-            }
-            if (ptr.getLength() == 0) {
-                return true;
-            }
-            pattern = compilePatternSpec((String) patternExpr.getDataType().toObject(ptr, patternExpr.getSortOrder()));
-        }
-        int offset;
-        if (this.offset == null) {
-            Expression offsetExpression = getOffsetExpression();
-            if (!offsetExpression.evaluate(tuple, ptr)) {
-                return false;
-            }
-            if (ptr.getLength() == 0) {
-                return true;
-            }
-            offset = offsetExpression.getDataType().getCodec().decodeInt(ptr, offsetExpression.getSortOrder());
-        } else {
-            offset = this.offset;
-        }
-        Expression strExpression = getSourceStrExpression();
-        if (!strExpression.evaluate(tuple, ptr)) {
-            return false;
-        }
-        if (ptr.get().length == 0) {
-            return true;
-        }
-
-        TYPE.coerceBytes(ptr, strExpression.getDataType(), strExpression.getSortOrder(), SortOrder.ASC);
-
-        // Account for 1 versus 0-based offset
-        offset = offset - (offset <= 0 ? 0 : 1);
-
-        pattern.substr(ptr, offset);
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    AbstractBasePattern pattern = this.pattern;
+    if (pattern == null) {
+      Expression patternExpr = getPatternExpression();
+      if (!patternExpr.evaluate(tuple, ptr)) {
+        return false;
+      }
+      if (ptr.getLength() == 0) {
         return true;
+      }
+      pattern = compilePatternSpec(
+        (String) patternExpr.getDataType().toObject(ptr, patternExpr.getSortOrder()));
+    }
+    int offset;
+    if (this.offset == null) {
+      Expression offsetExpression = getOffsetExpression();
+      if (!offsetExpression.evaluate(tuple, ptr)) {
+        return false;
+      }
+      if (ptr.getLength() == 0) {
+        return true;
+      }
+      offset =
+        offsetExpression.getDataType().getCodec().decodeInt(ptr, offsetExpression.getSortOrder());
+    } else {
+      offset = this.offset;
+    }
+    Expression strExpression = getSourceStrExpression();
+    if (!strExpression.evaluate(tuple, ptr)) {
+      return false;
+    }
+    if (ptr.get().length == 0) {
+      return true;
     }
 
-    @Override
-    public Integer getMaxLength() {
-        return maxLength;
-    }
+    TYPE.coerceBytes(ptr, strExpression.getDataType(), strExpression.getSortOrder(), SortOrder.ASC);
 
-    @Override
-    public OrderPreserving preservesOrder() {
-        if (offset != null) {
-            if (offset == 0 || offset == 1) {
-                return OrderPreserving.YES_IF_LAST;
-            }
-        }
-        return OrderPreserving.NO;
-    }
+    // Account for 1 versus 0-based offset
+    offset = offset - (offset <= 0 ? 0 : 1);
 
-    @Override
-    public void readFields(DataInput input) throws IOException {
-        super.readFields(input);
-        init();
-    }
+    pattern.substr(ptr, offset);
+    return true;
+  }
 
-    @Override
-    public int getKeyFormationTraversalIndex() {
-        return preservesOrder() == OrderPreserving.NO ? NO_TRAVERSAL : 0;
-    }
+  @Override
+  public Integer getMaxLength() {
+    return maxLength;
+  }
 
-    private Expression getOffsetExpression() {
-        return children.get(2);
+  @Override
+  public OrderPreserving preservesOrder() {
+    if (offset != null) {
+      if (offset == 0 || offset == 1) {
+        return OrderPreserving.YES_IF_LAST;
+      }
     }
+    return OrderPreserving.NO;
+  }
 
-    private Expression getPatternExpression() {
-        return children.get(1);
-    }
+  @Override
+  public void readFields(DataInput input) throws IOException {
+    super.readFields(input);
+    init();
+  }
 
-    private Expression getSourceStrExpression() {
-        return children.get(0);
-    }
+  @Override
+  public int getKeyFormationTraversalIndex() {
+    return preservesOrder() == OrderPreserving.NO ? NO_TRAVERSAL : 0;
+  }
 
-    @Override
-    public PDataType getDataType() {
-        // ALways VARCHAR since we do not know in advanced how long the 
-        // matched string will be.
-        return TYPE;
-    }
+  private Expression getOffsetExpression() {
+    return children.get(2);
+  }
 
-    @Override
-    public String getName() {
-        return NAME;
-    }
+  private Expression getPatternExpression() {
+    return children.get(1);
+  }
+
+  private Expression getSourceStrExpression() {
+    return children.get(0);
+  }
+
+  @Override
+  public PDataType getDataType() {
+    // ALways VARCHAR since we do not know in advanced how long the
+    // matched string will be.
+    return TYPE;
+  }
+
+  @Override
+  public String getName() {
+    return NAME;
+  }
 
 }

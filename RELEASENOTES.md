@@ -204,7 +204,7 @@ Phoenix now also supports heterogenous ports defined in HBASE-12706 for every re
 
 Note that while the phoenix+zk URL handling code has heuristics that tries to handle some omitted parameters, the Master and ConnectionRPC registry code strictly maps the URL parameters to by their ordering.
 
-Note that Phoenix now internally normalizes the URL. Whether you specify an explicit connection, or use the default "jdbc:phoenix" URL, Phoenix will internally normalize the connection, and set the  properties for the internal HBase Connection objects appropriately.  
+Note that Phoenix now internally normalizes the URL. Whether you specify an explicit connection, or use the default "jdbc:phoenix" URL, Phoenix will internally normalize the connection, and set the  properties for the internal HBase Connection objects appropriately.
 
 Also note that for most non-HA use cases an explicit connection URL should NOT be used. The preferred way to specify the connection is to have an up-to-date hbase-site.xml with both Hbase and Phoenix client properties set correctly (with other Hadoop conficguration files as needed)  on the Phoenix application classpath , and using the default "jdbc:phoenix" URL.
 
@@ -412,7 +412,7 @@ In Phoenix 5.1.x, Tephra support is not available with HBase 2.5.
 
 * [PHOENIX-6627](https://issues.apache.org/jira/browse/PHOENIX-6627) | *Major* | **Remove all references to Tephra from 4.x and master**
 
-Support for the Tephra transaction engine has been removed from Phoenix. 
+Support for the Tephra transaction engine has been removed from Phoenix.
 
 Ordinals of \`TransactionFactory.Provider\` are maintained to preserve compatibility with deployed system catalogs. The enum label for the former Tephra provider is deliberately renamed to \`NOTAVAILABLE\` so any downstreams with ill-advised direct dependencies on it will fail to compile.
 
@@ -518,11 +518,11 @@ Phoenix now automatically sets NORMALIZATION\_ENABLED=false when creating salted
 
 * [PHOENIX-6227](https://issues.apache.org/jira/browse/PHOENIX-6227) | *Major* | **Option for DDL changes to export to external schema repository**
 
-External\_Schema\_Id is now added to SYSTEM.CATALOG. When CHANGE\_DETECTION\_ENABLED = true, CREATE and ALTER statements to a table or view cause a call to an external schema registry is made to save a string representation of the schema to be made. The schema registry returns a schema id which is saved in the new SYSTEM.CATALOG field. 
+External\_Schema\_Id is now added to SYSTEM.CATALOG. When CHANGE\_DETECTION\_ENABLED = true, CREATE and ALTER statements to a table or view cause a call to an external schema registry is made to save a string representation of the schema to be made. The schema registry returns a schema id which is saved in the new SYSTEM.CATALOG field.
 
 When change detection is enabled, the WAL is now annotated with the external schema id, rather than the tuple of tenant id / schema name / logical table name / last DDL timestamp it was previously.
 
-The implementation to generate the string representation can be set via the Configuration property org.apache.phoenix.export.schemawriter.impl . By default it is a String representation of the PTable protobuf. 
+The implementation to generate the string representation can be set via the Configuration property org.apache.phoenix.export.schemawriter.impl . By default it is a String representation of the PTable protobuf.
 
 The implementation of the call to the schema repository can be set via the Configuration property org.apache.phoenix.export.schemaregistry.impl . By default it is an in-memory data structure unsuitable for production use. In production it is intended to be used with a standalone schema registry service.
 
@@ -561,6 +561,3 @@ Added phoenix-hbase-compat-2.4.1 to support latest patch versions of HBase 2.4 r
 * [PHOENIX-6343](https://issues.apache.org/jira/browse/PHOENIX-6343) | *Major* | **Phoenix allows duplicate column names when one of them is a primary key**
 
 Although user provided CF can have same column name as one of primary keys, default CF is no longer supported to have same column name as primary key columns.
-
-
-

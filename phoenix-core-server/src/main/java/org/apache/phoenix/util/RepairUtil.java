@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,19 +24,23 @@ import org.apache.hadoop.hbase.regionserver.StoreFile;
 import org.apache.hadoop.hbase.util.Bytes;
 
 public class RepairUtil {
-    public static boolean isLocalIndexStoreFilesConsistent(RegionCoprocessorEnvironment environment, Store store) {
-        byte[] startKey = environment.getRegion().getRegionInfo().getStartKey();
-        byte[] endKey = environment.getRegion().getRegionInfo().getEndKey();
-        byte[] indexKeyEmbedded = startKey.length == 0 ? new byte[endKey.length] : startKey;
-        for (StoreFile file : store.getStorefiles()) {
-            if (file.getFirstKey().isPresent() && file.getFirstKey().get() != null) {
-                byte[] fileFirstRowKey = CellUtil.cloneRow(file.getFirstKey().get());
-                if ((fileFirstRowKey != null && Bytes.compareTo(fileFirstRowKey, 0,
-                        indexKeyEmbedded.length, indexKeyEmbedded, 0, indexKeyEmbedded.length) != 0)) {
-                    return false; }
-            }
+  public static boolean isLocalIndexStoreFilesConsistent(RegionCoprocessorEnvironment environment,
+    Store store) {
+    byte[] startKey = environment.getRegion().getRegionInfo().getStartKey();
+    byte[] endKey = environment.getRegion().getRegionInfo().getEndKey();
+    byte[] indexKeyEmbedded = startKey.length == 0 ? new byte[endKey.length] : startKey;
+    for (StoreFile file : store.getStorefiles()) {
+      if (file.getFirstKey().isPresent() && file.getFirstKey().get() != null) {
+        byte[] fileFirstRowKey = CellUtil.cloneRow(file.getFirstKey().get());
+        if (
+          (fileFirstRowKey != null && Bytes.compareTo(fileFirstRowKey, 0, indexKeyEmbedded.length,
+            indexKeyEmbedded, 0, indexKeyEmbedded.length) != 0)
+        ) {
+          return false;
         }
-        return true;
+      }
     }
+    return true;
+  }
 
 }
