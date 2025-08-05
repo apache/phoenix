@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,12 +20,12 @@ package org.apache.phoenix.schema;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
 /**
- * Interface to decode column values that are stored in a byte[] 
+ * Interface to decode column values that are stored in a byte[]
  */
 public interface ColumnValueDecoder {
-    /**
-     * sets the ptr to the column value at the given index  
-     * @return false if the column value is absent (used to support DEFAULT expressions) or else true 
-     */
-    boolean decode(ImmutableBytesWritable ptr, int index);
+  /**
+   * sets the ptr to the column value at the given index
+   * @return false if the column value is absent (used to support DEFAULT expressions) or else true
+   */
+  boolean decode(ImmutableBytesWritable ptr, int index);
 }

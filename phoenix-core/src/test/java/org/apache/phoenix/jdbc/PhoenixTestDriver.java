@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,10 +21,8 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Properties;
 import java.util.concurrent.ThreadPoolExecutor;
-
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
-
 import org.apache.phoenix.end2end.ConnectionQueryServicesTestImpl;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
@@ -33,97 +31,92 @@ import org.apache.phoenix.query.QueryServicesTestImpl;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 
-
-
 /**
- * 
- * JDBC Driver implementation of Phoenix for testing.
- * To use this driver, specify test=true in url.
- * 
- * 
+ * JDBC Driver implementation of Phoenix for testing. To use this driver, specify test=true in url.
  * @since 0.1
  */
 @ThreadSafe
 public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
-    
-    @GuardedBy("this")
-    private ConnectionQueryServices connectionQueryServices;
-    private final ReadOnlyProps overrideProps;
-    
-    @GuardedBy("this")
-    private final QueryServices queryServices;
-    
-    @GuardedBy("this")
-    private boolean closed = false;
 
-    public PhoenixTestDriver() {
-        this(ReadOnlyProps.EMPTY_PROPS);
-    }
+  @GuardedBy("this")
+  private ConnectionQueryServices connectionQueryServices;
+  private final ReadOnlyProps overrideProps;
 
-    // For tests to override the default configuration
-    public PhoenixTestDriver(ReadOnlyProps props) {
-        overrideProps = props;
-        queryServices = new QueryServicesTestImpl(getDefaultProps(), overrideProps);
-    }
+  @GuardedBy("this")
+  private final QueryServices queryServices;
 
-    @Override
-    public synchronized QueryServices getQueryServices() {
-        checkClosed();
-        return queryServices;
-    }
+  @GuardedBy("this")
+  private boolean closed = false;
 
-    @Override
-    public boolean acceptsURL(String url) throws SQLException {
-        // Accept the url only if test=true attribute set
-        return super.acceptsURL(url) && isTestUrl(url);
+  public PhoenixTestDriver() {
+    this(ReadOnlyProps.EMPTY_PROPS);
+  }
+
+  // For tests to override the default configuration
+  public PhoenixTestDriver(ReadOnlyProps props) {
+    overrideProps = props;
+    queryServices = new QueryServicesTestImpl(getDefaultProps(), overrideProps);
+  }
+
+  @Override
+  public synchronized QueryServices getQueryServices() {
+    checkClosed();
+    return queryServices;
+  }
+
+  @Override
+  public boolean acceptsURL(String url) throws SQLException {
+    // Accept the url only if test=true attribute set
+    return super.acceptsURL(url) && isTestUrl(url);
+  }
+
+  @Override
+  public synchronized Connection connect(String url, Properties info) throws SQLException {
+    checkClosed();
+    return super.connect(url, info);
+  }
+
+  @Override // public for testing
+  public synchronized ConnectionQueryServices getConnectionQueryServices(String url,
+    Properties infoIn) throws SQLException {
+    checkClosed();
+    if (connectionQueryServices != null) {
+      return connectionQueryServices;
     }
-    
-    @Override
-    public synchronized Connection connect(String url, Properties info) throws SQLException {
-        checkClosed();
-        return super.connect(url, info);
+    final Properties info = PropertiesUtil.deepCopy(infoIn);
+    ConnectionInfo connInfo = ConnectionInfo.create(url, null, info);
+    info.putAll(connInfo.asProps().asMap());
+    if (connInfo.isConnectionless()) {
+      connectionQueryServices = new ConnectionlessQueryServicesImpl(queryServices, connInfo, info);
+    } else {
+      connectionQueryServices = new ConnectionQueryServicesTestImpl(queryServices, connInfo, info);
     }
-    
-    @Override // public for testing
-    public synchronized ConnectionQueryServices getConnectionQueryServices(String url, Properties infoIn) throws SQLException {
-        checkClosed();
-        if (connectionQueryServices != null) {
-            return connectionQueryServices;
-        }
-        final Properties info = PropertiesUtil.deepCopy(infoIn);
-        ConnectionInfo connInfo = ConnectionInfo.create(url, null, info);
-        info.putAll(connInfo.asProps().asMap());
-        if (connInfo.isConnectionless()) {
-            connectionQueryServices = new ConnectionlessQueryServicesImpl(queryServices, connInfo, info);
-        } else {
-            connectionQueryServices = new ConnectionQueryServicesTestImpl(queryServices, connInfo, info);
-        }
-        connectionQueryServices.init(url, info);
-        return connectionQueryServices;
+    connectionQueryServices.init(url, info);
+    return connectionQueryServices;
+  }
+
+  private synchronized void checkClosed() {
+    if (closed) {
+      throw new IllegalStateException("The Phoenix jdbc test driver has been closed.");
     }
-    
-    private synchronized void checkClosed() {
-        if (closed) {
-            throw new IllegalStateException("The Phoenix jdbc test driver has been closed.");
-        }
+  }
+
+  @Override
+  public synchronized void close() throws SQLException {
+    if (closed) {
+      return;
     }
-    
-    @Override
-    public synchronized void close() throws SQLException {
-        if (closed) {
-            return;
-        }
-        closed = true;
-        try {
-            if (connectionQueryServices != null) connectionQueryServices.close();
-        } finally {
-            ThreadPoolExecutor executor = queryServices.getExecutor();
-            try {
-                queryServices.close();
-            } finally {
-                if (executor != null) executor.shutdownNow();
-                connectionQueryServices = null;
-            }
-        }
+    closed = true;
+    try {
+      if (connectionQueryServices != null) connectionQueryServices.close();
+    } finally {
+      ThreadPoolExecutor executor = queryServices.getExecutor();
+      try {
+        queryServices.close();
+      } finally {
+        if (executor != null) executor.shutdownNow();
+        connectionQueryServices = null;
+      }
     }
+  }
 }

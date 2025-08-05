@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,30 +19,29 @@ package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
 import java.util.List;
-
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.expression.function.ToTimeFunction;
 
+public class ToTimeParseNode extends FunctionParseNode {
 
-public class ToTimeParseNode extends FunctionParseNode { 
+  public ToTimeParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
+    super(name, children, info);
+  }
 
-    public ToTimeParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
-        super(name, children, info);
+  @Override
+  public FunctionExpression create(List<Expression> children, StatementContext context)
+    throws SQLException {
+    String dateFormat = (String) ((LiteralExpression) children.get(1)).getValue();
+    String timeZoneId = (String) ((LiteralExpression) children.get(2)).getValue();
+    if (dateFormat == null) {
+      dateFormat = context.getTimeFormat();
     }
-
-    @Override
-    public FunctionExpression create(List<Expression> children, StatementContext context) throws SQLException {
-        String dateFormat = (String) ((LiteralExpression) children.get(1)).getValue();
-        String timeZoneId = (String) ((LiteralExpression) children.get(2)).getValue();
-        if (dateFormat == null) {
-            dateFormat = context.getTimeFormat();
-        }
-        if (timeZoneId == null) {
-            timeZoneId = context.getDateFormatTimeZoneId();
-        }
-        return new ToTimeFunction(children, dateFormat, timeZoneId);
+    if (timeZoneId == null) {
+      timeZoneId = context.getDateFormatTimeZoneId();
     }
+    return new ToTimeFunction(children, dateFormat, timeZoneId);
+  }
 }

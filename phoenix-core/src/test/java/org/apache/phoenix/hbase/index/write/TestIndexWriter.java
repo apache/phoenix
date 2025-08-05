@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -31,7 +31,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.Stoppable;
@@ -82,8 +81,8 @@ public class TestIndexWriter {
     Region region = Mockito.mock(Region.class);
     Mockito.when(env.getRegion()).thenReturn(region);
     Mockito.when(env.getConfiguration()).thenReturn(conf);
-    Mockito.when(region.getTableDescriptor()).thenReturn(
-        TableDescriptorBuilder.newBuilder(TableName.valueOf("dummy")).build());
+    Mockito.when(region.getTableDescriptor())
+      .thenReturn(TableDescriptorBuilder.newBuilder(TableName.valueOf("dummy")).build());
     assertNotNull(IndexWriter.getFailurePolicy(env));
   }
 
@@ -98,10 +97,10 @@ public class TestIndexWriter {
     LOGGER.info("Current thread is interrupted: " + Thread.interrupted());
     Abortable abort = new StubAbortable();
     Stoppable stop = Mockito.mock(Stoppable.class);
-    RegionCoprocessorEnvironment e =Mockito.mock(RegionCoprocessorEnvironment.class);
-    Configuration conf =new Configuration();
+    RegionCoprocessorEnvironment e = Mockito.mock(RegionCoprocessorEnvironment.class);
+    Configuration conf = new Configuration();
     Mockito.when(e.getConfiguration()).thenReturn(conf);
-    Mockito.when(e.getSharedData()).thenReturn(new ConcurrentHashMap<String,Object>());
+    Mockito.when(e.getSharedData()).thenReturn(new ConcurrentHashMap<String, Object>());
     Region mockRegion = Mockito.mock(Region.class);
     Mockito.when(e.getRegion()).thenReturn(mockRegion);
     TableDescriptor mockTableDesc = Mockito.mock(TableDescriptor.class);
@@ -117,25 +116,26 @@ public class TestIndexWriter {
     byte[] tableName = this.testName.getTableName();
     Put m = new Put(row);
     m.addColumn(Bytes.toBytes("family"), Bytes.toBytes("qual"), null);
-    Collection<Pair<Mutation, byte[]>> indexUpdates = Arrays.asList(new Pair<Mutation, byte[]>(m,
-        tableName));
+    Collection<Pair<Mutation, byte[]>> indexUpdates =
+      Arrays.asList(new Pair<Mutation, byte[]>(m, tableName));
 
     Table table = Mockito.mock(Table.class);
     final boolean[] completed = new boolean[] { false };
-        Mockito.doAnswer(new Answer<Void>() {
-            @Override
-            public Void answer(InvocationOnMock invocation) throws Throwable {
-                // just keep track that it was called
-                completed[0] = true;
-                return null;
-            }
-        }).when(table).batch(Mockito.anyList(), Mockito.any());
+    Mockito.doAnswer(new Answer<Void>() {
+      @Override
+      public Void answer(InvocationOnMock invocation) throws Throwable {
+        // just keep track that it was called
+        completed[0] = true;
+        return null;
+      }
+    }).when(table).batch(Mockito.anyList(), Mockito.any());
     Mockito.when(table.getName()).thenReturn(TableName.valueOf(testName.getTableName()));
     // add the table to the set of tables, so its returned to the writer
     tables.put(new ImmutableBytesPtr(tableName), table);
 
     // setup the writer and failure policy
-    TrackingParallelWriterIndexCommitter committer = new TrackingParallelWriterIndexCommitter(VersionInfo.getVersion());
+    TrackingParallelWriterIndexCommitter committer =
+      new TrackingParallelWriterIndexCommitter(VersionInfo.getVersion());
     committer.setup(factory, exec, stop, e);
     KillServerOnFailurePolicy policy = new KillServerOnFailurePolicy();
     policy.setup(stop, e);
@@ -160,10 +160,10 @@ public class TestIndexWriter {
     // single thread factory so the older request gets queued
     ExecutorService exec = Executors.newFixedThreadPool(1);
     Map<ImmutableBytesPtr, Table> tables = new HashMap<ImmutableBytesPtr, Table>();
-    RegionCoprocessorEnvironment e =Mockito.mock(RegionCoprocessorEnvironment.class);
-    Configuration conf =new Configuration();
+    RegionCoprocessorEnvironment e = Mockito.mock(RegionCoprocessorEnvironment.class);
+    Configuration conf = new Configuration();
     Mockito.when(e.getConfiguration()).thenReturn(conf);
-    Mockito.when(e.getSharedData()).thenReturn(new ConcurrentHashMap<String,Object>());
+    Mockito.when(e.getSharedData()).thenReturn(new ConcurrentHashMap<String, Object>());
     Region mockRegion = Mockito.mock(Region.class);
     Mockito.when(e.getRegion()).thenReturn(mockRegion);
     TableDescriptor mockTableDesc = Mockito.mock(TableDescriptor.class);
@@ -179,21 +179,21 @@ public class TestIndexWriter {
     final CountDownLatch writeStartedLatch = new CountDownLatch(1);
     // latch never gets counted down, so we wait forever
     final CountDownLatch waitOnAbortedLatch = new CountDownLatch(1);
-        Mockito.doAnswer(new Answer<Void>() {
-            @Override
-            public Void answer(InvocationOnMock invocation) throws Throwable {
-                LOGGER.info("Write started");
-                writeStartedLatch.countDown();
-                // when we interrupt the thread for shutdown, we should see this throw an interrupt too
-                try {
-                    waitOnAbortedLatch.await();
-                } catch (InterruptedException e) {
-                    LOGGER.info("Correctly interrupted while writing!");
-                    throw e;
-                }
-                return null;
-            }
-        }).when(table).batch(Mockito.anyListOf(Row.class), Mockito.any());
+    Mockito.doAnswer(new Answer<Void>() {
+      @Override
+      public Void answer(InvocationOnMock invocation) throws Throwable {
+        LOGGER.info("Write started");
+        writeStartedLatch.countDown();
+        // when we interrupt the thread for shutdown, we should see this throw an interrupt too
+        try {
+          waitOnAbortedLatch.await();
+        } catch (InterruptedException e) {
+          LOGGER.info("Correctly interrupted while writing!");
+          throw e;
+        }
+        return null;
+      }
+    }).when(table).batch(Mockito.anyListOf(Row.class), Mockito.any());
     // add the tables to the set of tables, so its returned to the writer
     tables.put(new ImmutableBytesPtr(tableName), table);
 
@@ -204,8 +204,9 @@ public class TestIndexWriter {
     indexUpdates.add(new Pair<Mutation, byte[]>(m, tableName));
 
     // setup the writer
-    TrackingParallelWriterIndexCommitter committer = new TrackingParallelWriterIndexCommitter(VersionInfo.getVersion());
-    committer.setup(factory, exec, stop, e );
+    TrackingParallelWriterIndexCommitter committer =
+      new TrackingParallelWriterIndexCommitter(VersionInfo.getVersion());
+    committer.setup(factory, exec, stop, e);
     KillServerOnFailurePolicy policy = new KillServerOnFailurePolicy();
     policy.setup(stop, e);
     final IndexWriter writer = new IndexWriter(committer, policy);

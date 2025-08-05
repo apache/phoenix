@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,14 +26,9 @@ import java.sql.DriverManager;
 import java.util.Arrays;
 import java.util.Properties;
 import java.util.concurrent.LinkedBlockingQueue;
-
 import org.apache.phoenix.end2end.ParallelStatsEnabledIT;
 import org.apache.phoenix.end2end.ParallelStatsEnabledTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.query.ConnectionQueryServices;
-import org.apache.phoenix.query.ConnectionQueryServicesImpl;
-import org.apache.phoenix.query.DelegateConnectionQueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
@@ -49,7 +44,7 @@ import org.slf4j.LoggerFactory;
 public class ConnectionCachingIT extends ParallelStatsEnabledIT {
   private static final Logger LOGGER = LoggerFactory.getLogger(ConnectionCachingIT.class);
 
-  @Parameters(name= "phoenix.scanner.lease.renew.enabled={0}")
+  @Parameters(name = "phoenix.scanner.lease.renew.enabled={0}")
   public static synchronized Iterable<String> data() {
     return Arrays.asList("true", "false");
   }
@@ -83,7 +78,8 @@ public class ConnectionCachingIT extends ParallelStatsEnabledIT {
       if (after <= before) {
         break;
       }
-      Thread.sleep(QueryServicesOptions.DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS / 2);
+      Thread
+        .sleep(QueryServicesOptions.DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS / 2);
       after = getNumCachedConnections(conn);
     }
     assertTrue("Saw " + before + " connections, but ended with " + after, after <= before);
@@ -96,10 +92,12 @@ public class ConnectionCachingIT extends ParallelStatsEnabledIT {
     if (cqs instanceof DelegateConnectionQueryServices) {
       cqs = ((DelegateConnectionQueryServices) cqs).getDelegate();
     }
-    assertTrue("ConnectionQueryServices was a " + cqs.getClass(), cqs instanceof ConnectionQueryServicesImpl);
+    assertTrue("ConnectionQueryServices was a " + cqs.getClass(),
+      cqs instanceof ConnectionQueryServicesImpl);
     ConnectionQueryServicesImpl cqsi = (ConnectionQueryServicesImpl) cqs;
     long cachedConnections = 0L;
-    for (LinkedBlockingQueue<WeakReference<PhoenixConnection>> queue : cqsi.getCachedConnections()) {
+    for (LinkedBlockingQueue<WeakReference<PhoenixConnection>> queue : cqsi
+      .getCachedConnections()) {
       cachedConnections += queue.size();
     }
     return cachedConnections;

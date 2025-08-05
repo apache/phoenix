@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,25 +15,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.iterate;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
 import java.util.concurrent.ConcurrentMap;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.ExtendedCellBuilder;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.AbstractClientScanner;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.IsolationLevel;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -44,9 +47,6 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
@@ -58,8 +58,6 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.Properties;
 
 /**
  * Scan over a region from restored snapshot
@@ -73,8 +71,8 @@ public class SnapshotScanner extends AbstractClientScanner {
   private List<Cell> values;
   private StatisticsCollector statisticsCollector;
 
-  public SnapshotScanner(Configuration conf, FileSystem fs, Path rootDir,
-      TableDescriptor htd, RegionInfo hri,  Scan scan) throws Throwable{
+  public SnapshotScanner(Configuration conf, FileSystem fs, Path rootDir, TableDescriptor htd,
+    RegionInfo hri, Scan scan) throws Throwable {
 
     LOGGER.info("Creating SnapshotScanner for region: " + hri);
 
@@ -92,20 +90,24 @@ public class SnapshotScanner extends AbstractClientScanner {
     // Collect statistics during scan if ANALYZE_TABLE attribute is set
     if (ScanUtil.isAnalyzeTable(scan)) {
       this.scanner = region.getScanner(scan);
-      PhoenixConnection connection = (PhoenixConnection) ConnectionUtil.getInputConnection(conf, new Properties());
+      PhoenixConnection connection =
+        (PhoenixConnection) ConnectionUtil.getInputConnection(conf, new Properties());
       String tableName = region.getTableDescriptor().getTableName().getNameAsString();
-      TableName physicalTableName = SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, conf);
+      TableName physicalTableName =
+        SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, conf);
       Table table = connection.getQueryServices().getTable(physicalTableName.getName());
-      StatisticsWriter statsWriter = StatisticsWriter.newWriter(connection, tableName, HConstants.LATEST_TIMESTAMP);
-      statisticsCollector = new DefaultStatisticsCollector(conf, region,
-              tableName, null, null, null, statsWriter, table);
+      StatisticsWriter statsWriter =
+        StatisticsWriter.newWriter(connection, tableName, HConstants.LATEST_TIMESTAMP);
+      statisticsCollector = new DefaultStatisticsCollector(conf, region, tableName, null, null,
+        null, statsWriter, table);
     } else if (scan.getAttribute(BaseScannerRegionObserver.NON_AGGREGATE_QUERY) != null) {
       RegionScannerFactory regionScannerFactory = new NonAggregateRegionScannerFactory(snapshotEnv);
       this.scanner = regionScannerFactory.getRegionScanner(scan, region.getScanner(scan));
       statisticsCollector = new NoOpStatisticsCollector();
     } else {
-      /* future work : Snapshot M/R jobs for aggregate queries*/
-      throw new UnsupportedOperationException("Snapshot M/R jobs not available for aggregate queries");
+      /* future work : Snapshot M/R jobs for aggregate queries */
+      throw new UnsupportedOperationException(
+        "Snapshot M/R jobs not available for aggregate queries");
     }
 
     statisticsCollector.init();
@@ -120,7 +122,7 @@ public class SnapshotScanner extends AbstractClientScanner {
     if (hasMore || !values.isEmpty()) {
       return Result.create(values);
     } else {
-      //we are done
+      // we are done
       return null;
     }
   }
@@ -199,40 +201,40 @@ public class SnapshotScanner extends AbstractClientScanner {
         throw new UnsupportedOperationException();
       }
 
-    @Override
-    public RegionCoprocessor getInstance() {
+      @Override
+      public RegionCoprocessor getInstance() {
         throw new UnsupportedOperationException();
-    }
+      }
 
-    @Override
-    public OnlineRegions getOnlineRegions() {
+      @Override
+      public OnlineRegions getOnlineRegions() {
         throw new UnsupportedOperationException();
-    }
+      }
 
-    @Override
-    public ServerName getServerName() {
+      @Override
+      public ServerName getServerName() {
         throw new UnsupportedOperationException();
-    }
+      }
 
-    @Override
-    public Connection getConnection() {
+      @Override
+      public Connection getConnection() {
         throw new UnsupportedOperationException();
-    }
+      }
 
-    @Override
-    public MetricRegistry getMetricRegistryForRegionServer() {
+      @Override
+      public MetricRegistry getMetricRegistryForRegionServer() {
         throw new UnsupportedOperationException();
-    }
+      }
 
-    @Override
-    public Connection createConnection(Configuration conf) throws IOException {
+      @Override
+      public Connection createConnection(Configuration conf) throws IOException {
         throw new UnsupportedOperationException();
-    }
+      }
 
-    @Override
-    public ExtendedCellBuilder getCellBuilder() {
+      @Override
+      public ExtendedCellBuilder getCellBuilder() {
         throw new UnsupportedOperationException();
-    }
+      }
     };
   }
 }

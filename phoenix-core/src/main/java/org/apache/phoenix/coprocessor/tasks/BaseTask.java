@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,13 +22,16 @@ import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.schema.task.Task;
 
 public abstract class BaseTask {
-    protected long timeMaxInterval;
-    protected RegionCoprocessorEnvironment env;
-    public void init(RegionCoprocessorEnvironment env, Long interval) {
-        this.env = env;
-        this.timeMaxInterval = interval;
-    }
-    public abstract TaskRegionObserver.TaskResult run(Task.TaskRecord taskRecord);
+  protected long timeMaxInterval;
+  protected RegionCoprocessorEnvironment env;
 
-    public abstract TaskRegionObserver.TaskResult checkCurrentResult(Task.TaskRecord taskRecord) throws Exception;
+  public void init(RegionCoprocessorEnvironment env, Long interval) {
+    this.env = env;
+    this.timeMaxInterval = interval;
+  }
+
+  public abstract TaskRegionObserver.TaskResult run(Task.TaskRecord taskRecord);
+
+  public abstract TaskRegionObserver.TaskResult checkCurrentResult(Task.TaskRecord taskRecord)
+    throws Exception;
 }

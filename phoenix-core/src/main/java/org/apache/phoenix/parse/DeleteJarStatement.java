@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,18 +19,18 @@ package org.apache.phoenix.parse;
 
 public class DeleteJarStatement extends MutableStatement {
 
-    private LiteralParseNode jarPath;
+  private LiteralParseNode jarPath;
 
-    public DeleteJarStatement(LiteralParseNode jarPath) {
-        this.jarPath = jarPath;
-    }
+  public DeleteJarStatement(LiteralParseNode jarPath) {
+    this.jarPath = jarPath;
+  }
 
-    @Override
-    public int getBindCount() {
-        return 0;
-    }
+  @Override
+  public int getBindCount() {
+    return 0;
+  }
 
-    public LiteralParseNode getJarPath() {
-        return jarPath;
-    }
+  public LiteralParseNode getJarPath() {
+    return jarPath;
+  }
 }

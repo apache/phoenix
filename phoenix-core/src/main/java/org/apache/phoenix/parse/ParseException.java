@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,28 +18,25 @@
 package org.apache.phoenix.parse;
 
 /**
- * 
- * RuntimeException for exceptions occurring during parsing,
- * since ANTLR doesn't handle typed exceptions well.
- *
- * 
+ * RuntimeException for exceptions occurring during parsing, since ANTLR doesn't handle typed
+ * exceptions well.
  * @since 2.0
  */
 public class ParseException extends RuntimeException {
 
-    public ParseException() {
-    }
+  public ParseException() {
+  }
 
-    public ParseException(String msg) {
-        super(msg);
-    }
+  public ParseException(String msg) {
+    super(msg);
+  }
 
-    public ParseException(Throwable t) {
-        super(t);
-    }
+  public ParseException(Throwable t) {
+    super(t);
+  }
 
-    public ParseException(String msg, Throwable t) {
-        super(msg, t);
-    }
+  public ParseException(String msg, Throwable t) {
+    super(msg, t);
+  }
 
 }

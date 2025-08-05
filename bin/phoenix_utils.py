@@ -34,14 +34,14 @@ def find(pattern, classPaths):
         # remove * if it's at the end of path
         if ((path is not None) and (len(path) > 0) and (path[-1] == '*')) :
             path = path[:-1]
-    
+
         for root, dirs, files in os.walk(path):
             # sort the file names so *-client always precedes *-thin-client
             files.sort()
             for name in files:
                 if fnmatch.fnmatch(name, pattern):
                     return os.path.join(root, name)
-                
+
     return ""
 
 def tryDecode(input):

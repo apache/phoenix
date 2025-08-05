@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,20 +19,13 @@ package org.apache.phoenix.query;
 
 import org.apache.phoenix.util.ReadOnlyProps;
 
-
-
-
-
 /**
- * 
  * Real implementation of QueryServices for use in runtime and perf testing
- *
- * 
  * @since 0.1
  */
 public final class QueryServicesImpl extends BaseQueryServicesImpl {
-    
-    public QueryServicesImpl(ReadOnlyProps defaultProps) {
-        super(defaultProps, QueryServicesOptions.withDefaults());
-    }
+
+  public QueryServicesImpl(ReadOnlyProps defaultProps) {
+    super(defaultProps, QueryServicesOptions.withDefaults());
+  }
 }

@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -31,30 +31,31 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
 
 @RunWith(MockitoJUnitRunner.class)
 public class LogUtilTest {
-    
-	@Mock PhoenixConnection con;
-	
-    @Test
-    public void testAddCustomAnnotationsWithNullConnection() {
-    	String logLine = LogUtil.addCustomAnnotations("log line", (PhoenixConnection)null);
-    	assertEquals(logLine, "log line");
-    }
-	
-    @Test
-    public void testAddCustomAnnotationsWithNullAnnotations() {
-    	when(con.getCustomTracingAnnotations()).thenReturn(null);
-    	
-    	String logLine = LogUtil.addCustomAnnotations("log line", con);
-    	assertEquals(logLine, "log line");
-    }
-    
-    @Test
-    public void testAddCustomAnnotations() {
-    	when(con.getCustomTracingAnnotations()).thenReturn(ImmutableMap.of("a1", "v1", "a2", "v2"));
-    	
-    	String logLine = LogUtil.addCustomAnnotations("log line", con);
-    	assertTrue(logLine.contains("log line"));
-    	assertTrue(logLine.contains("a1=v1"));
-    	assertTrue(logLine.contains("a2=v2"));
-    }
+
+  @Mock
+  PhoenixConnection con;
+
+  @Test
+  public void testAddCustomAnnotationsWithNullConnection() {
+    String logLine = LogUtil.addCustomAnnotations("log line", (PhoenixConnection) null);
+    assertEquals(logLine, "log line");
+  }
+
+  @Test
+  public void testAddCustomAnnotationsWithNullAnnotations() {
+    when(con.getCustomTracingAnnotations()).thenReturn(null);
+
+    String logLine = LogUtil.addCustomAnnotations("log line", con);
+    assertEquals(logLine, "log line");
+  }
+
+  @Test
+  public void testAddCustomAnnotations() {
+    when(con.getCustomTracingAnnotations()).thenReturn(ImmutableMap.of("a1", "v1", "a2", "v2"));
+
+    String logLine = LogUtil.addCustomAnnotations("log line", con);
+    assertTrue(logLine.contains("log line"));
+    assertTrue(logLine.contains("a1=v1"));
+    assertTrue(logLine.contains("a2=v2"));
+  }
 }

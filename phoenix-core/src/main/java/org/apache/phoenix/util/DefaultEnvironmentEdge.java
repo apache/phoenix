@@ -1,5 +1,4 @@
 /*
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,8 +22,7 @@ package org.apache.phoenix.util;
  */
 public class DefaultEnvironmentEdge extends EnvironmentEdge {
   /**
-   * {@inheritDoc}
-   * This implementation returns {@link System#currentTimeMillis()}
+   * {@inheritDoc} This implementation returns {@link System#currentTimeMillis()}
    */
   @Override
   public long currentTime() {

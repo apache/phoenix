@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,7 +28,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
@@ -52,10 +51,10 @@ public class TestCoveredColumnIndexCodec {
   private static final byte[] FAMILY = Bytes.toBytes(FAMILY_STRING);
   private static final byte[] QUAL = Bytes.toBytes("qual");
   private static final CoveredColumn COLUMN_REF = new CoveredColumn(FAMILY_STRING, QUAL);
-  private static final byte[] EMPTY_INDEX_KEY = CoveredColumnIndexCodec.composeRowKey(PK, 0,
-    Arrays.asList(toColumnEntry(new byte[0])));
-  private static final byte[] BLANK_INDEX_KEY = CoveredColumnIndexCodec.composeRowKey(PK, 0,
-    Collections.<ColumnEntry> emptyList());
+  private static final byte[] EMPTY_INDEX_KEY =
+    CoveredColumnIndexCodec.composeRowKey(PK, 0, Arrays.asList(toColumnEntry(new byte[0])));
+  private static final byte[] BLANK_INDEX_KEY =
+    CoveredColumnIndexCodec.composeRowKey(PK, 0, Collections.<ColumnEntry> emptyList());
 
   private static ColumnEntry toColumnEntry(byte[] bytes) {
     return new ColumnEntry(bytes, COLUMN_REF);
@@ -63,21 +62,20 @@ public class TestCoveredColumnIndexCodec {
 
   /**
    * Convert between an index and a bunch of values
-   * @throws Exception
    */
   @Test
   public void toFromIndexKey() throws Exception {
     // start with empty values
     byte[] indexKey = BLANK_INDEX_KEY;
     List<byte[]> stored = CoveredColumnIndexCodec.getValues(indexKey);
-    assertEquals("Found some stored values in an index row key that wasn't created with values!",
-      0, stored.size());
+    assertEquals("Found some stored values in an index row key that wasn't created with values!", 0,
+      stored.size());
 
     // a single, empty value
     indexKey = EMPTY_INDEX_KEY;
     stored = CoveredColumnIndexCodec.getValues(indexKey);
-    assertEquals("Found some stored values in an index row key that wasn't created with values!",
-      1, stored.size());
+    assertEquals("Found some stored values in an index row key that wasn't created with values!", 1,
+      stored.size());
     assertEquals("Found a non-zero length value: " + Bytes.toString(stored.get(0)), 0,
       stored.get(0).length);
 
@@ -86,9 +84,8 @@ public class TestCoveredColumnIndexCodec {
     byte[] v2 = new byte[] { 'b' };
     byte[] v3 = Bytes.toBytes("v3");
     int len = v1.length + v2.length + v3.length;
-    indexKey =
-        CoveredColumnIndexCodec.composeRowKey(PK, len,
-          Arrays.asList(toColumnEntry(v1), toColumnEntry(v2), toColumnEntry(v3)));
+    indexKey = CoveredColumnIndexCodec.composeRowKey(PK, len,
+      Arrays.asList(toColumnEntry(v1), toColumnEntry(v2), toColumnEntry(v3)));
     stored = CoveredColumnIndexCodec.getValues(indexKey);
     assertEquals("Didn't find expected number of values in index key!", 3, stored.size());
     assertTrue("First index keys don't match!", Bytes.equals(v1, stored.get(0)));
@@ -106,21 +103,18 @@ public class TestCoveredColumnIndexCodec {
     byte[] result = EMPTY_INDEX_KEY;
     assertTrue("Didn't correctly read single element as being null in row key",
       CoveredColumnIndexCodec.checkRowKeyForAllNulls(result));
-    result =
-        CoveredColumnIndexCodec.composeRowKey(pk, 0,
-          Lists.newArrayList(toColumnEntry(new byte[0]), toColumnEntry(new byte[0])));
+    result = CoveredColumnIndexCodec.composeRowKey(pk, 0,
+      Lists.newArrayList(toColumnEntry(new byte[0]), toColumnEntry(new byte[0])));
     assertTrue("Didn't correctly read two elements as being null in row key",
       CoveredColumnIndexCodec.checkRowKeyForAllNulls(result));
 
     // check cases where it isn't null
-    result =
-        CoveredColumnIndexCodec.composeRowKey(pk, 2,
-          Arrays.asList(toColumnEntry(new byte[] { 1, 2 })));
+    result = CoveredColumnIndexCodec.composeRowKey(pk, 2,
+      Arrays.asList(toColumnEntry(new byte[] { 1, 2 })));
     assertFalse("Found a null key, when it wasn't!",
       CoveredColumnIndexCodec.checkRowKeyForAllNulls(result));
-    result =
-        CoveredColumnIndexCodec.composeRowKey(pk, 2,
-          Arrays.asList(toColumnEntry(new byte[] { 1, 2 }), toColumnEntry(new byte[0])));
+    result = CoveredColumnIndexCodec.composeRowKey(pk, 2,
+      Arrays.asList(toColumnEntry(new byte[] { 1, 2 }), toColumnEntry(new byte[0])));
     assertFalse("Found a null key, when it wasn't!",
       CoveredColumnIndexCodec.checkRowKeyForAllNulls(result));
   }
@@ -134,8 +128,8 @@ public class TestCoveredColumnIndexCodec {
     }
 
     @Override
-    public List<Cell> getCurrentRowState(Mutation m, Collection<? extends ColumnReference> toCover, boolean preMutationStateOnly)
-        throws IOException {
+    public List<Cell> getCurrentRowState(Mutation m, Collection<? extends ColumnReference> toCover,
+      boolean preMutationStateOnly) throws IOException {
       return r.listCells();
     }
 
@@ -151,7 +145,7 @@ public class TestCoveredColumnIndexCodec {
     group.add(COLUMN_REF);
 
     final Result emptyState = Result.create(Collections.<Cell> emptyList());
-    
+
     // setup the state we expect for the codec
     RegionCoprocessorEnvironment env = Mockito.mock(RegionCoprocessorEnvironment.class);
     Configuration conf = new Configuration(false);
@@ -160,7 +154,7 @@ public class TestCoveredColumnIndexCodec {
 
     // make a new codec on those kvs
     CoveredColumnIndexCodec codec =
-        CoveredColumnIndexCodec.getCodecForTesting(Arrays.asList(group));
+      CoveredColumnIndexCodec.getCodecForTesting(Arrays.asList(group));
 
     // start with a basic put that has some keyvalues
     Put p = new Put(PK);
@@ -177,22 +171,24 @@ public class TestCoveredColumnIndexCodec {
 
     // check the codec for deletes it should send
     LocalTableState state = new LocalTableState(table, p);
-    Iterable<IndexUpdate> updates = codec.getIndexDeletes(state, IndexMetaData.NULL_INDEX_META_DATA, null, null);
-    assertFalse("Found index updates without any existing kvs in table!", updates.iterator().next()
-        .isValid());
+    Iterable<IndexUpdate> updates =
+      codec.getIndexDeletes(state, IndexMetaData.NULL_INDEX_META_DATA, null, null);
+    assertFalse("Found index updates without any existing kvs in table!",
+      updates.iterator().next().isValid());
 
     // get the updates with the pending update
     state.setCurrentTimestamp(1);
     state.addPendingUpdates(kvs);
     updates = codec.getIndexUpserts(state, IndexMetaData.NULL_INDEX_META_DATA, null, null, false);
-    assertTrue("Didn't find index updates for pending primary table update!", updates.iterator()
-        .hasNext());
+    assertTrue("Didn't find index updates for pending primary table update!",
+      updates.iterator().hasNext());
     for (IndexUpdate update : updates) {
-      assertTrue("Update marked as invalid, but should be a pending index write!", update.isValid());
+      assertTrue("Update marked as invalid, but should be a pending index write!",
+        update.isValid());
       Put m = (Put) update.getUpdate();
       // should just be the single update for the column reference
       byte[] expected =
-          CoveredColumnIndexCodec.composeRowKey(PK, v1.length, Arrays.asList(toColumnEntry(v1)));
+        CoveredColumnIndexCodec.composeRowKey(PK, v1.length, Arrays.asList(toColumnEntry(v1)));
       assertArrayEquals("Didn't get expected index value", expected, m.getRow());
     }
 
@@ -214,7 +210,7 @@ public class TestCoveredColumnIndexCodec {
       Delete m = (Delete) update.getUpdate();
       // should just be the single update for the column reference
       byte[] expected =
-          CoveredColumnIndexCodec.composeRowKey(PK, v1.length, Arrays.asList(toColumnEntry(v1)));
+        CoveredColumnIndexCodec.composeRowKey(PK, v1.length, Arrays.asList(toColumnEntry(v1)));
       assertArrayEquals("Didn't get expected index value", expected, m.getRow());
     }
     ensureNoUpdatesWhenCoveredByDelete(env, codec, kvs, d);
@@ -230,14 +226,15 @@ public class TestCoveredColumnIndexCodec {
     ensureNoUpdatesWhenCoveredByDelete(env, codec, kvs, d);
   }
 
-  private void ensureNoUpdatesWhenCoveredByDelete(RegionCoprocessorEnvironment env, IndexCodec codec, List<Cell> currentState,
-      Delete d) throws IOException {
+  private void ensureNoUpdatesWhenCoveredByDelete(RegionCoprocessorEnvironment env,
+    IndexCodec codec, List<Cell> currentState, Delete d) throws IOException {
     LocalHBaseState table = new SimpleTableState(Result.create(currentState));
     LocalTableState state = new LocalTableState(table, d);
     state.setCurrentTimestamp(d.getTimeStamp());
     // now we shouldn't see anything when getting the index update
     state.addPendingUpdates(d.getFamilyCellMap().get(FAMILY));
-    Iterable<IndexUpdate> updates = codec.getIndexUpserts(state, IndexMetaData.NULL_INDEX_META_DATA, null, null, false);
+    Iterable<IndexUpdate> updates =
+      codec.getIndexUpserts(state, IndexMetaData.NULL_INDEX_META_DATA, null, null, false);
     for (IndexUpdate update : updates) {
       assertFalse("Had some index updates, though it should have been covered by the delete",
         update.isValid());

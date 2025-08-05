@@ -28,4 +28,3 @@ export PATH=$PATH:$JAVA_HOME/bin:$ANT_HOME/bin:$MAVEN_HOME/bin
 export MAVEN_OPTS="${MAVEN_OPTS:-"-Xmx3100M -XX:-UsePerfData -XX:MaxPermSize=256m"}"
 
 ulimit -n
-

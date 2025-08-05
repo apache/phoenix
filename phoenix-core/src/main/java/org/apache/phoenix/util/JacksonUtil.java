@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,24 +22,24 @@ import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.ObjectWriter;
 
 public final class JacksonUtil {
-    private static final ObjectMapper mapper = new ObjectMapper();
+  private static final ObjectMapper mapper = new ObjectMapper();
 
-    private JacksonUtil() {
-    }
+  private JacksonUtil() {
+  }
 
-    public static ObjectReader getObjectReader(Class clazz) {
-        return mapper.readerFor(clazz);
-    }
+  public static ObjectReader getObjectReader(Class clazz) {
+    return mapper.readerFor(clazz);
+  }
 
-    public static ObjectReader getObjectReader(){
-        return mapper.reader();
-    }
+  public static ObjectReader getObjectReader() {
+    return mapper.reader();
+  }
 
-    public static ObjectWriter getObjectWriter(Class clazz) {
-        return mapper.writerFor(clazz);
-    }
+  public static ObjectWriter getObjectWriter(Class clazz) {
+    return mapper.writerFor(clazz);
+  }
 
-    public static ObjectWriter getObjectWriter(){
-        return mapper.writer();
-    }
+  public static ObjectWriter getObjectWriter() {
+    return mapper.writer();
+  }
 }

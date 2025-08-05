@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,7 +19,6 @@ package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
 import java.util.List;
-
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
@@ -27,65 +26,65 @@ import org.apache.hadoop.hbase.regionserver.ScannerContext;
 
 public class DelegateRegionScanner implements RegionScanner {
 
-    protected RegionScanner delegate;
+  protected RegionScanner delegate;
 
-    public DelegateRegionScanner(RegionScanner scanner) {
-        this.delegate = scanner;
-    }
+  public DelegateRegionScanner(RegionScanner scanner) {
+    this.delegate = scanner;
+  }
 
-    @Override
-    public boolean isFilterDone() throws IOException {
-        return delegate.isFilterDone();
-    }
+  @Override
+  public boolean isFilterDone() throws IOException {
+    return delegate.isFilterDone();
+  }
 
-    @Override
-    public boolean reseek(byte[] row) throws IOException {
-        return delegate.reseek(row);
-    }
+  @Override
+  public boolean reseek(byte[] row) throws IOException {
+    return delegate.reseek(row);
+  }
 
-    @Override
-    public long getMvccReadPoint() {
-        return delegate.getMvccReadPoint();
-    }
+  @Override
+  public long getMvccReadPoint() {
+    return delegate.getMvccReadPoint();
+  }
 
-    @Override
-    public void close() throws IOException {
-        delegate.close();
-    }
+  @Override
+  public void close() throws IOException {
+    delegate.close();
+  }
 
-    @Override
-    public long getMaxResultSize() {
-        return delegate.getMaxResultSize();
-    }
+  @Override
+  public long getMaxResultSize() {
+    return delegate.getMaxResultSize();
+  }
 
-    @Override
-    public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
-        throw new IOException("Next with scannerContext should not be called in Phoenix environment");
-    }
+  @Override
+  public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+    throw new IOException("Next with scannerContext should not be called in Phoenix environment");
+  }
 
-    @Override
-    public boolean next(List<Cell> result) throws IOException {
-        return delegate.next(result);
-    }
+  @Override
+  public boolean next(List<Cell> result) throws IOException {
+    return delegate.next(result);
+  }
 
-    @Override
-    public boolean nextRaw(List<Cell> result, ScannerContext scannerContext) throws IOException {
-        throw new IOException("NextRaw with scannerContext should not be called in Phoenix environment");
-    }
+  @Override
+  public boolean nextRaw(List<Cell> result, ScannerContext scannerContext) throws IOException {
+    throw new IOException(
+      "NextRaw with scannerContext should not be called in Phoenix environment");
+  }
 
-    @Override
-    public boolean nextRaw(List<Cell> arg0) throws IOException {
-        return delegate.nextRaw(arg0);
-    }
+  @Override
+  public boolean nextRaw(List<Cell> arg0) throws IOException {
+    return delegate.nextRaw(arg0);
+  }
 
-    @Override
-    public int getBatch() {
-        return delegate.getBatch();
-    }
+  @Override
+  public int getBatch() {
+    return delegate.getBatch();
+  }
 
-
-    @Override
-    public RegionInfo getRegionInfo() {
-        return delegate.getRegionInfo();
-    }
+  @Override
+  public RegionInfo getRegionInfo() {
+    return delegate.getRegionInfo();
+  }
 }

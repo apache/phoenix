@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,28 +19,27 @@ package org.apache.phoenix.expression.visitor;
 
 import java.util.List;
 import java.util.Map;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.function.ScalarFunction;
 
 public class ReplaceArrayFunctionExpressionVisitor extends CloneExpressionVisitor {
-    private Map<Expression, Expression> replacementMap;
+  private Map<Expression, Expression> replacementMap;
 
-    public ReplaceArrayFunctionExpressionVisitor(Map<Expression, Expression> replacementMap) {
-        this.replacementMap = replacementMap;
-    }
+  public ReplaceArrayFunctionExpressionVisitor(Map<Expression, Expression> replacementMap) {
+    this.replacementMap = replacementMap;
+  }
 
-    @Override
-    public boolean isCloneNode(Expression node, List<Expression> children) {
-        return !children.equals(node.getChildren());
-    }
+  @Override
+  public boolean isCloneNode(Expression node, List<Expression> children) {
+    return !children.equals(node.getChildren());
+  }
 
-    @Override
-    public Expression visitLeave(ScalarFunction node, List<Expression> l) {
-        Expression replacement = replacementMap.get(node);
-        if (replacement != null) {
-            return replacement;
-        }
-        return super.visitLeave(node, l);
+  @Override
+  public Expression visitLeave(ScalarFunction node, List<Expression> l) {
+    Expression replacement = replacementMap.get(node);
+    if (replacement != null) {
+      return replacement;
     }
+    return super.visitLeave(node, l);
+  }
 }

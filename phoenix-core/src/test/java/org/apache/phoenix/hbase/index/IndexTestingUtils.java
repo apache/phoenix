@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,7 +22,6 @@ import static org.junit.Assert.assertEquals;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
@@ -45,28 +44,28 @@ public class IndexTestingUtils {
   private static final Logger LOGGER = LoggerFactory.getLogger(IndexTestingUtils.class);
   private static final String MASTER_INFO_PORT_KEY = "hbase.master.info.port";
   private static final String RS_INFO_PORT_KEY = "hbase.regionserver.info.port";
-  
+
   private IndexTestingUtils() {
     // private ctor for util class
   }
 
   public static void setupConfig(Configuration conf) {
-      conf.setInt(MASTER_INFO_PORT_KEY, -1);
-      conf.setInt(RS_INFO_PORT_KEY, -1);
+    conf.setInt(MASTER_INFO_PORT_KEY, -1);
+    conf.setInt(RS_INFO_PORT_KEY, -1);
     // setup our codec, so we get proper replay/write
-      conf.set(WALCellCodec.WAL_CELL_CODEC_CLASS_KEY, IndexedWALEditCodec.class.getName());
+    conf.set(WALCellCodec.WAL_CELL_CODEC_CLASS_KEY, IndexedWALEditCodec.class.getName());
   }
+
   /**
    * Verify the state of the index table between the given key and time ranges against the list of
    * expected keyvalues.
-   * @throws IOException
    */
   @SuppressWarnings("javadoc")
-  public static void verifyIndexTableAtTimestamp(Table index1, List<KeyValue> expected,
-      long start, long end, byte[] startKey, byte[] endKey) throws IOException {
-    LOGGER.debug("Scanning " + index1.getName().getNameAsString() + " between times (" + start
-        + ", " + end + "] and keys: [" + Bytes.toString(startKey) + ", " + Bytes.toString(endKey)
-        + "].");
+  public static void verifyIndexTableAtTimestamp(Table index1, List<KeyValue> expected, long start,
+    long end, byte[] startKey, byte[] endKey) throws IOException {
+    LOGGER
+      .debug("Scanning " + index1.getName().getNameAsString() + " between times (" + start + ", "
+        + end + "] and keys: [" + Bytes.toString(startKey) + ", " + Bytes.toString(endKey) + "].");
     Scan s = new Scan(startKey, endKey);
     // s.setRaw(true);
     s.setMaxVersions();
@@ -82,12 +81,13 @@ public class IndexTestingUtils {
   }
 
   public static void verifyIndexTableAtTimestamp(Table index1, List<KeyValue> expected, long ts,
-      byte[] startKey) throws IOException {
-    IndexTestingUtils.verifyIndexTableAtTimestamp(index1, expected, ts, startKey, HConstants.EMPTY_END_ROW);
+    byte[] startKey) throws IOException {
+    IndexTestingUtils.verifyIndexTableAtTimestamp(index1, expected, ts, startKey,
+      HConstants.EMPTY_END_ROW);
   }
 
   public static void verifyIndexTableAtTimestamp(Table index1, List<KeyValue> expected, long start,
-      byte[] startKey, byte[] endKey) throws IOException {
+    byte[] startKey, byte[] endKey) throws IOException {
     verifyIndexTableAtTimestamp(index1, expected, start, start + 1, startKey, endKey);
   }
 }

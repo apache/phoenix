@@ -1019,6 +1019,3 @@
 | [PHOENIX-4874](https://issues.apache.org/jira/browse/PHOENIX-4874) | psql doesn't support date/time with values smaller than milliseconds |  Blocker | . |
 | [PHOENIX-4825](https://issues.apache.org/jira/browse/PHOENIX-4825) | Replace usage of HBase Base64 implementation with java.util.Base64 |  Blocker | . |
 | [PHOENIX-4826](https://issues.apache.org/jira/browse/PHOENIX-4826) | Changes to support HBase 2.0.1 |  Major | . |
-
-
-

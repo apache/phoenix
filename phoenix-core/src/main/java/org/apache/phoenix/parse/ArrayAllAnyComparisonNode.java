@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,32 +18,31 @@
 package org.apache.phoenix.parse;
 
 import java.util.List;
-
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.util.QueryUtil;
 
 public abstract class ArrayAllAnyComparisonNode extends CompoundParseNode {
 
-    public ArrayAllAnyComparisonNode(List<ParseNode> children) {
-        super(children);
-    }
+  public ArrayAllAnyComparisonNode(List<ParseNode> children) {
+    super(children);
+  }
 
-    public abstract String getType();
+  public abstract String getType();
 
-    @Override
-    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
-        List<ParseNode> children = getChildren();
-        ParseNode rhs = children.get(0);
-        ComparisonParseNode comp = (ComparisonParseNode)children.get(1);
-        ParseNode lhs = comp.getLHS();
-        CompareOp op = comp.getFilterOp();
-        buf.append(' ');
-        lhs.toSQL(resolver, buf);
-        buf.append(" " + QueryUtil.toSQL(op) + " ");
-        buf.append(getType());
-        buf.append('(');
-        rhs.toSQL(resolver, buf);
-        buf.append(')');
-    }
+  @Override
+  public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+    List<ParseNode> children = getChildren();
+    ParseNode rhs = children.get(0);
+    ComparisonParseNode comp = (ComparisonParseNode) children.get(1);
+    ParseNode lhs = comp.getLHS();
+    CompareOp op = comp.getFilterOp();
+    buf.append(' ');
+    lhs.toSQL(resolver, buf);
+    buf.append(" " + QueryUtil.toSQL(op) + " ");
+    buf.append(getType());
+    buf.append('(');
+    rhs.toSQL(resolver, buf);
+    buf.append(')');
+  }
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,27 +15,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.exception;
 
 import java.sql.SQLException;
 
 /**
- * The Exception is thrown when the returned row key by the given Scanner does not satisfy the
- * Scan boundaries i.e. scan start and end keys.
+ * The Exception is thrown when the returned row key by the given Scanner does not satisfy the Scan
+ * boundaries i.e. scan start and end keys.
  */
 public class ResultSetOutOfScanRangeException extends SQLException {
 
-    private static final SQLExceptionCode EXCEPTION_CODE =
-            SQLExceptionCode.ROW_KEY_OUT_OF_SCAN_RANGE;
+  private static final SQLExceptionCode EXCEPTION_CODE = SQLExceptionCode.ROW_KEY_OUT_OF_SCAN_RANGE;
 
-    public ResultSetOutOfScanRangeException(String message) {
-        super(new SQLExceptionInfo
-                .Builder(EXCEPTION_CODE)
-                .setMessage(message)
-                .build()
-                .toString(),
-                EXCEPTION_CODE.getSQLState(),
-                EXCEPTION_CODE.getErrorCode());
-    }
+  public ResultSetOutOfScanRangeException(String message) {
+    super(new SQLExceptionInfo.Builder(EXCEPTION_CODE).setMessage(message).build().toString(),
+      EXCEPTION_CODE.getSQLState(), EXCEPTION_CODE.getErrorCode());
+  }
 }

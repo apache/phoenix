@@ -15,12 +15,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-
 package org.apache.phoenix.pherf.workload.mt;
 
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import com.lmax.disruptor.WorkHandler;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Properties;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
@@ -31,9 +32,8 @@ import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.configuration.TenantGroup;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
-import org.apache.phoenix.pherf.workload.mt.generators.TenantLoadEventGeneratorFactory.GeneratorType;
 import org.apache.phoenix.pherf.workload.mt.MultiTenantTestUtils.TestConfigAndExpectations;
-
+import org.apache.phoenix.pherf.workload.mt.generators.TenantLoadEventGeneratorFactory.GeneratorType;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -42,122 +42,122 @@ import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Properties;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
- * Tests focused on tenant view operations and their validations
- * Tests focused on tenant operation workloads {@link MultiTenantWorkload}
- * and workload handlers {@link WorkHandler}
+ * Tests focused on tenant view operations and their validations Tests focused on tenant operation
+ * workloads {@link MultiTenantWorkload} and workload handlers {@link WorkHandler}
  */
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class TenantViewOperationWorkloadIT extends ParallelStatsDisabledIT {
-    private final MultiTenantTestUtils multiTenantTestUtils = new MultiTenantTestUtils();
-    private final Properties properties = PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES, false);
-    private final PhoenixUtil util = PhoenixUtil.create(true);
-    private final RegionCoprocessorEnvironment taskRegionEnvironment;
-    private GeneratorType generatorType;
+  private final MultiTenantTestUtils multiTenantTestUtils = new MultiTenantTestUtils();
+  private final Properties properties =
+    PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES, false);
+  private final PhoenixUtil util = PhoenixUtil.create(true);
+  private final RegionCoprocessorEnvironment taskRegionEnvironment;
+  private GeneratorType generatorType;
 
-    public TenantViewOperationWorkloadIT(String generatorType) throws Exception {
-        this.generatorType = GeneratorType.valueOf(generatorType);
-        taskRegionEnvironment =
-                (RegionCoprocessorEnvironment)getUtility()
-                        .getRSForFirstRegionInTable(
-                                PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
-                        .getRegions(PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
-                        .get(0).getCoprocessorHost()
-                        .findCoprocessorEnvironment(TaskRegionObserver.class.getName());
+  public TenantViewOperationWorkloadIT(String generatorType) throws Exception {
+    this.generatorType = GeneratorType.valueOf(generatorType);
+    taskRegionEnvironment = (RegionCoprocessorEnvironment) getUtility()
+      .getRSForFirstRegionInTable(PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
+      .getRegions(PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME).get(0).getCoprocessorHost()
+      .findCoprocessorEnvironment(TaskRegionObserver.class.getName());
+  }
+
+  @BeforeClass
+  public static synchronized void setUrl() {
+    PhoenixUtil.setZookeeper(MultiTenantTestUtils.getZookeeperFromUrl(url));
+  }
+
+  @Parameterized.Parameters(name = "generator_type={0}")
+  public static synchronized Collection<Object[]> data() {
+    List<Object[]> testCases = Lists.newArrayList();
+    testCases.add(new Object[] { "WEIGHTED" });
+    testCases.add(new Object[] { "UNIFORM" });
+    testCases.add(new Object[] { "SEQUENTIAL" });
+    return testCases;
+  }
+
+  @Before
+  public void setup() throws Exception {
+    multiTenantTestUtils.applySchema(util, ".*datamodel/.*test_mt.*.sql");
+  }
+
+  @After
+  public void cleanup() throws Exception {
+    util.deleteTables("PHERF.*BASE_TABLE");
+    if (taskRegionEnvironment != null) {
+      util.dropChildView(taskRegionEnvironment, 2);
     }
+  }
 
-    @BeforeClass
-    public static synchronized void setUrl() {
-        PhoenixUtil.setZookeeper(MultiTenantTestUtils.getZookeeperFromUrl(url));
+  @Test
+  public void testVariousOperations() throws Exception {
+
+    DataModel model =
+      multiTenantTestUtils.readTestDataModel("/scenario/test_mt_workload_template.xml");
+    for (Scenario scenario : model.getScenarios()) {
+      TestConfigAndExpectations settings = getTestConfigAndExpectations(scenario, generatorType);
+      scenario.setGeneratorName(generatorType.name());
+      scenario.getLoadProfile().setTenantDistribution(settings.tenantGroups);
+      multiTenantTestUtils.testVariousOperations(properties, model, scenario.getName(),
+        settings.expectedTenantGroups, settings.expectedOpGroups);
     }
+  }
 
-    @Parameterized.Parameters( name = "generator_type={0}" )
-    public static synchronized Collection<Object[]> data() {
-        List<Object[]> testCases = Lists.newArrayList();
-        testCases.add(new Object[] { "WEIGHTED" });
-        testCases.add(new Object[] { "UNIFORM" });
-        testCases.add(new Object[] { "SEQUENTIAL" });return testCases;
+  @Test
+  public void testWorkloadWithOneHandler() throws Exception {
+    int numHandlers = 1;
+
+    DataModel model =
+      multiTenantTestUtils.readTestDataModel("/scenario/test_mt_workload_template.xml");
+    for (Scenario scenario : model.getScenarios()) {
+      TestConfigAndExpectations settings = getTestConfigAndExpectations(scenario, generatorType);
+      scenario.setGeneratorName(generatorType.name());
+      scenario.getLoadProfile().setTenantDistribution(settings.tenantGroups);
+      multiTenantTestUtils.testWorkloadWithHandlers(properties, model, scenario.getName(),
+        numHandlers, settings.expectedTenantGroups, settings.expectedOpGroups);
     }
+  }
 
-    @Before
-    public void setup() throws Exception {
-        multiTenantTestUtils.applySchema(util,".*datamodel/.*test_mt.*.sql");
+  @Test
+  public void testWorkloadWithManyHandlers() throws Exception {
+    int numHandlers = 5;
+    DataModel model =
+      multiTenantTestUtils.readTestDataModel("/scenario/test_mt_workload_template.xml");
+    for (Scenario scenario : model.getScenarios()) {
+      TestConfigAndExpectations settings = getTestConfigAndExpectations(scenario, generatorType);
+      scenario.setGeneratorName(generatorType.name());
+      scenario.getLoadProfile().setTenantDistribution(settings.tenantGroups);
+      multiTenantTestUtils.testWorkloadWithHandlers(properties, model, scenario.getName(),
+        numHandlers, settings.expectedTenantGroups, settings.expectedOpGroups);
     }
+  }
 
-    @After
-    public void cleanup() throws Exception {
-        util.deleteTables("PHERF.*BASE_TABLE");
-        if (taskRegionEnvironment != null) {
-            util.dropChildView(taskRegionEnvironment, 2);
-        }
+  private TestConfigAndExpectations getTestConfigAndExpectations(Scenario scenario,
+    GeneratorType generatorType) {
+    TestConfigAndExpectations settings = new TestConfigAndExpectations();
+
+    switch (generatorType) {
+      case WEIGHTED:
+        settings.tenantGroups = scenario.getLoadProfile().getTenantDistribution();
+        settings.expectedOpGroups = scenario.getLoadProfile().getOpDistribution().size();
+        settings.expectedTenantGroups = scenario.getLoadProfile().getTenantDistribution().size();
+      default:
+        List<TenantGroup> tenantGroups = new ArrayList<>();
+        TenantGroup tg1 = new TenantGroup();
+        tg1.setId("tg1");
+        tg1.setNumTenants(10);
+        tg1.setWeight(100);
+        tenantGroups.add(tg1);
+        settings.tenantGroups = tenantGroups;
+        settings.expectedTenantGroups = 1;
+        settings.expectedOpGroups = scenario.getLoadProfile().getOpDistribution().size();
+        ;
+        break;
     }
-
-    @Test public void testVariousOperations() throws Exception {
-
-        DataModel model = multiTenantTestUtils.readTestDataModel(
-                "/scenario/test_mt_workload_template.xml");
-        for (Scenario scenario : model.getScenarios()) {
-            TestConfigAndExpectations settings = getTestConfigAndExpectations(scenario, generatorType);
-            scenario.setGeneratorName(generatorType.name());
-            scenario.getLoadProfile().setTenantDistribution(settings.tenantGroups);
-            multiTenantTestUtils.testVariousOperations(properties, model, scenario.getName(),
-                    settings.expectedTenantGroups, settings.expectedOpGroups);
-        }
-    }
-
-    @Test public void testWorkloadWithOneHandler() throws Exception {
-        int numHandlers = 1;
-
-        DataModel model = multiTenantTestUtils.readTestDataModel(
-                "/scenario/test_mt_workload_template.xml");
-        for (Scenario scenario : model.getScenarios()) {
-            TestConfigAndExpectations settings = getTestConfigAndExpectations(scenario, generatorType);
-            scenario.setGeneratorName(generatorType.name());
-            scenario.getLoadProfile().setTenantDistribution(settings.tenantGroups);
-            multiTenantTestUtils.testWorkloadWithHandlers(properties, model, scenario.getName(),
-                    numHandlers, settings.expectedTenantGroups, settings.expectedOpGroups);
-        }
-    }
-
-    @Test public void testWorkloadWithManyHandlers() throws Exception {
-        int numHandlers = 5;
-        DataModel model = multiTenantTestUtils.readTestDataModel(
-                "/scenario/test_mt_workload_template.xml");
-        for (Scenario scenario : model.getScenarios()) {
-            TestConfigAndExpectations settings = getTestConfigAndExpectations(scenario, generatorType);
-            scenario.setGeneratorName(generatorType.name());
-            scenario.getLoadProfile().setTenantDistribution(settings.tenantGroups);
-            multiTenantTestUtils.testWorkloadWithHandlers(properties, model, scenario.getName(),
-                    numHandlers, settings.expectedTenantGroups, settings.expectedOpGroups);
-        }
-    }
-
-    private TestConfigAndExpectations getTestConfigAndExpectations(Scenario scenario, GeneratorType generatorType) {
-        TestConfigAndExpectations settings = new TestConfigAndExpectations();
-
-        switch (generatorType) {
-        case WEIGHTED:
-            settings.tenantGroups = scenario.getLoadProfile().getTenantDistribution();
-            settings.expectedOpGroups = scenario.getLoadProfile().getOpDistribution().size();
-            settings.expectedTenantGroups = scenario.getLoadProfile().getTenantDistribution().size();
-        default:
-            List<TenantGroup> tenantGroups = new ArrayList<>();
-            TenantGroup tg1 = new TenantGroup();
-            tg1.setId("tg1");
-            tg1.setNumTenants(10);
-            tg1.setWeight(100);
-            tenantGroups.add(tg1);
-            settings.tenantGroups = tenantGroups;
-            settings.expectedTenantGroups = 1;
-            settings.expectedOpGroups = scenario.getLoadProfile().getOpDistribution().size();;
-            break;
-        }
-        return settings;
-    }
+    return settings;
+  }
 }

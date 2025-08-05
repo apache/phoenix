@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,11 +20,9 @@ package org.apache.phoenix.iterate;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
-
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
-import org.apache.phoenix.compile.ExplainPlanAttributes
-    .ExplainPlanAttributesBuilder;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.monitoring.OverAllQueryMetrics;
@@ -34,133 +32,126 @@ import org.apache.phoenix.util.ServerUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
-
 /**
- *
  * Create a union ResultIterators
- *
- * 
  */
 public class UnionResultIterators implements ResultIterators {
-    private final List<KeyRange> splits;
-    private final List<List<Scan>> scans;
-    private final List<PeekingResultIterator> iterators;
-    private final List<ReadMetricQueue> readMetricsList;
-    private final List<OverAllQueryMetrics> overAllQueryMetricsList;
-    private boolean closed;
-    private final StatementContext parentStmtCtx;
-    public UnionResultIterators(List<QueryPlan> plans, StatementContext parentStmtCtx) throws SQLException {
-        this.parentStmtCtx = parentStmtCtx;
-        int nPlans = plans.size();
-        iterators = Lists.newArrayListWithExpectedSize(nPlans);
-        splits = Lists.newArrayListWithExpectedSize(nPlans * 30); 
-        scans = Lists.newArrayListWithExpectedSize(nPlans * 10); 
-        readMetricsList = Lists.newArrayListWithCapacity(nPlans);
-        overAllQueryMetricsList = Lists.newArrayListWithCapacity(nPlans);
-        for (QueryPlan plan : plans) {
-            readMetricsList.add(plan.getContext().getReadMetricsQueue());
-            overAllQueryMetricsList.add(plan.getContext().getOverallQueryMetrics());
-            iterators.add(LookAheadResultIterator.wrap(plan.iterator()));
-            splits.addAll(plan.getSplits()); 
-            scans.addAll(plan.getScans());
-        }
-    }
+  private final List<KeyRange> splits;
+  private final List<List<Scan>> scans;
+  private final List<PeekingResultIterator> iterators;
+  private final List<ReadMetricQueue> readMetricsList;
+  private final List<OverAllQueryMetrics> overAllQueryMetricsList;
+  private boolean closed;
+  private final StatementContext parentStmtCtx;
 
-    @Override
-    public List<KeyRange> getSplits() {
-        if (splits == null)
-            return Collections.emptyList();
-        else
-            return splits;
+  public UnionResultIterators(List<QueryPlan> plans, StatementContext parentStmtCtx)
+    throws SQLException {
+    this.parentStmtCtx = parentStmtCtx;
+    int nPlans = plans.size();
+    iterators = Lists.newArrayListWithExpectedSize(nPlans);
+    splits = Lists.newArrayListWithExpectedSize(nPlans * 30);
+    scans = Lists.newArrayListWithExpectedSize(nPlans * 10);
+    readMetricsList = Lists.newArrayListWithCapacity(nPlans);
+    overAllQueryMetricsList = Lists.newArrayListWithCapacity(nPlans);
+    for (QueryPlan plan : plans) {
+      readMetricsList.add(plan.getContext().getReadMetricsQueue());
+      overAllQueryMetricsList.add(plan.getContext().getOverallQueryMetrics());
+      iterators.add(LookAheadResultIterator.wrap(plan.iterator()));
+      splits.addAll(plan.getSplits());
+      scans.addAll(plan.getScans());
     }
+  }
 
-    @Override
-    public void close() throws SQLException {
-        if (!closed) {
-            closed = true;
-            SQLException toThrow = null;
+  @Override
+  public List<KeyRange> getSplits() {
+    if (splits == null) return Collections.emptyList();
+    else return splits;
+  }
+
+  @Override
+  public void close() throws SQLException {
+    if (!closed) {
+      closed = true;
+      SQLException toThrow = null;
+      try {
+        if (iterators != null) {
+          for (int index = 0; index < iterators.size(); index++) {
+            PeekingResultIterator iterator = iterators.get(index);
             try {
-                if (iterators != null) {
-                    for (int index=0; index < iterators.size(); index++) {
-                        PeekingResultIterator iterator = iterators.get(index);
-                        try {
-                            iterator.close();
-                        } catch (Exception e) {
-                            if (toThrow == null) {
-                                toThrow = ServerUtil.parseServerException(e);
-                            } else {
-                                toThrow.setNextException(ServerUtil.parseServerException(e));
-                            }
-                        }
-                    }
-                }
+              iterator.close();
             } catch (Exception e) {
+              if (toThrow == null) {
                 toThrow = ServerUtil.parseServerException(e);
-            } finally {
-                setMetricsInParentContext();
-                if (toThrow != null) {
-                    throw toThrow;
-                }
+              } else {
+                toThrow.setNextException(ServerUtil.parseServerException(e));
+              }
             }
+          }
         }
-    }
-    
-    private void setMetricsInParentContext() {
-        ReadMetricQueue parentCtxReadMetrics = parentStmtCtx.getReadMetricsQueue();
-        for (ReadMetricQueue readMetrics : readMetricsList) {
-            parentCtxReadMetrics.combineReadMetrics(readMetrics);
+      } catch (Exception e) {
+        toThrow = ServerUtil.parseServerException(e);
+      } finally {
+        setMetricsInParentContext();
+        if (toThrow != null) {
+          throw toThrow;
         }
-        OverAllQueryMetrics parentCtxQueryMetrics = parentStmtCtx.getOverallQueryMetrics();
-        for (OverAllQueryMetrics metric : overAllQueryMetricsList) {
-            parentCtxQueryMetrics.combine(metric);
-        }
+      }
     }
-    
-    @Override
-    public List<List<Scan>> getScans() {
-        if (scans == null)
-            return Collections.emptyList();
-        else
-            return scans;
-    }
+  }
 
-    @Override
-    public int size() {
-        return scans.size();
+  private void setMetricsInParentContext() {
+    ReadMetricQueue parentCtxReadMetrics = parentStmtCtx.getReadMetricsQueue();
+    for (ReadMetricQueue readMetrics : readMetricsList) {
+      parentCtxReadMetrics.combineReadMetrics(readMetrics);
     }
+    OverAllQueryMetrics parentCtxQueryMetrics = parentStmtCtx.getOverallQueryMetrics();
+    for (OverAllQueryMetrics metric : overAllQueryMetricsList) {
+      parentCtxQueryMetrics.combine(metric);
+    }
+  }
 
-    @Override
-    public void explain(List<String> planSteps) {
-        for (PeekingResultIterator iterator : iterators) {
-            iterator.explain(planSteps);
-        }
-    }
+  @Override
+  public List<List<Scan>> getScans() {
+    if (scans == null) return Collections.emptyList();
+    else return scans;
+  }
 
-    @Override 
-    public List<PeekingResultIterator> getIterators() throws SQLException {    
-        return iterators;
-    }
+  @Override
+  public int size() {
+    return scans.size();
+  }
 
-    @Override
-    public void explain(List<String> planSteps,
-            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
-        boolean moreThanOneIters = false;
-        ExplainPlanAttributesBuilder lhsPointer = null;
-        // For more than one iterators, explainPlanAttributes will create
-        // chain of objects as lhs and rhs query plans.
-        for (PeekingResultIterator iterator : iterators) {
-            if (moreThanOneIters) {
-                ExplainPlanAttributesBuilder rhsBuilder =
-                    new ExplainPlanAttributesBuilder();
-                iterator.explain(planSteps, rhsBuilder);
-                ExplainPlanAttributes rhsPlans = rhsBuilder.build();
-                lhsPointer.setRhsJoinQueryExplainPlan(rhsPlans);
-                lhsPointer = rhsBuilder;
-            } else {
-                iterator.explain(planSteps, explainPlanAttributesBuilder);
-                lhsPointer = explainPlanAttributesBuilder;
-            }
-            moreThanOneIters = true;
-        }
+  @Override
+  public void explain(List<String> planSteps) {
+    for (PeekingResultIterator iterator : iterators) {
+      iterator.explain(planSteps);
     }
+  }
+
+  @Override
+  public List<PeekingResultIterator> getIterators() throws SQLException {
+    return iterators;
+  }
+
+  @Override
+  public void explain(List<String> planSteps,
+    ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+    boolean moreThanOneIters = false;
+    ExplainPlanAttributesBuilder lhsPointer = null;
+    // For more than one iterators, explainPlanAttributes will create
+    // chain of objects as lhs and rhs query plans.
+    for (PeekingResultIterator iterator : iterators) {
+      if (moreThanOneIters) {
+        ExplainPlanAttributesBuilder rhsBuilder = new ExplainPlanAttributesBuilder();
+        iterator.explain(planSteps, rhsBuilder);
+        ExplainPlanAttributes rhsPlans = rhsBuilder.build();
+        lhsPointer.setRhsJoinQueryExplainPlan(rhsPlans);
+        lhsPointer = rhsBuilder;
+      } else {
+        iterator.explain(planSteps, explainPlanAttributesBuilder);
+        lhsPointer = explainPlanAttributesBuilder;
+      }
+      moreThanOneIters = true;
+    }
+  }
 }

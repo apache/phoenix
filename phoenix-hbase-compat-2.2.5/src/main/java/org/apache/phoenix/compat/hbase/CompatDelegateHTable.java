@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,20 +18,19 @@
 package org.apache.phoenix.compat.hbase;
 
 import java.io.IOException;
-
 import org.apache.hadoop.hbase.client.RowMutations;
 import org.apache.hadoop.hbase.client.Table;
 
 public abstract class CompatDelegateHTable implements Table {
 
-    protected final Table delegate;
+  protected final Table delegate;
 
-    public CompatDelegateHTable(Table delegate) {
-        this.delegate = delegate;
-    }
+  public CompatDelegateHTable(Table delegate) {
+    this.delegate = delegate;
+  }
 
-    @Override
-    public void mutateRow(RowMutations rm) throws IOException {
-        delegate.mutateRow(rm);
-    }
+  @Override
+  public void mutateRow(RowMutations rm) throws IOException {
+    delegate.mutateRow(rm);
+  }
 }

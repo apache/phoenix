@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,20 +20,21 @@ package org.apache.phoenix.exception;
 import org.apache.hadoop.hbase.HConstants;
 
 public class UpgradeRequiredException extends RetriableUpgradeException {
-    private final long systemCatalogTimestamp;
+  private final long systemCatalogTimestamp;
 
-    public UpgradeRequiredException() {
-        this(HConstants.OLDEST_TIMESTAMP);
-    }
+  public UpgradeRequiredException() {
+    this(HConstants.OLDEST_TIMESTAMP);
+  }
 
-    public UpgradeRequiredException(long systemCatalogTimeStamp) {
-        super("Operation not allowed since cluster hasn't been upgraded. Call EXECUTE UPGRADE. ",
-          SQLExceptionCode.UPGRADE_REQUIRED.getSQLState(), SQLExceptionCode.UPGRADE_REQUIRED.getErrorCode());
-        this.systemCatalogTimestamp = systemCatalogTimeStamp;
-    }
+  public UpgradeRequiredException(long systemCatalogTimeStamp) {
+    super("Operation not allowed since cluster hasn't been upgraded. Call EXECUTE UPGRADE. ",
+      SQLExceptionCode.UPGRADE_REQUIRED.getSQLState(),
+      SQLExceptionCode.UPGRADE_REQUIRED.getErrorCode());
+    this.systemCatalogTimestamp = systemCatalogTimeStamp;
+  }
 
-    public long getSystemCatalogTimeStamp() {
-        return systemCatalogTimestamp;
-    }
+  public long getSystemCatalogTimeStamp() {
+    return systemCatalogTimestamp;
+  }
 
 }

@@ -15,15 +15,25 @@
   See the License for the specific language governing permissions and
   limitations under the License.
 -->
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.apache</groupId>
+    <artifactId>apache</artifactId>
+    <version>30</version>
+  </parent>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
   <version>5.1.4-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
+
+  <organization>
+    <name>Apache Software Foundation</name>
+    <url>https://www.apache.org</url>
+  </organization>
 
   <licenses>
     <license>
@@ -33,11 +43,6 @@
       <comments/>
     </license>
   </licenses>
-
-  <organization>
-    <name>Apache Software Foundation</name>
-    <url>https://www.apache.org</url>
-  </organization>
 
   <modules>
     <module>phoenix-hbase-compat-2.5.4</module>
@@ -53,23 +58,10 @@
     <!-- shaded artifact and assembly modules are added in shade-and-assembly profile -->
   </modules>
 
-  <repositories>
-    <repository>
-      <id>apache release</id>
-      <url>https://repository.apache.org/content/repositories/releases/</url>
-    </repository>
-  </repositories>
-
-  <parent>
-    <groupId>org.apache</groupId>
-    <artifactId>apache</artifactId>
-    <version>30</version>
-  </parent>
-
   <scm>
     <connection>scm:git:https://git-wip-us.apache.org/repos/asf/phoenix.git</connection>
-    <url>https://git-wip-us.apache.org/repos/asf/phoenix.git</url>
     <developerConnection>scm:git:https://git-wip-us.apache.org/repos/asf/phoenix.git</developerConnection>
+    <url>https://git-wip-us.apache.org/repos/asf/phoenix.git</url>
   </scm>
 
   <properties>
@@ -177,7 +169,7 @@
     <it.failIfNoSpecifiedTests>false</it.failIfNoSpecifiedTests>
     <surefire.failIfNoSpecifiedTests>false</surefire.failIfNoSpecifiedTests>
     <!-- Empty argument when code coverage is deactivated -->
-    <jacocoArgLine></jacocoArgLine>
+    <jacocoArgLine/>
 
     <!-- JVM version dependent JVM options for running tests. Keep mostly in sync with HBase-->
     <surefire.Xmx>2200m</surefire.Xmx>
@@ -189,13 +181,10 @@
       -Dorg.apache.hbase.thirdparty.io.netty.leakDetection.level=advanced
       -Dio.netty.eventLoopThreads=3 -Duser.timezone="America/Los_Angeles"
       -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/
-      "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"
-    </phoenix-surefire.argLine>
-    <phoenix-surefire.jdk8.tuning.flags>
-        -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC
+      "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</phoenix-surefire.argLine>
+    <phoenix-surefire.jdk8.tuning.flags>-XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC
         -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled
-        -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68
-    </phoenix-surefire.jdk8.tuning.flags>
+        -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</phoenix-surefire.jdk8.tuning.flags>
     <phoenix-surefire.jdk11.flags>-Dorg.apache.hbase.thirdparty.io.netty.tryReflectionSetAccessible=true
       --add-modules jdk.unsupported
       --add-opens java.base/java.nio=ALL-UNNAMED
@@ -207,11 +196,9 @@
       --add-opens java.base/java.util.concurrent=ALL-UNNAMED
       --add-exports java.base/jdk.internal.misc=ALL-UNNAMED
       --add-exports java.security.jgss/sun.security.krb5=ALL-UNNAMED</phoenix-surefire.jdk11.flags>
-    <phoenix-surefire.jdk11.tuning.flags>
-        ${phoenix-surefire.jdk8.tuning.flags}
-    </phoenix-surefire.jdk11.tuning.flags>
+    <phoenix-surefire.jdk11.tuning.flags>${phoenix-surefire.jdk8.tuning.flags}</phoenix-surefire.jdk11.tuning.flags>
     <phoenix-surefire.jdk17.flags>--add-opens java.base/jdk.internal.util.random=ALL-UNNAMED</phoenix-surefire.jdk17.flags>
-    <phoenix-surefire.jdk17.tuning.flags></phoenix-surefire.jdk17.tuning.flags>
+    <phoenix-surefire.jdk17.tuning.flags/>
     <!-- This is needed for SystemExitRule to work correctly. This may mask related issues in
     dependencies -->
     <phoenix-surefire.jdk21.flags>-Djava.security.manager=allow</phoenix-surefire.jdk21.flags>
@@ -231,611 +218,6 @@
       but allow for profile overrides -->
     <protoc.arch>${os.detected.classifier}</protoc.arch>
   </properties>
-
-  <build>
-    <extensions>
-      <extension>
-        <groupId>kr.motd.maven</groupId>
-        <artifactId>os-maven-plugin</artifactId>
-        <version>${os.maven.version}</version>
-      </extension>
-    </extensions>
-
-    <pluginManagement>
-      <plugins>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-project-info-reports-plugin</artifactId>
-        </plugin>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-compiler-plugin</artifactId>
-        </plugin>
-        <plugin>
-          <groupId>org.antlr</groupId>
-          <artifactId>antlr3-maven-plugin</artifactId>
-          <version>${maven-antlr-eclipse-plugin.version}</version>
-        </plugin>
-        <plugin>
-          <groupId>com.github.searls</groupId>
-          <artifactId>jasmine-maven-plugin</artifactId>
-          <version>${jasmine-maven-plugin.version}</version>
-        </plugin>
-        <plugin>
-          <groupId>com.github.spotbugs</groupId>
-          <artifactId>spotbugs-maven-plugin</artifactId>
-          <version>${spotbugs-maven-plugin.version}</version>
-          <dependencies>
-            <dependency>
-              <groupId>com.github.spotbugs</groupId>
-              <artifactId>spotbugs</artifactId>
-              <version>${spotbugs.version}</version>
-            </dependency>
-          </dependencies>
-          <configuration>
-            <effort>Max</effort>
-            <maxHeap>2048</maxHeap>
-            <excludeFilterFile>${top.dir}/src/main/config/spotbugs/spotbugs-exclude.xml</excludeFilterFile>
-          </configuration>
-        </plugin>
-        <!--This plugin's configuration is used to store Eclipse m2e settings 
-          only. It has no influence on the Maven build itself. -->
-        <plugin>
-          <groupId>org.eclipse.m2e</groupId>
-          <artifactId>lifecycle-mapping</artifactId>
-          <version>${lifecycle-mapping.version}</version>
-          <configuration>
-            <lifecycleMappingMetadata>
-              <pluginExecutions>
-                <pluginExecution>
-                  <pluginExecutionFilter>
-                    <groupId>org.antlr</groupId>
-                    <artifactId>antlr3-maven-plugin</artifactId>
-                    <versionRange>[3.5,)</versionRange>
-                    <goals>
-                      <goal>antlr</goal>
-                    </goals>
-                  </pluginExecutionFilter>
-                  <action>
-                    <ignore />
-                  </action>
-                </pluginExecution>
-              </pluginExecutions>
-            </lifecycleMappingMetadata>
-          </configuration>
-        </plugin>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-install-plugin</artifactId>
-        </plugin>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-eclipse-plugin</artifactId>
-          <version>${maven-eclipse-plugin.version}</version>
-        </plugin>
-        <plugin>
-          <artifactId>maven-assembly-plugin</artifactId>
-        </plugin>
-        <plugin>
-          <groupId>org.apache.rat</groupId>
-          <artifactId>apache-rat-plugin</artifactId>
-          <!-- Avoid defining exclusions in pluginManagement as they are global.
-               We already inherit some from the ASF parent pom. -->
-        </plugin>
-        <!-- We put slow-running tests into src/it and run them during the
-            integration-test phase using the failsafe plugin. This way
-            developers can run unit tests conveniently from the IDE or via
-            "mvn package" from the command line without triggering time
-            consuming integration tests. -->
-        <plugin>
-          <groupId>org.codehaus.mojo</groupId>
-          <artifactId>build-helper-maven-plugin</artifactId>
-          <version>${maven-build-helper-plugin.version}</version>
-          <executions>
-            <execution>
-              <id>add-test-source</id>
-              <phase>validate</phase>
-              <goals>
-                <goal>add-test-source</goal>
-              </goals>
-              <configuration>
-                <sources>
-                  <source>${basedir}/src/it/java</source>
-                </sources>
-              </configuration>
-            </execution>
-            <execution>
-              <id>add-test-resource</id>
-              <phase>validate</phase>
-              <goals>
-                <goal>add-test-resource</goal>
-              </goals>
-              <configuration>
-                <resources>
-                  <resource>
-                    <directory>${basedir}/src/it/resources</directory>
-                  </resource>
-                </resources>
-              </configuration>
-            </execution>
-          </executions>
-        </plugin>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-failsafe-plugin</artifactId>
-          <!-- Common settings for all executions -->
-          <configuration>
-            <encoding>UTF-8</encoding>
-            <forkCount>${numForkedIT}</forkCount>
-            <runOrder>alphabetical</runOrder>
-            <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-            <forkedProcessExitTimeoutInSeconds>180</forkedProcessExitTimeoutInSeconds>
-            <shutdown>exit</shutdown>
-            <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
-            <trimStackTrace>false</trimStackTrace>
-            <!-- https://www.orpiske.net/2021/04/test-woes-with-maven-failsafe-3-0-0-m5 -->
-            <useModulePath>false</useModulePath>
-            <forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
-            <systemPropertyVariables>
-              <java.io.tmpdir>${test.tmp.dir}</java.io.tmpdir>
-            </systemPropertyVariables>
-          </configuration>
-          <executions>
-            <execution>
-              <id>ParallelStatsEnabledTest</id>
-              <configuration>
-                <skip>${skipParallelStatsEnabledTests}</skip>
-                <reuseForks>true</reuseForks>
-                <groups>org.apache.phoenix.end2end.ParallelStatsEnabledTest</groups>
-              </configuration>
-              <goals>
-                <goal>integration-test</goal>
-                <goal>verify</goal>
-              </goals>
-            </execution>
-            <execution>
-              <id>ParallelStatsDisabledTest</id>
-              <configuration>
-                <reuseForks>true</reuseForks>
-                <skip>${skipParallelStatsDisabledTests}</skip>
-                <groups>org.apache.phoenix.end2end.ParallelStatsDisabledTest</groups>
-              </configuration>
-              <goals>
-                <goal>integration-test</goal>
-                <goal>verify</goal>
-              </goals>
-            </execution>
-            <execution>
-              <id>NeedTheirOwnClusterTests</id>
-              <configuration>
-                 <reuseForks>false</reuseForks>
-                 <skip>${skipNeedsOwnMiniClusterTests}</skip>
-                 <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
-              </configuration>
-              <goals>
-                 <goal>integration-test</goal>
-                 <goal>verify</goal>
-              </goals>
-            </execution>
-          </executions>
-        </plugin>
-        <plugin>
-          <artifactId>maven-dependency-plugin</artifactId>
-          <version>3.1.1</version>
-          <configuration>
-              <ignoredUnusedDeclaredDependencies>
-                <ignoredUnusedDeclaredDependency>
-                  org.apache.omid:*
-                </ignoredUnusedDeclaredDependency>
-                <ignoredUnusedDeclaredDependency>
-                  org.slf4j:slf4j-reload4j
-                </ignoredUnusedDeclaredDependency>
-                <ignoredUnusedDeclaredDependency>
-                  org.apache.hbase:hbase-testing-util
-                </ignoredUnusedDeclaredDependency>
-                <ignoredUnusedDeclaredDependency>
-                  org.apache.logging.log4j:log4j-api
-                </ignoredUnusedDeclaredDependency>
-                <ignoredUnusedDeclaredDependency>
-                  org.apache.logging.log4j:log4j-core
-                </ignoredUnusedDeclaredDependency>
-                <ignoredUnusedDeclaredDependency>
-                  org.apache.logging.log4j:log4j-slf4j-impl
-                </ignoredUnusedDeclaredDependency>
-                <ignoredUnusedDeclaredDependency>
-                  org.apache.logging.log4j:log4j-1.2-api
-                </ignoredUnusedDeclaredDependency>
-                <ignoredUnusedDeclaredDependency>
-                  org.apache.logging.log4j:log4j-api
-                </ignoredUnusedDeclaredDependency>
-                <ignoredUnusedDeclaredDependency>
-                  org.apache.logging.log4j:log4j-core
-                </ignoredUnusedDeclaredDependency>
-              </ignoredUnusedDeclaredDependencies>
-              <ignoredUsedUndeclaredDependencies>
-                <ignoredUsedUndeclaredDependency>
-                  <!-- couldn't figure out what's the deal with this -->
-                  dnsjava:dnsjava
-                </ignoredUsedUndeclaredDependency>
-                <ignoredUsedUndeclaredDependency>
-                  <!-- These change too frequently, so we just rely on the hbase transitive deps -->
-                  org.apache.hbase.thirdparty:*
-                </ignoredUsedUndeclaredDependency>
-                <ignoredUsedUndeclaredDependency>
-                  <!-- We only need this because the Hadoop Metrics API leak.
-                  By not declaring the dependency, we can pick up the CVE fixed version from Hadoop
-                  without having to also declare a dependency on commons-text dependency
-                  (which we do not use directly at all)-->
-                  org.apache.commons:commons-configuration2
-                </ignoredUsedUndeclaredDependency>
-              </ignoredUsedUndeclaredDependencies>
-            </configuration>
-          <executions>
-            <execution>
-              <id>create-mrapp-generated-classpath</id>
-              <phase>generate-test-resources</phase>
-              <goals>
-                <goal>build-classpath</goal>
-              </goals>
-              <configuration>
-                <outputFile>${project.build.directory}/classes/mrapp-generated-classpath
-                </outputFile>
-              </configuration>
-            </execution>
-            <execution>
-              <id>enforce-dependencies</id>
-              <goals>
-                <goal>analyze-only</goal>
-              </goals>
-              <configuration>
-                <failOnWarning>true</failOnWarning>
-              </configuration>
-            </execution>
-          </executions>
-        </plugin>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-shade-plugin</artifactId>
-          <version>${maven-shade-plugin.version}</version>
-        </plugin>
-        <plugin>
-          <!-- Allows us to get the apache-ds bundle artifacts -->
-          <groupId>org.apache.felix</groupId>
-          <artifactId>maven-bundle-plugin</artifactId>
-          <version>${maven-bundle-plugin.version}</version>
-        </plugin>
-        <plugin>
-          <groupId>org.codehaus.mojo</groupId>
-          <artifactId>exec-maven-plugin</artifactId>
-          <version>${exec-maven-plugin.version}</version>
-        </plugin>
-        <plugin>
-          <groupId>org.xolstice.maven.plugins</groupId>
-          <artifactId>protobuf-maven-plugin</artifactId>
-          <version>${protobuf.plugin.version}</version>
-        </plugin>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-enforcer-plugin</artifactId>
-          <dependencies>
-            <dependency>
-              <groupId>de.skuzzle.enforcer</groupId>
-              <artifactId>restrict-imports-enforcer-rule</artifactId>
-              <version>${restrict-imports.enforcer.version}</version>
-            </dependency>
-          </dependencies>
-          <executions>
-            <execution>
-              <id>banned-illegal-imports</id>
-              <phase>process-sources</phase>
-              <goals>
-                <goal>enforce</goal>
-              </goals>
-              <configuration>
-                <rules>
-                  <RestrictImports>
-                    <includeTestCode>true</includeTestCode>
-                    <reason>Use SLF4j for logging</reason>
-                    <bannedImports>
-                      <bannedImport>org.apache.commons.logging.Log</bannedImport>
-                      <bannedImport>org.apache.commons.logging.LogFactory</bannedImport>
-                    </bannedImports>
-                  </RestrictImports>
-                  <RestrictImports>
-                    <includeTestCode>true</includeTestCode>
-                    <reason>Use shaded version in phoenix-thirdparty</reason>
-                    <bannedImports>
-                      <bannedImport>com.google.common.**</bannedImport>
-                    </bannedImports>
-                  </RestrictImports>
-                  <RestrictImports>
-                    <includeTestCode>true</includeTestCode>
-                    <reason>Use shaded version in phoenix-thirdparty</reason>
-                    <bannedImports>
-                      <bannedImport>org.apache.commons.cli.**</bannedImport>
-                      <bannedImport>org.apache.hbase.thirdparty.org.apache.commons.cli.**</bannedImport>
-                    </bannedImports>
-                  </RestrictImports>
-                  <RestrictImports>
-                    <includeTestCode>true</includeTestCode>
-                    <reason>Use commons lang 3</reason>
-                    <bannedImports>
-                      <bannedImport>org.apache.commons.lang.**</bannedImport>
-                    </bannedImports>
-                  </RestrictImports>
-                  <RestrictImports>
-                    <includeTestCode>true</includeTestCode>
-                    <reason>Commons collection is restricted</reason>
-                    <bannedImports>
-                      <bannedImport>org.apache.commons.collections.**</bannedImport>
-                      <!-- If you really need to use commons-collections 4, add as dependency and remove this ban -->
-                      <bannedImport>org.apache.commons.collections4.**</bannedImport>
-                    </bannedImports>
-                  </RestrictImports>
-                  <RestrictImports>
-                    <includeTestCode>true</includeTestCode>
-                    <reason>Use edu.umd.cs.findbugs.annotations</reason>
-                    <bannedImports>
-                      <bannedImport>com.sun.istack.**</bannedImport>
-                    </bannedImports>
-                  </RestrictImports>
-                </rules>
-              </configuration>
-            </execution>
-          </executions>
-        </plugin>
-      </plugins>
-    </pluginManagement>
-
-    <plugins>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-checkstyle-plugin</artifactId>
-        <version>${maven-checkstyle-plugin.version}</version>
-        <configuration>
-          <configLocation>${top.dir}/src/main/config/checkstyle/checker.xml</configLocation>
-          <suppressionsLocation>${top.dir}/src/main/config/checkstyle/suppressions.xml</suppressionsLocation>
-          <consoleOutput>true</consoleOutput>
-          <headerLocation>${top.dir}/src/main/config/checkstyle/header.txt</headerLocation>
-          <failOnViolation><!--true-->false</failOnViolation>
-          <includeTestSourceDirectory><!--true-->false</includeTestSourceDirectory>
-        </configuration>
-        <executions>
-          <execution>
-            <id>validate</id>
-            <phase>validate</phase>
-            <configuration>
-              <skip>true</skip>
-            </configuration>
-            <goals>
-              <goal>check</goal>
-            </goals>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-source-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>attach-sources</id>
-            <phase>prepare-package</phase>
-            <goals>
-              <goal>jar-no-fork</goal>
-            </goals>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-javadoc-plugin</artifactId>
-        <configuration>
-          <quiet>true</quiet>
-          <links>
-            <link>https://hbase.apache.org/apidocs/</link>
-          </links>
-        </configuration>
-        <executions>
-          <execution>
-            <id>attach-javadocs</id>
-            <goals>
-              <!-- TODO turn back on javadocs - disabled now for testing -->
-              <!-- <goal>jar</goal> -->
-            </goals>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-surefire-plugin</artifactId>
-        <configuration>
-          <forkCount>${numForkedUT}</forkCount>
-          <reuseForks>true</reuseForks>
-          <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-          <shutdown>exit</shutdown>
-          <trimStackTrace>false</trimStackTrace>
-          <forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
-          <systemPropertyVariables>
-            <java.io.tmpdir>${test.tmp.dir}</java.io.tmpdir>
-          </systemPropertyVariables>
-        </configuration>
-      </plugin>
-      <!-- All projects create a test jar -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-jar-plugin</artifactId>
-        <executions>
-          <execution>
-            <phase>prepare-package
-            </phase>
-            <goals>
-              <goal>test-jar</goal>
-            </goals>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.rat</groupId>
-        <artifactId>apache-rat-plugin</artifactId>
-        <configuration>
-          <excludes>
-            <!-- Header on changelog isn't normal -->
-            <exclude>CHANGES</exclude>
-            <!-- create-release scripts -->
-            <exclude>dev/create-release/README.txt</exclude>
-            <exclude>dev/create-release/vote.tmpl</exclude>
-            <!-- IDE configuration -->
-            <exclude>dev/phoenix.importorder</exclude>
-            <!-- Release L&N -->
-            <exclude>dev/release_files/LICENSE</exclude>
-            <exclude>dev/release_files/NOTICE</exclude>
-            <!-- Exclude data files for examples -->
-            <exclude>docs/*.csv</exclude>
-            <exclude>examples/*.csv</exclude>
-            <!-- Exclude SQL files from rat. Sqlline 1.1.9 doesn't work with
-                 comments on the first line of a file. -->
-            <exclude>examples/*.sql</exclude>
-            <!-- precommit? -->
-            <exclude>**/patchprocess/**</exclude>
-            <!-- Argparse is bundled to work around system Python version
-                 issues, compatibile with ALv2 -->
-            <exclude>bin/argparse-1.4.0/argparse.py</exclude>
-            <!-- tmp files -->
-            <exclude>dev/work/**</exclude>
-            <exclude>dev/artifacts/**</exclude>
-          </excludes>
-        </configuration>
-      </plugin>
-      <plugin>
-        <!-- Allows us to get the apache-ds bundle artifacts -->
-        <groupId>org.apache.felix</groupId>
-        <artifactId>maven-bundle-plugin</artifactId>
-        <extensions>true</extensions>
-        <inherited>true</inherited>
-      </plugin>
-      <plugin>
-        <groupId>com.diffplug.spotless</groupId>
-        <artifactId>spotless-maven-plugin</artifactId>
-        <version>${spotless.version}</version>
-        <configuration>
-          <!-- define a language-specific format -->
-          <java>
-            <excludes>
-              <exclude>**/generated/*</exclude>
-              <exclude>**/package-info.java</exclude>
-            </excludes>
-            <!-- We need to explicitly set includes as we have src/it which is not standard java
-            src path and spotless does not identify it otherwise -->
-            <includes>
-              <include>src/main/java/**/*.java</include>
-              <include>src/test/java/**/*.java</include>
-              <include>src/it/java/**/*.java</include>
-            </includes>
-            <!--
-              e.g., remove the following lines:
-              "* @param paramName"
-              "* @throws ExceptionType"
-              "* @return returnType"'
-              Multiline to allow anchors on newlines
-              See https://errorprone.info/bugpattern/EmptyBlockTag
-            -->
-            <replaceRegex>
-              <name>Remove unhelpful javadoc stubs</name>
-              <searchRegex>(?m)^ *\* *@(?:param|throws|return) *\w* *\n</searchRegex>
-              <replacement/>
-            </replaceRegex>
-            <!--
-              e.g., rewrite
-              /** @return blabla */
-              or
-              /**
-               * @return blabla
-               */
-              to
-              /** Returns blabla */
-              See https://errorprone.info/bugpattern/MissingSummary
-              https://google.github.io/styleguide/javaguide.html#s7.2-summary-fragment
-            -->
-            <replaceRegex>
-              <name>Purge single returns tag multi line</name>
-              <searchRegex>(?m)^ */\*\*\n *\* *@return *(.*) *\n *\*/$</searchRegex>
-              <replacement>/** Returns $1 */</replacement>
-            </replaceRegex>
-            <replaceRegex>
-              <name>Purge single returns tag single line</name>
-              <searchRegex>^ */\*\* *@return *(.*) *\*/$</searchRegex>
-              <replacement>/** Returns $1 */</replacement>
-            </replaceRegex>
-            <!-- apply a specific flavor -->
-            <eclipse>
-              <file>${session.executionRootDirectory}/dev/PhoenixCodeTemplate.xml</file>
-            </eclipse>
-            <importOrder>
-              <file>${session.executionRootDirectory}/dev/phoenix.importorder</file>
-            </importOrder>
-            <trimTrailingWhitespace/>
-            <endWithNewline/>
-            <removeUnusedImports/>
-          </java>
-          <pom>
-            <sortPom>
-              <expandEmptyElements>false</expandEmptyElements>
-            </sortPom>
-          </pom>
-          <formats>
-            <!-- you can define as many formats as you want, each is independent -->
-            <format>
-              <!-- define the files to apply to -->
-              <includes>
-                <include>**/*.xml</include>
-                <include>**/*.sh</include>
-                <include>**/*.py</include>
-                <include>**/Jenkinsfile*</include>
-                <include>**/Dockerfile*</include>
-                <include>**/*.md</include>
-                <include>*.md</include>
-                <include>**/*.txt</include>
-                <include>*.txt</include>
-              </includes>
-              <excludes>
-                <exclude>**/target/**</exclude>
-                <exclude>**/dependency-reduced-pom.xml</exclude>
-              </excludes>
-              <!-- define the steps to apply to those files -->
-              <trimTrailingWhitespace/>
-              <endWithNewline/>
-            </format>
-            <format>
-              <!--
-                We have some files which have special license header which must be kept, so
-                here we add a special format section to apply license header, and leave the
-                java/scala section above only used for formatting code style
-              -->
-              <includes>
-                <include>src/main/java/**/*.java</include>
-                <include>src/test/java/**/*.java</include>
-                <include>src/it/java/**/*.java</include>
-              </includes>
-              <excludes>
-                <exclude>**/generated/*</exclude>
-                <exclude>**/package-info.java</exclude>
-              </excludes>
-              <licenseHeader>
-                <file>${session.executionRootDirectory}/src/main/config/checkstyle/header.txt</file>
-                <delimiter>package</delimiter>
-              </licenseHeader>
-            </format>
-          </formats>
-          <!-- Spotless considers processing same file twice: a bug!
-          With spotless >= 2.35.0 java formatter does not work for us if we don't disable upToDateChecking.
-          See [UpToDateChecking ignores java formatter|https://github.com/diffplug/spotless/issues/1767] -->
-          <upToDateChecking>
-            <enabled>false</enabled>
-          </upToDateChecking>
-        </configuration>
-      </plugin>
-    </plugins>
-  </build>
 
   <dependencyManagement>
     <dependencies>
@@ -1029,8 +411,8 @@
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-common</artifactId>
-        <type>test-jar</type>
         <version>${hadoop.version}</version>
+        <type>test-jar</type>
         <exclusions>
           <exclusion>
             <groupId>org.apache.htrace</groupId>
@@ -1084,6 +466,7 @@
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-auth</artifactId>
+        <version>${hadoop.version}</version>
         <exclusions>
           <exclusion>
             <groupId>net.minidev</groupId>
@@ -1098,7 +481,6 @@
             <artifactId>asm</artifactId>
           </exclusion>
         </exclusions>
-        <version>${hadoop.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
@@ -1136,9 +518,9 @@
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-hdfs</artifactId>
-        <type>test-jar</type>
-        <classifier>tests</classifier>
         <version>${hadoop.version}</version>
+        <classifier>tests</classifier>
+        <type>test-jar</type>
         <scope>test</scope>
         <exclusions>
           <exclusion>
@@ -1349,8 +731,8 @@
       <dependency>
         <groupId>org.apache.tephra</groupId>
         <artifactId>tephra-hbase-compat-${tephra.hbase.compat.version}</artifactId>
-        <classifier>shaded</classifier>
         <version>${tephra.version}</version>
+        <classifier>shaded</classifier>
         <!-- use tephra-core-shaded instead -->
         <exclusions>
           <exclusion>
@@ -1377,10 +759,10 @@
         <artifactId>omid-hbase-client</artifactId>
         <version>${omid.version}</version>
         <exclusions>
-         <exclusion>
-           <groupId>org.testng</groupId>
-           <artifactId>testng</artifactId>
-         </exclusion>
+          <exclusion>
+            <groupId>org.testng</groupId>
+            <artifactId>testng</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1588,8 +970,8 @@
         <groupId>com.fasterxml.jackson</groupId>
         <artifactId>jackson-bom</artifactId>
         <version>${jackson-bom.version}</version>
-        <scope>import</scope>
         <type>pom</type>
+        <scope>import</scope>
       </dependency>
       <!-- We don't depend on netty directly, but we need this to avoid pulling in different
       4.1.x versions of netty modules from the transitive dependencies
@@ -1598,8 +980,8 @@
         <groupId>io.netty</groupId>
         <artifactId>netty-bom</artifactId>
         <version>${netty-bom.version}</version>
-        <scope>import</scope>
         <type>pom</type>
+        <scope>import</scope>
       </dependency>
       <dependency>
         <groupId>com.google.protobuf</groupId>
@@ -1623,9 +1005,9 @@
       </dependency>
       <!-- Update transitive dependency to a one without CVEs -->
       <dependency>
-          <groupId>com.fasterxml.woodstox</groupId>
-          <artifactId>woodstox-core</artifactId>
-          <version>5.4.0</version>
+        <groupId>com.fasterxml.woodstox</groupId>
+        <artifactId>woodstox-core</artifactId>
+        <version>5.4.0</version>
       </dependency>
       <dependency>
         <groupId>org.apache.avro</groupId>
@@ -1697,7 +1079,7 @@
         <artifactId>libthrift</artifactId>
         <version>${thrift.version}</version>
         <exclusions>
-           <exclusion>
+          <exclusion>
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpcore</artifactId>
           </exclusion>
@@ -1734,7 +1116,7 @@
         <version>${log4j2.version}</version>
       </dependency>
 
-       <!-- Runtime dependencies -->
+      <!-- Runtime dependencies -->
       <dependency>
         <groupId>ch.qos.reload4j</groupId>
         <artifactId>reload4j</artifactId>
@@ -1755,6 +1137,627 @@
       </dependency>
     </dependencies>
   </dependencyManagement>
+
+  <repositories>
+    <repository>
+      <id>apache release</id>
+      <url>https://repository.apache.org/content/repositories/releases/</url>
+    </repository>
+  </repositories>
+
+  <build>
+
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-project-info-reports-plugin</artifactId>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+        </plugin>
+        <plugin>
+          <groupId>org.antlr</groupId>
+          <artifactId>antlr3-maven-plugin</artifactId>
+          <version>${maven-antlr-eclipse-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>com.github.searls</groupId>
+          <artifactId>jasmine-maven-plugin</artifactId>
+          <version>${jasmine-maven-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>com.github.spotbugs</groupId>
+          <artifactId>spotbugs-maven-plugin</artifactId>
+          <version>${spotbugs-maven-plugin.version}</version>
+          <configuration>
+            <effort>Max</effort>
+            <maxHeap>2048</maxHeap>
+            <excludeFilterFile>${top.dir}/src/main/config/spotbugs/spotbugs-exclude.xml</excludeFilterFile>
+          </configuration>
+          <dependencies>
+            <dependency>
+              <groupId>com.github.spotbugs</groupId>
+              <artifactId>spotbugs</artifactId>
+              <version>${spotbugs.version}</version>
+            </dependency>
+          </dependencies>
+        </plugin>
+        <!--This plugin's configuration is used to store Eclipse m2e settings
+          only. It has no influence on the Maven build itself. -->
+        <plugin>
+          <groupId>org.eclipse.m2e</groupId>
+          <artifactId>lifecycle-mapping</artifactId>
+          <version>${lifecycle-mapping.version}</version>
+          <configuration>
+            <lifecycleMappingMetadata>
+              <pluginExecutions>
+                <pluginExecution>
+                  <pluginExecutionFilter>
+                    <groupId>org.antlr</groupId>
+                    <artifactId>antlr3-maven-plugin</artifactId>
+                    <versionRange>[3.5,)</versionRange>
+                    <goals>
+                      <goal>antlr</goal>
+                    </goals>
+                  </pluginExecutionFilter>
+                  <action>
+                    <ignore/>
+                  </action>
+                </pluginExecution>
+              </pluginExecutions>
+            </lifecycleMappingMetadata>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-install-plugin</artifactId>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-eclipse-plugin</artifactId>
+          <version>${maven-eclipse-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <artifactId>maven-assembly-plugin</artifactId>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.rat</groupId>
+          <artifactId>apache-rat-plugin</artifactId>
+          <!-- Avoid defining exclusions in pluginManagement as they are global.
+               We already inherit some from the ASF parent pom. -->
+        </plugin>
+        <!-- We put slow-running tests into src/it and run them during the
+            integration-test phase using the failsafe plugin. This way
+            developers can run unit tests conveniently from the IDE or via
+            "mvn package" from the command line without triggering time
+            consuming integration tests. -->
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>build-helper-maven-plugin</artifactId>
+          <version>${maven-build-helper-plugin.version}</version>
+          <executions>
+            <execution>
+              <id>add-test-source</id>
+              <goals>
+                <goal>add-test-source</goal>
+              </goals>
+              <phase>validate</phase>
+              <configuration>
+                <sources>
+                  <source>${basedir}/src/it/java</source>
+                </sources>
+              </configuration>
+            </execution>
+            <execution>
+              <id>add-test-resource</id>
+              <goals>
+                <goal>add-test-resource</goal>
+              </goals>
+              <phase>validate</phase>
+              <configuration>
+                <resources>
+                  <resource>
+                    <directory>${basedir}/src/it/resources</directory>
+                  </resource>
+                </resources>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-failsafe-plugin</artifactId>
+          <!-- Common settings for all executions -->
+          <configuration>
+            <encoding>UTF-8</encoding>
+            <forkCount>${numForkedIT}</forkCount>
+            <runOrder>alphabetical</runOrder>
+            <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
+            <forkedProcessExitTimeoutInSeconds>180</forkedProcessExitTimeoutInSeconds>
+            <shutdown>exit</shutdown>
+            <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+            <trimStackTrace>false</trimStackTrace>
+            <!-- https://www.orpiske.net/2021/04/test-woes-with-maven-failsafe-3-0-0-m5 -->
+            <useModulePath>false</useModulePath>
+            <forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
+            <systemPropertyVariables>
+              <java.io.tmpdir>${test.tmp.dir}</java.io.tmpdir>
+            </systemPropertyVariables>
+          </configuration>
+          <executions>
+            <execution>
+              <id>ParallelStatsEnabledTest</id>
+              <goals>
+                <goal>integration-test</goal>
+                <goal>verify</goal>
+              </goals>
+              <configuration>
+                <skip>${skipParallelStatsEnabledTests}</skip>
+                <reuseForks>true</reuseForks>
+                <groups>org.apache.phoenix.end2end.ParallelStatsEnabledTest</groups>
+              </configuration>
+            </execution>
+            <execution>
+              <id>ParallelStatsDisabledTest</id>
+              <goals>
+                <goal>integration-test</goal>
+                <goal>verify</goal>
+              </goals>
+              <configuration>
+                <reuseForks>true</reuseForks>
+                <skip>${skipParallelStatsDisabledTests}</skip>
+                <groups>org.apache.phoenix.end2end.ParallelStatsDisabledTest</groups>
+              </configuration>
+            </execution>
+            <execution>
+              <id>NeedTheirOwnClusterTests</id>
+              <goals>
+                <goal>integration-test</goal>
+                <goal>verify</goal>
+              </goals>
+              <configuration>
+                <reuseForks>false</reuseForks>
+                <skip>${skipNeedsOwnMiniClusterTests}</skip>
+                <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
+        <plugin>
+          <artifactId>maven-dependency-plugin</artifactId>
+          <version>3.1.1</version>
+          <configuration>
+            <ignoredUnusedDeclaredDependencies>
+              <ignoredUnusedDeclaredDependency>org.apache.omid:*</ignoredUnusedDeclaredDependency>
+              <ignoredUnusedDeclaredDependency>org.slf4j:slf4j-reload4j</ignoredUnusedDeclaredDependency>
+              <ignoredUnusedDeclaredDependency>org.apache.hbase:hbase-testing-util</ignoredUnusedDeclaredDependency>
+              <ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-api</ignoredUnusedDeclaredDependency>
+              <ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-core</ignoredUnusedDeclaredDependency>
+              <ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-slf4j-impl</ignoredUnusedDeclaredDependency>
+              <ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-1.2-api</ignoredUnusedDeclaredDependency>
+              <ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-api</ignoredUnusedDeclaredDependency>
+              <ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-core</ignoredUnusedDeclaredDependency>
+            </ignoredUnusedDeclaredDependencies>
+            <ignoredUsedUndeclaredDependencies>
+              <ignoredUsedUndeclaredDependency>
+                <!-- couldn't figure out what's the deal with this -->
+                dnsjava:dnsjava
+              </ignoredUsedUndeclaredDependency>
+              <ignoredUsedUndeclaredDependency>
+                <!-- These change too frequently, so we just rely on the hbase transitive deps -->
+                org.apache.hbase.thirdparty:*
+              </ignoredUsedUndeclaredDependency>
+              <ignoredUsedUndeclaredDependency>
+                <!-- We only need this because the Hadoop Metrics API leak.
+                  By not declaring the dependency, we can pick up the CVE fixed version from Hadoop
+                  without having to also declare a dependency on commons-text dependency
+                  (which we do not use directly at all)-->
+                org.apache.commons:commons-configuration2
+              </ignoredUsedUndeclaredDependency>
+            </ignoredUsedUndeclaredDependencies>
+          </configuration>
+          <executions>
+            <execution>
+              <id>create-mrapp-generated-classpath</id>
+              <goals>
+                <goal>build-classpath</goal>
+              </goals>
+              <phase>generate-test-resources</phase>
+              <configuration>
+                <outputFile>${project.build.directory}/classes/mrapp-generated-classpath</outputFile>
+              </configuration>
+            </execution>
+            <execution>
+              <id>enforce-dependencies</id>
+              <goals>
+                <goal>analyze-only</goal>
+              </goals>
+              <configuration>
+                <failOnWarning>true</failOnWarning>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-shade-plugin</artifactId>
+          <version>${maven-shade-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <!-- Allows us to get the apache-ds bundle artifacts -->
+          <groupId>org.apache.felix</groupId>
+          <artifactId>maven-bundle-plugin</artifactId>
+          <version>${maven-bundle-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>exec-maven-plugin</artifactId>
+          <version>${exec-maven-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.xolstice.maven.plugins</groupId>
+          <artifactId>protobuf-maven-plugin</artifactId>
+          <version>${protobuf.plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-enforcer-plugin</artifactId>
+          <dependencies>
+            <dependency>
+              <groupId>de.skuzzle.enforcer</groupId>
+              <artifactId>restrict-imports-enforcer-rule</artifactId>
+              <version>${restrict-imports.enforcer.version}</version>
+            </dependency>
+          </dependencies>
+          <executions>
+            <execution>
+              <id>banned-illegal-imports</id>
+              <goals>
+                <goal>enforce</goal>
+              </goals>
+              <phase>process-sources</phase>
+              <configuration>
+                <rules>
+                  <RestrictImports>
+                    <includeTestCode>true</includeTestCode>
+                    <reason>Use SLF4j for logging</reason>
+                    <bannedImports>
+                      <bannedImport>org.apache.commons.logging.Log</bannedImport>
+                      <bannedImport>org.apache.commons.logging.LogFactory</bannedImport>
+                    </bannedImports>
+                  </RestrictImports>
+                  <RestrictImports>
+                    <includeTestCode>true</includeTestCode>
+                    <reason>Use shaded version in phoenix-thirdparty</reason>
+                    <bannedImports>
+                      <bannedImport>com.google.common.**</bannedImport>
+                    </bannedImports>
+                  </RestrictImports>
+                  <RestrictImports>
+                    <includeTestCode>true</includeTestCode>
+                    <reason>Use shaded version in phoenix-thirdparty</reason>
+                    <bannedImports>
+                      <bannedImport>org.apache.commons.cli.**</bannedImport>
+                      <bannedImport>org.apache.hbase.thirdparty.org.apache.commons.cli.**</bannedImport>
+                    </bannedImports>
+                  </RestrictImports>
+                  <RestrictImports>
+                    <includeTestCode>true</includeTestCode>
+                    <reason>Use commons lang 3</reason>
+                    <bannedImports>
+                      <bannedImport>org.apache.commons.lang.**</bannedImport>
+                    </bannedImports>
+                  </RestrictImports>
+                  <RestrictImports>
+                    <includeTestCode>true</includeTestCode>
+                    <reason>Commons collection is restricted</reason>
+                    <bannedImports>
+                      <bannedImport>org.apache.commons.collections.**</bannedImport>
+                      <!-- If you really need to use commons-collections 4, add as dependency and remove this ban -->
+                      <bannedImport>org.apache.commons.collections4.**</bannedImport>
+                    </bannedImports>
+                  </RestrictImports>
+                  <RestrictImports>
+                    <includeTestCode>true</includeTestCode>
+                    <reason>Use edu.umd.cs.findbugs.annotations</reason>
+                    <bannedImports>
+                      <bannedImport>com.sun.istack.**</bannedImport>
+                    </bannedImports>
+                  </RestrictImports>
+                </rules>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-checkstyle-plugin</artifactId>
+        <version>${maven-checkstyle-plugin.version}</version>
+        <configuration>
+          <configLocation>${top.dir}/src/main/config/checkstyle/checker.xml</configLocation>
+          <suppressionsLocation>${top.dir}/src/main/config/checkstyle/suppressions.xml</suppressionsLocation>
+          <consoleOutput>true</consoleOutput>
+          <headerLocation>${top.dir}/src/main/config/checkstyle/header.txt</headerLocation>
+          <failOnViolation>
+            <!--true-->
+            false
+          </failOnViolation>
+          <includeTestSourceDirectory>
+            <!--true-->
+            false
+          </includeTestSourceDirectory>
+        </configuration>
+        <executions>
+          <execution>
+            <id>validate</id>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <phase>validate</phase>
+            <configuration>
+              <skip>true</skip>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-source-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>attach-sources</id>
+            <goals>
+              <goal>jar-no-fork</goal>
+            </goals>
+            <phase>prepare-package</phase>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <configuration>
+          <quiet>true</quiet>
+          <links>
+            <link>https://hbase.apache.org/apidocs/</link>
+          </links>
+        </configuration>
+        <executions>
+          <execution>
+            <id>attach-javadocs</id>
+            <goals>
+              <!-- TODO turn back on javadocs - disabled now for testing -->
+              <!-- <goal>jar</goal> -->
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <forkCount>${numForkedUT}</forkCount>
+          <reuseForks>true</reuseForks>
+          <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
+          <shutdown>exit</shutdown>
+          <trimStackTrace>false</trimStackTrace>
+          <forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
+          <systemPropertyVariables>
+            <java.io.tmpdir>${test.tmp.dir}</java.io.tmpdir>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
+      <!-- All projects create a test jar -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals>
+              <goal>test-jar</goal>
+            </goals>
+            <phase>prepare-package</phase>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.rat</groupId>
+        <artifactId>apache-rat-plugin</artifactId>
+        <configuration>
+          <excludes>
+            <!-- Header on changelog isn't normal -->
+            <exclude>CHANGES</exclude>
+            <!-- create-release scripts -->
+            <exclude>dev/create-release/README.txt</exclude>
+            <exclude>dev/create-release/vote.tmpl</exclude>
+            <!-- IDE configuration -->
+            <exclude>dev/phoenix.importorder</exclude>
+            <!-- Release L&N -->
+            <exclude>dev/release_files/LICENSE</exclude>
+            <exclude>dev/release_files/NOTICE</exclude>
+            <!-- Exclude data files for examples -->
+            <exclude>docs/*.csv</exclude>
+            <exclude>examples/*.csv</exclude>
+            <!-- Exclude SQL files from rat. Sqlline 1.1.9 doesn't work with
+                 comments on the first line of a file. -->
+            <exclude>examples/*.sql</exclude>
+            <!-- precommit? -->
+            <exclude>**/patchprocess/**</exclude>
+            <!-- Argparse is bundled to work around system Python version
+                 issues, compatibile with ALv2 -->
+            <exclude>bin/argparse-1.4.0/argparse.py</exclude>
+            <!-- tmp files -->
+            <exclude>dev/work/**</exclude>
+            <exclude>dev/artifacts/**</exclude>
+          </excludes>
+        </configuration>
+      </plugin>
+      <plugin>
+        <!-- Allows us to get the apache-ds bundle artifacts -->
+        <groupId>org.apache.felix</groupId>
+        <artifactId>maven-bundle-plugin</artifactId>
+        <extensions>true</extensions>
+        <inherited>true</inherited>
+      </plugin>
+      <plugin>
+        <groupId>com.diffplug.spotless</groupId>
+        <artifactId>spotless-maven-plugin</artifactId>
+        <version>${spotless.version}</version>
+        <configuration>
+          <!-- define a language-specific format -->
+          <java>
+            <excludes>
+              <exclude>**/generated/*</exclude>
+              <exclude>**/package-info.java</exclude>
+            </excludes>
+            <!-- We need to explicitly set includes as we have src/it which is not standard java
+            src path and spotless does not identify it otherwise -->
+            <includes>
+              <include>src/main/java/**/*.java</include>
+              <include>src/test/java/**/*.java</include>
+              <include>src/it/java/**/*.java</include>
+            </includes>
+            <!--
+              e.g., remove the following lines:
+              "* @param paramName"
+              "* @throws ExceptionType"
+              "* @return returnType"'
+              Multiline to allow anchors on newlines
+              See https://errorprone.info/bugpattern/EmptyBlockTag
+            -->
+            <replaceRegex>
+              <name>Remove unhelpful javadoc stubs</name>
+              <searchRegex>(?m)^ *\* *@(?:param|throws|return) *\w* *\n</searchRegex>
+              <replacement/>
+            </replaceRegex>
+            <!--
+              e.g., rewrite
+              /** @return blabla */
+              or
+              /**
+               * @return blabla
+               */
+              to
+              /** Returns blabla */
+              See https://errorprone.info/bugpattern/MissingSummary
+              https://google.github.io/styleguide/javaguide.html#s7.2-summary-fragment
+            -->
+            <replaceRegex>
+              <name>Purge single returns tag multi line</name>
+              <searchRegex>(?m)^ */\*\*\n *\* *@return *(.*) *\n *\*/$</searchRegex>
+              <replacement>/** Returns $1 */</replacement>
+            </replaceRegex>
+            <replaceRegex>
+              <name>Purge single returns tag single line</name>
+              <searchRegex>^ */\*\* *@return *(.*) *\*/$</searchRegex>
+              <replacement>/** Returns $1 */</replacement>
+            </replaceRegex>
+            <!-- apply a specific flavor -->
+            <eclipse>
+              <file>${session.executionRootDirectory}/dev/PhoenixCodeTemplate.xml</file>
+            </eclipse>
+            <importOrder>
+              <file>${session.executionRootDirectory}/dev/phoenix.importorder</file>
+            </importOrder>
+            <trimTrailingWhitespace/>
+            <endWithNewline/>
+            <removeUnusedImports/>
+          </java>
+          <pom>
+            <sortPom>
+              <expandEmptyElements>false</expandEmptyElements>
+            </sortPom>
+          </pom>
+          <formats>
+            <!-- you can define as many formats as you want, each is independent -->
+            <format>
+              <!-- define the files to apply to -->
+              <includes>
+                <include>**/*.xml</include>
+                <include>**/*.sh</include>
+                <include>**/*.py</include>
+                <include>**/Jenkinsfile*</include>
+                <include>**/Dockerfile*</include>
+                <include>**/*.md</include>
+                <include>*.md</include>
+                <include>**/*.txt</include>
+                <include>*.txt</include>
+              </includes>
+              <excludes>
+                <exclude>**/target/**</exclude>
+                <exclude>**/dependency-reduced-pom.xml</exclude>
+              </excludes>
+              <!-- define the steps to apply to those files -->
+              <trimTrailingWhitespace/>
+              <endWithNewline/>
+            </format>
+            <format>
+              <!--
+                We have some files which have special license header which must be kept, so
+                here we add a special format section to apply license header, and leave the
+                java/scala section above only used for formatting code style
+              -->
+              <includes>
+                <include>src/main/java/**/*.java</include>
+                <include>src/test/java/**/*.java</include>
+                <include>src/it/java/**/*.java</include>
+              </includes>
+              <excludes>
+                <exclude>**/generated/*</exclude>
+                <exclude>**/package-info.java</exclude>
+              </excludes>
+              <licenseHeader>
+                <file>${session.executionRootDirectory}/src/main/config/checkstyle/header.txt</file>
+                <delimiter>package</delimiter>
+              </licenseHeader>
+            </format>
+          </formats>
+          <!-- Spotless considers processing same file twice: a bug!
+          With spotless >= 2.35.0 java formatter does not work for us if we don't disable upToDateChecking.
+          See [UpToDateChecking ignores java formatter|https://github.com/diffplug/spotless/issues/1767] -->
+          <upToDateChecking>
+            <enabled>false</enabled>
+          </upToDateChecking>
+        </configuration>
+      </plugin>
+    </plugins>
+    <extensions>
+      <extension>
+        <groupId>kr.motd.maven</groupId>
+        <artifactId>os-maven-plugin</artifactId>
+        <version>${os.maven.version}</version>
+      </extension>
+    </extensions>
+  </build>
+  <reporting>
+    <plugins>
+      <plugin>
+        <groupId>com.github.spotbugs</groupId>
+        <artifactId>spotbugs-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <reportSets>
+          <reportSet>
+            <reports>
+              <report>report</report>
+            </reports>
+          </reportSet>
+        </reportSets>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.rat</groupId>
+        <artifactId>apache-rat-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </reporting>
 
   <profiles>
     <profile>
@@ -1782,10 +1785,10 @@
             <artifactId>apache-rat-plugin</artifactId>
             <executions>
               <execution>
-                <phase>package</phase>
                 <goals>
                   <goal>check</goal>
                 </goals>
+                <phase>package</phase>
               </execution>
             </executions>
           </plugin>
@@ -2011,7 +2014,7 @@
       <id>codecoverage</id>
       <activation>
         <property>
-            <name>!skip.code-coverage</name>
+          <name>!skip.code-coverage</name>
         </property>
       </activation>
       <build>
@@ -2032,17 +2035,17 @@
               </execution>
               <execution>
                 <id>report</id>
-                <phase>post-integration-test</phase>
                 <goals>
                   <goal>report</goal>
                 </goals>
+                <phase>post-integration-test</phase>
               </execution>
               <execution>
                 <id>check</id>
-                <phase>verify</phase>
                 <goals>
-                    <goal>check</goal>
+                  <goal>check</goal>
                 </goals>
+                <phase>verify</phase>
                 <configuration>
                   <rules>
                     <rule>
@@ -2072,7 +2075,7 @@
       <id>spotbugs-site</id>
       <activation>
         <property>
-            <name>!spotbugs.site</name>
+          <name>!spotbugs.site</name>
         </property>
       </activation>
       <build>
@@ -2188,27 +2191,4 @@
       </reporting>
     </profile>
   </profiles>
-  <reporting>
-    <plugins>
-      <plugin>
-        <groupId>com.github.spotbugs</groupId>
-        <artifactId>spotbugs-maven-plugin</artifactId>
-      </plugin>
-      <plugin>
-        <groupId>org.jacoco</groupId>
-        <artifactId>jacoco-maven-plugin</artifactId>
-        <reportSets>
-          <reportSet>
-            <reports>
-              <report>report</report>
-            </reports>
-          </reportSet>
-        </reportSets>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.rat</groupId>
-        <artifactId>apache-rat-plugin</artifactId>
-      </plugin>
-    </plugins>
-  </reporting>
 </project>
