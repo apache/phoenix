@@ -34,8 +34,8 @@ import org.apache.hbase.thirdparty.com.google.common.base.Strings;
  */
 public abstract class AbstractRPCConnectionInfo extends ConnectionInfo {
 
-  protected static final String MASTER_ADDRS_KEY = "hbase.masters";
-  protected static final String MASTER_HOSTNAME_KEY = "hbase.master.hostname";
+  public static final String MASTER_ADDRS_KEY = "hbase.masters";
+  public static final String MASTER_HOSTNAME_KEY = "hbase.master.hostname";
 
   protected String bootstrapServers;
 
