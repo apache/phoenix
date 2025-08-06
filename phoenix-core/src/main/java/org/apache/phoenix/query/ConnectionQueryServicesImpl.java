@@ -435,8 +435,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       HConstants.CLIENT_ZOOKEEPER_CLIENT_PORT,
       this.config.get(HConstants.CLIENT_ZOOKEEPER_CLIENT_PORT), HConstants.ZOOKEEPER_CLIENT_PORT,
       this.config.get(HConstants.ZOOKEEPER_CLIENT_PORT), RPCConnectionInfo.BOOTSTRAP_NODES,
-      this.config.get(RPCConnectionInfo.BOOTSTRAP_NODES), HConstants.MASTER_ADDRS_KEY,
-      this.config.get(HConstants.MASTER_ADDRS_KEY),
+      this.config.get(RPCConnectionInfo.BOOTSTRAP_NODES), RPCConnectionInfo.MASTER_ADDRS_KEY,
+      this.config.get(RPCConnectionInfo.MASTER_ADDRS_KEY),
       ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY,
       this.config.get(ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY));
 
