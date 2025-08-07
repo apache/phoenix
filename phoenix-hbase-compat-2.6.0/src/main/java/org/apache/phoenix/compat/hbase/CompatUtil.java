@@ -19,18 +19,9 @@ package org.apache.phoenix.compat.hbase;
 
 import java.io.IOException;
 import java.util.List;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.RegionInfo;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.io.compress.Compression.Algorithm;
-import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
-import org.apache.hadoop.hbase.io.hfile.HFileContext;
-import org.apache.hadoop.hbase.io.hfile.HFileContextBuilder;
-import org.apache.hadoop.hbase.regionserver.StoreUtils;
-import org.apache.hadoop.hbase.util.ChecksumType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,30 +33,9 @@ public class CompatUtil {
     // Not to be instantiated
   }
 
-  public static HFileContext createHFileContext(Configuration conf, Algorithm compression,
-    Integer blockSize, DataBlockEncoding encoding, CellComparator comparator) {
-
-    return new HFileContextBuilder().withCompression(compression)
-      .withChecksumType(StoreUtils.getChecksumType(conf))
-      .withBytesPerCheckSum(StoreUtils.getBytesPerChecksum(conf)).withBlockSize(blockSize)
-      .withDataBlockEncoding(encoding).build();
-  }
-
   public static List<RegionInfo> getMergeRegions(Connection conn, RegionInfo regionInfo)
     throws IOException {
     return MetaTableAccessor.getMergeRegions(conn, regionInfo);
   }
 
-  public static ChecksumType getChecksumType(Configuration conf) {
-    return StoreUtils.getChecksumType(conf);
-  }
-
-  public static int getBytesPerChecksum(Configuration conf) {
-    return StoreUtils.getBytesPerChecksum(conf);
-  }
-
-  public static Connection createShortCircuitConnection(final Configuration configuration,
-    final RegionCoprocessorEnvironment env) throws IOException {
-    return env.createConnection(configuration);
-  }
 }
