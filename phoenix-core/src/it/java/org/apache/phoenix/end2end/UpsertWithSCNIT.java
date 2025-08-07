@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.hamcrest.CoreMatchers.containsString;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -78,8 +77,8 @@ public class UpsertWithSCNIT extends ParallelStatsDisabledIT {
 
     helpTestUpsertWithSCNIT(false, true, false, false, false);
     exception.expect(SQLException.class);
-    exception.expectMessage(containsString(
-      String.valueOf(SQLExceptionCode.CANNOT_SPECIFY_SCN_FOR_TXN_TABLE.getErrorCode())));
+    exception.expectMessage(
+      String.valueOf(SQLExceptionCode.CANNOT_SPECIFY_SCN_FOR_TXN_TABLE.getErrorCode()));
     prep.executeUpdate();
   }
 
@@ -116,8 +115,8 @@ public class UpsertWithSCNIT extends ParallelStatsDisabledIT {
 
     helpTestUpsertWithSCNIT(false, false, true, true, false);
     exception.expect(SQLException.class);
-    exception.expectMessage(containsString(String
-      .valueOf(SQLExceptionCode.CANNOT_UPSERT_WITH_SCN_FOR_TABLE_WITH_INDEXES.getErrorCode())));
+    exception.expectMessage(String
+      .valueOf(SQLExceptionCode.CANNOT_UPSERT_WITH_SCN_FOR_TABLE_WITH_INDEXES.getErrorCode()));
     prep.executeUpdate();
   }
 
@@ -126,8 +125,8 @@ public class UpsertWithSCNIT extends ParallelStatsDisabledIT {
 
     helpTestUpsertWithSCNIT(false, false, false, true, false);
     exception.expect(SQLException.class);
-    exception.expectMessage(containsString(String
-      .valueOf(SQLExceptionCode.CANNOT_UPSERT_WITH_SCN_FOR_TABLE_WITH_INDEXES.getErrorCode())));
+    exception.expectMessage(String
+      .valueOf(SQLExceptionCode.CANNOT_UPSERT_WITH_SCN_FOR_TABLE_WITH_INDEXES.getErrorCode()));
     prep.executeUpdate();
   }
 
@@ -136,8 +135,8 @@ public class UpsertWithSCNIT extends ParallelStatsDisabledIT {
 
     helpTestUpsertWithSCNIT(false, false, true, false, true);
     exception.expect(SQLException.class);
-    exception.expectMessage(containsString(String
-      .valueOf(SQLExceptionCode.CANNOT_UPSERT_WITH_SCN_FOR_TABLE_WITH_INDEXES.getErrorCode())));
+    exception.expectMessage(String
+      .valueOf(SQLExceptionCode.CANNOT_UPSERT_WITH_SCN_FOR_TABLE_WITH_INDEXES.getErrorCode()));
     prep.executeUpdate();
   }
 
@@ -146,8 +145,8 @@ public class UpsertWithSCNIT extends ParallelStatsDisabledIT {
 
     helpTestUpsertWithSCNIT(false, false, false, false, true);
     exception.expect(SQLException.class);
-    exception.expectMessage(containsString(String
-      .valueOf(SQLExceptionCode.CANNOT_UPSERT_WITH_SCN_FOR_TABLE_WITH_INDEXES.getErrorCode())));
+    exception.expectMessage(String
+      .valueOf(SQLExceptionCode.CANNOT_UPSERT_WITH_SCN_FOR_TABLE_WITH_INDEXES.getErrorCode()));
     prep.executeUpdate();
   }
 
@@ -156,8 +155,8 @@ public class UpsertWithSCNIT extends ParallelStatsDisabledIT {
 
     helpTestUpsertWithSCNIT(true, false, false, false, false);
     exception.expect(SQLException.class);
-    exception.expectMessage(containsString(String
-      .valueOf(SQLExceptionCode.CANNOT_UPSERT_WITH_SCN_FOR_ROW_TIMESTAMP_COLUMN.getErrorCode())));
+    exception.expectMessage(String
+      .valueOf(SQLExceptionCode.CANNOT_UPSERT_WITH_SCN_FOR_ROW_TIMESTAMP_COLUMN.getErrorCode()));
     prep.executeUpdate();
   }
 }

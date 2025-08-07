@@ -19,8 +19,8 @@ package org.apache.phoenix.rpc;
 
 import static org.apache.phoenix.util.TestUtil.DEFAULT_SCHEMA_NAME;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.anyLong;
-import static org.mockito.Matchers.eq;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.isNull;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;

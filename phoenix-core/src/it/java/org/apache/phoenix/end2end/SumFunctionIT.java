@@ -17,8 +17,9 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.hamcrest.CoreMatchers.is;
-import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -43,10 +44,10 @@ public class SumFunctionIT extends ParallelStatsDisabledIT {
       try (ResultSet rs = s.executeQuery("select sum(case when col1 is null then col2 else 0 end), "
         + "sum(case when col1 is not null then col2 else 0 end) from " + tableName)) {
 
-        assertThat(rs.next(), is(true));
-        assertThat(rs.getInt(1), is(1));
-        assertThat(rs.getInt(2), is(2));
-        assertThat(rs.next(), is(false));
+        assertTrue(rs.next());
+        assertEquals(rs.getInt(1), 1);
+        assertEquals(rs.getInt(2), 2);
+        assertFalse(rs.next());
       }
     }
   }
