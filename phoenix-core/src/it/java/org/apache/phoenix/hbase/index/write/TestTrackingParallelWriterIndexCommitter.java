@@ -26,7 +26,6 @@ import javax.annotation.concurrent.GuardedBy;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
@@ -53,8 +52,8 @@ public class TestTrackingParallelWriterIndexCommitter extends TrackingParallelWr
           @Override
           public Connection apply(ServerUtil.ConnectionType t) {
             try {
-              return CompatUtil.createShortCircuitConnection(
-                getTypeSpecificConfiguration(connectionType, env.getConfiguration()), env);
+              return env.createConnection(
+                getTypeSpecificConfiguration(connectionType, env.getConfiguration()));
             } catch (IOException e) {
               throw new RuntimeException(e);
             }
