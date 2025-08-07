@@ -51,6 +51,8 @@ import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.hadoop.hbase.HConstants.DEFAULT_ZK_SESSION_TIMEOUT;
+import static org.apache.hadoop.hbase.HConstants.ZK_SESSION_TIMEOUT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLUSTER_ROLE_1;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLUSTER_ROLE_2;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLUSTER_URL_1;
@@ -63,12 +65,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ZK_URL_1;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ZK_URL_2;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
-import static org.apache.phoenix.query.QueryServices.HA_STORE_AND_FORWARD_MODE_REFRESH_INTERVAL_MS;
-import static org.apache.phoenix.query.QueryServices.HA_SYNC_MODE_REFRESH_INTERVAL_MS;
-import static org.apache.phoenix.query.QueryServicesOptions
-        .DEFAULT_HA_STORE_AND_FORWARD_MODE_REFRESH_INTERVAL_MS;
-import static org.apache.phoenix.query.QueryServicesOptions
-        .DEFAULT_HA_SYNC_MODE_REFRESH_INTERVAL_MS;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_ZK;
 
@@ -83,6 +79,9 @@ public class HAGroupStoreClient implements Closeable {
     public static final String ZK_CONSISTENT_HA_NAMESPACE =
             "phoenix" + ZKPaths.PATH_SEPARATOR + "consistentHA";
     private static final long HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS = 30000L;
+    // Multiplier for ZK session timeout to account for time it will take for HMaster to abort
+    // the region server in case ZK connection is lost from the region server.
+    private static final double ZK_SESSION_TIMEOUT_MULTIPLIER = 1.1;
     private static final String CACHE_TYPE_LOCAL = "LOCAL";
     private static final String CACHE_TYPE_PEER = "PEER";
     private PhoenixHAAdmin phoenixHaAdmin;
@@ -109,8 +108,6 @@ public class HAGroupStoreClient implements Closeable {
     private final PathChildrenCacheListener peerCustomPathChildrenCacheListener;
     // Wait time for sync mode
     private final long waitTimeForSyncModeInMs;
-    // Wait time for store and forward mode
-    private final long waitTimeForStoreAndForwardModeInMs;
     // Policy for the HA group
     private HighAvailabilityPolicy policy;
     private ClusterRole clusterRole;
@@ -119,6 +116,9 @@ public class HAGroupStoreClient implements Closeable {
     private String peerClusterUrl;
     private long clusterRoleRecordVersion;
 
+    public static HAGroupStoreClient getInstance(Configuration conf, String haGroupName) throws SQLException {
+        return getInstanceForZkUrl(conf, haGroupName, null);
+    }
 
     /**
      * Creates/gets an instance of HAGroupStoreClient.
@@ -130,7 +130,7 @@ public class HAGroupStoreClient implements Closeable {
      *             the overhead of getting the local zkUrl from the configuration.
      * @return HAGroupStoreClient instance
      */
-    public static HAGroupStoreClient getInstance(Configuration conf, String haGroupName,
+    public static HAGroupStoreClient getInstanceForZkUrl(Configuration conf, String haGroupName,
             String zkUrl) throws SQLException {
         Preconditions.checkNotNull(haGroupName, "haGroupName cannot be null");
         String localZkUrl = Objects.toString(zkUrl, getLocalZkUrl(conf));
@@ -198,11 +198,8 @@ public class HAGroupStoreClient implements Closeable {
         this.conf = conf;
         this.haGroupName = haGroupName;
         this.zkUrl = zkUrl;
-        this.waitTimeForSyncModeInMs = conf.getLong(HA_SYNC_MODE_REFRESH_INTERVAL_MS,
-                DEFAULT_HA_SYNC_MODE_REFRESH_INTERVAL_MS);
-        this.waitTimeForStoreAndForwardModeInMs = conf.getLong(
-                HA_STORE_AND_FORWARD_MODE_REFRESH_INTERVAL_MS,
-                DEFAULT_HA_STORE_AND_FORWARD_MODE_REFRESH_INTERVAL_MS);
+        this.waitTimeForSyncModeInMs =  (long) Math.ceil(conf.getLong(ZK_SESSION_TIMEOUT, DEFAULT_ZK_SESSION_TIMEOUT) 
+                * ZK_SESSION_TIMEOUT_MULTIPLIER);
         // Custom Event Listener
         this.peerCustomPathChildrenCacheListener = peerPathChildrenCacheListener;
         try {
@@ -641,10 +638,6 @@ public class HAGroupStoreClient implements Closeable {
             if (currentHAGroupState == HAGroupState.ACTIVE_NOT_IN_SYNC
                     && newHAGroupState == HAGroupState.ACTIVE_IN_SYNC) {
                 waitTime = waitTimeForSyncModeInMs;
-            } else if (currentHAGroupState == HAGroupState.ACTIVE_NOT_IN_SYNC
-            && newHAGroupState == HAGroupState.ACTIVE_NOT_IN_SYNC) {
-                //This is to avoid extra requests to ZK for updates.
-                waitTime = waitTimeForStoreAndForwardModeInMs;
             }
         } else {
             throw new InvalidClusterRoleTransitionException("Cannot transition from "

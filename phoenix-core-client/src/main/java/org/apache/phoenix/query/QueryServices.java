@@ -140,14 +140,6 @@ public interface QueryServices extends SQLCloseable {
     public static final String MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB = "phoenix.coprocessor.maxMetaDataCacheTimeToLiveMs";
     public static final String MAX_SERVER_METADATA_CACHE_SIZE_ATTRIB = "phoenix.coprocessor.maxMetaDataCacheSize";
     public static final String MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB = "phoenix.client.maxMetaDataCacheSize";
-    // TODO: Revisit this default value based on standard ZK update time
-    // and time it takes for an update to reach regionserver cache.
-    // Refresh interval for store and forward mode status updates in milliseconds
-    public static final String HA_STORE_AND_FORWARD_MODE_REFRESH_INTERVAL_MS = "phoenix.ha.store.forward.mode.refresh.interval.ms";
-    // TODO: Revisit this default value based on standard ZK update time
-    // and time it takes for an update to reach regionserver cache.
-    // Refresh interval for sync mode status updates in milliseconds
-    public static final String HA_SYNC_MODE_REFRESH_INTERVAL_MS = "phoenix.ha.sync.mode.refresh.interval.ms";
     public static final String AUTO_UPGRADE_WHITELIST_ATTRIB = "phoenix.client.autoUpgradeWhiteList";
     // Mainly for testing to force spilling
     public static final String MAX_MEMORY_SIZE_ATTRIB = "phoenix.query.maxGlobalMemorySize";

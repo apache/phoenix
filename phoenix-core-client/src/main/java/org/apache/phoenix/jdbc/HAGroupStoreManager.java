@@ -89,7 +89,7 @@ public class HAGroupStoreManager {
      */
     public boolean isMutationBlocked(String haGroupName) throws IOException, SQLException {
         if (mutationBlockEnabled) {
-            HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstance(conf,
+            HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstanceForZkUrl(conf,
                     haGroupName, zkUrl);
             if (haGroupStoreClient != null) {
                 return haGroupStoreClient.getHAGroupStoreRecord() != null
@@ -138,7 +138,7 @@ public class HAGroupStoreManager {
      */
     public void invalidateHAGroupStoreClient(final String haGroupName,
             boolean broadcastUpdate) throws Exception {
-        HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstance(conf,
+        HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstanceForZkUrl(conf,
                 haGroupName, zkUrl);
         if (haGroupStoreClient != null) {
             haGroupStoreClient.rebuild(broadcastUpdate);
@@ -157,7 +157,7 @@ public class HAGroupStoreManager {
      */
     public Optional<HAGroupStoreRecord> getHAGroupStoreRecord(final String haGroupName)
             throws IOException, SQLException {
-        HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstance(conf,
+        HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstanceForZkUrl(conf,
                 haGroupName, zkUrl);
         if (haGroupStoreClient != null) {
             return Optional.ofNullable(haGroupStoreClient.getHAGroupStoreRecord());
@@ -174,7 +174,7 @@ public class HAGroupStoreManager {
     public void setHAGroupStatusToStoreAndForward(final String haGroupName)
             throws IOException, StaleHAGroupStoreRecordVersionException,
             InvalidClusterRoleTransitionException, SQLException {
-        HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstance(conf,
+        HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstanceForZkUrl(conf,
                 haGroupName, zkUrl);
         if (haGroupStoreClient != null) {
             haGroupStoreClient.setHAGroupStatusIfNeeded(
@@ -193,7 +193,7 @@ public class HAGroupStoreManager {
     public void setHAGroupStatusRecordToSync(final String haGroupName)
             throws IOException, StaleHAGroupStoreRecordVersionException,
             InvalidClusterRoleTransitionException, SQLException {
-        HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstance(conf,
+        HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstanceForZkUrl(conf,
                 haGroupName, zkUrl);
         if (haGroupStoreClient != null) {
             haGroupStoreClient.setHAGroupStatusIfNeeded(
@@ -215,7 +215,7 @@ public class HAGroupStoreManager {
      */
     public ClusterRoleRecord getClusterRoleRecord(String haGroupName)
             throws IOException, SQLException {
-        HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstance(conf,
+        HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstanceForZkUrl(conf,
                 haGroupName, zkUrl);
         if (haGroupStoreClient != null) {
             return haGroupStoreClient.getClusterRoleRecord();
