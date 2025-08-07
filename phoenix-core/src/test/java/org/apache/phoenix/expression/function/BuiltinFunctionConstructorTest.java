@@ -63,7 +63,11 @@ public class BuiltinFunctionConstructorTest {
     ExpressionType[] types = ExpressionType.values();
     for (int i = 0; i < types.length; i++) {
       try {
-        if (!AggregateFunction.class.isAssignableFrom(types[i].getExpressionClass())) {
+        if (
+          !AggregateFunction.class.isAssignableFrom(types[i].getExpressionClass())
+            && !ExpressionType.EXPRESSION_TYPES_NOT_SUPPORTED_AT_SERVER
+              .contains(types[i].getExpressionClass())
+        ) {
           Constructor cons = types[i].getExpressionClass().getDeclaredConstructor();
           cons.setAccessible(true);
           cons.newInstance();
