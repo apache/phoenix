@@ -598,8 +598,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
       updateCount = resultPair.getFirst();
       resultSet = resultPair.getSecond();
     }
-    boolean isReturningRow = upsertSql.toUpperCase().contains("RETURNING *");
-    if (conn.getAutoCommit() && isReturningRow) {
+    if (conn.getAutoCommit()) {
       assertEquals(success ? 1 : 0, updateCount);
       if (resultSet != null) {
         assertEquals("pk000", resultSet.getString(1));
