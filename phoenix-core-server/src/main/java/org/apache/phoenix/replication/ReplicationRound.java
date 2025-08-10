@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.replication;
 
-import com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 import java.util.Objects;
 
