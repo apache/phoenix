@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.replication;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscovery;

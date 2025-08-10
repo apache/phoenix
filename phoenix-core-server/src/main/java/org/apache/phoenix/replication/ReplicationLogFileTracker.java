@@ -17,15 +17,11 @@
  */
 package org.apache.phoenix.replication;
 
-import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogFileTracker;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogProcessor;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogProcessorImpl;
-import org.apache.phoenix.replication.metrics.ReplicationLogFileTrackerMetricValues;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
