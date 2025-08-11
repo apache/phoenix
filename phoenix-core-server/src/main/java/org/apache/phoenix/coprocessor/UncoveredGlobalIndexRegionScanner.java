@@ -18,7 +18,6 @@
 package org.apache.phoenix.coprocessor;
 
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHYSICAL_DATA_TABLE_NAME;
-import static org.apache.phoenix.hbase.index.write.AbstractParallelWriterIndexCommitter.INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY;
 
 import java.io.IOException;
 import java.util.Collection;
@@ -42,16 +41,10 @@ import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.hbase.index.parallel.EarlyExitFailure;
 import org.apache.phoenix.hbase.index.parallel.Task;
 import org.apache.phoenix.hbase.index.parallel.TaskBatch;
-import org.apache.phoenix.hbase.index.parallel.TaskRunner;
-import org.apache.phoenix.hbase.index.parallel.ThreadPoolBuilder;
-import org.apache.phoenix.hbase.index.parallel.ThreadPoolManager;
-import org.apache.phoenix.hbase.index.parallel.WaitForCompletionTaskRunner;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
 import org.apache.phoenix.index.IndexMaintainer;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ScanUtil;
@@ -75,31 +68,15 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
   protected byte[][] regionEndKeys;
   protected final Table dataHTable;
   protected final int rowCountPerTask;
-  protected static volatile TaskRunner pool;
   protected String exceptionMessage;
   protected final HTableFactory hTableFactory;
+  private RegionCoprocessorEnvironment env;
 
   // This relies on Hadoop Configuration to handle warning about deprecated configs and
   // to set the correct non-deprecated configs when an old one shows up.
   static {
     Configuration.addDeprecation("index.threads.max", NUM_CONCURRENT_INDEX_THREADS_CONF_KEY);
     Configuration.addDeprecation("index.row.count.per.task", INDEX_ROW_COUNTS_PER_TASK_CONF_KEY);
-  }
-
-  static void initThreadPool(final RegionCoprocessorEnvironment env) {
-    if (pool == null) {
-      synchronized (UncoveredGlobalIndexRegionScanner.class) {
-        if (pool == null) {
-          pool = new WaitForCompletionTaskRunner(ThreadPoolManager
-            .getExecutor(new ThreadPoolBuilder("Uncovered Global Index", env.getConfiguration())
-              .setMaxThread(QueryServices.PHOENIX_UNCOVERED_INDEX_MAX_POOL_SIZE,
-                QueryServicesOptions.DEFAULT_PHOENIX_UNCOVERED_INDEX_MAX_POOL_SIZE)
-              .setCoreTimeout(INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env));
-          LOGGER.info(
-            "Initialized region level thread pool cache for UncoveredGlobalIndexRegionScanner.");
-        }
-      }
-    }
   }
 
   public UncoveredGlobalIndexRegionScanner(final RegionScanner innerScanner, final Region region,
@@ -110,10 +87,10 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
     super(innerScanner, region, scan, env, dataTableScan, tupleProjector, indexMaintainer,
       viewConstants, ptr, pageSizeMs, queryLimit);
     final Configuration config = env.getConfiguration();
+    this.env = env;
     hTableFactory = IndexWriterUtils.getDefaultDelegateHTableFactory(env);
     rowCountPerTask =
       config.getInt(INDEX_ROW_COUNTS_PER_TASK_CONF_KEY, DEFAULT_INDEX_ROW_COUNTS_PER_TASK);
-    initThreadPool(env);
     byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
     dataHTable = hTableFactory.getTable(new ImmutableBytesPtr(dataTableName));
     regionEndKeys =
@@ -190,7 +167,8 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
     Pair<List<Boolean>, List<Future<Boolean>>> resultsAndFutures = null;
     try {
       LOGGER.debug("Waiting on index tasks to complete...");
-      resultsAndFutures = this.pool.submitUninterruptible(tasks);
+      resultsAndFutures =
+        PhoenixRegionServerEndpoint.getUncoveredIndexThreadPool(env).submitUninterruptible(tasks);
     } catch (ExecutionException e) {
       throw new RuntimeException(
         "Should not fail on the results while using a WaitForCompletionTaskRunner", e);
