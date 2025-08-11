@@ -157,18 +157,6 @@ public class PhoenixRegionServerEndpointIT extends BaseTest {
         }
     }
 
-    @Test
-    public void testInvalidateHAGroupStoreClient() {
-        HRegionServer regionServer = utility.getMiniHBaseCluster().getRegionServer(0);
-        PhoenixRegionServerEndpoint coprocessor = getPhoenixRegionServerEndpoint(regionServer);
-        assertNotNull(coprocessor);
-        ServerRpcController controller = new ServerRpcController();
-        RegionServerEndpointProtos.InvalidateHAGroupStoreClientRequest request
-                = RegionServerEndpointProtos.InvalidateHAGroupStoreClientRequest.newBuilder().build();
-        coprocessor.invalidateHAGroupStoreClient(controller, request, null);
-        assertFalse(controller.failed());
-    }
-
     private String getCreateTableStmt(String tableName) {
         return   "CREATE TABLE " + tableName +
                 "  (a_string varchar not null, col1 integer" +

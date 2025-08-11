@@ -18,6 +18,7 @@
 package org.apache.phoenix.jdbc;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.curator.RetryPolicy;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.recipes.atomic.AtomicValue;
@@ -26,10 +27,12 @@ import org.apache.curator.utils.ZKPaths;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.PairOfSameType;
+import org.apache.phoenix.exception.StaleHAGroupStoreRecordVersionException;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
+import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,8 +43,11 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
+
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_ZOOKEEPER_ZNODE_NAMESPACE;
 
 /**
  * Helper class to update cluster role record for a ZK cluster.
@@ -63,6 +69,13 @@ public class PhoenixHAAdmin implements Closeable {
         public CuratorFramework getCurator(String zkUrl, Properties properties) throws IOException {
             return HighAvailabilityGroup.getCurator(zkUrl, properties);
         }
+
+        /**
+         * Gets curator with specific namespace blocking if necessary to create it
+         */
+        public CuratorFramework getCurator(String zkUrl, Properties properties, String namespace) throws IOException {
+            return HighAvailabilityGroup.getCurator(zkUrl, properties, namespace);
+        }
     }
 
     private static final Logger LOG = LoggerFactory.getLogger(PhoenixHAAdmin.class);
@@ -76,17 +89,29 @@ public class PhoenixHAAdmin implements Closeable {
     /** Curator Provider **/
     private final HighAvailibilityCuratorProvider
             highAvailibilityCuratorProvider;
+    /** Namespace for Curator **/
+    private final String namespace;
 
     public PhoenixHAAdmin(Configuration conf) {
-        this(getLocalZkUrl(conf), conf, HighAvailibilityCuratorProvider.INSTANCE);
+        this(getLocalZkUrl(conf), conf, HighAvailibilityCuratorProvider.INSTANCE, null);
     }
 
-    public PhoenixHAAdmin(String zkUrl, Configuration conf) {
-        this(zkUrl, conf, HighAvailibilityCuratorProvider.INSTANCE);
+    public PhoenixHAAdmin(Configuration conf, String namespace) {
+        this(getLocalZkUrl(conf), conf, HighAvailibilityCuratorProvider.INSTANCE, namespace);
+    }
+
+    public PhoenixHAAdmin(String zkUrl, Configuration conf, String namespace) {
+        this(zkUrl, conf, HighAvailibilityCuratorProvider.INSTANCE, namespace);
     }
 
     public PhoenixHAAdmin(String zkUrl, Configuration conf,
-            HighAvailibilityCuratorProvider highAvailibilityCuratorProvider) {
+                          HighAvailibilityCuratorProvider highAvailibilityCuratorProvider) {
+        this(zkUrl, conf, highAvailibilityCuratorProvider, null);
+    }
+
+    public PhoenixHAAdmin(String zkUrl, Configuration conf,
+                          HighAvailibilityCuratorProvider highAvailibilityCuratorProvider,
+                          String namespace) {
         Preconditions.checkNotNull(zkUrl);
         Preconditions.checkNotNull(conf);
         Preconditions.checkNotNull(highAvailibilityCuratorProvider);
@@ -94,6 +119,7 @@ public class PhoenixHAAdmin implements Closeable {
         this.conf = conf;
         conf.iterator().forEachRemaining(k -> properties.setProperty(k.getKey(), k.getValue()));
         this.highAvailibilityCuratorProvider = highAvailibilityCuratorProvider;
+        this.namespace = Objects.toString(namespace, PHOENIX_HA_ZOOKEEPER_ZNODE_NAMESPACE);
     }
 
     /**
@@ -129,7 +155,7 @@ public class PhoenixHAAdmin implements Closeable {
      * Gets curator from the cache if available otherwise calls into getCurator to make it.
      */
     public CuratorFramework getCurator() throws IOException {
-        return highAvailibilityCuratorProvider.getCurator(zkUrl, properties);
+        return highAvailibilityCuratorProvider.getCurator(zkUrl, properties, namespace);
     }
 
 
@@ -160,20 +186,22 @@ public class PhoenixHAAdmin implements Closeable {
         }
     }
 
-    /**
-     * This lists all cluster role records stored in the zookeeper nodes.
-     * This read-only operation and hence no side effect on the ZK cluster.
-     */
-    public List<ClusterRoleRecord> listAllClusterRoleRecordsOnZookeeper() throws IOException {
-        List<String> haGroupNames;
+    public List<String> getHAGroupNames() throws IOException {
         try {
-            haGroupNames = getCurator().getChildren().forPath(ZKPaths.PATH_SEPARATOR);
+            return getCurator().getChildren().forPath(ZKPaths.PATH_SEPARATOR);
         } catch (Exception e) {
             String msg = String.format("Got exception when listing all HA groups in %s", zkUrl);
             LOG.error(msg);
             throw new IOException(msg, e);
         }
+    }
 
+    /**
+     * This lists all cluster role records stored in the zookeeper nodes.
+     * This read-only operation and hence no side effect on the ZK cluster.
+     */
+    public List<ClusterRoleRecord> listAllClusterRoleRecordsOnZookeeper() throws IOException {
+        List<String> haGroupNames = getHAGroupNames();
         List<ClusterRoleRecord> records = new ArrayList<>();
         List<String> failedHaGroups = new ArrayList<>();
         for (String haGroupName : haGroupNames) {
@@ -327,6 +355,15 @@ public class PhoenixHAAdmin implements Closeable {
         return inconsistentHaGroups;
     }
 
+    public void deleteHAGroupStoreRecordInZooKeeper(String haGroupName) throws IOException {
+        try {
+            getCurator().delete().quietly().deletingChildrenIfNeeded().forPath(toPath(haGroupName));
+        } catch (Exception e) {
+            LOG.error("Failed to delete HAGroupStoreRecord for HA group {}", haGroupName, e);
+            throw new IOException("Failed to delete HAGroupStoreRecord for HA group " + haGroupName, e);
+        }
+    }
+
     /**
      * This updates the cluster role data on the zookeeper it connects to.
      * To avoid conflicts, it does CAS (compare-and-set) when updating.  The constraint is that the
@@ -457,6 +494,72 @@ public class PhoenixHAAdmin implements Closeable {
                             haGroupPath, e.getMessage(), oldRecord, newRecord);
             LOG.error(msg, e);
             throw new IOException(msg, e);
+        }
+    }
+
+    /**
+     * Creates a new HAGroupStoreRecord in ZooKeeper.
+     *
+     * @param newHAGroupStoreRecord the new record to create
+     * @throws IOException if any error occurs during the creation
+     */
+    public void createHAGroupStoreRecordInZooKeeper(HAGroupStoreRecord newHAGroupStoreRecord)
+            throws IOException {
+        try {
+            getCurator()
+                    .create()
+                    .creatingParentsIfNeeded()
+                    .forPath(toPath(newHAGroupStoreRecord.getHaGroupName()), HAGroupStoreRecord.toJson(newHAGroupStoreRecord));
+        } catch (Exception e) {
+            throw new IOException("Failed to create HAGroupStoreRecord for HA group " + newHAGroupStoreRecord.getHaGroupName(), e);
+        }
+    }
+
+    /**
+     * Updates the HAGroupStoreRecord in ZooKeeper with version checking.
+     *
+     * @param haGroupName the HA group name
+     * @param newHAGroupStoreRecord the new record to store
+     * @param currentStatVersion the expected stat version for optimistic locking
+     * @throws StaleHAGroupStoreRecordVersionException if the version is stale
+     * @throws IOException if any other error occurs during the update
+     */
+    public void updateHAGroupStoreRecordInZooKeeper(String haGroupName, HAGroupStoreRecord newHAGroupStoreRecord, int currentStatVersion)
+            throws IOException, StaleHAGroupStoreRecordVersionException {
+        try {
+            getCurator()
+                    .setData()
+                    .withVersion(currentStatVersion)
+                    .forPath(toPath(haGroupName), HAGroupStoreRecord.toJson(newHAGroupStoreRecord));
+        } catch (KeeperException.BadVersionException e) {
+            LOG.error("Failed to set HAGroupStoreRecord for HA group {}, stale stat version", haGroupName, e);
+            throw new StaleHAGroupStoreRecordVersionException("Failed to set HAGroupStoreRecord for HA group "
+                    + haGroupName + " with cached stat version " + currentStatVersion, e);
+        } catch (Exception e) {
+            LOG.error("Failed to set HAGroupStoreRecord for HA group {}, unexpected error", haGroupName, e);
+            throw new IOException("Failed to set HAGroupStoreRecord for HA group " + haGroupName, e);
+        }
+    }
+
+    /**
+     * Gets the HAGroupStoreRecord and Stat from ZooKeeper.
+     *
+     * @param haGroupName the HA group name
+     * @return a pair of HAGroupStoreRecord and Stat
+     * @throws IOException if any error occurs during the retrieval
+     */
+    public Pair<HAGroupStoreRecord, Stat> getHAGroupStoreRecordInZooKeeper(String haGroupName) throws IOException {
+        try {
+            byte[] data = getCurator().getData().forPath(toPath(haGroupName));
+            HAGroupStoreRecord record = HAGroupStoreRecord.fromJson(data).orElse(null);
+            Stat stat = getCurator().checkExists().forPath(toPath(haGroupName));
+            return Pair.of(record, stat);
+        } catch (KeeperException.NoNodeException nne) {
+            LOG.warn("No HAGroupStoreRecord for HA group {} in ZK", haGroupName, nne);
+            return Pair.of(null, null);
+        } catch (Exception e) {
+            LOG.error("Failed to get HAGroupStoreRecord for HA group {}", haGroupName, e);
+            throw new IOException("Failed to get HAGroupStoreRecord for HA group " + haGroupName, e);
         }
     }
 

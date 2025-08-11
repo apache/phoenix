@@ -60,13 +60,14 @@ public class ClusterRoleRecord {
      * take traffic, standby and offline do not, and unknown is used if the state cannot be determined.
      */
     public enum ClusterRole {
-        ACTIVE, STANDBY, OFFLINE, UNKNOWN, ACTIVE_TO_STANDBY;
+        ACTIVE, STANDBY, OFFLINE, UNKNOWN, ACTIVE_TO_STANDBY, STANDBY_TO_ACTIVE;
 
         /**
          * @return true if a cluster with this role can be connected, otherwise false
          */
         public boolean canConnect() {
-            return this == ACTIVE || this == STANDBY || this == ACTIVE_TO_STANDBY;
+            return this == ACTIVE || this == STANDBY
+                    || this == ACTIVE_TO_STANDBY || this == STANDBY_TO_ACTIVE;
         }
 
         public static ClusterRole from(byte[] bytes) {
@@ -75,6 +76,32 @@ public class ClusterRoleRecord {
                     .filter(r -> r.name().equalsIgnoreCase(value))
                     .findFirst()
                     .orElse(UNKNOWN);
+        }
+
+        public boolean isMutationBlocked() {
+            return this == ACTIVE_TO_STANDBY;
+        }
+
+        /**
+         * @return the default HAGroupState for this ClusterRole
+         */
+        @JsonIgnore
+        public HAGroupStoreRecord.HAGroupState getDefaultHAGroupState() {
+            switch (this) {
+                case ACTIVE:
+                    return HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC;
+                case STANDBY:
+                    return HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY;
+                case OFFLINE:
+                    return HAGroupStoreRecord.HAGroupState.OFFLINE;
+                case ACTIVE_TO_STANDBY:
+                    return HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY;
+                case STANDBY_TO_ACTIVE:
+                    return HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE;
+                case UNKNOWN:
+                default:
+                    return HAGroupStoreRecord.HAGroupState.UNKNOWN;
+            }
         }
     }
 

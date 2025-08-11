@@ -1698,7 +1698,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private void pollForUpdatedTableDescriptor(final Admin admin, final TableDescriptor newTableDescriptor,
             final byte[] tableName) throws InterruptedException, TimeoutException {
-        checkAndRetry(new RetriableOperation() {
+        checkAndRetry (new RetriableOperation() {
 
             @Override
             public String getOperationName() {
@@ -1713,7 +1713,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         });
     }
 
-    private void checkAndRetry(RetriableOperation op) throws InterruptedException, TimeoutException {
+    private void checkAndRetry (RetriableOperation op) throws InterruptedException, TimeoutException {
         int maxRetries = ConnectionQueryServicesImpl.this.props.getInt(
                 QueryServices.NUM_RETRIES_FOR_SCHEMA_UPDATE_CHECK,
                 QueryServicesOptions.DEFAULT_RETRIES_FOR_SCHEMA_UPDATE_CHECK);
@@ -3875,6 +3875,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return setSystemDDLProperties(QueryConstants.CREATE_CDC_STREAM_METADATA);
     }
 
+    protected String getHAGroupDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_HA_GROUP_METADATA);
+    }
+
     private String setSystemDDLProperties(String ddl) {
         return String.format(ddl,
           props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_MAX_VERSIONS),
@@ -4140,8 +4144,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     private void createOtherSystemTables(PhoenixConnection metaConnection) throws SQLException, IOException {
-        try {
-            metaConnection.createStatement().execute(getSystemSequenceTableDDL(nSequenceSaltBuckets));
+        try (Statement stmt = metaConnection.createStatement()) {
+            stmt.execute(getSystemSequenceTableDDL(nSequenceSaltBuckets));
             // When creating the table above, DDL statements are
             // used. However, the CFD level properties are not set
             // via DDL commands, hence we are explicitly setting
@@ -4150,33 +4154,46 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } catch (TableAlreadyExistsException e) {
             nSequenceSaltBuckets = getSaltBuckets(e);
         }
-        try {
-            metaConnection.createStatement().execute(QueryConstants.CREATE_STATS_TABLE_METADATA);
-        } catch (TableAlreadyExistsException ignore) {}
-        try {
-            metaConnection.createStatement().execute(getFunctionTableDDL());
-        } catch (TableAlreadyExistsException ignore) {}
-        try {
-            metaConnection.createStatement().execute(getLogTableDDL());
-        } catch (TableAlreadyExistsException ignore) {}
-        try {
-            metaConnection.createStatement().executeUpdate(getChildLinkDDL());
-        } catch (TableAlreadyExistsException ignore) {}
-        try {
-            metaConnection.createStatement().executeUpdate(getMutexDDL());
-        } catch (TableAlreadyExistsException ignore) {}
-        try {
-            metaConnection.createStatement().executeUpdate(getTaskDDL());
-        } catch (TableAlreadyExistsException ignore) {}
-        try {
-            metaConnection.createStatement().executeUpdate(getTransformDDL());
-        } catch (TableAlreadyExistsException ignore) {}
-        try {
-            metaConnection.createStatement().executeUpdate(getCDCStreamStatusDDL());
-        } catch (TableAlreadyExistsException ignore) {}
-        try {
-            metaConnection.createStatement().executeUpdate(getCDCStreamDDL());
-        } catch (TableAlreadyExistsException ignore) {}
+        try (Statement stmt = metaConnection.createStatement()) {
+            stmt.execute(QueryConstants.CREATE_STATS_TABLE_METADATA);
+        } catch (TableAlreadyExistsException ignore) {
+        }
+        try (Statement stmt = metaConnection.createStatement()) {
+            stmt.execute(getFunctionTableDDL());
+        } catch (TableAlreadyExistsException ignore) {
+        }
+        try (Statement stmt = metaConnection.createStatement()) {
+            stmt.execute(getLogTableDDL());
+        } catch (TableAlreadyExistsException ignore) {
+        }
+        try (Statement stmt = metaConnection.createStatement()) {
+            stmt.execute(getChildLinkDDL());
+        } catch (TableAlreadyExistsException ignore) {
+        }
+        try (Statement stmt = metaConnection.createStatement()) {
+            stmt.executeUpdate(getMutexDDL());
+        } catch (TableAlreadyExistsException ignore) {
+        }
+        try (Statement stmt = metaConnection.createStatement()) {
+            stmt.executeUpdate(getTaskDDL());
+        } catch (TableAlreadyExistsException ignore) {
+        }
+        try (Statement stmt = metaConnection.createStatement()) {
+            stmt.executeUpdate(getTransformDDL());
+        } catch (TableAlreadyExistsException ignore) {
+        }
+        try (Statement stmt = metaConnection.createStatement()) {
+            stmt.executeUpdate(getCDCStreamStatusDDL());
+        } catch (TableAlreadyExistsException ignore) {
+        }
+        try (Statement stmt = metaConnection.createStatement()) {
+            stmt.executeUpdate(getCDCStreamDDL());
+        } catch (TableAlreadyExistsException ignore) {
+        }
+        try (Statement stmt = metaConnection.createStatement()) {
+            stmt.executeUpdate(getHAGroupDDL());
+        } catch (TableAlreadyExistsException ignore) {
+        }
     }
 
     /**
@@ -4811,7 +4828,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         metaConnection = upgradeSystemMutex(metaConnection);
         metaConnection = upgradeSystemCDCStreamStatus(metaConnection);
         metaConnection = upgradeSystemCDCStream(metaConnection);
-
+        metaConnection = upgradeSystemHAGroup(metaConnection);
         // As this is where the most time will be spent during an upgrade,
         // especially when there are large number of views.
         // Upgrade the SYSTEM.CHILD_LINK towards the end,
@@ -5159,6 +5176,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             throws SQLException {
         try {
             metaConnection.createStatement().executeUpdate(getCDCStreamDDL());
+        } catch (TableAlreadyExistsException ignored) {
+        }
+        return metaConnection;
+    }
+
+    private PhoenixConnection upgradeSystemHAGroup(PhoenixConnection metaConnection)
+            throws SQLException {
+        try (Statement stmt = metaConnection.createStatement()) {
+            stmt.executeUpdate(getHAGroupDDL());
         } catch (TableAlreadyExistsException ignored) {
         }
         return metaConnection;
