@@ -96,7 +96,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
 
         // Update to ACTIVE_TO_STANDBY role (should block mutations)
         HAGroupStoreRecord transitionRecord = new HAGroupStoreRecord(
-                "1.0", haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_TO_STANDBY);
+                "1.0", haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
 
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, transitionRecord, 0);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
@@ -218,7 +218,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
 
         // Create HAGroupStoreRecord with ACTIVE_TO_STANDBY role
         HAGroupStoreRecord transitionRecord = new HAGroupStoreRecord(
-                "1.0", haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_TO_STANDBY);
+                "1.0", haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
 
         haAdmin.createHAGroupStoreRecordInZooKeeper(transitionRecord);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);

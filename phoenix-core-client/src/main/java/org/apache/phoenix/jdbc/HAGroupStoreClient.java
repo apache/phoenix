@@ -198,7 +198,7 @@ public class HAGroupStoreClient implements Closeable {
         this.conf = conf;
         this.haGroupName = haGroupName;
         this.zkUrl = zkUrl;
-        this.waitTimeForSyncModeInMs =  (long) Math.ceil(conf.getLong(ZK_SESSION_TIMEOUT, DEFAULT_ZK_SESSION_TIMEOUT) 
+        this.waitTimeForSyncModeInMs =  (long) Math.ceil(conf.getLong(ZK_SESSION_TIMEOUT, DEFAULT_ZK_SESSION_TIMEOUT)
                 * ZK_SESSION_TIMEOUT_MULTIPLIER);
         // Custom Event Listener
         this.peerCustomPathChildrenCacheListener = peerPathChildrenCacheListener;
@@ -229,21 +229,14 @@ public class HAGroupStoreClient implements Closeable {
     /**
      * Rebuilds the internal cache by querying for all needed data.
      * This is a blocking operation that does not generate events to listeners.
-     * @param broadcastUpdate whether to broadcast the update to all regionservers
      *
      * @throws Exception if rebuild fails or client is not healthy
      */
-    public void rebuild(boolean broadcastUpdate) throws Exception {
+    public void rebuild() throws Exception {
         if (!isHealthy) {
             throw new IOException("HAGroupStoreClient is not healthy");
         }
-        LOGGER.info("Rebuilding HAGroupStoreClient for HA group {} with broadcastUpdate {}",
-                haGroupName, broadcastUpdate);
-        if (broadcastUpdate) {
-            // TODO: Add a lock for the row in system table.
-            // TODO: broadcast update all regionservers' HAGroupStoreClient Attributes
-            // with broadcastUpdate = false
-        }
+        LOGGER.info("Rebuilding HAGroupStoreClient for HA group {}", haGroupName);
         initializeHAGroupStoreClientAttributes(haGroupName);
         initializeZNodeIfNeeded();
         maybeInitializePeerPathChildrenCache();
@@ -257,7 +250,6 @@ public class HAGroupStoreClient implements Closeable {
         if (peerPathChildrenCache != null) {
             peerPathChildrenCache.rebuild();
         }
-        // TODO: Remove the lock for the row in system table if acquired.
         LOGGER.info("Rebuild Complete for HAGroupStoreClient for HA group {}", haGroupName);
     }
 
@@ -553,7 +545,7 @@ public class HAGroupStoreClient implements Closeable {
                 + "from System Table in case it might have been deleted",
                     targetPath, cacheType);
         try {
-            rebuild(false);
+            rebuild();
             return extractRecordAndStat(cache, targetPath, cacheType);
         } catch (Exception e) {
             LOGGER.error("Failed to initialize ZNode from System Table, giving up "

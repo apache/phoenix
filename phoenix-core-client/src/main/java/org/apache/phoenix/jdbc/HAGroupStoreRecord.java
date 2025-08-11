@@ -32,9 +32,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -53,13 +50,14 @@ public class HAGroupStoreRecord {
      * Enum representing the HA group state with each state having a corresponding ClusterRole.
      */
     public enum HAGroupState {
-        ABORT_TO_ACTIVE,
+        ABORT_TO_ACTIVE_IN_SYNC,
+        ABORT_TO_ACTIVE_NOT_IN_SYNC,
         ABORT_TO_STANDBY,
         ACTIVE_IN_SYNC,
         ACTIVE_NOT_IN_SYNC,
         ACTIVE_NOT_IN_SYNC_TO_STANDBY,
         ACTIVE_NOT_IN_SYNC_WITH_OFFLINE_PEER,
-        ACTIVE_TO_STANDBY,
+        ACTIVE_IN_SYNC_TO_STANDBY,
         ACTIVE_WITH_OFFLINE_PEER,
         DEGRADED_STANDBY,
         DEGRADED_STANDBY_FOR_READER,
@@ -77,14 +75,15 @@ public class HAGroupStoreRecord {
          */
         public ClusterRoleRecord.ClusterRole getClusterRole() {
             switch (this) {
-                case ABORT_TO_ACTIVE:
+                case ABORT_TO_ACTIVE_IN_SYNC:
+                case ABORT_TO_ACTIVE_NOT_IN_SYNC:
                 case ACTIVE_IN_SYNC:
                 case ACTIVE_NOT_IN_SYNC:
                 case ACTIVE_NOT_IN_SYNC_WITH_OFFLINE_PEER:
                 case ACTIVE_WITH_OFFLINE_PEER:
                     return ClusterRoleRecord.ClusterRole.ACTIVE;
+                case ACTIVE_IN_SYNC_TO_STANDBY:
                 case ACTIVE_NOT_IN_SYNC_TO_STANDBY:
-                case ACTIVE_TO_STANDBY:
                     return ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY;
                 case ABORT_TO_STANDBY:
                 case DEGRADED_STANDBY:
@@ -110,7 +109,7 @@ public class HAGroupStoreRecord {
             );
 
             ACTIVE_IN_SYNC.allowedTransitions = ImmutableSet.of(
-                    ACTIVE_NOT_IN_SYNC, ACTIVE_WITH_OFFLINE_PEER, ACTIVE_TO_STANDBY
+                    ACTIVE_NOT_IN_SYNC, ACTIVE_WITH_OFFLINE_PEER, ACTIVE_IN_SYNC_TO_STANDBY
             );
 
             STANDBY.allowedTransitions = ImmutableSet.of(STANDBY_TO_ACTIVE,
@@ -119,7 +118,9 @@ public class HAGroupStoreRecord {
             OFFLINE.allowedTransitions = ImmutableSet.of();
             // This needs to be manually recovered by operator
             UNKNOWN.allowedTransitions = ImmutableSet.of();
-            ACTIVE_TO_STANDBY.allowedTransitions = ImmutableSet.of(ABORT_TO_ACTIVE, STANDBY);
+            ACTIVE_NOT_IN_SYNC_TO_STANDBY.allowedTransitions = ImmutableSet.of(ABORT_TO_ACTIVE_NOT_IN_SYNC, 
+                    ACTIVE_IN_SYNC_TO_STANDBY);
+            ACTIVE_IN_SYNC_TO_STANDBY.allowedTransitions = ImmutableSet.of(ABORT_TO_ACTIVE_IN_SYNC, STANDBY);
             STANDBY_TO_ACTIVE.allowedTransitions = ImmutableSet.of(ABORT_TO_STANDBY,
                     ACTIVE_IN_SYNC);
             DEGRADED_STANDBY.allowedTransitions
@@ -128,12 +129,10 @@ public class HAGroupStoreRecord {
                     DEGRADED_STANDBY);
             DEGRADED_STANDBY_FOR_READER.allowedTransitions = ImmutableSet.of(STANDBY,
                     DEGRADED_STANDBY);
-            ACTIVE_WITH_OFFLINE_PEER.allowedTransitions = ImmutableSet.of(ACTIVE_IN_SYNC);
-            ABORT_TO_ACTIVE.allowedTransitions = ImmutableSet.of(ACTIVE_IN_SYNC,
-                    ACTIVE_NOT_IN_SYNC);
+            ACTIVE_WITH_OFFLINE_PEER.allowedTransitions = ImmutableSet.of(ACTIVE_NOT_IN_SYNC);
+            ABORT_TO_ACTIVE_IN_SYNC.allowedTransitions = ImmutableSet.of(ACTIVE_IN_SYNC);
+            ABORT_TO_ACTIVE_NOT_IN_SYNC.allowedTransitions = ImmutableSet.of(ACTIVE_NOT_IN_SYNC);
             ABORT_TO_STANDBY.allowedTransitions = ImmutableSet.of(STANDBY);
-            ACTIVE_NOT_IN_SYNC_TO_STANDBY.allowedTransitions = ImmutableSet.of(ACTIVE_TO_STANDBY,
-                    ACTIVE_NOT_IN_SYNC);
             ACTIVE_NOT_IN_SYNC_WITH_OFFLINE_PEER.allowedTransitions =
                     ImmutableSet.of(ACTIVE_NOT_IN_SYNC);
         }

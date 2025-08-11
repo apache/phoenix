@@ -223,7 +223,7 @@ public class PhoenixHAAdminIT extends BaseTest {
         HAGroupStoreRecord anotherUpdate = new HAGroupStoreRecord(
                 "v1.0",
                 haGroupName,
-                HAGroupStoreRecord.HAGroupState.ACTIVE_TO_STANDBY
+                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY
         );
 
         try {

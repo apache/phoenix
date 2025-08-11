@@ -209,7 +209,7 @@ public class HAGroupStoreRecordTest {
     public void testHAGroupStateGetClusterRole() {
         // Test that each HAGroupState maps to the correct ClusterRole
         assertEquals(ClusterRoleRecord.ClusterRole.ACTIVE,
-                HAGroupStoreRecord.HAGroupState.ABORT_TO_ACTIVE.getClusterRole());
+                HAGroupStoreRecord.HAGroupState.ABORT_TO_ACTIVE_IN_SYNC.getClusterRole());
         assertEquals(ClusterRoleRecord.ClusterRole.STANDBY,
                 HAGroupStoreRecord.HAGroupState.ABORT_TO_STANDBY.getClusterRole());
         assertEquals(ClusterRoleRecord.ClusterRole.ACTIVE,
@@ -221,7 +221,7 @@ public class HAGroupStoreRecordTest {
         assertEquals(ClusterRoleRecord.ClusterRole.ACTIVE,
                 HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC_WITH_OFFLINE_PEER.getClusterRole());
         assertEquals(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
-                HAGroupStoreRecord.HAGroupState.ACTIVE_TO_STANDBY.getClusterRole());
+                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY.getClusterRole());
         assertEquals(ClusterRoleRecord.ClusterRole.ACTIVE,
                 HAGroupStoreRecord.HAGroupState.ACTIVE_WITH_OFFLINE_PEER.getClusterRole());
         assertEquals(ClusterRoleRecord.ClusterRole.STANDBY,
@@ -258,7 +258,7 @@ public class HAGroupStoreRecordTest {
         assertTrue(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
                 .isTransitionAllowed(HAGroupStoreRecord.HAGroupState.ACTIVE_WITH_OFFLINE_PEER));
         assertTrue(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
-                .isTransitionAllowed(HAGroupStoreRecord.HAGroupState.ACTIVE_TO_STANDBY));
+                .isTransitionAllowed(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY));
 
         // Test valid transitions for STANDBY
         assertTrue(HAGroupStoreRecord.HAGroupState.STANDBY
@@ -269,9 +269,9 @@ public class HAGroupStoreRecordTest {
                 .isTransitionAllowed(HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY_FOR_WRITER));
 
         // Test valid transitions for ACTIVE_TO_STANDBY
-        assertTrue(HAGroupStoreRecord.HAGroupState.ACTIVE_TO_STANDBY
-                .isTransitionAllowed(HAGroupStoreRecord.HAGroupState.ABORT_TO_ACTIVE));
-        assertTrue(HAGroupStoreRecord.HAGroupState.ACTIVE_TO_STANDBY
+        assertTrue(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY
+                .isTransitionAllowed(HAGroupStoreRecord.HAGroupState.ABORT_TO_ACTIVE_IN_SYNC));
+        assertTrue(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY
                 .isTransitionAllowed(HAGroupStoreRecord.HAGroupState.STANDBY));
 
         // Test valid transitions for STANDBY_TO_ACTIVE

@@ -141,7 +141,7 @@ public class HAGroupStoreManager {
         HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstanceForZkUrl(conf,
                 haGroupName, zkUrl);
         if (haGroupStoreClient != null) {
-            haGroupStoreClient.rebuild(broadcastUpdate);
+            haGroupStoreClient.rebuild();
         } else {
             throw new IOException("HAGroupStoreClient is not initialized");
         }

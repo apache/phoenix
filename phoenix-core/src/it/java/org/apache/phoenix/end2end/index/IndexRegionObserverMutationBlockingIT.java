@@ -19,14 +19,12 @@ package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_NAMESPACE;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
-import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.sql.DriverManager;
-import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
@@ -42,7 +40,6 @@ import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.HAGroupStoreTestUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
@@ -108,7 +105,7 @@ public class IndexRegionObserverMutationBlockingIT extends BaseTest {
             // Set up HAGroupStoreRecord that will block mutations (ACTIVE_TO_STANDBY state)
             HAGroupStoreRecord haGroupStoreRecord
                     = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
-                    haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_TO_STANDBY);
+                    haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
             haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, haGroupStoreRecord, -1);
 
             // Wait for the event to propagate
@@ -179,7 +176,7 @@ public class IndexRegionObserverMutationBlockingIT extends BaseTest {
             // Set up HAGroupStoreRecord that will block mutations (ACTIVE_TO_STANDBY state)
             HAGroupStoreRecord haGroupStoreRecord
                     = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
-                    haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_TO_STANDBY);
+                    haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
             haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, haGroupStoreRecord, -1);
             Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
