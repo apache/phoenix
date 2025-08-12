@@ -19,26 +19,27 @@ package org.apache.phoenix.end2end;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Base64;
 import org.junit.experimental.categories.Category;
 
 /**
- * Tests for TOTAL_SEGMENTS() with VARCHAR primary key
+ * Tests for TOTAL_SEGMENTS() with VARBINARY_ENCODED primary key
  */
 @Category(ParallelStatsDisabledTest.class)
-public class TotalSegmentsFunctionIT extends BaseTotalSegmentsFunctionIT {
+public class TotalSegmentsFunction2IT extends BaseTotalSegmentsFunctionIT {
 
   @Override
   protected String getPrimaryKeyColumnType() {
-    return "VARCHAR";
+    return "VARBINARY_ENCODED";
   }
 
   @Override
   protected String getCompositeKeyColumnType() {
-    return "VARCHAR";
+    return "VARBINARY_ENCODED";
   }
 
   @Override
   protected String extractPrimaryKeyValue(ResultSet rs) throws SQLException {
-    return rs.getString(1);
+    return Base64.getEncoder().encodeToString(rs.getBytes(1));
   }
 }

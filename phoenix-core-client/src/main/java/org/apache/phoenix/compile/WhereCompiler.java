@@ -112,6 +112,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.ExpressionUtil;
@@ -387,10 +388,15 @@ public class WhereCompiler {
       return null;
     }
 
-    private Integer getTotalSegmentsVal(LiteralExpression literal) {
+    private Integer getTotalSegmentsVal(LiteralExpression literal) throws SQLException {
       ImmutableBytesWritable ptr = new ImmutableBytesWritable();
       if (literal.evaluate(null, ptr)) {
-        return (Integer) literal.getDataType().toObject(ptr);
+        Integer value = (Integer) PInteger.INSTANCE.toObject(ptr);
+        if (value != null && value <= 0) {
+          throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_TOTAL_SEGMENTS_VALUE).build()
+            .buildException();
+        }
+        return value;
       }
       return null;
     }

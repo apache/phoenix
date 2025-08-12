@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
@@ -581,4 +582,39 @@ public class ScanBoundaryFunctionIT extends ParallelStatsDisabledIT {
       }
     }
   }
+
+  @Test
+  public void testInvertedScanBoundaries() throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      // Test scan boundaries combined with other OR conditions - this should work
+      // The scan boundaries should be applied, and the OR condition should be evaluated as a filter
+      String sql = "SELECT PK, COL1, COL2 FROM " + fullTableName
+        + " WHERE SCAN_START_KEY() = ? AND SCAN_END_KEY() = ? AND (COL1 = ? OR COL2 = ?)";
+      try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+        stmt.setBytes(1, Bytes.toBytes("KEY_020"));
+        stmt.setBytes(2, Bytes.toBytes("KEY_010"));
+        stmt.setString(3, "Value_12");
+        stmt.setInt(4, 150);
+
+        // Verify scan boundaries are set correctly
+        PhoenixPreparedStatement pstmt = stmt.unwrap(PhoenixPreparedStatement.class);
+        QueryPlan plan = pstmt.optimizeQuery(sql);
+        Scan scan = plan.getContext().getScan();
+        assertArrayEquals(
+          "SCAN_START_KEY should set scan start row to 'KEY_020' even with OR in additional"
+            + " filters",
+          Bytes.toBytes("KEY_020"), scan.getStartRow());
+        assertArrayEquals(
+          "SCAN_END_KEY should set scan stop row to 'KEY_010' even with OR in additional "
+            + "filters",
+          Bytes.toBytes("KEY_010"), scan.getStopRow());
+
+        try (ResultSet rs = stmt.executeQuery()) {
+          assertFalse("No rows should be found", rs.next());
+        }
+      }
+    }
+  }
+
 }
