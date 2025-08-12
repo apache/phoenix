@@ -41,6 +41,7 @@ import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.hbase.index.parallel.EarlyExitFailure;
 import org.apache.phoenix.hbase.index.parallel.Task;
 import org.apache.phoenix.hbase.index.parallel.TaskBatch;
+import org.apache.phoenix.hbase.index.parallel.TaskRunner;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
@@ -167,8 +168,12 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
     Pair<List<Boolean>, List<Future<Boolean>>> resultsAndFutures = null;
     try {
       LOGGER.debug("Waiting on index tasks to complete...");
-      resultsAndFutures =
-        PhoenixRegionServerEndpoint.getUncoveredIndexThreadPool(env).submitUninterruptible(tasks);
+      TaskRunner pool = PhoenixRegionServerEndpoint.getUncoveredIndexThreadPool();
+      if (pool == null) {
+        throw new IOException(
+          "PhoenixRegionServerEndpoint should be loaded to use Uncovered Indexes.");
+      }
+      resultsAndFutures = pool.submitUninterruptible(tasks);
     } catch (ExecutionException e) {
       throw new RuntimeException(
         "Should not fail on the results while using a WaitForCompletionTaskRunner", e);

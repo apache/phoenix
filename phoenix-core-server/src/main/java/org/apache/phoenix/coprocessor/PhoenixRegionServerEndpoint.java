@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import static org.apache.phoenix.hbase.index.write.AbstractParallelWriterIndexCommitter.INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY;
-
 import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
 import com.google.protobuf.Service;
@@ -26,7 +24,6 @@ import java.io.IOException;
 import java.util.Collections;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessor;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerMetadataCache;
@@ -55,21 +52,24 @@ public class PhoenixRegionServerEndpoint extends
   private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixRegionServerEndpoint.class);
   private MetricsMetadataCachingSource metricsSource;
   protected Configuration conf;
-  private CoprocessorEnvironment env;
-  protected static volatile TaskRunner uncoveredIndexThreadPool;
+
+  // regionserver level thread pool used by Uncovered Indexes to scan data table rows
+  private static TaskRunner uncoveredIndexThreadPool;
 
   @Override
   public void start(CoprocessorEnvironment env) throws IOException {
-    this.env = env;
     this.conf = env.getConfiguration();
     this.metricsSource =
       MetricsPhoenixCoprocessorSourceFactory.getInstance().getMetadataCachingSource();
+    initUncoveredIndexThreadPool(this.conf);
   }
 
   @Override
   public void stop(CoprocessorEnvironment env) throws IOException {
-    uncoveredIndexThreadPool
-      .stop("PhoenixRegionServerEndpoint is stopping. Shutting down uncovered index threadpool.");
+    if (uncoveredIndexThreadPool != null) {
+      uncoveredIndexThreadPool
+        .stop("PhoenixRegionServerEndpoint is stopping. Shutting down uncovered index threadpool.");
+    }
   }
 
   @Override
@@ -151,23 +151,17 @@ public class PhoenixRegionServerEndpoint extends
     return ServerMetadataCacheImpl.getInstance(conf);
   }
 
-  public static TaskRunner getUncoveredIndexThreadPool(RegionCoprocessorEnvironment env) {
-    if (uncoveredIndexThreadPool == null) {
-      synchronized (PhoenixRegionServerEndpoint.class) {
-        if (uncoveredIndexThreadPool == null) {
-          initUncoveredIndexThreadPool(env);
-        }
-      }
-    }
+  public static TaskRunner getUncoveredIndexThreadPool() {
     return uncoveredIndexThreadPool;
   }
 
-  private static void initUncoveredIndexThreadPool(final RegionCoprocessorEnvironment env) {
-    uncoveredIndexThreadPool = new WaitForCompletionTaskRunner(ThreadPoolManager
-      .getExecutor(new ThreadPoolBuilder("Uncovered Global Index", env.getConfiguration())
+  private static void initUncoveredIndexThreadPool(Configuration conf) {
+    uncoveredIndexThreadPool = new WaitForCompletionTaskRunner(
+      ThreadPoolManager.getExecutor(new ThreadPoolBuilder("Uncovered Global Index", conf)
         .setMaxThread(QueryServices.PHOENIX_UNCOVERED_INDEX_MAX_POOL_SIZE,
           QueryServicesOptions.DEFAULT_PHOENIX_UNCOVERED_INDEX_MAX_POOL_SIZE)
-        .setCoreTimeout(INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env));
+        .setCoreTimeout(QueryServices.PHOENIX_UNCOVERED_INDEX_KEEP_ALIVE_TIME_MS,
+          QueryServicesOptions.DEFAULT_PHOENIX_UNCOVERED_INDEX_KEEP_ALIVE_TIME_MS)));
     LOGGER.info("Initialized region level thread pool for Uncovered Global Indexes.");
   }
 

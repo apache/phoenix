@@ -620,6 +620,8 @@ public interface QueryServices extends SQLCloseable {
     "phoenix.cdc.stream.partition.expiry.min.age.ms";
 
   String PHOENIX_UNCOVERED_INDEX_MAX_POOL_SIZE = "phoenix.uncovered.index.threads.max";
+  String PHOENIX_UNCOVERED_INDEX_KEEP_ALIVE_TIME_MS =
+    "phoenix.uncovered.index.threads.keepalive.ms";
 
   /**
    * Get executor service used for parallel scans
