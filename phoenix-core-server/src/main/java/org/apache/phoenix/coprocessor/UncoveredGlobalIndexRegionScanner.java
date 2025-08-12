@@ -71,7 +71,6 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
   protected final int rowCountPerTask;
   protected String exceptionMessage;
   protected final HTableFactory hTableFactory;
-  private RegionCoprocessorEnvironment env;
 
   // This relies on Hadoop Configuration to handle warning about deprecated configs and
   // to set the correct non-deprecated configs when an old one shows up.
@@ -88,7 +87,6 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
     super(innerScanner, region, scan, env, dataTableScan, tupleProjector, indexMaintainer,
       viewConstants, ptr, pageSizeMs, queryLimit);
     final Configuration config = env.getConfiguration();
-    this.env = env;
     hTableFactory = IndexWriterUtils.getDefaultDelegateHTableFactory(env);
     rowCountPerTask =
       config.getInt(INDEX_ROW_COUNTS_PER_TASK_CONF_KEY, DEFAULT_INDEX_ROW_COUNTS_PER_TASK);
