@@ -33,6 +33,8 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+
+import edu.umd.cs.findbugs.annotations.SuppressWarnings;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
@@ -235,13 +237,17 @@ public class TupleUtil {
    * @return ResultSet for the give single row.
    * @throws SQLException If any SQL operation fails.
    */
+  @SuppressWarnings(value="OBL_UNSATISFIED_OBLIGATION_EXCEPTION_EDGE",
+          justification="Tge statement object needs to be kept open for the returned RS to be " +
+                  "valid, however this is acceptable as not callingPhoenixStatement.close() " +
+                  "causes no resource leak")
   public static ResultSet getResultSet(Tuple toProject, TableName tableName, Connection conn,
     boolean withPrefetch) throws SQLException {
     if (tableName == null) {
       return null;
     }
-    try (Statement stmt = conn.createStatement(); PhoenixResultSet resultSet =
-      (PhoenixResultSet) stmt.executeQuery("SELECT * FROM " + tableName)) {
+    try (PhoenixResultSet resultSet =
+      (PhoenixResultSet) conn.createStatement().executeQuery("SELECT * FROM " + tableName)) {
       PTable pTable = resultSet.getStatement().getQueryPlan().getContext().getResolver().getTables()
         .get(0).getTable();
       TupleProjector tupleProjector = new TupleProjector(pTable);
