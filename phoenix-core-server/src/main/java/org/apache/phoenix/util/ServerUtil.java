@@ -44,7 +44,6 @@ import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControlle
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.Region.RowLock;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
@@ -195,8 +194,7 @@ public class ServerUtil {
           @Override
           public Connection apply(ConnectionType t) {
             try {
-              return CompatUtil.createShortCircuitConnection(
-                getTypeSpecificConfiguration(connectionType, env.getConfiguration()), env);
+              return env.createConnection(getTypeSpecificConfiguration(t, env.getConfiguration()));
             } catch (IOException e) {
               throw new RuntimeException(e);
             }

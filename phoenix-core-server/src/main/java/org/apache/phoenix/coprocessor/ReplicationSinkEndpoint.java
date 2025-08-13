@@ -17,13 +17,43 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import org.apache.phoenix.compat.hbase.ReplicationSinkCompatEndpoint;
+import java.io.IOException;
+import java.util.List;
+import java.util.Optional;
+import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessor;
+import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.RegionServerObserver;
+
+import org.apache.hadoop.hbase.shaded.protobuf.generated.AdminProtos;
+import org.apache.hadoop.hbase.shaded.protobuf.generated.WALProtos;
 
 /**
  * This class is to be used as regionserver coproc when Phoenix metadata attribute values like
  * Tenant id, Schema name, logical table, table type etc need to be replicated across the
  * replication sink cluster.
  */
-public class ReplicationSinkEndpoint extends ReplicationSinkCompatEndpoint {
+public class ReplicationSinkEndpoint implements RegionServerCoprocessor, RegionServerObserver {
+  @Override
+  public Optional<RegionServerObserver> getRegionServerObserver() {
+    return Optional.of(this);
+  }
 
+  @Override
+  public void preReplicationSinkBatchMutate(ObserverContext<RegionServerCoprocessorEnvironment> ctx,
+    AdminProtos.WALEntry walEntry, Mutation mutation) throws IOException {
+    RegionServerObserver.super.preReplicationSinkBatchMutate(ctx, walEntry, mutation);
+    List<WALProtos.Attribute> attributeList = walEntry.getKey().getExtendedAttributesList();
+    attachWALExtendedAttributesToMutation(mutation, attributeList);
+  }
+
+  private void attachWALExtendedAttributesToMutation(Mutation mutation,
+    List<WALProtos.Attribute> attributeList) {
+    if (attributeList != null) {
+      for (WALProtos.Attribute attribute : attributeList) {
+        mutation.setAttribute(attribute.getKey(), attribute.getValue().toByteArray());
+      }
+    }
+  }
 }

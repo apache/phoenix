@@ -20,18 +20,17 @@ package org.apache.phoenix.coprocessor;
 import static org.apache.phoenix.query.QueryConstants.NAME_SEPARATOR;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.CheckAndMutate;
-import org.apache.hadoop.hbase.client.CheckAndMutateResult;
-import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -43,6 +42,8 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PDate;
@@ -53,17 +54,227 @@ import org.apache.phoenix.util.QueryUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
+import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
+
 /**
  * Utility class for CDC (Change Data Capture) operations during compaction. This class contains
- * utilities for handling TTL row expiration events and generating CDC events with pre-image data
- * that are written directly to CDC index tables.
+ * utilities for handling TTL row expiration events and generating CDC events with pre-image data.
+ * CDC mutations are accumulated during compaction and written to CDC index tables in batches only
+ * when compaction completes.
  */
 public final class CDCCompactionUtil {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(CDCCompactionUtil.class);
 
+  // Shared cache for row images across all CompactionScanner instances in the JVM.
+  // Entries expire after 1200 seconds (20 minutes) by default.
+  // The JVM level cache helps merge the pre-image for the row with multiple CFs.
+  // The key of the cache contains (regionId + data table rowkey).
+  // The value contains pre-image that needs to be directly inserted in the CDC index.
+  private static volatile Cache<ImmutableBytesPtr, Map<String, Object>> sharedTtlImageCache;
+
   private CDCCompactionUtil() {
     // empty
+  }
+
+  /**
+   * Gets the shared row image cache, initializing it lazily with configuration.
+   * @param config The Hadoop configuration to read cache expiry from
+   * @return the shared cache instance
+   */
+  static Cache<ImmutableBytesPtr, Map<String, Object>>
+    getSharedRowImageCache(Configuration config) {
+    if (sharedTtlImageCache == null) {
+      synchronized (CDCCompactionUtil.class) {
+        if (sharedTtlImageCache == null) {
+          int expirySeconds = config.getInt(QueryServices.CDC_TTL_SHARED_CACHE_EXPIRY_SECONDS,
+            QueryServicesOptions.DEFAULT_CDC_TTL_SHARED_CACHE_EXPIRY_SECONDS);
+          sharedTtlImageCache =
+            CacheBuilder.newBuilder().expireAfterWrite(expirySeconds, TimeUnit.SECONDS).build();
+          LOGGER.info("Initialized shared CDC row image cache with expiry of {} seconds",
+            expirySeconds);
+        }
+      }
+    }
+    return sharedTtlImageCache;
+  }
+
+  /**
+   * Batch processor for CDC mutations during compaction. This class accumulates all mutations
+   * during the compaction operation and writes them to the CDC index in batches only when the
+   * compaction is complete.
+   */
+  public static class CDCBatchProcessor {
+
+    private final Map<ImmutableBytesPtr, Put> pendingMutations;
+    private final PTable cdcIndex;
+    private final PTable dataTable;
+    private final RegionCoprocessorEnvironment env;
+    private final Region region;
+    private final byte[] compactionTimeBytes;
+    private final long eventTimestamp;
+    private final String tableName;
+    private final int cdcTtlMutationMaxRetries;
+    private final int batchSize;
+    private final Configuration config;
+
+    public CDCBatchProcessor(PTable cdcIndex, PTable dataTable, RegionCoprocessorEnvironment env,
+      Region region, byte[] compactionTimeBytes, long eventTimestamp, String tableName,
+      int cdcTtlMutationMaxRetries, int batchSize) {
+      this.pendingMutations = new HashMap<>();
+      this.cdcIndex = cdcIndex;
+      this.dataTable = dataTable;
+      this.env = env;
+      this.region = region;
+      this.compactionTimeBytes = compactionTimeBytes;
+      this.eventTimestamp = eventTimestamp;
+      this.tableName = tableName;
+      this.cdcTtlMutationMaxRetries = cdcTtlMutationMaxRetries;
+      this.batchSize = batchSize;
+      this.config = env.getConfiguration();
+    }
+
+    /**
+     * Adds a CDC event for the specified expired row. If the row already exists in memory, merges
+     * the image with the existing image. Accumulates mutations in memory for batch processing
+     * during close() instead of immediately writing to the CDC index.
+     * @param expiredRow The expired row.
+     * @throws Exception If something goes wrong.
+     */
+    public void addCDCEvent(List<Cell> expiredRow) throws Exception {
+      Cell firstCell = expiredRow.get(0);
+      byte[] dataRowKey = CellUtil.cloneRow(firstCell);
+
+      Put expiredRowPut = new Put(dataRowKey);
+      for (Cell cell : expiredRow) {
+        expiredRowPut.add(cell);
+      }
+
+      IndexMaintainer cdcIndexMaintainer;
+      // rowKey for the Index mutation
+      byte[] rowKey;
+      try (PhoenixConnection serverConnection =
+        QueryUtil.getConnectionOnServer(new Properties(), env.getConfiguration())
+          .unwrap(PhoenixConnection.class)) {
+        cdcIndexMaintainer = cdcIndex.getIndexMaintainer(dataTable, serverConnection);
+
+        ValueGetter dataRowVG = new IndexUtil.SimpleValueGetter(expiredRowPut);
+        ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(expiredRowPut.getRow());
+
+        Put cdcIndexPut = cdcIndexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
+          dataRowVG, rowKeyPtr, eventTimestamp, null, null, false,
+          region.getRegionInfo().getEncodedNameAsBytes());
+
+        rowKey = cdcIndexPut.getRow().clone();
+        System.arraycopy(compactionTimeBytes, 0, rowKey, PartitionIdFunction.PARTITION_ID_LENGTH,
+          PDate.INSTANCE.getByteSize());
+      }
+
+      byte[] rowKeyWithoutTimestamp = new byte[rowKey.length - PDate.INSTANCE.getByteSize()];
+      // copy PARTITION_ID() from offset 0 to 31
+      System.arraycopy(rowKey, 0, rowKeyWithoutTimestamp, 0,
+        PartitionIdFunction.PARTITION_ID_LENGTH);
+      // copy data table rowkey from offset (32 + 8) to end of rowkey
+      System.arraycopy(rowKey,
+        PartitionIdFunction.PARTITION_ID_LENGTH + PDate.INSTANCE.getByteSize(),
+        rowKeyWithoutTimestamp, PartitionIdFunction.PARTITION_ID_LENGTH,
+        rowKeyWithoutTimestamp.length - PartitionIdFunction.PARTITION_ID_LENGTH);
+      ImmutableBytesPtr cacheKeyPtr = new ImmutableBytesPtr(rowKeyWithoutTimestamp);
+
+      // Check if we already have an image for this row in the shared cache, from other store
+      // compaction of the same region
+      Cache<ImmutableBytesPtr, Map<String, Object>> cache = getSharedRowImageCache(config);
+      Map<String, Object> existingPreImage = cache.getIfPresent(cacheKeyPtr);
+      if (existingPreImage == null) {
+        existingPreImage = new HashMap<>();
+        cache.put(cacheKeyPtr, existingPreImage);
+      }
+
+      // Create CDC event with merged pre-image
+      Map<String, Object> cdcEvent =
+        createTTLDeleteCDCEvent(expiredRowPut, dataTable, existingPreImage);
+      byte[] cdcEventBytes = JacksonUtil.getObjectWriter(HashMap.class).writeValueAsBytes(cdcEvent);
+      Put cdcIndexPut = buildCDCIndexPut(eventTimestamp, cdcEventBytes, rowKey, cdcIndexMaintainer);
+
+      pendingMutations.put(cacheKeyPtr, cdcIndexPut);
+    }
+
+    /**
+     * Flushes a specific list of mutations to the CDC index table.
+     * @param mutations List of mutations to flush
+     */
+    private void flushMutations(List<Put> mutations) throws Exception {
+      if (mutations.isEmpty()) {
+        return;
+      }
+
+      Exception lastException = null;
+      for (int retryCount = 0; retryCount < cdcTtlMutationMaxRetries; retryCount++) {
+        try (Table cdcIndexTable =
+          env.getConnection().getTable(TableName.valueOf(cdcIndex.getPhysicalName().getBytes()))) {
+          cdcIndexTable.put(mutations);
+          lastException = null;
+          LOGGER.debug("Successfully flushed batch of {} CDC mutations for table {}",
+            mutations.size(), tableName);
+          break;
+        } catch (Exception e) {
+          lastException = e;
+          long backoffMs = 100;
+          LOGGER.warn("CDC batch mutation attempt {}/{} failed, retrying in {}ms. Batch size: {}",
+            retryCount + 1, cdcTtlMutationMaxRetries, backoffMs, mutations.size(), e);
+          try {
+            Thread.sleep(backoffMs);
+          } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted during CDC batch mutation retry", ie);
+          }
+        }
+      }
+
+      if (lastException != null) {
+        LOGGER.error(
+          "Failed to flush CDC batch after {} attempts for table {}, index {}. {} "
+            + "events are missed.",
+          cdcTtlMutationMaxRetries, tableName, cdcIndex.getPhysicalName().getString(),
+          mutations.size(), lastException);
+      }
+    }
+
+    /**
+     * Finalizes the batch processor by flushing all accumulated mutations in batches. This method
+     * processes all accumulated mutations and writes them to the CDC index in batches of the
+     * configured batch size.
+     */
+    public void close() throws Exception {
+      if (pendingMutations.isEmpty()) {
+        LOGGER.trace("No CDC mutations to flush for table {}", tableName);
+        return;
+      }
+
+      int totalMutations = pendingMutations.size();
+      LOGGER.info("Flushing {} accumulated CDC mutations for table {} in batches of {}",
+        totalMutations, tableName, batchSize);
+
+      List<Put> allMutations = new ArrayList<>(pendingMutations.values());
+
+      for (int i = 0; i < allMutations.size(); i += batchSize) {
+        int endIndex = Math.min(i + batchSize, allMutations.size());
+        List<Put> batch = allMutations.subList(i, endIndex);
+        flushMutations(batch);
+        LOGGER.debug("Flushed CDC batch {}/{} for table {} (mutations {}-{} of {})",
+          (i / batchSize) + 1, (allMutations.size() + batchSize - 1) / batchSize, tableName, i + 1,
+          endIndex, totalMutations);
+      }
+
+      pendingMutations.clear();
+
+      Cache<ImmutableBytesPtr, Map<String, Object>> cache = getSharedRowImageCache(config);
+      LOGGER.info(
+        "CDC batch processor closed for table {}. Processed {} mutations in {} batches."
+          + " Shared cache size: {}",
+        tableName, totalMutations, (totalMutations + batchSize - 1) / batchSize, cache.size());
+    }
   }
 
   /**
@@ -128,223 +339,80 @@ public final class CDCCompactionUtil {
 
   /**
    * Builds CDC index Put mutation.
-   * @param cdcIndex            The CDC index table
-   * @param expiredRowPut       The expired row data as a Put
-   * @param eventTimestamp      The timestamp for the CDC event
-   * @param cdcEventBytes       The CDC event data to store
-   * @param dataTable           The data table
-   * @param env                 The region coprocessor environment
-   * @param region              The HBase region
-   * @param compactionTimeBytes The compaction time as bytes
+   * @param eventTimestamp     The timestamp for the CDC event
+   * @param cdcEventBytes      The CDC event data to store
+   * @param rowKey             The rowKey of the CDC index mutation
+   * @param cdcIndexMaintainer The index maintainer object for the CDC index
    * @return The CDC index Put mutation
    */
-  private static Put buildCDCIndexPut(PTable cdcIndex, Put expiredRowPut, long eventTimestamp,
-    byte[] cdcEventBytes, PTable dataTable, RegionCoprocessorEnvironment env, Region region,
-    byte[] compactionTimeBytes) throws Exception {
+  private static Put buildCDCIndexPut(long eventTimestamp, byte[] cdcEventBytes, byte[] rowKey,
+    IndexMaintainer cdcIndexMaintainer) {
 
-    try (PhoenixConnection serverConnection =
-      QueryUtil.getConnectionOnServer(new Properties(), env.getConfiguration())
-        .unwrap(PhoenixConnection.class)) {
+    Put newCdcIndexPut = new Put(rowKey, eventTimestamp);
 
-      IndexMaintainer cdcIndexMaintainer = cdcIndex.getIndexMaintainer(dataTable, serverConnection);
+    newCdcIndexPut.addColumn(cdcIndexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
+      cdcIndexMaintainer.getEmptyKeyValueQualifier(), eventTimestamp,
+      QueryConstants.UNVERIFIED_BYTES);
 
-      ValueGetter dataRowVG = new IndexUtil.SimpleValueGetter(expiredRowPut);
-      ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(expiredRowPut.getRow());
+    // Add CDC event data
+    newCdcIndexPut.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+      QueryConstants.CDC_IMAGE_CQ_BYTES, eventTimestamp, cdcEventBytes);
 
-      Put cdcIndexPut = cdcIndexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
-        dataRowVG, rowKeyPtr, eventTimestamp, null, null, false,
-        region.getRegionInfo().getEncodedNameAsBytes());
-
-      byte[] rowKey = cdcIndexPut.getRow().clone();
-      System.arraycopy(compactionTimeBytes, 0, rowKey, PartitionIdFunction.PARTITION_ID_LENGTH,
-        PDate.INSTANCE.getByteSize());
-      Put newCdcIndexPut = new Put(rowKey, eventTimestamp);
-
-      newCdcIndexPut.addColumn(cdcIndexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
-        cdcIndexMaintainer.getEmptyKeyValueQualifier(), eventTimestamp,
-        QueryConstants.UNVERIFIED_BYTES);
-
-      // Add CDC event data
-      newCdcIndexPut.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
-        QueryConstants.CDC_IMAGE_CQ_BYTES, eventTimestamp, cdcEventBytes);
-
-      return newCdcIndexPut;
-    }
+    return newCdcIndexPut;
   }
 
   /**
-   * Generates and applies a CDC index mutation for TTL expired row with retries if required.
-   * @param cdcIndex                 The CDC index table
+   * Creates a CDC batch processor for the given data table and configuration.
    * @param dataTable                The data table
-   * @param expiredRowPut            The expired row data as a Put
-   * @param eventTimestamp           The timestamp for the CDC event
-   * @param tableName                The table name for logging
    * @param env                      The region coprocessor environment
    * @param region                   The HBase region
    * @param compactionTimeBytes      The compaction time as bytes
-   * @param cdcTtlMutationMaxRetries Maximum retry attempts for CDC mutations
-   */
-  private static void generateCDCIndexMutation(PTable cdcIndex, PTable dataTable, Put expiredRowPut,
-    long eventTimestamp, String tableName, RegionCoprocessorEnvironment env, Region region,
-    byte[] compactionTimeBytes, int cdcTtlMutationMaxRetries) throws Exception {
-    Map<String, Object> cdcEvent =
-      createTTLDeleteCDCEvent(expiredRowPut, dataTable, new HashMap<>());
-    byte[] cdcEventBytes = JacksonUtil.getObjectWriter(HashMap.class).writeValueAsBytes(cdcEvent);
-    Put cdcIndexPut = buildCDCIndexPut(cdcIndex, expiredRowPut, eventTimestamp, cdcEventBytes,
-      dataTable, env, region, compactionTimeBytes);
-
-    Exception lastException = null;
-    for (int retryCount = 0; retryCount < cdcTtlMutationMaxRetries; retryCount++) {
-      try (Table cdcIndexTable =
-        env.getConnection().getTable(TableName.valueOf(cdcIndex.getPhysicalName().getBytes()))) {
-        CheckAndMutate checkAndMutate = CheckAndMutate.newBuilder(cdcIndexPut.getRow())
-          .ifNotExists(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
-            QueryConstants.CDC_IMAGE_CQ_BYTES)
-          .build(cdcIndexPut);
-        CheckAndMutateResult result = cdcIndexTable.checkAndMutate(checkAndMutate);
-
-        if (result.isSuccess()) {
-          // Successfully inserted new CDC event - Single CF case
-          lastException = null;
-          break;
-        } else {
-          // Row already exists, need to retrieve existing pre-image and merge
-          // Likely to happen for multi CF case
-          Get get = new Get(cdcIndexPut.getRow());
-          get.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
-            QueryConstants.CDC_IMAGE_CQ_BYTES);
-          Result existingResult = cdcIndexTable.get(get);
-
-          if (!existingResult.isEmpty()) {
-            Cell existingCell = existingResult.getColumnLatestCell(
-              QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.CDC_IMAGE_CQ_BYTES);
-
-            if (existingCell != null) {
-              byte[] existingCdcBytes = CellUtil.cloneValue(existingCell);
-              Map<String, Object> existingCdcEvent =
-                JacksonUtil.getObjectReader(HashMap.class).readValue(existingCdcBytes);
-              Map<String, Object> existingPreImage = (Map<String, Object>) existingCdcEvent
-                .getOrDefault(QueryConstants.CDC_PRE_IMAGE, new HashMap<>());
-
-              // Create new TTL delete event with merged pre-image
-              Map<String, Object> mergedCdcEvent =
-                createTTLDeleteCDCEvent(expiredRowPut, dataTable, existingPreImage);
-              byte[] mergedCdcEventBytes =
-                JacksonUtil.getObjectWriter(HashMap.class).writeValueAsBytes(mergedCdcEvent);
-
-              Put mergedCdcIndexPut = buildCDCIndexPut(cdcIndex, expiredRowPut, eventTimestamp,
-                mergedCdcEventBytes, dataTable, env, region, compactionTimeBytes);
-
-              cdcIndexTable.put(mergedCdcIndexPut);
-              lastException = null;
-              break;
-            } else {
-              LOGGER.warn("Rare event: Skipping CDC TTL mutation because other type"
-                + " of CDC event is recorded at time {}", eventTimestamp);
-              break;
-            }
-          } else {
-            LOGGER.warn("Rare event.. Skipping CDC TTL mutation because other type"
-              + " of CDC event is recorded at time {}", eventTimestamp);
-            break;
-          }
-        }
-      } catch (Exception e) {
-        lastException = e;
-        long backoffMs = 100;
-        LOGGER.warn("CDC mutation attempt {}/{} failed, retrying in {}ms", retryCount + 1,
-          cdcTtlMutationMaxRetries + 1, backoffMs, e);
-        try {
-          Thread.sleep(backoffMs);
-        } catch (InterruptedException ie) {
-          Thread.currentThread().interrupt();
-          throw new IOException("Interrupted during CDC mutation retry", ie);
-        }
-      }
-    }
-    if (lastException != null) {
-      LOGGER.error(
-        "Failed to generate CDC mutation after {} attempts for table {}, index "
-          + "{}. The event update is missed.",
-        cdcTtlMutationMaxRetries + 1, tableName, cdcIndex.getPhysicalName().getString(),
-        lastException);
-    }
-  }
-
-  /**
-   * Generates CDC TTL delete event and writes it directly to CDC index tables. This bypasses the
-   * normal CDC update path since the row is being expired.
-   * @param expiredRow               The cells of the expired row
-   * @param tableName                The table name for logging
    * @param compactionTime           The compaction timestamp
-   * @param dataTable                The data table
-   * @param env                      The region coprocessor environment
-   * @param region                   The HBase region
-   * @param compactionTimeBytes      The compaction time as bytes
+   * @param tableName                The table name for logging
    * @param cdcTtlMutationMaxRetries Maximum retry attempts for CDC mutations
+   * @param batchSize                The batch size for CDC mutations
+   * @return CDCBatchProcessor instance or null if no active CDC index
    */
-  private static void generateCDCTTLDeleteEvent(List<Cell> expiredRow, String tableName,
-    long compactionTime, PTable dataTable, RegionCoprocessorEnvironment env, Region region,
-    byte[] compactionTimeBytes, int cdcTtlMutationMaxRetries) {
-    try {
-      PTable cdcIndex = CDCUtil.getActiveCDCIndex(dataTable);
-      if (cdcIndex == null) {
-        LOGGER.warn("No active CDC index found for table {}", tableName);
-        return;
-      }
-      Cell firstCell = expiredRow.get(0);
-      byte[] dataRowKey = CellUtil.cloneRow(firstCell);
-      Put expiredRowPut = new Put(dataRowKey);
-
-      for (Cell cell : expiredRow) {
-        expiredRowPut.add(cell);
-      }
-
-      try {
-        generateCDCIndexMutation(cdcIndex, dataTable, expiredRowPut, compactionTime, tableName, env,
-          region, compactionTimeBytes, cdcTtlMutationMaxRetries);
-      } catch (Exception e) {
-        LOGGER.error("Failed to generate CDC mutation for index {}: {}",
-          cdcIndex.getName().getString(), e.getMessage(), e);
-      }
-    } catch (Exception e) {
-      LOGGER.error("Error generating CDC TTL delete event for table {}", tableName, e);
+  public static CDCBatchProcessor createBatchProcessor(PTable dataTable,
+    RegionCoprocessorEnvironment env, Region region, byte[] compactionTimeBytes,
+    long compactionTime, String tableName, int cdcTtlMutationMaxRetries, int batchSize) {
+    PTable cdcIndex = CDCUtil.getActiveCDCIndex(dataTable);
+    if (cdcIndex == null) {
+      LOGGER.warn("No active CDC index found for table {}", tableName);
+      return null;
     }
+    return new CDCBatchProcessor(cdcIndex, dataTable, env, region, compactionTimeBytes,
+      compactionTime, tableName, cdcTtlMutationMaxRetries, batchSize);
   }
 
   /**
-   * Handles TTL row expiration for CDC event generation. This method is called when a row is
-   * detected as expired during major compaction.
-   * @param expiredRow               The cells of the expired row
-   * @param expirationType           The type of TTL expiration
-   * @param tableName                The table name for logging purposes
-   * @param compactionTime           The timestamp when compaction started
-   * @param table                    The Phoenix data table metadata
-   * @param env                      The region coprocessor environment for accessing HBase
-   *                                 resources
-   * @param region                   The HBase region being compacted
-   * @param compactionTimeBytes      The compaction timestamp as byte array for CDC index row key
-   *                                 construction
-   * @param cdcTtlMutationMaxRetries Maximum number of retry attempts for CDC mutation operations
+   * Handles TTL row expiration for CDC event generation using batch processing. This method is
+   * called when a row is detected as expired during major compaction.
+   * @param expiredRow     The cells of the expired row
+   * @param expirationType The type of TTL expiration
+   * @param tableName      The table name for logging purposes
+   * @param batchProcessor The CDC batch processor instance
    */
   static void handleTTLRowExpiration(List<Cell> expiredRow, String expirationType, String tableName,
-    long compactionTime, PTable table, RegionCoprocessorEnvironment env, Region region,
-    byte[] compactionTimeBytes, int cdcTtlMutationMaxRetries) {
+    CDCBatchProcessor batchProcessor) {
+    if (batchProcessor == null) {
+      return;
+    }
+
     try {
       Cell firstCell = expiredRow.get(0);
       byte[] rowKey = CellUtil.cloneRow(firstCell);
 
-      LOGGER.info(
+      LOGGER.debug(
         "TTL row expiration detected: table={}, rowKey={}, expirationType={}, "
           + "cellCount={}, compactionTime={}",
-        tableName, Bytes.toStringBinary(rowKey), expirationType, expiredRow.size(), compactionTime);
+        tableName, Bytes.toStringBinary(rowKey), expirationType, expiredRow.size(),
+        batchProcessor.eventTimestamp);
 
-      // Generate CDC TTL delete event with pre-image data
-      generateCDCTTLDeleteEvent(expiredRow, tableName, compactionTime, table, env, region,
-        compactionTimeBytes, cdcTtlMutationMaxRetries);
-
+      batchProcessor.addCDCEvent(expiredRow);
     } catch (Exception e) {
       LOGGER.error("Error handling TTL row expiration for CDC: table {}", tableName, e);
     }
   }
+
 }

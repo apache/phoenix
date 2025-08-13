@@ -1653,13 +1653,12 @@ public class TestUtil {
     TableOperation operation) throws Exception {
     ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
     Configuration configuration = services.getConfiguration();
-    org.apache.hadoop.hbase.client.Connection hbaseConn =
-      ConnectionFactory.createConnection(configuration);
-    Admin admin = services.getAdmin();
-    RegionLocator regionLocator = hbaseConn.getRegionLocator(TableName.valueOf(tableName));
-    int nRegions = regionLocator.getAllRegionLocations().size();
-    operation.execute(admin, regionLocator, nRegions);
-
+    try (org.apache.hadoop.hbase.client.Connection hbaseConn =
+      ConnectionFactory.createConnection(configuration); Admin admin = services.getAdmin()) {
+      RegionLocator regionLocator = hbaseConn.getRegionLocator(TableName.valueOf(tableName));
+      int nRegions = regionLocator.getAllRegionLocations().size();
+      operation.execute(admin, regionLocator, nRegions);
+    }
   }
 
   private static void waitForRegionChange(RegionLocator regionLocator, int initialRegionCount)

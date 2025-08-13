@@ -24,7 +24,9 @@ import static org.apache.phoenix.query.QueryServices.ALLOW_VIEWS_ADD_NEW_CF_BASE
 import static org.apache.phoenix.query.QueryServices.AUTO_UPGRADE_ENABLED;
 import static org.apache.phoenix.query.QueryServices.CALL_QUEUE_PRODUCER_ATTRIB_NAME;
 import static org.apache.phoenix.query.QueryServices.CALL_QUEUE_ROUND_ROBIN_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.CDC_TTL_MUTATION_BATCH_SIZE;
 import static org.apache.phoenix.query.QueryServices.CDC_TTL_MUTATION_MAX_RETRIES;
+import static org.apache.phoenix.query.QueryServices.CDC_TTL_SHARED_CACHE_EXPIRY_SECONDS;
 import static org.apache.phoenix.query.QueryServices.CLIENT_INDEX_ASYNC_THRESHOLD;
 import static org.apache.phoenix.query.QueryServices.CLIENT_METRICS_TAG;
 import static org.apache.phoenix.query.QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB;
@@ -33,6 +35,7 @@ import static org.apache.phoenix.query.QueryServices.COLLECT_REQUEST_LEVEL_METRI
 import static org.apache.phoenix.query.QueryServices.COMMIT_STATS_ASYNC;
 import static org.apache.phoenix.query.QueryServices.CONNECTION_ACTIVITY_LOGGING_ENABLED;
 import static org.apache.phoenix.query.QueryServices.CONNECTION_ACTIVITY_LOGGING_INTERVAL;
+import static org.apache.phoenix.query.QueryServices.CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED;
 import static org.apache.phoenix.query.QueryServices.CONNECTION_QUERY_SERVICE_HISTOGRAM_SIZE_RANGES;
 import static org.apache.phoenix.query.QueryServices.CONNECTION_QUERY_SERVICE_METRICS_ENABLED;
 import static org.apache.phoenix.query.QueryServices.CONNECTION_QUERY_SERVICE_METRICS_PUBLISHER_CLASSNAME;
@@ -388,6 +391,7 @@ public class QueryServicesOptions {
   public static final int DEFAULT_INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS = 0;
 
   public static final boolean DEFAULT_CONNECTION_ACTIVITY_LOGGING_ENABLED = false;
+  public static final boolean DEFAULT_CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED = false;
   public static final int DEFAULT_CONNECTION_ACTIVITY_LOGGING_INTERVAL_IN_MINS = 15;
   public static final boolean DEFAULT_STATS_COLLECTION_ENABLED = true;
   public static final boolean DEFAULT_USE_STATS_FOR_PARALLELIZATION = true;
@@ -491,6 +495,8 @@ public class QueryServicesOptions {
   public static final Boolean DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT = true;
   public static final Boolean DEFAULT_CQSI_THREAD_POOL_METRICS_ENABLED = false;
   public static final int DEFAULT_CDC_TTL_MUTATION_MAX_RETRIES = 5;
+  public static final int DEFAULT_CDC_TTL_MUTATION_BATCH_SIZE = 50;
+  public static final int DEFAULT_CDC_TTL_SHARED_CACHE_EXPIRY_SECONDS = 1200;
 
   public static final long DEFAULT_PHOENIX_CDC_STREAM_PARTITION_EXPIRY_MIN_AGE_MS =
     30 * 60 * 60 * 1000; // 30 hours
@@ -600,6 +606,8 @@ public class QueryServicesOptions {
       .setIfUnset(SERVER_MERGE_FOR_UNCOVERED_INDEX, DEFAULT_SERVER_MERGE_FOR_UNCOVERED_INDEX)
       .setIfUnset(MAX_IN_LIST_SKIP_SCAN_SIZE, DEFAULT_MAX_IN_LIST_SKIP_SCAN_SIZE)
       .setIfUnset(CONNECTION_ACTIVITY_LOGGING_ENABLED, DEFAULT_CONNECTION_ACTIVITY_LOGGING_ENABLED)
+      .setIfUnset(CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED,
+        DEFAULT_CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED)
       .setIfUnset(CONNECTION_ACTIVITY_LOGGING_INTERVAL,
         DEFAULT_CONNECTION_ACTIVITY_LOGGING_INTERVAL_IN_MINS)
       .setIfUnset(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED,
@@ -612,7 +620,9 @@ public class QueryServicesOptions {
       .setIfUnset(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT,
         DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT)
       .setIfUnset(CQSI_THREAD_POOL_METRICS_ENABLED, DEFAULT_CQSI_THREAD_POOL_METRICS_ENABLED)
-      .setIfUnset(CDC_TTL_MUTATION_MAX_RETRIES, DEFAULT_CDC_TTL_MUTATION_MAX_RETRIES);
+      .setIfUnset(CDC_TTL_MUTATION_MAX_RETRIES, DEFAULT_CDC_TTL_MUTATION_MAX_RETRIES)
+      .setIfUnset(CDC_TTL_MUTATION_BATCH_SIZE, DEFAULT_CDC_TTL_MUTATION_BATCH_SIZE)
+      .setIfUnset(CDC_TTL_SHARED_CACHE_EXPIRY_SECONDS, DEFAULT_CDC_TTL_SHARED_CACHE_EXPIRY_SECONDS);
 
     // HBase sets this to 1, so we reset it to something more appropriate.
     // Hopefully HBase will change this, because we can't know if a user set

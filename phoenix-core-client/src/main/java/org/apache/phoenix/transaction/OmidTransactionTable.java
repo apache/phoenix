@@ -336,4 +336,9 @@ public class OmidTransactionTable extends CompatOmidTransactionTable implements 
   public RegionLocator getRegionLocator() throws IOException {
     throw new UnsupportedOperationException();
   }
+
+  @Override
+  public Result mutateRow(RowMutations rm) throws IOException {
+    throw new UnsupportedOperationException();
+  }
 }
