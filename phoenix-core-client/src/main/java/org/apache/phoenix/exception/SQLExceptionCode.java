@@ -103,6 +103,7 @@ public enum SQLExceptionCode {
   SUBQUERY_SELECT_LIST_COLUMN_MUST_HAS_ALIAS(219, "23019",
     "Every column in subquery select lists must has alias when used for join."),
   ROW_KEY_OUT_OF_SCAN_RANGE(220, "23020", "Row key is out of scan start/stop key boundaries"),
+  INVALID_TOTAL_SEGMENTS_VALUE(221, "23021", "TOTAL_SEGMENTS() value must be greater than 0"),
 
   CONCURRENT_TABLE_MUTATION(301, "23000", "Concurrent modification to table.", new Factory() {
     @Override
