@@ -29,6 +29,7 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -239,8 +240,8 @@ public class TupleUtil {
     if (tableName == null) {
       return null;
     }
-    try (PhoenixResultSet resultSet =
-      (PhoenixResultSet) conn.createStatement().executeQuery("SELECT * FROM " + tableName)) {
+    try (Statement stmt = conn.createStatement(); PhoenixResultSet resultSet =
+      (PhoenixResultSet) stmt.executeQuery("SELECT * FROM " + tableName)) {
       PTable pTable = resultSet.getStatement().getQueryPlan().getContext().getResolver().getTables()
         .get(0).getTable();
       TupleProjector tupleProjector = new TupleProjector(pTable);

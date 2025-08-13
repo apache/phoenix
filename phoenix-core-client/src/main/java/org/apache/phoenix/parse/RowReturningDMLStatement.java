@@ -18,5 +18,5 @@
 package org.apache.phoenix.parse;
 
 public interface RowReturningDMLStatement {
-  public boolean isReturningRow();
+  boolean isReturningRow();
 }
