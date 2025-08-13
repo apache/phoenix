@@ -25,7 +25,6 @@ import static org.junit.Assert.assertEquals;
 
 import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
-
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.sql.Connection;
@@ -38,7 +37,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.TableName;
@@ -107,7 +105,7 @@ public class MetadataServerConnectionsIT extends BaseTest {
 
     @Override
     public void createTable(RpcController controller, MetaDataProtos.CreateTableRequest request,
-            RpcCallback<MetaDataProtos.MetaDataResponse> done) {
+      RpcCallback<MetaDataProtos.MetaDataResponse> done) {
       // Invoke the actual create table routine
       super.createTable(controller, request, done);
 
@@ -117,9 +115,8 @@ public class MetadataServerConnectionsIT extends BaseTest {
       String fullTableName = null;
 
       // Get the singleton connection for testing
-      org.apache.hadoop.hbase.client.Connection
-              conn = ServerUtil.ConnectionFactory.getConnection(
-                      ServerUtil.ConnectionType.DEFAULT_SERVER_CONNECTION, env);
+      org.apache.hadoop.hbase.client.Connection conn = ServerUtil.ConnectionFactory
+        .getConnection(ServerUtil.ConnectionType.DEFAULT_SERVER_CONNECTION, env);
       try {
         // Get the current table creation details
         List<Mutation> tableMetadata = ProtobufUtil.getMutations(request);
@@ -143,7 +140,8 @@ public class MetadataServerConnectionsIT extends BaseTest {
         }
 
         // Get the thread pool executor from the HTable.
-        Table hTable = ServerUtil.getHTableForCoprocessorScan(env, TableName.valueOf(fullTableName));
+        Table hTable =
+          ServerUtil.getHTableForCoprocessorScan(env, TableName.valueOf(fullTableName));
         if (hTable instanceof HTable) {
           HTable testTable = (HTable) hTable;
           Field props = testTable.getClass().getDeclaredField("pool");
@@ -154,18 +152,16 @@ public class MetadataServerConnectionsIT extends BaseTest {
           // Since we are not overriding any defaults, it should match the defaults.
           assertEquals(htpe.getMaximumPoolSize(), DEFAULT_HCONNECTION_POOL_MAX_SIZE);
           assertEquals(htpe.getCorePoolSize(), DEFAULT_HCONNECTION_POOL_CORE_SIZE);
-          LOGGER.debug("HTable threadpool info {}, {}, {}, {}",
-                  htpe.getCorePoolSize(),
-                  htpe.getMaximumPoolSize(),
-                  htpe.getQueue().remainingCapacity(),
-                  htpe.getKeepAliveTime(TimeUnit.SECONDS));
+          LOGGER.debug("HTable threadpool info {}, {}, {}, {}", htpe.getCorePoolSize(),
+            htpe.getMaximumPoolSize(), htpe.getQueue().remainingCapacity(),
+            htpe.getKeepAliveTime(TimeUnit.SECONDS));
 
           int count = Thread.activeCount();
           Thread[] th = new Thread[count];
           // returns the number of threads put into the array
           Thread.enumerate(th);
-          long hTablePoolCount = Arrays.stream(th).filter(
-                  s -> s.getName().equals("htable-pool-0")).count();
+          long hTablePoolCount =
+            Arrays.stream(th).filter(s -> s.getName().equals("htable-pool-0")).count();
           // Assert no default HTable threadpools are created.
           assertEquals(0, hTablePoolCount);
           LOGGER.debug("htable-pool-0 threads {}", hTablePoolCount);
@@ -176,22 +172,18 @@ public class MetadataServerConnectionsIT extends BaseTest {
         // handle cases that an IOE is wrapped inside a RuntimeException
         // like HTableInterface#createHTableInterface
         MetaDataProtos.MetaDataResponse.Builder builder =
-                MetaDataProtos.MetaDataResponse.newBuilder();
+          MetaDataProtos.MetaDataResponse.newBuilder();
 
         LOGGER.error("This is unexpected");
         ProtobufUtil.setControllerException(controller,
-                ClientUtil.createIOException(
-                        SchemaUtil.getPhysicalTableName(
-                                        PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,
-                                        false)
-                                .toString(),
-                        new DoNotRetryIOException("Not allowed")));
+          ClientUtil.createIOException(SchemaUtil
+            .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, false)
+            .toString(), new DoNotRetryIOException("Not allowed")));
         done.run(builder.build());
 
       }
 
     }
-
 
     @Override
     public void getVersion(RpcController controller, MetaDataProtos.GetVersionRequest request,
@@ -201,8 +193,7 @@ public class MetadataServerConnectionsIT extends BaseTest {
       LOGGER.error("This is unexpected");
       ProtobufUtil.setControllerException(controller,
         ClientUtil.createIOException(
-          SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,
-                          false)
+          SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, false)
             .toString(),
           new DoNotRetryIOException("Not allowed")));
       builder.setVersion(-1);
@@ -229,36 +220,36 @@ public class MetadataServerConnectionsIT extends BaseTest {
       final Statement stmt = conn.createStatement();
 
       stmt.execute("CREATE TABLE " + tableName
-              + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
-              + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))"
-              + " UPDATE_CACHE_FREQUENCY=ALWAYS, MULTI_TENANT=true");
+        + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
+        + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))"
+        + " UPDATE_CACHE_FREQUENCY=ALWAYS, MULTI_TENANT=true");
       conn.commit();
 
-      for (int i=0; i< NUM_VIEWS; i++) {
+      for (int i = 0; i < NUM_VIEWS; i++) {
         Properties props = new Properties();
         String viewTenantId = String.format("00T%012d", i);
         props.setProperty(TENANT_ID_ATTRIB, viewTenantId);
         // Create multilevel tenant views
         try (Connection tConn = DriverManager.getConnection(getUrl(), props)) {
           final Statement viewStmt = tConn.createStatement();
-          viewStmt.execute("CREATE VIEW " + view01
-                  + " (VCOL1 CHAR(8), COL5 VARCHAR) AS SELECT * FROM " + tableName
-                  + " WHERE COL2 = 'col2'");
+          viewStmt
+            .execute("CREATE VIEW " + view01 + " (VCOL1 CHAR(8), COL5 VARCHAR) AS SELECT * FROM "
+              + tableName + " WHERE COL2 = 'col2'");
 
           viewStmt.execute("CREATE VIEW " + view02 + " (VCOL2 CHAR(10), COL6 VARCHAR)"
-                  + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
+            + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
           tConn.commit();
 
           // Create multilevel tenant indexes
           final Statement indexStmt = tConn.createStatement();
           indexStmt.execute("CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
-                  + "(COL1, COL2, COL3)");
+            + "(COL1, COL2, COL3)");
           indexStmt.execute("CREATE INDEX " + index_view02 + " ON " + view02 + " (COL6) INCLUDE "
-                  + "(COL1, COL2, COL3)");
-          indexStmt.execute("CREATE INDEX " + index_view03 + " ON " + view01 + " (COL5) INCLUDE "
-                  + "(COL2, COL1)");
-          indexStmt.execute("CREATE INDEX " + index_view04 + " ON " + view02 + " (COL6) INCLUDE "
-                  + "(COL2, COL1)");
+            + "(COL1, COL2, COL3)");
+          indexStmt.execute(
+            "CREATE INDEX " + index_view03 + " ON " + view01 + " (COL5) INCLUDE " + "(COL2, COL1)");
+          indexStmt.execute(
+            "CREATE INDEX " + index_view04 + " ON " + view02 + " (COL6) INCLUDE " + "(COL2, COL1)");
 
           tConn.commit();
 
@@ -326,8 +317,7 @@ public class MetadataServerConnectionsIT extends BaseTest {
       conn.commit();
 
       final Statement statement = conn.createStatement();
-      ResultSet rs = statement.executeQuery("SELECT COL2, VCOL1, VCOL2, COL5, COL6 FROM " +
-              view02);
+      ResultSet rs = statement.executeQuery("SELECT COL2, VCOL1, VCOL2, COL5, COL6 FROM " + view02);
       // No need to verify each row result as the primary focus of this test is to ensure
       // no RPC call from MetaDataEndpointImpl to MetaDataEndpointImpl is done while
       // creating server side connection.
