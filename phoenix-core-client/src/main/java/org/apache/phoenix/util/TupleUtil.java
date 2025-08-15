@@ -24,6 +24,7 @@ import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_QUALIFIER;
 
+import edu.umd.cs.findbugs.annotations.SuppressWarnings;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.sql.Connection;
@@ -32,6 +33,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
@@ -226,14 +228,20 @@ public class TupleUtil {
   /**
    * Convert the given Tuple containing list of Cells to ResultSet with similar effect as if SELECT
    * * FROM <table-name> is queried.
-   * @param toProject Tuple to be projected.
-   * @param tableName Table name.
-   * @param conn      Phoenix Connection object.
+   * @param toProject    Tuple to be projected.
+   * @param tableName    Table name.
+   * @param conn         Phoenix Connection object.
+   * @param withPrefetch When {@code true}, the returned ResultSet is prefetched, otherwise one
+   *                     needs to call next() on it.
    * @return ResultSet for the give single row.
    * @throws SQLException If any SQL operation fails.
    */
-  public static ResultSet getResultSet(Tuple toProject, TableName tableName, Connection conn)
-    throws SQLException {
+  @SuppressWarnings(value = "OBL_UNSATISFIED_OBLIGATION_EXCEPTION_EDGE",
+          justification = "Tge statement object needs to be kept open for the returned RS to be "
+          + "valid, however this is acceptable as not callingPhoenixStatement.close() "
+          + "causes no resource leak")
+  public static ResultSet getResultSet(Tuple toProject, TableName tableName, Connection conn,
+    boolean withPrefetch) throws SQLException {
     if (tableName == null) {
       return null;
     }
@@ -268,7 +276,9 @@ public class TupleUtil {
       ResultSet newResultSet = new PhoenixPrefetchedResultSet(resultSet.getRowProjector(),
         resultSet.getContext(), Collections
           .singletonList(new ResultTuple(Result.create(Collections.singletonList(newCell)))));
-      newResultSet.next();
+      if (withPrefetch) {
+        newResultSet.next();
+      }
       return newResultSet;
     }
   }
