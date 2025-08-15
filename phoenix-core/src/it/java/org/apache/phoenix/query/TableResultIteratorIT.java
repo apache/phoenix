@@ -34,7 +34,7 @@ import org.junit.experimental.categories.Category;
 
 @Category(ParallelStatsDisabledTest.class)
 @SuppressWarnings("deprecated")
-public class SkipSystemTablesExistenceCheckIT extends ParallelStatsDisabledIT {
+public class TableResultIteratorIT extends ParallelStatsDisabledIT {
 
   @Test
   public void testTableResultIterator() throws Exception {
