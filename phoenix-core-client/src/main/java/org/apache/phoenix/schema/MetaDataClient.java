@@ -4745,9 +4745,9 @@ public class MetaDataClient {
           /**
            * To check if TTL is defined at any of the child below we are checking it at
            * {@link org.apache.phoenix.coprocessor.MetaDataEndpointImpl#mutateColumn(List, ColumnMutator, int, PTable, PTable, boolean)}
-           * level where in function {@link org.apache.phoenix.coprocessor.MetaDataEndpointImpl#
-           * validateIfMutationAllowedOnParent(PTable, List, PTableType, long, byte[], byte[],
-           * byte[], List, int)} we are already traversing through allDescendantViews.
+           * level where in function
+           * {@link org.apache.phoenix.coprocessor.MetaDataEndpointImpl# validateIfMutationAllowedOnParent(PTable, List, PTableType, long, byte[], byte[], byte[], List, int)}
+           * we are already traversing through allDescendantViews.
            */
         }
 
