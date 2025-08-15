@@ -160,8 +160,8 @@ public class PhoenixRegionServerEndpoint extends
       ThreadPoolManager.getExecutor(new ThreadPoolBuilder("Uncovered Global Index", conf)
         .setMaxThread(QueryServices.PHOENIX_UNCOVERED_INDEX_MAX_POOL_SIZE,
           QueryServicesOptions.DEFAULT_PHOENIX_UNCOVERED_INDEX_MAX_POOL_SIZE)
-        .setCoreTimeout(QueryServices.PHOENIX_UNCOVERED_INDEX_KEEP_ALIVE_TIME_MS,
-          QueryServicesOptions.DEFAULT_PHOENIX_UNCOVERED_INDEX_KEEP_ALIVE_TIME_MS)));
+        .setCoreTimeout(QueryServices.PHOENIX_UNCOVERED_INDEX_KEEP_ALIVE_TIME_SEC,
+          QueryServicesOptions.DEFAULT_PHOENIX_UNCOVERED_INDEX_KEEP_ALIVE_TIME_SEC)));
     LOGGER.info("Initialized region level thread pool for Uncovered Global Indexes.");
   }
 

@@ -502,7 +502,7 @@ public class QueryServicesOptions {
     30 * 60 * 60 * 1000; // 30 hours
 
   public static final int DEFAULT_PHOENIX_UNCOVERED_INDEX_MAX_POOL_SIZE = 512;
-  public static final int DEFAULT_PHOENIX_UNCOVERED_INDEX_KEEP_ALIVE_TIME_MS = 60 * 1000; // 1min
+  public static final int DEFAULT_PHOENIX_UNCOVERED_INDEX_KEEP_ALIVE_TIME_SEC = 60; // 1min
 
   private final Configuration config;
 
