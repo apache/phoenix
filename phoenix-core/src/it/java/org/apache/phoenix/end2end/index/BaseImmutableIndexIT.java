@@ -34,8 +34,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -60,38 +58,32 @@ import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
-@Category(NeedsOwnMiniClusterTest.class)
-@RunWith(Parameterized.class)
-public class ImmutableIndexIT extends BaseTest {
+public abstract class BaseImmutableIndexIT extends BaseTest {
 
   private final boolean localIndex;
+  private final boolean serverSideIndex;
   private final PhoenixTransactionProvider transactionProvider;
   private final String tableDDLOptions;
 
@@ -101,10 +93,11 @@ public class ImmutableIndexIT extends BaseTest {
   private static String INDEX_DDL;
   public static final AtomicInteger NUM_ROWS = new AtomicInteger(0);
 
-  public ImmutableIndexIT(boolean localIndex, boolean transactional, String transactionProvider,
-    boolean columnEncoded) {
+  public BaseImmutableIndexIT(boolean localIndex, boolean transactional, String transactionProvider,
+    boolean columnEncoded, boolean serverSideIndex) {
     StringBuilder optionBuilder = new StringBuilder("IMMUTABLE_ROWS=true");
     this.localIndex = localIndex;
+    this.serverSideIndex = serverSideIndex;
     if (!columnEncoded) {
       optionBuilder.append(",COLUMN_ENCODED_BYTES=0,IMMUTABLE_STORAGE_SCHEME="
         + PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
@@ -121,28 +114,51 @@ public class ImmutableIndexIT extends BaseTest {
 
   }
 
-  @BeforeClass
-  public static synchronized void doSetup() throws Exception {
+  protected static Map<String, String> createServerProps() {
     Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(1);
     serverProps.put("hbase.coprocessor.region.classes", CreateIndexRegionObserver.class.getName());
+    return serverProps;
+  }
+
+  protected static Map<String, String> createClientProps() {
     Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(5);
     clientProps.put(QueryServices.TRANSACTIONS_ENABLED, "true");
     clientProps.put(QueryServices.INDEX_POPULATION_SLEEP_TIME, "15000");
     clientProps.put(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB, "true");
     clientProps.put(HConstants.HBASE_CLIENT_RETRIES_NUMBER, "1");
     clientProps.put(HConstants.HBASE_CLIENT_PAUSE, "1");
-    setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
-      new ReadOnlyProps(clientProps.entrySet().iterator()));
+    return clientProps;
   }
 
-  // name is used by failsafe as file name in reports
-  @Parameters(
-      name = "ImmutableIndexIT_localIndex={0},transactional={1},transactionProvider={2},columnEncoded={3}")
-  public static synchronized Collection<Object[]> data() {
-    return Arrays.asList(new Object[][] { { false, false, null, false },
-      { false, false, null, true },
-      // OMID does not support local indexes or column encoding
-      { false, true, "OMID", false }, { true, false, null, false }, { true, false, null, true }, });
+  @Test
+  public void testClientVsServerSideIndexMutations() throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    String tableName = "TBL_" + generateUniqueName();
+    String indexName = "IND_" + generateUniqueName();
+    String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+    String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.setAutoCommit(false);
+      String ddl = "CREATE TABLE " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + tableDDLOptions;
+      Statement stmt = conn.createStatement();
+      stmt.execute(ddl);
+      ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullTableName
+        + " (long_col1)";
+      stmt.execute(ddl);
+      upsertRows(conn, fullTableName, 3);
+      assertClientVsServerSideIndexMutations(conn);
+      conn.commit();
+      ResultSet rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullTableName);
+      assertTrue(rs.next());
+      assertEquals(3, rs.getInt(1));
+      rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullIndexName);
+      assertTrue(rs.next());
+      assertEquals(3, rs.getInt(1));
+      String dml = "DELETE from " + fullTableName + " WHERE varchar_pk='varchar1'";
+      assertEquals(1, conn.createStatement().executeUpdate(dml));
+      assertClientVsServerSideIndexMutations(conn);
+      conn.commit();
+    }
   }
 
   @Test
@@ -274,7 +290,45 @@ public class ImmutableIndexIT extends BaseTest {
     }
   }
 
+  private boolean isServerSideIndex() {
+    // An index is a server-side index if its mutations are generated and applied on the server
+    // side, otherwise
+    // it is a client-side index
+    // 1. Non-transactional local indexes are server-side indexes
+    // 2. Transactional global indexes are client-side indexes
+    // 3. Transactional local indexes are server-side indexes unless the transaction provider does
+    // not support it
+    // 4. Non-transactional global mutable indexes are server-side indexes
+    // 5. If configured using QueryServices.SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB (that is,
+    // when serverSideIndex = true), non-transactional immutable indexes are also server-side
+    // indexes, otherwise they
+    // are client-side indexes
+    if (
+      (localIndex && transactionProvider != null
+        && transactionProvider.isUnsupported(Feature.MAINTAIN_LOCAL_INDEX_ON_SERVER))
+        || (!localIndex && transactionProvider != null) || (!localIndex && !serverSideIndex)
+    ) {
+      return false;
+    }
+    return serverSideIndex;
+  }
+
+  private void assertClientVsServerSideIndexMutations(Connection conn) throws SQLException {
+    boolean serverSideMutations = isServerSideIndex();
+    Iterator<Pair<byte[], List<Cell>>> iterator = PhoenixRuntime.getUncommittedDataIterator(conn);
+    while (iterator.hasNext()) {
+      byte[] tableName = iterator.next().getFirst();
+      PTable table = conn.unwrap(PhoenixConnection.class).getTable(Bytes.toString(tableName));
+      if (table.getType() == PTableType.INDEX) {
+        assertFalse(serverSideMutations);
+      }
+    }
+  }
+
   private void assertIndexMutations(Connection conn) throws SQLException {
+    if (isServerSideIndex()) {
+      return;
+    }
     Iterator<Pair<byte[], List<Cell>>> iterator = PhoenixRuntime.getUncommittedDataIterator(conn);
     assertTrue(iterator.hasNext());
     iterator.next();

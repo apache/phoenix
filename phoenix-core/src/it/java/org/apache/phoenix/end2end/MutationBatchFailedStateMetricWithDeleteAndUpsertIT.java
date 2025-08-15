@@ -31,7 +31,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Map;
 import java.util.Properties;
-import org.apache.phoenix.end2end.index.ImmutableIndexIT;
+import org.apache.phoenix.end2end.index.BaseImmutableIndexIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -69,7 +69,7 @@ public class MutationBatchFailedStateMetricWithDeleteAndUpsertIT
       // mutations
       // Note :- it is called before applying mutation to region
       TestUtil.addCoprocessor(conn, deleteTableName,
-        ImmutableIndexIT.DeleteFailingRegionObserver.class);
+        BaseImmutableIndexIT.DeleteFailingRegionObserver.class);
       // trying to delete 4 rows with this single delete statement
       ResultSet rs =
         stmt.executeQuery("SELECT COUNT(*) FROM " + deleteTableName + " where val1 > 1");
