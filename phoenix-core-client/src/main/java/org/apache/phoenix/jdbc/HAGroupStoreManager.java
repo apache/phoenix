@@ -91,8 +91,8 @@ public class HAGroupStoreManager {
     public boolean isMutationBlocked(String haGroupName) throws IOException, SQLException {
         if (mutationBlockEnabled) {
             HAGroupStoreClient haGroupStoreClient = getHAGroupStoreClient(haGroupName);
-            HAGroupStoreRecordWithMetadata recordWithMetadata
-                    = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+            HAGroupStoreRecord recordWithMetadata
+                    = haGroupStoreClient.getHAGroupStoreRecord();
             return recordWithMetadata != null
                     && recordWithMetadata.getClusterRole() != null
                     && recordWithMetadata.getClusterRole()
@@ -149,10 +149,10 @@ public class HAGroupStoreManager {
      *        is not found.
      * @throws IOException when HAGroupStoreClient is not healthy.
      */
-    public Optional<HAGroupStoreRecordWithMetadata> getHAGroupStoreRecord(final String haGroupName)
+    public Optional<HAGroupStoreRecord> getHAGroupStoreRecord(final String haGroupName)
             throws IOException, SQLException {
         HAGroupStoreClient haGroupStoreClient = getHAGroupStoreClient(haGroupName);
-        return Optional.ofNullable(haGroupStoreClient.getHAGroupStoreRecordWithMetadata());
+        return Optional.ofNullable(haGroupStoreClient.getHAGroupStoreRecord());
     }
 
     /**
@@ -190,20 +190,24 @@ public class HAGroupStoreManager {
      *
      * @param haGroupName name of the HA group
      * @throws IOException when HAGroupStoreClient is not healthy.
-     * @throws InvalidClusterRoleTransitionException when the current state cannot transition to a degraded reader state
+     * @throws InvalidClusterRoleTransitionException when the current state
+     *   cannot transition to a degraded reader state
      */
     public void setReaderToDegraded(final String haGroupName)
             throws IOException, StaleHAGroupStoreRecordVersionException,
             InvalidClusterRoleTransitionException, SQLException {
         HAGroupStoreClient haGroupStoreClient = getHAGroupStoreClient(haGroupName);
-        HAGroupStoreRecordWithMetadata currentRecord = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+        HAGroupStoreRecord currentRecord
+                = haGroupStoreClient.getHAGroupStoreRecord();
 
         if (currentRecord == null) {
-            throw new IOException("Current HAGroupStoreRecord is null for HA group: " + haGroupName);
+            throw new IOException("Current HAGroupStoreRecord is null for HA group: "
+                    + haGroupName);
         }
 
         HAGroupStoreRecord.HAGroupState currentState = currentRecord.getHAGroupState();
-        HAGroupStoreRecord.HAGroupState targetState = HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY_FOR_READER;
+        HAGroupStoreRecord.HAGroupState targetState
+                = HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY_FOR_READER;
 
         if (currentState == HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY_FOR_WRITER) {
             targetState = HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY;
@@ -219,16 +223,19 @@ public class HAGroupStoreManager {
      *
      * @param haGroupName name of the HA group
      * @throws IOException when HAGroupStoreClient is not healthy.
-     * @throws InvalidClusterRoleTransitionException when the current state cannot transition to a healthy reader state
+     * @throws InvalidClusterRoleTransitionException when the current state
+     *   cannot transition to a healthy reader state
      */
     public void setReaderToHealthy(final String haGroupName)
             throws IOException, StaleHAGroupStoreRecordVersionException,
             InvalidClusterRoleTransitionException, SQLException {
         HAGroupStoreClient haGroupStoreClient = getHAGroupStoreClient(haGroupName);
-        HAGroupStoreRecordWithMetadata currentRecord = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+        HAGroupStoreRecord currentRecord
+                = haGroupStoreClient.getHAGroupStoreRecord();
 
         if (currentRecord == null) {
-            throw new IOException("Current HAGroupStoreRecord is null for HA group: " + haGroupName);
+            throw new IOException("Current HAGroupStoreRecord is null "
+                    + "for HA group: " + haGroupName);
         }
 
         HAGroupStoreRecord.HAGroupState currentState = currentRecord.getHAGroupState();
@@ -274,7 +281,8 @@ public class HAGroupStoreManager {
         try {
             HAGroupStoreClient client = getHAGroupStoreClient(haGroupName);
             client.subscribeToTransition(fromState, toState, clusterType, listener);
-            LOGGER.debug("Delegated subscription to transition {} -> {} for HA group {} on {} cluster to client",
+            LOGGER.debug("Delegated subscription to transition {} -> {} "
+                            + "for HA group {} on {} cluster to client",
                     fromState, toState, haGroupName, clusterType);
         } catch (IOException e) {
             throw new SQLException("HAGroupStoreClient not found for HA group: " + haGroupName, e);
@@ -298,7 +306,8 @@ public class HAGroupStoreManager {
         try {
             HAGroupStoreClient client = getHAGroupStoreClient(haGroupName);
             client.unsubscribeFromTransition(fromState, toState, clusterType, listener);
-            LOGGER.debug("Delegated unsubscription from transition {} -> {} for HA group {} on {} cluster to client",
+            LOGGER.debug("Delegated unsubscription from transition {} -> {}"
+                            + "for HA group {} on {} cluster to client",
                     fromState, toState, haGroupName, clusterType);
         } catch (IOException | SQLException e) {
             LOGGER.warn("HAGroupStoreClient not found for HA group: {} - cannot unsubscribe: {}",
@@ -322,7 +331,8 @@ public class HAGroupStoreManager {
         try {
             HAGroupStoreClient client = getHAGroupStoreClient(haGroupName);
             client.subscribeToTargetState(targetState, clusterType, listener);
-            LOGGER.debug("Delegated subscription to target state {} for HA group {} on {} cluster to client",
+            LOGGER.debug("Delegated subscription to target state {} "
+                            + "for HA group {} on {} cluster to client",
                     targetState, haGroupName, clusterType);
         } catch (IOException e) {
             throw new SQLException("HAGroupStoreClient not found for HA group: " + haGroupName, e);
@@ -344,7 +354,8 @@ public class HAGroupStoreManager {
         try {
             HAGroupStoreClient client = getHAGroupStoreClient(haGroupName);
             client.unsubscribeFromTargetState(targetState, clusterType, listener);
-            LOGGER.debug("Delegated unsubscription from target state {} for HA group {} on {} cluster to client",
+            LOGGER.debug("Delegated unsubscription from target state {} "
+                            + "for HA group {} on {} cluster to client",
                     targetState, haGroupName, clusterType);
         } catch (IOException | SQLException e) {
             LOGGER.warn("HAGroupStoreClient not found for HA group: {} - cannot unsubscribe: {}",
@@ -365,7 +376,8 @@ public class HAGroupStoreManager {
         HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstanceForZkUrl(conf,
                 haGroupName, zkUrl);
         if (haGroupStoreClient == null) {
-            throw new IOException("HAGroupStoreClient is not initialized for HA group: " + haGroupName);
+            throw new IOException("HAGroupStoreClient is not initialized "
+                    + "for HA group: " + haGroupName);
         }
         return haGroupStoreClient;
     }

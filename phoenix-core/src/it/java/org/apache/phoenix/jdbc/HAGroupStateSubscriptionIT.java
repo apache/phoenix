@@ -46,7 +46,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_NAMESPACE;
+import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
@@ -85,7 +85,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
 
     @Before
     public void before() throws Exception {
-        haAdmin = new PhoenixHAAdmin(config, ZK_CONSISTENT_HA_NAMESPACE);
+        haAdmin = new PhoenixHAAdmin(config, ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
         zkUrl = getLocalZkUrl(config);
         this.peerZKUrl = CLUSTERS.getZkUrl2();
 
@@ -116,7 +116,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         AtomicReference<ClusterType> lastPeerClusterType = new AtomicReference<>();
 
         // Create listeners for different target states
-        HAGroupStateListener localListener = (groupName, fromState, toState, clusterType) -> {
+        HAGroupStateListener localListener = (groupName, fromState, toState, modifiedTime, clusterType) -> {
             if (toState == HAGroupState.ACTIVE_IN_SYNC && clusterType == ClusterType.LOCAL) {
                 localNotifications.incrementAndGet();
                 lastLocalClusterType.set(clusterType);
@@ -124,7 +124,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
             }
         };
 
-        HAGroupStateListener peerListener = (groupName, fromState, toState, clusterType) -> {
+        HAGroupStateListener peerListener = (groupName, fromState, toState, modifiedTime, clusterType) -> {
             if (toState == HAGroupState.DEGRADED_STANDBY_FOR_READER && clusterType == ClusterType.PEER) {
                 peerNotifications.incrementAndGet();
                 lastPeerClusterType.set(clusterType);
@@ -143,7 +143,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
 
         // Need to set up peer record first
         // For peer cluster, we need to create the record in peer ZK
-        PhoenixHAAdmin peerHaAdmin = new PhoenixHAAdmin(peerZKUrl, config, ZK_CONSISTENT_HA_NAMESPACE);
+        PhoenixHAAdmin peerHaAdmin = new PhoenixHAAdmin(peerZKUrl, config, ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
         HAGroupStoreRecord initialPeerRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY);
         peerHaAdmin.createHAGroupStoreRecordInZooKeeper(initialPeerRecord);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
@@ -175,7 +175,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         AtomicReference<ClusterType> lastPeerClusterType = new AtomicReference<>();
 
         // Create listeners for different specific transitions
-        HAGroupStateListener localListener = (groupName, fromState, toState, clusterType) -> {
+        HAGroupStateListener localListener = (groupName, fromState, toState, modifiedTime, clusterType) -> {
             if (fromState == HAGroupState.STANDBY && toState == HAGroupState.STANDBY_TO_ACTIVE && clusterType == ClusterType.LOCAL) {
                 localNotifications.incrementAndGet();
                 lastLocalClusterType.set(clusterType);
@@ -183,7 +183,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
             }
         };
 
-        HAGroupStateListener peerListener = (groupName, fromState, toState, clusterType) -> {
+        HAGroupStateListener peerListener = (groupName, fromState, toState, modifiedTime, clusterType) -> {
             if (fromState == HAGroupState.DEGRADED_STANDBY_FOR_READER && toState == HAGroupState.STANDBY && clusterType == ClusterType.PEER) {
                 peerNotifications.incrementAndGet();
                 lastPeerClusterType.set(clusterType);
@@ -200,7 +200,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, initialLocalRecord, 0);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
-        PhoenixHAAdmin peerHaAdmin = new PhoenixHAAdmin(peerZKUrl, config, ZK_CONSISTENT_HA_NAMESPACE);
+        PhoenixHAAdmin peerHaAdmin = new PhoenixHAAdmin(peerZKUrl, config, ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
         HAGroupStoreRecord initialPeerRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.DEGRADED_STANDBY_FOR_READER);
         peerHaAdmin.createHAGroupStoreRecordInZooKeeper(initialPeerRecord);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
@@ -234,7 +234,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         AtomicInteger totalNotifications = new AtomicInteger(0);
         AtomicReference<ClusterType> lastClusterType = new AtomicReference<>();
 
-        HAGroupStateListener listener = (groupName, fromState, toState, clusterType) -> {
+        HAGroupStateListener listener = (groupName, fromState, toState, modifiedTime, clusterType) -> {
             if (fromState == HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY && toState == HAGroupState.STANDBY) {
                 totalNotifications.incrementAndGet();
                 lastClusterType.set(clusterType);
@@ -254,7 +254,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, initialRecord, 0);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
-        PhoenixHAAdmin peerHaAdmin = new PhoenixHAAdmin(peerZKUrl, config, ZK_CONSISTENT_HA_NAMESPACE);
+        PhoenixHAAdmin peerHaAdmin = new PhoenixHAAdmin(peerZKUrl, config, ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
         peerHaAdmin.createHAGroupStoreRecordInZooKeeper(initialRecord);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -290,7 +290,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         AtomicInteger listener1PeerNotifications = new AtomicInteger(0);
         AtomicInteger listener2PeerNotifications = new AtomicInteger(0);
 
-        HAGroupStateListener listener1 = (groupName, fromState, toState, clusterType) -> {
+        HAGroupStateListener listener1 = (groupName, fromState, toState, modifiedTime, clusterType) -> {
             if (fromState == HAGroupState.DEGRADED_STANDBY_FOR_WRITER && toState == HAGroupState.DEGRADED_STANDBY) {
                 if (clusterType == ClusterType.LOCAL) {
                     listener1LocalNotifications.incrementAndGet();
@@ -301,7 +301,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
             }
         };
 
-        HAGroupStateListener listener2 = (groupName, fromState, toState, clusterType) -> {
+        HAGroupStateListener listener2 = (groupName, fromState, toState, modifiedTime, clusterType) -> {
             if (fromState == HAGroupState.DEGRADED_STANDBY_FOR_WRITER && toState == HAGroupState.DEGRADED_STANDBY) {
                 if (clusterType == ClusterType.LOCAL) {
                     listener2LocalNotifications.incrementAndGet();
@@ -323,7 +323,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, initialRecord, 0);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
-        PhoenixHAAdmin peerHaAdmin = new PhoenixHAAdmin(peerZKUrl, config, ZK_CONSISTENT_HA_NAMESPACE);
+        PhoenixHAAdmin peerHaAdmin = new PhoenixHAAdmin(peerZKUrl, config, ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
         peerHaAdmin.createHAGroupStoreRecordInZooKeeper(initialRecord);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -358,7 +358,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         AtomicReference<ClusterType> lastTransitionAClusterType = new AtomicReference<>();
         AtomicReference<ClusterType> lastTransitionBClusterType = new AtomicReference<>();
 
-        HAGroupStateListener sharedListener = (groupName, fromState, toState, clusterType) -> {
+        HAGroupStateListener sharedListener = (groupName, fromState, toState, modifiedTime, clusterType) -> {
             if (fromState == HAGroupState.ACTIVE_NOT_IN_SYNC_TO_STANDBY && toState == HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY && clusterType == ClusterType.LOCAL) {
                 transitionANotifications.incrementAndGet();
                 lastTransitionAClusterType.set(clusterType);
@@ -379,7 +379,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, initialLocalRecord, 0);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
-        PhoenixHAAdmin peerHaAdmin = new PhoenixHAAdmin(peerZKUrl, config, ZK_CONSISTENT_HA_NAMESPACE);
+        PhoenixHAAdmin peerHaAdmin = new PhoenixHAAdmin(peerZKUrl, config, ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
         HAGroupStoreRecord initialPeerRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ABORT_TO_ACTIVE_IN_SYNC);
         peerHaAdmin.createHAGroupStoreRecordInZooKeeper(initialPeerRecord);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
@@ -411,7 +411,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         String nonExistentHAGroup = "nonExistentGroup_" + testName.getMethodName();
         HAGroupStoreManager manager = HAGroupStoreManager.getInstance(config);
 
-        HAGroupStateListener listener = (groupName, fromState, toState, clusterType) -> {
+        HAGroupStateListener listener = (groupName, fromState, toState, modifiedTime, clusterType) -> {
             // Should not be called
         };
 
@@ -435,18 +435,18 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         AtomicInteger goodListener2Notifications = new AtomicInteger(0);
         AtomicInteger badListenerCalls = new AtomicInteger(0);
 
-        HAGroupStateListener goodListener1 = (groupName, fromState, toState, clusterType) -> {
+        HAGroupStateListener goodListener1 = (groupName, fromState, toState, modifiedTime, clusterType) -> {
             goodListener1Notifications.incrementAndGet();
             LOGGER.info("Good listener 1 called: {} -> {} on {}", fromState, toState, clusterType);
         };
 
-        HAGroupStateListener badListener = (groupName, fromState, toState, clusterType) -> {
+        HAGroupStateListener badListener = (groupName, fromState, toState, modifiedTime, clusterType) -> {
             badListenerCalls.incrementAndGet();
             LOGGER.info("Bad listener called, about to throw exception");
             throw new RuntimeException("Test exception from bad listener");
         };
 
-        HAGroupStateListener goodListener2 = (groupName, fromState, toState, clusterType) -> {
+        HAGroupStateListener goodListener2 = (groupName, fromState, toState, modifiedTime, clusterType) -> {
             goodListener2Notifications.incrementAndGet();
             LOGGER.info("Good listener 2 called: {} -> {} on {}", fromState, toState, clusterType);
         };
@@ -492,7 +492,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
                 try {
                     startLatch.await(); // Wait for all threads to be ready
 
-                    HAGroupStateListener listener = (groupName, fromState, toState, clusterType) -> {
+                    HAGroupStateListener listener = (groupName, fromState, toState, modifiedTime, clusterType) -> {
                         LOGGER.debug("Thread {} listener called: {} -> {} on {}", threadIndex, fromState, toState, clusterType);
                     };
 
@@ -532,7 +532,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         AtomicInteger localNotifications = new AtomicInteger(0);
         AtomicInteger peerNotifications = new AtomicInteger(0);
 
-        HAGroupStateListener listener = (groupName, fromState, toState, clusterType) -> {
+        HAGroupStateListener listener = (groupName, fromState, toState, modifiedTime, clusterType) -> {
             if (clusterType == ClusterType.LOCAL) {
                 localNotifications.incrementAndGet();
             } else {
@@ -547,7 +547,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
 
         // Rapidly alternate state changes on both clusters
         final int changeCount = 5;
-        PhoenixHAAdmin peerHaAdmin = new PhoenixHAAdmin(peerZKUrl, config, ZK_CONSISTENT_HA_NAMESPACE);
+        PhoenixHAAdmin peerHaAdmin = new PhoenixHAAdmin(peerZKUrl, config, ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
         HAGroupStoreRecord initialPeerRecord = new HAGroupStoreRecord("1.0", haGroupName,HAGroupState.DEGRADED_STANDBY_FOR_WRITER);
         peerHaAdmin.createHAGroupStoreRecordInZooKeeper(initialPeerRecord);
 
@@ -588,10 +588,10 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         HAGroupStoreManager manager = HAGroupStoreManager.getInstance(config);
 
         // Create listeners
-        HAGroupStateListener listener1 = (groupName, fromState, toState, clusterType) -> {};
-        HAGroupStateListener listener2 = (groupName, fromState, toState, clusterType) -> {};
-        HAGroupStateListener listener3 = (groupName, fromState, toState, clusterType) -> {};
-        HAGroupStateListener listener4 = (groupName, fromState, toState, clusterType) -> {};
+        HAGroupStateListener listener1 = (groupName, fromState, toState, modifiedTime, clusterType) -> {};
+        HAGroupStateListener listener2 = (groupName, fromState, toState, modifiedTime, clusterType) -> {};
+        HAGroupStateListener listener3 = (groupName, fromState, toState, modifiedTime, clusterType) -> {};
+        HAGroupStateListener listener4 = (groupName, fromState, toState, modifiedTime, clusterType) -> {};
 
         // Get client to access internal maps via reflection
         HAGroupStoreClient client = HAGroupStoreClient.getInstanceForZkUrl(config, haGroupName, zkUrl);
@@ -668,9 +668,9 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
 
         // Test that new subscriptions still work properly
         AtomicInteger newSubscriptionNotifications = new AtomicInteger(0);
-        HAGroupStateListener newTestListener = (groupName, fromState, toState, clusterType) -> {
+        HAGroupStateListener newTestListener = (groupName, fromState, toState, modifiedTime, clusterType) -> {
             newSubscriptionNotifications.incrementAndGet();
-            LOGGER.info("New subscription triggered: {} -> {} on {}", fromState, toState, clusterType);
+            LOGGER.info("New subscription triggered: {} -> {} on {} at {}", fromState, toState, clusterType, modifiedTime);
         };
 
         // Subscribe with new test listener

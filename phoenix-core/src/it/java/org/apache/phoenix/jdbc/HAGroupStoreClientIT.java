@@ -40,6 +40,7 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -52,7 +53,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.curator.framework.recipes.cache.PathChildrenCacheListener;
 
 import static org.apache.hadoop.hbase.HConstants.DEFAULT_ZK_SESSION_TIMEOUT;
-import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_NAMESPACE;
+import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_HA_GROUP_NAME;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
@@ -91,8 +92,8 @@ public class HAGroupStoreClientIT extends BaseTest {
 
     @Before
     public void before() throws Exception {
-        haAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster1().getConfiguration(), ZK_CONSISTENT_HA_NAMESPACE);
-        peerHaAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster2().getConfiguration(), ZK_CONSISTENT_HA_NAMESPACE);
+        haAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster1().getConfiguration(), ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
+        peerHaAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster2().getConfiguration(), ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
         haAdmin.getCurator().delete().quietly().forPath(toPath(testName.getMethodName()));
         peerHaAdmin.getCurator().delete().quietly().forPath(toPath(testName.getMethodName()));
         zkUrl = getLocalZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration());
@@ -135,7 +136,7 @@ public class HAGroupStoreClientIT extends BaseTest {
         createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, record);
         HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
 
-        HAGroupStoreRecordWithMetadata currentRecord = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+        HAGroupStoreRecord currentRecord = haGroupStoreClient.getHAGroupStoreRecord();
         assert currentRecord != null && currentRecord.getHAGroupState() == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC;
 
         // Base case: Check that peerPathChildrenCache is not null in HAGroupStoreClient via reflection
@@ -157,7 +158,7 @@ public class HAGroupStoreClientIT extends BaseTest {
         // Now update System table to contain valid peer ZK URL and also change local cluster role to STANDBY
         HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName,this.zkUrl, this.peerZKUrl, ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE, null);
         haGroupStoreClient.rebuild();
-        currentRecord = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+        currentRecord = haGroupStoreClient.getHAGroupStoreRecord();
         assertNotNull(currentRecord);
         assertEquals(HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY, currentRecord.getHAGroupState());
 
@@ -170,7 +171,7 @@ public class HAGroupStoreClientIT extends BaseTest {
         createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, record);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
-        currentRecord = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+        currentRecord = haGroupStoreClient.getHAGroupStoreRecord();
         assertNotNull(currentRecord);
         assertEquals(HAGroupStoreRecord.HAGroupState.STANDBY, currentRecord.getHAGroupState());
 
@@ -180,7 +181,7 @@ public class HAGroupStoreClientIT extends BaseTest {
         String invalidUrl = "invalidURL";
         HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, this.zkUrl, invalidUrl, ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE, null);
         haGroupStoreClient.rebuild();
-        currentRecord = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+        currentRecord = haGroupStoreClient.getHAGroupStoreRecord();
         assertNotNull(currentRecord);
         assertEquals(HAGroupStoreRecord.HAGroupState.STANDBY, currentRecord.getHAGroupState());
 
@@ -224,7 +225,7 @@ public class HAGroupStoreClientIT extends BaseTest {
                 HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
         createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, record);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        HAGroupStoreRecordWithMetadata currentRecord = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+        HAGroupStoreRecord currentRecord = haGroupStoreClient.getHAGroupStoreRecord();
         assert currentRecord != null && currentRecord.getHAGroupState() == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC;
 
         // Now Update HAGroupStoreRecord so that current cluster has state ACTIVE_TO_STANDBY
@@ -234,7 +235,7 @@ public class HAGroupStoreClientIT extends BaseTest {
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         // Check that now the cluster should be in ActiveToStandby
-        currentRecord = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+        currentRecord = haGroupStoreClient.getHAGroupStoreRecord();
         assert currentRecord != null && currentRecord.getHAGroupState() == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY;
 
         // Change it back to ACTIVE so that cluster is not in ACTIVE_TO_STANDBY state
@@ -243,7 +244,7 @@ public class HAGroupStoreClientIT extends BaseTest {
         createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, record);
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        currentRecord = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+        currentRecord = haGroupStoreClient.getHAGroupStoreRecord();
         assert currentRecord != null && currentRecord.getHAGroupState() == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC;
 
         // Change it again to ACTIVE_TO_STANDBY so that we can validate watcher works repeatedly
@@ -252,7 +253,7 @@ public class HAGroupStoreClientIT extends BaseTest {
         createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, record);
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        currentRecord = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+        currentRecord = haGroupStoreClient.getHAGroupStoreRecord();
         assert currentRecord != null && currentRecord.getHAGroupState() == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY;
 
         // Change it back to ACTIVE to verify transition works
@@ -261,7 +262,7 @@ public class HAGroupStoreClientIT extends BaseTest {
         createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, record);
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        currentRecord = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+        currentRecord = haGroupStoreClient.getHAGroupStoreRecord();
         assert currentRecord != null && currentRecord.getHAGroupState() == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC;
     }
 
@@ -303,8 +304,8 @@ public class HAGroupStoreClientIT extends BaseTest {
         HAGroupStoreClient haGroupStoreClient2 = HAGroupStoreClient.getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName2, zkUrl);
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        HAGroupStoreRecordWithMetadata currentRecord1 = haGroupStoreClient1.getHAGroupStoreRecordWithMetadata();
-        HAGroupStoreRecordWithMetadata currentRecord2 = haGroupStoreClient2.getHAGroupStoreRecordWithMetadata();
+        HAGroupStoreRecord currentRecord1 = haGroupStoreClient1.getHAGroupStoreRecord();
+        HAGroupStoreRecord currentRecord2 = haGroupStoreClient2.getHAGroupStoreRecord();
         assert currentRecord1 != null && currentRecord1.getHAGroupState() == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC;
         assert currentRecord2 != null && currentRecord2.getHAGroupState() == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC;
 
@@ -319,8 +320,8 @@ public class HAGroupStoreClientIT extends BaseTest {
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         // Check that now the cluster should be in ActiveToStandby
-        currentRecord1 = haGroupStoreClient1.getHAGroupStoreRecordWithMetadata();
-        currentRecord2 = haGroupStoreClient2.getHAGroupStoreRecordWithMetadata();
+        currentRecord1 = haGroupStoreClient1.getHAGroupStoreRecord();
+        currentRecord2 = haGroupStoreClient2.getHAGroupStoreRecord();
         assert currentRecord1 != null && currentRecord1.getHAGroupState() == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY;
         assert currentRecord2 != null && currentRecord2.getHAGroupState() == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC;
 
@@ -334,8 +335,8 @@ public class HAGroupStoreClientIT extends BaseTest {
         createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName2, record2);
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        currentRecord1 = haGroupStoreClient1.getHAGroupStoreRecordWithMetadata();
-        currentRecord2 = haGroupStoreClient2.getHAGroupStoreRecordWithMetadata();
+        currentRecord1 = haGroupStoreClient1.getHAGroupStoreRecord();
+        currentRecord2 = haGroupStoreClient2.getHAGroupStoreRecord();
         assert currentRecord1 != null && currentRecord1.getHAGroupState() == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC;
         assert currentRecord2 != null && currentRecord2.getHAGroupState() == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC;
 
@@ -349,8 +350,8 @@ public class HAGroupStoreClientIT extends BaseTest {
         createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName2, record2);
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        currentRecord1 = haGroupStoreClient1.getHAGroupStoreRecordWithMetadata();
-        currentRecord2 = haGroupStoreClient2.getHAGroupStoreRecordWithMetadata();
+        currentRecord1 = haGroupStoreClient1.getHAGroupStoreRecord();
+        currentRecord2 = haGroupStoreClient2.getHAGroupStoreRecord();
         assert currentRecord1 != null && currentRecord1.getHAGroupState() == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC;
         assert currentRecord2 != null && currentRecord2.getHAGroupState() == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY;
     }
@@ -374,7 +375,7 @@ public class HAGroupStoreClientIT extends BaseTest {
         for (int i = 0; i < threadCount; i++) {
             executor.submit(() -> {
                 try {
-                    HAGroupStoreRecordWithMetadata currentRecord = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+                    HAGroupStoreRecord currentRecord = haGroupStoreClient.getHAGroupStoreRecord();
                     assert currentRecord != null && currentRecord.getHAGroupState() == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC;
                     latch.countDown();
                 } catch (Exception e) {
@@ -397,7 +398,7 @@ public class HAGroupStoreClientIT extends BaseTest {
         for (int i = 0; i < threadCount; i++) {
             executor.submit(() -> {
                 try {
-                    HAGroupStoreRecordWithMetadata currentRecord = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+                    HAGroupStoreRecord currentRecord = haGroupStoreClient.getHAGroupStoreRecord();
                     assert currentRecord != null && currentRecord.getHAGroupState() == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY;
                     latch2.countDown();
                 } catch (Exception e) {
@@ -418,24 +419,26 @@ public class HAGroupStoreClientIT extends BaseTest {
         createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, record1);
         HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        HAGroupStoreRecordWithMetadata currentRecord = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+        HAGroupStoreRecord currentRecord = haGroupStoreClient.getHAGroupStoreRecord();
         assertNotNull(currentRecord);
         assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, currentRecord.getHAGroupState());
 
         haAdmin.getCurator().delete().deletingChildrenIfNeeded().forPath(toPath(StringUtils.EMPTY));
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        currentRecord = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+        currentRecord = haGroupStoreClient.getHAGroupStoreRecord();
 
         // The record should be automatically rebuilt from System Table as it is not in ZK
         assertNotNull(currentRecord);
         assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC, currentRecord.getHAGroupState());
+        // The record should have a timestamp
+        assertNotNull(currentRecord.getLastSyncStateTimeInMs());
 
         record1 = new HAGroupStoreRecord("v1.0", haGroupName,
                 HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC_TO_STANDBY);
 
         createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, record1);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        currentRecord = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+        currentRecord = haGroupStoreClient.getHAGroupStoreRecord();
         assertNotNull(currentRecord);
         assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC_TO_STANDBY, currentRecord.getHAGroupState());
     }
@@ -452,7 +455,7 @@ public class HAGroupStoreClientIT extends BaseTest {
         HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        HAGroupStoreRecordWithMetadata currentRecord = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+        HAGroupStoreRecord currentRecord = haGroupStoreClient.getHAGroupStoreRecord();
         assert currentRecord != null && currentRecord.getHAGroupState() == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC;
 
         // Shutdown the ZK Cluster to simulate CONNECTION_SUSPENDED event
@@ -460,7 +463,7 @@ public class HAGroupStoreClientIT extends BaseTest {
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         //Check that HAGroupStoreClient instance is not healthy and throws IOException
-        assertThrows(IOException.class, () -> haGroupStoreClient.getHAGroupStoreRecordWithMetadata());
+        assertThrows(IOException.class, () -> haGroupStoreClient.getHAGroupStoreRecord());
         // Check that the HAGroupStoreClient instance is not healthy via reflection
         Field isHealthyField = HAGroupStoreClient.class.getDeclaredField("isHealthy");
         isHealthyField.setAccessible(true);
@@ -472,7 +475,7 @@ public class HAGroupStoreClientIT extends BaseTest {
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         //Check that HAGroupStoreClient instance is back to healthy and provides correct response
-        currentRecord = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+        currentRecord = haGroupStoreClient.getHAGroupStoreRecord();
         assert currentRecord != null && currentRecord.getHAGroupState() == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC;
         // Check that the HAGroupStoreClient instance is healthy via reflection
         assertTrue((boolean)isHealthyField.get(haGroupStoreClient));
@@ -522,7 +525,7 @@ public class HAGroupStoreClientIT extends BaseTest {
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Verify initial state
-        HAGroupStoreRecordWithMetadata currentRecord = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+        HAGroupStoreRecord currentRecord = haGroupStoreClient.getHAGroupStoreRecord();
         assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, currentRecord.getHAGroupState());
 
         // Update to STANDBY (this should succeed as it's a valid transition)
@@ -530,7 +533,7 @@ public class HAGroupStoreClientIT extends BaseTest {
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Verify the record was updated
-        currentRecord = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+        currentRecord = haGroupStoreClient.getHAGroupStoreRecord();
         assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, currentRecord.getHAGroupState());
     }
 
@@ -548,7 +551,7 @@ public class HAGroupStoreClientIT extends BaseTest {
         HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
 
         // Get the current record
-        HAGroupStoreRecordWithMetadata currentRecord = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+        HAGroupStoreRecord currentRecord = haGroupStoreClient.getHAGroupStoreRecord();
 
         // Try to set to ACTIVE_IN_SYNC immediately (should not update due to timing)
         haGroupStoreClient.setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
@@ -556,7 +559,7 @@ public class HAGroupStoreClientIT extends BaseTest {
         // Add sleep if due to any bug the update might have gone through and we can assert below this.
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         // Verify no update occurred
-        HAGroupStoreRecordWithMetadata afterRecord = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+        HAGroupStoreRecord afterRecord = haGroupStoreClient.getHAGroupStoreRecord();
         Stat afterRecordInZKStat = haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName).getRight();
         int afterRecordVersion = afterRecordInZKStat.getVersion();
 
@@ -579,7 +582,7 @@ public class HAGroupStoreClientIT extends BaseTest {
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Verify the record was updated
-        HAGroupStoreRecordWithMetadata updatedRecord = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+        HAGroupStoreRecord updatedRecord = haGroupStoreClient.getHAGroupStoreRecord();
         assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, updatedRecord.getHAGroupState());
     }
 
@@ -644,7 +647,7 @@ public class HAGroupStoreClientIT extends BaseTest {
         haGroupStoreClient.setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
-        HAGroupStoreRecordWithMetadata afterFirst = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+        HAGroupStoreRecord afterFirst = haGroupStoreClient.getHAGroupStoreRecord();
         assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, afterFirst.getHAGroupState());
 
         // Wait and make another transition: ACTIVE_TO_STANDBY -> STANDBY
@@ -652,7 +655,7 @@ public class HAGroupStoreClientIT extends BaseTest {
         haGroupStoreClient.setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.STANDBY);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
-        HAGroupStoreRecordWithMetadata afterSecond = haGroupStoreClient.getHAGroupStoreRecordWithMetadata();
+        HAGroupStoreRecord afterSecond = haGroupStoreClient.getHAGroupStoreRecord();
         assertEquals(HAGroupStoreRecord.HAGroupState.STANDBY, afterSecond.getHAGroupState());
     }
 
