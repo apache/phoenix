@@ -269,8 +269,8 @@ public class HAGroupStoreManagerIT extends BaseTest {
         HAGroupStoreRecord updatedRecord = updatedRecordOpt.get();
         assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC, updatedRecord.getHAGroupState());
         assertNotNull(updatedRecord.getLastSyncStateTimeInMs());
-        
-        // Set the HA group status to store and forward again and verify 
+
+        // Set the HA group status to store and forward again and verify
         // that getLastSyncStateTimeInMs is same (ACTIVE_NOT_IN_SYNC)
         // The time should only update when we move to AIS to ANIS
         haGroupStoreManager.setHAGroupStatusToStoreAndForward(haGroupName);
@@ -280,7 +280,6 @@ public class HAGroupStoreManagerIT extends BaseTest {
         HAGroupStoreRecord updatedRecord2 = updatedRecordOpt.get();
         assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC, updatedRecord2.getHAGroupState());
         assertEquals(updatedRecord.getLastSyncStateTimeInMs(), updatedRecord2.getLastSyncStateTimeInMs());
-        
     }
 
     @Test
@@ -293,7 +292,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         assertNotNull(initialRecord);
         assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC, initialRecord.getHAGroupState());
         assertNotNull(initialRecord.getLastSyncStateTimeInMs());
-        
+
         // Set the HA group status to sync (ACTIVE), we need to wait for ZK_SESSION_TIMEOUT * Multiplier
         Thread.sleep((long) Math.ceil(config.getLong(ZK_SESSION_TIMEOUT, DEFAULT_ZK_SESSION_TIMEOUT)
                 * ZK_SESSION_TIMEOUT_MULTIPLIER));

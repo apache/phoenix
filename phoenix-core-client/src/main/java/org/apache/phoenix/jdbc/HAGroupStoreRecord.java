@@ -118,9 +118,11 @@ public class HAGroupStoreRecord {
             OFFLINE.allowedTransitions = ImmutableSet.of();
             // This needs to be manually recovered by operator
             UNKNOWN.allowedTransitions = ImmutableSet.of();
-            ACTIVE_NOT_IN_SYNC_TO_STANDBY.allowedTransitions = ImmutableSet.of(ABORT_TO_ACTIVE_NOT_IN_SYNC,
+            ACTIVE_NOT_IN_SYNC_TO_STANDBY.allowedTransitions
+                    = ImmutableSet.of(ABORT_TO_ACTIVE_NOT_IN_SYNC,
                     ACTIVE_IN_SYNC_TO_STANDBY);
-            ACTIVE_IN_SYNC_TO_STANDBY.allowedTransitions = ImmutableSet.of(ABORT_TO_ACTIVE_IN_SYNC, STANDBY);
+            ACTIVE_IN_SYNC_TO_STANDBY.allowedTransitions
+                    = ImmutableSet.of(ABORT_TO_ACTIVE_IN_SYNC, STANDBY);
             STANDBY_TO_ACTIVE.allowedTransitions = ImmutableSet.of(ABORT_TO_STANDBY,
                     ACTIVE_IN_SYNC);
             DEGRADED_STANDBY.allowedTransitions
@@ -180,7 +182,8 @@ public class HAGroupStoreRecord {
     /**
      * Convenience constructor for backward compatibility without lastSyncStateTimeInMs.
      */
-    public HAGroupStoreRecord(String protocolVersion, String haGroupName, HAGroupState haGroupState) {
+    public HAGroupStoreRecord(String protocolVersion,
+                              String haGroupName, HAGroupState haGroupState) {
         this(protocolVersion, haGroupName, haGroupState, null);
     }
 
@@ -203,10 +206,10 @@ public class HAGroupStoreRecord {
     }
 
     public boolean hasSameInfo(HAGroupStoreRecord other) {
-        return haGroupName.equals(other.haGroupName) &&
-                haGroupState.equals(other.haGroupState) &&
-                protocolVersion.equals(other.protocolVersion) &&
-                Objects.equals(lastSyncStateTimeInMs, other.lastSyncStateTimeInMs);
+        return haGroupName.equals(other.haGroupName) 
+                && haGroupState.equals(other.haGroupState) 
+                && protocolVersion.equals(other.protocolVersion) 
+                && Objects.equals(lastSyncStateTimeInMs, other.lastSyncStateTimeInMs);
     }
 
     public String getProtocolVersion() {
