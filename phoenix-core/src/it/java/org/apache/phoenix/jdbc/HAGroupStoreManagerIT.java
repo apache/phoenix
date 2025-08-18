@@ -190,6 +190,79 @@ public class HAGroupStoreManagerIT extends BaseTest {
     }
 
     @Test
+    public void testGetPeerHAGroupStoreRecord() throws Exception {
+        String haGroupName = testName.getMethodName();
+        HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(config);
+
+        // Initially, peer record should not be present
+        Optional<HAGroupStoreRecord> peerRecordOpt = haGroupStoreManager.getPeerHAGroupStoreRecord(haGroupName);
+        assertFalse(peerRecordOpt.isPresent());
+
+        // Create a peer HAAdmin to create records in peer cluster
+        PhoenixHAAdmin peerHaAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster2().getConfiguration(),
+                ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
+
+        try {
+            // Create a HAGroupStoreRecord in the peer cluster
+            HAGroupStoreRecord peerRecord = new HAGroupStoreRecord(
+                    "1.0", haGroupName, HAGroupStoreRecord.HAGroupState.STANDBY);
+
+            peerHaAdmin.createHAGroupStoreRecordInZooKeeper(peerRecord);
+            Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+
+            // Now peer record should be present
+            peerRecordOpt = haGroupStoreManager.getPeerHAGroupStoreRecord(haGroupName);
+            assertTrue(peerRecordOpt.isPresent());
+
+            // Verify the peer record details
+            HAGroupStoreRecord retrievedPeerRecord = peerRecordOpt.get();
+            assertEquals(haGroupName, retrievedPeerRecord.getHaGroupName());
+            assertEquals(HAGroupStoreRecord.HAGroupState.STANDBY, retrievedPeerRecord.getHAGroupState());
+            assertEquals(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, retrievedPeerRecord.getProtocolVersion());
+
+            // Delete peer record
+            peerHaAdmin.deleteHAGroupStoreRecordInZooKeeper(haGroupName);
+            Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+
+            // Peer record should no longer be present
+            peerRecordOpt = haGroupStoreManager.getPeerHAGroupStoreRecord(haGroupName);
+            assertFalse(peerRecordOpt.isPresent());
+
+            // Create peer record again with different state
+            HAGroupStoreRecord newPeerRecord = new HAGroupStoreRecord(
+                    "1.0", haGroupName, HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY_FOR_READER);
+
+            peerHaAdmin.createHAGroupStoreRecordInZooKeeper(newPeerRecord);
+            Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+
+            // Verify the updated peer record
+            peerRecordOpt = haGroupStoreManager.getPeerHAGroupStoreRecord(haGroupName);
+            assertTrue(peerRecordOpt.isPresent());
+            assertEquals(HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY_FOR_READER,
+                    peerRecordOpt.get().getHAGroupState());
+
+        } finally {
+            // Clean up peer record
+            try {
+                peerHaAdmin.deleteHAGroupStoreRecordInZooKeeper(haGroupName);
+            } catch (Exception e) {
+                // Ignore cleanup errors
+            }
+            peerHaAdmin.close();
+        }
+    }
+
+    @Test
+    public void testGetPeerHAGroupStoreRecordWhenHAGroupNotInSystemTable() throws Exception {
+        String haGroupName = testName.getMethodName();
+        HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(config);
+
+        // Try to get peer record for an HA group that doesn't exist in system table
+        Optional<HAGroupStoreRecord> peerRecordOpt = haGroupStoreManager.getPeerHAGroupStoreRecord(haGroupName);
+        assertFalse("Peer record should not be present for non-existent HA group", peerRecordOpt.isPresent());
+    }
+
+    @Test
     public void testInvalidateHAGroupStoreClient() throws Exception {
         String haGroupName = testName.getMethodName();
         HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(config);
@@ -285,7 +358,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
     }
 
     @Test
-    public void testSetHAGroupStatusRecordToSync() throws Exception {
+    public void testSetHAGroupStatusToSync() throws Exception {
         String haGroupName = testName.getMethodName();
         HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(config);
 
@@ -298,7 +371,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         // Set the HA group status to sync (ACTIVE), we need to wait for ZK_SESSION_TIMEOUT * Multiplier
         Thread.sleep((long) Math.ceil(config.getLong(ZK_SESSION_TIMEOUT, DEFAULT_ZK_SESSION_TIMEOUT)
                 * ZK_SESSION_TIMEOUT_MULTIPLIER));
-        haGroupStoreManager.setHAGroupStatusRecordToSync(haGroupName);
+        haGroupStoreManager.setHAGroupStatusToSync(haGroupName);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Verify the state was updated to ACTIVE_IN_SYNC

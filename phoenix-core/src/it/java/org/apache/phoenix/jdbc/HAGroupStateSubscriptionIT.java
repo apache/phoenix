@@ -33,6 +33,7 @@ import org.junit.rules.TestName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.sql.SQLException;
 import java.util.List;
@@ -419,7 +420,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         try {
             manager.subscribeToTransition(nonExistentHAGroup, HAGroupState.OFFLINE, HAGroupState.STANDBY, ClusterType.LOCAL, listener);
             fail("Expected SQLException for non-existent HA group");
-        } catch (SQLException e) {
+        } catch (IOException e) {
             assertTrue("Exception should mention the HA group name", e.getMessage().contains(nonExistentHAGroup));
             LOGGER.info("Correctly caught exception for non-existent HA group: {}", e.getMessage());
         }

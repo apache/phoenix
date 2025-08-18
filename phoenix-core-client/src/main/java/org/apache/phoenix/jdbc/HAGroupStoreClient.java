@@ -373,7 +373,7 @@ public class HAGroupStoreClient implements Closeable {
      * @return HAGroupStoreRecord for the specified HA group name, or null if not found
      * @throws IOException if the client is not healthy
      */
-    private HAGroupStoreRecord getHAGroupStoreRecordFromPeer() throws IOException {
+    public HAGroupStoreRecord getHAGroupStoreRecordFromPeer() throws IOException {
         if (!isHealthy) {
             throw new IOException("HAGroupStoreClient is not healthy");
         }
