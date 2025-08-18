@@ -67,15 +67,11 @@ public class PhoenixRegionServerEndpoint extends
 
   @Override
   public void stop(CoprocessorEnvironment env) throws IOException {
+    RegionServerCoprocessor.super.stop(env);
     if (uncoveredIndexThreadPool != null) {
       uncoveredIndexThreadPool
-        .stop("PhoenixRegionServerEndpoint is stopping. Shutting down uncovered index threadpool.");
+              .stop("PhoenixRegionServerEndpoint is stopping. Shutting down uncovered index threadpool.");
     }
-  }
-
-  @Override
-  public void stop(CoprocessorEnvironment env) throws IOException {
-    RegionServerCoprocessor.super.stop(env);
     ServerUtil.ConnectionFactory.shutdown();
   }
 
