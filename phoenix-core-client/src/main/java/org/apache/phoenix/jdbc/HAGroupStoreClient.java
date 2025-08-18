@@ -310,7 +310,7 @@ public class HAGroupStoreClient implements Closeable {
                 currentHAGroupStoreRecordStat.getMtime(), haGroupState)) {
                 // We maintain last sync time as the last time cluster was in sync state.
                 // If state changes from ACTIVE_IN_SYNC to ACTIVE_NOT_IN_SYNC, record that time
-                // Once state changes back to ACTIVE_IN_SYNC or the role is 
+                // Once state changes back to ACTIVE_IN_SYNC or the role is
                 // NOT ACTIVE or ACTIVE_TO_STANDBY
                 // set the time to null to mark that we are current(or we don't have any reader).
                 // TODO: Verify that for reader this is the correct approach.

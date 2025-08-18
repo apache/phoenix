@@ -206,9 +206,9 @@ public class HAGroupStoreRecord {
     }
 
     public boolean hasSameInfo(HAGroupStoreRecord other) {
-        return haGroupName.equals(other.haGroupName) 
-                && haGroupState.equals(other.haGroupState) 
-                && protocolVersion.equals(other.protocolVersion) 
+        return haGroupName.equals(other.haGroupName)
+                && haGroupState.equals(other.haGroupState)
+                && protocolVersion.equals(other.protocolVersion)
                 && Objects.equals(lastSyncStateTimeInMs, other.lastSyncStateTimeInMs);
     }
 

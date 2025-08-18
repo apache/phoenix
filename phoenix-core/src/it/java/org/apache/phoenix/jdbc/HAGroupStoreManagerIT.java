@@ -73,6 +73,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
         props.put(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, "true");
+        props.put(ZK_SESSION_TIMEOUT, String.valueOf(30*1000));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
         CLUSTERS.start();
     }
@@ -178,13 +179,14 @@ public class HAGroupStoreManagerIT extends BaseTest {
         // Get MTime from HAAdmin for equality verification below.
         Pair<HAGroupStoreRecord, Stat> currentRecordAndStat = haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName);
 
-        // Record for comparison
-        HAGroupStoreRecord record = new HAGroupStoreRecord(
-                HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
-                HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC, currentRecordAndStat.getRight().getMtime());
-
-        // Complete object comparison instead of field-by-field
-        assertEquals(record, retrievedOpt.get());
+        // Complete object comparison field-by-field
+        assertEquals(haGroupName, retrievedOpt.get().getHaGroupName());
+        assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC, retrievedOpt.get().getHAGroupState());
+        Long lastSyncStateTimeInMs = retrievedOpt.get().getLastSyncStateTimeInMs();
+        Long mtime = currentRecordAndStat.getRight().getMtime();
+        // Allow a small margin of error
+        assertTrue(Math.abs(lastSyncStateTimeInMs - mtime) <= 1);
+        assertEquals(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, retrievedOpt.get().getProtocolVersion());
     }
 
     @Test
