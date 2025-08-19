@@ -125,6 +125,12 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
     assertEquals("a", rs.getString(1));
     assertEquals("b", rs.getString(2));
     assertFalse(rs.next());
+    stmt = conn.prepareStatement("UPSERT INTO " + tableName
+            + " (inst,host,\"DATE\") VALUES(?,'b',CURRENT_DATE())");
+    stmt.setString(1, "a");
+    stmt.execute();
+    rs = stmt.getResultSet();
+    assertNull(rs);
     conn.close();
   }
 
