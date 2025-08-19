@@ -70,7 +70,7 @@ public class PhoenixRegionServerEndpoint extends
     RegionServerCoprocessor.super.stop(env);
     if (uncoveredIndexThreadPool != null) {
       uncoveredIndexThreadPool
-              .stop("PhoenixRegionServerEndpoint is stopping. Shutting down uncovered index threadpool.");
+        .stop("PhoenixRegionServerEndpoint is stopping. Shutting down uncovered index threadpool.");
     }
     ServerUtil.ConnectionFactory.shutdown();
   }
