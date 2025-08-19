@@ -22,20 +22,23 @@ import java.util.List;
 import java.util.Map;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 
-public class DeleteStatement extends DMLStatement implements FilterableStatement {
+public class DeleteStatement extends DMLStatement
+  implements FilterableStatement, RowReturningDMLStatement {
   private final ParseNode whereNode;
   private final List<OrderByNode> orderBy;
   private final LimitNode limit;
   private final HintNode hint;
+  private final boolean returningRow;
 
   public DeleteStatement(NamedTableNode table, HintNode hint, ParseNode whereNode,
     List<OrderByNode> orderBy, LimitNode limit, int bindCount,
-    Map<String, UDFParseNode> udfParseNodes) {
+    Map<String, UDFParseNode> udfParseNodes, boolean returningRow) {
     super(table, bindCount, udfParseNodes);
     this.whereNode = whereNode;
     this.orderBy = orderBy == null ? Collections.<OrderByNode> emptyList() : orderBy;
     this.limit = limit;
     this.hint = hint == null ? HintNode.EMPTY_HINT_NODE : hint;
+    this.returningRow = returningRow;
   }
 
   @Override
@@ -83,4 +86,7 @@ public class DeleteStatement extends DMLStatement implements FilterableStatement
     throw new UnsupportedOperationException("Table sampling is not allowd for Deletion");
   }
 
+  public boolean isReturningRow() {
+    return returningRow;
+  }
 }

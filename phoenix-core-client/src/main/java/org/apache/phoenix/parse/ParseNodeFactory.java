@@ -900,9 +900,9 @@ public class ParseNodeFactory {
   public UpsertStatement upsert(NamedTableNode table, HintNode hint, List<ColumnName> columns,
     List<ParseNode> values, SelectStatement select, int bindCount,
     Map<String, UDFParseNode> udfParseNodes, List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
-    UpsertStatement.OnDuplicateKeyType onDupKeyType) {
+    UpsertStatement.OnDuplicateKeyType onDupKeyType, boolean returningRow) {
     return new UpsertStatement(table, hint, columns, values, select, bindCount, udfParseNodes,
-      onDupKeyPairs, onDupKeyType);
+      onDupKeyPairs, onDupKeyType, returningRow);
   }
 
   public CursorName cursorName(String name) {
@@ -927,8 +927,9 @@ public class ParseNodeFactory {
 
   public DeleteStatement delete(NamedTableNode table, HintNode hint, ParseNode node,
     List<OrderByNode> orderBy, LimitNode limit, int bindCount,
-    Map<String, UDFParseNode> udfParseNodes) {
-    return new DeleteStatement(table, hint, node, orderBy, limit, bindCount, udfParseNodes);
+    Map<String, UDFParseNode> udfParseNodes, boolean returningRow) {
+    return new DeleteStatement(table, hint, node, orderBy, limit, bindCount, udfParseNodes,
+      returningRow);
   }
 
   public SelectStatement select(SelectStatement statement, ParseNode where) {
