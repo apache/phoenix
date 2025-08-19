@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlan;
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlanWithLimit;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PAGED_ROWS_COUNTER;
+import static org.apache.phoenix.query.QueryServices.USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -34,7 +35,11 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Map;
 import java.util.Properties;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.PagingRegionScanner;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.monitoring.MetricType;
@@ -449,6 +454,25 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
     Map<String, Map<MetricType, Long>> metrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
     long numRpc = getMetricValue(metrics, MetricType.COUNT_RPC_CALLS);
     Assert.assertEquals(101, numRpc);
+  }
+
+  @Test
+  public void testBloomFilterDefaults() throws Exception {
+    String dataTableName = generateUniqueName();
+    populateTable(dataTableName);
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      TableDescriptor td =
+        pconn.getQueryServices().getTableDescriptor(Bytes.toBytes(dataTableName));
+      BloomType bloomType = td.getColumnFamilies()[0].getBloomFilterType();
+      assertEquals(BloomType.ROW, bloomType);
+      assertFalse(PagingRegionScanner.useBloomFilterForMultiKeyPointLookup(td));
+      String ddl = String.format("alter table %s set \"%s\" = true", dataTableName,
+        USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP);
+      conn.createStatement().execute(ddl);
+      td = pconn.getQueryServices().getTableDescriptor(Bytes.toBytes(dataTableName));
+      assertTrue(PagingRegionScanner.useBloomFilterForMultiKeyPointLookup(td));
+    }
   }
 
   private void populateTable(String tableName) throws Exception {

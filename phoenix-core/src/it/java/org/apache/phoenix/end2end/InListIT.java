@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static java.util.Collections.singletonList;
+import static org.apache.phoenix.query.QueryServices.USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
@@ -313,6 +314,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         ddlBuilder.append(", ");
       }
       ddlBuilder.append("BLOOMFILTER='ROW'");
+      ddlBuilder.append(String.format(", \"%s\" = true", USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP));
     }
     return ddlBuilder.toString();
   }

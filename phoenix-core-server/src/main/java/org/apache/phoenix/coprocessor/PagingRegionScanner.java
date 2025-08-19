@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import static org.apache.phoenix.query.QueryServices.USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP;
+
 import java.io.IOException;
 import java.util.List;
 import org.apache.hadoop.hbase.Cell;
@@ -36,6 +38,8 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 /**
  * PagingRegionScanner works with PagingFilter to make sure that the time between two rows returned
@@ -185,13 +189,23 @@ public class PagingRegionScanner extends BaseRegionScanner {
     pagingFilter = ScanUtil.getPhoenixPagingFilter(scan);
   }
 
+  @VisibleForTesting
+  public static boolean useBloomFilterForMultiKeyPointLookup(TableDescriptor tableDescriptor) {
+    String useBloomFilter = tableDescriptor.getValue(USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP);
+    return Boolean.valueOf(useBloomFilter);
+  }
+
+  private boolean useBloomFilterForMultiKeyPointLookup() {
+    return useBloomFilterForMultiKeyPointLookup(region.getTableDescriptor());
+  }
+
   void init() throws IOException {
     if (initialized) {
       return;
     }
     TableDescriptor tableDescriptor = region.getTableDescriptor();
     BloomType bloomFilterType = tableDescriptor.getColumnFamilies()[0].getBloomFilterType();
-    if (bloomFilterType == BloomType.ROW) {
+    if (bloomFilterType == BloomType.ROW && useBloomFilterForMultiKeyPointLookup()) {
       // Check if the scan is a multi-point-lookup scan if so remove it from the scan
       SkipScanFilter skipScanFilter = ScanUtil.removeSkipScanFilter(scan);
       if (skipScanFilter != null) {
