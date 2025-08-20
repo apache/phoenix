@@ -33,7 +33,6 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
@@ -237,9 +236,9 @@ public class TupleUtil {
    * @throws SQLException If any SQL operation fails.
    */
   @SuppressWarnings(value = "OBL_UNSATISFIED_OBLIGATION_EXCEPTION_EDGE",
-          justification = "Tge statement object needs to be kept open for the returned RS to be "
-          + "valid, however this is acceptable as not callingPhoenixStatement.close() "
-          + "causes no resource leak")
+      justification = "Tge statement object needs to be kept open for the returned RS to be "
+        + "valid, however this is acceptable as not callingPhoenixStatement.close() "
+        + "causes no resource leak")
   public static ResultSet getResultSet(Tuple toProject, TableName tableName, Connection conn,
     boolean withPrefetch) throws SQLException {
     if (tableName == null) {

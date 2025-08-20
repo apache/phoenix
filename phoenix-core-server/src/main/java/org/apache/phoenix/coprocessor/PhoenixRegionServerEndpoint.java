@@ -41,6 +41,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,10 +67,12 @@ public class PhoenixRegionServerEndpoint extends
 
   @Override
   public void stop(CoprocessorEnvironment env) throws IOException {
+    RegionServerCoprocessor.super.stop(env);
     if (uncoveredIndexThreadPool != null) {
       uncoveredIndexThreadPool
         .stop("PhoenixRegionServerEndpoint is stopping. Shutting down uncovered index threadpool.");
     }
+    ServerUtil.ConnectionFactory.shutdown();
   }
 
   @Override
