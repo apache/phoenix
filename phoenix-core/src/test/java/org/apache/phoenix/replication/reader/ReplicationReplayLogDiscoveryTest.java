@@ -1,16 +1,19 @@
 package org.apache.phoenix.replication.reader;
 
+import java.io.IOException;
+import java.net.URI;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.phoenix.replication.ReplicationLogGroup;
 import org.apache.phoenix.replication.ReplicationStateTracker;
-import org.junit.*;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.ClassRule;
+import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
-
-import java.io.IOException;
-import java.net.URI;
 
 import static org.junit.Assert.assertEquals;
 

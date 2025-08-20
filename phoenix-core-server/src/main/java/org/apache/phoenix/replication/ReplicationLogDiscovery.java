@@ -17,23 +17,26 @@
  */
 package org.apache.phoenix.replication;
 
-import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.Path;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscovery;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscovery;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
- * Abstract base class for discovering and processing replication log files.
- * Manages the lifecycle of replication log processing including starting/stopping the discovery service,
+ * Abstract base class for discovering and processing replication log files (to be implemented for replication replay on target
+ * and store and forward mode on source). It manages the lifecycle of replication log processing including start/stop of replication log discovery,
  * scheduling periodic replay operations, and processing files from both new and in-progress directories.
  */
 public abstract class ReplicationLogDiscovery {
@@ -128,7 +131,7 @@ public abstract class ReplicationLogDiscovery {
      * @throws IOException if there's an error during shutdown
      */
     public void stop() throws IOException {
-        ScheduledExecutorService schedulerToShutdown = null;
+        ScheduledExecutorService schedulerToShutdown;
         
         synchronized (this) {
             if (!isRunning) {
@@ -169,7 +172,7 @@ public abstract class ReplicationLogDiscovery {
     }
 
     /**
-     * Determines which replication rounds need to be processed based on current time and last processed round.
+     * Determines which replication rounds need to be processed based on current time and last sync timestamp.
      * @return List of replication rounds that need to be processed
      */
     protected List<ReplicationRound> getRoundsToProcess() {
@@ -289,6 +292,56 @@ public abstract class ReplicationLogDiscovery {
     /** Creates a new metrics source for monitoring operations. */
     protected abstract MetricsReplicationLogDiscovery createMetricsSource();
 
+    /**
+     * Returns the executor thread count. Subclasses can override this method to provide custom name format.
+     * @return the executor thread count (default: 1).
+     */
+    public int getExecutorThreadCount() {
+        return DEFAULT_EXECUTOR_THREAD_COUNT;
+    }
+
+    /**
+     * Returns the executor thread name format. Subclasses can override this method to provide custom name format.
+     * @return the executor thread name format (default: ReplicationLogDiscovery-%d).
+     */
+    public String getExecutorThreadNameFormat() {
+        return DEFAULT_EXECUTOR_THREAD_NAME_FORMAT;
+    }
+
+    /**
+     * Returns the replay interval in seconds. Subclasses can override this method to provide custom intervals.
+     * @return The replay interval in seconds (default: 10 seconds).
+     */
+    public long getReplayIntervalSeconds() {
+        return DEFAULT_REPLAY_INTERVAL_SECONDS;
+    }
+
+    /**
+     * Returns the shutdown timeout in seconds. Subclasses can override this method to provide custom timeout values.
+     * @return The shutdown timeout in seconds (default: 30 seconds).
+     */
+    public long getShutdownTimeoutSeconds() {
+        return DEFAULT_SHUTDOWN_TIMEOUT_SECONDS;
+    }
+
+    /**
+     * Returns the probability (in percentage) for processing files from in-progress directory. Subclasses can override this method
+     * to provide custom probabilities.
+     * @return The probability (default 5.0%)
+     */
+    public double getInProgressDirectoryProcessProbability() {
+        return DEFAULT_IN_PROGRESS_DIRECTORY_PROCESSING_PROBABILITY;
+    }
+
+    /**
+     * Returns the buffer percentage for calculating buffer time. Subclasses can override this method 
+     * to provide custom buffer percentages.
+     * @return The buffer percentage (default 15.0%)
+     */
+    public double getWaitingBufferPercentage() {
+        return DEFAULT_WAITING_BUFFER_PERCENTAGE;
+    }
+
     public ReplicationStateTracker getReplicationStateTracker() {
         return this.replicationStateTracker;
     }
@@ -303,43 +356,6 @@ public abstract class ReplicationLogDiscovery {
 
     public String getHaGroupName() {
         return this.haGroupName;
-    }
-
-    public int getExecutorThreadCount() {
-        return DEFAULT_EXECUTOR_THREAD_COUNT;
-    }
-
-    public String getExecutorThreadNameFormat() {
-        return DEFAULT_EXECUTOR_THREAD_NAME_FORMAT;
-    }
-
-    /**
-     * Returns the replay interval in seconds. Subclasses can override this method to provide custom intervals.
-     * @return The replay interval in seconds
-     */
-    public long getReplayIntervalSeconds() {
-        return DEFAULT_REPLAY_INTERVAL_SECONDS;
-    }
-
-    /**
-     * Returns the shutdown timeout in seconds. Subclasses can override this method to provide custom timeout values.
-     * @return The shutdown timeout in seconds
-     */
-    public long getShutdownTimeoutSeconds() {
-        return DEFAULT_SHUTDOWN_TIMEOUT_SECONDS;
-    }
-
-    public double getInProgressDirectoryProcessProbability() {
-        return DEFAULT_IN_PROGRESS_DIRECTORY_PROCESSING_PROBABILITY;
-    }
-
-    /**
-     * Returns the buffer percentage for calculating buffer time. Subclasses can override this method 
-     * to provide custom buffer percentages.
-     * @return The buffer percentage (default 15.0%)
-     */
-    public double getWaitingBufferPercentage() {
-        return DEFAULT_WAITING_BUFFER_PERCENTAGE;
     }
 
     public boolean isRunning() {

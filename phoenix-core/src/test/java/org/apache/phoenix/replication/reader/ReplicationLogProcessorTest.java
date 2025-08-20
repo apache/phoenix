@@ -27,7 +27,6 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
-import java.net.URI;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.ArrayList;
@@ -46,7 +45,13 @@ import java.util.stream.Collectors;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.*;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellBuilderFactory;
+import org.apache.hadoop.hbase.CellBuilderType;
+import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.HRegionInfo;
+import org.apache.hadoop.hbase.NotServingRegionException;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.Delete;
@@ -63,15 +68,16 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.replication.ReplicationLogDiscovery;
-import org.apache.phoenix.replication.ReplicationLogGroup;
 import org.apache.phoenix.replication.log.LogFileReader;
 import org.apache.phoenix.replication.log.LogFileReaderContext;
 import org.apache.phoenix.replication.log.LogFileTestUtil;
 import org.apache.phoenix.replication.log.LogFileWriter;
 import org.apache.phoenix.replication.log.LogFileWriterContext;
 import org.apache.phoenix.replication.metrics.ReplicationLogProcessorMetricValues;
-import org.apache.phoenix.util.*;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.StringUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
@@ -414,67 +420,6 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
             assertEquals("Invalid log file success count", 1, metricValues.getLogFileReplaySuccessCount());
             assertEquals("There must not be any failed mutations", 0, metricValues.getFailedMutationsCount());
             assertEquals("There must not be any failed files", 0, metricValues.getLogFileReplayFailureCount());
-
-        } finally {
-            replicationLogProcessor.close();
-        }
-    }
-
-    @Test
-    public void testReplicationLogReplay() throws Exception {
-        final String table1Name = "T_" + generateUniqueName();
-        final String table2Name = "T_" + generateUniqueName();
-        URI standbyUri = new Path(testFolder.toString()).toUri();
-        conf.set(ReplicationLogGroup.REPLICATION_STANDBY_HDFS_URL_KEY, standbyUri.toString());
-        conf.set(ReplicationReplay.REPLICATION_LOG_REPLAY_HDFS_URL_KEY, standbyUri.toString());
-        String testHAGroupId = "testHAGroup";
-        final Path filePath = new Path(testFolder.newFile("testProcessLogFileEnd2End").toURI());
-        ServerName serverName = ServerName.valueOf("test", 60010, EnvironmentEdgeManager.currentTimeMillis());
-        ReplicationLogGroup replicationLog = ReplicationLogGroup.get(conf, serverName, testHAGroupId);
-//        replicationLog.init();
-
-//        LogFileWriter writer = initLogFileWriter(filePath);
-        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupId);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            conn.createStatement().execute(String.format(CREATE_TABLE_SQL_STATEMENT, table1Name));
-            conn.createStatement().execute(String.format(CREATE_TABLE_SQL_STATEMENT, table2Name));
-            PhoenixConnection phoenixConnection = conn.unwrap(PhoenixConnection.class);
-
-            List<Mutation> table1Mutations = generateHBaseMutations(phoenixConnection, 2, table1Name, 100L, "a");
-            List<Mutation> table2Mutations = generateHBaseMutations(phoenixConnection, 5, table2Name, 101L, "b");
-            table1Mutations.forEach(mutation -> {
-                try {
-                    replicationLog.append(table1Name, mutation.hashCode(), mutation);
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-            });
-            table2Mutations.forEach(mutation -> {
-                try {
-                    replicationLog.append(table2Name, mutation.hashCode(), mutation);
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-            });
-            replicationLog.sync();
-            replicationLog.close();
-//            conf.set(ReplicationLogReplayService.REPLICATION_LOG_REPLAY_HDFS_URL_KEY, testFolder.toString());
-            ReplicationReplayLogDiscovery replicationReplayLogDiscovery = ReplicationReplay.get(conf, "testHAGroup").getReplicationReplayLogDiscovery();
-            replicationReplayLogDiscovery.replay();
-            System.out.println("Starting Sleep");
-            Thread.sleep(60*1000L);
-            System.out.println("Finished Sleep");
-
-            validate(table1Name, table1Mutations);
-            validate(table2Name, table2Mutations);
-
-            System.out.println("Starting the replay again");
-            replicationReplayLogDiscovery.replay();
-            // Ensure metrics are correctly populated
-//            ReplicationLogProcessorMetricValues metricValues = replicationLogProcessor.getMetrics().getCurrentMetricValues();
-//            assertEquals("Invalid log file success count", 1, metricValues.getLogFileReplaySuccessCount());
-//            assertEquals("There must not be any failed mutations", 0, metricValues.getFailedMutationsCount());
-//            assertEquals("There must not be any failed files", 0, metricValues.getLogFileReplayFailureCount());
 
         } finally {
             replicationLogProcessor.close();

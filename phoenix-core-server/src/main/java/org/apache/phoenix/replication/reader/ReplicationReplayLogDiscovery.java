@@ -17,14 +17,14 @@
  */
 package org.apache.phoenix.replication.reader;
 
+import java.io.IOException;
+
 import org.apache.hadoop.fs.Path;
 import org.apache.phoenix.replication.ReplicationLogDiscovery;
 import org.apache.phoenix.replication.ReplicationRound;
 import org.apache.phoenix.replication.ReplicationStateTracker;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscovery;
 import org.apache.phoenix.replication.metrics.MetricsReplicationReplayLogFileDiscoveryImpl;
-
-import java.io.IOException;
 
 /**
  * Concrete implementation of ReplicationLogDiscovery for replay operations.

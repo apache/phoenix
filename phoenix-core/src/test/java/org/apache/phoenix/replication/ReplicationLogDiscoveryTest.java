@@ -17,23 +17,12 @@
  */
 package org.apache.phoenix.replication;
 
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.phoenix.replication.reader.ReplicationLogReplayFileTracker;
-import org.apache.phoenix.replication.reader.ReplicationReplayLogDiscovery;
-import org.apache.phoenix.replication.reader.ReplicationReplayStateTracker;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.ClassRule;
-import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
-import org.mockito.Mockito;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.net.URI;
@@ -43,7 +32,23 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 
-import static org.junit.Assert.*;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.phoenix.replication.reader.ReplicationLogReplayFileTracker;
+import org.apache.phoenix.replication.reader.ReplicationReplayLogDiscovery;
+import org.apache.phoenix.replication.reader.ReplicationReplayStateTracker;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.ClassRule;
+import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
+import org.mockito.Mockito;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ReplicationLogDiscoveryTest {
 

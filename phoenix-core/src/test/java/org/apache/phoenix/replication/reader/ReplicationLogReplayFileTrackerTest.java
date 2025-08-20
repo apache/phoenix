@@ -1,5 +1,10 @@
 package org.apache.phoenix.replication.reader;
 
+import static org.junit.Assert.assertEquals;
+
+import java.io.IOException;
+import java.net.URI;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -9,11 +14,6 @@ import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
-
-import java.io.IOException;
-import java.net.URI;
-
-import static org.junit.Assert.assertEquals;
 
 public class ReplicationLogReplayFileTrackerTest {
 

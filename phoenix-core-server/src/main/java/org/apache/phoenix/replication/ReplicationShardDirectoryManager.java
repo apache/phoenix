@@ -17,12 +17,12 @@
  */
 package org.apache.phoenix.replication;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.Path;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
 
 /**
  * Manages shard-based directory structure for Phoenix replication log files.
@@ -153,18 +153,6 @@ public class ReplicationShardDirectoryManager {
         return shardPaths;
     }
 
-    public int getReplicationRoundDurationSeconds() {
-        return this.replicationRoundDurationSeconds;
-    }
-
-    public Path getShardDirectoryPath() {
-        return this.shardDirectoryPath;
-    }
-
-    public int getNumShards() {
-        return this.numShards;
-    }
-
     /**
      * Returns the nearest replication round start timestamp for the given timestamp.
      * @param timestamp The timestamp in milliseconds since epoch
@@ -177,5 +165,17 @@ public class ReplicationShardDirectoryManager {
         // Calculate the nearest round start timestamp
         // This rounds down to the nearest multiple of round time
         return (timestamp / roundTimeMs) * roundTimeMs;
+    }
+
+    public int getReplicationRoundDurationSeconds() {
+        return this.replicationRoundDurationSeconds;
+    }
+
+    public Path getShardDirectoryPath() {
+        return this.shardDirectoryPath;
+    }
+
+    public int getNumShards() {
+        return this.numShards;
     }
 }

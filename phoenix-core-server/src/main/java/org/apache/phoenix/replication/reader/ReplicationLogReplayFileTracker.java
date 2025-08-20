@@ -17,14 +17,12 @@
  */
 package org.apache.phoenix.replication.reader;
 
+import java.net.URI;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.phoenix.replication.ReplicationLogFileTracker;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogProcessorImpl;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogReplayFileTrackerImpl;
-import org.apache.phoenix.replication.metrics.ReplicationLogFileTrackerMetricValues;
-
-import java.net.URI;
 
 /**
  * Concrete implementation of ReplicationLogFileTracker for replay operations.

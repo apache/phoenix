@@ -1,5 +1,14 @@
 package org.apache.phoenix.replication.reader;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+
+import java.io.IOException;
+import java.net.URI;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -9,11 +18,6 @@ import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
-
-import java.io.IOException;
-import java.net.URI;
-
-import static org.junit.Assert.*;
 
 public class ReplicationReplayTest {
 
@@ -65,7 +69,7 @@ public class ReplicationReplayTest {
     }
 
     @Test
-    public void testReplicationReplayInstanceCaching() throws Exception {
+    public void testReplicationReplayInstanceCaching() {
         final String haGroupName1 = "testHAGroup_1";
         final String haGroupName2 = "testHAGroup_2";
 
@@ -91,7 +95,7 @@ public class ReplicationReplayTest {
     }
 
     @Test
-    public void testReplicationReplayCacheRemovalOnClose() throws Exception {
+    public void testReplicationReplayCacheRemovalOnClose() {
         final String haGroupName = "testHAGroup";
 
         // Get initial instance

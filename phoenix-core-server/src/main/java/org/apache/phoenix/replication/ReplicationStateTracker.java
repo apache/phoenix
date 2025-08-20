@@ -17,12 +17,12 @@
  */
 package org.apache.phoenix.replication;
 
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
-
 import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
+
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 
 /**
  * This class tracks the last round in sync for replication.
