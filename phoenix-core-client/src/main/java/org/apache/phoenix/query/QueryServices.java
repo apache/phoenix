@@ -631,6 +631,8 @@ public interface QueryServices extends SQLCloseable {
   String PHOENIX_UNCOVERED_INDEX_KEEP_ALIVE_TIME_SEC =
     "phoenix.uncovered.index.threads.keepalive.sec";
 
+  String USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP = "phoenix.bloomfilter.multikey.pointlookup";
+
   /**
    * Get executor service used for parallel scans
    */
