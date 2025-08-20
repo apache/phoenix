@@ -573,6 +573,8 @@ public interface QueryServices extends SQLCloseable {
 
   String CQSI_THREAD_POOL_METRICS_ENABLED = "phoenix.cqsi.thread.pool.metrics.enabled";
 
+  String USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP = "phoenix.bloomfilter.multikey.pointlookup";
+
   /**
    * Get executor service used for parallel scans
    */
