@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.phoenix.replication.reader;
 
 import static org.junit.Assert.assertEquals;
@@ -35,7 +52,7 @@ public class ReplicationReplayTest {
         localFs = FileSystem.getLocal(conf);
         rootURI = new Path(testFolder.getRoot().toString()).toUri();
         haGroupName = "testGroup";
-        
+
         // Set the required configuration for ReplicationReplay
         conf.set(ReplicationReplay.REPLICATION_LOG_REPLAY_HDFS_URL_KEY, rootURI.toString());
     }
@@ -49,22 +66,22 @@ public class ReplicationReplayTest {
     public void testInit() throws IOException {
         // Create TestableReplicationReplay instance
         ReplicationReplay replicationReplay = new ReplicationReplay(conf, haGroupName);
-        
+
         // Call init method
         replicationReplay.init();
-        
+
         // 1. Ensure filesystem and rootURI are initialized correctly
         assertNotNull("FileSystem should be initialized", replicationReplay.getFileSystem());
         assertNotNull("RootURI should be initialized", replicationReplay.getRootURI());
         assertEquals("RootURI should match the configured URI", rootURI, replicationReplay.getRootURI());
-        
+
         // 2. Ensure expected haGroupFilesPath is created
         Path expectedHaGroupFilesPath = new Path(rootURI.getPath(), haGroupName);
-        assertTrue("HA group files path should be created", 
+        assertTrue("HA group files path should be created",
             replicationReplay.getFileSystem().exists(expectedHaGroupFilesPath));
-        
+
         // 3. Ensure replicationReplayLogDiscovery is initialized correctly
-        assertNotNull("ReplicationReplayLogDiscovery should be initialized", 
+        assertNotNull("ReplicationReplayLogDiscovery should be initialized",
             replicationReplay.getReplicationReplayLogDiscovery());
     }
 

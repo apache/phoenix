@@ -97,41 +97,41 @@ public class ReplicationLogDiscoveryTest {
     public void testStartAndStop() throws IOException {
         // 1. Validate that it's not running initially
         assertFalse("Discovery should not be running initially", discovery.isRunning());
-        
+
         // 2. Validate that scheduler is set to null initially
         assertNull("Scheduler should be null initially", discovery.getScheduler());
-        
+
         // 3. Call the start method
         discovery.start();
-        
+
         // 4. Ensure isRunning is set to true
         assertTrue("Discovery should be running after start", discovery.isRunning());
-        
+
         // 5. Ensure scheduler is started with correct parameters
         assertNotNull("Scheduler should not be null after start", discovery.getScheduler());
         assertFalse("Scheduler should not be shutdown after start", discovery.getScheduler().isShutdown());
-        
+
         // Verify thread name format
         String threadName = discovery.getExecutorThreadNameFormat();
         assertTrue("Thread name should contain ReplicationLogDiscovery", threadName.contains("ReplicationLogDiscovery"));
-        
+
         // Verify replay interval
         long replayInterval = discovery.getReplayIntervalSeconds();
         assertEquals("Replay interval should be 10 seconds", 10L, replayInterval);
-        
+
         // 6. Ensure starting again does not create a new scheduler (and also should not throw any exception)
         ScheduledExecutorService originalScheduler = discovery.getScheduler();
         discovery.start(); // Should not create new scheduler
         ScheduledExecutorService sameScheduler = discovery.getScheduler();
         assertSame("Should reuse the same scheduler instance", originalScheduler, sameScheduler);
         assertTrue("Discovery should still be running", discovery.isRunning());
-        
+
         // 7. Call stop
         discovery.stop();
-        
+
         // 8. Ensure scheduler is stopped
         assertTrue("Scheduler should be shutdown after stop", discovery.getScheduler().isShutdown());
-        
+
         // 9. Ensure isRunning is false
         assertFalse("Discovery should not be running after stop", discovery.isRunning());
     }
@@ -142,23 +142,23 @@ public class ReplicationLogDiscoveryTest {
         List<ReplicationRound> testRounds = new ArrayList<>();
         testRounds.add(new ReplicationRound(1704153600000L, 1704153660000L));
         testRounds.add(new ReplicationRound(1704153660000L, 1704153720000L));
-        
+
         discovery.setMockRoundsToProcess(testRounds);
         discovery.replay();
-        
+
         // Verify that processRound was called for each round
         List<ReplicationRound> processedRounds = discovery.getProcessedRounds();
         assertEquals("Should have processed 2 rounds", 2, processedRounds.size());
         assertEquals("First round should match", testRounds.get(0), processedRounds.get(0));
         assertEquals("Second round should match", testRounds.get(1), processedRounds.get(1));
-        
+
         // Reset for next test
         discovery.resetProcessedRounds();
-        
+
         // Case 2: getRoundsToProcess returns empty list
         discovery.setMockRoundsToProcess(new ArrayList<>());
         discovery.replay();
-        
+
         // Verify that processRound was not called
         processedRounds = discovery.getProcessedRounds();
         assertEquals("Should not have processed any rounds when list is empty", 0, processedRounds.size());
@@ -174,16 +174,16 @@ public class ReplicationLogDiscoveryTest {
         // This should result in non-empty rounds to process
         ReplicationRound pastRound = new ReplicationRound(1704153600000L, 1704153660000L);
         Mockito.when(stateTracker.getLastRoundInSync()).thenReturn(pastRound);
-        
+
         List<ReplicationRound> rounds = discovery.getRoundsToProcess();
         assertFalse("Should have found rounds to process when last processed round is in the past", rounds.isEmpty());
-        
+
         // Case 2: getLastSuccessfullyProcessedRound returns a round end time in past (not far enough to account for buffer)
         // This should result in empty rounds to process
         long lastRoundEndTime = EnvironmentEdgeManager.currentTimeMillis() - discovery.getReplayIntervalSeconds() * 1000L; // 1 round before (but not far enough to account for buffer)
         ReplicationRound lastRound = new ReplicationRound(lastRoundEndTime - discovery.getReplayIntervalSeconds() * 1000L, lastRoundEndTime);
         Mockito.when(stateTracker.getLastRoundInSync()).thenReturn(lastRound);
-        
+
         rounds = discovery.getRoundsToProcess();
         assertTrue("Should have empty rounds", rounds.isEmpty());
 
@@ -202,36 +202,36 @@ public class ReplicationLogDiscoveryTest {
         // 1. Create new files with start of the day round (00:00:00)
         ReplicationRound replicationRound = new ReplicationRound(1704153600000L, 1704153660000L); // 00:00:00 - 00:01:00
         List<Path> newFilesForRound = createNewFilesForRound(replicationRound, 3);
-        
+
         // 2. Create file for shard count min round (which should also go to same shard)
         int shardCount = fileTracker.getReplicationShardDirectoryManager().getAllShardPaths().size();
         ReplicationRound differentRoundSameShard = new ReplicationRound(1704153600000L + (shardCount * 60 * 1000L), 1704153660000L + (shardCount * 60 * 1000L));
         List<Path> differentRoundSameShardFiles = createNewFilesForRound(differentRoundSameShard, 2);
-        
+
         // 3. Create files for (00:01:00) and (00:02:00) start time of the rounds
         ReplicationRound round0100 = new ReplicationRound(1704153660000L, 1704153720000L); // 00:01:00 - 00:02:00
         List<Path> round0100NewFiles = createNewFilesForRound(round0100, 2);
         ReplicationRound round0200 = new ReplicationRound(1704153720000L, 1704153780000L); // 00:02:00 - 00:03:00
         List<Path> round0200NewFiles = createNewFilesForRound(round0200, 2);
-        
+
         // 4. Create 2 in progress files for (00:00:04) timestamp
         long timestamp0004 = 1704153600000L + (4 * 1000L); // 00:00:04
         List<Path> inProgressFiles0004 = createInProgressFiles(timestamp0004, 2);
-        
+
         // 5. Create 2 in progress files for (00:01:02) timestamp
         long timestamp0102 = 1704153660000L + (2 * 1000L); // 00:01:02
         List<Path> inProgressFiles0102 = createInProgressFiles(timestamp0102, 2);
-        
+
         // 6. Mock shouldProcessInProgressDirectory to return true
         discovery.setMockShouldProcessInProgressDirectory(true);
-        
+
         // Process the start of day round
         discovery.processRound(replicationRound);
-        
+
         // 7. Ensure current round new files (3) are processed and in progress (4) are processed (Total 7)
         List<Path> processedFiles = discovery.getProcessedFiles();
         assertEquals("Invalid number of files processed", 7, processedFiles.size());
-        
+
         // Create set of expected files that should be processed
         Set<String> expectedProcessedPaths = new HashSet<>();
         for (Path file : newFilesForRound) {
@@ -243,32 +243,32 @@ public class ReplicationLogDiscoveryTest {
         for (Path file : inProgressFiles0102) {
             expectedProcessedPaths.add(file.toUri().getPath());
         }
-        
+
         // Create set of actually processed file paths
         Set<String> actualProcessedPaths = new HashSet<>();
         for (Path file : processedFiles) {
             actualProcessedPaths.add(file.toUri().getPath());
         }
-        
+
         // Validate that sets are equal
         assertEquals("Expected and actual processed files should match", expectedProcessedPaths, actualProcessedPaths);
-        
+
         // Verify that shouldProcessInProgressDirectory was called once
         Mockito.verify(discovery, Mockito.times(1)).shouldProcessInProgressDirectory();
-        
+
         // Validate that files from other rounds were NOT processed
         for (Path unexpectedFile : differentRoundSameShardFiles) {
-            assertFalse("Should NOT have processed shard count round file: " + unexpectedFile.getName(), 
+            assertFalse("Should NOT have processed shard count round file: " + unexpectedFile.getName(),
                 processedFiles.stream().anyMatch(p -> p.toUri().getPath().equals(unexpectedFile.toUri().getPath())));
         }
-        
+
         for (Path unexpectedFile : round0100NewFiles) {
-            assertFalse("Should NOT have processed round 00:01:00 file: " + unexpectedFile.getName(), 
+            assertFalse("Should NOT have processed round 00:01:00 file: " + unexpectedFile.getName(),
                 processedFiles.stream().anyMatch(p -> p.toUri().getPath().equals(unexpectedFile.toUri().getPath())));
         }
-        
+
         for (Path unexpectedFile : round0200NewFiles) {
-            assertFalse("Should NOT have processed round 00:02:00 file: " + unexpectedFile.getName(), 
+            assertFalse("Should NOT have processed round 00:02:00 file: " + unexpectedFile.getName(),
                 processedFiles.stream().anyMatch(p -> p.toUri().getPath().equals(unexpectedFile.toUri().getPath())));
         }
     }
@@ -364,26 +364,26 @@ public class ReplicationLogDiscoveryTest {
         // Test multiple times to verify probability-based behavior
         int totalTests = 1000;
         int trueCount = 0;
-        
+
         for (int i = 0; i < totalTests; i++) {
             if (discovery.shouldProcessInProgressDirectory()) {
                 trueCount++;
             }
         }
-        
+
         // Calculate the actual probability
         double actualProbability = (double) trueCount / totalTests * 100.0;
         double expectedProbability = discovery.getInProgressDirectoryProcessProbability();
-        
+
         // Verify that the actual probability is close to the expected probability
         // Allow for some variance due to randomness (within 2% of expected)
         double variance = Math.abs(actualProbability - expectedProbability);
-        assertTrue("Actual probability (" + actualProbability + "%) should be close to expected probability (" + 
+        assertTrue("Actual probability (" + actualProbability + "%) should be close to expected probability (" +
             expectedProbability + "%), variance: " + variance + "%", variance < 2.0);
-        
+
         // Verify that we have some true results (probability > 0)
         assertTrue("Should have some true results", trueCount > 0);
-        
+
         // Verify that we don't have too many true results (probability < 100%)
         assertTrue("Should not have too many true results", trueCount < totalTests);
 
@@ -400,45 +400,45 @@ public class ReplicationLogDiscoveryTest {
         // 1. Create new files with start of the day round (00:00:00)
         ReplicationRound replicationRound = new ReplicationRound(1704153600000L, 1704153660000L); // 00:00:00 - 00:01:00
         List<Path> newFilesForRound = createNewFilesForRound(replicationRound, 3);
-        
+
         // 2. Create file for shard count min round (which should also go to same shard)
         int shardCount = fileTracker.getReplicationShardDirectoryManager().getAllShardPaths().size();
         ReplicationRound differentRoundSameShard = new ReplicationRound(1704153600000L + (shardCount * 60 * 1000L), 1704153660000L + (shardCount * 60 * 1000L));
         List<Path> differentRoundSameShardFiles = createNewFilesForRound(differentRoundSameShard, 2);
-        
+
         // 3. Create files for (00:01:00) and (00:02:00) start time of the rounds
         ReplicationRound round0100 = new ReplicationRound(1704153660000L, 1704153720000L); // 00:01:00 - 00:02:00
         List<Path> round0100NewFiles = createNewFilesForRound(round0100, 2);
         ReplicationRound round0200 = new ReplicationRound(1704153720000L, 1704153780000L); // 00:02:00 - 00:03:00
         List<Path> round0200NewFiles = createNewFilesForRound(round0200, 2);
-        
+
         // 4. Create 2 in progress files for (00:00:04) timestamp
         long timestamp0004 = 1704153600000L + (4 * 1000L); // 00:00:04
         List<Path> inProgressFiles0004 = createInProgressFiles(timestamp0004, 2);
-        
+
         // 5. Create 2 in progress files for (00:01:02) timestamp
         long timestamp0102 = 1704153660000L + (2 * 1000L); // 00:01:02
         List<Path> inProgressFiles0102 = createInProgressFiles(timestamp0102, 2);
 
         // Process new files for the round
         discovery.processNewFilesForRound(replicationRound);
-        
+
         // 7. Ensure only current round new files (3) are processed
         List<Path> processedFiles = discovery.getProcessedFiles();
         assertEquals("Invalid number of files processed", 3, processedFiles.size());
-        
+
         // Create set of expected files that should be processed (only new files)
         Set<String> expectedProcessedPaths = new HashSet<>();
         for (Path file : newFilesForRound) {
             expectedProcessedPaths.add(file.toUri().getPath());
         }
-        
+
         // Create set of actually processed file paths
         Set<String> actualProcessedPaths = new HashSet<>();
         for (Path file : processedFiles) {
             actualProcessedPaths.add(file.toUri().getPath());
         }
-        
+
         // Validate that sets are equal
         assertEquals("Expected and actual processed files should match", expectedProcessedPaths, actualProcessedPaths);
 
@@ -449,31 +449,31 @@ public class ReplicationLogDiscoveryTest {
             Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
                     Mockito.argThat(path -> path.getName().startsWith(expectedFile.getName().split("\\.")[0])));
         }
-        
+
         // Validate that files from other rounds were NOT processed
         for (Path unexpectedFile : differentRoundSameShardFiles) {
-            assertFalse("Should NOT have processed shard count round file: " + unexpectedFile.getName(), 
+            assertFalse("Should NOT have processed shard count round file: " + unexpectedFile.getName(),
                 processedFiles.stream().anyMatch(p -> p.toUri().getPath().equals(unexpectedFile.toUri().getPath())));
         }
-        
+
         for (Path unexpectedFile : round0100NewFiles) {
-            assertFalse("Should NOT have processed round 00:01:00 file: " + unexpectedFile.getName(), 
+            assertFalse("Should NOT have processed round 00:01:00 file: " + unexpectedFile.getName(),
                 processedFiles.stream().anyMatch(p -> p.toUri().getPath().equals(unexpectedFile.toUri().getPath())));
         }
-        
+
         for (Path unexpectedFile : round0200NewFiles) {
-            assertFalse("Should NOT have processed round 00:02:00 file: " + unexpectedFile.getName(), 
+            assertFalse("Should NOT have processed round 00:02:00 file: " + unexpectedFile.getName(),
                 processedFiles.stream().anyMatch(p -> p.toUri().getPath().equals(unexpectedFile.toUri().getPath())));
         }
-        
+
         // Validate that in-progress files were NOT processed (processNewFilesForRound only processes new files)
         for (Path unexpectedFile : inProgressFiles0004) {
-            assertFalse("Should NOT have processed in-progress file from 00:00:04: " + unexpectedFile.getName(), 
+            assertFalse("Should NOT have processed in-progress file from 00:00:04: " + unexpectedFile.getName(),
                 processedFiles.stream().anyMatch(p -> p.toUri().getPath().equals(unexpectedFile.toUri().getPath())));
         }
-        
+
         for (Path unexpectedFile : inProgressFiles0102) {
-            assertFalse("Should NOT have processed in-progress file from 00:01:02: " + unexpectedFile.getName(), 
+            assertFalse("Should NOT have processed in-progress file from 00:01:02: " + unexpectedFile.getName(),
                 processedFiles.stream().anyMatch(p -> p.toUri().getPath().equals(unexpectedFile.toUri().getPath())));
         }
     }
@@ -489,25 +489,25 @@ public class ReplicationLogDiscoveryTest {
             .when(discovery).processFile(Mockito.argThat(path -> path.toUri().getPath().equals(newFilesForRound.get(1).toUri().getPath())));
         Mockito.doThrow(new IOException("Processing failed for file 3"))
                 .when(discovery).processFile(Mockito.argThat(path -> path.toUri().getPath().equals(newFilesForRound.get(3).toUri().getPath())));
-        
+
         // Process new files for the round
         discovery.processNewFilesForRound(replicationRound);
 
         // Verify that processFile was called for each file in the round
         Mockito.verify(discovery, Mockito.times(5)).processFile(Mockito.any(Path.class));
-        
+
         // Verify that processFile was called for each specific file
         for (Path expectedFile : newFilesForRound) {
             System.out.println("Checking for " + expectedFile);
             Mockito.verify(discovery, Mockito.times(1)).processFile(
                 Mockito.argThat(path -> path.toUri().getPath().equals(expectedFile.toString())));
         }
-        
+
         // Verify that markCompleted was called for each successfully processed file
         Mockito.verify(fileTracker, Mockito.times(3)).markCompleted(Mockito.any(Path.class));
-        
+
         // Verify that markCompleted was called for each successfully processed file with correct paths
-        System.out.println("Called for " + newFilesForRound.get(0).getName() + " but recieved");
+        System.out.println("Called for " + newFilesForRound.get(0).getName() + " but received");
         Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
                 Mockito.argThat(path -> path.getName().startsWith(newFilesForRound.get(0).getName().split("\\.")[0])));
         Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
@@ -547,25 +547,25 @@ public class ReplicationLogDiscoveryTest {
             Mockito.doThrow(new IOException("Processing failed for file: " + file.getName()))
                 .when(discovery).processFile(Mockito.argThat(path -> path.toUri().getPath().equals(file.toUri().getPath())));
         }
-        
+
         // Process new files for the round
         discovery.processNewFilesForRound(replicationRound);
 
         // Verify that processFile was called for each file in the round
         Mockito.verify(discovery, Mockito.times(5)).processFile(Mockito.any(Path.class));
-        
+
         // Verify that processFile was called for each specific file
         for (Path expectedFile : newFilesForRound) {
             Mockito.verify(discovery, Mockito.times(1)).processFile(
                 Mockito.argThat(path -> path.toUri().getPath().equals(expectedFile.toString())));
         }
-        
+
         // Verify that markCompleted was NOT called for any file (all failed)
         Mockito.verify(fileTracker, Mockito.never()).markCompleted(Mockito.any(Path.class));
-        
+
         // Verify that markFailed was called for all files
         Mockito.verify(fileTracker, Mockito.times(5)).markFailed(Mockito.any(Path.class));
-        
+
         // Verify that markFailed was called for each specific file with correct paths
         for (Path failedFile : newFilesForRound) {
             Mockito.verify(fileTracker, Mockito.times(1)).markFailed(
@@ -581,24 +581,24 @@ public class ReplicationLogDiscoveryTest {
         // 1. Create in-progress files for different timestamps
         long timestamp0004 = 1704153600000L + (4 * 1000L); // 00:00:04
         List<Path> inProgressFiles0004 = createInProgressFiles(timestamp0004, 3);
-        
+
         long timestamp0102 = 1704153660000L + (2 * 1000L); // 00:01:02
         List<Path> inProgressFiles0102 = createInProgressFiles(timestamp0102, 2);
-        
+
         long timestamp0206 = 1704153720000L + (6 * 1000L); // 00:02:06
         List<Path> inProgressFiles0206 = createInProgressFiles(timestamp0206, 2);
-        
+
         // 2. Create some new files to ensure they are NOT processed
         ReplicationRound replicationRound = new ReplicationRound(1704153600000L, 1704153660000L); // 00:00:00 - 00:01:00
         List<Path> newFilesForRound = createNewFilesForRound(replicationRound, 3);
-        
+
         // Process in-progress directory
         discovery.processInProgressDirectory();
-        
+
         // 3. Ensure all in-progress files (7 total) are processed
         List<Path> processedFiles = discovery.getProcessedFiles();
         assertEquals("Invalid number of files processed", 7, processedFiles.size());
-        
+
         // Create set of expected files that should be processed (only in-progress files)
         Set<String> expectedProcessedPaths = new HashSet<>();
         for (Path file : inProgressFiles0004) {
@@ -610,13 +610,13 @@ public class ReplicationLogDiscoveryTest {
         for (Path file : inProgressFiles0206) {
             expectedProcessedPaths.add(file.toUri().getPath());
         }
-        
+
         // Create set of actually processed file paths
         Set<String> actualProcessedPaths = new HashSet<>();
         for (Path file : processedFiles) {
             actualProcessedPaths.add(file.toUri().getPath());
         }
-        
+
         // Validate that sets are equal
         assertEquals("Expected and actual processed files should match", expectedProcessedPaths, actualProcessedPaths);
 
@@ -636,10 +636,10 @@ public class ReplicationLogDiscoveryTest {
             Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
                     Mockito.argThat(path -> path.getName().startsWith(fileTracker.getFilePrefix(expectedFile))));
         }
-        
+
         // Validate that new files were NOT processed (processInProgressDirectory only processes in-progress files)
         for (Path unexpectedFile : newFilesForRound) {
-            assertFalse("Should NOT have processed new file: " + unexpectedFile.getName(), 
+            assertFalse("Should NOT have processed new file: " + unexpectedFile.getName(),
                 processedFiles.stream().anyMatch(p -> p.toUri().getPath().equals(unexpectedFile.toUri().getPath())));
         }
     }
@@ -649,10 +649,10 @@ public class ReplicationLogDiscoveryTest {
         // Create in-progress files for different timestamps
         long timestamp0004 = 1704153600000L + (4 * 1000L); // 00:00:04
         List<Path> inProgressFiles0004 = createInProgressFiles(timestamp0004, 3);
-        
+
         long timestamp0102 = 1704153660000L + (2 * 1000L); // 00:01:02
         List<Path> inProgressFiles0102 = createInProgressFiles(timestamp0102, 2);
-        
+
         // Combine all in-progress files for easier access
         List<Path> allInProgressFiles = new ArrayList<>();
         allInProgressFiles.addAll(inProgressFiles0004);
@@ -663,19 +663,19 @@ public class ReplicationLogDiscoveryTest {
             .when(discovery).processFile(Mockito.argThat(path -> path.toUri().getPath().equals(allInProgressFiles.get(1).toUri().getPath())));
         Mockito.doThrow(new IOException("Processing failed for file 3"))
                 .when(discovery).processFile(Mockito.argThat(path -> path.toUri().getPath().equals(allInProgressFiles.get(3).toUri().getPath())));
-        
+
         // Process in-progress directory
         discovery.processInProgressDirectory();
 
         // Verify that processFile was called for each file in the directory (i.e. 5 + 2 times for failed once that would succeed in next retry)
         Mockito.verify(discovery, Mockito.times(7)).processFile(Mockito.any(Path.class));
-        
+
         // Verify that processFile was called for each specific file
         for (Path expectedFile : allInProgressFiles) {
             Mockito.verify(discovery, Mockito.times(1)).processFile(
                 Mockito.argThat(path -> path.toUri().getPath().equals(expectedFile.toString())));
         }
-        
+
         // Verify that markCompleted was called for each successfully processed file
         Mockito.verify(fileTracker, Mockito.times(5)).markCompleted(Mockito.any(Path.class));
 
@@ -702,8 +702,6 @@ public class ReplicationLogDiscoveryTest {
                     Mockito.argThat(path -> fileTracker.getFilePrefix(path).equals(fileTracker.getFilePrefix(expectedFile))));
         }
     }
-
-    
 
     private List<Path> createNewFilesForRound(ReplicationRound replicationRound, int fileCount) throws IOException {
         // Create files for multiple rounds in the same shard with each file at gap of 2 seconds

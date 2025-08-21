@@ -119,7 +119,7 @@ public abstract class ReplicationLogDiscovery {
                     LOG.error("Error during replay", e);
                 }
             }, 0, getReplayIntervalSeconds(), TimeUnit.SECONDS);
-            
+
             isRunning = true;
             LOG.info("ReplicationLogDiscovery started for group: {}", haGroupName);
         }
@@ -132,13 +132,13 @@ public abstract class ReplicationLogDiscovery {
      */
     public void stop() throws IOException {
         ScheduledExecutorService schedulerToShutdown;
-        
+
         synchronized (this) {
             if (!isRunning) {
                 LOG.warn("ReplicationLogDiscovery is not running for group: {}", haGroupName);
                 return;
             }
-            
+
             isRunning = false;
             schedulerToShutdown = scheduler;
         }
@@ -154,7 +154,7 @@ public abstract class ReplicationLogDiscovery {
                 Thread.currentThread().interrupt();
             }
         }
-        
+
         LOG.info("ReplicationLogDiscovery stopped for group: {}", haGroupName);
     }
 
@@ -334,7 +334,7 @@ public abstract class ReplicationLogDiscovery {
     }
 
     /**
-     * Returns the buffer percentage for calculating buffer time. Subclasses can override this method 
+     * Returns the buffer percentage for calculating buffer time. Subclasses can override this method
      * to provide custom buffer percentages.
      * @return The buffer percentage (default 15.0%)
      */

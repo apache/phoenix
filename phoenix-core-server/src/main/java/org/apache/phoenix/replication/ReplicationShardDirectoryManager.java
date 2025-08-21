@@ -92,19 +92,19 @@ public class ReplicationShardDirectoryManager {
         // 1. Figure out how many seconds have passed from start of the day for this file
         // Convert timestamp to seconds since epoch
         long secondsSinceEpoch = fileTimestamp / 1000L;
-        
+
         // Calculate seconds since start of the day (00:00:00)
         // Get the number of seconds since the start of the current day
         long secondsSinceStartOfDay = secondsSinceEpoch % TimeUnit.DAYS.toSeconds(1);
-        
+
         // 2. Calculate which shard this timestamp belongs to
-        // Each shard represents a time range: 0 to roundTimeSeconds = shard 0, 
+        // Each shard represents a time range: 0 to roundTimeSeconds = shard 0,
         // roundTimeSeconds to 2*roundTimeSeconds = shard 1, etc.
         int shardIndex = (int) (secondsSinceStartOfDay / replicationRoundDurationSeconds);
-        
+
         // Apply modulo to ensure shard index doesn't exceed numShards
         shardIndex = shardIndex % numShards;
-        
+
         // Create the shard directory path with formatted shard number
         String shardDirName = String.format(SHARD_DIR_FORMAT, shardIndex);
         return new Path(shardDirectoryPath, shardDirName);

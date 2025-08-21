@@ -39,53 +39,53 @@ public class ReplicationReplayLogDiscovery extends ReplicationLogDiscovery {
     /**
      * Configuration key for replay interval in seconds
      */
-    public static final String REPLICATION_REPLAY_INTERVAL_SECONDS_KEY = 
+    public static final String REPLICATION_REPLAY_INTERVAL_SECONDS_KEY =
             "phoenix.replication.replay.interval.seconds";
 
     /**
      * Configuration key for shutdown timeout in seconds
      */
-    public static final String REPLICATION_REPLAY_SHUTDOWN_TIMEOUT_SECONDS_KEY = 
+    public static final String REPLICATION_REPLAY_SHUTDOWN_TIMEOUT_SECONDS_KEY =
             "phoenix.replication.replay.executor.shutdown.timeout.seconds";
 
     /**
      * Configuration key for executor thread count
      */
-    public static final String REPLICATION_REPLAY_EXECUTOR_THREAD_COUNT_KEY = 
+    public static final String REPLICATION_REPLAY_EXECUTOR_THREAD_COUNT_KEY =
             "phoenix.replication.replay.executor.thread.count";
 
     /**
      * Configuration key for in-progress directory processing probability
      */
-    public static final String REPLICATION_REPLAY_IN_PROGRESS_DIRECTORY_PROCESSING_PROBABILITY_KEY = 
+    public static final String REPLICATION_REPLAY_IN_PROGRESS_DIRECTORY_PROCESSING_PROBABILITY_KEY =
             "phoenix.replication.replay.in.progress.directory.processing.probability";
 
     /**
      * Configuration key for waiting buffer percentage
      */
-    public static final String REPLICATION_REPLAY_WAITING_BUFFER_PERCENTAGE_KEY = 
+    public static final String REPLICATION_REPLAY_WAITING_BUFFER_PERCENTAGE_KEY =
             "phoenix.replication.replay.waiting.buffer.percentage";
-    
+
     /**
      * Default replay interval in seconds. Controls how frequently the replay process runs.
      */
     public static final long DEFAULT_REPLAY_INTERVAL_SECONDS = 60;
-    
+
     /**
      * Default shutdown timeout in seconds. Maximum time to wait for executor service to shutdown gracefully.
      */
     public static final long DEFAULT_SHUTDOWN_TIMEOUT_SECONDS = 30;
-    
+
     /**
      * Default number of executor threads for processing replication log files.
      */
     public static final int DEFAULT_EXECUTOR_THREAD_COUNT = 1;
-    
+
     /**
      * Default probability (in percentage) for processing in-progress directory during each replay cycle.
      */
     public static final double DEFAULT_IN_PROGRESS_DIRECTORY_PROCESSING_PROBABILITY = 5.0;
-    
+
     /**
      * Default waiting buffer percentage. Buffer time is calculated as this percentage of round time.
      */

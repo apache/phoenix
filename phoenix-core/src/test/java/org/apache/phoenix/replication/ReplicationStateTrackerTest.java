@@ -74,7 +74,7 @@ public class ReplicationStateTrackerTest {
     public void testGetMinTimestampFromInProgressFilesSingleFile() throws IOException {
         // Create a single file path
         Path filePath = new Path("/test/1704153600000_rs1.plog");
-        
+
         // Mock single file list
         when(mockTracker.getInProgressFiles()).thenReturn(Arrays.asList(filePath));
         when(mockTracker.getFileTimestamp(filePath)).thenReturn(1704153600000L);
@@ -84,7 +84,7 @@ public class ReplicationStateTrackerTest {
 
         // Verify result contains the timestamp
         assertTrue("Result should be present for single file", result.isPresent());
-        assertEquals("Should return the timestamp of the single file", 
+        assertEquals("Should return the timestamp of the single file",
             Long.valueOf(1704153600000L), result.get());
 
         // Verify method calls
@@ -98,9 +98,9 @@ public class ReplicationStateTrackerTest {
         Path file1 = new Path("/test/1704153660000_rs2.plog");
         Path file2 = new Path("/test/1704153600000_rs1.plog");
         Path file3 = new Path("/test/1704153720000_rs3.plog");
-        
+
         List<Path> files = Arrays.asList(file1, file2, file3);
-        
+
         // Mock file list and timestamps
         when(mockTracker.getInProgressFiles()).thenReturn(files);
         when(mockTracker.getFileTimestamp(file1)).thenReturn(1704153660000L);
@@ -112,7 +112,7 @@ public class ReplicationStateTrackerTest {
 
         // Verify result contains the minimum timestamp
         assertTrue("Result should be present for multiple files", result.isPresent());
-        assertEquals("Should return the minimum timestamp", 
+        assertEquals("Should return the minimum timestamp",
             Long.valueOf(1704153600000L), result.get());
 
         // Verify method calls
@@ -141,7 +141,7 @@ public class ReplicationStateTrackerTest {
     public void testGetMinTimestampFromNewFilesSingleFile() throws IOException {
         // Create a single file path
         Path filePath = new Path("/test/1704153600000_rs1.plog");
-        
+
         // Mock single file list
         when(mockTracker.getNewFiles()).thenReturn(Arrays.asList(filePath));
         when(mockTracker.getFileTimestamp(filePath)).thenReturn(1704153600000L);
@@ -151,7 +151,7 @@ public class ReplicationStateTrackerTest {
 
         // Verify result contains the timestamp
         assertTrue("Result should be present for single file", result.isPresent());
-        assertEquals("Should return the timestamp of the single file", 
+        assertEquals("Should return the timestamp of the single file",
             Long.valueOf(1704153600000L), result.get());
 
         // Verify method calls
@@ -165,9 +165,9 @@ public class ReplicationStateTrackerTest {
         Path file1 = new Path("/test/1704153660000_rs2.plog");
         Path file2 = new Path("/test/1704153600000_rs1.plog");
         Path file3 = new Path("/test/1704153720000_rs3.plog");
-        
+
         List<Path> files = Arrays.asList(file1, file2, file3);
-        
+
         // Mock file list and timestamps
         when(mockTracker.getNewFiles()).thenReturn(files);
         when(mockTracker.getFileTimestamp(file1)).thenReturn(1704153660000L);
@@ -179,7 +179,7 @@ public class ReplicationStateTrackerTest {
 
         // Verify result contains the minimum timestamp
         assertTrue("Result should be present for multiple files", result.isPresent());
-        assertEquals("Should return the minimum timestamp", 
+        assertEquals("Should return the minimum timestamp",
             Long.valueOf(1704153600000L), result.get());
 
         // Verify method calls
@@ -194,17 +194,17 @@ public class ReplicationStateTrackerTest {
      * Testable implementation of ReplicationStateTracker for testing
      */
     private static class TestableReplicationStateTracker extends ReplicationStateTracker {
-        
+
         @Override
         public void init(ReplicationLogFileTracker replicationLogFileTracker) throws IOException {
             // No-op implementation for testing
         }
-        
+
         // Expose the protected method for testing
         public Optional<Long> getMinTimestampFromInProgressFiles(ReplicationLogFileTracker replicationLogFileTracker) throws IOException {
             return super.getMinTimestampFromInProgressFiles(replicationLogFileTracker);
         }
-        
+
         // Expose the protected method for testing
         public Optional<Long> getMinTimestampFromNewFiles(ReplicationLogFileTracker replicationLogFileTracker) throws IOException {
             return super.getMinTimestampFromNewFiles(replicationLogFileTracker);

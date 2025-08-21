@@ -97,7 +97,7 @@ public class ReplicationLogFileTrackerTest {
         // Verify ReplicationShardDirectoryManager was created
         ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
         assertNotNull("ReplicationShardDirectoryManager should not be null", shardManager);
-        
+
         // Verify the shard directory path is correct
         Path expectedShardDirectory = new Path(new Path(new Path(rootURI.getPath(), haGroupName), "in"), "shard");
         assertEquals("Shard directory should be set correctly", expectedShardDirectory, shardManager.getShardDirectoryPath());
@@ -114,15 +114,15 @@ public class ReplicationLogFileTrackerTest {
         // Test with different HA group name
         String differentHaGroupName = "differentGroup";
         tracker = new TestableReplicationLogFileTracker(conf, differentHaGroupName, mockFs, rootURI);
-        
+
         // Call init method
         tracker.init();
-        
+
         // Verify correct path was created
         Path expectedInProgressPath = new Path(new Path(rootURI.getPath(), differentHaGroupName), "in_progress");
         assertTrue("In-progress directory should exist for different HA group", localFs.exists(expectedInProgressPath));
         assertTrue("In-progress directory should be a directory", localFs.isDirectory(expectedInProgressPath));
-        
+
         // Verify shard directory uses correct HA group name
         ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
         Path expectedShardDirectory = new Path(new Path(new Path(rootURI.getPath(), differentHaGroupName), "in"), "shard");
@@ -138,11 +138,11 @@ public class ReplicationLogFileTrackerTest {
         Path expectedInProgressPath = new Path(new Path(rootURI.getPath(), haGroupName), "in_progress");
         localFs.mkdirs(expectedInProgressPath);
         assertTrue("Directory should exist before init", localFs.exists(expectedInProgressPath));
-        
+
         // Get initial directory count
         Path rootPath = new Path(rootURI.getPath());
         int initialDirCount = countDirectories(localFs, rootPath);
-        
+
         // Call init method multiple times
         tracker.init();
         tracker.close();
@@ -153,11 +153,11 @@ public class ReplicationLogFileTrackerTest {
         // Verify directory still exists and is valid
         assertTrue("In-progress directory should still exist", localFs.exists(expectedInProgressPath));
         assertTrue("In-progress directory should still be a directory", localFs.isDirectory(expectedInProgressPath));
-        
+
         // Verify no additional directories were created
         int finalDirCount = countDirectories(localFs, rootPath);
         assertEquals("No additional directories should be created", initialDirCount, finalDirCount);
-        
+
         // Verify ReplicationShardDirectoryManager is still valid
         ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
         assertNotNull("ReplicationShardDirectoryManager should not be null after multiple init calls", shardManager);
@@ -172,36 +172,36 @@ public class ReplicationLogFileTrackerTest {
     public void testGetNewFilesForRound() throws IOException {
         // Initialize tracker
         tracker.init();
-        
+
         // Create a replication round (60 seconds duration)
         long roundStartTime = 1704153600000L; // 2024-01-02 00:00:00
         long roundEndTime = roundStartTime + TimeUnit.MINUTES.toMillis(1); // 60 seconds later
         ReplicationRound targetRound = new ReplicationRound(roundStartTime, roundEndTime);
-        
+
         // Get the shard directory for this round
         ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
         Path shardDirectory = shardManager.getShardDirectory(targetRound);
-        
+
         // Create the shard directory
         localFs.mkdirs(shardDirectory);
-        
+
         // Create files in the target round's shard directory
         Path fileInTargetRound1 = new Path(shardDirectory, "1704153600000_rs1.plog"); // Start of round
         Path fileInTargetRound2 = new Path(shardDirectory, "1704153630000_rs2.plog"); // Middle of round
         Path fileInTargetRound3 = new Path(shardDirectory, "1704153659000_rs3.plog"); // End of round
-        
+
         // Create files in other rounds (same shard)
         Path fileInOtherRound1 = new Path(shardDirectory, "1704161280000_rs4.plog"); // future round for same shard
         Path fileInOtherRound2 = new Path(shardDirectory, "1704161310000_rs5.plog"); // Previous round
-        
+
         // Create files in other shards
         Path fileInOtherShard1 = new Path(shardDirectory.getParent(), "001/1704153600000_rs6.plog");
         Path fileInOtherShard2 = new Path(shardDirectory.getParent(), "002/1704153600000_rs7.plog");
-        
+
         // Create all directories and files
         localFs.mkdirs(fileInOtherShard1.getParent());
         localFs.mkdirs(fileInOtherShard2.getParent());
-        
+
         // Create empty files
         localFs.create(fileInTargetRound1, true).close();
         localFs.create(fileInTargetRound2, true).close();
@@ -210,7 +210,7 @@ public class ReplicationLogFileTrackerTest {
         localFs.create(fileInOtherRound2, true).close();
         localFs.create(fileInOtherShard1, true).close();
         localFs.create(fileInOtherShard2, true).close();
-        
+
         // Call getNewFilesForRound
         List<Path> result = tracker.getNewFilesForRound(targetRound);
 
@@ -223,10 +223,10 @@ public class ReplicationLogFileTrackerTest {
         expectedPaths.add(fileInTargetRound1.toString());
         expectedPaths.add(fileInTargetRound2.toString());
         expectedPaths.add(fileInTargetRound3.toString());
-        
+
         // Create actual set of paths
         Set<String> actualPaths = result.stream().map(path -> path.toUri().getPath()).collect(Collectors.toSet());
-        
+
         assertEquals("Should return exactly 3 files from target round", expectedPaths.size(), actualPaths.size());
         assertEquals("File paths do not match", expectedPaths, actualPaths);
     }
@@ -235,27 +235,27 @@ public class ReplicationLogFileTrackerTest {
     public void testGetNewFilesForRoundForNoFilesExist() throws IOException {
         // Initialize tracker
         tracker.init();
-        
+
         // Create a replication round
         long roundStartTime = 1704153600000L;
         long roundEndTime = roundStartTime + TimeUnit.MINUTES.toMillis(1);
         ReplicationRound targetRound = new ReplicationRound(roundStartTime, roundEndTime);
-        
+
         // Get the shard directory for this round
         ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
         Path shardDirectory = shardManager.getShardDirectory(targetRound);
-        
+
         // Create the shard directory but leave it empty
         localFs.mkdirs(shardDirectory);
-        
+
         // Call getNewFilesForRound
         List<Path> result = tracker.getNewFilesForRound(targetRound);
-        
+
         // Verify file system operation counts
         Mockito.verify(mockFs, times(1)).listStatus(Mockito.any(Path.class));
         Mockito.verify(mockFs, times(1)).exists(Mockito.eq(shardDirectory));
         Mockito.verify(mockFs, times(1)).listStatus(Mockito.eq(shardDirectory));
-        
+
         // Verify empty list is returned
         assertTrue("Should return empty list for empty directory", result.isEmpty());
     }
@@ -264,26 +264,26 @@ public class ReplicationLogFileTrackerTest {
     public void testGetNewFilesForRoundForNonExistentShardDirectory() throws IOException {
         // Initialize tracker
         tracker.init();
-        
+
         // Create a replication round
         long roundStartTime = 1704153600000L;
         long roundEndTime = roundStartTime + TimeUnit.MINUTES.toMillis(1);
         ReplicationRound targetRound = new ReplicationRound(roundStartTime, roundEndTime);
-        
+
         // Get the shard directory for this round
         ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
         Path shardDirectory = shardManager.getShardDirectory(targetRound);
-        
+
         // Assert that shard directory does not exist
         assertFalse("Shard directory should not exist", localFs.exists(shardDirectory));
-        
+
         // Call getNewFilesForRound
         List<Path> result = tracker.getNewFilesForRound(targetRound);
-        
+
         // Verify file system operation counts
         Mockito.verify(mockFs, times(1)).exists(Mockito.eq(shardDirectory));
         Mockito.verify(mockFs, times(0)).listStatus(Mockito.any(Path.class));
-        
+
         // Verify empty list is returned
         assertTrue("Should return empty list for non-existent directory", result.isEmpty());
     }
@@ -292,51 +292,51 @@ public class ReplicationLogFileTrackerTest {
     public void testGetNewFilesForRoundWithInvalidFiles() throws IOException {
         // Initialize tracker
         tracker.init();
-        
+
         // Create a replication round
         long roundStartTime = 1704153600000L;
         long roundEndTime = roundStartTime + TimeUnit.MINUTES.toMillis(1);
         ReplicationRound targetRound = new ReplicationRound(roundStartTime, roundEndTime);
-        
+
         // Get the shard directory for this round
         ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
         Path shardDirectory = shardManager.getShardDirectory(targetRound);
-        
+
         // Create the shard directory
         localFs.mkdirs(shardDirectory);
-        
+
         // Create valid files
         Path validFile1 = new Path(shardDirectory, "1704153600000_rs1.plog");
         Path validFile2 = new Path(shardDirectory, "1704153630000_rs2.plog");
-        
+
         // Create invalid files (wrong extension, invalid timestamp format)
         Path invalidFile1 = new Path(shardDirectory, "1704153600000_rs1.txt");
         Path invalidFile2 = new Path(shardDirectory, "invalid_timestamp_rs2.plog");
         Path invalidFile3 = new Path(shardDirectory, "1704153600000_rs3.log");
-        
+
         // Create all files
         localFs.create(validFile1, true).close();
         localFs.create(validFile2, true).close();
         localFs.create(invalidFile1, true).close();
         localFs.create(invalidFile2, true).close();
         localFs.create(invalidFile3, true).close();
-        
+
         // Call getNewFilesForRound
         List<Path> result = tracker.getNewFilesForRound(targetRound);
-        
+
         // Verify file system operation counts
         Mockito.verify(mockFs, times(1)).listStatus(Mockito.any(Path.class));
         Mockito.verify(mockFs, times(1)).exists(Mockito.eq(shardDirectory));
         Mockito.verify(mockFs, times(1)).listStatus(Mockito.eq(shardDirectory));
-        
+
         // Prepare expected set of valid file paths
         Set<String> expectedPaths = new HashSet<>();
         expectedPaths.add(validFile1.toString());
         expectedPaths.add(validFile2.toString());
-        
+
         // Create actual set of paths
         Set<String> actualPaths = result.stream().map(path -> path.toUri().getPath()).collect(Collectors.toSet());
-        
+
         // Verify only valid files are returned
         assertEquals("Should return exactly 2 valid files", expectedPaths.size(), actualPaths.size());
         assertEquals("File paths do not match", expectedPaths, actualPaths);
@@ -346,44 +346,44 @@ public class ReplicationLogFileTrackerTest {
     public void testGetInProgressFiles() throws IOException {
         // Initialize tracker
         tracker.init();
-        
+
         // Get the in-progress directory path
         Path inProgressDir = tracker.getInProgressDirPath();
-        
+
         // Create valid files in in-progress directory
         Path validFile1 = new Path(inProgressDir, "1704153600000_rs1.plog");
         Path validFile2 = new Path(inProgressDir, "1704153630000_rs2.plog");
         Path validFile3 = new Path(inProgressDir, "1704153659000_rs3.plog");
-        
+
         // Create invalid files (wrong extension, invalid format)
         Path invalidFile1 = new Path(inProgressDir, "1704153600000_rs1.txt");
         Path invalidFile3 = new Path(inProgressDir, "1704153600000_rs3.log");
-        
+
         // Create all files
         localFs.create(validFile1, true).close();
         localFs.create(validFile2, true).close();
         localFs.create(validFile3, true).close();
         localFs.create(invalidFile1, true).close();
         localFs.create(invalidFile3, true).close();
-        
+
         // Call getInProgressFiles
         List<Path> result = tracker.getInProgressFiles();
-        
+
         // Verify file system operation counts
         Mockito.verify(mockFs, times(1)).listStatus(Mockito.any(Path.class));
         // exists should be called twice for in-progress directory, first during init and second during getInProgressFiles
         Mockito.verify(mockFs, times(2)).exists(Mockito.eq(inProgressDir));
         Mockito.verify(mockFs, times(1)).listStatus(Mockito.eq(inProgressDir));
-        
+
         // Prepare expected set of valid file paths
         Set<String> expectedPaths = new HashSet<>();
         expectedPaths.add(validFile1.toString());
         expectedPaths.add(validFile2.toString());
         expectedPaths.add(validFile3.toString());
-        
+
         // Create actual set of paths
         Set<String> actualPaths = result.stream().map(path -> path.toUri().getPath()).collect(Collectors.toSet());
-        
+
         // Verify only valid files are returned
         assertEquals("Should return exactly 3 valid files", expectedPaths.size(), actualPaths.size());
         assertEquals("File paths do not match", expectedPaths, actualPaths);
@@ -393,23 +393,23 @@ public class ReplicationLogFileTrackerTest {
     public void testGetInProgressFilesForEmptyDirectory() throws IOException {
         // Initialize tracker
         tracker.init();
-        
+
         // Get the in-progress directory path
         Path inProgressDir = tracker.getInProgressDirPath();
-        
+
         // Ensure directory exists but is empty
         assertTrue("In-progress directory should exist", localFs.exists(inProgressDir));
         assertTrue("In-progress directory should be a directory", localFs.isDirectory(inProgressDir));
-        
+
         // Call getInProgressFiles
         List<Path> result = tracker.getInProgressFiles();
-        
+
         // Verify file system operation counts
         Mockito.verify(mockFs, times(1)).listStatus(Mockito.any(Path.class));
         // exists should be called twice for in-progress directory, first during init and second during getInProgressFiles
         Mockito.verify(mockFs, times(2)).exists(Mockito.eq(inProgressDir));
         Mockito.verify(mockFs, times(1)).listStatus(Mockito.eq(inProgressDir));
-        
+
         // Verify empty list is returned
         assertTrue("Should return empty list for empty directory", result.isEmpty());
     }
@@ -418,23 +418,23 @@ public class ReplicationLogFileTrackerTest {
     public void testGetInProgressFilesForNonExistentDirectory() throws IOException {
         // Initialize tracker
         tracker.init();
-        
+
         // Get the in-progress directory path
         Path inProgressDir = tracker.getInProgressDirPath();
-        
+
         // Delete the in-progress directory to make it non-existent
         localFs.delete(inProgressDir, true);
         assertFalse("In-progress directory should not exist", localFs.exists(inProgressDir));
-        
+
         // Call getInProgressFiles
         List<Path> result = tracker.getInProgressFiles();
-        
+
         // Verify file system operation counts
         // listStatus() should not be called when directory doesn't exist
         Mockito.verify(mockFs, times(0)).listStatus(Mockito.any(Path.class));
         // exists should be called twice for in-progress directory, first during init and second during getInProgressFiles
         Mockito.verify(mockFs, times(2)).exists(Mockito.eq(inProgressDir));
-        
+
         // Verify empty list is returned
         assertTrue("Should return empty list for non-existent directory", result.isEmpty());
     }
@@ -443,50 +443,50 @@ public class ReplicationLogFileTrackerTest {
     public void testGetNewFiles() throws IOException {
         // Initialize tracker
         tracker.init();
-        
+
         // Get all shard paths
         ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
         List<Path> allShardPaths = shardManager.getAllShardPaths();
-        
+
         // Create files in multiple shards
         Path shard0Path = allShardPaths.get(0);
         Path shard1Path = allShardPaths.get(1);
         Path shard2Path = allShardPaths.get(2);
-        
+
         // Create valid files in shard 0
         Path validFile1 = new Path(shard0Path, "1704153600000_rs1.plog");
         Path validFile2 = new Path(shard0Path, "1704153630000_rs2.plog");
-        
+
         // Create valid files in shard 1
         Path validFile3 = new Path(shard1Path, "1704153660000_rs3.plog");
         Path validFile4 = new Path(shard1Path, "1704153690000_rs4.plog");
-        
+
         // Create valid files in shard 2
         Path validFile5 = new Path(shard2Path, "1704153720000_rs5.plog");
-        
+
         // Create invalid files in shards
         Path invalidFile1 = new Path(shard0Path, "1704153600000_rs1.txt");
         Path invalidFile3 = new Path(shard2Path, "1704153720000_rs3.log");
-        
+
         // Create all directories and files
         localFs.mkdirs(shard0Path);
         localFs.mkdirs(shard1Path);
         localFs.mkdirs(shard2Path);
-        
+
         // Create valid files
         localFs.create(validFile1, true).close();
         localFs.create(validFile2, true).close();
         localFs.create(validFile3, true).close();
         localFs.create(validFile4, true).close();
         localFs.create(validFile5, true).close();
-        
+
         // Create invalid files
         localFs.create(invalidFile1, true).close();
         localFs.create(invalidFile3, true).close();
-        
+
         // Call getNewFiles
         List<Path> result = tracker.getNewFiles();
-        
+
         // Verify file system operation counts
         // getNewFiles calls exists() and listStatus() for each shard path
         // There are 3 shards for which directory is created, so exists() should be called once for each shard and once for in-progress directory during creation
@@ -506,7 +506,7 @@ public class ReplicationLogFileTrackerTest {
             // Verify file system operations for each shard path
             Mockito.verify(mockFs, times(1)).exists(Mockito.eq(shardPath));
         }
-        
+
         // Prepare expected set of valid file paths
         Set<String> expectedPaths = new HashSet<>();
         expectedPaths.add(validFile1.toString());
@@ -514,10 +514,10 @@ public class ReplicationLogFileTrackerTest {
         expectedPaths.add(validFile3.toString());
         expectedPaths.add(validFile4.toString());
         expectedPaths.add(validFile5.toString());
-        
+
         // Create actual set of paths
         Set<String> actualPaths = result.stream().map(path -> path.toUri().getPath()).collect(Collectors.toSet());
-        
+
         // Verify all valid files from all shards are returned
         assertEquals("Should return exactly 5 valid files from all shards", expectedPaths.size(), actualPaths.size());
         assertEquals("File paths do not match", expectedPaths, actualPaths);
@@ -527,19 +527,19 @@ public class ReplicationLogFileTrackerTest {
     public void testGetNewFilesForEmptyShards() throws IOException {
         // Initialize tracker
         tracker.init();
-        
+
         // Get all shard paths
         ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
         List<Path> allShardPaths = shardManager.getAllShardPaths();
-        
+
         // Create directories but leave them empty
         for (Path shardPath : allShardPaths) {
             localFs.mkdirs(shardPath);
         }
-        
+
         // Call getNewFiles
         List<Path> result = tracker.getNewFiles();
-        
+
         // Verify file system operation counts
         // getNewFiles calls exists() and listStatus() for each shard path
         // All shard directories exist but are empty, so exists() should be called for all shards and once for in-progress directory during creation
@@ -553,7 +553,7 @@ public class ReplicationLogFileTrackerTest {
             Mockito.verify(mockFs, times(1)).exists(Mockito.eq(shardPath));
             Mockito.verify(mockFs, times(1)).listStatus(Mockito.eq(shardPath));
         }
-        
+
         // Verify empty list is returned
         assertTrue("Should return empty list for empty shards", result.isEmpty());
     }
@@ -562,19 +562,19 @@ public class ReplicationLogFileTrackerTest {
     public void testGetNewFilesForNonExistentShards() throws IOException {
         // Initialize tracker
         tracker.init();
-        
+
         // Get all shard paths
         ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
         List<Path> allShardPaths = shardManager.getAllShardPaths();
-        
+
         // Assert that no shard directories exist
         for (Path shardPath : allShardPaths) {
             assertFalse("Shard directory should not exist: " + shardPath, localFs.exists(shardPath));
         }
-        
+
         // Call getNewFiles
         List<Path> result = tracker.getNewFiles();
-        
+
         // Verify file system operation counts
         // getNewFiles calls exists() for each shard path
         // All shard directories don't exist, so exists() should be called for all shards and once for in-progress directory during creation
@@ -588,7 +588,7 @@ public class ReplicationLogFileTrackerTest {
             Mockito.verify(mockFs, times(1)).exists(Mockito.eq(shardPath));
             // listStatus() should not be called for non-existent directories
         }
-        
+
         // Verify empty list is returned
         assertTrue("Should return empty list for non-existent shards", result.isEmpty());
     }
@@ -597,23 +597,23 @@ public class ReplicationLogFileTrackerTest {
     public void testMarkInProgressForNewFile() throws IOException {
         // Initialize tracker
         tracker.init();
-        
+
         // Create a file in a shard directory (without UUID)
         ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
         List<Path> allShardPaths = shardManager.getAllShardPaths();
         Path shardPath = allShardPaths.get(0);
         localFs.mkdirs(shardPath);
-        
+
         // Create original file without UUID
         Path originalFile = new Path(shardPath, "1704153600000_rs1.plog");
         localFs.create(originalFile, true).close();
-        
+
         // Verify original file exists
         assertTrue("Original file should exist", localFs.exists(originalFile));
-        
+
         // Call markInProgress
         Optional<Path> result = tracker.markInProgress(originalFile);
-        
+
         // Verify file system operation counts
         // markInProgress involves moving file from shard directory to in-progress directory
         // It should call exists() for only in progress directory (during init), rename() to move file
@@ -623,31 +623,31 @@ public class ReplicationLogFileTrackerTest {
         Mockito.verify(mockFs, times(1)).rename(Mockito.eq(originalFile), Mockito.any(Path.class));
         // Ensure no listStatus() is called
         Mockito.verify(mockFs, times(0)).listStatus(Mockito.any(Path.class));
-        
+
         // Verify operation was successful
         assertTrue("markInProgress should be successful", result.isPresent());
 
         // Verify original file no longer exists
         assertFalse("Original file should no longer exist", localFs.exists(originalFile));
-        
+
         // Verify file was moved to in-progress directory with UUID
         Path inProgressDir = tracker.getInProgressDirPath();
         FileStatus[] files = localFs.listStatus(inProgressDir);
         assertEquals("Should have exactly one file in in-progress directory", 1, files.length);
-        
+
         // Verify the new file has UUID format and is in in-progress directory
         String newFileName = files[0].getPath().getName();
         assertTrue("New file should have UUID suffix", newFileName.matches("1704153600000_rs1_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\\.plog"));
         
         // Assert that renamed file is in in-progress directory
         Path renamedFile = files[0].getPath();
-        assertTrue("Renamed file should be in in-progress directory", 
+        assertTrue("Renamed file should be in in-progress directory",
                   renamedFile.getParent().toUri().getPath().equals(tracker.getInProgressDirPath().toString()));
-        
+
         // Assert that renamed file has same prefix as original file
         String originalFileName = originalFile.getName();
         String originalPrefix = originalFileName.substring(0, originalFileName.lastIndexOf('.'));
-        assertTrue("Renamed file should have same prefix as original file", 
+        assertTrue("Renamed file should have same prefix as original file",
                   newFileName.startsWith(originalPrefix + "_"));
     }
 
@@ -655,16 +655,16 @@ public class ReplicationLogFileTrackerTest {
     public void testMarkInProgressForAlreadyInProgressFile() throws IOException {
         // Initialize tracker
         tracker.init();
-        
+
         // Create a file in in-progress directory with existing UUID
         Path inProgressDir = tracker.getInProgressDirPath();
         String existingUUID = "12345678-1234-1234-1234-123456789abc";
         Path originalFile = new Path(inProgressDir, "1704153600000_rs1_" + existingUUID + ".plog");
         localFs.create(originalFile, true).close();
-        
+
         // Verify original file exists
         assertTrue("Original file should exist", localFs.exists(originalFile));
-        
+
         // Call markInProgress
         Optional<Path> result = tracker.markInProgress(originalFile);
 
@@ -677,26 +677,26 @@ public class ReplicationLogFileTrackerTest {
         Mockito.verify(mockFs, times(1)).rename(Mockito.eq(originalFile), Mockito.any(Path.class));
         // Ensure no listStatus() is called
         Mockito.verify(mockFs, times(0)).listStatus(Mockito.any(Path.class));
-        
+
         // Verify operation was successful
         assertTrue("markInProgress should be successful", result.isPresent());
 
         // Verify original file no longer exists
         assertFalse("Original file should no longer exist", localFs.exists(originalFile));
-        
+
         // Verify new file exists in same directory with new UUID
         FileStatus[] files = localFs.listStatus(inProgressDir);
         assertEquals("Should have exactly one file in in-progress directory", 1, files.length);
-        
+
         // Verify the new file has different UUID
         String newFileName = files[0].getPath().getName();
         assertTrue("New file should have UUID suffix", newFileName.matches("1704153600000_rs1_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\\.plog"));
         assertFalse("New file should have different UUID", newFileName.contains(existingUUID));
-        
+
         // Assert that renamed file has same prefix as original file
         String originalFileName = originalFile.getName();
         String originalPrefix = originalFileName.substring(0, originalFileName.lastIndexOf('_'));
-        assertTrue("Renamed file should have same prefix as original file", 
+        assertTrue("Renamed file should have same prefix as original file",
                   newFileName.startsWith(originalPrefix + "_"));
     }
 
@@ -704,23 +704,23 @@ public class ReplicationLogFileTrackerTest {
     public void testMarkInProgressForNonExistentFile() throws IOException {
         // Initialize tracker
         tracker.init();
-        
+
         // Create a non-existent file path
         Path nonExistentFile = new Path(tracker.getInProgressDirPath(), "non_existent_file.plog");
-        
+
         // Verify file doesn't exist
         assertFalse("File should not exist", localFs.exists(nonExistentFile));
-        
+
         // Call markInProgress
         Optional<Path> result = tracker.markInProgress(nonExistentFile);
-        
+
         // Verify file system operation counts
         Mockito.verify(mockFs, times(1)).exists(Mockito.any(Path.class));
         Mockito.verify(mockFs, times(1)).exists(Mockito.eq(tracker.getInProgressDirPath()));
         Mockito.verify(mockFs, times(1)).rename(Mockito.any(Path.class), Mockito.any(Path.class));
         // Ensure no listStatus() is called
         Mockito.verify(mockFs, times(0)).listStatus(Mockito.any(Path.class));
-        
+
         // Verify operation failed
         assertFalse("markInProgress should return false for non-existent file", result.isPresent());
     }
@@ -729,17 +729,17 @@ public class ReplicationLogFileTrackerTest {
     public void testMarkCompletedSuccessfulDeletion() throws IOException {
         // Initialize tracker
         tracker.init();
-        
+
         // Create original file in shard directory
         Path originalFile = new Path(tracker.getInProgressDirPath(), "1704153600000_rs1_12345678-1234-1234-1234-123456789xyz.plog");
         localFs.create(originalFile, true).close();
-        
+
         // Verify original file exists
         assertTrue("Original file should exist", localFs.exists(originalFile));
-        
+
         // Call markCompleted on the original file
         boolean result = tracker.markCompleted(originalFile);
-        
+
         // Verify file system operation counts
         // markCompleted involves deleting the file from in-progress directory
         // It should call exists() for in-progress directory (during init), delete() to remove file
@@ -749,10 +749,10 @@ public class ReplicationLogFileTrackerTest {
         Mockito.verify(mockFs, times(1)).delete(Mockito.eq(originalFile), Mockito.eq(false));
         // Ensure no listStatus() is called
         Mockito.verify(mockFs, times(0)).listStatus(Mockito.any(Path.class));
-        
+
         // Verify operation was successful
         assertTrue("markCompleted should return true for successful deletion", result);
-        
+
         // Verify original file no longer exists
         assertFalse("Original file should no longer exist", localFs.exists(originalFile));
     }
@@ -783,7 +783,7 @@ public class ReplicationLogFileTrackerTest {
 
         // Call markCompleted on the original file
         boolean result = tracker.markCompleted(originalFile);
-        
+
         // Verify file system operation counts
         // markCompleted with intermittent failure involves retrying delete operations
         // It should call exists() for in-progress directory (during init), and 2 times while fetching in progress files
@@ -795,7 +795,7 @@ public class ReplicationLogFileTrackerTest {
         // Ensure listStatus() is called exactly twice on in progress directory
         Mockito.verify(mockFs, times(2)).listStatus(Mockito.any(Path.class));
         Mockito.verify(mockFs, times(2)).listStatus(Mockito.eq(tracker.getInProgressDirPath()));
-        
+
         // Verify operation was successful after retries
         assertTrue("markCompleted should return true after successful retry", result);
     }
@@ -823,10 +823,10 @@ public class ReplicationLogFileTrackerTest {
 
         // Create the file using the spy filesystem
         mockFs.create(originalFile, true).close();
-        
+
         // Call markCompleted on the original file
         boolean result = tracker.markCompleted(originalFile);
-        
+
         // Verify file system operation counts
         // markCompleted with persistent failure involves retrying delete operations until all retries exhausted
         // It should call exists() for in-progress directory (during init), and 3 times while fetching in progress files during retries
@@ -850,11 +850,11 @@ public class ReplicationLogFileTrackerTest {
     public void testMarkCompletedWhenFileDeletedByOtherProcessAlready() throws IOException {
         // Initialize tracker
         tracker.init();
-        
+
         // Create original file in in-progress directory with UUID
         Path fileToBeDeleted = new Path(tracker.getInProgressDirPath(), "1704153600000_rs1_12345678-1234-1234-1234-123456789jkl.plog");
         localFs.create(fileToBeDeleted, true).close();
-        
+
         // Create in-progress file with different prefix
         String uuid = "12345678-1234-1234-1234-123456789abc";
         Path anotherInProgressFile = new Path(tracker.getInProgressDirPath(), "1704153600001_rs2_" + uuid + ".plog");
@@ -866,12 +866,12 @@ public class ReplicationLogFileTrackerTest {
         // Assert first file is deleted and second file should exist
         assertFalse("Original file to be deleted should not exist", localFs.exists(fileToBeDeleted));
         assertTrue("Second file should exist", localFs.exists(anotherInProgressFile));
-        
+
         // Call markCompleted on the deleted file
         // Since the file is already deleted, it should search for other files with same prefix
         // but find none, so it should return true (assuming file was deleted by another process)
         boolean result = tracker.markCompleted(fileToBeDeleted);
-        
+
         // Verify file system operation counts
         // markCompleted when file is already deleted involves checking in-progress directory for matching files
         // It should call exists() for in-progress directory (during init), and once while fetching in progress files
@@ -883,10 +883,10 @@ public class ReplicationLogFileTrackerTest {
         // Ensure listStatus() is called exactly once to check for matching files
         Mockito.verify(mockFs, times(1)).listStatus(Mockito.any(Path.class));
         Mockito.verify(mockFs, times(1)).listStatus(Mockito.eq(tracker.getInProgressDirPath()));
-        
+
         // Verify operation was successful (no matching files found)
         assertTrue("markCompleted should return true when file is already deleted and no matching files found", result);
-        
+
         // Verify the other in-progress file still exists (was not affected)
         assertTrue("Other in-progress file should still exist", localFs.exists(anotherInProgressFile));
     }
@@ -920,7 +920,7 @@ public class ReplicationLogFileTrackerTest {
         // Call markCompleted on the original file
         // Should return false due to multiple matching files during retries
         boolean result = tracker.markCompleted(originalFile);
-        
+
         // Verify file system operation counts
         // markCompleted with multiple matching files involves checking in-progress directory for matching files
         // It should call exists() for in-progress directory (during init), and once while fetching in progress files
@@ -932,7 +932,7 @@ public class ReplicationLogFileTrackerTest {
         // Ensure listStatus() is called exactly once to check for matching files
         Mockito.verify(mockFs, times(1)).listStatus(Mockito.any(Path.class));
         Mockito.verify(mockFs, times(1)).listStatus(Mockito.eq(tracker.getInProgressDirPath()));
-        
+
         // Verify operation failed
         assertFalse("markCompleted should return false for multiple matching files", result);
 
@@ -945,20 +945,20 @@ public class ReplicationLogFileTrackerTest {
     public void testGetFileTimestamp() throws IOException {
         // Initialize tracker
         tracker.init();
-        
+
         // Test with new file (without UUID)
         Path newFile = new Path(tracker.getInProgressDirPath(), "1704153600000_rs1.plog");
         long newFileTimestamp = tracker.getFileTimestamp(newFile);
         assertEquals("New file timestamp should be extracted correctly", 1704153600000L, newFileTimestamp);
-        
+
         // Test with in-progress file (with UUID)
         Path inProgressFile = new Path(tracker.getInProgressDirPath(), "1704153600000_rs1_12345678-1234-1234-1234-123456789abc.plog");
         long inProgressFileTimestamp = tracker.getFileTimestamp(inProgressFile);
         assertEquals("In-progress file timestamp should be extracted correctly", 1704153600000L, inProgressFileTimestamp);
-        
+
         // Verify both timestamps are the same
         assertEquals("Both files should have the same timestamp", newFileTimestamp, inProgressFileTimestamp);
-        
+
         // Test with different timestamp
         Path anotherValidFile = new Path(tracker.getInProgressDirPath(), "1704161280000_rs2_87654321-4321-4321-4321-cba987654321.plog");
         long anotherTimestamp = tracker.getFileTimestamp(anotherValidFile);
@@ -969,7 +969,7 @@ public class ReplicationLogFileTrackerTest {
     public void testGetFileTimestampWithInvalidFormat() throws IOException {
         // Initialize tracker
         tracker.init();
-        
+
         // Test file with invalid timestamp format (non-numeric)
         Path invalidFile = new Path(tracker.getInProgressDirPath(), "invalid_timestamp_rs1_12345678-1234-1234-1234-123456789abc.plog");
         tracker.getFileTimestamp(invalidFile);
@@ -980,7 +980,7 @@ public class ReplicationLogFileTrackerTest {
     public void testGetFileTimestampWithMissingTimestamp() throws IOException {
         // Initialize tracker
         tracker.init();
-        
+
         // Test file with missing timestamp part
         Path invalidFile = new Path(tracker.getInProgressDirPath(), "rs1_12345678-1234-1234-1234-123456789abc.plog");
         tracker.getFileTimestamp(invalidFile);
@@ -990,19 +990,19 @@ public class ReplicationLogFileTrackerTest {
     public void testIsValidLogFile() throws IOException {
         // Initialize tracker
         tracker.init();
-        
+
         // 1. New File (valid) - without UUID, with .plog extension
         Path newFile = new Path(tracker.getInProgressDirPath(), "1704153600000_rs1.plog");
         assertTrue("New file with .plog extension should be valid", tracker.isValidLogFile(newFile));
-        
+
         // 2. InProgressFile (valid) - with UUID, with .plog extension
         Path inProgressFile = new Path(tracker.getInProgressDirPath(), "1704153600000_rs1_12345678-1234-1234-1234-123456789abc.plog");
         assertTrue("In-progress file with .plog extension should be valid", tracker.isValidLogFile(inProgressFile));
-        
+
         // 3. Valid file (invalid extension) - without UUID, without .plog extension
         Path newFileInvalidExt = new Path(tracker.getInProgressDirPath(), "1704153600000_rs1.txt");
         assertFalse("New file without .plog extension should be invalid", tracker.isValidLogFile(newFileInvalidExt));
-        
+
         // 4. InProgress (invalid extension) - with UUID, without .plog extension
         Path inProgressFileInvalidExt = new Path(tracker.getInProgressDirPath(), "1704153600000_rs1_12345678-1234-1234-1234-123456789abc.txt");
         assertFalse("In-progress file without .plog extension should be invalid", tracker.isValidLogFile(inProgressFileInvalidExt));
@@ -1012,18 +1012,18 @@ public class ReplicationLogFileTrackerTest {
     public void testGetFileUUID() throws IOException {
         // Initialize tracker
         tracker.init();
-        
+
         // 1. For new File - without UUID
         Path newFile = new Path(tracker.getInProgressDirPath(), "1704153600000_rs1.plog");
         Optional<String> newFileUUID = tracker.getFileUUID(newFile);
         assertFalse("New file without UUID should return empty Optional", newFileUUID.isPresent());
-        
+
         // 2. For in-progress file - with UUID
         Path inProgressFile = new Path(tracker.getInProgressDirPath(), "1704153600000_rs1_12345678-1234-1234-1234-123456789abc.plog");
         Optional<String> inProgressFileUUID = tracker.getFileUUID(inProgressFile);
         assertTrue("In-progress file with UUID should return present Optional", inProgressFileUUID.isPresent());
         assertEquals("In-progress file UUID should be extracted correctly", "12345678-1234-1234-1234-123456789abc", inProgressFileUUID.get());
-        
+
         // Test with different UUID
         Path anotherInProgressFile = new Path(tracker.getInProgressDirPath(), "1704153600000_rs1_87654321-4321-4321-4321-cba987654321.plog");
         Optional<String> anotherUUID = tracker.getFileUUID(anotherInProgressFile);

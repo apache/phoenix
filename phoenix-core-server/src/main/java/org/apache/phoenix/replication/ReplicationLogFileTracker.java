@@ -234,7 +234,7 @@ public abstract class ReplicationLogFileTracker {
                     LOG.warn("Interrupted while waiting to retry file deletion: {}", file);
                     return false;
                 }
-                
+
                 try {
                     // List in-progress files and find matching file with same <timestamp>_<region-server> prefix
                     List<Path> inProgressFiles = getInProgressFiles();
@@ -306,7 +306,7 @@ public abstract class ReplicationLogFileTracker {
                 newFileName = baseName + "_" + UUID.randomUUID().toString() + extension;
                 targetDirectory = getInProgressDirPath();
             }
-            
+
             Path newPath = new Path(targetDirectory, newFileName);
             if (fileSystem.rename(file, newPath)) {
                 LOG.debug("Successfully marked file as in progress: {} -> {}", file.getName(), newFileName);
@@ -373,7 +373,7 @@ public abstract class ReplicationLogFileTracker {
         if (parts.length < 3) {
             return fileName.split("\\.")[0]; // Return full filename if no underscore found
         }
-        
+
         // Return everything except the last part (UUID)
         StringBuilder prefix = new StringBuilder();
         for (int i = 0; i < parts.length - 1; i++) {
