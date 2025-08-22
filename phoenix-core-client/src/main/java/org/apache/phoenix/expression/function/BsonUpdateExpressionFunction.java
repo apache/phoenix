@@ -95,7 +95,7 @@ public class BsonUpdateExpressionFunction extends ScalarFunction {
       updateExpressionBsonDoc = RawBsonDocument.parse(updateExpression);
     } else {
       updateExpressionBsonDoc = (RawBsonDocument) PBson.INSTANCE.toObject(ptr);
-      if (updateExpressionBsonDoc == null || updateExpressionBsonDoc.isEmpty()) {
+      if (updateExpressionBsonDoc == null) {
         return true;
       }
     }

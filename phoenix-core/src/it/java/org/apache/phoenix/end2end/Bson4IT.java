@@ -56,6 +56,7 @@ import org.bson.BsonNull;
 import org.bson.BsonString;
 import org.bson.Document;
 import org.bson.RawBsonDocument;
+import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -502,6 +503,45 @@ public class Bson4IT extends ParallelStatsDisabledIT {
       assertFalse(rs.next());
 
       validateExplainPlan(ps, tableName, "FULL SCAN ");
+    }
+  }
+
+  @Test
+  public void testBsonReturnValueWithEmptyUpdateExpression() throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    String tableName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.setAutoCommit(true);
+      conn.createStatement().execute("CREATE TABLE " + tableName + " (" +
+              " hk VARCHAR NOT NULL, " +
+              " sk VARCHAR NOT NULL, " +
+              " col BSON, " +
+              " CONSTRAINT pk PRIMARY KEY (hk, sk))");
+
+      RawBsonDocument bsonDoc = RawBsonDocument.parse("{\"a\":1,\"b\":2}");
+
+      PreparedStatement p = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
+      p.setString(1, "h1");
+      p.setString(2, "s1");
+      p.setObject(3, bsonDoc);
+      p.execute();
+
+      p = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?)  ON DUPLICATE KEY UPDATE\n" +
+              " COL = BSON_UPDATE_EXPRESSION(COL,'{}')");
+      p.setString(1, "h1");
+      p.setString(2, "s1");
+      Pair<Integer, ResultSet> resultPair = p.unwrap(PhoenixPreparedStatement.class).executeAtomicUpdateReturnRow();
+      Assert.assertEquals(1, resultPair.getFirst().intValue());
+      Assert.assertEquals(bsonDoc, resultPair.getSecond().getObject(3));
+
+      p = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?)  ON DUPLICATE KEY UPDATE\n" +
+              " COL = BSON_UPDATE_EXPRESSION(COL,?)");
+      p.setString(1, "h1");
+      p.setString(2, "s1");
+      p.setObject(3, new BsonDocument());
+      resultPair = p.unwrap(PhoenixPreparedStatement.class).executeAtomicUpdateReturnRow();
+      Assert.assertEquals(1, resultPair.getFirst().intValue());
+      Assert.assertEquals(bsonDoc, resultPair.getSecond().getObject(3));
     }
   }
 
