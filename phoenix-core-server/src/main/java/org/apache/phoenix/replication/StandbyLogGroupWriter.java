@@ -76,12 +76,15 @@ public class StandbyLogGroupWriter extends ReplicationLogGroupWriter {
 
     @Override
     protected void initializeReplicationShardDirectoryManager() {
-        this.haGroupLogFilesPath = new Path(new Path(standbyUrl.getPath(), logGroup.getHaGroupName()), ReplicationLogReplayFileTracker.IN_SUBDIRECTORY);
-        this.replicationShardDirectoryManager = new ReplicationShardDirectoryManager(logGroup.getConfiguration(), haGroupLogFilesPath);
+        this.haGroupLogFilesPath = new Path(new Path(standbyUrl.getPath(), logGroup.getHaGroupName()), 
+            ReplicationLogReplayFileTracker.IN_SUBDIRECTORY);
+        this.replicationShardDirectoryManager = new ReplicationShardDirectoryManager(
+            logGroup.getConfiguration(), haGroupLogFilesPath);
     }
 
     /**
-     * Creates a new log file path in a sharded directory structure using {@link ReplicationShardDirectoryManager}.
+     * Creates a new log file path in a sharded directory structure using 
+     * {@link ReplicationShardDirectoryManager}.
      * Directory Structure: [root_path]/[ha_group_name]/in/shard/[shard_directory]/[file_name]
      */
     protected Path makeWriterPath(FileSystem fs) throws IOException {

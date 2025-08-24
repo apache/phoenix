@@ -37,12 +37,14 @@ public class MetricsReplicationLogDiscoveryImpl extends BaseSourceImpl
         super(metricsName, metricsDescription, metricsContext, metricsJmxContext);
         numRoundsProcessed = getMetricsRegistry().newCounter(NUM_ROUNDS_PROCESSED,
             NUM_ROUNDS_PROCESSED_DESC, 0L);
-        numInProgressDirectoryProcessed = getMetricsRegistry().newCounter(NUM_IN_PROGRESS_DIRECTORY_PROCESSED,
-            NUM_IN_PROGRESS_DIRECTORY_PROCESSED_DESC, 0L);
+        numInProgressDirectoryProcessed = getMetricsRegistry()
+            .newCounter(NUM_IN_PROGRESS_DIRECTORY_PROCESSED,
+                NUM_IN_PROGRESS_DIRECTORY_PROCESSED_DESC, 0L);
         timeToProcessNewFiles = getMetricsRegistry().newHistogram(TIME_TO_PROCESS_NEW_FILES,
             TIME_TO_PROCESS_NEW_FILES_DESC);
-        timeToProcessInProgressFiles = getMetricsRegistry().newHistogram(TIME_TO_PROCESS_IN_PROGRESS_FILES,
-            TIME_TO_PROCESS_IN_PROGRESS_FILES_DESC);
+        timeToProcessInProgressFiles = getMetricsRegistry()
+            .newHistogram(TIME_TO_PROCESS_IN_PROGRESS_FILES,
+                TIME_TO_PROCESS_IN_PROGRESS_FILES_DESC);
     }
 
     @Override

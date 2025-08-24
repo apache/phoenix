@@ -27,19 +27,25 @@ public interface MetricsReplicationLogFileTracker extends BaseSource {
     String METRICS_JMX_CONTEXT = "RegionServer,sub=" + METRICS_NAME;
 
     String MARK_FILE_IN_PROGRESS_REQUEST_COUNT = "markFileInProgressRequestCount";
-    String MARK_FILE_IN_PROGRESS_REQUEST_COUNT_DESC = "Number of requests made to mark file in progress";
+    String MARK_FILE_IN_PROGRESS_REQUEST_COUNT_DESC = 
+        "Number of requests made to mark file in progress";
     String MARK_FILE_COMPLETED_REQUEST_COUNT = "markFileCompletedRequestCount";
-    String MARK_FILE_COMPLETED_REQUEST_COUNT_DESC = "Number of requests made to mark file completed";
+    String MARK_FILE_COMPLETED_REQUEST_COUNT_DESC = 
+        "Number of requests made to mark file completed";
     String MARK_FILE_FAILED_REQUEST_COUNT = "markFileFailedRequestCount";
     String MARK_FILE_FAILED_REQUEST_COUNT_DESC = "Number of requests made to mark file failed";
     String MARK_FILE_COMPLETED_REQUEST_FAILED_COUNT = "markFileCompletedRequestFailedCount";
-    String MARK_FILE_COMPLETED_REQUEST_FAILED_COUNT_DESC = "Number of requests made to mark file completed failed";
+    String MARK_FILE_COMPLETED_REQUEST_FAILED_COUNT_DESC = 
+        "Number of requests made to mark file completed failed";
     String MARK_FILE_IN_PROGRESS_TIME = "markFileInProgressTimeMs";
-    String MARK_FILE_IN_PROGRESS_TIME_DESC = "Histogram of time taken for marking a file in progress in milliseconds";
+    String MARK_FILE_IN_PROGRESS_TIME_DESC = 
+        "Histogram of time taken for marking a file in progress in milliseconds";
     String MARK_FILE_COMPLETED_TIME = "markFileCompletedTimeMs";
-    String MARK_FILE_COMPLETED_TIME_DESC = "Histogram of time taken for marking a file completed in milliseconds";
+    String MARK_FILE_COMPLETED_TIME_DESC = 
+        "Histogram of time taken for marking a file completed in milliseconds";
     String MARK_FILE_FAILED_TIME = "markFileFailedTimeMs";
-    String MARK_FILE_FAILED_TIME_DESC = "Histogram of time taken for marking a file failed in milliseconds";
+    String MARK_FILE_FAILED_TIME_DESC = 
+        "Histogram of time taken for marking a file failed in milliseconds";
 
     /**
      * Increments the counter for mark file in progress requests.

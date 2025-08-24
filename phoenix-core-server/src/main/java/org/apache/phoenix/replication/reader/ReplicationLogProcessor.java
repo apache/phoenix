@@ -232,6 +232,9 @@ public class ReplicationLogProcessor implements Closeable {
         long startTime = System.currentTimeMillis();
 
         try {
+
+            boolean isClosed = ((LeaseRecoverable) fs).isFileClosed(filePath);
+
             // Create the LogFileReader for given path
             logFileReader = createLogFileReader(fs, filePath);
 

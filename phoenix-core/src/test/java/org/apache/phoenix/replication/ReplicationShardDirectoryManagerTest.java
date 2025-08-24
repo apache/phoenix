@@ -138,7 +138,7 @@ public class ReplicationShardDirectoryManagerTest {
         for (int day = 0; day < 2; day++) {
             for (int hour = 0; hour < 24; hour++) {
                 for (int minute = 0; minute < 60; minute++) {
-                    long minuteStart = dayStart + (day * 24 * 60 * 60 * 1000L) + 
+                    long minuteStart = dayStart + (day * 24 * 60 * 60 * 1000L) +
                                      (hour * 60 * 60 * 1000L) + (minute * 60 * 1000L);
 
                     // Calculate expected shard index based on the algorithm
@@ -152,7 +152,7 @@ public class ReplicationShardDirectoryManagerTest {
                     Path shardPathStart = manager.getShardDirectory(timestampStartOfMin);
                     String expectedPathStart = expectedBasePath + "/" + String.format("%03d", shardIndex);
                     assertEquals(String.format("Start of minute %02d:%02d:%02d (day %d) should map to shard %03d",
-                                           hour, minute, 0, day + 1, shardIndex), 
+                                           hour, minute, 0, day + 1, shardIndex),
                                expectedPathStart, shardPathStart.toString());
 
                     // 2. Test mid of minute (random between 2-58 seconds)
@@ -161,7 +161,7 @@ public class ReplicationShardDirectoryManagerTest {
                     Path shardPathMid = manager.getShardDirectory(timestampMidOfMin);
                     String expectedPathMid = expectedBasePath + "/" + String.format("%03d", shardIndex);
                     assertEquals(String.format("Mid of minute %02d:%02d:%02d (day %d) should map to shard %03d",
-                                           hour, minute, randomSeconds, day + 1, shardIndex), 
+                                           hour, minute, randomSeconds, day + 1, shardIndex),
                                expectedPathMid, shardPathMid.toString());
 
                     // 3. Test end of minute (XX:XX:59)

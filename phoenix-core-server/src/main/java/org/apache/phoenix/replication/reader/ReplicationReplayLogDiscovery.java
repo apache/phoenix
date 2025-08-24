@@ -72,7 +72,8 @@ public class ReplicationReplayLogDiscovery extends ReplicationLogDiscovery {
     public static final long DEFAULT_REPLAY_INTERVAL_SECONDS = 60;
 
     /**
-     * Default shutdown timeout in seconds. Maximum time to wait for executor service to shutdown gracefully.
+     * Default shutdown timeout in seconds. Maximum time to wait for executor service to shutdown 
+     * gracefully.
      */
     public static final long DEFAULT_SHUTDOWN_TIMEOUT_SECONDS = 30;
 
@@ -82,27 +83,34 @@ public class ReplicationReplayLogDiscovery extends ReplicationLogDiscovery {
     public static final int DEFAULT_EXECUTOR_THREAD_COUNT = 1;
 
     /**
-     * Default probability (in percentage) for processing in-progress directory during each replay cycle.
+     * Default probability (in percentage) for processing in-progress directory during each replay 
+     * cycle.
      */
     public static final double DEFAULT_IN_PROGRESS_DIRECTORY_PROCESSING_PROBABILITY = 5.0;
 
     /**
-     * Default waiting buffer percentage. Buffer time is calculated as this percentage of round time.
+     * Default waiting buffer percentage. Buffer time is calculated as this percentage of round 
+     * time.
      */
     public static final double DEFAULT_WAITING_BUFFER_PERCENTAGE = 15.0;
 
-    public ReplicationReplayLogDiscovery(final ReplicationLogReplayFileTracker replicationLogReplayFileTracker, final ReplicationStateTracker replicationStateTracker) {
+    public ReplicationReplayLogDiscovery(final ReplicationLogReplayFileTracker 
+        replicationLogReplayFileTracker, 
+        final ReplicationStateTracker replicationStateTracker) {
         super(replicationLogReplayFileTracker, replicationStateTracker);
     }
 
     @Override
     protected void processFile(Path path) throws IOException {
-        ReplicationLogProcessor.get(getConf(), getHaGroupName()).processLogFile(getReplicationLogFileTracker().getFileSystem(), path);
+        ReplicationLogProcessor.get(getConf(), getHaGroupName())
+            .processLogFile(getReplicationLogFileTracker().getFileSystem(), path);
     }
 
     @Override
-    protected void updateStatePostRoundCompletion(final ReplicationRound replicationRound) throws IOException {
-        // TODO: update last round in sync conditionally, i.e. ONLY when cluster is not in DEGRADED_STANBY_FOR_WRITER state
+    protected void updateStatePostRoundCompletion(final ReplicationRound replicationRound) 
+        throws IOException {
+        // TODO: update last round in sync conditionally, i.e. ONLY when cluster is not in 
+        // DEGRADED_STANBY_FOR_WRITER state
         replicationStateTracker.setLastRoundInSync(replicationRound);
     }
 
@@ -118,26 +126,32 @@ public class ReplicationReplayLogDiscovery extends ReplicationLogDiscovery {
 
     @Override
     public long getReplayIntervalSeconds() {
-        return getConf().getLong(REPLICATION_REPLAY_INTERVAL_SECONDS_KEY, DEFAULT_REPLAY_INTERVAL_SECONDS);
+        return getConf().getLong(REPLICATION_REPLAY_INTERVAL_SECONDS_KEY, 
+            DEFAULT_REPLAY_INTERVAL_SECONDS);
     }
 
     @Override
     public long getShutdownTimeoutSeconds() {
-        return getConf().getLong(REPLICATION_REPLAY_SHUTDOWN_TIMEOUT_SECONDS_KEY, DEFAULT_SHUTDOWN_TIMEOUT_SECONDS);
+        return getConf().getLong(REPLICATION_REPLAY_SHUTDOWN_TIMEOUT_SECONDS_KEY, 
+            DEFAULT_SHUTDOWN_TIMEOUT_SECONDS);
     }
 
     @Override
     public int getExecutorThreadCount() {
-        return getConf().getInt(REPLICATION_REPLAY_EXECUTOR_THREAD_COUNT_KEY, DEFAULT_EXECUTOR_THREAD_COUNT);
+        return getConf().getInt(REPLICATION_REPLAY_EXECUTOR_THREAD_COUNT_KEY, 
+            DEFAULT_EXECUTOR_THREAD_COUNT);
     }
 
     @Override
     public double getInProgressDirectoryProcessProbability() {
-        return getConf().getDouble(REPLICATION_REPLAY_IN_PROGRESS_DIRECTORY_PROCESSING_PROBABILITY_KEY, DEFAULT_IN_PROGRESS_DIRECTORY_PROCESSING_PROBABILITY);
+        return getConf().getDouble(
+            REPLICATION_REPLAY_IN_PROGRESS_DIRECTORY_PROCESSING_PROBABILITY_KEY, 
+            DEFAULT_IN_PROGRESS_DIRECTORY_PROCESSING_PROBABILITY);
     }
 
     @Override
     public double getWaitingBufferPercentage() {
-        return getConf().getDouble(REPLICATION_REPLAY_WAITING_BUFFER_PERCENTAGE_KEY, DEFAULT_WAITING_BUFFER_PERCENTAGE);
+        return getConf().getDouble(REPLICATION_REPLAY_WAITING_BUFFER_PERCENTAGE_KEY, 
+            DEFAULT_WAITING_BUFFER_PERCENTAGE);
     }
 }

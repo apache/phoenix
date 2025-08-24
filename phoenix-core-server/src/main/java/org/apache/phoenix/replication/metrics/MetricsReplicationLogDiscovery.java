@@ -27,13 +27,17 @@ public interface MetricsReplicationLogDiscovery extends BaseSource {
     String METRICS_JMX_CONTEXT = "RegionServer,sub=" + METRICS_NAME;
 
     String NUM_ROUNDS_PROCESSED = "numRoundsProcessed";
-    String NUM_ROUNDS_PROCESSED_DESC = "Number of rounds processed during replication log discovery";
+    String NUM_ROUNDS_PROCESSED_DESC = 
+        "Number of rounds processed during replication log discovery";
     String NUM_IN_PROGRESS_DIRECTORY_PROCESSED = "numInProgressDirectoryProcessed";
-    String NUM_IN_PROGRESS_DIRECTORY_PROCESSED_DESC = "Number of times in progress directory is processed during replication log discovery";
+    String NUM_IN_PROGRESS_DIRECTORY_PROCESSED_DESC = 
+        "Number of times in progress directory is processed during replication log discovery";
     String TIME_TO_PROCESS_NEW_FILES = "timeToProcessNewFilesMs";
-    String TIME_TO_PROCESS_NEW_FILES_DESC = "Histogram of time taken to process new files in milliseconds";
+    String TIME_TO_PROCESS_NEW_FILES_DESC = 
+        "Histogram of time taken to process new files in milliseconds";
     String TIME_TO_PROCESS_IN_PROGRESS_FILES = "timeToProcessInProgressFilesMs";
-    String TIME_TO_PROCESS_IN_PROGRESS_FILES_DESC = "Histogram of time taken to process in progress files in milliseconds";
+    String TIME_TO_PROCESS_IN_PROGRESS_FILES_DESC = 
+        "Histogram of time taken to process in progress files in milliseconds";
 
     /**
      * Increments the counter for rounds processed.
@@ -43,7 +47,8 @@ public interface MetricsReplicationLogDiscovery extends BaseSource {
 
     /**
      * Increments the counter for in progress directory processing.
-     * This counter tracks the number of times the in progress directory is processed during replication log discovery.
+     * This counter tracks the number of times the in progress directory is processed 
+     * during replication log discovery.
      */
     void incrementNumInProgressDirectoryProcessed();
 

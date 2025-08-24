@@ -35,18 +35,25 @@ public class ReplicationReplayStateTracker extends ReplicationStateTracker {
         // TODO: Update this to check from HA Store Client
         boolean isDegradedStandByForWriter = false;
 
-        if(isDegradedStandByForWriter) {
-            // TODO: Set the last successfully processed replication round to the last store-and-forward starting timestamp is obtained from the HA store record cached by HA Store Manager
+        if (isDegradedStandByForWriter) {
+            // TODO: Set the last successfully processed replication round to the last 
+            // store-and-forward 
+            // starting timestamp is obtained from the HA store record cached by HA Store Manager
         } else {
-            Optional<Long> minTimestampFromInProgressFiles = getMinTimestampFromInProgressFiles(replicationLogFileTracker);
-            if(minTimestampFromInProgressFiles.isPresent()) {
-                this.lastRoundInSync = replicationLogFileTracker.getReplicationShardDirectoryManager().getReplicationRoundFromEndTime(minTimestampFromInProgressFiles.get());
+            Optional<Long> minTimestampFromInProgressFiles = 
+                getMinTimestampFromInProgressFiles(replicationLogFileTracker);
+            if (minTimestampFromInProgressFiles.isPresent()) {
+                this.lastRoundInSync = replicationLogFileTracker.getReplicationShardDirectoryManager()
+                    .getReplicationRoundFromEndTime(minTimestampFromInProgressFiles.get());
             } else {
-                Optional<Long> minTimestampFromNewFiles = getMinTimestampFromNewFiles(replicationLogFileTracker);
-                if(minTimestampFromNewFiles.isPresent()) {
-                    this.lastRoundInSync = replicationLogFileTracker.getReplicationShardDirectoryManager().getReplicationRoundFromEndTime(minTimestampFromNewFiles.get());
+                Optional<Long> minTimestampFromNewFiles = 
+                getMinTimestampFromNewFiles(replicationLogFileTracker);
+                if (minTimestampFromNewFiles.isPresent()) {
+                    this.lastRoundInSync = replicationLogFileTracker.getReplicationShardDirectoryManager()
+                    .getReplicationRoundFromEndTime(minTimestampFromNewFiles.get());
                 } else {
-                    this.lastRoundInSync = replicationLogFileTracker.getReplicationShardDirectoryManager().getReplicationRoundFromEndTime(EnvironmentEdgeManager.currentTime());
+                    this.lastRoundInSync = replicationLogFileTracker.getReplicationShardDirectoryManager()
+                        .getReplicationRoundFromEndTime(EnvironmentEdgeManager.currentTime());
                 }
             }
         }

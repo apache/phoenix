@@ -638,7 +638,7 @@ public class ReplicationLogFileTrackerTest {
         // Verify the new file has UUID format and is in in-progress directory
         String newFileName = files[0].getPath().getName();
         assertTrue("New file should have UUID suffix", newFileName.matches("1704153600000_rs1_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\\.plog"));
-        
+
         // Assert that renamed file is in in-progress directory
         Path renamedFile = files[0].getPath();
         assertTrue("Renamed file should be in in-progress directory",

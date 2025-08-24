@@ -35,9 +35,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Abstract base class for discovering and processing replication log files (to be implemented for replication replay on target
- * and store and forward mode on source). It manages the lifecycle of replication log processing including start/stop of replication log discovery,
- * scheduling periodic replay operations, and processing files from both new and in-progress directories.
+ * Abstract base class for discovering and processing replication log files (to be implemented for 
+ * replication replay on target and store and forward mode on source). It manages the lifecycle of 
+      * replication log processing including start/stop of replication log discovery, scheduling 
+     * periodic 
+ * replay operations, and processing files from both new and in-progress directories.
  */
 public abstract class ReplicationLogDiscovery {
 
@@ -81,7 +83,8 @@ public abstract class ReplicationLogDiscovery {
     protected volatile boolean isRunning = false;
     protected MetricsReplicationLogDiscovery metrics;
 
-    public ReplicationLogDiscovery(final ReplicationLogFileTracker replicationLogFileTracker, final ReplicationStateTracker replicationStateTracker) {
+    public ReplicationLogDiscovery(final ReplicationLogFileTracker replicationLogFileTracker, 
+        final ReplicationStateTracker replicationStateTracker) {
         this.replicationLogFileTracker = replicationLogFileTracker;
         this.replicationStateTracker = replicationStateTracker;
         this.haGroupName = replicationLogFileTracker.getHaGroupName();
@@ -99,8 +102,11 @@ public abstract class ReplicationLogDiscovery {
     }
 
     /**
-     * Starts the replication log discovery service by initializing the scheduler and scheduling periodic replay operations.
-     * Creates a thread pool with configured thread count and schedules replay tasks at fixed intervals.
+     * Starts the replication log discovery service by initializing the scheduler and scheduling 
+     * periodic 
+     * replay operations. Creates a thread pool with configured thread count and schedules replay 
+     * tasks 
+     * at fixed intervals.
      * @throws IOException if there's an error during initialization
      */
     public void start() throws IOException {
@@ -110,7 +116,8 @@ public abstract class ReplicationLogDiscovery {
                 return;
             }
             // Initialize and schedule the executors
-            scheduler = Executors.newScheduledThreadPool(getExecutorThreadCount(), new ThreadFactoryBuilder()
+            scheduler = Executors.newScheduledThreadPool(getExecutorThreadCount(), 
+                new ThreadFactoryBuilder()
                     .setNameFormat(getExecutorThreadNameFormat()).build());
             scheduler.scheduleAtFixedRate(() -> {
                 try {
@@ -146,7 +153,8 @@ public abstract class ReplicationLogDiscovery {
         if (schedulerToShutdown != null && !schedulerToShutdown.isShutdown()) {
             schedulerToShutdown.shutdown();
             try {
-                if (!schedulerToShutdown.awaitTermination(getShutdownTimeoutSeconds(), TimeUnit.SECONDS)) {
+                if (!schedulerToShutdown.awaitTermination(getShutdownTimeoutSeconds(), 
+                    TimeUnit.SECONDS)) {
                     schedulerToShutdown.shutdownNow();
                 }
             } catch (InterruptedException e) {
@@ -159,7 +167,9 @@ public abstract class ReplicationLogDiscovery {
     }
 
     /**
-     * Executes a replay operation for next set of rounds. Retrieves rounds to process and processes each round sequentially.
+     * Executes a replay operation for next set of rounds. Retrieves rounds to process and 
+     * processes 
+     * each round sequentially.
      * @throws IOException if there's an error during replay processing
      */
     public void replay() throws IOException {
@@ -172,24 +182,31 @@ public abstract class ReplicationLogDiscovery {
     }
 
     /**
-     * Determines which replication rounds need to be processed based on current time and last sync timestamp.
+     * Determines which replication rounds need to be processed based on current time and last sync 
+     * timestamp.
      * @return List of replication rounds that need to be processed
      */
     protected List<ReplicationRound> getRoundsToProcess() {
         long currentTime = EnvironmentEdgeManager.currentTimeMillis();
         long previousRoundEndTime = replicationStateTracker.getLastRoundInSync().getEndTime();
-        long roundTimeMills = replicationLogFileTracker.getReplicationShardDirectoryManager().getReplicationRoundDurationSeconds() * 1000L;
+        long roundTimeMills = replicationLogFileTracker.getReplicationShardDirectoryManager()
+            .getReplicationRoundDurationSeconds() * 1000L;
         long bufferMillis = (long) (roundTimeMills * getWaitingBufferPercentage() / 100.0);
         final List<ReplicationRound> replicationRounds = new ArrayList<>();
-        for(long startTime = previousRoundEndTime; startTime < currentTime - roundTimeMills - bufferMillis; startTime += roundTimeMills) {
-            replicationRounds.add(replicationLogFileTracker.getReplicationShardDirectoryManager().getReplicationRoundFromStartTime(startTime));
+        for(long startTime = previousRoundEndTime; 
+            startTime < currentTime - roundTimeMills - bufferMillis; 
+            startTime += roundTimeMills) {
+            replicationRounds.add(replicationLogFileTracker.getReplicationShardDirectoryManager()
+                .getReplicationRoundFromStartTime(startTime));
         }
         return replicationRounds;
     }
 
     /**
      * Processes a single replication round by handling new files and optionally in-progress files.
-     * Always processes new files for the round, and conditionally processes in-progress files based on probability.
+     * Always processes new files for the round, and conditionally processes in-progress files 
+     * based on 
+     * probability.
      * @param replicationRound - The replication round to process
      * @throws IOException if there's an error during round processing
      */
@@ -209,11 +226,13 @@ public abstract class ReplicationLogDiscovery {
 
     /**
      * Determines whether to process in-progress directory files based on configured probability.
-     * Uses random number generation to decide if in-progress files should be processed in this cycle.
+     * Uses random number generation to decide if in-progress files should be processed in this 
+     * cycle.
      * @return true if in-progress directory should be processed, false otherwise
      */
     protected boolean shouldProcessInProgressDirectory() {
-        return ThreadLocalRandom.current().nextDouble(100.0) < getInProgressDirectoryProcessProbability();
+        return ThreadLocalRandom.current().nextDouble(100.0) < 
+            getInProgressDirectoryProcessProbability();
     }
 
     /**
@@ -287,13 +306,16 @@ public abstract class ReplicationLogDiscovery {
      */
     protected abstract void processFile(Path path) throws IOException;
 
-    protected abstract void updateStatePostRoundCompletion(ReplicationRound replicationRound) throws IOException;
+    protected abstract void updateStatePostRoundCompletion(ReplicationRound replicationRound) 
+        throws IOException;
 
     /** Creates a new metrics source for monitoring operations. */
     protected abstract MetricsReplicationLogDiscovery createMetricsSource();
 
     /**
-     * Returns the executor thread count. Subclasses can override this method to provide custom name format.
+     * Returns the executor thread count. Subclasses can override this method to provide custom 
+     * name 
+     * format.
      * @return the executor thread count (default: 1).
      */
     public int getExecutorThreadCount() {
@@ -301,7 +323,9 @@ public abstract class ReplicationLogDiscovery {
     }
 
     /**
-     * Returns the executor thread name format. Subclasses can override this method to provide custom name format.
+     * Returns the executor thread name format. Subclasses can override this method to provide 
+     * custom 
+     * name format.
      * @return the executor thread name format (default: ReplicationLogDiscovery-%d).
      */
     public String getExecutorThreadNameFormat() {
@@ -309,7 +333,9 @@ public abstract class ReplicationLogDiscovery {
     }
 
     /**
-     * Returns the replay interval in seconds. Subclasses can override this method to provide custom intervals.
+     * Returns the replay interval in seconds. Subclasses can override this method to provide 
+     * custom 
+     * intervals.
      * @return The replay interval in seconds (default: 10 seconds).
      */
     public long getReplayIntervalSeconds() {
@@ -317,7 +343,9 @@ public abstract class ReplicationLogDiscovery {
     }
 
     /**
-     * Returns the shutdown timeout in seconds. Subclasses can override this method to provide custom timeout values.
+     * Returns the shutdown timeout in seconds. Subclasses can override this method to provide 
+     * custom 
+     * timeout values.
      * @return The shutdown timeout in seconds (default: 30 seconds).
      */
     public long getShutdownTimeoutSeconds() {
@@ -325,8 +353,8 @@ public abstract class ReplicationLogDiscovery {
     }
 
     /**
-     * Returns the probability (in percentage) for processing files from in-progress directory. Subclasses can override this method
-     * to provide custom probabilities.
+     * Returns the probability (in percentage) for processing files from in-progress directory. 
+     * Subclasses can override this method to provide custom probabilities.
      * @return The probability (default 5.0%)
      */
     public double getInProgressDirectoryProcessProbability() {
@@ -334,7 +362,8 @@ public abstract class ReplicationLogDiscovery {
     }
 
     /**
-     * Returns the buffer percentage for calculating buffer time. Subclasses can override this method
+     * Returns the buffer percentage for calculating buffer time. Subclasses can override this 
+     * method 
      * to provide custom buffer percentages.
      * @return The buffer percentage (default 15.0%)
      */

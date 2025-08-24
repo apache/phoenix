@@ -38,14 +38,17 @@ public class MetricsReplicationLogFileTrackerImpl extends BaseSourceImpl
     public MetricsReplicationLogFileTrackerImpl(String metricsName, String metricsDescription,
             String metricsContext, String metricsJmxContext) {
         super(metricsName, metricsDescription, metricsContext, metricsJmxContext);
-        markFileInProgressRequestCount = getMetricsRegistry().newCounter(MARK_FILE_IN_PROGRESS_REQUEST_COUNT,
-            MARK_FILE_IN_PROGRESS_REQUEST_COUNT_DESC, 0L);
-        markFileCompletedRequestCount = getMetricsRegistry().newCounter(MARK_FILE_COMPLETED_REQUEST_COUNT,
-            MARK_FILE_COMPLETED_REQUEST_COUNT_DESC, 0L);
+        markFileInProgressRequestCount = getMetricsRegistry()
+            .newCounter(MARK_FILE_IN_PROGRESS_REQUEST_COUNT,
+                MARK_FILE_IN_PROGRESS_REQUEST_COUNT_DESC, 0L);
+        markFileCompletedRequestCount = getMetricsRegistry()
+            .newCounter(MARK_FILE_COMPLETED_REQUEST_COUNT,
+                MARK_FILE_COMPLETED_REQUEST_COUNT_DESC, 0L);
         markFileFailedRequestCount = getMetricsRegistry().newCounter(MARK_FILE_FAILED_REQUEST_COUNT,
             MARK_FILE_FAILED_REQUEST_COUNT_DESC, 0L);
-        markFileCompletedRequestFailedCount = getMetricsRegistry().newCounter(MARK_FILE_COMPLETED_REQUEST_FAILED_COUNT,
-            MARK_FILE_COMPLETED_REQUEST_FAILED_COUNT_DESC, 0L);
+        markFileCompletedRequestFailedCount = getMetricsRegistry()
+            .newCounter(MARK_FILE_COMPLETED_REQUEST_FAILED_COUNT,
+                MARK_FILE_COMPLETED_REQUEST_FAILED_COUNT_DESC, 0L);
         markFileInProgressTime = getMetricsRegistry().newHistogram(MARK_FILE_IN_PROGRESS_TIME,
             MARK_FILE_IN_PROGRESS_TIME_DESC);
         markFileCompletedTime = getMetricsRegistry().newHistogram(MARK_FILE_COMPLETED_TIME,

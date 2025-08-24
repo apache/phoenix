@@ -30,7 +30,8 @@ import org.apache.phoenix.replication.metrics.MetricsReplicationLogReplayFileTra
  */
 public class ReplicationLogReplayFileTracker extends ReplicationLogFileTracker {
 
-    public ReplicationLogReplayFileTracker(final Configuration conf, final String haGroupName, final FileSystem fileSystem, final URI rootURI) {
+    public ReplicationLogReplayFileTracker(final Configuration conf, final String haGroupName, 
+        final FileSystem fileSystem, final URI rootURI) {
         super(conf, haGroupName, fileSystem, rootURI);
     }
 

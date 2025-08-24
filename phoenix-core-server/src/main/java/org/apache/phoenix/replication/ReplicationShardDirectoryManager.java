@@ -27,8 +27,9 @@ import org.apache.hadoop.fs.Path;
 /**
  * Manages shard-based directory structure for Phoenix replication log files.
  *
- * This class manages mapping between replication log files and different shard directories based on timestamp.
- * The root directory could be IN (on standby cluster) or OUT(on active cluster) and it manages shard interaction within given root directory.
+ * This class manages mapping between replication log files and different shard directories based on 
+ * timestamp. The root directory could be IN (on standby cluster) or OUT(on active cluster) and it 
+ * manages shard interaction within given root directory.
  * <p><strong>Directory Structure:</strong></p>
  * <pre>
  * /phoenix/replication/<group-id>/in/shard/
@@ -46,25 +47,29 @@ public class ReplicationShardDirectoryManager {
     public static final String REPLICATION_NUM_SHARDS_KEY = "phoenix.replication.log.shards";
 
     /**
-     * Default number of shard directories. Assuming 400 workers on standby writing replication log files every 1 min,
-     * and a lag of 2 days, number of files would be 400 * 2 * 24 * 60 = 1152000 files. Each shard will have
-     * (1152000 / 128) = 9000 files which is very well manageable for single HDFS directory
+     * Default number of shard directories. Assuming 400 workers on standby writing replication log 
+     * files every 1 min, and a lag of 2 days, number of files would be 400 * 2 * 24 * 60 = 
+     * 1152000 files. Each shard will have (1152000 / 128) = 9000 files which is very well 
+     * manageable for single HDFS directory
      */
     public static final int DEFAULT_REPLICATION_NUM_SHARDS = 128;
 
     /**
-     * Format string for shard directory names. Uses 3-digit zero-padded format (e.g., "000", "001", "002").
+     * Format string for shard directory names. Uses 3-digit zero-padded format (e.g., "000", "001", 
+     * "002").
      */
     public static final String SHARD_DIR_FORMAT = "%03d";
 
     /**
      * Configuration key for the duration of each replication round in seconds.
      */
-    public static final String PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY = "phoenix.replication.round.duration.seconds";
+    public static final String PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY = 
+        "phoenix.replication.round.duration.seconds";
 
     /**
      * Default duration of each replication round in seconds.
-     * Files with timestamps within the same 60-second window will be placed in the same shard directory.
+     * Files with timestamps within the same 60-second window will be placed in the same shard 
+     * directory.
      * This provides a good balance between file distribution and processing efficiency.
      */
     public static final int DEFAULT_REPLICATION_ROUND_DURATION_SECONDS = 60;
@@ -78,13 +83,16 @@ public class ReplicationShardDirectoryManager {
     private final Path shardDirectoryPath;
 
     public ReplicationShardDirectoryManager(final Configuration conf, final Path rootPath) {
-        this.shardDirectoryPath = new Path(rootPath.toUri().getPath(), REPLICATION_SHARD_SUB_DIRECTORY_NAME);
+        this.shardDirectoryPath = new Path(rootPath.toUri().getPath(), 
+            REPLICATION_SHARD_SUB_DIRECTORY_NAME);
         this.numShards = conf.getInt(REPLICATION_NUM_SHARDS_KEY, DEFAULT_REPLICATION_NUM_SHARDS);
-        this.replicationRoundDurationSeconds = conf.getInt(PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY, DEFAULT_REPLICATION_ROUND_DURATION_SECONDS);
+        this.replicationRoundDurationSeconds = conf.getInt(
+            PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY, DEFAULT_REPLICATION_ROUND_DURATION_SECONDS);
     }
 
     /**
-     * Returns the shard directory to which file with given timestamp belongs to based on round time period
+     * Returns the shard directory to which file with given timestamp belongs to based on round time 
+     * period
      * @param fileTimestamp The timestamp in milliseconds since epoch
      * @return The shard directory path for the given timestamp
      */
@@ -121,7 +129,8 @@ public class ReplicationShardDirectoryManager {
 
 
     /**
-     * Returns a ReplicationRound object based on the given round start time, calculating the end time as start time + round duration.
+     * Returns a ReplicationRound object based on the given round start time, calculating the end time 
+     * as start time + round duration.
      * @param roundStartTime - start time of the given round.
      * @return The round to which input roundStartTime belongs to
      */
@@ -132,7 +141,8 @@ public class ReplicationShardDirectoryManager {
     }
 
     /**
-     * Returns a ReplicationRound object based on the given round end time, calculating the start time as end time - round duration.
+     * Returns a ReplicationRound object based on the given round end time, calculating the start time 
+     * as end time - round duration.
      * @param roundEndTime - end time of the given round.
      * @return The round to which input roundEndTime belongs to
      */
@@ -142,7 +152,9 @@ public class ReplicationShardDirectoryManager {
         return new ReplicationRound(validRoundStartTime, validRoundEndTime);
     }
 
-    /** Returns a list of all shard directory paths, formatted with 3-digit zero-padded shard numbers. */
+    /** 
+     * Returns a list of all shard directory paths, formatted with 3-digit zero-padded shard numbers. 
+     */
     public List<Path> getAllShardPaths() {
         List<Path> shardPaths = new ArrayList<>();
         for (int i = 0; i < numShards; i++) {
