@@ -883,9 +883,10 @@ finally{ contextStack.pop(); }
 
 // Parse a full upsert expression structure.
 upsert_node returns [UpsertStatement ret]
+@init{List<List<ParseNode>> v = new ArrayList<List<ParseNode>>(); }
     :   UPSERT (hint=hintClause)? INTO t=from_table_name
         (LPAREN p=upsert_column_refs RPAREN)?
-        ((VALUES LPAREN v=one_or_more_expressions RPAREN (
+        ((VALUES LPAREN e = one_or_more_expressions {v.add(e);} RPAREN (COMMA LPAREN e = one_or_more_expressions {v.add(e);} RPAREN )* (
             ON DUPLICATE KEY (
                 ig=IGNORE
               | ( upd=UPDATE pairs=update_column_pairs )
