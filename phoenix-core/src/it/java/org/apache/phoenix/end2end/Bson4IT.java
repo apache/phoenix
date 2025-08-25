@@ -512,11 +512,8 @@ public class Bson4IT extends ParallelStatsDisabledIT {
     String tableName = generateUniqueName();
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       conn.setAutoCommit(true);
-      conn.createStatement().execute("CREATE TABLE " + tableName + " (" +
-              " hk VARCHAR NOT NULL, " +
-              " sk VARCHAR NOT NULL, " +
-              " col BSON, " +
-              " CONSTRAINT pk PRIMARY KEY (hk, sk))");
+      conn.createStatement().execute("CREATE TABLE " + tableName + " (" + " hk VARCHAR NOT NULL, "
+        + " sk VARCHAR NOT NULL, " + " col BSON, " + " CONSTRAINT pk PRIMARY KEY (hk, sk))");
 
       RawBsonDocument bsonDoc = RawBsonDocument.parse("{\"a\":1,\"b\":2}");
 
@@ -526,16 +523,17 @@ public class Bson4IT extends ParallelStatsDisabledIT {
       p.setObject(3, bsonDoc);
       p.execute();
 
-      p = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?)  ON DUPLICATE KEY UPDATE\n" +
-              " COL = BSON_UPDATE_EXPRESSION(COL,'{}')");
+      p = conn.prepareStatement("UPSERT INTO " + tableName
+        + " VALUES (?,?)  ON DUPLICATE KEY UPDATE\n" + " COL = BSON_UPDATE_EXPRESSION(COL,'{}')");
       p.setString(1, "h1");
       p.setString(2, "s1");
-      Pair<Integer, ResultSet> resultPair = p.unwrap(PhoenixPreparedStatement.class).executeAtomicUpdateReturnRow();
+      Pair<Integer, ResultSet> resultPair =
+        p.unwrap(PhoenixPreparedStatement.class).executeAtomicUpdateReturnRow();
       Assert.assertEquals(1, resultPair.getFirst().intValue());
       Assert.assertEquals(bsonDoc, resultPair.getSecond().getObject(3));
 
-      p = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?)  ON DUPLICATE KEY UPDATE\n" +
-              " COL = BSON_UPDATE_EXPRESSION(COL,?)");
+      p = conn.prepareStatement("UPSERT INTO " + tableName
+        + " VALUES (?,?)  ON DUPLICATE KEY UPDATE\n" + " COL = BSON_UPDATE_EXPRESSION(COL,?)");
       p.setString(1, "h1");
       p.setString(2, "s1");
       p.setObject(3, new BsonDocument());
