@@ -37,6 +37,7 @@ import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSou
 import org.apache.phoenix.jdbc.ClusterRoleRecord;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.protobuf.ProtobufUtil;
+import org.apache.phoenix.replication.reader.ReplicationLogReplayService;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -62,10 +63,15 @@ public class PhoenixRegionServerEndpoint
         this.metricsSource = MetricsPhoenixCoprocessorSourceFactory
                                 .getInstance().getMetadataCachingSource();
         this.zkUrl = getLocalZkUrl(conf);
+        // Start log replication replay
+        ReplicationLogReplayService.getInstance(conf).start();
     }
 
     @Override
     public void stop(CoprocessorEnvironment env) throws IOException {
+        // Stop log replication replay
+        ReplicationLogReplayService.getInstance(conf).start();
+        ReplicationLogReplayService.getInstance(conf).stop();
         RegionServerCoprocessor.super.stop(env);
         ServerUtil.ConnectionFactory.shutdown();
     }
