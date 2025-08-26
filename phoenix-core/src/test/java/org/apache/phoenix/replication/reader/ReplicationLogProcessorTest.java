@@ -1231,8 +1231,8 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
 
             try {
                 spyProcessor.processReplicationLogBatch(tableMutationsMap);
-                fail("Should throw IOException for non-existent file");
-            } catch (IOException e) {
+            fail("Should throw IOException for non-existent file");
+        } catch (IOException e) {
                 assertTrue("IOException must be thrown due to persistent failures", true);
             }
 
@@ -1360,7 +1360,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
             try {
                 spyProcessor.processReplicationLogBatch(tableMutationsMap);
                 // Should succeed after retries
-            } catch (IOException e) {
+        } catch (IOException e) {
                 fail("Should not throw IOException as mutations should eventually succeed");
             }
 
