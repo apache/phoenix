@@ -31,8 +31,7 @@ import org.slf4j.LoggerFactory;
 /**
   * Manages replication replay operations for a specific HA group. Provides singleton instances per 
  * group name and orchestrates the initialization of file system, file tracker, state tracker, and 
- * log discovery 
- * components. 
+ * log discovery components.
  * It also handles starting and stopping replay operations through the log discovery service.
  */
 public class ReplicationReplay {

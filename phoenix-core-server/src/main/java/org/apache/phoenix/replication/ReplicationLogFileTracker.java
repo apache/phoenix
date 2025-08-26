@@ -115,8 +115,7 @@ public abstract class ReplicationLogFileTracker {
 
     /**
      * Retrieves new replication log files that belong to a specific replication round. It skips
-     * the
-     * invalid files (if any)
+     * the invalid files (if any)
      * @param replicationRound - The replication round for which to retrieve files
      * @return List of valid log file paths that belong to the specified replication round
      * @throws IOException if there's an error accessing the file system
@@ -390,7 +389,7 @@ public abstract class ReplicationLogFileTracker {
     /**
      * Extracts everything except the UUID (last part) from a file path.
      * For example, from "1704153600000_rs1_12345678-1234-1234-1234-123456789abc.plog"
-     * returns "1704153600000_rs1"
+     * This method will return "1704153600000_rs1"
      * @param file - The file path to extract prefix from.
      */
     protected String getFilePrefix(Path file) {
@@ -413,7 +412,8 @@ public abstract class ReplicationLogFileTracker {
     }
 
     /**
-     * No op implementation for marking a file as failed
+     * No op implementation for marking a file as failed as its expected to be picked by
+     * by other process from in-progress directory
      * @param file - The file which needs to be marked as failed
      * @return - true if marked as failed, false otherwise
      */

@@ -85,8 +85,7 @@ public class ReplicationLogReplayService {
 
     /**
      * Gets the singleton instance of the ReplicationLogReplayService using the lazy initializer 
-     * pattern.
-     * Initializes the instance if it hasn't been created yet.
+     * pattern. Initializes the instance if it hasn't been created yet.
      * @param conf Configuration object.
      * @return The singleton ReplicationLogManager instance.
      * @throws IOException If initialization fails.
@@ -105,8 +104,7 @@ public class ReplicationLogReplayService {
 
     /**
      * Starts the replication log replay service by initializing the scheduler and scheduling 
-     * periodic 
-     * replay operations for each HA Group.
+     * periodic replay operations for each HA Group.
      * @throws IOException if there's an error during initialization
      */
     public void start() throws IOException {
