@@ -252,7 +252,7 @@ public abstract class ReplicationLogGroupWriter {
     protected abstract void initializeFileSystems() throws IOException;
 
     /**
-     * Initialize the {@link ReplicationShardDirectoryManager} to manage file to shard directory 
+     * Initialize the {@link ReplicationShardDirectoryManager} to manage file to shard directory
      * mapping
      */
     protected abstract void initializeReplicationShardDirectoryManager();

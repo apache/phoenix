@@ -58,7 +58,7 @@ public abstract class ReplicationLogFileTracker {
     /**
      * Configuration key for delay between file deletion retry attempts
      */
-     private static final String FILE_DELETE_RETRY_DELAY_MS_KEY = 
+     private static final String FILE_DELETE_RETRY_DELAY_MS_KEY =
          "phoenix.replication.file.delete.retry.delay.ms";
 
      /**
@@ -74,7 +74,7 @@ public abstract class ReplicationLogFileTracker {
     protected final String haGroupName;
     protected MetricsReplicationLogFileTracker metrics;
 
-    protected ReplicationLogFileTracker(final Configuration conf, final String haGroupName, 
+    protected ReplicationLogFileTracker(final Configuration conf, final String haGroupName,
         final FileSystem fileSystem, final URI rootURI) {
         this.conf = conf;
         this.fileSystem = fileSystem;
@@ -93,15 +93,15 @@ public abstract class ReplicationLogFileTracker {
 
     /**
      * Initializes the file tracker by setting up new files directory and in-progress directory.
-     * Creates the in-progress directory (rootURI/<group-name>/[in/out]_progress) if it doesn't 
+     * Creates the in-progress directory (rootURI/<group-name>/[in/out]_progress) if it doesn't
      * exist.
      */
     public void init() throws IOException {
-        Path newFilesDirectory = new Path(new Path(rootURI.getPath(), haGroupName), 
+        Path newFilesDirectory = new Path(new Path(rootURI.getPath(), haGroupName),
             getNewLogSubDirectoryName());
-        this.replicationShardDirectoryManager = new ReplicationShardDirectoryManager(conf, 
+        this.replicationShardDirectoryManager = new ReplicationShardDirectoryManager(conf,
             newFilesDirectory);
-        this.inProgressDirPath = new Path(new Path(rootURI.getPath(), haGroupName), 
+        this.inProgressDirPath = new Path(new Path(rootURI.getPath(), haGroupName),
             getInProgressLogSubDirectoryName());
         createDirectoryIfNotExists(inProgressDirPath);
         this.metrics = createMetricsSource();
@@ -114,8 +114,8 @@ public abstract class ReplicationLogFileTracker {
     }
 
     /**
-     * Retrieves new replication log files that belong to a specific replication round. It skips 
-     * the 
+     * Retrieves new replication log files that belong to a specific replication round. It skips
+     * the
      * invalid files (if any)
      * @param replicationRound - The replication round for which to retrieve files
      * @return List of valid log file paths that belong to the specified replication round
@@ -142,13 +142,13 @@ public abstract class ReplicationLogFileTracker {
                 }
                 try {
                     long fileTimestamp = getFileTimestamp(status.getPath());
-                    if(fileTimestamp >= replicationRound.getStartTime() && 
+                    if(fileTimestamp >= replicationRound.getStartTime() &&
                         fileTimestamp <= replicationRound.getEndTime()) {
                         filesInRound.add(status.getPath());
                     }
                 } catch (NumberFormatException exception) {
                     // Should we throw an exception here instead?
-                    LOG.warn("Failed to extract timestamp from {}. Ignoring the file.", 
+                    LOG.warn("Failed to extract timestamp from {}. Ignoring the file.",
                         status.getPath());
                 }
             }
@@ -158,7 +158,7 @@ public abstract class ReplicationLogFileTracker {
 
     /**
      * Retrieves all valid log files currently in the in-progress directory.
-     * @return List of valid log file paths in the in-progress directory, empty list if directory 
+     * @return List of valid log file paths in the in-progress directory, empty list if directory
      * doesn't exist
      * @throws IOException if there's an error accessing the file system
      */
@@ -201,9 +201,9 @@ public abstract class ReplicationLogFileTracker {
     }
 
     /**
-     * Marks a file as completed by deleting it from the file system. Uses retry logic with 
-     * configurable retry count and delay. During retry attempts, it fetches the file with same 
-     * prefix (instead of re-using the same file) because it would likely be re-named by some 
+     * Marks a file as completed by deleting it from the file system. Uses retry logic with
+     * configurable retry count and delay. During retry attempts, it fetches the file with same
+     * prefix (instead of re-using the same file) because it would likely be re-named by some
      * other process
      * @param file - The file path to mark as completed
      * @return true if file was successfully deleted, false otherwise
@@ -214,7 +214,7 @@ public abstract class ReplicationLogFileTracker {
         getMetrics().incrementMarkFileCompletedRequestCount();
 
         int maxRetries = conf.getInt(FILE_DELETE_RETRIES_KEY, DEFAULT_FILE_DELETE_RETRIES);
-        long retryDelayMs = conf.getLong(FILE_DELETE_RETRY_DELAY_MS_KEY, 
+        long retryDelayMs = conf.getLong(FILE_DELETE_RETRY_DELAY_MS_KEY,
             DEFAULT_FILE_DELETE_RETRY_DELAY_MS);
 
         Path fileToDelete = file;
@@ -231,14 +231,14 @@ public abstract class ReplicationLogFileTracker {
                     LOG.warn("Failed to delete file (attempt {}): {}", attempt + 1, fileToDelete);
                 }
             } catch (IOException e) {
-                LOG.warn("IOException while deleting file (attempt {}): {}", attempt + 1, 
+                LOG.warn("IOException while deleting file (attempt {}): {}", attempt + 1,
                     fileToDelete, e);
             }
 
             // Increment the deletion failure count
             getMetrics().incrementMarkFileCompletedRequestFailedCount();
 
-                // If deletion failed and it's not the last attempt, sleep first then try to find 
+                // If deletion failed and it's not the last attempt, sleep first then try to find
                 // matching in-progress file
             if (attempt < maxRetries) {
                 // Sleep before next retry
@@ -251,7 +251,7 @@ public abstract class ReplicationLogFileTracker {
                 }
 
                 try {
-                    // List in-progress files and find matching file with same 
+                    // List in-progress files and find matching file with same
                     // <timestamp>_<region-server> prefix
                     List<Path> inProgressFiles = getInProgressFiles();
                     List<Path> matchingFiles = inProgressFiles.stream()
@@ -260,12 +260,12 @@ public abstract class ReplicationLogFileTracker {
                     // Assert only single file exists with that prefix
                     if (matchingFiles.size() == 1) {
                         Path matchingFile = matchingFiles.get(0);
-                        LOG.info("Found matching in-progress file: {} for original file: {}", 
+                        LOG.info("Found matching in-progress file: {} for original file: {}",
                             matchingFile, file);
                         // Update fileToDelete to the matching file for subsequent retries
                         fileToDelete = matchingFile;
                     } else if (matchingFiles.size() > 1) {
-                        LOG.warn("Multiple matching in-progress files found for prefix {}: {}", 
+                        LOG.warn("Multiple matching in-progress files found for prefix {}: {}",
                             filePrefix, matchingFiles.size());
                         long endTime = EnvironmentEdgeManager.currentTimeMillis();
                         getMetrics().updateMarkFileCompletedTime(endTime - startTime);
@@ -280,7 +280,7 @@ public abstract class ReplicationLogFileTracker {
                     }
                 } catch (IOException e) {
                     LOG.warn("IOException while searching for matching in-progress file (attempt {}): " +
-                        "{}", 
+                        "{}",
                         attempt + 1, file, e);
                 }
             }
@@ -334,7 +334,7 @@ public abstract class ReplicationLogFileTracker {
 
             Path newPath = new Path(targetDirectory, newFileName);
             if (fileSystem.rename(file, newPath)) {
-                LOG.debug("Successfully marked file as in progress: {} -> {}", file.getName(), 
+                LOG.debug("Successfully marked file as in progress: {} -> {}", file.getName(),
                 newFileName);
                 return Optional.of(newPath);
             } else {
