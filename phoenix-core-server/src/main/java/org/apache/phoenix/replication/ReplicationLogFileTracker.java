@@ -309,9 +309,8 @@ public abstract class ReplicationLogFileTracker {
 
             // Check if file is already in in-progress directory
             if(file.getParent().toUri().getPath().equals(getInProgressDirPath().toString())) {
-                // File is already in in-progress directory, replace UUID with a new one (stay in " +
-                "same 
-                // directory)
+                // File is already in in-progress directory, replace UUID with a new one
+                // keep the directory same as in progress
                 String[] parts = fileName.split("_");
                 // Remove the last part (UUID) and add new UUID
                 StringBuilder newNameBuilder = new StringBuilder();
