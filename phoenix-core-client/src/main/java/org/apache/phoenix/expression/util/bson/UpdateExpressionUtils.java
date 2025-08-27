@@ -50,6 +50,9 @@ public class UpdateExpressionUtils {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(UpdateExpressionUtils.class);
 
+  private static final String INVALID_UPDATE_PATH_MESSAGE =
+    "The document path provided in the update expression is invalid for update";
+
   /**
    * Update operator enum values. Any new update operator that requires update to deeply nested
    * structures (nested documents or nested arrays), need to have its own type added here.
@@ -184,8 +187,8 @@ public class UpdateExpressionUtils {
       bsonDocument.put("$set", new BsonArray(new ArrayList<>(set1)));
       return bsonDocument;
     }
-    throw new RuntimeException("Data type for current value " + currentValue
-      + " is not matching with new value " + setValuesToDelete);
+    // Current value exists but is not a set, or is set of different type
+    throw new BsonUpdateInvalidArgumentException(INVALID_UPDATE_PATH_MESSAGE);
   }
 
   /**
@@ -222,6 +225,13 @@ public class UpdateExpressionUtils {
       }
       // If the top level field exists, perform the operation here and return.
       if (topLevelValue != null) {
+        if (
+          !topLevelValue.isNumber() && !topLevelValue.isDecimal128()
+            && !CommonComparisonExpressionUtils.isBsonSet(topLevelValue)
+        ) {
+          // Current value exists but is not a number or set
+          throw new BsonUpdateInvalidArgumentException(INVALID_UPDATE_PATH_MESSAGE);
+        }
         bsonDocument.put(fieldKey, modifyFieldValueByAdd(topLevelValue, newVal));
       } else if (!fieldKey.contains(".") && !fieldKey.contains("[")) {
         bsonDocument.put(fieldKey, newVal);
@@ -265,8 +275,8 @@ public class UpdateExpressionUtils {
       bsonDocument.put("$set", new BsonArray(new ArrayList<>(set1)));
       return bsonDocument;
     }
-    throw new RuntimeException(
-      "Data type for current value " + currentValue + " is not matching with new value " + newVal);
+    // Current value exists but is not a number or set, or is set of different type
+    throw new BsonUpdateInvalidArgumentException(INVALID_UPDATE_PATH_MESSAGE);
   }
 
   /**
@@ -353,7 +363,7 @@ public class UpdateExpressionUtils {
       if (value == null || !value.isDocument()) {
         LOGGER.error("Value is null or not document. Value: {}, Idx: {}, fieldKey: {}, New val: {},"
           + " Update op: {}", value, idx, fieldKey, newVal, updateOp);
-        throw new RuntimeException("Value is null or it is not of type document.");
+        throw new BsonUpdateInvalidArgumentException(INVALID_UPDATE_PATH_MESSAGE);
       }
       BsonDocument nestedDocument = (BsonDocument) value;
       curIdx++;
@@ -363,7 +373,7 @@ public class UpdateExpressionUtils {
           BsonValue nestedValue = nestedDocument.get(sb.toString());
           if (nestedValue == null) {
             LOGGER.error("Should have found nested map for {}", sb);
-            return;
+            throw new BsonUpdateInvalidArgumentException(INVALID_UPDATE_PATH_MESSAGE);
           }
           updateNestedField(nestedValue, curIdx, fieldKey, newVal, updateOp);
           return;
@@ -386,7 +396,7 @@ public class UpdateExpressionUtils {
       if (value == null || !value.isArray()) {
         LOGGER.error("Value is null or not document. Value: {}, Idx: {}, fieldKey: {}, New val: {}",
           value, idx, fieldKey, newVal);
-        throw new RuntimeException("Value is null or not array.");
+        throw new BsonUpdateInvalidArgumentException(INVALID_UPDATE_PATH_MESSAGE);
       }
       BsonArray nestedArray = (BsonArray) value;
       if (curIdx == fieldKey.length()) {
@@ -407,16 +417,16 @@ public class UpdateExpressionUtils {
         if (fieldKey.charAt(i) == '.') {
           BsonValue topFieldValue = ((BsonDocument) value).get(sb.toString());
           if (topFieldValue == null) {
-            LOGGER.error("Incorrect access. Should have found nested bsonDocument for {}", sb);
-            throw new RuntimeException("Document does not contain key: " + sb);
+            // Missing parent document - throw exception for all operations
+            throw new BsonUpdateInvalidArgumentException(INVALID_UPDATE_PATH_MESSAGE);
           }
           updateNestedField(topFieldValue, i, fieldKey, newVal, updateOp);
           return;
         } else if (fieldKey.charAt(i) == '[') {
           BsonValue topFieldValue = ((BsonDocument) value).get(sb.toString());
           if (topFieldValue == null) {
-            LOGGER.error("Incorrect access. Should have found nested list for {}", sb);
-            throw new RuntimeException("Document does not contain key: " + sb);
+            // Parent array is missing
+            throw new BsonUpdateInvalidArgumentException(INVALID_UPDATE_PATH_MESSAGE);
           }
           updateNestedField(topFieldValue, i, fieldKey, newVal, updateOp);
           return;
@@ -445,10 +455,12 @@ public class UpdateExpressionUtils {
     final UpdateOp updateOp, final int arrayIdx, final BsonArray nestedArray) {
     switch (updateOp) {
       case SET: {
-        if (arrayIdx < nestedArray.size()) {
-          nestedArray.set(arrayIdx, newVal);
-        } else {
+        if (arrayIdx >= nestedArray.size()) {
+          // Appending to the end of the array
           nestedArray.add(newVal);
+        } else {
+          // Setting existing element
+          nestedArray.set(arrayIdx, newVal);
         }
         break;
       }
@@ -462,11 +474,21 @@ public class UpdateExpressionUtils {
         if (arrayIdx < nestedArray.size()) {
           BsonValue currentValue = nestedArray.get(arrayIdx);
           if (currentValue != null) {
+            // Validate ADD operation against existing array element
+            if (
+              !currentValue.isNumber() && !currentValue.isDecimal128()
+                && !CommonComparisonExpressionUtils.isBsonSet(currentValue)
+            ) {
+              // Current value exists but is not a number or set
+              throw new BsonUpdateInvalidArgumentException(INVALID_UPDATE_PATH_MESSAGE);
+            }
             nestedArray.set(arrayIdx, modifyFieldValueByAdd(currentValue, newVal));
           } else {
+            // For null array element, just set the value directly
             nestedArray.set(arrayIdx, newVal);
           }
         } else {
+          // For ADD beyond array size, just set the value directly (no initialization logic)
           nestedArray.add(newVal);
         }
         break;
@@ -520,9 +542,18 @@ public class UpdateExpressionUtils {
       case ADD: {
         BsonValue currentValue = nestedDocument.get(targetNodeFieldKey.toString());
         if (currentValue != null) {
+          // Validate ADD operation against existing value
+          if (
+            !currentValue.isNumber() && !currentValue.isDecimal128()
+              && !CommonComparisonExpressionUtils.isBsonSet(currentValue)
+          ) {
+            // Current value exists but is not a number or set
+            throw new BsonUpdateInvalidArgumentException(INVALID_UPDATE_PATH_MESSAGE);
+          }
           nestedDocument.put(targetNodeFieldKey.toString(),
             modifyFieldValueByAdd(currentValue, newVal));
         } else {
+          // For missing field, just set the value directly
           nestedDocument.put(targetNodeFieldKey.toString(), newVal);
         }
         break;
@@ -762,6 +793,12 @@ public class UpdateExpressionUtils {
     }
     BsonArray bsonArray1 = (BsonArray) ((BsonDocument) bsonValue1).get("$set");
     BsonArray bsonArray2 = (BsonArray) ((BsonDocument) bsonValue2).get("$set");
+
+    // Handle empty sets - they are compatible with any set
+    if (bsonArray1.isEmpty() || bsonArray2.isEmpty()) {
+      return true;
+    }
+
     return bsonArray1.get(0).getBsonType().equals(bsonArray2.get(0).getBsonType());
   }
 
