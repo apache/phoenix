@@ -196,6 +196,10 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         }
     }
 
+    /**
+     * Tests the createLogFileReader method with a zero-length file that is not closed.
+     * @throws IOException
+     */
     @Test
     public void testCreateLogFileReaderWithUnclosedZeroLengthFile() throws IOException {
         Path emptyFilePath = new Path(testFolder.newFile("empty_file").toURI());
@@ -247,6 +251,10 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         Mockito.verify(reader, Mockito.times(1)).close();
     }
 
+    /**
+     * Tests the isFileClosed method for a local file-system (non-LeaseRecoverable FS).
+     * @throws IOException
+     */
     @Test
     public void testIsFileClosedForNonRecoverableFS() throws IOException {
         ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupName);
@@ -264,6 +272,11 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         assertTrue("Non LeaseRecoverable FS file must be considered closed", replicationLogProcessor.isFileClosed(localFs, filePath));
     }
 
+    /**
+     * Tests the isFileClosed method for (for both closed and un-closed files) in distributed file
+     * system (HDFS, i.e. a LeaseRecoverable FS)
+     * @throws IOException
+     */
     @Test
     public void testIsFileClosedForRecoverableFS() throws IOException, InterruptedException {
         ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupName);
@@ -560,6 +573,10 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         }
     }
 
+    /**
+     * Tests processing of unclosed log file with valid header and trailer
+     * @throws Exception
+     */
     @Test
     public void testProcessLogFileForUnClosedFileWithValidHeaderAndTrailer() throws Exception {
         FileSystem distributedFileSystem = FileSystem.get(conf);
@@ -629,6 +646,10 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         distributedFileSystem.delete(filePath, false);
     }
 
+    /**
+     * Tests processing of unclosed file with valid header but missing trailer
+     * @throws Exception
+     */
     @Test
     public void testProcessLogFileForUnClosedFileWithValidHeaderAndMissingTrailer() throws Exception {
         FileSystem distributedFileSystem = FileSystem.get(conf);
@@ -697,6 +718,10 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         distributedFileSystem.delete(filePath, false);
     }
 
+    /**
+     * Tests processing of unclosed file with missing header and trailer (i.e. empty file)
+     * @throws Exception
+     */
     @Test
     public void testProcessLogFileForUnClosedFileWithMissingHeaderAndTrailer() throws Exception {
         FileSystem distributedFileSystem = FileSystem.get(conf);

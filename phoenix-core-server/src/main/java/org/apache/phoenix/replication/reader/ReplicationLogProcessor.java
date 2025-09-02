@@ -343,11 +343,9 @@ public class ReplicationLogProcessor implements Closeable {
     protected boolean isFileClosed(final FileSystem fs, final Path filePath) throws IOException {
         boolean isClosed;
         try {
-            System.out.println("Trying to check if file is closed");
             isClosed = ((LeaseRecoverable) fs).isFileClosed(filePath);
-            System.out.println("Found value - " + isClosed);
         } catch (ClassCastException classCastException) {
-            // If filesystem is not instead of LeaseRecoverable, assume file is always closed
+            // If filesystem is not of type LeaseRecoverable, assume file is always closed
             isClosed = true;
         }
         return isClosed;
