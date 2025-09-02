@@ -112,6 +112,12 @@
                   <exclude>hbase-webapps/**</exclude>
                 </excludes>
               </filter>
+              <filter>
+                <artifact>*:*</artifact>
+                <excludes>
+                  <exclude>csv-bulk-load-config.properties</exclude>
+                </excludes>
+              </filter>
               <!-- Phoenix specific -->
             </filters>
             <transformers>

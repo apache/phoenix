@@ -99,6 +99,12 @@
                   <exclude>webapps/**</exclude>
                 </excludes>
               </filter>
+              <filter>
+                <artifact>*:*</artifact>
+                <excludes>
+                  <exclude>csv-bulk-load-config.properties</exclude>
+                </excludes>
+              </filter>
               <!-- Phoenix specific -->
               <filter>
                 <artifact>org.apache.commons:commons-math3</artifact>

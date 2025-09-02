@@ -31,6 +31,7 @@ import java.util.concurrent.Future;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.LeaseRecoverable;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
@@ -40,6 +41,8 @@ import org.apache.hadoop.hbase.client.AsyncTable;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.util.FutureUtils;
+import org.apache.hadoop.hbase.util.RecoverLeaseFSUtils;
+import org.apache.phoenix.replication.log.InvalidLogTrailerException;
 import org.apache.phoenix.replication.log.LogFile;
 import org.apache.phoenix.replication.log.LogFileReader;
 import org.apache.phoenix.replication.log.LogFileReaderContext;
@@ -235,6 +238,12 @@ public class ReplicationLogProcessor implements Closeable {
             // Create the LogFileReader for given path
             logFileReader = createLogFileReader(fs, filePath);
 
+            if(logFileReader == null) {
+                // This is an empty file, assume processed successfully and return
+                LOG.warn("Found empty file to process {}", filePath);
+                return;
+            }
+
             for (LogFile.Record record : logFileReader) {
                 final TableName tableName = TableName.valueOf(record.getHBaseTableName());
                 final Mutation mutation = record.getMutation();
@@ -294,16 +303,54 @@ public class ReplicationLogProcessor implements Closeable {
             throw new IOException("Log file does not exist: " + filePath);
         }
         LogFileReader logFileReader = new LogFileReader();
-        try {
-            LogFileReaderContext logFileReaderContext = new LogFileReaderContext(conf)
-                    .setFileSystem(fs).setFilePath(filePath);
+        LogFileReaderContext logFileReaderContext = new LogFileReaderContext(conf)
+                .setFileSystem(fs).setFilePath(filePath);
+        boolean isClosed = isFileClosed(fs, filePath);
+        if(isClosed) {
+            // As file is closed, ensure that the file has a valid header and trailer
             logFileReader.init(logFileReaderContext);
-        } catch (IOException exception) {
-            LOG.error("Failed to initialize new LogFileReader for path {}",
-                    filePath, exception);
-            throw exception;
+            return logFileReader;
+        } else {
+            LOG.warn("Found un-closed file {}. Starting lease recovery.", filePath);
+            recoverLease(fs, filePath);
+            if (fs.getFileStatus(filePath).getLen() <= 0) {
+                // Found empty file, returning null LogReader
+                return null;
+            }
+            try {
+                // Acquired the lease, try to create reader with validation both header and trailer
+                logFileReader.init(logFileReaderContext);
+                return logFileReader;
+            } catch (InvalidLogTrailerException invalidLogTrailerException) {
+                // If trailer is corrupt (or missing), try to create reader without trailer validation
+                LOG.warn("Invalid Trailer for file {}",
+                        filePath, invalidLogTrailerException);
+                logFileReaderContext.setValidateTrailer(false);
+                logFileReader.init(logFileReaderContext);
+                return logFileReader;
+            } catch (IOException exception) {
+                LOG.error("Failed to initialize new LogFileReader for path {}",
+                        filePath, exception);
+                throw exception;
+            }
         }
-        return logFileReader;
+    }
+
+    protected void recoverLease(final FileSystem fs, final Path filePath) throws IOException {
+        RecoverLeaseFSUtils.recoverFileLease(fs, filePath, conf);
+    }
+
+    protected boolean isFileClosed(final FileSystem fs, final Path filePath) throws IOException {
+        boolean isClosed;
+        try {
+            System.out.println("Trying to check if file is closed");
+            isClosed = ((LeaseRecoverable) fs).isFileClosed(filePath);
+            System.out.println("Found value - " + isClosed);
+        } catch (ClassCastException classCastException) {
+            // If filesystem is not instead of LeaseRecoverable, assume file is always closed
+            isClosed = true;
+        }
+        return isClosed;
     }
 
     /**
