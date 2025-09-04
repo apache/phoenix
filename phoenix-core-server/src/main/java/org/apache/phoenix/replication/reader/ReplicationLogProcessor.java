@@ -19,11 +19,7 @@ package org.apache.phoenix.replication.reader;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -235,13 +231,15 @@ public class ReplicationLogProcessor implements Closeable {
 
         try {
             // Create the LogFileReader for given path
-            logFileReader = createLogFileReader(fs, filePath);
+            Optional<LogFileReader> logFileReaderOptional = createLogFileReader(fs, filePath);
 
-            if(logFileReader == null) {
+            if(!logFileReaderOptional.isPresent()) {
                 // This is an empty file, assume processed successfully and return
                 LOG.warn("Found empty file to process {}", filePath);
                 return;
             }
+
+            logFileReader = logFileReaderOptional.get();
 
             for (LogFile.Record record : logFileReader) {
                 final TableName tableName = TableName.valueOf(record.getHBaseTableName());
@@ -295,7 +293,7 @@ public class ReplicationLogProcessor implements Closeable {
      * @return A configured LogFileReader instance
      * @throws IOException if the file doesn't exist or initialization fails
      */
-    protected LogFileReader createLogFileReader(FileSystem fs, Path filePath) throws IOException {
+    protected Optional<LogFileReader> createLogFileReader(FileSystem fs, Path filePath) throws IOException {
         // Ensure that file exists. If we face exception while checking the path itself,
         // method would throw same exception back to the caller
         if (!fs.exists(filePath)) {
@@ -308,25 +306,25 @@ public class ReplicationLogProcessor implements Closeable {
         if(isClosed) {
             // As file is closed, ensure that the file has a valid header and trailer
             logFileReader.init(logFileReaderContext);
-            return logFileReader;
+            return Optional.of(logFileReader);
         } else {
             LOG.warn("Found un-closed file {}. Starting lease recovery.", filePath);
             recoverLease(fs, filePath);
             if (fs.getFileStatus(filePath).getLen() <= 0) {
                 // Found empty file, returning null LogReader
-                return null;
+                return Optional.empty();
             }
             try {
                 // Acquired the lease, try to create reader with validation both header and trailer
                 logFileReader.init(logFileReaderContext);
-                return logFileReader;
+                return Optional.of(logFileReader);
             } catch (InvalidLogTrailerException invalidLogTrailerException) {
                 // If trailer is corrupt (or missing), try to create reader without trailer validation
                 LOG.warn("Invalid Trailer for file {}",
                         filePath, invalidLogTrailerException);
                 logFileReaderContext.setValidateTrailer(false);
                 logFileReader.init(logFileReaderContext);
-                return logFileReader;
+                return Optional.of(logFileReader);
             } catch (IOException exception) {
                 LOG.error("Failed to initialize new LogFileReader for path {}",
                         filePath, exception);

@@ -35,6 +35,9 @@ import java.io.InterruptedIOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
+/**
+ * Utility methods for recovering file lease for hdfs.
+ */
 public class RecoverLeaseFSUtils {
 
     private static final Logger LOG = LoggerFactory.getLogger(RecoverLeaseFSUtils.class);

@@ -86,6 +86,7 @@
                   <exclude>NOTICE.*</exclude>
                   <exclude>NOTICE</exclude>
                   <exclude>README*</exclude>
+                  <exclude>csv-bulk-load-config.properties</exclude>
                 </excludes>
               </filter>
              <filter>
@@ -97,12 +98,6 @@
                   <exclude>org/apache/hadoop/yarn/client/api/impl/package-info.class</exclude>
                   <exclude>org/apache/hadoop/yarn/client/api/package-info.class</exclude>
                   <exclude>webapps/**</exclude>
-                </excludes>
-              </filter>
-              <filter>
-                <artifact>*:*</artifact>
-                <excludes>
-                  <exclude>csv-bulk-load-config.properties</exclude>
                 </excludes>
               </filter>
               <!-- Phoenix specific -->

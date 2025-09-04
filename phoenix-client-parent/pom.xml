@@ -86,6 +86,7 @@
                   <exclude>NOTICE.*</exclude>
                   <exclude>NOTICE</exclude>
                   <exclude>README*</exclude>
+                  <exclude>csv-bulk-load-config.properties</exclude>
                 </excludes>
               </filter>
              <filter>
