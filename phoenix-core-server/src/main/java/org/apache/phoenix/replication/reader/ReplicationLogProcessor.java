@@ -41,7 +41,6 @@ import org.apache.hadoop.hbase.client.AsyncTable;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.util.FutureUtils;
-import org.apache.hadoop.hbase.util.RecoverLeaseFSUtils;
 import org.apache.phoenix.replication.log.InvalidLogTrailerException;
 import org.apache.phoenix.replication.log.LogFile;
 import org.apache.phoenix.replication.log.LogFileReader;

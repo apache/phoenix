@@ -44,7 +44,6 @@ import java.util.stream.Collectors;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.LeaseRecoverable;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellBuilderFactory;
@@ -66,7 +65,6 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.hadoop.hbase.util.RecoverLeaseFSUtils;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
@@ -76,7 +74,6 @@ import org.apache.phoenix.replication.log.LogFileTestUtil;
 import org.apache.phoenix.replication.log.LogFileWriter;
 import org.apache.phoenix.replication.log.LogFileWriterContext;
 import org.apache.phoenix.replication.metrics.ReplicationLogProcessorMetricValues;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.StringUtil;
@@ -197,28 +194,6 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
     }
 
     /**
-     * Tests the createLogFileReader method with a zero-length file that is not closed.
-     * @throws IOException
-     */
-    @Test
-    public void testCreateLogFileReaderWithUnclosedZeroLengthFile() throws IOException {
-        Path emptyFilePath = new Path(testFolder.newFile("empty_file").toURI());
-        ReplicationLogProcessor replicationLogProcessor = Mockito.spy(new ReplicationLogProcessor(conf, testHAGroupName));
-        // Ensure file is not closed
-        Mockito.doReturn(false).when(replicationLogProcessor).isFileClosed(localFs, emptyFilePath);
-        try {
-            LogFileReader logFileReader = replicationLogProcessor.createLogFileReader(localFs, emptyFilePath);
-            assertNull("LogReader must be null for empty file", logFileReader);
-            // Ensure recover lease is invoked with expected number of times and parameters
-            Mockito.verify(replicationLogProcessor, Mockito.times(1)).recoverLease(Mockito.any(), Mockito.any());
-            Mockito.verify(replicationLogProcessor, Mockito.times(1)).recoverLease(localFs, emptyFilePath);
-        } finally {
-            replicationLogProcessor.close();
-            localFs.delete(emptyFilePath);
-        }
-    }
-
-    /**
      * Tests the closeReader method with both null and valid LogFileReader instances.
      */
     @Test
@@ -249,65 +224,6 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
 
         // Ensure reader's close method is called only once
         Mockito.verify(reader, Mockito.times(1)).close();
-    }
-
-    /**
-     * Tests the isFileClosed method for a local file-system (non-LeaseRecoverable FS).
-     * @throws IOException
-     */
-    @Test
-    public void testIsFileClosedForNonRecoverableFS() throws IOException {
-        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupName);
-        Path filePath = new Path(testFolder.newFile("testIsFileClosed").toURI());
-        String tableName = "T_" + generateUniqueName();
-
-        // Create a valid log file with proper structure and one record
-        LogFileWriter writer = initLogFileWriter(filePath);
-
-        // Add a mutation to make it a proper log file with data
-        Mutation put = LogFileTestUtil.newPut("testRow", 1, 1);
-        writer.append(tableName, 1, put);
-        writer.sync();
-
-        assertTrue("Non LeaseRecoverable FS file must be considered closed", replicationLogProcessor.isFileClosed(localFs, filePath));
-    }
-
-    /**
-     * Tests the isFileClosed method for (for both closed and un-closed files) in distributed file
-     * system (HDFS, i.e. a LeaseRecoverable FS)
-     * @throws IOException
-     */
-    @Test
-    public void testIsFileClosedForRecoverableFS() throws IOException, InterruptedException {
-        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupName);
-        FileSystem distributedFileSystem = FileSystem.get(conf);
-
-        // Create an empty file in HDFS
-        final String tableName = "T_" + EnvironmentEdgeManager.currentTimeMillis();
-        final Path filePath = new Path("/tmp/testHDFSLeaseRecovery_" + EnvironmentEdgeManager.currentTimeMillis());
-        distributedFileSystem.create(filePath);
-
-        // Create a valid log file with proper structure and one record
-        LogFileWriter writer = initLogFileWriter(filePath);
-
-        // Add a mutation to make it a proper log file with data
-        Mutation put = LogFileTestUtil.newPut("testRow", 1, 1);
-        writer.append(tableName, 1, put);
-        writer.sync();
-
-        assertFalse("File must not be closed", replicationLogProcessor.isFileClosed(distributedFileSystem, filePath));
-
-        // Close the writer
-        writer.close();
-
-        // Recover lease explicitly to close the file
-        RecoverLeaseFSUtils.recoverFileLease(distributedFileSystem, filePath, conf);
-
-        // Ensure file is closed before checking with custom isFileClosed method
-        assertTrue("File must be closed", ((LeaseRecoverable) distributedFileSystem).isFileClosed(filePath));
-
-        // Assert isFileClosed returns true
-        assertTrue("File must be closed", replicationLogProcessor.isFileClosed(distributedFileSystem, filePath));
     }
 
     /**
@@ -469,7 +385,7 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         final String table2Name = "T_" + generateUniqueName();
         final Path filePath = new Path(testFolder.newFile("testProcessLogFileEnd2End").toURI());
         LogFileWriter writer = initLogFileWriter(filePath);
-        ReplicationLogProcessor replicationLogProcessor = Mockito.spy(new ReplicationLogProcessor(conf, testHAGroupName));
+        ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupName);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute(String.format(CREATE_TABLE_SQL_STATEMENT, table1Name));
             conn.createStatement().execute(String.format(CREATE_TABLE_SQL_STATEMENT, table2Name));
@@ -498,9 +414,6 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
 
             validate(table1Name, table1Mutations);
             validate(table2Name, table2Mutations);
-
-            // Ensure recover lease is NOT invoked
-            Mockito.verify(replicationLogProcessor, Mockito.times(0)).recoverLease(Mockito.any(), Mockito.any());
 
             // Ensure metrics are correctly populated
             ReplicationLogProcessorMetricValues metricValues = replicationLogProcessor.getMetrics().getCurrentMetricValues();
@@ -573,190 +486,10 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
         }
     }
 
-    /**
-     * Tests processing of unclosed log file with valid header and trailer
-     * @throws Exception
-     */
     @Test
-    public void testProcessLogFileForUnClosedFileWithValidHeaderAndTrailer() throws Exception {
+    public void testHDFSLeaseRecovery() throws Exception {
         FileSystem distributedFileSystem = FileSystem.get(conf);
 
-        // Create an empty file in HDFS
-        final String tableNameString = "T1_" + EnvironmentEdgeManager.currentTimeMillis();
-        final Path filePath = new Path("/tmp/testHDFSLeaseRecovery_" + EnvironmentEdgeManager.currentTimeMillis());
-        distributedFileSystem.create(filePath);
-
-        LogFileWriter writer = new LogFileWriter();
-        LogFileWriterContext writerContext = new LogFileWriterContext(conf).setFileSystem(distributedFileSystem)
-                .setFilePath(filePath);
-        writer.init(writerContext);
-
-        // Use replication log writer to append 1 record to it
-        Mutation put = LogFileTestUtil.newPut("row1", 3L, 4);
-        writer.append(tableNameString, 1, put);
-        writer.sync();
-
-        // Closing just to add a valid trailer. isClosed() method is mocked to return false
-        writer.close();
-
-        // Create a replication log processor and spy on it
-        ReplicationLogProcessor spyProcessor = Mockito.spy(new ReplicationLogProcessor(conf, testHAGroupName));
-
-        // Mock isClosed method to return false
-        Mockito.doReturn(false).when(spyProcessor).isFileClosed(Mockito.any(), Mockito.any());
-
-        // Create argument captor to capture the actual parameters passed to processReplicationLogBatch
-        ArgumentCaptor<Map<TableName, List<Mutation>>> mapCaptor =
-                ArgumentCaptor.forClass(Map.class);
-
-        Mockito.doNothing().when(spyProcessor).processReplicationLogBatch(mapCaptor.capture());
-
-        // Process the file without closing - should not throw any exceptions
-        spyProcessor.processLogFile(distributedFileSystem, filePath);
-
-        // Verify processReplicationLogBatch was called the expected number of times
-        Mockito.verify(spyProcessor, Mockito.times(1))
-                .processReplicationLogBatch(Mockito.any(Map.class));
-
-        // Validate the captured parameters
-        Map<TableName, List<Mutation>> capturedMap = mapCaptor.getValue();
-        assertNotNull("Captured map should not be null", capturedMap);
-        assertEquals("Should have exactly one table", 1, capturedMap.size());
-
-        // Verify the table name
-        TableName expectedTableName = TableName.valueOf(tableNameString);
-        assertTrue("Map should contain the expected table", capturedMap.containsKey(expectedTableName));
-
-        // Verify the mutations list
-        List<Mutation> mutations = capturedMap.get(expectedTableName);
-        assertNotNull("Mutations list should not be null", mutations);
-        assertEquals("Should have exactly one mutation", 1, mutations.size());
-
-        // Verify the mutation details
-        Mutation capturedMutation = mutations.get(0);
-        assertTrue("Mutation should be a Put", capturedMutation instanceof Put);
-        LogFileTestUtil.assertMutationEquals("Invalid put", put, capturedMutation);
-
-        // Ensure recover lease is invoked with expected number of times and parameters
-        Mockito.verify(spyProcessor, Mockito.times(1)).recoverLease(Mockito.any(), Mockito.any());
-        Mockito.verify(spyProcessor, Mockito.times(1)).recoverLease(distributedFileSystem, filePath);
-
-        // Clean up
-        spyProcessor.close();
-        distributedFileSystem.delete(filePath, false);
-    }
-
-    /**
-     * Tests processing of unclosed file with valid header but missing trailer
-     * @throws Exception
-     */
-    @Test
-    public void testProcessLogFileForUnClosedFileWithValidHeaderAndMissingTrailer() throws Exception {
-        FileSystem distributedFileSystem = FileSystem.get(conf);
-
-        // Create an empty file in HDFS
-        final String tableNameString = "T1_" + EnvironmentEdgeManager.currentTimeMillis();
-        final Path filePath = new Path("/tmp/testHDFSLeaseRecovery_" + EnvironmentEdgeManager.currentTimeMillis());
-        distributedFileSystem.create(filePath);
-
-        LogFileWriter writer = new LogFileWriter();
-        LogFileWriterContext writerContext = new LogFileWriterContext(conf).setFileSystem(distributedFileSystem)
-                .setFilePath(filePath);
-        writer.init(writerContext);
-
-        // Use replication log writer to append 1 record to it
-        Mutation put = LogFileTestUtil.newPut("row1", 3L, 4);
-        writer.append(tableNameString, 1, put);
-        writer.sync();
-
-        // Do not close the file (intentionally left open to simulate missing trailer)
-
-        // Create a replication log processor and spy on it
-        ReplicationLogProcessor spyProcessor = Mockito.spy(new ReplicationLogProcessor(conf, testHAGroupName));
-
-        // Mock isClosed method to return false
-        Mockito.doReturn(false).when(spyProcessor).isFileClosed(Mockito.any(), Mockito.any());
-
-        // Create argument captor to capture the actual parameters passed to processReplicationLogBatch
-        ArgumentCaptor<Map<TableName, List<Mutation>>> mapCaptor =
-                ArgumentCaptor.forClass(Map.class);
-
-        Mockito.doNothing().when(spyProcessor).processReplicationLogBatch(mapCaptor.capture());
-
-        // Process the file without closing - should not throw any exceptions
-        spyProcessor.processLogFile(distributedFileSystem, filePath);
-
-        // Verify processReplicationLogBatch was called the expected number of times
-        Mockito.verify(spyProcessor, Mockito.times(1))
-                .processReplicationLogBatch(Mockito.any(Map.class));
-
-        // Validate the captured parameters
-        Map<TableName, List<Mutation>> capturedMap = mapCaptor.getValue();
-        assertNotNull("Captured map should not be null", capturedMap);
-        assertEquals("Should have exactly one table", 1, capturedMap.size());
-
-        // Verify the table name
-        TableName expectedTableName = TableName.valueOf(tableNameString);
-        assertTrue("Map should contain the expected table", capturedMap.containsKey(expectedTableName));
-
-        // Verify the mutations list
-        List<Mutation> mutations = capturedMap.get(expectedTableName);
-        assertNotNull("Mutations list should not be null", mutations);
-        assertEquals("Should have exactly one mutation", 1, mutations.size());
-
-        // Verify the mutation details
-        Mutation capturedMutation = mutations.get(0);
-        assertTrue("Mutation should be a Put", capturedMutation instanceof Put);
-        LogFileTestUtil.assertMutationEquals("Invalid put", put, capturedMutation);
-
-        // Ensure recover lease is invoked with expected number of times and parameters
-        Mockito.verify(spyProcessor, Mockito.times(1)).recoverLease(Mockito.any(), Mockito.any());
-        Mockito.verify(spyProcessor, Mockito.times(1)).recoverLease(distributedFileSystem, filePath);
-
-        // Clean up
-        spyProcessor.close();
-        distributedFileSystem.delete(filePath, false);
-    }
-
-    /**
-     * Tests processing of unclosed file with missing header and trailer (i.e. empty file)
-     * @throws Exception
-     */
-    @Test
-    public void testProcessLogFileForUnClosedFileWithMissingHeaderAndTrailer() throws Exception {
-        FileSystem distributedFileSystem = FileSystem.get(conf);
-
-        // Create an empty file in HDFS
-        final String tableNameString = "T1_" + System.currentTimeMillis();
-        final Path filePath = new Path("/tmp/testHDFSLeaseRecovery_" + EnvironmentEdgeManager.currentTimeMillis());
-        distributedFileSystem.create(filePath);
-
-        // Create a replication log processor and spy on it
-        ReplicationLogProcessor spyProcessor = Mockito.spy(new ReplicationLogProcessor(conf, testHAGroupName));
-
-        // Create argument captor to capture the actual parameters passed to processReplicationLogBatch
-        ArgumentCaptor<Map<TableName, List<Mutation>>> mapCaptor =
-                ArgumentCaptor.forClass(Map.class);
-
-        Mockito.doNothing().when(spyProcessor).processReplicationLogBatch(mapCaptor.capture());
-
-        // Mock isClosed method to return false
-        Mockito.doReturn(false).when(spyProcessor).isFileClosed(Mockito.any(), Mockito.any());
-
-        // Process the file without closing - should not throw any exceptions
-        spyProcessor.processLogFile(distributedFileSystem, filePath);
-
-        // Verify processReplicationLogBatch should not be called as file is empty
-        Mockito.verify(spyProcessor, Mockito.times(0))
-                .processReplicationLogBatch(Mockito.any(Map.class));
-
-        // Ensure recover lease is invoked with expected number of times and parameters
-        Mockito.verify(spyProcessor, Mockito.times(1)).recoverLease(Mockito.any(), Mockito.any());
-        Mockito.verify(spyProcessor, Mockito.times(1)).recoverLease(distributedFileSystem, filePath);
-
-        // Clean up
-        spyProcessor.close();
-        distributedFileSystem.delete(filePath, false);
     }
 
     /**
