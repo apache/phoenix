@@ -196,7 +196,7 @@ public class ReplicationLogProcessor implements Closeable {
                 DEFAULT_REPLICATION_STANDBY_LOG_REPLAY_THREAD_POOL_SIZE);
         decorateConf();
         this.metrics = createMetricsSource();
-        this.executorService = Executors.newFixedThreadPool(threadPoolSize, 
+        this.executorService = Executors.newFixedThreadPool(threadPoolSize,
                 new ThreadFactoryBuilder()
                         .setNameFormat("Phoenix-Replication-Log-Processor-" + haGroupName + "-%d")
                         .build());
@@ -298,7 +298,7 @@ public class ReplicationLogProcessor implements Closeable {
      * @return A configured LogFileReader instance
      * @throws IOException if the file doesn't exist or initialization fails
      */
-    protected Optional<LogFileReader> createLogFileReader(FileSystem fs, Path filePath) 
+    protected Optional<LogFileReader> createLogFileReader(FileSystem fs, Path filePath)
             throws IOException {
         // Ensure that file exists. If we face exception while checking the path itself,
         // method would throw same exception back to the caller
@@ -306,7 +306,7 @@ public class ReplicationLogProcessor implements Closeable {
             throw new IOException("Log file does not exist: " + filePath);
         }
         LogFileReader logFileReader = new LogFileReader();
-        LogFileReaderContext logFileReaderContext = new LogFileReaderContext(conf) 
+        LogFileReaderContext logFileReaderContext = new LogFileReaderContext(conf)
                 .setFileSystem(fs).setFilePath(filePath);
         boolean isClosed = isFileClosed(fs, filePath);
         if (isClosed) {
@@ -326,13 +326,13 @@ public class ReplicationLogProcessor implements Closeable {
                 return Optional.of(logFileReader);
             } catch (InvalidLogTrailerException invalidLogTrailerException) {
                 // If trailer is corrupt (or missing), try to create reader without trailer validation
-                LOG.warn("Invalid Trailer for file {}", 
+                LOG.warn("Invalid Trailer for file {}",
                         filePath, invalidLogTrailerException);
                 logFileReaderContext.setValidateTrailer(false);
                 logFileReader.init(logFileReaderContext);
                 return Optional.of(logFileReader);
             } catch (IOException exception) {
-                LOG.error("Failed to initialize new LogFileReader for path {}", 
+                LOG.error("Failed to initialize new LogFileReader for path {}",
                         filePath, exception);
                 throw exception;
             }
@@ -461,7 +461,7 @@ public class ReplicationLogProcessor implements Closeable {
         for (Map.Entry<TableName, List<Mutation>> entry : tableMutationMap.entrySet()) {
             TableName tableName = entry.getKey();
             List<Mutation> mutations = entry.getValue();
-            AsyncTable<?> table = getAsyncConnection() 
+            AsyncTable<?> table = getAsyncConnection()
                     .getTable(tableName, executorService);
             futures.put(tableName, table.batchAll(mutations));
         }
@@ -476,7 +476,7 @@ public class ReplicationLogProcessor implements Closeable {
                 // Add failed mutations to retry list
                 failedOperations.put(tableName, tableMutationMap.get(tableName));
                 getMetrics().incrementFailedMutationsCount(tableMutationMap.get(tableName).size());
-                LOG.debug("Failed to apply mutations for table {}: {}", tableName, 
+                LOG.debug("Failed to apply mutations for table {}: {}", tableName,
                         e.getMessage());
                 lastException = e;
             }
@@ -582,7 +582,7 @@ public class ReplicationLogProcessor implements Closeable {
 
         public ApplyMutationBatchResult(final Map<TableName, List<Mutation>> failedMutations,
                 final Exception exception) {
-            this.failedMutations = failedMutations != null 
+            this.failedMutations = failedMutations != null
                     ? Collections.unmodifiableMap(failedMutations) : Collections.emptyMap();
             this.exception = exception;
         }
