@@ -59,7 +59,7 @@ public class ReplicationLogProcessor implements Closeable {
     /**
      * The maximum count of mutations to process in single batch while reading replication log file
      */
-    public static final String REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE = 
+    public static final String REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE =
             "phoenix.replication.log.standby.replay.batch.size";
 
     /**
@@ -73,7 +73,7 @@ public class ReplicationLogProcessor implements Closeable {
      * The maximum total size of mutations to process in single batch while reading
      * replication log file
      */
-    public static final String REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE_BYTES = 
+    public static final String REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE_BYTES =
             "phoenix.replication.log.standby.replay.batch.size.bytes";
 
     /**
@@ -85,7 +85,7 @@ public class ReplicationLogProcessor implements Closeable {
     /**
      * The number of threads to apply mutations via async hbase client
      */
-    public static final String REPLICATION_STANDBY_LOG_REPLAY_THREAD_POOL_SIZE = 
+    public static final String REPLICATION_STANDBY_LOG_REPLAY_THREAD_POOL_SIZE =
             "phoenix.replication.log.standby.replay.thread.pool.size";
 
     /**
@@ -96,7 +96,7 @@ public class ReplicationLogProcessor implements Closeable {
     /**
      * The maximum number of retries for HBase client operations while applying the mutations
      */
-    public static final String REPLICATION_STANDBY_HBASE_CLIENT_RETRIES_COUNT = 
+    public static final String REPLICATION_STANDBY_HBASE_CLIENT_RETRIES_COUNT =
             "phoenix.replication.standby.hbase.client.retries.number";
 
     /**
@@ -107,7 +107,7 @@ public class ReplicationLogProcessor implements Closeable {
     /**
      * The timeout for HBase client operations while applying the mutations.
      */
-    public static final String REPLICATION_STANDBY_HBASE_CLIENT_OPERATION_TIMEOUT_MS = 
+    public static final String REPLICATION_STANDBY_HBASE_CLIENT_OPERATION_TIMEOUT_MS =
             "phoenix.replication.standby.hbase.client.operations.timeout";
 
     /**
@@ -118,7 +118,7 @@ public class ReplicationLogProcessor implements Closeable {
     /**
      * The maximum number of retry attempts for failed batch operations.
      */
-    public static final String REPLICATION_STANDBY_BATCH_RETRY_COUNT = 
+    public static final String REPLICATION_STANDBY_BATCH_RETRY_COUNT =
             "phoenix.replication.standby.batch.retry.count";
 
     /**
@@ -129,7 +129,7 @@ public class ReplicationLogProcessor implements Closeable {
     /**
      * The maximum delay for retry attempts in milliseconds.
      */
-    public static final String REPLICATION_STANDBY_BATCH_RETRY_MAX_DELAY_MS = 
+    public static final String REPLICATION_STANDBY_BATCH_RETRY_MAX_DELAY_MS =
             "phoenix.replication.standby.batch.retry.max.delay.ms";
 
     /**
@@ -159,7 +159,7 @@ public class ReplicationLogProcessor implements Closeable {
     private final MetricsReplicationLogProcessor metrics;
 
     /** Cache of ReplicationLogGroup instances by HA Group Name */
-    private static final ConcurrentHashMap<String, ReplicationLogProcessor> INSTANCES = 
+    private static final ConcurrentHashMap<String, ReplicationLogProcessor> INSTANCES =
             new ConcurrentHashMap<>();
 
     /**
@@ -170,7 +170,7 @@ public class ReplicationLogProcessor implements Closeable {
      * @return ReplicationLogProcessor instance
      */
     public static ReplicationLogProcessor get(Configuration conf, String haGroupName) {
-        return INSTANCES.computeIfAbsent(haGroupName, 
+        return INSTANCES.computeIfAbsent(haGroupName,
                 k -> new ReplicationLogProcessor(conf, haGroupName));
     }
 
@@ -184,15 +184,15 @@ public class ReplicationLogProcessor implements Closeable {
         // overridden
         this.conf = HBaseConfiguration.create(conf);
         this.haGroupName = haGroupName;
-        this.batchSize = this.conf.getInt(REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE, 
+        this.batchSize = this.conf.getInt(REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE,
                 DEFAULT_REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE);
-        this.batchSizeBytes = this.conf.getLong(REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE_BYTES, 
+        this.batchSizeBytes = this.conf.getLong(REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE_BYTES,
                 DEFAULT_REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE_BYTES);
-        this.batchRetryCount = this.conf.getInt(REPLICATION_STANDBY_BATCH_RETRY_COUNT, 
+        this.batchRetryCount = this.conf.getInt(REPLICATION_STANDBY_BATCH_RETRY_COUNT,
                 DEFAULT_REPLICATION_STANDBY_BATCH_RETRY_COUNT);
-        this.maxRetryDelayMs = this.conf.getLong(REPLICATION_STANDBY_BATCH_RETRY_MAX_DELAY_MS, 
+        this.maxRetryDelayMs = this.conf.getLong(REPLICATION_STANDBY_BATCH_RETRY_MAX_DELAY_MS,
                 DEFAULT_REPLICATION_STANDBY_BATCH_RETRY_MAX_DELAY_MS);
-        final int threadPoolSize = this.conf.getInt(REPLICATION_STANDBY_LOG_REPLAY_THREAD_POOL_SIZE, 
+        final int threadPoolSize = this.conf.getInt(REPLICATION_STANDBY_LOG_REPLAY_THREAD_POOL_SIZE,
                 DEFAULT_REPLICATION_STANDBY_LOG_REPLAY_THREAD_POOL_SIZE);
         decorateConf();
         this.metrics = createMetricsSource();
@@ -207,11 +207,11 @@ public class ReplicationLogProcessor implements Closeable {
      * reducing the timeout and number of retries.
      */
     private void decorateConf() {
-        this.conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 
-                this.conf.getInt(REPLICATION_STANDBY_HBASE_CLIENT_RETRIES_COUNT, 
+        this.conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
+                this.conf.getInt(REPLICATION_STANDBY_HBASE_CLIENT_RETRIES_COUNT,
                         DEFAULT_REPLICATION_STANDBY_HBASE_CLIENT_RETRIES_COUNT));
-        this.conf.setLong(HConstants.HBASE_CLIENT_OPERATION_TIMEOUT, 
-                this.conf.getLong(REPLICATION_STANDBY_HBASE_CLIENT_OPERATION_TIMEOUT_MS, 
+        this.conf.setLong(HConstants.HBASE_CLIENT_OPERATION_TIMEOUT,
+                this.conf.getLong(REPLICATION_STANDBY_HBASE_CLIENT_OPERATION_TIMEOUT_MS,
                         DEFAULT_REPLICATION_STANDBY_HBASE_CLIENT_OPERATION_TIMEOUT_MS));
     }
 
@@ -250,7 +250,7 @@ public class ReplicationLogProcessor implements Closeable {
                 final TableName tableName = TableName.valueOf(record.getHBaseTableName());
                 final Mutation mutation = record.getMutation();
 
-                tableToMutationsMap.computeIfAbsent(tableName, k -> new ArrayList<>()) 
+                tableToMutationsMap.computeIfAbsent(tableName, k -> new ArrayList<>())
                         .add(mutation);
 
                 // Increment current batch size and current batch size bytes
@@ -258,7 +258,7 @@ public class ReplicationLogProcessor implements Closeable {
                 currentBatchSizeBytes += mutation.heapSize();
 
                 // Process when we reach either the batch count or size limit
-                if (currentBatchSize >= getBatchSize() 
+                if (currentBatchSize >= getBatchSize()
                         || currentBatchSizeBytes >= getBatchSizeBytes()) {
                     processReplicationLogBatch(tableToMutationsMap);
                     totalProcessed += currentBatchSize;
@@ -274,7 +274,7 @@ public class ReplicationLogProcessor implements Closeable {
                 totalProcessed += currentBatchSize;
             }
 
-            LOG.info("Completed processing log file {}. Total mutations processed: {}", 
+            LOG.info("Completed processing log file {}. Total mutations processed: {}",
                     logFileReader.getContext().getFilePath(), totalProcessed);
             getMetrics().incrementLogFileReplaySuccessCount();
         } catch (Exception e) {
@@ -364,12 +364,12 @@ public class ReplicationLogProcessor implements Closeable {
         try {
             logFileReader.close();
         } catch (IOException exception) {
-            LOG.error("Error while closing LogFileReader: {}", 
+            LOG.error("Error while closing LogFileReader: {}",
                     logFileReader, exception);
         }
     }
 
-    protected void processReplicationLogBatch( 
+    protected void processReplicationLogBatch(
             Map<TableName, List<Mutation>> tableMutationMap) throws IOException {
 
         if (tableMutationMap == null || tableMutationMap.isEmpty()) {
@@ -386,7 +386,7 @@ public class ReplicationLogProcessor implements Closeable {
 
         while (attempt <= batchRetryCount && !currentOperations.isEmpty()) {
             if (attempt > 0) {
-                LOG.warn("Retrying failed batch operations, attempt {} of {}", 
+                LOG.warn("Retrying failed batch operations, attempt {} of {}",
                         attempt, batchRetryCount);
             }
 
@@ -401,7 +401,7 @@ public class ReplicationLogProcessor implements Closeable {
 
                 // Update current operations for next retry
                 currentOperations = result.getFailedMutations();
-                lastError = new IOException("Failed to apply the mutations", 
+                lastError = new IOException("Failed to apply the mutations",
                         result.getException());
             } catch (IOException e) {
                 lastError = e;
@@ -425,7 +425,7 @@ public class ReplicationLogProcessor implements Closeable {
 
         // If we still have failed operations after all retries, throw the last error
         if (!currentOperations.isEmpty() && lastError != null) {
-            LOG.error("Failed to process batch operations after {} retries. Failed tables: {}", 
+            LOG.error("Failed to process batch operations after {} retries. Failed tables: {}",
                     batchRetryCount, currentOperations.keySet());
             throw lastError;
         }
@@ -446,7 +446,7 @@ public class ReplicationLogProcessor implements Closeable {
      * @return ApplyMutationBatchResult containing failed mutations and any exceptions
      * @throws IOException if there's an error applying mutations
      */
-    protected ApplyMutationBatchResult applyMutations( 
+    protected ApplyMutationBatchResult applyMutations(
             Map<TableName, List<Mutation>> tableMutationMap) throws IOException {
 
         if (tableMutationMap == null || tableMutationMap.isEmpty()) {
@@ -474,7 +474,7 @@ public class ReplicationLogProcessor implements Closeable {
                 FutureUtils.get(future);
             } catch (IOException e) {
                 // Add failed mutations to retry list
-                failedOperations.put(tableName, tableMutationMap.get(tableName)); 
+                failedOperations.put(tableName, tableMutationMap.get(tableName));
                 getMetrics().incrementFailedMutationsCount(tableMutationMap.get(tableName).size());
                 LOG.debug("Failed to apply mutations for table {}: {}", tableName, 
                         e.getMessage());
@@ -499,7 +499,7 @@ public class ReplicationLogProcessor implements Closeable {
                     /**
                      * Get the AsyncConnection immediately.
                      */
-                    existingAsyncConnection = FutureUtils.get( 
+                    existingAsyncConnection = FutureUtils.get(
                             ConnectionFactory.createAsyncConnection(conf));
                     asyncConnection = existingAsyncConnection;
                 }
@@ -521,7 +521,7 @@ public class ReplicationLogProcessor implements Closeable {
             }
             asyncConnection = null;
             // Shutdown the executor service
-            if (executorService != null && !executorService.isShutdown()) { 
+            if (executorService != null && !executorService.isShutdown()) {
                 executorService.shutdownNow();
             }
             // Remove the instance from cache
@@ -548,12 +548,12 @@ public class ReplicationLogProcessor implements Closeable {
     }
 
     public int getHBaseClientRetriesCount() {
-        return this.conf.getInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 
+        return this.conf.getInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
                 DEFAULT_REPLICATION_STANDBY_HBASE_CLIENT_RETRIES_COUNT);
     }
 
     public long getHBaseClientOperationTimeout() {
-        return this.conf.getLong(HConstants.HBASE_CLIENT_OPERATION_TIMEOUT, 
+        return this.conf.getLong(HConstants.HBASE_CLIENT_OPERATION_TIMEOUT,
                 DEFAULT_REPLICATION_STANDBY_HBASE_CLIENT_OPERATION_TIMEOUT_MS);
     }
 
@@ -580,7 +580,7 @@ public class ReplicationLogProcessor implements Closeable {
         private final Map<TableName, List<Mutation>> failedMutations;
         private final Exception exception;
 
-        public ApplyMutationBatchResult(final Map<TableName, List<Mutation>> failedMutations, 
+        public ApplyMutationBatchResult(final Map<TableName, List<Mutation>> failedMutations,
                 final Exception exception) {
             this.failedMutations = failedMutations != null 
                     ? Collections.unmodifiableMap(failedMutations) : Collections.emptyMap();
