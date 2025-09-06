@@ -17,6 +17,12 @@
  */
 package org.apache.phoenix.replication.reader;
 
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InterruptedIOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FilterFileSystem;
@@ -28,12 +34,6 @@ import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.server.namenode.LeaseExpiredException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InterruptedIOException;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 
 /**
  * Utility methods for recovering file lease for hdfs.
@@ -49,7 +49,8 @@ public class RecoverLeaseFSUtils {
      * usually needs 10 minutes before marking the nodes as dead. So we're putting ourselves
      * beyond that limit 'to be safe'.
      */
-    public static final String REPLICATION_REPLAY_LEASE_RECOVERY_TIMEOUT_MILLISECOND = "phoenix.replication.replay.lease.recovery.timeout.millis";
+    public static final String REPLICATION_REPLAY_LEASE_RECOVERY_TIMEOUT_MILLISECOND = 
+            "phoenix.replication.replay.lease.recovery.timeout.millis";
 
     public static final long DEFAULT_REPLICATION_REPLAY_LEASE_RECOVERY_TIMEOUT_MILLISECOND = 900000;
 
@@ -57,14 +58,16 @@ public class RecoverLeaseFSUtils {
      * The first pause before retrying the lease recovery.
      * This setting should be a little above what the cluster dfs heartbeat is set to.
      */
-    public static final String REPLICATION_REPLAY_LEASE_RECOVERY_FIRST_PAUSE_MILLISECOND = "phoenix.replication.replay.lease.recovery.first.pause.mills";
+    public static final String REPLICATION_REPLAY_LEASE_RECOVERY_FIRST_PAUSE_MILLISECOND = 
+            "phoenix.replication.replay.lease.recovery.first.pause.mills";
 
     public static final long DEFAULT_REPLICATION_REPLAY_LEASE_RECOVERY_FIRST_PAUSE_MILLISECOND = 4000;
 
     /**
      * The pause between subsequent retries of the lease recovery.
      */
-    public static final String REPLICATION_REPLAY_LEASE_RECOVERY_PAUSE_MILLISECOND = "phoenix.replication.replay.lease.recovery.pause.mills";
+    public static final String REPLICATION_REPLAY_LEASE_RECOVERY_PAUSE_MILLISECOND = 
+            "phoenix.replication.replay.lease.recovery.pause.mills";
 
     public static final long DEFAULT_REPLICATION_REPLAY_LEASE_RECOVERY_PAUSE_MILLISECOND = 1000;
 
@@ -77,14 +80,16 @@ public class RecoverLeaseFSUtils {
      * timeout, then further recovery will take liner backoff with this base, to avoid endless
      * preemptions when this value is not properly configured.
      */
-    public static final String REPLICATION_REPLAY_LEASE_RECOVERY_DFS_TIMEOUT_MILLISECOND = "phoenix.replication.replay.lease.recovery.dfs.timeout.mills";
+    public static final String REPLICATION_REPLAY_LEASE_RECOVERY_DFS_TIMEOUT_MILLISECOND = 
+            "phoenix.replication.replay.lease.recovery.dfs.timeout.mills";
 
     public static final long DEFAULT_REPLICATION_REPLAY_LEASE_RECOVERY_DFS_TIMEOUT_MILLISECOND = 64 * 1000;
 
 
     private static Class<?> leaseRecoverableClazz = null;
     private static Method recoverLeaseMethod = null;
-    public static final String LEASE_RECOVERABLE_CLASS_NAME = LeaseRecoverable.class.getCanonicalName();
+    public static final String LEASE_RECOVERABLE_CLASS_NAME = 
+            LeaseRecoverable.class.getCanonicalName();
     // static {
     // } "org.apache.hadoop.fs.LeaseRecoverable";
     static {
@@ -102,18 +107,18 @@ public class RecoverLeaseFSUtils {
             recoverLeaseMethod = leaseRecoverableClazz.getMethod("recoverLease", Path.class);
             LOG.debug("set recoverLeaseMethod to " + className + ".recoverLease()");
         } catch (ClassNotFoundException e) {
-            LOG.debug(
-                    "LeaseRecoverable interface not in the classpath, this means Hadoop 3.3.5 or below.");
+            LOG.debug("LeaseRecoverable interface not in the classpath, " +
+                    "this means Hadoop 3.3.5 or below.");
             try {
                 recoverLeaseMethod = DistributedFileSystem.class.getMethod("recoverLease", Path.class);
             } catch (NoSuchMethodException ex) {
-                LOG.error("Cannot find recoverLease method in DistributedFileSystem class. "
-                        + "It should never happen. Abort.", ex);
+                LOG.error("Cannot find recoverLease method in DistributedFileSystem class. " +
+                        "It should never happen. Abort.", ex);
                 throw new RuntimeException(ex);
             }
         } catch (NoSuchMethodException e) {
-            LOG.error("Cannot find recoverLease method in LeaseRecoverable class. "
-                    + "It should never happen. Abort.", e);
+            LOG.error("Cannot find recoverLease method in LeaseRecoverable class. " +
+                    "It should never happen. Abort.", e);
             throw new RuntimeException(e);
         }
     }
@@ -154,7 +159,7 @@ public class RecoverLeaseFSUtils {
         return false;
     }
 
-    /*
+    /**
      * Run the dfs recover lease. recoverLease is asynchronous. It returns: -false when it starts the
      * lease recovery (i.e. lease recovery not *yet* done) - true when the lease recovery has
      * succeeded or the file is closed. But, we have to be careful. Each time we call recoverLease, it
@@ -178,9 +183,12 @@ public class RecoverLeaseFSUtils {
         LOG.info("Recover lease on dfs file " + p);
 
         long startWaiting = EnvironmentEdgeManager.currentTime();
-        long recoveryTimeout = conf.getLong(REPLICATION_REPLAY_LEASE_RECOVERY_TIMEOUT_MILLISECOND, DEFAULT_REPLICATION_REPLAY_LEASE_RECOVERY_TIMEOUT_MILLISECOND) + startWaiting;
-        long firstPause = conf.getLong(REPLICATION_REPLAY_LEASE_RECOVERY_FIRST_PAUSE_MILLISECOND, DEFAULT_REPLICATION_REPLAY_LEASE_RECOVERY_FIRST_PAUSE_MILLISECOND);
-        long subsequentPauseBase = conf.getLong(REPLICATION_REPLAY_LEASE_RECOVERY_DFS_TIMEOUT_MILLISECOND, DEFAULT_REPLICATION_REPLAY_LEASE_RECOVERY_DFS_TIMEOUT_MILLISECOND);
+        long recoveryTimeout = conf.getLong(REPLICATION_REPLAY_LEASE_RECOVERY_TIMEOUT_MILLISECOND, 
+                DEFAULT_REPLICATION_REPLAY_LEASE_RECOVERY_TIMEOUT_MILLISECOND) + startWaiting;
+        long firstPause = conf.getLong(REPLICATION_REPLAY_LEASE_RECOVERY_FIRST_PAUSE_MILLISECOND, 
+                DEFAULT_REPLICATION_REPLAY_LEASE_RECOVERY_FIRST_PAUSE_MILLISECOND);
+        long subsequentPauseBase = conf.getLong(REPLICATION_REPLAY_LEASE_RECOVERY_DFS_TIMEOUT_MILLISECOND, 
+                DEFAULT_REPLICATION_REPLAY_LEASE_RECOVERY_DFS_TIMEOUT_MILLISECOND);
 
         Method isFileClosedMeth = null;
         // whether we need to look for isFileClosed method
@@ -208,11 +216,12 @@ public class RecoverLeaseFSUtils {
                             (EnvironmentEdgeManager.currentTime() - localStartWaiting)
                                     < subsequentPauseBase * nbAttempt
                     ) {
-                        Thread.sleep(conf.getLong(REPLICATION_REPLAY_LEASE_RECOVERY_PAUSE_MILLISECOND, DEFAULT_REPLICATION_REPLAY_LEASE_RECOVERY_PAUSE_MILLISECOND));
+                        Thread.sleep(conf.getLong(REPLICATION_REPLAY_LEASE_RECOVERY_PAUSE_MILLISECOND, 
+                                DEFAULT_REPLICATION_REPLAY_LEASE_RECOVERY_PAUSE_MILLISECOND));
                         if (findIsFileClosedMeth) {
                             try {
-                                isFileClosedMeth =
-                                        dfs.getClass().getMethod("isFileClosed", new Class[] { Path.class });
+                                isFileClosedMeth = dfs.getClass().getMethod("isFileClosed", 
+                                        new Class[] { Path.class });
                             } catch (NoSuchMethodException nsme) {
                                 LOG.debug("isFileClosed not available");
                             } finally {
@@ -238,10 +247,12 @@ public class RecoverLeaseFSUtils {
     private static boolean checkIfTimedout(final Configuration conf, final long recoveryTimeout,
                                            final int nbAttempt, final Path p, final long startWaiting) {
         if (recoveryTimeout < EnvironmentEdgeManager.currentTime()) {
-            LOG.warn("Cannot recoverLease after trying for "
-                    + conf.getLong(REPLICATION_REPLAY_LEASE_RECOVERY_TIMEOUT_MILLISECOND, DEFAULT_REPLICATION_REPLAY_LEASE_RECOVERY_TIMEOUT_MILLISECOND)
-                    + "ms " + REPLICATION_REPLAY_LEASE_RECOVERY_TIMEOUT_MILLISECOND + " continuing, but may be DATALOSS!!!; "
-                    + getLogMessageDetail(nbAttempt, p, startWaiting));
+            LOG.warn("Cannot recoverLease after trying for " +
+                    conf.getLong(REPLICATION_REPLAY_LEASE_RECOVERY_TIMEOUT_MILLISECOND, 
+                            DEFAULT_REPLICATION_REPLAY_LEASE_RECOVERY_TIMEOUT_MILLISECOND) +
+                    "ms " + REPLICATION_REPLAY_LEASE_RECOVERY_TIMEOUT_MILLISECOND + 
+                    " continuing, but may be DATALOSS!!!; " +
+                    getLogMessageDetail(nbAttempt, p, startWaiting));
             return true;
         }
         return false;
@@ -256,8 +267,8 @@ public class RecoverLeaseFSUtils {
         boolean recovered = false;
         try {
             recovered = (Boolean) recoverLeaseMethod.invoke(dfs, p);
-            LOG.info((recovered ? "Recovered lease, " : "Failed to recover lease, ")
-                    + getLogMessageDetail(nbAttempt, p, startWaiting));
+            LOG.info((recovered ? "Recovered lease, " : "Failed to recover lease, ") +
+                    getLogMessageDetail(nbAttempt, p, startWaiting));
         } catch (InvocationTargetException ite) {
             final Throwable e = ite.getCause();
             if (e instanceof LeaseExpiredException && e.getMessage().contains("File does not exist")) {
@@ -274,7 +285,9 @@ public class RecoverLeaseFSUtils {
         return recovered;
     }
 
-    /** Returns Detail to append to any log message around lease recovering. */
+    /**
+     * Returns Detail to append to any log message around lease recovering.
+     */
     private static String getLogMessageDetail(final int nbAttempt, final Path p,
                                               final long startWaiting) {
         return "attempt=" + nbAttempt + " on file=" + p + " after "

@@ -86,7 +86,6 @@
                   <exclude>NOTICE.*</exclude>
                   <exclude>NOTICE</exclude>
                   <exclude>README*</exclude>
-                  <exclude>csv-bulk-load-config.properties</exclude>
                 </excludes>
               </filter>
              <filter>
@@ -121,6 +120,12 @@
                 </excludes>
               </filter>
               <!-- Phoenix specific -->
+              <filter>
+                <artifact>*:*</artifact>
+                <excludes>
+                  <exclude>csv-bulk-load-config.properties</exclude>
+                </excludes>
+              </filter>
             </filters>
             <transformers>
               <transformer
