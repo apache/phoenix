@@ -35,6 +35,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.ExecutorService;
@@ -138,10 +139,12 @@ public class ReplicationLogProcessorTest extends ParallelStatsDisabledIT {
 
         // Test createLogFileReader with valid file - should succeed
         ReplicationLogProcessor replicationLogProcessor = new ReplicationLogProcessor(conf, testHAGroupName);
-        LogFileReader reader = replicationLogProcessor.createLogFileReader(localFs, validFilePath);
+        Optional<LogFileReader> optionalLogFileReader = replicationLogProcessor.createLogFileReader(localFs, validFilePath);
 
         // Verify reader is created successfully
-        assertNotNull("Reader should not be null for valid file", reader);
+        assertNotNull("Reader should not be null for valid file", optionalLogFileReader);
+        assertTrue("Reader should be present for valid file", optionalLogFileReader.isPresent());
+        LogFileReader reader = optionalLogFileReader.get();
         assertNotNull("Reader context should not be null", reader.getContext());
         assertEquals("File path should match", validFilePath, reader.getContext().getFilePath());
         assertEquals("File system should match", localFs, reader.getContext().getFileSystem());
