@@ -112,7 +112,7 @@ public class RecoverLeaseFSUtils {
             LOG.debug("LeaseRecoverable interface not in the classpath, "
                     + "this means Hadoop 3.3.5 or below.");
             try {
-                recoverLeaseMethod = DistributedFileSystem.class.getMethod("recoverLease", 
+                recoverLeaseMethod = DistributedFileSystem.class.getMethod("recoverLease",
                         Path.class);
             } catch (NoSuchMethodException ex) {
                 LOG.error("Cannot find recoverLease method in DistributedFileSystem class. "
@@ -183,8 +183,8 @@ public class RecoverLeaseFSUtils {
      * above. If HDFS-4525 is available, call it every second, and we might be able to exit early.
      */
     private static boolean recoverDFSFileLease(final FileSystem dfs, final Path p,
-                                               final Configuration conf, 
-                                               final CancelableProgressable reporter) 
+                                               final Configuration conf,
+                                               final CancelableProgressable reporter)
                                                throws IOException {
         LOG.info("Recover lease on dfs file " + p);
 
@@ -254,7 +254,7 @@ public class RecoverLeaseFSUtils {
     }
 
     private static boolean checkIfTimedout(final Configuration conf, final long recoveryTimeout,
-                                           final int nbAttempt, final Path p, 
+                                           final int nbAttempt, final Path p,
                                            final long startWaiting) {
         if (recoveryTimeout < EnvironmentEdgeManager.currentTime()) {
             LOG.warn("Cannot recoverLease after trying for "
@@ -281,8 +281,8 @@ public class RecoverLeaseFSUtils {
                     + getLogMessageDetail(nbAttempt, p, startWaiting));
         } catch (InvocationTargetException ite) {
             final Throwable e = ite.getCause();
-            if (e instanceof LeaseExpiredException && 
-                    e.getMessage().contains("File does not exist")) {
+            if (e instanceof LeaseExpiredException
+                    && e.getMessage().contains("File does not exist")) {
                 // This exception comes out instead of FNFE, fix it
                 throw new FileNotFoundException("The given replication log wasn't found at " + p);
             } else if (e instanceof FileNotFoundException) {
