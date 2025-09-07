@@ -70,7 +70,6 @@
     <!-- These are expected to be overridden to conform to cluster versions
     along with hbase.version (defined in profiles) -->
     <hadoop.version>3.2.4</hadoop.version>
-
     <phoenix.thirdparty.version>2.1.0</phoenix.thirdparty.version>
     <hbase.suffix>hbase-${hbase.profile}</hbase.suffix>
 
@@ -1893,7 +1892,7 @@
       <properties>
         <hbase.profile>2.5</hbase.profile>
         <hbase.compat.version>2.5.4</hbase.compat.version>
-        <hadoop.version>3.4.1</hadoop.version>
+        <hadoop.version>3.4.2</hadoop.version>
         <hbase.version>${hbase-2.5.runtime.version}</hbase.version>
         <zookeeper.version>3.8.4</zookeeper.version>
         <tephra.hbase.compat.version>2.4</tephra.hbase.compat.version>
@@ -2037,7 +2036,7 @@
       </activation>
       <properties>
         <hbase.profile>2.5</hbase.profile>
-        <hadoop.version>3.4.1</hadoop.version>
+        <hadoop.version>3.4.2</hadoop.version>
         <hbase.compat.version>2.5.4</hbase.compat.version>
         <hbase.version>${hbase-2.5.runtime.version}</hbase.version>
         <zookeeper.version>3.8.4</zookeeper.version>
