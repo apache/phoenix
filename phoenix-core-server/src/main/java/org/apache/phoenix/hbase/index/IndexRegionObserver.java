@@ -1363,7 +1363,15 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     BatchMutateContext context) {
     for (IndexMaintainer indexMaintainer : indexMetaData.getIndexMaintainers()) {
       if (indexMaintainer.isImmutableRows()) {
-        context.immutableRows = true;
+        // Here we care if index is immutable in order to skip reading data table rows. However, if the data table
+        // storage scheme does not agree with the index table storage scheme, we cannot skip reading data table rows,
+        // and thus we cannot treat the index as immutable. Consider the case where data table uses the single cell per
+        // column format and index uses the single cell format. If the data table row is updated partially, we need to
+        // read the data table row on disk to retrieve missing columns in the partial update to build the full index
+        // row. Please note with the single cell format, the row has single cell (and the empty cell)
+        if (indexMaintainer.getDataImmutableStorageScheme() == indexMaintainer.getIndexStorageScheme()) {
+          context.immutableRows = true;
+        }
       }
       if (indexMaintainer instanceof TransformMaintainer) {
         context.hasTransform = true;
