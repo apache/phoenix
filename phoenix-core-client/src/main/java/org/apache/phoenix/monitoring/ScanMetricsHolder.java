@@ -30,6 +30,10 @@ import static org.apache.phoenix.monitoring.MetricType.COUNT_RPC_RETRIES;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_SCANNED_REGIONS;
 import static org.apache.phoenix.monitoring.MetricType.PAGED_ROWS_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.SCAN_BYTES;
+import static org.apache.phoenix.monitoring.MetricType.BYTES_READ_FROM_FS;
+import static org.apache.phoenix.monitoring.MetricType.BYTES_READ_FROM_MEMSTORE;
+import static org.apache.phoenix.monitoring.MetricType.BYTES_READ_FROM_BLOCKCACHE;
+import static org.apache.phoenix.monitoring.MetricType.BLOCK_READ_OPS_COUNT;
 
 import java.io.IOException;
 import java.util.Map;
@@ -39,21 +43,25 @@ import org.apache.phoenix.log.LogLevel;
 
 public class ScanMetricsHolder {
 
-  private final CombinableMetric countOfRPCcalls;
-  private final CombinableMetric countOfRemoteRPCcalls;
-  private final CombinableMetric sumOfMillisSecBetweenNexts;
-  private final CombinableMetric countOfNSRE;
-  private final CombinableMetric countOfBytesInResults;
-  private final CombinableMetric countOfBytesInRemoteResults;
-  private final CombinableMetric countOfRegions;
-  private final CombinableMetric countOfRPCRetries;
-  private final CombinableMetric countOfRemoteRPCRetries;
-  private final CombinableMetric countOfRowsScanned;
-  private final CombinableMetric countOfRowsFiltered;
-  private final CombinableMetric countOfBytesScanned;
-  private final CombinableMetric countOfRowsPaged;
-  private Map<String, Long> scanMetricMap;
-  private Object scan;
+    private final CombinableMetric countOfRPCcalls;
+    private final CombinableMetric countOfRemoteRPCcalls;
+    private final CombinableMetric sumOfMillisSecBetweenNexts;
+    private final CombinableMetric countOfNSRE;
+    private final CombinableMetric countOfBytesInResults;
+    private final CombinableMetric countOfBytesInRemoteResults;
+    private final CombinableMetric countOfRegions;
+    private final CombinableMetric countOfRPCRetries;
+    private final CombinableMetric countOfRemoteRPCRetries;
+    private final CombinableMetric countOfRowsScanned;
+    private final CombinableMetric countOfRowsFiltered;
+    private final CombinableMetric countOfBytesScanned;
+    private final CombinableMetric countOfRowsPaged;
+    private final CombinableMetric countOfBytesReadFromFS;
+    private final CombinableMetric countOfBytesReadFromMemstore;
+    private final CombinableMetric countOfBytesReadFromBlockcache;
+    private final CombinableMetric countOfBlockReadOps;
+    private  Map<String, Long> scanMetricMap;
+    private Object scan;
 
   private static final ScanMetricsHolder NO_OP_INSTANCE =
     new ScanMetricsHolder(new ReadMetricQueue(false, LogLevel.OFF), "", null);
@@ -67,23 +75,29 @@ public class ScanMetricsHolder {
     return new ScanMetricsHolder(readMetrics, tableName, scan);
   }
 
-  private ScanMetricsHolder(ReadMetricQueue readMetrics, String tableName, Scan scan) {
-    readMetrics.addScanHolder(this);
-    this.scan = scan;
-    countOfRPCcalls = readMetrics.allotMetric(COUNT_RPC_CALLS, tableName);
-    countOfRemoteRPCcalls = readMetrics.allotMetric(COUNT_REMOTE_RPC_CALLS, tableName);
-    sumOfMillisSecBetweenNexts = readMetrics.allotMetric(COUNT_MILLS_BETWEEN_NEXTS, tableName);
-    countOfNSRE = readMetrics.allotMetric(COUNT_NOT_SERVING_REGION_EXCEPTION, tableName);
-    countOfBytesInResults = readMetrics.allotMetric(COUNT_BYTES_REGION_SERVER_RESULTS, tableName);
-    countOfBytesInRemoteResults = readMetrics.allotMetric(COUNT_BYTES_IN_REMOTE_RESULTS, tableName);
-    countOfRegions = readMetrics.allotMetric(COUNT_SCANNED_REGIONS, tableName);
-    countOfRPCRetries = readMetrics.allotMetric(COUNT_RPC_RETRIES, tableName);
-    countOfRemoteRPCRetries = readMetrics.allotMetric(COUNT_REMOTE_RPC_RETRIES, tableName);
-    countOfRowsScanned = readMetrics.allotMetric(COUNT_ROWS_SCANNED, tableName);
-    countOfRowsFiltered = readMetrics.allotMetric(COUNT_ROWS_FILTERED, tableName);
-    countOfBytesScanned = readMetrics.allotMetric(SCAN_BYTES, tableName);
-    countOfRowsPaged = readMetrics.allotMetric(PAGED_ROWS_COUNTER, tableName);
-  }
+    private ScanMetricsHolder(ReadMetricQueue readMetrics, String tableName,Scan scan) {
+        readMetrics.addScanHolder(this);
+        this.scan=scan;
+        countOfRPCcalls = readMetrics.allotMetric(COUNT_RPC_CALLS, tableName);
+        countOfRemoteRPCcalls = readMetrics.allotMetric(COUNT_REMOTE_RPC_CALLS, tableName);
+        sumOfMillisSecBetweenNexts = readMetrics.allotMetric(COUNT_MILLS_BETWEEN_NEXTS, tableName);
+        countOfNSRE = readMetrics.allotMetric(COUNT_NOT_SERVING_REGION_EXCEPTION, tableName);
+        countOfBytesInResults =
+                readMetrics.allotMetric(COUNT_BYTES_REGION_SERVER_RESULTS, tableName);
+        countOfBytesInRemoteResults =
+                readMetrics.allotMetric(COUNT_BYTES_IN_REMOTE_RESULTS, tableName);
+        countOfRegions = readMetrics.allotMetric(COUNT_SCANNED_REGIONS, tableName);
+        countOfRPCRetries = readMetrics.allotMetric(COUNT_RPC_RETRIES, tableName);
+        countOfRemoteRPCRetries = readMetrics.allotMetric(COUNT_REMOTE_RPC_RETRIES, tableName);
+        countOfRowsScanned = readMetrics.allotMetric(COUNT_ROWS_SCANNED, tableName);
+        countOfRowsFiltered = readMetrics.allotMetric(COUNT_ROWS_FILTERED, tableName);
+        countOfBytesScanned = readMetrics.allotMetric(SCAN_BYTES,tableName);
+        countOfRowsPaged = readMetrics.allotMetric(PAGED_ROWS_COUNTER, tableName);
+        countOfBytesReadFromFS = readMetrics.allotMetric(BYTES_READ_FROM_FS, tableName);
+        countOfBytesReadFromMemstore = readMetrics.allotMetric(BYTES_READ_FROM_MEMSTORE, tableName);
+        countOfBytesReadFromBlockcache = readMetrics.allotMetric(BYTES_READ_FROM_BLOCKCACHE, tableName);
+        countOfBlockReadOps = readMetrics.allotMetric(BLOCK_READ_OPS_COUNT, tableName);
+    }
 
   public CombinableMetric getCountOfRemoteRPCcalls() {
     return countOfRemoteRPCcalls;
@@ -141,18 +155,32 @@ public class ScanMetricsHolder {
     return countOfRowsPaged;
   }
 
-  public void setScanMetricMap(Map<String, Long> scanMetricMap) {
-    this.scanMetricMap = scanMetricMap;
-  }
-
-  @Override
-  public String toString() {
-    try {
-      return "{\"scan\":" + scan + ", \"scanMetrics\":"
-        + JsonMapper.writeObjectAsString(scanMetricMap) + "}";
-    } catch (IOException e) {
-      return "{\"Exception while converting scan metrics to Json\":\"" + e.getMessage() + "\"}";
+    public CombinableMetric getCountOfBytesReadFromFS() {
+        return countOfBytesReadFromFS;
     }
-  }
 
+    public CombinableMetric getCountOfBytesReadFromMemstore() {
+        return countOfBytesReadFromMemstore;
+    }
+
+    public CombinableMetric getCountOfBytesReadFromBlockcache() {
+        return countOfBytesReadFromBlockcache;
+    }
+
+    public CombinableMetric getCountOfBlockReadOps() {
+        return countOfBlockReadOps;
+    }
+
+    public void setScanMetricMap(Map<String, Long> scanMetricMap) {
+        this.scanMetricMap = scanMetricMap;
+    }
+    
+    @Override
+    public String toString() {
+        try {
+            return "{\"scan\":" + scan + ", \"scanMetrics\":" + JsonMapper.writeObjectAsString(scanMetricMap) + "}";
+        } catch (IOException e) {
+            return "{\"Exception while converting scan metrics to Json\":\"" + e.getMessage() + "\"}";
+        }
+    }
 }
