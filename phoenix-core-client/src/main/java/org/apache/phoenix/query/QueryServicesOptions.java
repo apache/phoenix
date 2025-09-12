@@ -314,8 +314,8 @@ public class QueryServicesOptions {
   public static final boolean DEFAULT_EXPLAIN_CHUNK_COUNT = true;
   public static final boolean DEFAULT_EXPLAIN_ROW_COUNT = true;
   public static final boolean DEFAULT_ALLOW_ONLINE_TABLE_SCHEMA_UPDATE = true;
-  public static final int DEFAULT_RETRIES_FOR_SCHEMA_UPDATE_CHECK = 10;
-  public static final long DEFAULT_DELAY_FOR_SCHEMA_UPDATE_CHECK = 5 * 1000; // 5 seconds.
+  public static final int DEFAULT_RETRIES_FOR_SCHEMA_UPDATE_CHECK = 50;
+  public static final long DEFAULT_DELAY_FOR_SCHEMA_UPDATE_CHECK = 1000; // 1 second.
   public static final boolean DEFAULT_STORE_NULLS = false;
 
   // TODO Change this to true as part of PHOENIX-1543
