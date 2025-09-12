@@ -1737,9 +1737,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       try {
         success = op.checkForCompletion();
       } catch (Exception ex) {
-        // If we encounter any exception on the first or last try, propagate the exception and fail.
+        // If we encounter any exception on the first try, propagate the exception and fail.
         // Else, we swallow the exception and retry till we reach maxRetries.
-        if (numTries == 1 || numTries == maxRetries) {
+        if (numTries == 1) {
           watch.stop();
           TimeoutException toThrow = new TimeoutException("Operation " + op.getOperationName()
             + " didn't complete because of exception. Time elapsed: " + watch.elapsedMillis());
