@@ -93,7 +93,7 @@ def setPath():
     PHOENIX_TRACESERVER_JAR_PATTERN = "phoenix-tracing-webapp-*-runnable.jar"
     PHOENIX_TESTS_JAR_PATTERN = "phoenix-core-*-tests*.jar"
     PHOENIX_PHERF_JAR_PATTERN = "phoenix-pherf-*[!s].jar"
-    SLF4J_BACKEND_JAR_PATTERN = "log4j-slf4j*.jar"
+    SLF4J_BACKEND_JAR_PATTERN = "log4j-slf4j2*.jar"
     LOGGING_JAR_PATTERN = "log4j-core*.jar"
     LOGGING_JAR_PATTERN2 = "log4j-api*.jar"
     LOGGING_JAR_PATTERN3 = "log4j-1.2-api*.jar"
