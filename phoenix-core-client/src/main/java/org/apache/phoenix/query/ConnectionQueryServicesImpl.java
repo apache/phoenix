@@ -1748,7 +1748,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
         }
       }
       numTries++;
-      if (!success) {
+      if (numTries < maxRetries && !success) {
         Thread.sleep(sleepInterval);
       }
     } while (numTries < maxRetries && !success);
