@@ -277,54 +277,6 @@ public class HAGroupStoreManager {
     }
 
     /**
-     * Subscribe to be notified when a specific state transition occurs.
-     *
-     * @param haGroupName the name of the HA group to monitor
-     * @param fromState the state to transition from
-     * @param toState the state to transition to
-     * @param clusterType whether to monitor local or peer cluster
-     * @param listener the listener to notify when the transition occurs
-     * @throws IOException if unable to get HAGroupStoreClient instance
-     */
-    public void subscribeToTransition(String haGroupName,
-                                      HAGroupStoreRecord.HAGroupState fromState,
-                                      HAGroupStoreRecord.HAGroupState toState,
-                                      ClusterType clusterType,
-                                      HAGroupStateListener listener) throws IOException {
-        HAGroupStoreClient client = getHAGroupStoreClient(haGroupName);
-        client.subscribeToTransition(fromState, toState, clusterType, listener);
-        LOGGER.debug("Delegated subscription to transition {} -> {} "
-                        + "for HA group {} on {} cluster to client",
-                fromState, toState, haGroupName, clusterType);
-    }
-
-    /**
-     * Unsubscribe from specific state transition notifications.
-     *
-     * @param haGroupName the name of the HA group
-     * @param fromState the state to transition from
-     * @param toState the state to transition to
-     * @param clusterType whether monitoring local or peer cluster
-     * @param listener the listener to remove
-     */
-    public void unsubscribeFromTransition(String haGroupName,
-                                          HAGroupStoreRecord.HAGroupState fromState,
-                                          HAGroupStoreRecord.HAGroupState toState,
-                                          ClusterType clusterType,
-                                          HAGroupStateListener listener) {
-        try {
-            HAGroupStoreClient client = getHAGroupStoreClient(haGroupName);
-            client.unsubscribeFromTransition(fromState, toState, clusterType, listener);
-            LOGGER.debug("Delegated unsubscription from transition {} -> {}"
-                            + "for HA group {} on {} cluster to client",
-                    fromState, toState, haGroupName, clusterType);
-        } catch (IOException e) {
-            LOGGER.warn("HAGroupStoreClient not found for HA group: {} - cannot unsubscribe: {}",
-                       haGroupName, e.getMessage());
-        }
-    }
-
-    /**
      * Subscribe to be notified when any transition to a target state occurs.
      *
      * @param haGroupName the name of the HA group to monitor

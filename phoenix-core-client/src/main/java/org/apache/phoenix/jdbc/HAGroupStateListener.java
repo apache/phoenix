@@ -31,7 +31,6 @@ import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
  * <p>Notifications are provided for both local and peer cluster state changes,
  * distinguished by the {@link ClusterType} parameter.</p>
  *
- * @see HAGroupStoreManager#subscribeToTransition
  * @see HAGroupStoreManager#subscribeToTargetState
  */
 public interface HAGroupStateListener {
@@ -44,7 +43,6 @@ public interface HAGroupStateListener {
      * consider delegating to a separate thread.</p>
      *
      * @param haGroupName the name of the HA group that transitioned
-     * @param fromState the previous state before the transition
      * @param toState the new state after the transition
      * @param modifiedTime the time the state transition occurred
      * @param clusterType whether this transition occurred on the local or peer cluster
@@ -53,7 +51,6 @@ public interface HAGroupStateListener {
      *                   logged and will not prevent other listeners from being notified
      */
     void onStateChange(String haGroupName,
-                       HAGroupState fromState,
                        HAGroupState toState,
                        long modifiedTime,
                        ClusterType clusterType);

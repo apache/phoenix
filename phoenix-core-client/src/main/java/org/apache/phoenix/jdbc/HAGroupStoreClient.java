@@ -116,9 +116,6 @@ public class HAGroupStoreClient implements Closeable {
     private volatile HAGroupState lastKnownPeerState;
 
     // Subscription storage for HA group state change notifications per client instance
-    // Map key format: "clusterType:fromState:toState" -> Set<Listeners>
-    private final ConcurrentHashMap<String, CopyOnWriteArraySet<HAGroupStateListener>>
-            specificTransitionSubscribers = new ConcurrentHashMap<>();
     // Map key format: "clusterType:targetState" -> Set<Listeners>
     private final ConcurrentHashMap<String, CopyOnWriteArraySet<HAGroupStateListener>>
             targetStateSubscribers = new ConcurrentHashMap<>();
@@ -695,46 +692,6 @@ public class HAGroupStoreClient implements Closeable {
     // ========== HA Group State Change Subscription Methods ==========
 
     /**
-     * Subscribe to be notified when a specific state transition occurs.
-     *
-     * @param fromState the state to transition from
-     * @param toState the state to transition to
-     * @param clusterType whether to monitor local or peer cluster
-     * @param listener the listener to notify when the transition occurs
-     */
-    public void subscribeToTransition(HAGroupState fromState, HAGroupState toState,
-                                      ClusterType clusterType, HAGroupStateListener listener) {
-        String key = buildTransitionKey(clusterType, fromState, toState);
-        specificTransitionSubscribers.computeIfAbsent(key,
-                k -> new CopyOnWriteArraySet<>()).add(listener);
-        LOGGER.info("Subscribed listener to transition {} -> {} for HA group {} on {} cluster",
-                fromState, toState, haGroupName, clusterType);
-    }
-
-    /**
-     * Unsubscribe from specific state transition notifications.
-     *
-     * @param fromState the state to transition from
-     * @param toState the state to transition to
-     * @param clusterType whether monitoring local or peer cluster
-     * @param listener the listener to remove
-     */
-    public void unsubscribeFromTransition(HAGroupState fromState, HAGroupState toState,
-                                          ClusterType clusterType, HAGroupStateListener listener) {
-        String key = buildTransitionKey(clusterType, fromState, toState);
-        CopyOnWriteArraySet<HAGroupStateListener> listeners
-                = specificTransitionSubscribers.get(key);
-        if (listeners != null && listeners.remove(listener)) {
-            if (listeners.isEmpty()) {
-                specificTransitionSubscribers.remove(key);
-            }
-            LOGGER.info("Unsubscribed listener from transition {} -> {} "
-                            + "for HA group {} on {} cluster",
-                    fromState, toState, haGroupName, clusterType);
-        }
-    }
-
-    /**
      * Subscribe to be notified when any transition to a target state occurs.
      *
      * @param targetState the target state to watch for
@@ -791,14 +748,11 @@ public class HAGroupStoreClient implements Closeable {
             clusterType = ClusterType.PEER;
         }
 
-        // Only notify if there's an actual state transition (not initial state)
-        if (oldState != null && !oldState.equals(newState)) {
+        // Only notify if there's an actual state transition or initial state
+        if (oldState == null || !oldState.equals(newState)) {
             LOGGER.info("Detected state transition for HA group {} from {} to {} on {} cluster",
                     haGroupName, oldState, newState, clusterType);
             notifySubscribers(oldState, newState, newStat.getMtime(), clusterType);
-        } else if (oldState == null) {
-            LOGGER.debug("Initial state detected for HA group {} as {} on {} cluster",
-                    haGroupName, newState, clusterType);
         }
     }
 
@@ -816,20 +770,10 @@ public class HAGroupStoreClient implements Closeable {
         LOGGER.debug("Notifying subscribers of state transition "
                         + "for HA group {} from {} to {} on {} cluster",
                 haGroupName, fromState, toState, clusterType);
-
-        // Create keys for both subscription types
-        String specificTransitionKey = buildTransitionKey(clusterType, fromState, toState);
         String targetStateKey = buildTargetStateKey(clusterType, toState);
 
         // Collect all listeners that need to be notified
         Set<HAGroupStateListener> listenersToNotify = new HashSet<>();
-
-        // Find specific transition subscribers
-        CopyOnWriteArraySet<HAGroupStateListener> specificListeners
-                = specificTransitionSubscribers.get(specificTransitionKey);
-        if (specificListeners != null) {
-            listenersToNotify.addAll(specificListeners);
-        }
 
         // Find target state subscribers
         CopyOnWriteArraySet<HAGroupStateListener> targetListeners
@@ -847,7 +791,7 @@ public class HAGroupStoreClient implements Closeable {
             for (HAGroupStateListener listener : listenersToNotify) {
                 try {
                     listener.onStateChange(haGroupName,
-                            fromState, toState, modifiedTime, clusterType);
+                            toState, modifiedTime, clusterType);
                 } catch (Exception e) {
                     LOGGER.error("Error notifying listener of state transition "
                                     + "for HA group {} from {} to {} on {} cluster",
@@ -859,15 +803,6 @@ public class HAGroupStoreClient implements Closeable {
     }
 
     // ========== Helper Methods ==========
-
-    /**
-     * Build key for specific transition subscriptions.
-     */
-    private String buildTransitionKey(ClusterType clusterType,
-                                      HAGroupState fromState,
-                                      HAGroupState toState) {
-        return clusterType + ":" + fromState + ":" + toState;
-    }
 
     /**
      * Build key for target state subscriptions.
