@@ -414,7 +414,7 @@ public interface QueryServices extends SQLCloseable {
   public static final String INDEX_REGION_OBSERVER_ENABLED_ATTRIB =
     "phoenix.index.region.observer.enabled";
   // Enable the IndexRegionObserver coprocessor for immutable tables
-  public static final String SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB =
+  String SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB =
     "phoenix.server.side.immutable.indexes.enabled";
 
   // Whether IndexRegionObserver/GlobalIndexChecker is enabled for all tables

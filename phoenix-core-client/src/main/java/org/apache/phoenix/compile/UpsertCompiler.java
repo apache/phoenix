@@ -620,7 +620,7 @@ public class UpsertCompiler {
           && (serverSideImmutableIndexes || !table.isImmutableRows());
         boolean hasWhereSubquery = select.getWhere() != null && select.getWhere().hasSubquery();
         runOnServer =
-          (sameTable || (serverUpsertSelectEnabled && !hasGlobalServerSideIndexes)) && isAutoCommit
+          (sameTable || serverUpsertSelectEnabled && !hasGlobalServerSideIndexes) && isAutoCommit
           // We can run the upsert select for initial index population on server side for
           // transactional
           // tables since the writes do not need to be done transactionally, since we gate the index
