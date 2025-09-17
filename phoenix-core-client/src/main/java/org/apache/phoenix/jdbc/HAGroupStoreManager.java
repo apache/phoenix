@@ -158,8 +158,8 @@ public class HAGroupStoreManager {
      * Returns the HAGroupStoreRecord for a specific HA group from peer cluster.
      *
      * @param haGroupName name of the HA group
-     * @return Optional HAGroupStoreRecord for the HA group from peer cluster, can be empty if the HA group
-     *        is not found or peer cluster is not available.
+     * @return Optional HAGroupStoreRecord for the HA group from peer cluster can be empty if 
+     *        the HA group is not found or peer cluster is not available.
      * @throws IOException when HAGroupStoreClient is not healthy.
      */
     public Optional<HAGroupStoreRecord> getPeerHAGroupStoreRecord(final String haGroupName)
