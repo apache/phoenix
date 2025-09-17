@@ -43,7 +43,7 @@ import org.junit.rules.TestName;
 
 import java.util.Map;
 
-import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_NAMESPACE;
+import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -83,7 +83,7 @@ public class PhoenixRegionServerEndpointITWithConsistentFailover extends BaseTes
         assertNotNull(coprocessor);
         ServerRpcController controller = new ServerRpcController();
 
-        try (PhoenixHAAdmin peerHAAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster2().getConfiguration(), ZK_CONSISTENT_HA_NAMESPACE)) {
+        try (PhoenixHAAdmin peerHAAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster2().getConfiguration(), ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE)) {
             HAGroupStoreRecord peerHAGroupStoreRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, HAGroupState.STANDBY);
             peerHAAdmin.createHAGroupStoreRecordInZooKeeper(peerHAGroupStoreRecord);
         }
