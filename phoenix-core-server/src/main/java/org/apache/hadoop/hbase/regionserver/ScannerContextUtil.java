@@ -56,4 +56,12 @@ public class ScannerContextUtil {
   public static void setReturnImmediately(ScannerContext sc) {
     sc.returnImmediately();
   }
+
+  /**
+   * returnImmediately is a private field in ScannerContext and there is no getter API on it But the
+   * checkTimeLimit API on the ScannerContext will return true if returnImmediately is set
+   */
+  public static boolean checkTimeLimit(ScannerContext sc) {
+    return sc.checkTimeLimit(ScannerContext.LimitScope.BETWEEN_ROWS);
+  }
 }

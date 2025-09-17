@@ -106,8 +106,9 @@ public class DelegateRegionScanner implements RegionScanner {
       ScannerContext noLimitContext = ScannerContextUtil.copyNoLimitScanner(scannerContext);
       boolean hasMore =
         raw ? delegate.nextRaw(result, noLimitContext) : delegate.next(result, noLimitContext);
-      if (isDummy(result)) {
-        // when a dummy row is returned by a lower layer, set returnImmediately
+      if (isDummy(result) || ScannerContextUtil.checkTimeLimit(noLimitContext)) {
+        // when a dummy row is returned by a lower layer or if the result is valid but the lower
+        // layer signals us to return immediately, we need to set returnImmediately
         // on the ScannerContext to force HBase to return a response to the client
         ScannerContextUtil.setReturnImmediately(scannerContext);
       }
