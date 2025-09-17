@@ -1573,11 +1573,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       context.dataRowStates =
         new HashMap<ImmutableBytesPtr, Pair<Put, Put>>(context.rowsToLock.size());
       if (
-        (!context.immutableRows && context.hasGlobalIndex) || context.hasTransform
+        !context.immutableRows && context.hasGlobalIndex || context.hasTransform
           || context.hasAtomic || context.returnResult || context.hasRowDelete
           || context.hasConditionalTTL
-          || (!context.immutableRows && context.hasUncoveredIndex
-            && isPartialUncoveredIndexMutation(indexMetaData, miniBatchOp))
+          || !context.immutableRows && context.hasUncoveredIndex
+            && isPartialUncoveredIndexMutation(indexMetaData, miniBatchOp)
       ) {
         getCurrentRowStates(c, context);
       }
