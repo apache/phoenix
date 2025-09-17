@@ -18,7 +18,7 @@
 package org.apache.phoenix.jdbc;
 
 import static org.apache.hadoop.hbase.HConstants.DEFAULT_ZK_SESSION_TIMEOUT;
-import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_NAMESPACE;
+import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_ZK_SESSION_TIMEOUT_MS_KEY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_HA_GROUP_NAME;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
@@ -93,9 +93,9 @@ public class HAGroupStoreClientIT extends BaseTest {
   @Before
   public void before() throws Exception {
     haAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster1().getConfiguration(),
-      ZK_CONSISTENT_HA_NAMESPACE);
+      ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
     peerHaAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster2().getConfiguration(),
-      ZK_CONSISTENT_HA_NAMESPACE);
+      ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
     haAdmin.getCurator().delete().quietly().forPath(toPath(testName.getMethodName()));
     peerHaAdmin.getCurator().delete().quietly().forPath(toPath(testName.getMethodName()));
     zkUrl = getLocalZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration());
@@ -468,6 +468,8 @@ public class HAGroupStoreClientIT extends BaseTest {
     assertNotNull(currentRecord);
     assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC,
       currentRecord.getHAGroupState());
+    // The record should have a timestamp
+    assertNotNull(currentRecord.getLastSyncStateTimeInMs());
 
     record1 = new HAGroupStoreRecord("v1.0", haGroupName,
       HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC_TO_STANDBY);
