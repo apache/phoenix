@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -31,6 +32,7 @@ import java.util.concurrent.Future;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.LeaseRecoverable;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
@@ -40,6 +42,7 @@ import org.apache.hadoop.hbase.client.AsyncTable;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.util.FutureUtils;
+import org.apache.phoenix.replication.log.InvalidLogTrailerException;
 import org.apache.phoenix.replication.log.LogFile;
 import org.apache.phoenix.replication.log.LogFileReader;
 import org.apache.phoenix.replication.log.LogFileReaderContext;
@@ -168,7 +171,7 @@ public class ReplicationLogProcessor implements Closeable {
      */
     public static ReplicationLogProcessor get(Configuration conf, String haGroupName) {
         return INSTANCES.computeIfAbsent(haGroupName,
-            k -> new ReplicationLogProcessor(conf, haGroupName));
+                k -> new ReplicationLogProcessor(conf, haGroupName));
     }
 
     /**
@@ -194,9 +197,9 @@ public class ReplicationLogProcessor implements Closeable {
         decorateConf();
         this.metrics = createMetricsSource();
         this.executorService = Executors.newFixedThreadPool(threadPoolSize,
-            new ThreadFactoryBuilder()
-                .setNameFormat("Phoenix-Replication-Log-Processor-" + haGroupName + "-%d")
-                .build());
+                new ThreadFactoryBuilder()
+                        .setNameFormat("Phoenix-Replication-Log-Processor-" + haGroupName + "-%d")
+                        .build());
     }
 
     /**
@@ -233,7 +236,15 @@ public class ReplicationLogProcessor implements Closeable {
 
         try {
             // Create the LogFileReader for given path
-            logFileReader = createLogFileReader(fs, filePath);
+            Optional<LogFileReader> logFileReaderOptional = createLogFileReader(fs, filePath);
+
+            if (!logFileReaderOptional.isPresent()) {
+                // This is an empty file, assume processed successfully and return
+                LOG.warn("Found empty file to process {}", filePath);
+                return;
+            }
+
+            logFileReader = logFileReaderOptional.get();
 
             for (LogFile.Record record : logFileReader) {
                 final TableName tableName = TableName.valueOf(record.getHBaseTableName());
@@ -287,23 +298,60 @@ public class ReplicationLogProcessor implements Closeable {
      * @return A configured LogFileReader instance
      * @throws IOException if the file doesn't exist or initialization fails
      */
-    protected LogFileReader createLogFileReader(FileSystem fs, Path filePath) throws IOException {
+    protected Optional<LogFileReader> createLogFileReader(FileSystem fs, Path filePath)
+            throws IOException {
         // Ensure that file exists. If we face exception while checking the path itself,
         // method would throw same exception back to the caller
         if (!fs.exists(filePath)) {
             throw new IOException("Log file does not exist: " + filePath);
         }
         LogFileReader logFileReader = new LogFileReader();
-        try {
-            LogFileReaderContext logFileReaderContext = new LogFileReaderContext(conf)
-                    .setFileSystem(fs).setFilePath(filePath);
+        LogFileReaderContext logFileReaderContext = new LogFileReaderContext(conf)
+                .setFileSystem(fs).setFilePath(filePath);
+        boolean isClosed = isFileClosed(fs, filePath);
+        if (isClosed) {
+            // As file is closed, ensure that the file has a valid header and trailer
             logFileReader.init(logFileReaderContext);
-        } catch (IOException exception) {
-            LOG.error("Failed to initialize new LogFileReader for path {}",
-                    filePath, exception);
-            throw exception;
+            return Optional.of(logFileReader);
+        } else {
+            LOG.warn("Found un-closed file {}. Starting lease recovery.", filePath);
+            recoverLease(fs, filePath);
+            if (fs.getFileStatus(filePath).getLen() <= 0) {
+                // Found empty file, returning null LogReader
+                return Optional.empty();
+            }
+            try {
+                // Acquired the lease, try to create reader with validation both header and trailer
+                logFileReader.init(logFileReaderContext);
+                return Optional.of(logFileReader);
+            } catch (InvalidLogTrailerException invalidLogTrailerException) {
+                // If trailer is missing or corrupt, create reader without trailer validation
+                LOG.warn("Invalid Trailer for file {}",
+                        filePath, invalidLogTrailerException);
+                logFileReaderContext.setValidateTrailer(false);
+                logFileReader.init(logFileReaderContext);
+                return Optional.of(logFileReader);
+            } catch (IOException exception) {
+                LOG.error("Failed to initialize new LogFileReader for path {}",
+                        filePath, exception);
+                throw exception;
+            }
         }
-        return logFileReader;
+    }
+
+    protected void recoverLease(final FileSystem fs, final Path filePath) throws IOException {
+        RecoverLeaseFSUtils.recoverFileLease(fs, filePath, conf);
+    }
+
+    protected boolean isFileClosed(final FileSystem fs, final Path filePath) throws IOException {
+        boolean isClosed;
+        try {
+            isClosed = ((LeaseRecoverable) fs).isFileClosed(filePath);
+        } catch (ClassCastException classCastException) {
+            // If filesystem is not of type LeaseRecoverable, assume file is always closed
+            isClosed = true;
+        }
+        return isClosed;
     }
 
     /**
@@ -353,7 +401,8 @@ public class ReplicationLogProcessor implements Closeable {
 
                 // Update current operations for next retry
                 currentOperations = result.getFailedMutations();
-                lastError = new IOException("Failed to apply the mutations", result.getException());
+                lastError = new IOException("Failed to apply the mutations",
+                        result.getException());
             } catch (IOException e) {
                 lastError = e;
             }
@@ -427,7 +476,8 @@ public class ReplicationLogProcessor implements Closeable {
                 // Add failed mutations to retry list
                 failedOperations.put(tableName, tableMutationMap.get(tableName));
                 getMetrics().incrementFailedMutationsCount(tableMutationMap.get(tableName).size());
-                LOG.debug("Failed to apply mutations for table {}: {}", tableName, e.getMessage());
+                LOG.debug("Failed to apply mutations for table {}: {}", tableName,
+                        e.getMessage());
                 lastException = e;
             }
         }
