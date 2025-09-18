@@ -119,9 +119,11 @@ public class HAGroupStoreRecord {
             OFFLINE.allowedTransitions = ImmutableSet.of();
             // This needs to be manually recovered by operator
             UNKNOWN.allowedTransitions = ImmutableSet.of();
-            ACTIVE_NOT_IN_SYNC_TO_STANDBY.allowedTransitions = ImmutableSet.of(ABORT_TO_ACTIVE_NOT_IN_SYNC, 
+            ACTIVE_NOT_IN_SYNC_TO_STANDBY.allowedTransitions
+                    = ImmutableSet.of(ABORT_TO_ACTIVE_NOT_IN_SYNC,
                     ACTIVE_IN_SYNC_TO_STANDBY);
-            ACTIVE_IN_SYNC_TO_STANDBY.allowedTransitions = ImmutableSet.of(ABORT_TO_ACTIVE_IN_SYNC, STANDBY);
+            ACTIVE_IN_SYNC_TO_STANDBY.allowedTransitions
+                    = ImmutableSet.of(ABORT_TO_ACTIVE_IN_SYNC, STANDBY);
             STANDBY_TO_ACTIVE.allowedTransitions = ImmutableSet.of(ABORT_TO_STANDBY,
                     ACTIVE_IN_SYNC);
             DEGRADED_STANDBY.allowedTransitions
@@ -163,12 +165,14 @@ public class HAGroupStoreRecord {
     private final String haGroupName;
     private final HAGroupState haGroupState;
     private final long recordVersion;
+    private final Long lastSyncStateTimeInMs;
 
     @JsonCreator
     public HAGroupStoreRecord(@JsonProperty("protocolVersion") String protocolVersion,
                               @JsonProperty("haGroupName") String haGroupName,
                               @JsonProperty("haGroupState") HAGroupState haGroupState,
-                              @JsonProperty("recordVersion") Long recordVersion) {
+                              @JsonProperty("recordVersion") Long recordVersion,
+                              @JsonProperty("lastSyncStateTimeInMs") Long lastSyncStateTimeInMs) {
         Preconditions.checkNotNull(haGroupName, "HA group name cannot be null!");
         Preconditions.checkNotNull(haGroupState, "HA group state cannot be null!");
         Preconditions.checkNotNull(recordVersion, "Record version cannot be null!");
@@ -176,7 +180,24 @@ public class HAGroupStoreRecord {
         this.protocolVersion = Objects.toString(protocolVersion, DEFAULT_PROTOCOL_VERSION);
         this.haGroupName = haGroupName;
         this.haGroupState = haGroupState;
-        this.recordVersion = recordVersion != null ? recordVersion : DEFAULT_RECORD_VERSION;
+        this.recordVersion = recordVersion;
+        this.lastSyncStateTimeInMs = lastSyncStateTimeInMs;
+    }
+
+    /**
+     * Convenience constructor for backward compatibility without lastSyncStateTimeInMs.
+     */
+    public HAGroupStoreRecord(String protocolVersion,
+                              String haGroupName, HAGroupState haGroupState, Long recordVersion) {
+        this(protocolVersion, haGroupName, haGroupState, recordVersion, null);
+    }
+
+        /**
+     * Convenience constructor for backward compatibility without recordVersion and lastSyncStateTimeInMs.
+     */
+    public HAGroupStoreRecord(String protocolVersion,
+                              String haGroupName, HAGroupState haGroupState) {
+        this(protocolVersion, haGroupName, haGroupState, DEFAULT_RECORD_VERSION, null);
     }
 
     public static Optional<HAGroupStoreRecord> fromJson(byte[] bytes) {
@@ -198,10 +219,11 @@ public class HAGroupStoreRecord {
     }
 
     public boolean hasSameInfo(HAGroupStoreRecord other) {
-        return haGroupName.equals(other.haGroupName) &&
-                haGroupState.equals(other.haGroupState) &&
-                protocolVersion.equals(other.protocolVersion) &&
-                recordVersion == other.recordVersion;
+        return haGroupName.equals(other.haGroupName)
+                && haGroupState.equals(other.haGroupState)
+                && protocolVersion.equals(other.protocolVersion)
+                && recordVersion == other.recordVersion
+                && Objects.equals(lastSyncStateTimeInMs, other.lastSyncStateTimeInMs);
     }
 
     public String getProtocolVersion() {
@@ -221,6 +243,10 @@ public class HAGroupStoreRecord {
         return haGroupState;
     }
 
+    public Long getLastSyncStateTimeInMs() {
+        return lastSyncStateTimeInMs;
+    }
+
     @JsonIgnore
     public ClusterRoleRecord.ClusterRole getClusterRole() {
         return haGroupState.getClusterRole();
@@ -233,6 +259,7 @@ public class HAGroupStoreRecord {
                 .append(haGroupName)
                 .append(haGroupState)
                 .append(recordVersion)
+                .append(lastSyncStateTimeInMs)
                 .hashCode();
     }
 
@@ -251,6 +278,7 @@ public class HAGroupStoreRecord {
                     .append(haGroupName, otherRecord.haGroupName)
                     .append(haGroupState, otherRecord.haGroupState)
                     .append(recordVersion, otherRecord.recordVersion)
+                    .append(lastSyncStateTimeInMs, otherRecord.lastSyncStateTimeInMs)
                     .isEquals();
         }
     }
@@ -262,6 +290,7 @@ public class HAGroupStoreRecord {
                 + ", haGroupName='" + haGroupName + '\''
                 + ", haGroupState=" + haGroupState
                 + ", recordVersion=" + recordVersion
+                + ", lastSyncStateTimeInMs=" + lastSyncStateTimeInMs
                 + '}';
     }
 

@@ -136,4 +136,19 @@ public class HAGroupStoreTestUtil {
             conn.commit();
         }
     }
-} 
+
+    /**
+     * Deletes all HA group records from the system table for testing purposes.
+     *
+     * @param zkUrl the ZooKeeper URL to connect to
+     * @throws SQLException if the database operation fails
+     */
+    public static void deleteAllHAGroupRecordsInSystemTable(String zkUrl) throws SQLException {
+        // Delete all records from System Table
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(JDBC_PROTOCOL_ZK + JDBC_PROTOCOL_SEPARATOR + zkUrl);
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("DELETE FROM " + SYSTEM_HA_GROUP_NAME);
+            conn.commit();
+        }
+    }
+}

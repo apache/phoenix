@@ -140,8 +140,8 @@ public class HighAvailabilityTestingUtility {
             masterAddress1 = hbaseCluster1.getConfiguration().get(HConstants.MASTER_ADDRS_KEY).replaceAll(":", "\\\\:");
             masterAddress2 = hbaseCluster2.getConfiguration().get(HConstants.MASTER_ADDRS_KEY).replaceAll(":", "\\\\:");
 
-            haAdmin1 = new PhoenixHAAdmin(getZkUrl1(), hbaseCluster1.getConfiguration(), HighAvailibilityCuratorProvider.INSTANCE, HAGroupStoreClient.ZK_CONSISTENT_HA_NAMESPACE);
-            haAdmin2 = new PhoenixHAAdmin(getZkUrl2(), hbaseCluster2.getConfiguration(), HighAvailibilityCuratorProvider.INSTANCE, HAGroupStoreClient.ZK_CONSISTENT_HA_NAMESPACE);
+            haAdmin1 = new PhoenixHAAdmin(getZkUrl1(), hbaseCluster1.getConfiguration(), HighAvailibilityCuratorProvider.INSTANCE, HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
+            haAdmin2 = new PhoenixHAAdmin(getZkUrl2(), hbaseCluster2.getConfiguration(), HighAvailibilityCuratorProvider.INSTANCE, HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
 
             admin1 = hbaseCluster1.getConnection().getAdmin();
             admin2 = hbaseCluster2.getConnection().getAdmin();
