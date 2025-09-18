@@ -2107,18 +2107,18 @@
     <!-- The dependencies should be defined only in phoenix-core
     ,but maven doesn't seem to support that -->
     <profile>
-      <!-- This WILL work with the public -hadoop3 artifacts -->
-      <id>phoenix-hbase-compat-2.6.2-default</id>
+      <!-- must be identical to phoenix-hbase-compat-2.5.4 profile -->
+      <!-- This WILL work with the public HBase artifacts -->
+      <id>phoenix-hbase-compat-2.5.12-default</id>
       <activation>
         <property>
           <name>!hbase.profile</name>
         </property>
       </activation>
       <properties>
-        <hbase.profile>2.6</hbase.profile>
-        <!-- Same compat version as 2.6.0, but different Hadoop version -->
-        <hbase.compat.version>2.6.0</hbase.compat.version>
-        <hbase.version>${hbase-2.6.runtime.version}</hbase.version>
+        <hbase.profile>2.5</hbase.profile>
+        <hbase.compat.version>2.5.4</hbase.compat.version>
+        <hbase.version>${hbase-2.5.runtime.version}</hbase.version>
       </properties>
     </profile>
     <profile>
