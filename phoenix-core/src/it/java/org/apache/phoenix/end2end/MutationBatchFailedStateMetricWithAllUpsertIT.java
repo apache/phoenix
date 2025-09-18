@@ -29,7 +29,7 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.Map;
 import java.util.Properties;
-import org.apache.phoenix.end2end.index.ImmutableIndexIT;
+import org.apache.phoenix.end2end.index.BaseImmutableIndexIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -68,7 +68,7 @@ public class MutationBatchFailedStateMetricWithAllUpsertIT
       // mutations
       // Note :- it is called before applying mutation to region
       TestUtil.addCoprocessor(conn, deleteTableName,
-        ImmutableIndexIT.DeleteFailingRegionObserver.class);
+        BaseImmutableIndexIT.DeleteFailingRegionObserver.class);
 
       for (int i = 0; i < numUpsertCount; i++) {
         String upsertSQL = String.format(upsertStatement, deleteTableName);
