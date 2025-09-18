@@ -58,6 +58,8 @@ public class PhoenixHAAdminIT extends BaseTest {
     private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS = new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();
     private PhoenixHAAdmin haAdmin;
     private PhoenixHAAdmin peerHaAdmin;
+    private final String defaultProtocolVersion = "v1.0";
+    private final long defaultStateVersion = 1;
 
     @Rule
     public TestName testName = new TestName();
@@ -97,11 +99,7 @@ public class PhoenixHAAdminIT extends BaseTest {
         String haGroupName = testName.getMethodName();
         String peerZKUrl = CLUSTERS.getZkUrl2();
 
-        HAGroupStoreRecord record = new HAGroupStoreRecord(
-                "v1.0",
-                haGroupName,
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
-        );
+        HAGroupStoreRecord record = createInitialRecord(haGroupName);
 
         // Create the record in ZooKeeper
         haAdmin.createHAGroupStoreRecordInZooKeeper(record);
@@ -118,20 +116,17 @@ public class PhoenixHAAdminIT extends BaseTest {
     public void testCreateHAGroupStoreRecordInZooKeeperWithExistingNode() throws Exception {
         String haGroupName = testName.getMethodName();
 
-        HAGroupStoreRecord record1 = new HAGroupStoreRecord(
-                "v1.0",
-                haGroupName,
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
-        );
+        HAGroupStoreRecord record1 = createInitialRecord(haGroupName);
 
         // Create the first record
         haAdmin.createHAGroupStoreRecordInZooKeeper(record1);
 
         // Try to create again with different data
         HAGroupStoreRecord record2 = new HAGroupStoreRecord(
-                "v1.0",
+                defaultProtocolVersion,
                 haGroupName,
-                HAGroupStoreRecord.HAGroupState.STANDBY
+                HAGroupStoreRecord.HAGroupState.STANDBY,
+                defaultStateVersion
         );
 
         // This should throw an exception due to NodeExistsException handling
@@ -151,6 +146,7 @@ public class PhoenixHAAdminIT extends BaseTest {
         assertEquals(record1.getHAGroupState(), savedRecord.getHAGroupState());
         assertEquals(record1.getProtocolVersion(), savedRecord.getProtocolVersion());
         assertEquals(record1.getHaGroupName(), savedRecord.getHaGroupName());
+        assertEquals(record1.getRecordVersion(), savedRecord.getRecordVersion());
     }
 
     @Test
@@ -159,11 +155,7 @@ public class PhoenixHAAdminIT extends BaseTest {
         String peerZKUrl = CLUSTERS.getZkUrl2();
 
         // Create initial record
-        HAGroupStoreRecord initialRecord = new HAGroupStoreRecord(
-                "v1.0",
-                haGroupName,
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
-        );
+        HAGroupStoreRecord initialRecord = createInitialRecord(haGroupName);
 
         haAdmin.createHAGroupStoreRecordInZooKeeper(initialRecord);
 
@@ -174,9 +166,10 @@ public class PhoenixHAAdminIT extends BaseTest {
 
         // Update the record
         HAGroupStoreRecord updatedRecord = new HAGroupStoreRecord(
-                "v1.0",
+                defaultProtocolVersion,
                 haGroupName,
-                HAGroupStoreRecord.HAGroupState.STANDBY
+                HAGroupStoreRecord.HAGroupState.STANDBY,
+                defaultStateVersion + 1
         );
 
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, updatedRecord, currentVersion);
@@ -189,6 +182,7 @@ public class PhoenixHAAdminIT extends BaseTest {
         assertEquals(updatedRecord.getHAGroupState(), savedRecord.getHAGroupState());
         assertEquals(updatedRecord.getProtocolVersion(), savedRecord.getProtocolVersion());
         assertEquals(updatedRecord.getHaGroupName(), savedRecord.getHaGroupName());
+        assertEquals(updatedRecord.getRecordVersion(), savedRecord.getRecordVersion());
     }
 
     @Test
@@ -197,11 +191,7 @@ public class PhoenixHAAdminIT extends BaseTest {
         String peerZKUrl = CLUSTERS.getZkUrl2();
 
         // Create initial record
-        HAGroupStoreRecord initialRecord = new HAGroupStoreRecord(
-                "v1.0",
-                haGroupName,
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
-        );
+        HAGroupStoreRecord initialRecord = createInitialRecord(haGroupName);
 
         haAdmin.createHAGroupStoreRecordInZooKeeper(initialRecord);
 
@@ -212,18 +202,20 @@ public class PhoenixHAAdminIT extends BaseTest {
 
         // Update the record with current version (should succeed)
         HAGroupStoreRecord updatedRecord = new HAGroupStoreRecord(
-                "v1.0",
+                defaultProtocolVersion,
                 haGroupName,
-                HAGroupStoreRecord.HAGroupState.STANDBY
+                HAGroupStoreRecord.HAGroupState.STANDBY,
+                defaultStateVersion + 1
         );
 
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, updatedRecord, currentVersion);
 
         // Try to update again with the same (now stale) version - should fail
         HAGroupStoreRecord anotherUpdate = new HAGroupStoreRecord(
-                "v1.0",
+                defaultProtocolVersion,
                 haGroupName,
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY
+                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY,
+                defaultStateVersion + 2
         );
 
         try {
@@ -241,11 +233,7 @@ public class PhoenixHAAdminIT extends BaseTest {
         String peerZKUrl = CLUSTERS.getZkUrl2();
 
         // Create initial record
-        HAGroupStoreRecord initialRecord = new HAGroupStoreRecord(
-                "v1.0",
-                haGroupName,
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
-        );
+        HAGroupStoreRecord initialRecord = createInitialRecord(haGroupName);
 
         haAdmin.createHAGroupStoreRecordInZooKeeper(initialRecord);
 
@@ -263,6 +251,7 @@ public class PhoenixHAAdminIT extends BaseTest {
         assertEquals(initialRecord.getClusterRole(), retrievedRecord.getClusterRole());
         assertEquals(initialRecord.getHAGroupState(), retrievedRecord.getHAGroupState());
         assertEquals(initialRecord.getProtocolVersion(), retrievedRecord.getProtocolVersion());
+        assertEquals(initialRecord.getRecordVersion(), retrievedRecord.getRecordVersion());
 
         // Verify stat is valid
         assertTrue(stat.getVersion() >= 0);
@@ -282,11 +271,7 @@ public class PhoenixHAAdminIT extends BaseTest {
         String peerZKUrl = CLUSTERS.getZkUrl2();
 
         // Step 1: Create initial record
-        HAGroupStoreRecord initialRecord = new HAGroupStoreRecord(
-                "v1.0",
-                haGroupName,
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
-        );
+        HAGroupStoreRecord initialRecord = createInitialRecord(haGroupName);
 
         haAdmin.createHAGroupStoreRecordInZooKeeper(initialRecord);
 
@@ -299,12 +284,14 @@ public class PhoenixHAAdminIT extends BaseTest {
         assertEquals(initialRecord.getClusterRole(), retrievedRecord.getClusterRole());
         assertEquals(initialRecord.getHAGroupState(), retrievedRecord.getHAGroupState());
         assertEquals(initialRecord.getProtocolVersion(), retrievedRecord.getProtocolVersion());
+        assertEquals(initialRecord.getRecordVersion(), retrievedRecord.getRecordVersion());
 
         // Step 3: Update the record
         HAGroupStoreRecord updatedRecord = new HAGroupStoreRecord(
-                "v1.0",
+                defaultProtocolVersion,
                 haGroupName,
-                HAGroupStoreRecord.HAGroupState.STANDBY
+                HAGroupStoreRecord.HAGroupState.STANDBY,
+                defaultStateVersion + 1
         );
 
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, updatedRecord, stat.getVersion());
@@ -318,7 +305,7 @@ public class PhoenixHAAdminIT extends BaseTest {
         assertEquals(updatedRecord.getClusterRole(), finalRecord.getClusterRole());
         assertEquals(updatedRecord.getHAGroupState(), finalRecord.getHAGroupState());
         assertEquals(updatedRecord.getProtocolVersion(), finalRecord.getProtocolVersion());
-
+        assertEquals(updatedRecord.getRecordVersion(), finalRecord.getRecordVersion());
         // Verify stat version increased
         assertTrue(finalStat.getVersion() > stat.getVersion());
     }
@@ -328,11 +315,7 @@ public class PhoenixHAAdminIT extends BaseTest {
         String haGroupName = testName.getMethodName();
 
         // Create initial record
-        HAGroupStoreRecord initialRecord = new HAGroupStoreRecord(
-                "v1.0",
-                haGroupName,
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
-        );
+        HAGroupStoreRecord initialRecord = createInitialRecord(haGroupName);
 
         haAdmin.createHAGroupStoreRecordInZooKeeper(initialRecord);
 
@@ -360,9 +343,10 @@ public class PhoenixHAAdminIT extends BaseTest {
 
                     // Create a unique update record for this thread
                     HAGroupStoreRecord updatedRecord = new HAGroupStoreRecord(
-                            "v1.0",
+                            defaultProtocolVersion,
                             haGroupName,
-                            HAGroupStoreRecord.HAGroupState.STANDBY
+                            HAGroupStoreRecord.HAGroupState.STANDBY,
+                            defaultStateVersion + 1
                     );
 
                     // All threads use the same currentVersion, causing conflicts
@@ -413,11 +397,7 @@ public class PhoenixHAAdminIT extends BaseTest {
         String haGroupName = testName.getMethodName();
 
         // Create initial record
-        HAGroupStoreRecord initialRecord = new HAGroupStoreRecord(
-                "v1.0",
-                haGroupName,
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
-        );
+        HAGroupStoreRecord initialRecord = createInitialRecord(haGroupName);
 
         haAdmin.createHAGroupStoreRecordInZooKeeper(initialRecord);
 
@@ -441,9 +421,10 @@ public class PhoenixHAAdminIT extends BaseTest {
 
                     // Create update record for this thread
                     HAGroupStoreRecord updatedRecord = new HAGroupStoreRecord(
-                            "v1.0",
+                            defaultProtocolVersion,
                             haGroupName,
-                            threadId % 2 == 0 ? HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC : HAGroupStoreRecord.HAGroupState.STANDBY
+                            threadId % 2 == 0 ? HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC : HAGroupStoreRecord.HAGroupState.STANDBY,
+                            defaultStateVersion + 1
                     );
 
                     // Update with the current version
@@ -477,5 +458,16 @@ public class PhoenixHAAdminIT extends BaseTest {
         // The final record should have the version from the last update
         assertEquals(threadCount, finalResult.getRight().getVersion());
     }
+
+    private HAGroupStoreRecord createInitialRecord(String haGroupName) {
+        return new HAGroupStoreRecord(
+                defaultProtocolVersion,
+                haGroupName,
+                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
+                defaultStateVersion
+        );
+    }
+
+
 
 }

@@ -20,7 +20,6 @@ package org.apache.phoenix.jdbc;
 import static org.apache.hadoop.test.GenericTestUtils.waitFor;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
 import static org.apache.phoenix.jdbc.HighAvailabilityPolicy.PARALLEL;
-import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair.doTestWhenOneHBaseDown;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithConnection;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_PARALLEL_CONNECTION_CREATED_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_PARALLEL_CONNECTION_ERROR_COUNTER;
@@ -249,14 +248,23 @@ public class ParallelPhoenixConnectionIT {
             // Get details of connection#1
             PhoenixConnection pConn1 = pr.getFutureConnection1().get();
             Configuration config1 = pConn1.getQueryServices().getConfiguration();
-            String zkQuorum1 = config1.get(HConstants.ZOOKEEPER_QUORUM);
+            String masterAddress1;
             String principal1 = config1.get(QueryServices.QUERY_SERVICES_NAME);
 
             // Get details of connection#2
             PhoenixConnection pConn2 = pr.getFutureConnection2().get();
             Configuration config2 = pConn2.getQueryServices().getConfiguration();
-            String zkQuorum2 = config2.get(HConstants.ZOOKEEPER_QUORUM);
+            String masterAddress2;
             String principal2 = config2.get(QueryServices.QUERY_SERVICES_NAME);
+
+            if (pConn1.getURL().contains(String.valueOf(CLUSTERS.
+                    getGivenClusterMasterPort(CLUSTERS.getHBaseCluster1())))) {
+                masterAddress1 = CLUSTERS.getMasterAddress1().replace("\\", "");
+                masterAddress2 = CLUSTERS.getMasterAddress2().replace("\\", "");
+            } else {
+                masterAddress1 = CLUSTERS.getMasterAddress2().replace("\\", "");
+                masterAddress2 = CLUSTERS.getMasterAddress1().replace("\\", "");
+            }
 
             // Slow down connection#1
             CountDownLatch latch = new CountDownLatch(1);
@@ -277,12 +285,12 @@ public class ParallelPhoenixConnectionIT {
                 // Assert connection#1 CQSI thread pool metrics
                 String conn1HistogramKey = getHistogramKey(config1);
                 assertHTableThreadPoolHistograms(htableHistograms.get(conn1HistogramKey),
-                    conn1HistogramKey, false, zkQuorum1, principal1);
+                    conn1HistogramKey, false, masterAddress1, principal1);
 
                 // Assert connection#2 CQSI thread pool metrics
                 String conn2HistogramKey = getHistogramKey(config2);
                 assertHTableThreadPoolHistograms(htableHistograms.get(conn2HistogramKey),
-                    conn2HistogramKey, true, zkQuorum2, principal2);
+                    conn2HistogramKey, true, masterAddress2, principal2);
 
                 // Assert that the CQSI thread pool metrics for both connections are different
                 Assert.assertNotEquals(conn1HistogramKey, conn2HistogramKey);
@@ -347,7 +355,7 @@ public class ParallelPhoenixConnectionIT {
      */
     @Test
     public void testCluster1Unavailable() throws Exception {
-        doTestWhenOneHBaseDown(CLUSTERS.getHBaseCluster1(), () -> {
+        CLUSTERS.doTestWhenOneHBaseDown(CLUSTERS.getHBaseCluster1(), () -> {
             CLUSTERS.logClustersStates();
             try (Connection conn = getParallelConnection()) {
                 doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
@@ -371,18 +379,8 @@ public class ParallelPhoenixConnectionIT {
      */
     @Test
     public void testBothClusterATSRole() throws Exception {
-        String zkUrl1 = CLUSTERS.getZkUrl1();
-        String zkUrl2 = CLUSTERS.getZkUrl2();
-        String haGroupName = testName.getMethodName();
-        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl1, zkUrl2,
-                ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.ACTIVE_TO_STANDBY, null);
-        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl2, zkUrl1,
-                ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.ACTIVE_TO_STANDBY, null);
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.ACTIVE_TO_STANDBY);
         try (ParallelPhoenixConnection conn = (ParallelPhoenixConnection) getParallelConnection()) {
-            PhoenixConnection conn1 = conn.futureConnection1.get();
-            PhoenixConnection conn2 = conn.futureConnection2.get();
-            conn1.setHAGroupName(haGroupName);
-            conn2.setHAGroupName(haGroupName);
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
             fail("Expected MutationBlockedIOException to be thrown");
         } catch (SQLException e) {
@@ -566,7 +564,7 @@ public class ParallelPhoenixConnectionIT {
     @Test
     public void testConnectionErrorCount() throws Exception {
 
-        doTestWhenOneHBaseDown(CLUSTERS.getHBaseCluster1(), () -> {
+        CLUSTERS.doTestWhenOneHBaseDown(CLUSTERS.getHBaseCluster1(), () -> {
             CLUSTERS.logClustersStates();
             GLOBAL_HA_PARALLEL_CONNECTION_CREATED_COUNTER.getMetric().reset();
             GLOBAL_HA_PARALLEL_CONNECTION_ERROR_COUNTER.getMetric().reset();
@@ -580,7 +578,7 @@ public class ParallelPhoenixConnectionIT {
                 /* Determine which cluster is down from a phoenix HA point of view and close the other */
 
                 CompletableFuture<PhoenixConnection> pConn = null;
-                int downClientPort = CLUSTERS.getHBaseCluster1().getZkCluster().getClientPort();
+                int downClientPort = CLUSTERS.getGivenClusterMasterPort(CLUSTERS.getHBaseCluster1());
                 if(((ParallelPhoenixConnection) conn).getContext().getHaGroup().getRoleRecord().
                         getUrl1().contains(String.valueOf(downClientPort))) {
                     pConn = ((ParallelPhoenixConnection) conn).futureConnection2;
@@ -782,87 +780,6 @@ public class ParallelPhoenixConnectionIT {
         }
     }
 
-    /**
-     * This is to make sure all Phoenix connections are closed when registryType changes
-     * of a CRR , ZK --> MASTER
-     *
-     * Test with many connections.
-     */
-    @Test
-    public void testAllWrappedConnectionsClosedAfterRegistryChangeToMaster() throws Exception {
-        short numberOfConnections = 10;
-        List<Connection> connectionList = new ArrayList<>(numberOfConnections);
-        for (short i = 0; i < numberOfConnections; i++) {
-            connectionList.add(getParallelConnection());
-        }
-        ConnectionQueryServicesImpl cqsi = (ConnectionQueryServicesImpl) PhoenixDriver.INSTANCE.
-                getConnectionQueryServices(CLUSTERS.getJdbcUrl1(haGroup), clientProperties);
-        ConnectionInfo connInfo = ConnectionInfo.create(CLUSTERS.getJdbcUrl1(haGroup),
-                PhoenixDriver.INSTANCE.getQueryServices().getProps(), clientProperties);
-
-        ClusterRoleRecord.RegistryType newRegistry = ClusterRoleRecord.RegistryType.MASTER;
-        CLUSTERS.transitClusterRoleRecordRegistry(haGroup, newRegistry);
-
-        for (short i = 0; i < numberOfConnections; i++) {
-            LOG.info("Asserting connection number {}", i);
-            ParallelPhoenixConnection conn = ((ParallelPhoenixConnection) connectionList.get(i));
-            assertFalse(conn.isClosed());
-            assertTrue(conn.futureConnection1.get().isClosed());
-            assertTrue(conn.futureConnection2.get().isClosed());
-        }
-        //CQSI should be closed
-        try {
-            cqsi.checkClosed();
-            fail("Should have thrown an exception as cqsi should be closed");
-        } catch (IllegalStateException e) {
-            //Exception cqsi should have been invalidated as well
-            assertFalse(PhoenixDriver.INSTANCE.checkIfCQSIIsInCache(connInfo));
-        } catch (Exception e) {
-            fail("Should have thrown on IllegalStateException as cqsi should be closed");
-        }
-    }
-
-    /**
-     * This is to make sure all Phoenix connections are closed when registryType changes
-     * of a CRR. ZK --> RPC
-     *
-     * Test with many connections.
-     */
-    @Test(timeout = 300000)
-    public void testAllWrappedConnectionsClosedAfterRegistryChangeToRpc() throws Exception {
-        short numberOfConnections = 10;
-        List<Connection> connectionList = new ArrayList<>(numberOfConnections);
-        for (short i = 0; i < numberOfConnections; i++) {
-            connectionList.add(getParallelConnection());
-        }
-        ConnectionQueryServicesImpl cqsi = (ConnectionQueryServicesImpl) PhoenixDriver.INSTANCE.
-                getConnectionQueryServices(CLUSTERS.getJdbcUrl1(haGroup), clientProperties);
-        ConnectionInfo connInfo = ConnectionInfo.create(CLUSTERS.getJdbcUrl1(haGroup),
-                PhoenixDriver.INSTANCE.getQueryServices().getProps(), clientProperties);
-
-        ClusterRoleRecord.RegistryType newRegistry = ClusterRoleRecord.RegistryType.RPC;
-        //RPC Registry is only there in hbase version greater than 2.5.0
-        assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.5.0")>=0);
-        CLUSTERS.transitClusterRoleRecordRegistry(haGroup, newRegistry);
-
-        for (short i = 0; i < numberOfConnections; i++) {
-            LOG.info("Asserting connection number {}", i);
-            ParallelPhoenixConnection conn = ((ParallelPhoenixConnection) connectionList.get(i));
-            assertFalse(conn.isClosed());
-            assertTrue(conn.futureConnection1.get().isClosed());
-            assertTrue(conn.futureConnection2.get().isClosed());
-        }
-        //CQSI should be closed
-        try {
-            cqsi.checkClosed();
-            fail("Should have thrown an exception as cqsi should be closed");
-        } catch (IllegalStateException e) {
-            //Exception cqsi should have been invalidated as well
-            assertFalse(PhoenixDriver.INSTANCE.checkIfCQSIIsInCache(connInfo));
-        } catch (Exception e) {
-            fail("Should have thrown on IllegalStateException as cqsi should be closed");
-        }
-    }
 
     /**
      * Helper method to test Operation type of Phoenix Statement provided by

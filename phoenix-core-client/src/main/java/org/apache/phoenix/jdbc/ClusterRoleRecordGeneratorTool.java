@@ -21,7 +21,10 @@ package org.apache.phoenix.jdbc;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.hbase.ClusterMetrics;
 import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
@@ -40,7 +43,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_ATTR_PREFIX;
-import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
+import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalMasterUrl;
 
 
 /**
@@ -80,9 +83,9 @@ public class ClusterRoleRecordGeneratorTool extends Configured implements Tool {
         }
     }
 
-    List<ClusterRoleRecord> listAllRecordsByZk() throws IOException {
-        /* This current cluster's full ZK url for HBase, in host:port:/hbase format. */
-        String localZkUrl = getLocalZkUrl(getConf());
+    List<ClusterRoleRecord> listAllRecordsByZk() throws Exception {
+        /* This current cluster's full Master url for HBase, in host:port format. */
+        String localMasterUrl = getLocalMasterUrl(getConf());
         final String[] haGroupNames = getConf().getStrings(PHOENIX_HA_GROUPS_ATTR);
         if (haGroupNames == null || haGroupNames.length == 0) {
             String msg = "No HA groups configured for this cluster via " + PHOENIX_HA_GROUPS_ATTR;
@@ -92,14 +95,48 @@ public class ClusterRoleRecordGeneratorTool extends Configured implements Tool {
 
         List<ClusterRoleRecord> records = new ArrayList<>();
         for (String haGroupName : haGroupNames) {
-            String peerZkUrl = getPeerZkUrl(getConf(), haGroupName);
+            String peerMasterUrl = getPeerMasterUrl(getConf(), haGroupName);
             records.add(new ClusterRoleRecord(haGroupName, getHaPolicy(haGroupName),
-                    localZkUrl, ClusterRole.ACTIVE,
-                    peerZkUrl, ClusterRole.STANDBY,
+                    localMasterUrl, ClusterRole.ACTIVE,
+                    peerMasterUrl, ClusterRole.STANDBY,
                     1));
         }
         LOG.debug("Returning all cluster role records discovered: {}", records);
         return records;
+    }
+
+    /**
+     * Method to get the peer master url from configuration
+     * @param conf Configuration object for local cluster
+     * @param haGroupName HA group name
+     * @return Peer master url
+     * @throws Exception if unable to get the peer master url
+     */
+    private static String getPeerMasterUrl(Configuration conf, String haGroupName) throws Exception {
+        String peerZkUrl = getPeerZkUrl(conf, haGroupName);
+
+        Connection connection = null;
+        ServerName serverName;
+        String peerMaster;
+        try {
+            Configuration newConf = HBaseConfiguration.create();
+
+            newConf.set(HConstants.ZOOKEEPER_QUORUM, peerZkUrl.split(":")[0].replace("\\", ""));
+            newConf.set(HConstants.ZOOKEEPER_CLIENT_PORT, peerZkUrl.split(":")[1].replace("\\", ""));
+
+            connection = ConnectionFactory.createConnection(newConf);
+
+            ClusterMetrics clusterMetrics = connection.getAdmin().getClusterMetrics();
+            serverName = clusterMetrics.getMasterName();
+            assert serverName != null;
+            peerMaster = serverName.getHostname() + "\\:" + serverName.getPort();
+        } finally {
+            if (connection != null) {
+                connection.close();
+            }
+        }
+        return peerMaster;
+
     }
 
     /**

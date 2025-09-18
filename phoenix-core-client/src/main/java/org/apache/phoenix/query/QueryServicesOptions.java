@@ -462,6 +462,7 @@ public class QueryServicesOptions {
 
 
     public static final Boolean DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED = false;
+    public static final Boolean DEFAULT_HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED = true;
     public static final Boolean DEFAULT_CQSI_THREAD_POOL_ENABLED = false;
     public static final int DEFAULT_CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS = 60;
     public static final int DEFAULT_CQSI_THREAD_POOL_CORE_POOL_SIZE = 25;

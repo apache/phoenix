@@ -352,6 +352,14 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                     .run(new CallRunner.CallableThrowable<PhoenixResultSet, SQLException>() {
                         @Override public PhoenixResultSet call() throws SQLException {
                             final long startTime = EnvironmentEdgeManager.currentTimeMillis();
+                            //Refesh the cluster role record for failover policy if refresh interval is expired
+                            if (connection.getHAGroup() != null && 
+                                connection.getHAGroup().getRoleRecord() != null &&
+                                connection.getHAGroup().getRoleRecord().getPolicy() == HighAvailabilityPolicy.FAILOVER &&
+                                connection.getHAGroup().shouldRefreshRoleRecord()) {
+                                    LOGGER.info("Refreshing cluster role record for before executing query");
+                                    connection.getHAGroup().refreshClusterRoleRecord();
+                            }
                             boolean success = false;
                             boolean updateMetrics = true;
                             boolean pointLookup = false;

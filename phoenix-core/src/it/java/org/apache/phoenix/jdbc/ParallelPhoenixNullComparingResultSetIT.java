@@ -20,7 +20,6 @@ package org.apache.phoenix.jdbc;
 import static org.apache.phoenix.jdbc.ClusterRoleRecordGeneratorTool.PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
 import static org.apache.phoenix.jdbc.HighAvailabilityPolicy.PARALLEL;
-import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair.doTestWhenOneHBaseDown;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_PARALLEL_CONNECTION_ERROR_COUNTER;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -128,7 +127,7 @@ public class ParallelPhoenixNullComparingResultSetIT {
         int id = intCounter.incrementAndGet();
         int v = 1000 + id;
         addRowToCluster2(tableName, id, v);
-        doTestWhenOneHBaseDown(CLUSTERS.getHBaseCluster1(), () -> {
+        CLUSTERS.doTestWhenOneHBaseDown(CLUSTERS.getHBaseCluster1(), () -> {
             CLUSTERS.logClustersStates();
             readIdAndVerifyValue(tableName, id, v);
             // Read a non existent row
@@ -142,7 +141,7 @@ public class ParallelPhoenixNullComparingResultSetIT {
         int id = intCounter.incrementAndGet();
         int v = 1000 + id;
         addRowToCluster1(tableName, id, v);
-        doTestWhenOneHBaseDown(CLUSTERS.getHBaseCluster2(), () -> {
+        CLUSTERS.doTestWhenOneHBaseDown(CLUSTERS.getHBaseCluster2(), () -> {
             CLUSTERS.logClustersStates();
             readIdAndVerifyValue(tableName, id, v);
             readNonExistentRowAndVerify(tableName, intCounter.incrementAndGet());

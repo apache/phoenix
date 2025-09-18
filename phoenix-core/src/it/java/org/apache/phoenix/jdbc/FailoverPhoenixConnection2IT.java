@@ -18,9 +18,16 @@
 package org.apache.phoenix.jdbc;
 
 import static org.apache.hadoop.test.GenericTestUtils.waitFor;
-import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair.doTestWhenOneZKDown;
+import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION;
+import static org.apache.phoenix.exception.SQLExceptionCode.HA_NO_ACTIVE_CLUSTER;
+import static org.apache.phoenix.exception.SQLExceptionCode.STALE_CRR_RETHROW_AFTER_REFRESH;
+import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.ACTIVE;
+import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY;
+import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.STANDBY;
+import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.STANDBY_TO_ACTIVE;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithConnection;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_CRR_CACHE_FREQUENCY_MS_KEY;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -28,15 +35,12 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.junit.Assume.assumeTrue;
 
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.ExecutorService;
@@ -44,10 +48,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.commons.lang3.RandomStringUtils;
-import org.apache.hadoop.hbase.util.VersionInfo;
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.exception.FailoverSQLException;
+import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
+import org.apache.phoenix.util.JDBCUtil;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -97,9 +103,14 @@ public class FailoverPhoenixConnection2IT {
         haGroupName = testName.getMethodName();
         clientProperties = HighAvailabilityTestingUtility.getHATestProperties();
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName);
+        clientProperties.setProperty(PHOENIX_HA_CRR_CACHE_FREQUENCY_MS_KEY, "1000");
+
+        CLUSTERS.deleteHAGroupRecordFromBothClusters(haGroupName);
 
         // Make first cluster ACTIVE
         CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER);
+
+        CLUSTERS.rebuildBothClustersGroupStoreClient(haGroupName);
 
         haGroup = getHighAvailibilityGroup(CLUSTERS.getJdbcHAUrl(), clientProperties);
         LOG.info("Initialized haGroup {} with URL {}", haGroup, CLUSTERS.getJdbcHAUrl());
@@ -110,6 +121,7 @@ public class FailoverPhoenixConnection2IT {
     @After
     public void tearDown() throws Exception {
         try {
+            CLUSTERS.deleteHAGroupRecordFromBothClusters(haGroupName);
             haGroup.close();
             PhoenixDriver.INSTANCE
                     .getConnectionQueryServices(CLUSTERS.getJdbcUrl1(haGroup), haGroup.getProperties())
@@ -131,16 +143,16 @@ public class FailoverPhoenixConnection2IT {
      */
     @Test(timeout = 300000)
     public void testFailoverCanFinishWhenOneZKDown() throws Exception {
-        doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
+        CLUSTERS.doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
             // Because cluster1 is down, any version record will only be updated in cluster2.
             // Become ACTIVE cluster is still ACTIVE in current version record, no CQS to be closed.
-            CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.OFFLINE);
+            CLUSTERS.transitClusterRoleWithCluster1Down(haGroup, ACTIVE, ClusterRoleRecord.ClusterRole.OFFLINE);
 
             // Usually making this cluster STANDBY will close the CQS and all existing connections.
             // The HA group was created in setup() but no CQS is yet opened for this ACTIVE cluster.
             // As a result there is neither the CQS nor existing opened connections.
             // In this case, the failover should finish instead of failing to get/close the CQS.
-            CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE);
+            CLUSTERS.transitClusterRoleWithCluster1Down(haGroup, STANDBY, ACTIVE);
 
             try (Connection conn = createFailoverConnection()) {
                 FailoverPhoenixConnection failoverConn = (FailoverPhoenixConnection) conn;
@@ -161,11 +173,11 @@ public class FailoverPhoenixConnection2IT {
      */
     @Test(timeout = 300000)
     public void testFailoverCanFinishWhenOneZKDownWithCQS() throws Exception {
-        doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
+        CLUSTERS.doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
             // Try to make a connection to current ACTIVE cluster, which should fail.
             try {
                 createFailoverConnection();
-                fail("Should have failed since ACTIVE ZK '" + CLUSTERS.getZkUrl1() + "' is down");
+                fail("Should have failed since ACTIVE HBase '" + CLUSTERS.getMasterAddress1() + "' is down");
             } catch (SQLException e) {
                 LOG.info("Got expected exception when ACTIVE ZK cluster is down", e);
             }
@@ -173,7 +185,8 @@ public class FailoverPhoenixConnection2IT {
             // As the target ZK is down, now existing CQS if any is in a bad state. In this case,
             // the failover should still finish. After all, this is the most important use case the
             // failover is designed for.
-            CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE);
+            CLUSTERS.transitClusterRoleWithCluster1Down(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY_TO_ACTIVE);
+            CLUSTERS.transitClusterRoleWithCluster1Down(haGroup, STANDBY, ACTIVE);
 
             try (Connection conn = createFailoverConnection()) {
                 FailoverPhoenixConnection failoverConn = (FailoverPhoenixConnection) conn;
@@ -199,7 +212,7 @@ public class FailoverPhoenixConnection2IT {
         try (Connection conn = createFailoverConnection()) {
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
         }
-        doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
+        CLUSTERS.doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
             try {
                 try (Connection conn = createFailoverConnection()) {
                     doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
@@ -211,7 +224,8 @@ public class FailoverPhoenixConnection2IT {
 
             // So on-call engineer comes into play, and triggers a failover
             // Because cluster1 is down, new version record will only be updated in cluster2
-            CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE);
+            CLUSTERS.transitClusterRoleWithCluster1Down(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY_TO_ACTIVE);
+            CLUSTERS.transitClusterRoleWithCluster1Down(haGroup, STANDBY, ACTIVE);
 
             // After failover, the FailoverPhoenixConnection should go to the second cluster
             try (Connection conn = createFailoverConnection()) {
@@ -232,7 +246,8 @@ public class FailoverPhoenixConnection2IT {
 
         LOG.info("Testing failover back to cluster1 when bot clusters are up and running");
         // Failover back to the first cluster since it is healthy after restart
-        CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY);
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY_TO_ACTIVE, ClusterRole.ACTIVE_TO_STANDBY);
+        CLUSTERS.transitClusterRole(haGroup, ACTIVE, STANDBY);
         // After ACTIVE ZK restarts and fail back, this should still work
         try (Connection conn = createFailoverConnection()) {
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
@@ -246,28 +261,36 @@ public class FailoverPhoenixConnection2IT {
      * After failover, client can not connect to this HA group (ACTIVE cluster  2 is down).
      * After cluster 2 (ACTIVE) restarts, client can connect to this HA group.
      */
-    @Test(timeout = 300000)
-    public void testConnectionWhenStandbyZKRestarts() throws Exception {
-        doTestWhenOneZKDown(CLUSTERS.getHBaseCluster2(), () -> {
-            try (Connection conn = createFailoverConnection()) {
-                doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
-            }
+     @Test(timeout = 300000)
+     public void testConnectionWhenStandbyZKRestarts() throws Exception {
+         CLUSTERS.doTestWhenOneZKDown(CLUSTERS.getHBaseCluster2(), () -> {
+             try (Connection conn = createFailoverConnection()) {
+                 doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
+             }
 
-            // Innocent on-call engineer triggers a failover to second cluster
-            CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE);
+             // Innocent on-call engineer triggers a failover to second cluster
+             CLUSTERS.transitClusterRoleWithCluster2Down(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY_TO_ACTIVE);
+             CLUSTERS.transitClusterRoleWithCluster2Down(haGroup, STANDBY, ACTIVE);
 
-            try {
-                createFailoverConnection();
-                fail("Should have failed since ACTIVE ZK cluster was shutdown");
-            } catch (SQLException e) {
-                LOG.info("Got expected exception when ACTIVE ZK cluster {} was shutdown",
-                        CLUSTERS.getZkUrl2(), e);
-            }
-        });
-        try (Connection conn = createFailoverConnection()) {
-            doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
-        }
-    }
+             try {
+                 createFailoverConnection();
+                 fail("Should have failed since ACTIVE ZK cluster was shutdown");
+             } catch (SQLException e) {
+                 LOG.info("Got expected exception when ACTIVE ZK cluster {} was shutdown",
+                         CLUSTERS.getZkUrl2(), e);
+             }
+         });
+
+         //We will need to update SYSTEM Table for cluster 2 here as it was down and has
+         //stale info.
+         CLUSTERS.doUpdatesMissedWhenClusterWasDown(haGroup, ACTIVE_TO_STANDBY, ClusterRole.STANDBY_TO_ACTIVE, 2);
+         CLUSTERS.doUpdatesMissedWhenClusterWasDown(haGroup, STANDBY, ACTIVE, 2);
+         //Wait for sometime for poller to pull the record (5 sec)
+         sleepThreadFor(5000);
+         try (Connection conn = createFailoverConnection()) {
+             doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
+         }
+     }
 
     /**
      * Tests the scenario where two ZK clusters both restart.
@@ -278,8 +301,8 @@ public class FailoverPhoenixConnection2IT {
      */
     @Test(timeout = 300000)
     public void testConnectionWhenTwoZKRestarts() throws Exception {
-        doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
-            doTestWhenOneZKDown(CLUSTERS.getHBaseCluster2(), () -> {
+        CLUSTERS.doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
+            CLUSTERS.doTestWhenOneZKDown(CLUSTERS.getHBaseCluster2(), () -> {
                 try {
                     createFailoverConnection();
                     fail("Should have failed since ACTIVE ZK cluster was shutdown");
@@ -298,7 +321,8 @@ public class FailoverPhoenixConnection2IT {
             }
 
             // So on-call engineer comes into play, and triggers a failover
-            CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE);
+            CLUSTERS.transitClusterRoleWithCluster1Down(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY_TO_ACTIVE);
+            CLUSTERS.transitClusterRoleWithCluster1Down(haGroup, STANDBY, ACTIVE);
 
             // After the second cluster (ACTIVE) ZK restarts, this should still work
             try (Connection conn = createFailoverConnection()) {
@@ -320,7 +344,8 @@ public class FailoverPhoenixConnection2IT {
             connectionList.add(createFailoverConnection());
         }
 
-        CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE);
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY_TO_ACTIVE);
+        CLUSTERS.transitClusterRole(haGroup, STANDBY, ACTIVE);
 
         for (short i = 0; i < numberOfConnections; i++) {
             LOG.info("Asserting connection number {}", i);
@@ -344,14 +369,15 @@ public class FailoverPhoenixConnection2IT {
         // Add a good connection before shutting down and failing over
         connections.add(executor.submit(this::createFailoverConnection));
 
-        doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
+        CLUSTERS.doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
             LOG.info("Since cluster1 is down, now failing over to cluster2");
             // Create parallel clients that would use the CQSI that failover policy tries to close
             for (short i = 1; i < numberOfThreads; i++) {
                 connections.add(executor.submit(this::createFailoverConnection));
             }
             // The ACTIVE cluster goes down, and then on-call engineer triggers failover.
-            CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE);
+            CLUSTERS.transitClusterRoleWithCluster1Down(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY_TO_ACTIVE);
+            CLUSTERS.transitClusterRoleWithCluster1Down(haGroup, STANDBY, ACTIVE);
         });
 
         waitFor(() -> {
@@ -371,86 +397,6 @@ public class FailoverPhoenixConnection2IT {
             }
             return true;
         }, 100, 120_000);
-    }
-
-    /**
-     * This is to make sure all Phoenix connections are closed when registryType changes
-     * of a CRR. ZK --> MASTER
-     *
-     * Test with many connections.
-     */
-    @Test(timeout = 300000)
-    public void testAllWrappedConnectionsClosedAfterRegistryChangeToMaster() throws Exception {
-        short numberOfConnections = 10;
-        List<Connection> connectionList = new ArrayList<>(numberOfConnections);
-        for (short i = 0; i < numberOfConnections; i++) {
-            connectionList.add(createFailoverConnection());
-        }
-        ConnectionQueryServicesImpl cqsi = (ConnectionQueryServicesImpl) PhoenixDriver.INSTANCE.
-                getConnectionQueryServices(CLUSTERS.getJdbcUrl1(haGroup), clientProperties);
-        ConnectionInfo connInfo = ConnectionInfo.create(CLUSTERS.getJdbcUrl1(haGroup),
-                PhoenixDriver.INSTANCE.getQueryServices().getProps(), clientProperties);
-
-        ClusterRoleRecord.RegistryType newRegistry = ClusterRoleRecord.RegistryType.MASTER;
-        CLUSTERS.transitClusterRoleRecordRegistry(haGroup, newRegistry);
-
-        for (short i = 0; i < numberOfConnections; i++) {
-            LOG.info("Asserting connection number {}", i);
-            FailoverPhoenixConnection conn = ((FailoverPhoenixConnection) connectionList.get(i));
-            assertFalse(conn.isClosed());
-            assertTrue(conn.getWrappedConnection().isClosed());
-        }
-        //CQSI should be closed
-        try {
-            cqsi.checkClosed();
-            fail("Should have thrown an exception as cqsi should be closed");
-        } catch (IllegalStateException e) {
-            //Exception Expected cqsi should have been invalidated as well
-            assertFalse(PhoenixDriver.INSTANCE.checkIfCQSIIsInCache(connInfo));
-        } catch (Exception e) {
-            fail("Should have thrown on IllegalStateException as cqsi should be closed");
-        }
-    }
-
-    /**
-     * This is to make sure all Phoenix connections are closed when registryType changes
-     * of a CRR. ZK --> RPC
-     *
-     * Test with many connections.
-     */
-    @Test(timeout = 300000)
-    public void testAllWrappedConnectionsClosedAfterRegistryChangeToRpc() throws Exception {
-        short numberOfConnections = 10;
-        List<Connection> connectionList = new ArrayList<>(numberOfConnections);
-        for (short i = 0; i < numberOfConnections; i++) {
-            connectionList.add(createFailoverConnection());
-        }
-        ConnectionQueryServicesImpl cqsi = (ConnectionQueryServicesImpl) PhoenixDriver.INSTANCE.
-                getConnectionQueryServices(CLUSTERS.getJdbcUrl1(haGroup), clientProperties);
-        ConnectionInfo connInfo = ConnectionInfo.create(CLUSTERS.getJdbcUrl1(haGroup),
-                PhoenixDriver.INSTANCE.getQueryServices().getProps(), clientProperties);
-
-        ClusterRoleRecord.RegistryType newRegistry = ClusterRoleRecord.RegistryType.RPC;
-        //RPC Registry is only there in hbase version greater than 2.5.0
-        assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.5.0")>=0);
-        CLUSTERS.transitClusterRoleRecordRegistry(haGroup, newRegistry);
-
-        for (short i = 0; i < numberOfConnections; i++) {
-            LOG.info("Asserting connection number {}", i);
-            FailoverPhoenixConnection conn = ((FailoverPhoenixConnection) connectionList.get(i));
-            assertFalse(conn.isClosed());
-            assertTrue(conn.getWrappedConnection().isClosed());
-        }
-        //CQSI should be closed
-        try {
-            cqsi.checkClosed();
-            fail("Should have thrown an exception as cqsi should be closed");
-        } catch (IllegalStateException e) {
-            //Expected cqsi should have been invalidated as well
-            assertFalse(PhoenixDriver.INSTANCE.checkIfCQSIIsInCache(connInfo));
-        } catch (Exception e) {
-            fail("Should have thrown on IllegalStateException as cqsi should be closed");
-        }
     }
 
     /**
@@ -475,7 +421,7 @@ public class FailoverPhoenixConnection2IT {
         CLUSTERS.restartCluster1();
         //Basically applying new url for cluster 1
         CLUSTERS.refreshClusterRoleRecordAfterClusterRestart(haGroup,
-                ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY);
+                ACTIVE, STANDBY, 1);
         for (short i = 0; i < numberOfConnections; i++) {
             LOG.info("Asserting connection number {}", i);
             FailoverPhoenixConnection conn = ((FailoverPhoenixConnection) connectionList.get(i));
@@ -515,7 +461,7 @@ public class FailoverPhoenixConnection2IT {
         CLUSTERS.restartCluster2();
         //Basically applying new url for cluster 2
         CLUSTERS.refreshClusterRoleRecordAfterClusterRestart(haGroup,
-                ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY);
+                ACTIVE, STANDBY, 2);
         for (short i = 0; i < numberOfConnections; i++) {
             LOG.info("Asserting connection number {}", i);
             FailoverPhoenixConnection conn = ((FailoverPhoenixConnection) connectionList.get(i));
@@ -532,31 +478,124 @@ public class FailoverPhoenixConnection2IT {
     }
 
     /**
-     * Test connections should close early when transitioning to ATS.
-     * cluster 1 ( ACTIVE --> ACTIVE_TO_STANDBY )
+     * Testing stale CRR version detection during writes and automatic CRR refresh in both cases
+     * 1 - When Stale CRR Version detected
+     * 2 - When CRR was refreshed to non-active Poller started to automatically refresh until it detects an ACTIVE CRR
+    */
+    @Test(timeout = 300000)
+    public void testStaleCrrVersionDetection() throws Exception {
+        Connection connection = createFailoverConnection();
+        doTestBasicOperationsWithConnection(connection, tableName, haGroupName);
+        CLUSTERS.transitClusterRole(haGroup, ACTIVE_TO_STANDBY, STANDBY, false);
+        CLUSTERS.transitClusterRole(haGroup, STANDBY, STANDBY, false);
+
+        try {
+            doTestBasicOperationsWithConnection(connection, tableName, haGroupName);
+            fail("Should have failed since CRR is stale");
+        } catch (SQLException e) {
+            //Should fail but CRR must be refresh after detecting Stale version
+            LOG.info("Printing exception", e);
+            assertEquals(e.getErrorCode(), STALE_CRR_RETHROW_AFTER_REFRESH.getErrorCode());
+        }
+
+        //Connection creation should fail as now we don't have active cluster
+        try {
+            createFailoverConnection();
+            fail("Should have failed since ACTIVE ZK cluster was shutdown");
+        } catch (SQLException e) {
+            LOG.info("Printing exception", e);
+            assertEquals(e.getErrorCode(), CANNOT_ESTABLISH_CONNECTION.getErrorCode());
+            assertTrue(e.getCause() instanceof FailoverSQLException);
+            //Expected
+        }
+        //Above connection creation should start a poller as well
+        CLUSTERS.transitClusterRole(haGroup, STANDBY, STANDBY_TO_ACTIVE, false);
+        CLUSTERS.transitClusterRole(haGroup, STANDBY, ACTIVE, false);
+
+        //Sleep for 5 sec for poller to automatically pick up change
+        sleepThreadFor(5000);
+
+        //Connection creation and operations should work
+        try (Connection conn = createFailoverConnection()) {
+            doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
+        }
+
+    }
+
+    /**
+     * Testing executeQuery/scans should detect and refresh CRR when haGroup's CRR update cache is expired
      */
     @Test(timeout = 300000)
-    public void testAllWrappedConnectionsClosedWhenRoleChangeFromActiveToATS()
-            throws Exception {
+    public void testStaleCrrVersionWithReadDetection() throws Exception {
+        Connection connection = createFailoverConnection();
+        //do Write
+        int id = RandomUtils.nextInt();
+        try (Statement stmt = connection.createStatement()) {
+            stmt.executeUpdate(String.format("UPSERT INTO %s VALUES(%d, 1984)", tableName, id));
+            connection.commit();
+        }
+        CLUSTERS.transitClusterRole(haGroup, ACTIVE_TO_STANDBY, STANDBY, false);
 
-        //Creating some connections to ACTIVE cluster
-        short numberOfConnections = 10;
-        //Create FailoverPhoenixConnections with default urls
-        List<Connection> connectionList = new ArrayList<>(numberOfConnections);
-        for (short i = 0; i < numberOfConnections; i++) {
-            connectionList.add(createFailoverConnection());
+        //Expire the CRR cache in HAGroup for scan operation
+        sleepThreadFor(3000);
+
+        //Read operation should refresh the CRR leading to success and also update the CRR in HAGroup
+        try (ResultSet rs = connection.createStatement().executeQuery(
+                String.format("SELECT v FROM %s WHERE id = %d", tableName, id))) {
+            rs.next();
+            String url = JDBCUtil.formatUrl(CLUSTERS.getJdbcUrl1(haGroup), haGroup.getRoleRecord().getRegistryType());
+            assertEquals(haGroup.getRoleRecord().getRole(url), ACTIVE_TO_STANDBY);
+        } catch (SQLException e) {
+            fail(String.format("Should have succeeded but failed with exception {}", e));
         }
 
-        //Transit Role1 ACTIVE --> ACTIVE_TO_STANDBY
-        CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
-                ClusterRoleRecord.ClusterRole.STANDBY);
+        CLUSTERS.transitClusterRole(haGroup, STANDBY, STANDBY, true);
+        //connections should be closed
+        assertTrue(((FailoverPhoenixConnection)connection).getWrappedConnection().isClosed());
 
-        //Connections should be closed
-        for (short i = 0; i < numberOfConnections; i++) {
-            FailoverPhoenixConnection conn = ((FailoverPhoenixConnection) connectionList.get(i));
-            assertFalse(conn.isClosed());
-            assertTrue(conn.getWrappedConnection().isClosed());
+        //Connection creation should fail as now we don't have active cluster
+        try {
+            createFailoverConnection();
+            fail("Should have failed since ACTIVE ZK cluster was shutdown");
+        } catch (SQLException e) {
+            assertEquals(e.getErrorCode(), CANNOT_ESTABLISH_CONNECTION.getErrorCode());
+            assertTrue(e.getCause() instanceof FailoverSQLException);
+            //Expected
         }
+        //Above connection creation should start a poller as well
+        CLUSTERS.transitClusterRole(haGroup, STANDBY, STANDBY_TO_ACTIVE, false);
+        CLUSTERS.transitClusterRole(haGroup, STANDBY, ACTIVE, false);
+
+        //Sleep for 5 sec for poller to automatically pick up change
+        sleepThreadFor(5000);
+
+        //Connection creation and operations should work
+        try (Connection conn = createFailoverConnection()) {
+            doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
+        }
+
+        //Poller should have Stopped when we got Active CRR so transitions now should not be detected
+        //unless we do any scan or write
+
+        CLUSTERS.transitClusterRole(haGroup, STANDBY, ACTIVE_TO_STANDBY, false);
+        CLUSTERS.transitClusterRole(haGroup, STANDBY, STANDBY, false);
+
+        //Sleeping for 2 Sec to confirm poller is not detecting and has been stopped
+        sleepThreadFor(2000);
+
+        //Connection creation should happen
+        try (Connection conn = createFailoverConnection()){
+            try {
+                ResultSet rs = connection.createStatement().executeQuery(
+                    String.format("SELECT v FROM %s WHERE id = %d", tableName, id));
+                fail("Should have failed as CRR is not Active and cache frequency is expired so creation " +
+                    "of result set should try to refresh CRR and should close current connection and statement and fail");
+            } catch (Exception e) {
+                //Expected
+                LOG.info("Got expected exception", e);
+            }
+        }
+
     }
 
     /**
@@ -564,5 +603,16 @@ public class FailoverPhoenixConnection2IT {
      */
     private Connection createFailoverConnection() throws SQLException {
         return DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(), clientProperties);
+    }
+
+    private void sleepThreadFor(long sleepTime) {
+        long start = System.currentTimeMillis();
+        while (System.currentTimeMillis() - start < sleepTime) {
+            try {
+                Thread.sleep(sleepTime - (System.currentTimeMillis() - start));
+            } catch (InterruptedException e) {
+                // Keep looping to complete the sleep duration.
+            }
+        }
     }
 }

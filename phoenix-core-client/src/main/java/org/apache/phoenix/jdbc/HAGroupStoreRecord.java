@@ -45,6 +45,7 @@ public class HAGroupStoreRecord {
 
     private static final Logger LOG = LoggerFactory.getLogger(HAGroupStoreRecord.class);
     public static final String DEFAULT_PROTOCOL_VERSION = "1.0";
+    public static final long DEFAULT_RECORD_VERSION = 1L;
 
     /**
      * Enum representing the HA group state with each state having a corresponding ClusterRole.
@@ -161,17 +162,21 @@ public class HAGroupStoreRecord {
     private final String protocolVersion;
     private final String haGroupName;
     private final HAGroupState haGroupState;
+    private final long recordVersion;
 
     @JsonCreator
     public HAGroupStoreRecord(@JsonProperty("protocolVersion") String protocolVersion,
                               @JsonProperty("haGroupName") String haGroupName,
-                              @JsonProperty("haGroupState") HAGroupState haGroupState) {
+                              @JsonProperty("haGroupState") HAGroupState haGroupState,
+                              @JsonProperty("recordVersion") Long recordVersion) {
         Preconditions.checkNotNull(haGroupName, "HA group name cannot be null!");
         Preconditions.checkNotNull(haGroupState, "HA group state cannot be null!");
+        Preconditions.checkNotNull(recordVersion, "Record version cannot be null!");
 
         this.protocolVersion = Objects.toString(protocolVersion, DEFAULT_PROTOCOL_VERSION);
         this.haGroupName = haGroupName;
         this.haGroupState = haGroupState;
+        this.recordVersion = recordVersion != null ? recordVersion : DEFAULT_RECORD_VERSION;
     }
 
     public static Optional<HAGroupStoreRecord> fromJson(byte[] bytes) {
@@ -195,7 +200,8 @@ public class HAGroupStoreRecord {
     public boolean hasSameInfo(HAGroupStoreRecord other) {
         return haGroupName.equals(other.haGroupName) &&
                 haGroupState.equals(other.haGroupState) &&
-                protocolVersion.equals(other.protocolVersion);
+                protocolVersion.equals(other.protocolVersion) &&
+                recordVersion == other.recordVersion;
     }
 
     public String getProtocolVersion() {
@@ -204,6 +210,10 @@ public class HAGroupStoreRecord {
 
     public String getHaGroupName() {
         return haGroupName;
+    }
+
+    public long getRecordVersion() {
+        return recordVersion;
     }
 
     @JsonProperty("haGroupState")
@@ -222,6 +232,7 @@ public class HAGroupStoreRecord {
                 .append(protocolVersion)
                 .append(haGroupName)
                 .append(haGroupState)
+                .append(recordVersion)
                 .hashCode();
     }
 
@@ -239,6 +250,7 @@ public class HAGroupStoreRecord {
                     .append(protocolVersion, otherRecord.protocolVersion)
                     .append(haGroupName, otherRecord.haGroupName)
                     .append(haGroupState, otherRecord.haGroupState)
+                    .append(recordVersion, otherRecord.recordVersion)
                     .isEquals();
         }
     }
@@ -249,6 +261,7 @@ public class HAGroupStoreRecord {
                 + "protocolVersion='" + protocolVersion + '\''
                 + ", haGroupName='" + haGroupName + '\''
                 + ", haGroupState=" + haGroupState
+                + ", recordVersion=" + recordVersion
                 + '}';
     }
 

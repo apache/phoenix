@@ -47,6 +47,7 @@ import org.slf4j.LoggerFactory;
 /**
  * The command line tool to manage high availability (HA) groups and their cluster roles.
  */
+@Deprecated
 public class PhoenixHAAdminTool extends Configured implements Tool {
     // Following are return value of this tool. We need this to be very explicit because external
     // system calling this tool may need to retry, alert or audit the operations of cluster roles.

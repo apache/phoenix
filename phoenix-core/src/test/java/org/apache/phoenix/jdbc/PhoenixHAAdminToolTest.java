@@ -66,8 +66,8 @@ import org.slf4j.LoggerFactory;
  */
 public class PhoenixHAAdminToolTest {
     private static final Logger LOG = LoggerFactory.getLogger(PhoenixHAAdminToolTest.class);
-    private static final String ZK1 = "zk1:2181:/hbase";
-    private static final String ZK2 = "zk2:2181:/hbase";
+    private static final String MASTER1 = "master1:60010";
+    private static final String MASTER2 = "master2:60010";
     private static final PrintStream STDOUT = System.out;
     private static final ByteArrayOutputStream STDOUT_CAPTURE = new ByteArrayOutputStream();
 
@@ -77,7 +77,7 @@ public class PhoenixHAAdminToolTest {
     private final CuratorFramework curator = Mockito.mock(CuratorFramework.class);
     /** HA admin to test for one test case. */
     private final PhoenixHAAdmin
-            admin = new PhoenixHAAdmin(ZK1, new Configuration(), mockHighAvailibilityCuratorProvider);
+            admin = new PhoenixHAAdmin(MASTER1, new Configuration(), mockHighAvailibilityCuratorProvider);
 
     private String haGroupName;
     private ClusterRoleRecord recordV1;
@@ -91,8 +91,8 @@ public class PhoenixHAAdminToolTest {
         haGroupName = testName.getMethodName();
         recordV1 = new ClusterRoleRecord(
                 haGroupName, HighAvailabilityPolicy.FAILOVER,
-                ZK1, ClusterRole.ACTIVE,
-                ZK2, ClusterRole.STANDBY,
+                MASTER1, ClusterRole.ACTIVE,
+                MASTER2, ClusterRole.STANDBY,
                 1);
         saveRecordV1ToZk();
     }
@@ -153,8 +153,8 @@ public class PhoenixHAAdminToolTest {
             String haGroupName2 = haGroupName + RandomStringUtils.randomAlphabetic(3);
             ClusterRoleRecord record2 = new ClusterRoleRecord(
                     haGroupName2, HighAvailabilityPolicy.FAILOVER,
-                    ZK1, ClusterRole.ACTIVE,
-                    ZK2, ClusterRole.STANDBY,
+                    MASTER1, ClusterRole.ACTIVE,
+                    MASTER2, ClusterRole.STANDBY,
                     1);
             String fileName = ClusterRoleRecordTest.createJsonFileWithRecords(recordV1, record2);
             List<ClusterRoleRecord> records = new PhoenixHAAdminTool().readRecordsFromFile(fileName);
@@ -192,8 +192,8 @@ public class PhoenixHAAdminToolTest {
         saveRecordV1ToZk();
         ClusterRoleRecord recordV2 = new ClusterRoleRecord(
                 haGroupName, HighAvailabilityPolicy.FAILOVER,
-                ZK1, ClusterRole.STANDBY,
-                ZK2 , ClusterRole.STANDBY,
+                MASTER1, ClusterRole.STANDBY,
+                MASTER2 , ClusterRole.STANDBY,
                 2); // higher version than recordV1 so update should be tried
        try {
            result = admin.createOrUpdateDataOnZookeeper(recordV2);
@@ -213,8 +213,8 @@ public class PhoenixHAAdminToolTest {
         saveRecordV1ToZk();
         ClusterRoleRecord recordV0 = new ClusterRoleRecord(
                 haGroupName, HighAvailabilityPolicy.FAILOVER,
-                ZK1, ClusterRole.STANDBY,
-                ZK2 , ClusterRole.STANDBY,
+                MASTER1, ClusterRole.STANDBY,
+                MASTER2 , ClusterRole.STANDBY,
                 0); // lower version than recordV1
         assertFalse(admin.createOrUpdateDataOnZookeeper(recordV0));
 
@@ -230,8 +230,8 @@ public class PhoenixHAAdminToolTest {
         saveRecordV1ToZk();
         ClusterRoleRecord record2 = new ClusterRoleRecord(
                 haGroupName, HighAvailabilityPolicy.FAILOVER,
-                ZK1, ClusterRole.STANDBY,
-                ZK2 , ClusterRole.STANDBY,
+                MASTER1, ClusterRole.STANDBY,
+                MASTER2 , ClusterRole.STANDBY,
                 1); // same version but different role1
         try {
             admin.createOrUpdateDataOnZookeeper(record2);

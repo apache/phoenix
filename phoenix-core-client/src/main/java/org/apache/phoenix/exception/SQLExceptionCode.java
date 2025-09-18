@@ -280,6 +280,9 @@ public enum SQLExceptionCode {
     HA_READ_FROM_CLUSTER_FAILED_ON_NULL(1986, "F1Q86", "Unable to read from cluster for null."),
     HA_INVALID_PROPERTIES(1987, "F1Q87", "Invalid properties to get a Phoenix HA connection."),
     HA_CLUSTER_CAN_NOT_CONNECT(1988, "F1Q88", "Cluster can not serve any requests for this HA group"),
+    CLUSTER_ROLE_RECORD_NOT_FOUND(1989, "F1Q89", "Cluster role record not found for this HA group"),
+    STALE_CRR_RETHROW_AFTER_REFRESH(1991, "F1Q91", "Stale CRR found during operation refreshing it"),
+    STALE_CRR_RETHROW_AFTER_REFRESH_FAILED(1992, "F1Q92", "Stale CRR found during operation, HAGroup refresh failed"),
 
 
     // Syntax error

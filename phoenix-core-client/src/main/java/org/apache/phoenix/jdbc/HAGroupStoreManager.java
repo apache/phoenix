@@ -18,8 +18,13 @@
 package org.apache.phoenix.jdbc;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.exception.InvalidClusterRoleTransitionException;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.exception.StaleHAGroupStoreRecordVersionException;
+import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
+import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,46 +32,76 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
+import static org.apache.phoenix.query.QueryServices.HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions
         .DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED;
 
 /**
  * Implementation of HAGroupStoreManager that uses HAGroupStoreClient.
  * Manages all HAGroupStoreClient instances.
+ * Supports multiple instances per ZK URL to handle multiple MiniClusters.
  */
 public class HAGroupStoreManager {
-    private static volatile HAGroupStoreManager haGroupStoreManagerInstance;
     private static final Logger LOGGER = LoggerFactory.getLogger(HAGroupStoreManager.class);
+    
+    // Map of <ZKUrl, HAGroupStoreManagerInstance> for different MiniClusters
+    // Can revert this but will fail for tests with one cluster down
+    private static final Map<String, HAGroupStoreManager> instances = new ConcurrentHashMap<>();
+    
     private final boolean mutationBlockEnabled;
+    private final boolean checkStaleCRRForEveryMutation;
     private final String zkUrl;
     private final Configuration conf;
 
     /**
      * Creates/gets an instance of HAGroupStoreManager.
+     * Use the ZK URL from the configuration to determine the instance.
      *
      * @param conf configuration
      * @return HAGroupStoreManager instance
      */
     public static HAGroupStoreManager getInstance(final Configuration conf) {
-        if (haGroupStoreManagerInstance == null) {
-            synchronized (HAGroupStoreManager.class) {
-                if (haGroupStoreManagerInstance == null) {
-                    haGroupStoreManagerInstance = new HAGroupStoreManager(conf);
-                }
-            }
-        }
-        return haGroupStoreManagerInstance;
+        return getInstanceForZkUrl(conf, null);
+    }
+
+    /**
+     * Creates/gets an instance of HAGroupStoreManager for a specific ZK URL.
+     * This allows different region servers to have their own instances.
+     *
+     * @param conf configuration
+     * @param zkUrl specific ZK URL to use, null to use local ZK URL from config
+     * @return HAGroupStoreManager instance for the specified ZK URL
+     */
+    public static HAGroupStoreManager getInstanceForZkUrl(final Configuration conf, String zkUrl) {
+        String localZkUrl = Objects.toString(zkUrl, getLocalZkUrl(conf));
+        Objects.requireNonNull(localZkUrl, "zkUrl cannot be null");
+        
+        return instances.computeIfAbsent(localZkUrl, url -> {
+            LOGGER.info("Creating new HAGroupStoreManager instance for ZK URL: {}", url);
+            return new HAGroupStoreManager(conf, url);
+        });
     }
 
     private HAGroupStoreManager(final Configuration conf) {
+        this(conf, getLocalZkUrl(conf));
+    }
+
+    private HAGroupStoreManager(final Configuration conf, final String zkUrl) {
         this.mutationBlockEnabled = conf.getBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED,
                 DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED);
-        this.zkUrl = getLocalZkUrl(conf);
+        this.checkStaleCRRForEveryMutation = conf.getBoolean(HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED,
+                DEFAULT_HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED);
+        this.zkUrl = zkUrl;
         this.conf = conf;
+        LOGGER.info("Started HAGroupStoreManager with ZK URL: {}", zkUrl);
     }
 
     /**
@@ -96,6 +131,21 @@ public class HAGroupStoreManager {
                         && haGroupStoreClient.getHAGroupStoreRecord().getClusterRole() != null
                         && haGroupStoreClient.getHAGroupStoreRecord().getClusterRole()
                         .isMutationBlocked();
+            }
+            throw new IOException("HAGroupStoreClient is not initialized");
+        }
+        return false;
+    }
+
+    public boolean isHAGroupOnClientStale(String haGroupName) throws IOException, SQLException {
+        if (checkStaleCRRForEveryMutation) {
+            HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstanceForZkUrl(conf,
+                    haGroupName, zkUrl);
+            if (haGroupStoreClient != null) {
+                //If local cluster is not ACTIVE/ACTIVE_TO_STANDBY, it means the Failover CRR is stale on client
+                //As they are trying to write/read from a STANDBY cluster.
+                return haGroupStoreClient.getPolicy() == HighAvailabilityPolicy.FAILOVER && 
+                    !haGroupStoreClient.getHAGroupStoreRecord().getHAGroupState().getClusterRole().isActive();
             }
             throw new IOException("HAGroupStoreClient is not initialized");
         }
@@ -220,6 +270,12 @@ public class HAGroupStoreManager {
         if (haGroupStoreClient != null) {
             return haGroupStoreClient.getClusterRoleRecord();
         }
-        throw new IOException("HAGroupStoreClient is not initialized");
+        //If haGroupStoreClient is null, it means the HA group is not configured in the local cluster throw
+        //a SQLException with CLUSTER_ROLE_RECORD_NOT_FOUND error code to make client known that CRR for the
+        //given HAGroupName doesn't exist.
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.CLUSTER_ROLE_RECORD_NOT_FOUND)
+                .setMessage("HAGroupStoreClient is not initialized")
+                .build()
+                .buildException();
     }
 }

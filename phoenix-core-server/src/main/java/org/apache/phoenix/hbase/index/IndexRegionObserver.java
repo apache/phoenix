@@ -61,6 +61,7 @@ import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.exception.MutationBlockedIOException;
+import org.apache.phoenix.exception.StaleClusterRoleRecordException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.Expression;
@@ -129,6 +130,7 @@ import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -634,12 +636,22 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           final Set<String> haGroupNames = extractHAGroupNameAttribute(miniBatchOp);
           // Check if mutation is blocked for any of the HAGroupNames
           for (String haGroupName : haGroupNames) {
-              if (StringUtils.isNotBlank(haGroupName)
+            //TODO: Below approach might be slow need to figure out faster way, slower part is getting haGroupStoreClient
+            //We can also cache roleRecord (I tried it and still its slow due to haGroupStoreClient initialization) and caching
+            //will give us old result in case one cluster is unreachable instead of UNKNOWN.
+            //Check if mutation's haGroup is stale
+            boolean isHAGroupOnClientStale = haGroupStoreManager.isHAGroupOnClientStale(haGroupName);
+            if (StringUtils.isNotBlank(haGroupName) && isHAGroupOnClientStale) {
+                throw new StaleClusterRoleRecordException(String.format("HAGroupStoreRecord is stale for haGroup %s " +
+                    "on client", haGroupName));
+            }
+            
+            if (StringUtils.isNotBlank(haGroupName)
                       && haGroupStoreManager.isMutationBlocked(haGroupName)) {
                   throw new MutationBlockedIOException("Blocking Mutation as Some CRRs are in "
                           + "ACTIVE_TO_STANDBY state and "
                           + "CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
-              }
+            }
           }
           preBatchMutateWithExceptions(c, miniBatchOp);
           return;
