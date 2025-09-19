@@ -267,6 +267,51 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  public void testAggregateQuery() throws Exception {
+    final String tablename = generateUniqueName();
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    // use a higher timeout value so that we can trigger a page timeout from the scanner
+    // rather than the page filter
+    props.put(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Long.toString(10));
+    String ddl = "CREATE TABLE " + tablename + " (id VARCHAR NOT NULL,\n" + "k1 INTEGER NOT NULL,\n"
+      + "k2 INTEGER NOT NULL,\n" + "k3 INTEGER,\n" + "v1 VARCHAR,\n"
+      + "CONSTRAINT pk PRIMARY KEY (id, k1, k2)) ";
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      createTestTable(getUrl(), ddl);
+      String dml = "UPSERT INTO " + tablename + " VALUES(?, ?, ?, ?, ?)";
+      PreparedStatement ps = conn.prepareStatement(dml);
+      int totalRows = 10000;
+      for (int i = 0; i < totalRows; ++i) {
+        ps.setString(1, "id_" + i % 3);
+        ps.setInt(2, i % 20);
+        ps.setInt(3, i);
+        ps.setInt(4, i % 10);
+        ps.setString(5, "val");
+        ps.executeUpdate();
+        if (i != 0 && i % 100 == 0) {
+          conn.commit();
+        }
+      }
+      conn.commit();
+      String dql = String.format("SELECT count(*) from %s where id = '%s'", tablename, "id_2");
+      try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
+        assertTrue(rs.next());
+        assertEquals(totalRows / 3, rs.getInt(1));
+        assertFalse(rs.next());
+        assertServerPagingMetric(tablename, rs, false); // no dummy rows
+        Map<String, Map<MetricType, Long>> metrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
+        for (Map.Entry<String, Map<MetricType, Long>> entry : metrics.entrySet()) {
+          Map<MetricType, Long> metricValues = entry.getValue();
+          Long rpcCalls = metricValues.get(MetricType.COUNT_RPC_CALLS);
+          assertNotNull(rpcCalls);
+          // multiple scan rpcs will be executed for every page timeout
+          assertTrue(String.format("Got %d", rpcCalls.longValue()), rpcCalls > 1);
+        }
+      }
+    }
+  }
+
+  @Test
   public void testLimitOffset() throws SQLException {
     final String tablename = generateUniqueName();
     final String[] STRINGS = { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n",
