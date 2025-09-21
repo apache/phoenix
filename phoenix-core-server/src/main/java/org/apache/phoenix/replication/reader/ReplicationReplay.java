@@ -25,6 +25,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.phoenix.replication.ReplicationLogFileTracker;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogReplayFileTrackerImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -104,8 +106,8 @@ public class ReplicationReplay {
      */
     protected void init() throws IOException {
         initializeFileSystem();
-        ReplicationLogReplayFileTracker replicationLogReplayFileTracker = 
-            new ReplicationLogReplayFileTracker(conf, haGroupName, fileSystem, rootURI);
+        ReplicationLogFileTracker replicationLogReplayFileTracker =
+            new ReplicationLogFileTracker(conf, haGroupName, fileSystem, rootURI, ReplicationLogFileTracker.DirectoryType.IN, new MetricsReplicationLogReplayFileTrackerImpl(haGroupName));
         replicationLogReplayFileTracker.init();
         ReplicationReplayStateTracker replicationStateTracker = new ReplicationReplayStateTracker();
         replicationStateTracker.init(replicationLogReplayFileTracker);

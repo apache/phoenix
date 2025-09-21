@@ -282,14 +282,18 @@ public abstract class ReplicationLogDiscovery {
         Optional<Path> optionalInProgressFilePath = Optional.empty();
         try {
             optionalInProgressFilePath = replicationLogFileTracker.markInProgress(file);
+            System.out.println("Found optional in progress as " + optionalInProgressFilePath.isPresent());
             if(optionalInProgressFilePath.isPresent()) {
+                System.out.println("Starting processing");
                 processFile(file);
+                System.out.println("Finished processing");
                 replicationLogFileTracker.markCompleted(optionalInProgressFilePath.get());
             }
         } catch (IOException exception) {
             LOG.error("Failed to process the file {}", file, exception);
             optionalInProgressFilePath.ifPresent(replicationLogFileTracker::markFailed);
-            throw exception;
+            // Not throwing this exception because next time another random file will be retried.
+            // If it's persistent failure for in_progress directory, cluster state to be updated accordingly.
         }
     }
 

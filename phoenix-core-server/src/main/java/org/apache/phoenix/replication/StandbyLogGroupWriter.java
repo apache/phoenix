@@ -27,8 +27,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.phoenix.replication.log.LogFileWriter;
 import org.apache.phoenix.replication.log.LogFileWriterContext;
-import org.apache.phoenix.replication.reader.ReplicationLogReplayFileTracker;
-import org.apache.phoenix.replication.reader.ReplicationReplayLogDiscovery;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -77,7 +75,7 @@ public class StandbyLogGroupWriter extends ReplicationLogGroupWriter {
     @Override
     protected void initializeReplicationShardDirectoryManager() {
         this.haGroupLogFilesPath = new Path(new Path(standbyUrl.getPath(), logGroup.getHaGroupName()), 
-            ReplicationLogReplayFileTracker.IN_SUBDIRECTORY);
+            ReplicationLogFileTracker.DirectoryType.IN.getName());
         this.replicationShardDirectoryManager = new ReplicationShardDirectoryManager(
             logGroup.getConfiguration(), haGroupLogFilesPath);
     }

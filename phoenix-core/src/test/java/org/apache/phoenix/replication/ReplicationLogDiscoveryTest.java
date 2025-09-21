@@ -36,8 +36,10 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.phoenix.replication.reader.ReplicationLogReplayFileTracker;
-import org.apache.phoenix.replication.reader.ReplicationReplayLogDiscovery;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscovery;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogFileTracker;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogReplayFileTrackerImpl;
+import org.apache.phoenix.replication.metrics.MetricsReplicationReplayLogFileDiscoveryImpl;
 import org.apache.phoenix.replication.reader.ReplicationReplayStateTracker;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -63,14 +65,15 @@ public class ReplicationLogDiscoveryTest {
     private Configuration conf;
     private FileSystem localFs;
     private URI rootURI;
-    private String haGroupName;
+    private static final String haGroupName = "testGroup";
+    private static final MetricsReplicationLogFileTracker metricsLogTracker = new MetricsReplicationLogReplayFileTrackerImpl(haGroupName);
+    private static final MetricsReplicationLogDiscovery metricsLogDiscovery = new MetricsReplicationReplayLogFileDiscoveryImpl(haGroupName);
 
     @Before
     public void setUp() throws IOException {
         conf = HBaseConfiguration.create();
         localFs = FileSystem.getLocal(conf);
         rootURI = new Path(testFolder.getRoot().toString()).toUri();
-        haGroupName = "testGroup";
 
         fileTracker = Mockito.spy(new TestableReplicationLogFileTracker(conf, haGroupName, localFs, rootURI));
         fileTracker.init();
@@ -79,6 +82,7 @@ public class ReplicationLogDiscoveryTest {
         stateTracker.init(fileTracker);
 
         discovery = Mockito.spy(new TestableReplicationLogDiscovery(fileTracker, stateTracker));
+        Mockito.doReturn(metricsLogDiscovery).when(discovery).getMetrics();
     }
 
     @After
@@ -734,25 +738,36 @@ public class ReplicationLogDiscoveryTest {
 
 
 
-    private static class TestableReplicationLogFileTracker extends ReplicationLogReplayFileTracker {
+    private static class TestableReplicationLogFileTracker extends ReplicationLogFileTracker {
         public TestableReplicationLogFileTracker(final Configuration conf, final String haGroupName, final FileSystem fileSystem, final URI rootURI) {
-            super(conf, haGroupName, fileSystem, rootURI);
+            super(conf, haGroupName, fileSystem, rootURI, DirectoryType.IN, metricsLogTracker);
         }
     }
 
-    private static class TestableReplicationLogDiscovery extends ReplicationReplayLogDiscovery {
+    private static class TestableReplicationLogDiscovery extends ReplicationLogDiscovery {
         private final List<Path> processedFiles = new ArrayList<>();
         private final List<ReplicationRound> processedRounds = new ArrayList<>();
         private List<ReplicationRound> mockRoundsToProcess = null;
 
-        public TestableReplicationLogDiscovery(ReplicationLogReplayFileTracker fileTracker, ReplicationStateTracker stateTracker) {
+        public TestableReplicationLogDiscovery(ReplicationLogFileTracker fileTracker, ReplicationStateTracker stateTracker) {
             super(fileTracker, stateTracker);
         }
 
         @Override
         protected void processFile(Path path) throws IOException {
             // Simulate file processing
+            System.out.println("Simulating file processing");
             processedFiles.add(path);
+        }
+
+        @Override
+        protected void updateStatePostRoundCompletion(ReplicationRound replicationRound) throws IOException {
+            replicationStateTracker.setLastRoundInSync(replicationRound);
+        }
+
+        @Override
+        protected MetricsReplicationLogDiscovery createMetricsSource() {
+            return metricsLogDiscovery;
         }
 
         @Override

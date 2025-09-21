@@ -24,8 +24,10 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.phoenix.replication.ReplicationLogFileTracker;
 import org.apache.phoenix.replication.ReplicationLogGroup;
 import org.apache.phoenix.replication.ReplicationStateTracker;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogReplayFileTrackerImpl;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.ClassRule;
@@ -59,7 +61,7 @@ public class ReplicationReplayLogDiscoveryTest {
     @Test
     public void testGetExecutorThreadNameFormat() {
         // Create ReplicationReplayLogDiscovery instance
-        ReplicationLogReplayFileTracker fileTracker = new ReplicationLogReplayFileTracker(conf, "testGroup", localFs, standbyUri);
+        ReplicationLogFileTracker fileTracker = createReplicationLogFileTracker(conf, "testGroup", localFs, standbyUri);
         ReplicationStateTracker stateTracker = new ReplicationReplayStateTracker();
         ReplicationReplayLogDiscovery discovery = new ReplicationReplayLogDiscovery(fileTracker, stateTracker);
 
@@ -72,7 +74,7 @@ public class ReplicationReplayLogDiscoveryTest {
     @Test
     public void testGetReplayIntervalSeconds() {
         // Create ReplicationReplayLogDiscovery instance
-        ReplicationLogReplayFileTracker fileTracker = new ReplicationLogReplayFileTracker(conf, "testGroup", localFs, standbyUri);
+        ReplicationLogFileTracker fileTracker = createReplicationLogFileTracker(conf, "testGroup", localFs, standbyUri);
         ReplicationStateTracker stateTracker = new ReplicationReplayStateTracker();
         ReplicationReplayLogDiscovery discovery = new ReplicationReplayLogDiscovery(fileTracker, stateTracker);
 
@@ -91,7 +93,7 @@ public class ReplicationReplayLogDiscoveryTest {
     @Test
     public void testGetShutdownTimeoutSeconds() {
         // Create ReplicationReplayLogDiscovery instance
-        ReplicationLogReplayFileTracker fileTracker = new ReplicationLogReplayFileTracker(conf, "testGroup", localFs, standbyUri);
+        ReplicationLogFileTracker fileTracker = createReplicationLogFileTracker(conf, "testGroup", localFs, standbyUri);
         ReplicationStateTracker stateTracker = new ReplicationReplayStateTracker();
         ReplicationReplayLogDiscovery discovery = new ReplicationReplayLogDiscovery(fileTracker, stateTracker);
 
@@ -110,7 +112,7 @@ public class ReplicationReplayLogDiscoveryTest {
     @Test
     public void testGetExecutorThreadCount() {
         // Create ReplicationReplayLogDiscovery instance
-        ReplicationLogReplayFileTracker fileTracker = new ReplicationLogReplayFileTracker(conf, "testGroup", localFs, standbyUri);
+        ReplicationLogFileTracker fileTracker = createReplicationLogFileTracker(conf, "testGroup", localFs, standbyUri);
         ReplicationStateTracker stateTracker = new ReplicationReplayStateTracker();
         ReplicationReplayLogDiscovery discovery = new ReplicationReplayLogDiscovery(fileTracker, stateTracker);
 
@@ -129,7 +131,7 @@ public class ReplicationReplayLogDiscoveryTest {
     @Test
     public void testGetInProgressDirectoryProcessProbability() {
         // Create ReplicationReplayLogDiscovery instance
-        ReplicationLogReplayFileTracker fileTracker = new ReplicationLogReplayFileTracker(conf, "testGroup", localFs, standbyUri);
+        ReplicationLogFileTracker fileTracker = createReplicationLogFileTracker(conf, "testGroup", localFs, standbyUri);
         ReplicationStateTracker stateTracker = new ReplicationReplayStateTracker();
         ReplicationReplayLogDiscovery discovery = new ReplicationReplayLogDiscovery(fileTracker, stateTracker);
 
@@ -148,7 +150,7 @@ public class ReplicationReplayLogDiscoveryTest {
     @Test
     public void testGetWaitingBufferPercentage() {
         // Create ReplicationReplayLogDiscovery instance
-        ReplicationLogReplayFileTracker fileTracker = new ReplicationLogReplayFileTracker(conf, "testGroup", localFs, standbyUri);
+        ReplicationLogFileTracker fileTracker = createReplicationLogFileTracker(conf, "testGroup", localFs, standbyUri);
         ReplicationStateTracker stateTracker = new ReplicationReplayStateTracker();
         ReplicationReplayLogDiscovery discovery = new ReplicationReplayLogDiscovery(fileTracker, stateTracker);
 
@@ -164,4 +166,7 @@ public class ReplicationReplayLogDiscoveryTest {
             20.0, customResult, 0.001);
     }
 
+    private ReplicationLogFileTracker createReplicationLogFileTracker(final Configuration conf, final String haGroupName, final FileSystem fileSystem, final URI rootURI) {
+        return new ReplicationLogFileTracker(conf, haGroupName, fileSystem, rootURI, ReplicationLogFileTracker.DirectoryType.IN, new MetricsReplicationLogReplayFileTrackerImpl(haGroupName));
+    }
 }
