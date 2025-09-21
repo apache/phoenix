@@ -136,8 +136,8 @@ public class HighAvailabilityGroup {
      */
     public static final String PHOENIX_HA_CRR_CACHE_FREQUENCY_MS_KEY =
             PHOENIX_HA_ATTR_PREFIX + "crr.cache.frequency.ms";
-    public static final long PHOENIX_HA_CRR_CACHE_FREQUENCY_MS_DEFAULT = 10000; // 10 seconds
-            
+    public static final long PHOENIX_HA_CRR_CACHE_FREQUENCY_MS_DEFAULT = 2000; // 2 seconds
+
     public static final RegistryType DEFAULT_PHOENIX_HA_CRR_REGISTRY_TYPE = RegistryType.RPC;
 
     static final Logger LOG = LoggerFactory.getLogger(HighAvailabilityGroup.class);
@@ -227,11 +227,19 @@ public class HighAvailabilityGroup {
     }
 
     /**
-     * Get an instance of HAURLInfo given the HA connecting URL (with "|") and client properties.
+     * Get an instance of {@link HAURLInfo} given the HA connecting URL (with "|") and client properties.
      * Here we do parsing of url and try to extract principal and other additional params
      * @throws SQLException if fails to get HA information and/or invalid properties are seen
      */
     public static HAURLInfo getUrlInfo(String url, Properties properties) throws SQLException {
+        //Check if HA group name is provided in the properties if not throw an exception
+        String name = properties.getProperty(PHOENIX_HA_GROUP_ATTR);
+        if (StringUtils.isEmpty(name)) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.HA_INVALID_PROPERTIES)
+                    .setMessage(String.format("HA group name can not be empty for HA URL %s", url))
+                    .build()
+                    .buildException();
+        }
         url = checkUrl(url);
         String principal = null;
         String additionalJDBCParams = null;
@@ -290,14 +298,6 @@ public class HighAvailabilityGroup {
                 ? (additionalJDBCParams.equals(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR))
                     ? null : additionalJDBCParams) : null;
 
-        //Check if HA group name is provided
-        String name = properties.getProperty(PHOENIX_HA_GROUP_ATTR);
-        if (StringUtils.isEmpty(name)) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.HA_INVALID_PROPERTIES)
-                    .setMessage(String.format("HA group name can not be empty for HA URL %s", url))
-                    .build()
-                    .buildException();
-        }
         HAURLInfo haurlInfo = new HAURLInfo(name, principal, additionalJDBCParams);
         HAGroupInfo info = getHAGroupInfo(url, properties);
         URLS.computeIfAbsent(info, haGroupInfo -> new HashSet<>()).add(haurlInfo);
@@ -306,9 +306,6 @@ public class HighAvailabilityGroup {
 
     private static HAGroupInfo getHAGroupInfo(String url, Properties properties)
             throws SQLException {
-        url = checkUrl(url);
-        url = url.substring(url.indexOf("[") + 1, url.indexOf("]"));
-        String [] urls = url.split("\\|");
         String name = properties.getProperty(PHOENIX_HA_GROUP_ATTR);
         if (StringUtils.isEmpty(name)) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.HA_INVALID_PROPERTIES)
@@ -316,6 +313,9 @@ public class HighAvailabilityGroup {
                     .build()
                     .buildException();
         }
+        url = checkUrl(url);
+        url = url.substring(url.indexOf("[") + 1, url.indexOf("]"));
+        String [] urls = url.split("\\|");
         return new HAGroupInfo(name, urls[0], urls[1]);
     }
 
@@ -382,11 +382,14 @@ public class HighAvailabilityGroup {
             GROUPS.remove(info);
             haGroup.close();
 
-            if (e instanceof SQLException && ((SQLException)e).getErrorCode() 
+            if (e instanceof SQLException && ((SQLException)e).getErrorCode()
                         == SQLExceptionCode.CLUSTER_ROLE_RECORD_NOT_FOUND.getErrorCode()) {
-                
-                LOG.error("HA group {} failed to initialized. Got exception when getting ClusterRoleRecord for HA group {}", info, e.getCause());
-                //If the exception is due to missing CRR, we will put this HA group into negative cache
+
+                LOG.error("HA group {} failed to initialized. Got exception when getting " +
+                        "ClusterRoleRecord for HA group {}", info, e.getCause());
+                //If the exception is due to missing CRR, we will put this HA group into negative
+                //cache to prevent unnecessary computations of trying to get CRR for every
+                //connection cache expires every 5 secs
                 MISSING_CRR_GROUPS_CACHE.put(info, true);
                 return Optional.empty();
             }
@@ -606,14 +609,6 @@ public class HighAvailabilityGroup {
 
         ClusterRoleRecord roleRecordFromEndpoint = getClusterRoleRecordFromEndpoint();
 
-        if (roleRecordFromEndpoint == null) {
-            LOG.error("Failed to get ClusterRoleRecord for HA group {}", info);
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CLUSTER_ROLE_RECORD_NOT_FOUND)
-                    .setMessage("Failed to get ClusterRoleRecord for HA group " + info)
-                    .build()
-                    .buildException();
-        }
-
         LOG.info("Initial cluster role for HA group {} is {}", info, roleRecordFromEndpoint);
         roleRecord = roleRecordFromEndpoint;
         state = State.READY;
@@ -816,7 +811,7 @@ public class HighAvailabilityGroup {
             //roleRecords resides.
             url1 = JDBCUtil.formatUrl(url1, DEFAULT_PHOENIX_HA_CRR_REGISTRY_TYPE);
             url2 = JDBCUtil.formatUrl(url2, DEFAULT_PHOENIX_HA_CRR_REGISTRY_TYPE);
-            Preconditions.checkArgument(!url1.equals(url2), "Two clusters have the same ZK!");
+            Preconditions.checkArgument(!url1.equals(url2), "Two clusters have the same urls!");
             // Ignore the given order of url1 and url2, and reorder for equals comparison.
             if (url1.compareTo(url2) > 0) {
                 this.urls = new PairOfSameType<>(url2, url1);
@@ -843,13 +838,6 @@ public class HighAvailabilityGroup {
 
         public String getJDBCUrl2(HAURLInfo haURLInfo) {
             return getJDBCUrl(getUrl2(), haURLInfo, DEFAULT_PHOENIX_HA_CRR_REGISTRY_TYPE);
-        }
-
-        /**
-         * Helper method to return the znode path in the Phoenix HA namespace.
-         */
-        String getZkPath() {
-            return ZKPaths.PATH_SEPARATOR + name;
         }
 
         @Override
@@ -894,7 +882,7 @@ public class HighAvailabilityGroup {
      * @param type Registry Type for which url has to be constructed
      * @return jdbc url in proper format i.e. jdbc:phoenix+<registry>:url:principal:additionalParam
      * example :- jdbc:phoenix+zk:zk1\\:port1,zk2\\:port2,zk3\\:port3,zk4\\:port4,zk5\\:port5::znode:principal:additionalParams
-     * or jdbc:phoenix+master:master1\\:port1,master2\\:port2,master3\\:port3,master4\\:port4,master5\\:port5::principal:additionParams
+     * or jdbc:phoenix+master:master1\\:port1,master2\\:port2,master3\\:port3,master4\\:port4,master5\\:port5:::principal:additionParams
      */
     public static String getJDBCUrl(String url, HAURLInfo haURLInfo,
                                     ClusterRoleRecord.RegistryType type) {
@@ -949,7 +937,7 @@ public class HighAvailabilityGroup {
     public static String getJDBCHAUrl(String url1, String url2, HAURLInfo haURLInfo) {
         StringBuilder sb = new StringBuilder();
         sb.append(PhoenixRuntime.JDBC_PROTOCOL_RPC).append(JDBC_PROTOCOL_SEPARATOR);
-        sb.append("[" + url1 + "|" + url2 + "]");
+        sb.append("[").append(url1).append("|").append(url2).append("]");
         if (haURLInfo != null) {
             if (ObjectUtils.anyNotNull(haURLInfo.getPrincipal(), haURLInfo.getAdditionalJDBCParams())) {
                 sb.append(haURLInfo.getPrincipal() == null ? JDBC_PROTOCOL_SEPARATOR
@@ -974,14 +962,14 @@ public class HighAvailabilityGroup {
 
 
     /**
-     * Method to get ClusterRoleRecord from RegionServer Endpoints from eiher of the clusters. 
+     * Method to get ClusterRoleRecord from RegionServer Endpoints from either of the clusters.
      * @return ClusterRoleRecord from the first available cluster
      * @throws SQLException if there is an error getting the ClusterRoleRecord
      */
     private ClusterRoleRecord getClusterRoleRecordFromEndpoint() throws SQLException {
-        long pollerInterval = Long.parseLong(properties.getProperty(PHOENIX_HA_CRR_POLLER_INTERVAL_MS_KEY, 
+        long pollerInterval = Long.parseLong(properties.getProperty(PHOENIX_HA_CRR_POLLER_INTERVAL_MS_KEY,
                 config.get(PHOENIX_HA_CRR_POLLER_INTERVAL_MS_KEY, PHOENIX_HA_CRR_POLLER_INTERVAL_MS_DEFAULT)));
-        
+
         //Get the CRR via RSEndpoint for cluster 1
         try {
             return GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl1(), info.getName(), this, pollerInterval, properties);
@@ -1066,16 +1054,14 @@ public class HighAvailabilityGroup {
     }
 
     /**
-     * Check if we should refresh the RoleRecord based on cache frequency
-     * Similar to avoidMetadataRPC logic
+     * Check if we should refresh the RoleRecord based on cache frequency if the cacheAge is
+     * greater than clusterRoleRecordCacheFrequency, then return true
      */
     public boolean shouldRefreshRoleRecord() {
         if (roleRecord == null) {
             return true; // Always refresh if no role record
         }
-    
         long cacheAge = System.currentTimeMillis() - lastClusterRoleRecordRefreshTime;
-        
         return cacheAge >= clusterRoleRecordCacheFrequency;
     }
 

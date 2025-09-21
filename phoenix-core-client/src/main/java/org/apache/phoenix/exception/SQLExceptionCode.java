@@ -283,6 +283,7 @@ public enum SQLExceptionCode {
     CLUSTER_ROLE_RECORD_NOT_FOUND(1989, "F1Q89", "Cluster role record not found for this HA group"),
     STALE_CRR_RETHROW_AFTER_REFRESH(1991, "F1Q91", "Stale CRR found during operation refreshing it"),
     STALE_CRR_RETHROW_AFTER_REFRESH_FAILED(1992, "F1Q92", "Stale CRR found during operation, HAGroup refresh failed"),
+    HA_ROLE_TRANSITION_NOT_ALLOWED(1993, "F1Q93", "Role transition not allowed for this HA group"),
 
 
     // Syntax error

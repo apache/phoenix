@@ -38,6 +38,7 @@ import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static org.apache.phoenix.jdbc.HAGroupStoreRecord.DEFAULT_RECORD_VERSION;
@@ -305,9 +306,9 @@ public class HAGroupStoreManagerIT extends BaseTest {
         conf.set(HConstants.ZOOKEEPER_QUORUM, getLocalZkUrl(config));
 
         // Set the HAGroupStoreManager instance to null via reflection to force recreation
-        Field field = HAGroupStoreManager.class.getDeclaredField("haGroupStoreManagerInstance");
+        Field field = HAGroupStoreManager.class.getDeclaredField("instances");
         field.setAccessible(true);
-        field.set(null, null);
+        field.set(null, new ConcurrentHashMap<>());
 
         HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(config);
         // Create HAGroupStoreRecord with ACTIVE_IN_SYNC_TO_STANDBY role
@@ -321,7 +322,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         assertFalse(haGroupStoreManager.isMutationBlocked(haGroupName));
 
         // Set the HAGroupStoreManager instance back to null via reflection to force recreation for other tests
-        field.set(null, null);
+        field.set(null, new ConcurrentHashMap<>());
     }
 
     @Test

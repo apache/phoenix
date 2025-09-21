@@ -19,7 +19,6 @@ package org.apache.phoenix.jdbc;
 
 import static org.apache.hadoop.test.GenericTestUtils.waitFor;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION;
-import static org.apache.phoenix.exception.SQLExceptionCode.HA_NO_ACTIVE_CLUSTER;
 import static org.apache.phoenix.exception.SQLExceptionCode.STALE_CRR_RETHROW_AFTER_REFRESH;
 import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.ACTIVE;
 import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY;
@@ -592,7 +591,7 @@ public class FailoverPhoenixConnection2IT {
                     "of result set should try to refresh CRR and should close current connection and statement and fail");
             } catch (Exception e) {
                 //Expected
-                LOG.info("Got expected exception", e);
+                assertTrue(e instanceof FailoverSQLException);
             }
         }
 

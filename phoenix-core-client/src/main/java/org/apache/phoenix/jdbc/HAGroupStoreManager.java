@@ -54,11 +54,11 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_HA_GROUP_STA
  */
 public class HAGroupStoreManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(HAGroupStoreManager.class);
-    
+
     // Map of <ZKUrl, HAGroupStoreManagerInstance> for different MiniClusters
     // Can revert this but will fail for tests with one cluster down
-    private static final Map<String, HAGroupStoreManager> instances = new ConcurrentHashMap<>();
-    
+    private static Map<String, HAGroupStoreManager> instances = new ConcurrentHashMap<>();
+
     private final boolean mutationBlockEnabled;
     private final boolean checkStaleCRRForEveryMutation;
     private final String zkUrl;
@@ -86,7 +86,7 @@ public class HAGroupStoreManager {
     public static HAGroupStoreManager getInstanceForZkUrl(final Configuration conf, String zkUrl) {
         String localZkUrl = Objects.toString(zkUrl, getLocalZkUrl(conf));
         Objects.requireNonNull(localZkUrl, "zkUrl cannot be null");
-        
+
         return instances.computeIfAbsent(localZkUrl, url -> {
             LOGGER.info("Creating new HAGroupStoreManager instance for ZK URL: {}", url);
             return new HAGroupStoreManager(conf, url);
@@ -142,7 +142,7 @@ public class HAGroupStoreManager {
             HAGroupStoreClient haGroupStoreClient = getHAGroupStoreClient(haGroupName);
             //If local cluster is not ACTIVE/ACTIVE_TO_STANDBY, it means the Failover CRR is stale on client
             //As they are trying to write/read from a STANDBY cluster.
-            return haGroupStoreClient.getPolicy() == HighAvailabilityPolicy.FAILOVER && 
+            return haGroupStoreClient.getPolicy() == HighAvailabilityPolicy.FAILOVER &&
                     !haGroupStoreClient.getHAGroupStoreRecord().getHAGroupState().getClusterRole().isActive();
         }
         return false;

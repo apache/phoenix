@@ -308,6 +308,7 @@ public class HAGroupStoreClient implements Closeable {
         }
         if (isUpdateNeeded(currentHAGroupStoreRecord.getHAGroupState(),
                 currentHAGroupStoreRecordStat.getMtime(), haGroupState)) {
+                //As we are updating the HAGroupStoreRecord increase the record version
                 long newStateVersion = currentHAGroupStoreRecord.getRecordVersion() + 1;
                 // We maintain last sync time as the last time cluster was in sync state.
                 // If state changes from ACTIVE_IN_SYNC to ACTIVE_NOT_IN_SYNC, record that time
@@ -364,7 +365,7 @@ public class HAGroupStoreClient implements Closeable {
             peerClusterRole = peerHAGroupStoreRecord.getClusterRole();
             this.peerGroupRecordVersion = peerHAGroupStoreRecord.getRecordVersion();
         }
-        
+
         long clusterRoleRecordVersion = combineCanonicalVersions(this.localGroupRecordVersion, this.peerGroupRecordVersion);
 
         return new ClusterRoleRecord(this.haGroupName,
@@ -378,7 +379,7 @@ public class HAGroupStoreClient implements Closeable {
 
     /**
      * Get the policy for a given HA group.
-     * @return
+     * @return HighAvailabilityPolicy for the specified HA group name
      */
     public HighAvailabilityPolicy getPolicy() {
         return this.policy;
@@ -423,8 +424,7 @@ public class HAGroupStoreClient implements Closeable {
                 lastSyncTimeInMs
             );
             phoenixHaAdmin.createHAGroupStoreRecordInZooKeeper(newHAGroupStoreRecord);
-        } else if (haGroupStoreRecord != null &&
-                !haGroupStoreRecord.getClusterRole().equals(this.clusterRole)) {
+        } else if (!haGroupStoreRecord.getClusterRole().equals(this.clusterRole)) {
             this.localGroupRecordVersion = haGroupStoreRecord.getRecordVersion() + 1;
             newHAGroupStoreRecord = new HAGroupStoreRecord(
                 HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
@@ -728,8 +728,8 @@ public class HAGroupStoreClient implements Closeable {
     }
 
     /**
-     * Combine two versions into a single long value to be used for comparision and sending back to client
-     * @param version1 HAGroupRecord version for cluster 1  
+     * Combine two versions into a single long value to be used for comparison and sending back to client
+     * @param version1 HAGroupRecord version for cluster 1
      * @param version2 HAGroupRecord version for cluster 2
      * @return combined version
      */
@@ -797,7 +797,7 @@ public class HAGroupStoreClient implements Closeable {
                     targetState, haGroupName, clusterType);
         }
     }
-    
+
     /**
      * Handle state change detection and notify subscribers if a transition occurred.
      *

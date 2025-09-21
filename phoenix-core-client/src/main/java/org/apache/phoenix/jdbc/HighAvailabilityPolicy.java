@@ -58,13 +58,17 @@ public enum HighAvailabilityPolicy {
          *      us to continue existing/new reads to continue, so FailoverConnections are allowed)
          * ACTIVE_TO_STANDBY --> STANDBY (Closing all current connections)
          * ACTIVE_TO_STANDBY --> ACTIVE (NOOP on client side, server will resume Mutations)
-         *
          * STANDBY --> STANDBY_TO_ACTIVE (NOOP on client side)
          * STANDBY_TO_ACTIVE --> STANDBY (NOOP on client side)
-         * 
          * STANDBY_TO_ACTIVE --> ACTIVE (Invalidate CQSI as connections has been closed and now being cleared)
-         * 
-         * other transitions are not allowed and restricted on Server side.
+         *
+         * other transitions are not allowed and restricted on Server side, but as client can have
+         * stale roleRecord and it can miss some transitions for ex:- it has ACTIVE, and it gets to
+         * know that it has stale info though that HAGroup has transitioned to STANDBY already.
+         * ACTIVE --> STANDBY (Closing all current connections) (A --> ATS --> S)
+         * STANDBY --> ACTIVE (Invalidate CQSI as connections has been closed and now being cleared)
+         *                          (S --> STA --> A)
+         *
          * @param haGroup The high availability (HA) group
          * @param oldRecord The older cluster role record cached in this client for the given HA group
          * @param newRecord New cluster role record read from one ZooKeeper cluster znode
@@ -74,21 +78,28 @@ public enum HighAvailabilityPolicy {
         void transitClusterRole(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
                 ClusterRoleRecord newRecord) throws SQLException {
 
-            if (oldRecord.getRole1() == ACTIVE_TO_STANDBY &&
+            //Both Roles can't be active at same time, as it is a failover policy.
+            if (newRecord.getRole1().isActive() && newRecord.getRole2().isActive()) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.HA_ROLE_TRANSITION_NOT_ALLOWED)
+                        .setMessage("Failover High Availability Policy doesn't allow both roles to be active at same time.")
+                        .build().buildException();
+            }
+
+            if (oldRecord.getRole1().isActive() &&
                     (newRecord.getRole1() == STANDBY)) {
                 transitStandby(haGroup, oldRecord.getUrl1(), oldRecord.getRegistryType(),
                         newRecord.getRole1());
             }
-            if (oldRecord.getRole2() == ACTIVE_TO_STANDBY &&
+            if (oldRecord.getRole2().isActive() &&
                     (newRecord.getRole2() == STANDBY)) {
                 transitStandby(haGroup, oldRecord.getUrl2(), oldRecord.getRegistryType(),
                         newRecord.getRole2());
             }
-            if (oldRecord.getRole1() == STANDBY_TO_ACTIVE && 
+            if ((oldRecord.getRole1() == STANDBY_TO_ACTIVE || oldRecord.getRole1() == STANDBY) &&
                     (newRecord.getRole1() == ACTIVE)) {
                 transitActive(haGroup, oldRecord.getUrl1(), oldRecord.getRegistryType());
             }
-            if (oldRecord.getRole2() == STANDBY_TO_ACTIVE && 
+            if ((oldRecord.getRole2() == STANDBY_TO_ACTIVE || oldRecord.getRole2() == STANDBY) &&
                     (newRecord.getRole2() == ACTIVE)) {
                 transitActive(haGroup, oldRecord.getUrl2(), oldRecord.getRegistryType());
             }
@@ -139,6 +150,15 @@ public enum HighAvailabilityPolicy {
             }
         }
 
+        /**
+         * Function to call in case Role is changing from ACTIVE like role to STANDBY role, to close
+         * cqsi and all connections related to it.
+         * @param haGroup The high availability (HA) group
+         * @param url The url for which cqsi needs to be closed
+         * @param registryType The registry Type of connections affiliate to cqsi
+         * @param newRole url is moving to which new role after transition.
+         * @throws SQLException if fails to invalidate the cqs
+         */
         private void transitStandby(HighAvailabilityGroup haGroup, String url,
                                     ClusterRoleRecord.RegistryType registryType,
                                     ClusterRoleRecord.ClusterRole newRole) throws SQLException {
@@ -148,6 +168,14 @@ public enum HighAvailabilityPolicy {
             closeConnections(haGroup, url, registryType);
         }
 
+        /**
+         * Function to call in case Role is changing from STANDBY like role to ACTIVE role, to
+         * invalidate cqsi
+         * @param haGroup The high availability (HA) group
+         * @param url The url for which cqsi needs to be invalidated
+         * @param registryType The registry Type of connections affiliate to cqsi
+         * @throws SQLException if fails to invalidate the cqs
+         */
         private void transitActive(HighAvailabilityGroup haGroup, String url,
                                    ClusterRoleRecord.RegistryType registryType) throws SQLException {
             // Invalidate CQS cache if any that has been closed but has not been cleared
@@ -175,6 +203,14 @@ public enum HighAvailabilityPolicy {
             }
         }
 
+        /**
+         * Call-back function when a cluster role record transition is detected in the
+         * high availability group for PARALLEL policy.
+         * TODO:- We are not doing anything for change in role, but we should handle OFFLINE cases
+         * @param haGroup The high availability (HA) group
+         * @param oldRecord The older cluster role record cached in this client for the given HA group
+         * @param newRecord New cluster role record read from one ZooKeeper cluster znode
+         */
         @Override
         void transitClusterRole(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
                 ClusterRoleRecord newRecord) {

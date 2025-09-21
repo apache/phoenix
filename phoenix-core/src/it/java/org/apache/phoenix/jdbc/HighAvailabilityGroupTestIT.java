@@ -105,6 +105,7 @@ public class HighAvailabilityGroupTestIT {
         // Mock a CQS
         ConnectionQueryServices cqs = mock(ConnectionQueryServicesImpl.class);
         when(cqs.connect(anyString(), any(Properties.class))).thenReturn(connection);
+        when(cqs.connect(anyString(), any(Properties.class), any(HighAvailabilityGroup.class))).thenReturn(connection);
 
         // Register the mocked PhoenixEmbeddedDriver
         when(DRIVER.acceptsURL(startsWith(PhoenixRuntime.JDBC_PROTOCOL))).thenReturn(true);

@@ -74,7 +74,7 @@ public class ClusterRoleRecordGeneratorTool extends Configured implements Tool {
             File file = StringUtils.isEmpty(fileName)
                     ? File.createTempFile("phoenix.ha.cluster.role.records", ".json")
                     : new File(fileName);
-            JacksonUtil.getObjectWriterPretty().writeValue(file, listAllRecordsByZk());
+            JacksonUtil.getObjectWriterPretty().writeValue(file, listAllRecordsByMaster());
             System.out.println("Created JSON file '" + file + "'");
             return 0;
         } catch (Exception e) {
@@ -83,7 +83,7 @@ public class ClusterRoleRecordGeneratorTool extends Configured implements Tool {
         }
     }
 
-    List<ClusterRoleRecord> listAllRecordsByZk() throws Exception {
+    List<ClusterRoleRecord> listAllRecordsByMaster() throws Exception {
         /* This current cluster's full Master url for HBase, in host:port format. */
         String localMasterUrl = getLocalMasterUrl(getConf());
         final String[] haGroupNames = getConf().getStrings(PHOENIX_HA_GROUPS_ATTR);

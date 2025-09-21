@@ -20,8 +20,8 @@ package org.apache.phoenix.exception;
 import java.io.IOException;
 
 /**
- * Exception thrown when attempting to update HAGroupStoreRecord with a stale ZK stat version,
- * indicating that the record has been modified by another process.
+ * Exception thrown when attempting to do operation on STANDBY Cluster of HA Connection,
+ * indicating that the client has slate Cluster Role Record info for the HAGroup.
  */
 public class StaleClusterRoleRecordException extends IOException {
     private static final long serialVersionUID = 1L;

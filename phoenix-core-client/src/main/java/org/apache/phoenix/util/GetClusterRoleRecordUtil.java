@@ -57,7 +57,7 @@ public class GetClusterRoleRecordUtil {
      * Scheduler to fetch ClusterRoleRecord until we get an Active ClusterRoleRecord
      */
     private static Map<String, ScheduledExecutorService> schedulerMap = new ConcurrentHashMap<>();
-    
+
     private static final Object pollerLock = new Object();
 
     private static volatile ScheduledFuture<?> pollerFuture = null;
@@ -68,9 +68,10 @@ public class GetClusterRoleRecordUtil {
     /**
      * Method to get ClusterRoleRecord from RegionServer Endpoints. it picks a random region server
      * and gets the CRR from it.
-     * @param conn Connection to be used to get RegionServer Endpoint Service
+     * @param url URL to create Connection to be used to get RegionServer Endpoint Service
      * @param haGroupName Name of the HA group
      * @param doRetry Whether to retry if the operation fails
+     * @param properties Connection properties
      * @return ClusterRoleRecord from the first available cluster
      * @throws SQLException if there is an error getting the ClusterRoleRecord
      */
@@ -94,15 +95,15 @@ public class GetClusterRoleRecordUtil {
             RegionServerEndpointProtos.GetClusterRoleRecordResponse response = service.getClusterRoleRecord(null, request);
 
             //Check if the ClusterRoleRecord is valid, if not, throw an exception
-            if (response.getHaGroupName() == null || response.getPolicy() == null || response.getUrl1() == null 
+            if (response.getHaGroupName() == null || response.getPolicy() == null || response.getUrl1() == null
                     || response.getRole1() == null || response.getUrl2() == null || response.getRole2() == null) {
                 throw new SQLException("Invalid ClusterRoleRecord response from RegionServer");
             }
 
             //Generate the ClusterRoleRecord from the response
-            return new ClusterRoleRecord(response.getHaGroupName().toStringUtf8(), HighAvailabilityPolicy.valueOf(response.getPolicy().toStringUtf8()), 
-                            response.getUrl1().toStringUtf8(), ClusterRole.valueOf(response.getRole1().toStringUtf8()), 
-                            response.getUrl2().toStringUtf8(), ClusterRole.valueOf(response.getRole2().toStringUtf8()), 
+            return new ClusterRoleRecord(response.getHaGroupName().toStringUtf8(), HighAvailabilityPolicy.valueOf(response.getPolicy().toStringUtf8()),
+                            response.getUrl1().toStringUtf8(), ClusterRole.valueOf(response.getRole1().toStringUtf8()),
+                            response.getUrl2().toStringUtf8(), ClusterRole.valueOf(response.getRole2().toStringUtf8()),
                             response.getVersion());
 
         } catch (Exception e) {
@@ -122,7 +123,7 @@ public class GetClusterRoleRecordUtil {
     }
 
     /**
-     * Method to schedule a poller to fetch ClusterRoleRecord every 5 seconds (or configured value) 
+     * Method to schedule a poller to fetch ClusterRoleRecord every 5 seconds (or configured value)
      * until we get an Active ClusterRoleRecord
      * @param conn Connection to be used to get RegionServer Endpoint Service
      * @param haGroupName Name of the HA group
@@ -133,9 +134,9 @@ public class GetClusterRoleRecordUtil {
 
         if (clusterRoleRecord.getPolicy() == HighAvailabilityPolicy.FAILOVER &&
                 !clusterRoleRecord.getRole1().isActive() && !clusterRoleRecord.getRole2().isActive()) {
-            LOGGER.info("Non-active ClusterRoleRecord found for HA group {}. Scheduling poller to check every {} seconds," +  
+            LOGGER.info("Non-active ClusterRoleRecord found for HA group {}. Scheduling poller to check every {} seconds," +
             "until we find an ACTIVE CRR", haGroupName, pollerInterval);
-            //Schedule a poller to fetch ClusterRoleRecord every 5 seconds (or configured value) 
+            //Schedule a poller to fetch ClusterRoleRecord every 5 seconds (or configured value)
             //until we get an Active ClusterRoleRecord and return the Non-Active CRR
             schedulePoller(url, haGroupName, haGroup, pollerInterval, properties);
         }
@@ -144,7 +145,7 @@ public class GetClusterRoleRecordUtil {
     }
 
     /**
-     * Method to schedule a poller to fetch ClusterRoleRecord every pollerInterval seconds 
+     * Method to schedule a poller to fetch ClusterRoleRecord every pollerInterval seconds
      * until we get an Active ClusterRoleRecord
      * @param url URL of the RegionServer Endpoint Service
      * @param haGroupName Name of the HA group
@@ -173,7 +174,7 @@ public class GetClusterRoleRecordUtil {
                                 pollerFuture.cancel(false);
                             }
                             //Refresh ClusterRoleRecord for the HAGroup with appropriate transition
-                            haGroup.refreshClusterRoleRecord(); 
+                            haGroup.refreshClusterRoleRecord();
                             schedulerMap.get(haGroupName).shutdown();
                             schedulerMap.remove(haGroupName); 
                         }
@@ -195,10 +196,10 @@ public class GetClusterRoleRecordUtil {
      * @return ClusterRoleRecordRequest for the given HA group name
      */
     private static RegionServerEndpointProtos.GetClusterRoleRecordRequest getClusterRoleRecordRequest(String haGroupName) {
-        RegionServerEndpointProtos.GetClusterRoleRecordRequest.Builder requestBuilder 
+        RegionServerEndpointProtos.GetClusterRoleRecordRequest.Builder requestBuilder
                 = RegionServerEndpointProtos.GetClusterRoleRecordRequest.newBuilder();
         requestBuilder.setHaGroupName(ByteString.copyFromUtf8(haGroupName));
-                
+
         return requestBuilder.build();
     }
 

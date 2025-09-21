@@ -362,7 +362,7 @@ public class HighAvailabilityGroup2IT {
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName2);
         clientProperties.setProperty(PHOENIX_HA_FALLBACK_CLUSTER_KEY, CLUSTERS.getJdbcUrl1(haGroup));
 
-        CLUSTERS.doTestWhenOneZKDown(CLUSTERS.getHBaseCluster2(), () -> {
+        CLUSTERS.doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
             try {
                 DriverManager.getConnection(jdbcHAUrl, clientProperties);
                 fail("Should have failed since one HA group can not initialized. Not falling back");

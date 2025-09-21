@@ -320,6 +320,4 @@ public class ParallelPhoenixUtil {
         }
         return new PairOfSameType<>(value1, value2);
     }
-
-
 }

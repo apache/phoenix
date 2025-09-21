@@ -1277,6 +1277,11 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
         return this.haGroupName;
     }
 
+    /**
+     * Get the HAGroup for which this connection is part of, This will return null for Single
+     * Cluster Connections
+     * @return The HAGroup for which this connection is part of.
+     */
     public HighAvailabilityGroup getHAGroup() {
         return this.haGroup;
     }

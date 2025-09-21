@@ -788,14 +788,6 @@ public class MutationState implements SQLCloseable {
                         }
                     }
                 }
-                // Set HAGroupName attribute if available in the connection for HA Connections
-                if (connection.getHAGroupName() != null) {
-                    for (Mutation mutation : rowMutations) {
-                        mutation.setAttribute(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB, 
-                            connection.getHAGroupName().getBytes());
-                    }
-                }
-
                 // The DeleteCompiler already generates the deletes for indexes, so no need to do it again
                 rowMutationsPertainingToIndex = Collections.emptyList();
 
@@ -823,11 +815,6 @@ public class MutationState implements SQLCloseable {
                             mutation.setAttribute(PhoenixIndexBuilderHelper.RETURN_RESULT,
                                     PhoenixIndexBuilderHelper.RETURN_RESULT_OLD_ROW);
                         }
-                    }
-                    // Set HAGroupName attribute if available in the connection for HA Connections
-                    if (connection.getHAGroupName() != null) {
-                        mutation.setAttribute(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB, 
-                            connection.getHAGroupName().getBytes());
                     }
                 }
                 rowMutationsPertainingToIndex = rowMutations;
@@ -878,7 +865,11 @@ public class MutationState implements SQLCloseable {
                 Bytes.toBytes(table.getExternalSchemaId()) : null;
         byte[] lastDDLTimestamp =
                 table.getLastDDLTimestamp() != null ? Bytes.toBytes(table.getLastDDLTimestamp()) : null;
-        byte[] haGroupName = StringUtils.isNotBlank(connection.getHAGroupName()) ? Bytes.toBytes(connection.getHAGroupName()) : null;
+        byte[] haGroupName = null;
+        //Only set haGroupName if connection is part of HA Connection
+        if (connection.getHAGroup() != null && StringUtils.isNotBlank(connection.getHAGroupName()) ) {
+            haGroupName = Bytes.toBytes(connection.getHAGroupName());
+        }
         WALAnnotationUtil.annotateMutation(mutation, tenantId, schemaName, tableName, tableType, lastDDLTimestamp, haGroupName);
     }
 

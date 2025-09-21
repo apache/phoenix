@@ -319,9 +319,10 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
 
     /**
      * This is the utility method to help wrapping a method call to phoenix connection.
-     * If we receive a StaleHAGroupStoreRecordVersionException, we will try to refresh the CRR
-     * and transition the connections according to the new record.
-     * and in any case if the refresh is not successful, we will throw the exception.
+     * If we receive a {@link org.apache.phoenix.exception.StaleClusterRoleRecordException},
+     * we will try to refresh the CRR and transition the connections according to the new record.
+     * StaleCRRException is thrown for mutations only for scans we are checking before executing the
+     * queries and in any case if the refresh is successful or not, we will throw the exception.
      *
      * @param s   the supplier which returns a value and may throw SQLException
      * @param <T> type of the returned object by the supplier
@@ -342,18 +343,18 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
                 if (isStaleClusterRoleRecordExceptionExistsInThrowable(e)) {
                     LOG.debug("StaleHAGroupStoreException found refreshing HAGroup");
                     //If the exception is due to stale ClusterRoleRecord version, try
-                    //refreshing the ClusterRoleRecord and state trasitions if required
+                    //refreshing the ClusterRoleRecord and state transitions if required
 
                     if (!context.getHAGroup().refreshClusterRoleRecord()) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.STALE_CRR_RETHROW_AFTER_REFRESH_FAILED)
                                 .setMessage(String.format("Error while running operation Stale ClusterRoleRecord for HAGroup %s" +
-                                                " found with version %s, refreshing HAGroup failed",
+                                                " found with version %s, refreshing HAGroup failed :- %s",
                                         context.getHAGroup(), context.getHAGroup().getRoleRecord().getVersion(), e)).build().buildException();
                     }
 
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.STALE_CRR_RETHROW_AFTER_REFRESH)
                             .setMessage(String.format("Error while running operation Stale ClusterRoleRecord for HAGroup %s" +
-                                            " found with version %s",
+                                            " found with version %s :- %s",
                                     context.getHAGroup(), context.getHAGroup().getRoleRecord().getVersion(), e)).build().buildException();
 
                 }

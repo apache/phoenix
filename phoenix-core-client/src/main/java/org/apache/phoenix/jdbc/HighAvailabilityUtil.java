@@ -21,6 +21,9 @@ package org.apache.phoenix.jdbc;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.phoenix.exception.StaleClusterRoleRecordException;
 
+/**
+ * High Availability Utility class.
+ */
 public class HighAvailabilityUtil {
 
     public static boolean isStaleClusterRoleRecordExceptionExistsInThrowable(Throwable e) {

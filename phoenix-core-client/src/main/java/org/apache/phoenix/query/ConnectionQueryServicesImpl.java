@@ -1239,11 +1239,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     @Override
     public PhoenixConnection connect(String url, Properties info) throws SQLException {
-        checkClosed();
-        throwConnectionClosedIfNullMetaData();
-        validateConnectionProperties(info);
-
-        return new PhoenixConnection(this, url, info);
+        return this.connect(url, info, null);
     }
 
     @Override
