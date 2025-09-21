@@ -41,7 +41,7 @@ import org.slf4j.LoggerFactory;
  *
  * This will be extended by specific implementations for tracking IN and OUT directory files.
  */
-public abstract class ReplicationLogFileTracker {
+public class ReplicationLogFileTracker {
 
     private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogFileTracker.class);
 
@@ -67,6 +67,7 @@ public abstract class ReplicationLogFileTracker {
     private static final long DEFAULT_FILE_DELETE_RETRY_DELAY_MS = 1000L;
 
     private final URI rootURI;
+    private final DirectoryType directoryType;
     private final FileSystem fileSystem;
     private Path inProgressDirPath;
     private ReplicationShardDirectoryManager replicationShardDirectoryManager;
@@ -74,18 +75,23 @@ public abstract class ReplicationLogFileTracker {
     protected final String haGroupName;
     protected MetricsReplicationLogFileTracker metrics;
 
-    protected ReplicationLogFileTracker(final Configuration conf, final String haGroupName,
-        final FileSystem fileSystem, final URI rootURI) {
+    public ReplicationLogFileTracker(final Configuration conf, final String haGroupName,
+                                     final FileSystem fileSystem, final URI rootURI, final DirectoryType directoryType, final MetricsReplicationLogFileTracker metrics) {
         this.conf = conf;
         this.fileSystem = fileSystem;
         this.haGroupName = haGroupName;
         this.rootURI = rootURI;
+        this.directoryType = directoryType;
+        this.metrics = metrics;
     }
 
-    protected abstract String getNewLogSubDirectoryName();
+    protected String getNewLogSubDirectoryName() {
+        return this.directoryType.getName();
+    }
 
-    /** Creates a new metrics source for monitoring operations. */
-    protected abstract MetricsReplicationLogFileTracker createMetricsSource();
+    protected MetricsReplicationLogFileTracker getMetricsSource() {
+        return this.metrics;
+    }
 
     protected String getInProgressLogSubDirectoryName() {
         return getNewLogSubDirectoryName() + "_progress";
@@ -104,11 +110,11 @@ public abstract class ReplicationLogFileTracker {
         this.inProgressDirPath = new Path(new Path(rootURI.getPath(), haGroupName),
             getInProgressLogSubDirectoryName());
         createDirectoryIfNotExists(inProgressDirPath);
-        this.metrics = createMetricsSource();
     }
 
     public void close() {
         if(this.metrics != null) {
+            System.out.println("Closing the metrics");
             this.metrics.close();
         }
     }
@@ -161,7 +167,7 @@ public abstract class ReplicationLogFileTracker {
      * doesn't exist
      * @throws IOException if there's an error accessing the file system
      */
-    protected List<Path> getInProgressFiles() throws IOException {
+    public List<Path> getInProgressFiles() throws IOException {
         if (!fileSystem.exists(getInProgressDirPath())) {
             return Collections.emptyList();
         }
@@ -183,7 +189,7 @@ public abstract class ReplicationLogFileTracker {
      * @return List of all valid log file paths from all shard directories
      * @throws IOException if there's an error accessing the file system
      */
-    protected List<Path> getNewFiles() throws IOException {
+    public List<Path> getNewFiles() throws IOException {
         List<Path> shardPaths = replicationShardDirectoryManager.getAllShardPaths();
         List<Path> newFiles = new ArrayList<>();
         for(Path shardPath : shardPaths) {
@@ -455,6 +461,21 @@ public abstract class ReplicationLogFileTracker {
             if (!fileSystem.mkdirs(directoryPath)) {
                 throw new IOException("Failed to create directory: " + directoryPath);
             }
+        }
+    }
+
+    public enum DirectoryType {
+        IN ("in"),
+        OUT ("out");
+
+        private final String name;
+
+        DirectoryType(final String name) {
+            this.name = name;
+        }
+
+        public String getName() {
+            return this.name;
         }
     }
 }

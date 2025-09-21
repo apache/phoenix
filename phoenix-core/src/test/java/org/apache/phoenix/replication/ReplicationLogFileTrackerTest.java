@@ -54,12 +54,13 @@ public class ReplicationLogFileTrackerTest {
     @ClassRule
     public static TemporaryFolder testFolder = new TemporaryFolder();
 
-    private TestableReplicationLogFileTracker tracker;
+    private ReplicationLogFileTracker tracker;
     private Configuration conf;
     private FileSystem localFs;
     private FileSystem mockFs;
     private URI rootURI;
-    private String haGroupName;
+    private static final String haGroupName = "testGroup";
+    private static final MetricsReplicationLogFileTracker metrics = new MetricsReplicationLogReplayFileTrackerImpl(haGroupName);
 
     @Before
     public void setUp() throws IOException {
@@ -67,8 +68,7 @@ public class ReplicationLogFileTrackerTest {
         localFs = Mockito.spy(FileSystem.getLocal(conf));
         mockFs = Mockito.spy(localFs);
         rootURI = new Path(testFolder.getRoot().toString()).toUri();
-        haGroupName = "testGroup";
-        tracker = new TestableReplicationLogFileTracker(conf, haGroupName, mockFs, rootURI);
+        tracker = createReplicationLogFileTracker(conf, haGroupName, mockFs, rootURI);
     }
 
     @After
@@ -113,7 +113,7 @@ public class ReplicationLogFileTrackerTest {
     public void testInitWithDifferentHaGroupName() throws IOException {
         // Test with different HA group name
         String differentHaGroupName = "differentGroup";
-        tracker = new TestableReplicationLogFileTracker(conf, differentHaGroupName, mockFs, rootURI);
+        tracker = createReplicationLogFileTracker(conf, differentHaGroupName, mockFs, rootURI);
 
         // Call init method
         tracker.init();
@@ -778,7 +778,7 @@ public class ReplicationLogFileTrackerTest {
 
         // Replace the tracker's filesystem with our mock
         tracker.close();
-        tracker = new TestableReplicationLogFileTracker(conf, haGroupName, mockFs, rootURI);
+        tracker = createReplicationLogFileTracker(conf, haGroupName, mockFs, rootURI);
         tracker.init();
 
         // Call markCompleted on the original file
@@ -798,6 +798,9 @@ public class ReplicationLogFileTrackerTest {
 
         // Verify operation was successful after retries
         assertTrue("markCompleted should return true after successful retry", result);
+
+        // clean up
+        tracker.close();
     }
 
     @Test
@@ -807,7 +810,7 @@ public class ReplicationLogFileTrackerTest {
         FileSystem mockFs = spy(localFs);
 
         // Replace the tracker's filesystem with our spy
-        tracker = new TestableReplicationLogFileTracker(conf, haGroupName, mockFs, rootURI);
+        tracker = createReplicationLogFileTracker(conf, haGroupName, mockFs, rootURI);
         tracker.init();
 
         // Create original file in in-progress directory with UUID
@@ -844,6 +847,9 @@ public class ReplicationLogFileTrackerTest {
 
         // Verify operation failed after all retries
         assertFalse("markCompleted should return false after all retries fail", result);
+
+        // clean up
+        tracker.close();
     }
 
     @Test
@@ -1006,6 +1012,9 @@ public class ReplicationLogFileTrackerTest {
         // 4. InProgress (invalid extension) - with UUID, without .plog extension
         Path inProgressFileInvalidExt = new Path(tracker.getInProgressDirPath(), "1704153600000_rs1_12345678-1234-1234-1234-123456789abc.txt");
         assertFalse("In-progress file without .plog extension should be invalid", tracker.isValidLogFile(inProgressFileInvalidExt));
+
+        // clean up
+        tracker.close();
     }
 
     @Test
@@ -1051,19 +1060,9 @@ public class ReplicationLogFileTrackerTest {
         return count;
     }
 
-    private static class TestableReplicationLogFileTracker extends ReplicationLogFileTracker {
-        public TestableReplicationLogFileTracker(final Configuration conf, final String haGroupName, final FileSystem fileSystem, final URI rootURI) {
-            super(conf, haGroupName, fileSystem, rootURI);
-        }
-
-        @Override
-        protected String getNewLogSubDirectoryName() {
-            return "in";
-        }
-
-        @Override
-        protected MetricsReplicationLogFileTracker createMetricsSource() {
-            return new MetricsReplicationLogReplayFileTrackerImpl(haGroupName);
-        }
+    private ReplicationLogFileTracker createReplicationLogFileTracker(final Configuration conf, final String haGroupName, final FileSystem fileSystem, final URI rootURI) {
+        return new ReplicationLogFileTracker(conf, haGroupName, fileSystem, rootURI, ReplicationLogFileTracker.DirectoryType.IN, metrics);
     }
+
+
 }

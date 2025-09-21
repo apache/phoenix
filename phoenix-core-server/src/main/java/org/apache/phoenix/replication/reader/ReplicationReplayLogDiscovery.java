@@ -21,6 +21,7 @@ import java.io.IOException;
 
 import org.apache.hadoop.fs.Path;
 import org.apache.phoenix.replication.ReplicationLogDiscovery;
+import org.apache.phoenix.replication.ReplicationLogFileTracker;
 import org.apache.phoenix.replication.ReplicationRound;
 import org.apache.phoenix.replication.ReplicationStateTracker;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscovery;
@@ -34,7 +35,7 @@ import org.apache.phoenix.replication.metrics.MetricsReplicationReplayLogFileDis
  */
 public class ReplicationReplayLogDiscovery extends ReplicationLogDiscovery {
 
-    public static final String EXECUTOR_THREAD_NAME_FORMAT = "Phoenix-Replication-Replay-%d";
+    public static final String EXECUTOR_THREAD_NAME_FORMAT = "Phoenix-ReplicationReplayLogDiscovery-%d";
 
     /**
      * Configuration key for replay interval in seconds
@@ -94,7 +95,7 @@ public class ReplicationReplayLogDiscovery extends ReplicationLogDiscovery {
      */
     public static final double DEFAULT_WAITING_BUFFER_PERCENTAGE = 15.0;
 
-    public ReplicationReplayLogDiscovery(final ReplicationLogReplayFileTracker 
+    public ReplicationReplayLogDiscovery(final ReplicationLogFileTracker
         replicationLogReplayFileTracker, 
         final ReplicationStateTracker replicationStateTracker) {
         super(replicationLogReplayFileTracker, replicationStateTracker);
@@ -102,6 +103,7 @@ public class ReplicationReplayLogDiscovery extends ReplicationLogDiscovery {
 
     @Override
     protected void processFile(Path path) throws IOException {
+        System.out.println("Calling actual process file method");
         ReplicationLogProcessor.get(getConf(), getHaGroupName())
             .processLogFile(getReplicationLogFileTracker().getFileSystem(), path);
     }

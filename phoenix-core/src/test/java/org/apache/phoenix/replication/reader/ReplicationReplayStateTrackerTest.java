@@ -37,8 +37,10 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.util.EnvironmentEdge;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
+import org.apache.phoenix.replication.ReplicationLogFileTracker;
 import org.apache.phoenix.replication.ReplicationRound;
 import org.apache.phoenix.replication.ReplicationShardDirectoryManager;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogReplayFileTrackerImpl;
 import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
@@ -50,7 +52,7 @@ public class ReplicationReplayStateTrackerTest {
     public static TemporaryFolder testFolder = new TemporaryFolder();
 
     private ReplicationReplayStateTracker stateTracker;
-    private TestableReplicationLogReplayFileTracker mockTracker;
+    private ReplicationLogFileTracker mockTracker;
     private Path rootPath;
 
     @Before
@@ -331,10 +333,10 @@ public class ReplicationReplayStateTrackerTest {
         }
     }
 
-    private static class TestableReplicationLogReplayFileTracker extends ReplicationLogReplayFileTracker {
+    private static class TestableReplicationLogReplayFileTracker extends ReplicationLogFileTracker {
 
         public TestableReplicationLogReplayFileTracker(Configuration conf, String haGroupName, FileSystem fileSystem, URI rootURI) {
-            super(conf, haGroupName, fileSystem, rootURI);
+            super(conf, haGroupName, fileSystem, rootURI, DirectoryType.IN, new MetricsReplicationLogReplayFileTrackerImpl(haGroupName));
         }
 
         // Expose the protected method for testing

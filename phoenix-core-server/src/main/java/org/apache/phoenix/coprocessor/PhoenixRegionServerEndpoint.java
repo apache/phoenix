@@ -70,7 +70,7 @@ public class PhoenixRegionServerEndpoint
     @Override
     public void stop(CoprocessorEnvironment env) throws IOException {
         // Stop log replication replay
-        ReplicationLogReplayService.getInstance(conf).start();
+        ReplicationLogReplayService.getInstance(conf).stop();
         RegionServerCoprocessor.super.stop(env);
         ServerUtil.ConnectionFactory.shutdown();
     }
