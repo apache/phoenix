@@ -20,8 +20,10 @@ package org.apache.phoenix.coprocessor;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHYSICAL_DATA_TABLE_NAME;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ExecutionException;
@@ -71,6 +73,8 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
   protected final int rowCountPerTask;
   protected String exceptionMessage;
   protected final HTableFactory hTableFactory;
+  private final boolean isScanMetricsEnabled;
+  private List<DataTableScanMetricsWithScanTime> dataTableScanMetrics;
 
   // This relies on Hadoop Configuration to handle warning about deprecated configs and
   // to set the correct non-deprecated configs when an old one shows up.
@@ -100,6 +104,10 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
       // repair it
       ScanUtil.addEmptyColumnToScan(dataTableScan, indexMaintainer.getDataEmptyKeyValueCF(),
         indexMaintainer.getEmptyKeyValueQualifierForDataTable());
+    }
+    isScanMetricsEnabled = scan.isScanMetricsEnabled();
+    if (isScanMetricsEnabled) {
+      dataTableScanMetrics = new ArrayList<>();
     }
   }
 
@@ -133,6 +141,11 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
         LOGGER.info("One of the scan tasks in UncoveredGlobalIndexRegionScanner" + " for region "
           + region.getRegionInfo().getRegionNameAsString() + " could not complete on time (in "
           + pageSizeMs + " ms) and" + " will be resubmitted");
+      }
+      if (isScanMetricsEnabled) {
+        Map<String, Long> scanMetrics = resultScanner.getScanMetrics().getMetricsMap();
+        long scanTimeInMs = EnvironmentEdgeManager.currentTimeMillis() - startTime;
+        dataTableScanMetrics.add(buildDataTableScanMetrics(scanMetrics, scanTimeInMs));
       }
     } catch (Throwable t) {
       exceptionMessage = "scanDataRows fails for at least one task";
@@ -208,10 +221,66 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
       addTasksForScanningDataTableRowsInParallel(tasks, setList.get(i), startTime);
     }
     submitTasks(tasks);
+    if (isScanMetricsEnabled) {
+      DataTableScanMetricsWithScanTime dataTableScanMetricsForSlowestScan = null;
+      for (DataTableScanMetricsWithScanTime dataTableScanMetrics : dataTableScanMetrics) {
+        if (dataTableScanMetricsForSlowestScan == null) {
+          dataTableScanMetricsForSlowestScan = dataTableScanMetrics;
+        } else if (
+          dataTableScanMetricsForSlowestScan.getScanTimeInMs()
+              < dataTableScanMetrics.getScanTimeInMs()
+        ) {
+          dataTableScanMetricsForSlowestScan = dataTableScanMetrics;
+        }
+      }
+      if (dataTableScanMetricsForSlowestScan != null) {
+        dataTableScanMetricsForSlowestScan.populateThreadLocalServerSideScanMetrics();
+      }
+    }
     if (state == State.SCANNING_DATA_INTERRUPTED) {
       state = State.SCANNING_DATA;
     } else {
       state = State.READY;
+    }
+  }
+
+  private static DataTableScanMetricsWithScanTime
+    buildDataTableScanMetrics(Map<String, Long> scanMetrics, long scanTimeInMs) {
+    DataTableScanMetricsWithScanTime.Builder builder =
+      new DataTableScanMetricsWithScanTime.Builder();
+    builder.setScanTimeInMs(scanTimeInMs);
+    DataTableScanMetrics.buildDataTableScanMetrics(scanMetrics, builder);
+    return builder.build();
+  }
+
+  private static class DataTableScanMetricsWithScanTime extends DataTableScanMetrics {
+    private final long scanTimeInMs;
+
+    public DataTableScanMetricsWithScanTime(long scanTimeInMs, long fsReadTimeInMs,
+      long bytesReadFromFS, long bytesReadFromMemstore, long bytesReadFromBlockcache,
+      long blockReadOps) {
+      super(fsReadTimeInMs, bytesReadFromFS, bytesReadFromMemstore, bytesReadFromBlockcache,
+        blockReadOps);
+      this.scanTimeInMs = scanTimeInMs;
+    }
+
+    public long getScanTimeInMs() {
+      return scanTimeInMs;
+    }
+
+    private static class Builder extends DataTableScanMetrics.Builder {
+      private long scanTimeInMs = 0;
+
+      public Builder setScanTimeInMs(long scanTimeInMs) {
+        this.scanTimeInMs = scanTimeInMs;
+        return this;
+      }
+
+      @Override
+      public DataTableScanMetricsWithScanTime build() {
+        return new DataTableScanMetricsWithScanTime(scanTimeInMs, fsReadTimeInMs, bytesReadFromFS,
+          bytesReadFromMemstore, bytesReadFromBlockcache, blockReadOps);
+      }
     }
   }
 }

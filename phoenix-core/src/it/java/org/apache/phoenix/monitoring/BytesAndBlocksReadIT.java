@@ -17,20 +17,15 @@
  */
 package org.apache.phoenix.monitoring;
 
-import static org.junit.Assert.assertTrue;
-
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Map;
-
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.regionserver.CompactSplit;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -46,113 +41,168 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 @Category(NeedsOwnMiniClusterTest.class)
 public class BytesAndBlocksReadIT extends BaseTest {
 
-    @BeforeClass
-    public static void setup() throws Exception {
-        Map<String, String> props = Maps.newHashMapWithExpectedSize(4);
-        props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, "true");
-        props.put(QueryServices.SCAN_CACHE_SIZE_ATTRIB, "10");
-        props.put(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, "0");
-        props.put(CompactSplit.HBASE_REGION_SERVER_ENABLE_COMPACTION, "false");
-        setUpTestDriver(new ReadOnlyProps(props));
-    }
+  @BeforeClass
+  public static void setup() throws Exception {
+    Map<String, String> props = Maps.newHashMapWithExpectedSize(4);
+    props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, "true");
+    props.put(QueryServices.SCAN_CACHE_SIZE_ATTRIB, "10");
+    props.put(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, "0");
+    props.put(CompactSplit.HBASE_REGION_SERVER_ENABLE_COMPACTION, "false");
+    setUpTestDriver(new ReadOnlyProps(props));
+  }
 
-    @Test
-    public void testSimpleQuery() throws Exception {
-        String tableName = generateUniqueName();
-        String ddl =
-            "CREATE TABLE " + tableName + " (id INTEGER NOT NULL PRIMARY KEY, name VARCHAR)";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            conn.createStatement().execute(ddl);
-            conn.commit();
-            Statement stmt = conn.createStatement();
-            stmt.execute("UPSERT INTO " + tableName + " (id, name) VALUES (3, 'Jim')");
-            conn.commit();
-            ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName);
-            assertRowReadFromMemstore(tableName, getQueryReadMetrics(rs));
-            TestUtil.flush(utility, TableName.valueOf(tableName));
-            rs = stmt.executeQuery("SELECT * FROM " + tableName);
-            assertRowReadFromFs(tableName, getQueryReadMetrics(rs));
-            rs = stmt.executeQuery("SELECT * FROM " + tableName);
-            assertRowReadFromBlockcache(tableName, getQueryReadMetrics(rs));
-        }
+  @Test
+  public void testSinglePointLookupQuery() throws Exception {
+    String tableName = generateUniqueName();
+    String sql = "SELECT * FROM " + tableName + " WHERE k1 = 1 AND k2 = 'a'";
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTableAndUpsertData(conn, tableName, "");
+      Statement stmt = conn.createStatement();
+      ResultSet rs = stmt.executeQuery(sql);
+      assertOnReadsFromMemstore(tableName, getQueryReadMetrics(rs));
+      TestUtil.flush(utility, TableName.valueOf(tableName));
+      rs = stmt.executeQuery(sql);
+      assertOnReadsFromFs(tableName, getQueryReadMetrics(rs));
+      rs = stmt.executeQuery(sql);
+      assertOnReadsFromBlockcache(tableName, getQueryReadMetrics(rs));
+      rs = stmt.executeQuery(sql);
     }
+  }
 
-    @Test
-    public void testBytesReadInClientUpsertSelect() throws Exception {
-        String sourceTableName = generateUniqueName();
-        String targetTableName = generateUniqueName();
-        String ddl = "CREATE TABLE " + sourceTableName + " (id INTEGER NOT NULL PRIMARY KEY, name VARCHAR)";
-        String ddl2 = "CREATE TABLE " + targetTableName + " (id INTEGER NOT NULL PRIMARY KEY, name VARCHAR)";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            Statement stmt = conn.createStatement();
-            stmt.execute(ddl);
-            conn.commit();
-            stmt.execute(ddl2);
-            conn.commit();
-            stmt.execute("UPSERT INTO " + sourceTableName + " (id, name) VALUES (1, 'Kim')");
-            conn.commit();
-            stmt.execute("UPSERT INTO " + sourceTableName + " (id, name) VALUES (2, 'Tim')");
-            conn.commit();
-            stmt.execute("UPSERT INTO " + sourceTableName + " (id, name) VALUES (3, 'Jim')");
-            conn.commit();
-            assertRowReadFromMemstore(sourceTableName, getMutationReadMetrics(conn, targetTableName, sourceTableName, 1));
-            TestUtil.flush(utility, TableName.valueOf(sourceTableName));
-            assertRowReadFromFs(sourceTableName, getMutationReadMetrics(conn, targetTableName, sourceTableName, 2));
-            assertRowReadFromBlockcache(sourceTableName, getMutationReadMetrics(conn, targetTableName, sourceTableName, 3));
-        }
+  @Test
+  public void testMultiPointLookupQueryWithoutBloomFilter() throws Exception {
+    String tableName = generateUniqueName();
+    String sql = "SELECT * FROM " + tableName + " WHERE k1 IN (1, 2, 3) AND k2 IN ('a', 'b', 'c')";
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTableAndUpsertData(conn, tableName, "BLOOMFILTER='NONE'");
+      Statement stmt = conn.createStatement();
+      ResultSet rs = stmt.executeQuery(sql);
+      assertOnReadsFromMemstore(tableName, getQueryReadMetrics(rs));
+      TestUtil.flush(utility, TableName.valueOf(tableName));
+      rs = stmt.executeQuery(sql);
+      assertOnReadsFromFs(tableName, getQueryReadMetrics(rs));
+      rs = stmt.executeQuery(sql);
+      assertOnReadsFromBlockcache(tableName, getQueryReadMetrics(rs));
+      rs = stmt.executeQuery(sql);
     }
-    
-    private void assertRowReadFromMemstore(String tableName, Map<String, Map<MetricType, Long>> readMetrics) throws Exception {
-        Assert.assertTrue(readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_MEMSTORE) > 0);
-        Assert.assertEquals(0,
-            (long) readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_FS));
-        Assert.assertEquals(0,
-            (long) readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_BLOCKCACHE));
-    }
+  }
 
-    private void assertRowReadFromFs(String tableName,
-        Map<String, Map<MetricType, Long>> readMetrics) throws Exception {
-        Assert.assertTrue(readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_FS) > 0);
-        Assert.assertTrue(readMetrics.get(tableName).get(MetricType.BLOCK_READ_OPS_COUNT) > 0);
-        Assert.assertEquals(0,
-            (long) readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_MEMSTORE));
-        Assert.assertEquals(0,
-            (long) readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_BLOCKCACHE));
+  @Test
+  public void testMultiPointLookupQueryWithBloomFilter() throws Exception {
+    String tableName = generateUniqueName();
+    String sql = "SELECT * FROM " + tableName + " WHERE k1 IN (1, 2, 3) AND k2 IN ('a', 'b', 'c')";
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTableAndUpsertData(conn, tableName,
+        "\"phoenix.bloomfilter.multikey.pointlookup\"=true");
+      Statement stmt = conn.createStatement();
+      ResultSet rs = stmt.executeQuery(sql);
+      assertOnReadsFromMemstore(tableName, getQueryReadMetrics(rs));
+      TestUtil.flush(utility, TableName.valueOf(tableName));
+      rs = stmt.executeQuery(sql);
+      assertOnReadsFromFs(tableName, getQueryReadMetrics(rs), true);
+      rs = stmt.executeQuery(sql);
+      assertOnReadsFromBlockcache(tableName, getQueryReadMetrics(rs));
+      rs = stmt.executeQuery(sql);
     }
+  }
 
-    private void assertRowReadFromBlockcache(String tableName, Map<String, Map<MetricType, Long>> readMetrics) throws Exception {
-        Assert
-            .assertTrue(readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_BLOCKCACHE) > 0);
-        Assert.assertEquals(0,
-            (long) readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_FS));
-        Assert.assertEquals(0,
-            (long) readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_MEMSTORE));
-        Assert.assertEquals(0,
-            (long) readMetrics.get(tableName).get(MetricType.BLOCK_READ_OPS_COUNT));
+  @Test
+  public void testBytesReadInClientUpsertSelect() throws Exception {
+    String sourceTableName = generateUniqueName();
+    String targetTableName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTableAndUpsertData(conn, sourceTableName, "");
+      createTable(conn, targetTableName, "");
+      assertOnReadsFromMemstore(sourceTableName,
+        getMutationReadMetrics(conn, targetTableName, sourceTableName, 1));
+      TestUtil.flush(utility, TableName.valueOf(sourceTableName));
+      assertOnReadsFromFs(sourceTableName,
+        getMutationReadMetrics(conn, targetTableName, sourceTableName, 2));
+      assertOnReadsFromBlockcache(sourceTableName,
+        getMutationReadMetrics(conn, targetTableName, sourceTableName, 3));
     }
-    
-    private Map<String, Map<MetricType, Long>> getQueryReadMetrics(ResultSet rs) throws Exception {
-        int rowCount = 0;
-        while (rs.next()) {
-            rowCount++;
-        }
-        Assert.assertEquals(1, rowCount);
-        Map<String, Map<MetricType, Long>> readMetrics =
-            PhoenixRuntime.getRequestReadMetricInfo(rs);
-        return readMetrics;
+  }
+
+  private void createTable(Connection conn, String tableName, String ddlOptions) throws Exception {
+    try (Statement stmt = conn.createStatement()) {
+      stmt.execute("CREATE TABLE " + tableName
+        + " (k1 INTEGER NOT NULL, k2 varchar NOT NULL, v1 VARCHAR, v2 VARCHAR, CONSTRAINT PK PRIMARY KEY (k1, k2)) "
+        + ddlOptions);
+      conn.commit();
     }
+  }
 
-    private Map<String, Map<MetricType, Long>> getMutationReadMetrics(Connection conn, String targetTableName, String sourceTableName, int rowId)
-        throws Exception {
-        Statement stmt = conn.createStatement();
-        stmt.execute(
-                "UPSERT INTO " + targetTableName + " (id, name) SELECT * FROM " + sourceTableName + " WHERE id = " + rowId);
-        conn.commit();
-        Map<String, Map<MetricType, Long>> readMetrics =
-            PhoenixRuntime.getReadMetricInfoForMutationsSinceLastReset(conn);
-        PhoenixRuntime.resetMetrics(conn);
-        return readMetrics;
+  private void createTableAndUpsertData(Connection conn, String tableName, String ddlOptions)
+    throws Exception {
+    createTable(conn, tableName, ddlOptions);
+    try (Statement stmt = conn.createStatement()) {
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (1, 'a', 'v1', 'v2')");
+      conn.commit();
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (2, 'b', 'v1', 'v2')");
+      conn.commit();
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (3, 'c', 'v1', 'v2')");
+      conn.commit();
     }
+  }
 
+  private void assertOnReadsFromMemstore(String tableName,
+    Map<String, Map<MetricType, Long>> readMetrics) throws Exception {
+    Assert.assertTrue(readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_MEMSTORE) > 0);
+    Assert.assertEquals(0, (long) readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_FS));
+    Assert.assertEquals(0,
+      (long) readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_BLOCKCACHE));
+  }
 
+  private void assertOnReadsFromFs(String tableName, Map<String, Map<MetricType, Long>> readMetrics)
+    throws Exception {
+    assertOnReadsFromFs(tableName, readMetrics, false);
+  }
+
+  private void assertOnReadsFromFs(String tableName, Map<String, Map<MetricType, Long>> readMetrics,
+    boolean isMultiPointBloomFilterEnabled) throws Exception {
+    Assert.assertTrue(readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_FS) > 0);
+    Assert.assertTrue(readMetrics.get(tableName).get(MetricType.BLOCK_READ_OPS_COUNT) > 0);
+    Assert.assertEquals(0,
+      (long) readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_MEMSTORE));
+    if (isMultiPointBloomFilterEnabled) {
+      Assert.assertTrue(
+        (long) readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_BLOCKCACHE) > 0);
+    } else {
+      Assert.assertEquals(0,
+        (long) readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_BLOCKCACHE));
+    }
+  }
+
+  private void assertOnReadsFromBlockcache(String tableName,
+    Map<String, Map<MetricType, Long>> readMetrics) throws Exception {
+    Assert.assertTrue(readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_BLOCKCACHE) > 0);
+    Assert.assertEquals(0, (long) readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_FS));
+    Assert.assertEquals(0,
+      (long) readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_MEMSTORE));
+    Assert.assertEquals(0, (long) readMetrics.get(tableName).get(MetricType.BLOCK_READ_OPS_COUNT));
+  }
+
+  private Map<String, Map<MetricType, Long>> getQueryReadMetrics(ResultSet rs) throws Exception {
+    int rowCount = 0;
+    while (rs.next()) {
+      rowCount++;
+    }
+    Assert.assertTrue(rowCount > 0);
+    Map<String, Map<MetricType, Long>> readMetrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
+    System.out.println("Query readMetrics: " + readMetrics);
+    return readMetrics;
+  }
+
+  private Map<String, Map<MetricType, Long>> getMutationReadMetrics(Connection conn,
+    String targetTableName, String sourceTableName, int rowId) throws Exception {
+    Statement stmt = conn.createStatement();
+    stmt.execute("UPSERT INTO " + targetTableName + " (k1, k2, v1, v2) SELECT * FROM "
+      + sourceTableName + " WHERE k1 = " + rowId);
+    conn.commit();
+    Map<String, Map<MetricType, Long>> readMetrics =
+      PhoenixRuntime.getReadMetricInfoForMutationsSinceLastReset(conn);
+    System.out.println("Mutation readMetrics: " + readMetrics);
+    PhoenixRuntime.resetMetrics(conn);
+    return readMetrics;
+  }
 }
