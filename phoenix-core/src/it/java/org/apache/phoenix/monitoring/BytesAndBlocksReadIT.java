@@ -45,7 +45,6 @@ public class BytesAndBlocksReadIT extends BaseTest {
   public static void setup() throws Exception {
     Map<String, String> props = Maps.newHashMapWithExpectedSize(4);
     props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, "true");
-    props.put(QueryServices.SCAN_CACHE_SIZE_ATTRIB, "10");
     props.put(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, "0");
     props.put(CompactSplit.HBASE_REGION_SERVER_ENABLE_COMPACTION, "false");
     setUpTestDriver(new ReadOnlyProps(props));
@@ -120,6 +119,104 @@ public class BytesAndBlocksReadIT extends BaseTest {
         getMutationReadMetrics(conn, targetTableName, sourceTableName, 2));
       assertOnReadsFromBlockcache(sourceTableName,
         getMutationReadMetrics(conn, targetTableName, sourceTableName, 3));
+    }
+  }
+
+  @Test
+  public void testAggregateQueryWithoutGroupBy() throws Exception {
+    String tableName = generateUniqueName();
+    String sql = "SELECT MAX(v1) FROM " + tableName + " WHERE k1 = 1";
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTable(conn, tableName, "");
+      Statement stmt = conn.createStatement();
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (1, 'a', 'a1', 'a2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (1, 'b', 'b1', 'b2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (3, 'c', 'c1', 'c2')");
+      conn.commit();
+      ResultSet rs = stmt.executeQuery(sql);
+      assertOnReadsFromMemstore(tableName, getQueryReadMetrics(rs));
+      TestUtil.flush(utility, TableName.valueOf(tableName));
+      rs = stmt.executeQuery(sql);
+      assertOnReadsFromFs(tableName, getQueryReadMetrics(rs));
+      rs = stmt.executeQuery(sql);
+      assertOnReadsFromBlockcache(tableName, getQueryReadMetrics(rs));
+      rs = stmt.executeQuery(sql);
+    }
+  }
+
+  @Test
+  public void testAggregateQueryWithGroupBy() throws Exception {
+    String tableName = generateUniqueName();
+    String sql = "SELECT MAX(v1) FROM " + tableName + " WHERE v2 = 'v2' GROUP BY k1";
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTable(conn, tableName, "");
+      Statement stmt = conn.createStatement();
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (1, 'a', 'a1', 'v2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (1, 'b', 'b1', 'b2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (1, 'c', 'c1', 'v2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (3, 'd', 'd1', 'd2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (3, 'e', 'e1', 'v2')");
+      conn.commit();
+      ResultSet rs = stmt.executeQuery(sql);
+      assertOnReadsFromMemstore(tableName, getQueryReadMetrics(rs));
+      TestUtil.flush(utility, TableName.valueOf(tableName));
+      rs = stmt.executeQuery(sql);
+      assertOnReadsFromFs(tableName, getQueryReadMetrics(rs));
+      rs = stmt.executeQuery(sql);
+      assertOnReadsFromBlockcache(tableName, getQueryReadMetrics(rs));
+      rs = stmt.executeQuery(sql);
+    }
+  }
+
+  @Test
+  public void testAggregateQueryWithGroupByAndOrderBy() throws Exception {
+    String tableName = generateUniqueName();
+    String sql = "SELECT v2, MAX(v1) FROM " + tableName + " GROUP BY v2 ORDER BY v2";
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTable(conn, tableName, "");
+      Statement stmt = conn.createStatement();
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (1, 'a', 'a1', 'v2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (1, 'b', 'b1', 'b2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (1, 'c', 'c1', 'v2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (3, 'd', 'd1', 'd2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (3, 'e', 'e1', 'v2')");
+      conn.commit();
+      ResultSet rs = stmt.executeQuery(sql);
+      assertOnReadsFromMemstore(tableName, getQueryReadMetrics(rs));
+      TestUtil.flush(utility, TableName.valueOf(tableName));
+      rs = stmt.executeQuery(sql);
+      assertOnReadsFromFs(tableName, getQueryReadMetrics(rs));
+      rs = stmt.executeQuery(sql);
+      assertOnReadsFromBlockcache(tableName, getQueryReadMetrics(rs));
+      rs = stmt.executeQuery(sql);
+    }
+  }
+
+  @Test
+  public void testUnionAllQuery() throws Exception {
+    String tableName1 = generateUniqueName();
+    String tableName2 = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTable(conn, tableName1, "");
+      Statement stmt = conn.createStatement();
+      stmt.execute("UPSERT INTO " + tableName1 + " (k1, k2, v1, v2) VALUES (1, 'a', 'a1', 'v2')");
+      stmt.execute("UPSERT INTO " + tableName1 + " (k1, k2, v1, v2) VALUES (1, 'b', 'b1', 'b2')");
+      stmt.execute("UPSERT INTO " + tableName1 + " (k1, k2, v1, v2) VALUES (1, 'c', 'c1', 'v2')");
+      conn.commit();
+      createTable(conn, tableName2, "");
+      stmt.execute("UPSERT INTO " + tableName2 + " (k1, k2, v1, v2) VALUES (3, 'd', 'd1', 'd2')");
+      stmt.execute("UPSERT INTO " + tableName2 + " (k1, k2, v1, v2) VALUES (3, 'e', 'e1', 'v2')");
+      conn.commit();
+      String sql = "SELECT MAX(v1) FROM (SELECT k1, v1 FROM " + tableName1
+        + " UNION ALL SELECT k1, v1 FROM " + tableName2 + ") GROUP BY k1 HAVING MAX(v1) > 'c1'";
+      ResultSet rs = stmt.executeQuery(sql);
+      assertOnReadsFromMemstore(tableName1, getQueryReadMetrics(rs));
+      TestUtil.flush(utility, TableName.valueOf(tableName1));
+      rs = stmt.executeQuery(sql);
+      assertOnReadsFromFs(tableName1, getQueryReadMetrics(rs));
+      rs = stmt.executeQuery(sql);
+      assertOnReadsFromBlockcache(tableName1, getQueryReadMetrics(rs));
+      rs = stmt.executeQuery(sql);
     }
   }
 
