@@ -314,8 +314,8 @@ public class QueryServicesOptions {
   public static final boolean DEFAULT_EXPLAIN_CHUNK_COUNT = true;
   public static final boolean DEFAULT_EXPLAIN_ROW_COUNT = true;
   public static final boolean DEFAULT_ALLOW_ONLINE_TABLE_SCHEMA_UPDATE = true;
-  public static final int DEFAULT_RETRIES_FOR_SCHEMA_UPDATE_CHECK = 10;
-  public static final long DEFAULT_DELAY_FOR_SCHEMA_UPDATE_CHECK = 5 * 1000; // 5 seconds.
+  public static final int DEFAULT_RETRIES_FOR_SCHEMA_UPDATE_CHECK = 50;
+  public static final long DEFAULT_DELAY_FOR_SCHEMA_UPDATE_CHECK = 1000; // 1 second.
   public static final boolean DEFAULT_STORE_NULLS = false;
 
   // TODO Change this to true as part of PHOENIX-1543
@@ -424,6 +424,7 @@ public class QueryServicesOptions {
   public static final long DEFAULT_GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS =
     7 * 24 * 60 * 60 * 1000; /* 7 days */
   public static final boolean DEFAULT_INDEX_REGION_OBSERVER_ENABLED = true;
+  public static final boolean DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED = false;
 
   public static final String DEFAULT_INDEX_REGION_OBSERVER_ENABLED_ALL_TABLES =
     Boolean.toString(true);
@@ -500,6 +501,9 @@ public class QueryServicesOptions {
 
   public static final long DEFAULT_PHOENIX_CDC_STREAM_PARTITION_EXPIRY_MIN_AGE_MS =
     30 * 60 * 60 * 1000; // 30 hours
+
+  public static final int DEFAULT_PHOENIX_UNCOVERED_INDEX_MAX_POOL_SIZE = 512;
+  public static final int DEFAULT_PHOENIX_UNCOVERED_INDEX_KEEP_ALIVE_TIME_SEC = 60; // 1min
 
   private final Configuration config;
 

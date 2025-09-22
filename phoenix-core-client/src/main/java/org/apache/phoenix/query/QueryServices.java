@@ -412,9 +412,13 @@ public interface QueryServices extends SQLCloseable {
   // The minimum age of an unverified global index row to be eligible for deletion
   public static final String GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB =
     "phoenix.global.index.row.age.threshold.to.delete.ms";
-  // Enable the IndexRegionObserver Coprocessor
+  // Enable the IndexRegionObserver coprocessor
   public static final String INDEX_REGION_OBSERVER_ENABLED_ATTRIB =
     "phoenix.index.region.observer.enabled";
+  // Enable the IndexRegionObserver coprocessor for immutable tables
+  String SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB =
+    "phoenix.server.side.immutable.indexes.enabled";
+
   // Whether IndexRegionObserver/GlobalIndexChecker is enabled for all tables
   public static final String INDEX_REGION_OBSERVER_ENABLED_ALL_TABLES_ATTRIB =
     "phoenix.index.region.observer.enabled.all.tables";
@@ -626,6 +630,12 @@ public interface QueryServices extends SQLCloseable {
 
   String PHOENIX_CDC_STREAM_PARTITION_EXPIRY_MIN_AGE_MS =
     "phoenix.cdc.stream.partition.expiry.min.age.ms";
+
+  String PHOENIX_UNCOVERED_INDEX_MAX_POOL_SIZE = "phoenix.uncovered.index.threads.max";
+  String PHOENIX_UNCOVERED_INDEX_KEEP_ALIVE_TIME_SEC =
+    "phoenix.uncovered.index.threads.keepalive.sec";
+
+  String USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP = "phoenix.bloomfilter.multikey.pointlookup";
 
   /**
    * Get executor service used for parallel scans

@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlan;
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlanWithLimit;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PAGED_ROWS_COUNTER;
+import static org.apache.phoenix.query.QueryServices.USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -34,7 +35,11 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Map;
 import java.util.Properties;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.PagingRegionScanner;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.monitoring.MetricType;
@@ -262,6 +267,51 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  public void testAggregateQuery() throws Exception {
+    final String tablename = generateUniqueName();
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    // use a higher timeout value so that we can trigger a page timeout from the scanner
+    // rather than the page filter
+    props.put(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Long.toString(10));
+    String ddl = "CREATE TABLE " + tablename + " (id VARCHAR NOT NULL,\n" + "k1 INTEGER NOT NULL,\n"
+      + "k2 INTEGER NOT NULL,\n" + "k3 INTEGER,\n" + "v1 VARCHAR,\n"
+      + "CONSTRAINT pk PRIMARY KEY (id, k1, k2)) ";
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      createTestTable(getUrl(), ddl);
+      String dml = "UPSERT INTO " + tablename + " VALUES(?, ?, ?, ?, ?)";
+      PreparedStatement ps = conn.prepareStatement(dml);
+      int totalRows = 10000;
+      for (int i = 0; i < totalRows; ++i) {
+        ps.setString(1, "id_" + i % 3);
+        ps.setInt(2, i % 20);
+        ps.setInt(3, i);
+        ps.setInt(4, i % 10);
+        ps.setString(5, "val");
+        ps.executeUpdate();
+        if (i != 0 && i % 100 == 0) {
+          conn.commit();
+        }
+      }
+      conn.commit();
+      String dql = String.format("SELECT count(*) from %s where id = '%s'", tablename, "id_2");
+      try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
+        assertTrue(rs.next());
+        assertEquals(totalRows / 3, rs.getInt(1));
+        assertFalse(rs.next());
+        assertServerPagingMetric(tablename, rs, false); // no dummy rows
+        Map<String, Map<MetricType, Long>> metrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
+        for (Map.Entry<String, Map<MetricType, Long>> entry : metrics.entrySet()) {
+          Map<MetricType, Long> metricValues = entry.getValue();
+          Long rpcCalls = metricValues.get(MetricType.COUNT_RPC_CALLS);
+          assertNotNull(rpcCalls);
+          // multiple scan rpcs will be executed for every page timeout
+          assertTrue(String.format("Got %d", rpcCalls.longValue()), rpcCalls > 1);
+        }
+      }
+    }
+  }
+
+  @Test
   public void testLimitOffset() throws SQLException {
     final String tablename = generateUniqueName();
     final String[] STRINGS = { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n",
@@ -449,6 +499,25 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
     Map<String, Map<MetricType, Long>> metrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
     long numRpc = getMetricValue(metrics, MetricType.COUNT_RPC_CALLS);
     Assert.assertEquals(101, numRpc);
+  }
+
+  @Test
+  public void testBloomFilterDefaults() throws Exception {
+    String dataTableName = generateUniqueName();
+    populateTable(dataTableName);
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      TableDescriptor td =
+        pconn.getQueryServices().getTableDescriptor(Bytes.toBytes(dataTableName));
+      BloomType bloomType = td.getColumnFamilies()[0].getBloomFilterType();
+      assertEquals(BloomType.ROW, bloomType);
+      assertFalse(PagingRegionScanner.useBloomFilterForMultiKeyPointLookup(td));
+      String ddl = String.format("alter table %s set \"%s\" = true", dataTableName,
+        USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP);
+      conn.createStatement().execute(ddl);
+      td = pconn.getQueryServices().getTableDescriptor(Bytes.toBytes(dataTableName));
+      assertTrue(PagingRegionScanner.useBloomFilterForMultiKeyPointLookup(td));
+    }
   }
 
   private void populateTable(String tableName) throws Exception {

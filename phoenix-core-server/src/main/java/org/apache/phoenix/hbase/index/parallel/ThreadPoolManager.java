@@ -56,6 +56,16 @@ public class ThreadPoolManager {
     return getExecutor(builder, env.getSharedData());
   }
 
+  /**
+   * Used by PhoenixRegionServerEndpoint to create a regionserver level pool for Uncovered Indexes.
+   * Since this pool will be tied to the regionserver's lifecycle, we don't need to use sharedData.
+   */
+  public static synchronized ThreadPoolExecutor getExecutor(ThreadPoolBuilder builder) {
+    ShutdownOnUnusedThreadPoolExecutor pool = getDefaultExecutor(builder);
+    pool.addReference();
+    return pool;
+  }
+
   static synchronized ThreadPoolExecutor getExecutor(ThreadPoolBuilder builder,
     Map<String, Object> poolCache) {
     ThreadPoolExecutor pool = (ThreadPoolExecutor) poolCache.get(builder.getName());

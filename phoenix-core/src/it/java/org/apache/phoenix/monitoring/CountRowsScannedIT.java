@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.monitoring;
 
+import static org.apache.phoenix.query.QueryServices.USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP;
 import static org.junit.Assert.assertEquals;
 
 import java.sql.Connection;
@@ -122,7 +123,15 @@ public class CountRowsScannedIT extends BaseTest {
     // skip scan
     long count12 =
       countRowsScannedFromSql(stmt, "SELECT A,Z FROM " + tableName + " WHERE A in (20, 45, 68, 3)");
-    assertEquals(4, count12);
+    assertEquals(7, count12); // 2n - 1 where n is number of keys
+
+    // Query again but this time enable bloom filters for multi key point lookup
+    String ddl = String.format("alter table %s set \"%s\" = true", tableName,
+      USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP);
+    conn.createStatement().execute(ddl);
+    long count13 =
+      countRowsScannedFromSql(stmt, "SELECT A,Z FROM " + tableName + " WHERE A in (20, 45, 68, 3)");
+    assertEquals(4, count13);
   }
 
   @Test

@@ -23,6 +23,7 @@ import static org.apache.phoenix.util.TestUtil.closeStatement;
 import static org.apache.phoenix.util.TestUtil.closeStmtAndConn;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
@@ -98,6 +99,38 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
     assertTrue(rs.next());
     assertEquals("b", rs.getString(1));
     assertFalse(rs.next());
+    conn.close();
+  }
+
+  @Test
+  public void testPlainUpsertWithReturning() throws Exception {
+    String tableName = generateUniqueName();
+    ensureTableCreated(getUrl(), tableName, TestUtil.PTSDB_NAME, null, null, null);
+    Properties props = new Properties();
+    props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
+    props.put("hbase.client.scanner.timeout.period", "6000000");
+    props.put("phoenix.query.timeoutMs", "6000000");
+    props.put("zookeeper.session.timeout", "6000000");
+    props.put("hbase.rpc.timeout", "6000000");
+    Connection conn = DriverManager.getConnection(getUrl(), props);
+    conn.setAutoCommit(true);
+    PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName
+      + " (inst,host,\"DATE\") VALUES(?,'b',CURRENT_DATE()) RETURNING *");
+    stmt.setString(1, "a");
+    stmt.execute();
+    ResultSet rs = stmt.getResultSet();
+    assertNotNull(rs);
+    assertTrue(rs.next());
+    assertEquals(1, stmt.getUpdateCount());
+    assertEquals("a", rs.getString(1));
+    assertEquals("b", rs.getString(2));
+    assertFalse(rs.next());
+    stmt = conn.prepareStatement(
+      "UPSERT INTO " + tableName + " (inst,host,\"DATE\") VALUES(?,'b',CURRENT_DATE())");
+    stmt.setString(1, "a");
+    stmt.execute();
+    rs = stmt.getResultSet();
+    assertNull(rs);
     conn.close();
   }
 
@@ -865,7 +898,8 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
       createTableStatement.execute();
     }
 
-    testGlobalSequenceUpsertWithTenantConnection(tableName);
+    testGlobalSequenceUpsertWithTenantConnection(tableName, false);
+    testGlobalSequenceUpsertWithTenantConnection(tableName, true);
     testGlobalSequenceUpsertWithGlobalConnection(tableName);
     testTenantSequenceUpsertWithSameTenantConnection(tableName);
     testTenantSequenceUpsertWithDifferentTenantConnection(tableName);
@@ -970,7 +1004,8 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
     }
   }
 
-  private void testGlobalSequenceUpsertWithTenantConnection(String tableName) throws Exception {
+  private void testGlobalSequenceUpsertWithTenantConnection(String tableName,
+    boolean withReturningRow) throws Exception {
     String sequenceName = generateUniqueSequenceName();
 
     try (Connection conn = DriverManager.getConnection(getUrl())) {
@@ -984,11 +1019,20 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
       tenantConn.setAutoCommit(true);
 
       Statement executeUpdateStatement = tenantConn.createStatement();
-      executeUpdateStatement
-        .execute(String.format("UPSERT INTO %s ( SEQUENCE_NUMBER) VALUES " + "( NEXT VALUE FOR %s)",
-          tableName, sequenceName));
+      String sql = String.format("UPSERT INTO %s (SEQUENCE_NUMBER) VALUES " + "(NEXT VALUE FOR %s)",
+        tableName, sequenceName);
+      if (withReturningRow) {
+        sql += " RETURNING *";
+      }
+      executeUpdateStatement.execute(sql);
 
-      ResultSet rs = executeUpdateStatement.executeQuery("select * from " + tableName);
+      ResultSet rs;
+      if (withReturningRow) {
+        rs = executeUpdateStatement.getResultSet();
+      } else {
+        rs = executeUpdateStatement.executeQuery("select * from " + tableName);
+      }
+      assertNotNull(rs);
       assertTrue(rs.next());
       assertEquals("1", rs.getString(1));
       assertFalse(rs.next());

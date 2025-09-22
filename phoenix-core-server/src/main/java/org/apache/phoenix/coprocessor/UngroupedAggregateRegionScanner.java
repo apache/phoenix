@@ -64,6 +64,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
+import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.GlobalCache;
@@ -603,6 +604,7 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
   public boolean next(List<Cell> resultsToReturn, ScannerContext scannerContext)
     throws IOException {
     boolean hasMore;
+    boolean returnImmediately = false;
     long startTime = EnvironmentEdgeManager.currentTimeMillis();
     Configuration conf = env.getConfiguration();
     final TenantCache tenantCache = GlobalCache.getTenantCache(env, ScanUtil.getTenantId(scan));
@@ -646,6 +648,10 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                 resultsToReturn.addAll(results);
                 return true;
               }
+              // we got a dummy result from the lower scanner but hasAny is true which means that
+              // we have a valid result which can be returned to the client instead of a dummy.
+              // We need to signal the RPC handler to return.
+              returnImmediately = true;
               break;
             }
             if (!results.isEmpty()) {
@@ -702,6 +708,10 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
           } while (
             hasMore && (EnvironmentEdgeManager.currentTimeMillis() - startTime) < pageSizeMs
           );
+          if (EnvironmentEdgeManager.currentTimeMillis() - startTime >= pageSizeMs) {
+            // we hit a page scanner timeout, signal the RPC handler to return.
+            returnImmediately = true;
+          }
           if (!mutations.isEmpty()) {
             if (!isSingleRowDelete) {
               annotateAndCommit(mutations);
@@ -752,6 +762,10 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
             SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, AGG_TIMESTAMP, value, 0, value.length);
         }
         resultsToReturn.add(keyValue);
+      }
+      if (returnImmediately && scannerContext != null) {
+        // signal the RPC handler to return
+        ScannerContextUtil.setReturnImmediately(scannerContext);
       }
       return hasMore;
     }
