@@ -119,6 +119,7 @@ public class BytesAndBlocksReadIT extends BaseTest {
       assertOnReadsFromMemstore(sourceTableName,
         getMutationReadMetrics(conn, targetTableName, sourceTableName, 1));
       TestUtil.flush(utility, TableName.valueOf(sourceTableName));
+      // 1 Data Block from source table
       assertOnReadsFromFs(sourceTableName,
         getMutationReadMetrics(conn, targetTableName, sourceTableName, 2), 1);
       assertOnReadsFromBlockcache(sourceTableName,
@@ -141,6 +142,7 @@ public class BytesAndBlocksReadIT extends BaseTest {
       assertOnReadsFromMemstore(tableName, getQueryReadMetrics(rs));
       TestUtil.flush(utility, TableName.valueOf(tableName));
       rs = stmt.executeQuery(sql);
+      // 1 Data Block from table
       assertOnReadsFromFs(tableName, getQueryReadMetrics(rs), 1);
       rs = stmt.executeQuery(sql);
       assertOnReadsFromBlockcache(tableName, getQueryReadMetrics(rs));
@@ -164,6 +166,7 @@ public class BytesAndBlocksReadIT extends BaseTest {
       assertOnReadsFromMemstore(tableName, getQueryReadMetrics(rs));
       TestUtil.flush(utility, TableName.valueOf(tableName));
       rs = stmt.executeQuery(sql);
+      // 1 Data Block from table
       assertOnReadsFromFs(tableName, getQueryReadMetrics(rs), 1);
       rs = stmt.executeQuery(sql);
       assertOnReadsFromBlockcache(tableName, getQueryReadMetrics(rs));
@@ -187,6 +190,7 @@ public class BytesAndBlocksReadIT extends BaseTest {
       assertOnReadsFromMemstore(tableName, getQueryReadMetrics(rs));
       TestUtil.flush(utility, TableName.valueOf(tableName));
       rs = stmt.executeQuery(sql);
+      // 1 Data Block from table
       assertOnReadsFromFs(tableName, getQueryReadMetrics(rs), 1);
       rs = stmt.executeQuery(sql);
       assertOnReadsFromBlockcache(tableName, getQueryReadMetrics(rs));
