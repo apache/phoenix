@@ -25,7 +25,11 @@ import java.util.Map;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.regionserver.CompactSplit;
 import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -61,10 +65,10 @@ public class BytesAndBlocksReadIT extends BaseTest {
       assertOnReadsFromMemstore(tableName, getQueryReadMetrics(rs));
       TestUtil.flush(utility, TableName.valueOf(tableName));
       rs = stmt.executeQuery(sql);
-      assertOnReadsFromFs(tableName, getQueryReadMetrics(rs));
+      // 1 Data Block + 1 Bloom Block
+      assertOnReadsFromFs(tableName, getQueryReadMetrics(rs), 2);
       rs = stmt.executeQuery(sql);
       assertOnReadsFromBlockcache(tableName, getQueryReadMetrics(rs));
-      rs = stmt.executeQuery(sql);
     }
   }
 
@@ -79,10 +83,10 @@ public class BytesAndBlocksReadIT extends BaseTest {
       assertOnReadsFromMemstore(tableName, getQueryReadMetrics(rs));
       TestUtil.flush(utility, TableName.valueOf(tableName));
       rs = stmt.executeQuery(sql);
-      assertOnReadsFromFs(tableName, getQueryReadMetrics(rs));
+      // 1 Data Block
+      assertOnReadsFromFs(tableName, getQueryReadMetrics(rs), 1);
       rs = stmt.executeQuery(sql);
       assertOnReadsFromBlockcache(tableName, getQueryReadMetrics(rs));
-      rs = stmt.executeQuery(sql);
     }
   }
 
@@ -98,10 +102,10 @@ public class BytesAndBlocksReadIT extends BaseTest {
       assertOnReadsFromMemstore(tableName, getQueryReadMetrics(rs));
       TestUtil.flush(utility, TableName.valueOf(tableName));
       rs = stmt.executeQuery(sql);
-      assertOnReadsFromFs(tableName, getQueryReadMetrics(rs), true);
+      // 1 Data Block + 1 Bloom Block
+      assertOnReadsFromFs(tableName, getQueryReadMetrics(rs), 2, true);
       rs = stmt.executeQuery(sql);
       assertOnReadsFromBlockcache(tableName, getQueryReadMetrics(rs));
-      rs = stmt.executeQuery(sql);
     }
   }
 
@@ -116,7 +120,7 @@ public class BytesAndBlocksReadIT extends BaseTest {
         getMutationReadMetrics(conn, targetTableName, sourceTableName, 1));
       TestUtil.flush(utility, TableName.valueOf(sourceTableName));
       assertOnReadsFromFs(sourceTableName,
-        getMutationReadMetrics(conn, targetTableName, sourceTableName, 2));
+        getMutationReadMetrics(conn, targetTableName, sourceTableName, 2), 1);
       assertOnReadsFromBlockcache(sourceTableName,
         getMutationReadMetrics(conn, targetTableName, sourceTableName, 3));
     }
@@ -137,10 +141,9 @@ public class BytesAndBlocksReadIT extends BaseTest {
       assertOnReadsFromMemstore(tableName, getQueryReadMetrics(rs));
       TestUtil.flush(utility, TableName.valueOf(tableName));
       rs = stmt.executeQuery(sql);
-      assertOnReadsFromFs(tableName, getQueryReadMetrics(rs));
+      assertOnReadsFromFs(tableName, getQueryReadMetrics(rs), 1);
       rs = stmt.executeQuery(sql);
       assertOnReadsFromBlockcache(tableName, getQueryReadMetrics(rs));
-      rs = stmt.executeQuery(sql);
     }
   }
 
@@ -161,10 +164,9 @@ public class BytesAndBlocksReadIT extends BaseTest {
       assertOnReadsFromMemstore(tableName, getQueryReadMetrics(rs));
       TestUtil.flush(utility, TableName.valueOf(tableName));
       rs = stmt.executeQuery(sql);
-      assertOnReadsFromFs(tableName, getQueryReadMetrics(rs));
+      assertOnReadsFromFs(tableName, getQueryReadMetrics(rs), 1);
       rs = stmt.executeQuery(sql);
       assertOnReadsFromBlockcache(tableName, getQueryReadMetrics(rs));
-      rs = stmt.executeQuery(sql);
     }
   }
 
@@ -185,10 +187,9 @@ public class BytesAndBlocksReadIT extends BaseTest {
       assertOnReadsFromMemstore(tableName, getQueryReadMetrics(rs));
       TestUtil.flush(utility, TableName.valueOf(tableName));
       rs = stmt.executeQuery(sql);
-      assertOnReadsFromFs(tableName, getQueryReadMetrics(rs));
+      assertOnReadsFromFs(tableName, getQueryReadMetrics(rs), 1);
       rs = stmt.executeQuery(sql);
       assertOnReadsFromBlockcache(tableName, getQueryReadMetrics(rs));
-      rs = stmt.executeQuery(sql);
     }
   }
 
@@ -210,13 +211,150 @@ public class BytesAndBlocksReadIT extends BaseTest {
       String sql = "SELECT MAX(v1) FROM (SELECT k1, v1 FROM " + tableName1
         + " UNION ALL SELECT k1, v1 FROM " + tableName2 + ") GROUP BY k1 HAVING MAX(v1) > 'c1'";
       ResultSet rs = stmt.executeQuery(sql);
-      assertOnReadsFromMemstore(tableName1, getQueryReadMetrics(rs));
+      Map<String, Map<MetricType, Long>> readMetrics = getQueryReadMetrics(rs);
+      assertOnReadsFromMemstore(tableName1, readMetrics);
+      assertOnReadsFromMemstore(tableName2, readMetrics);
       TestUtil.flush(utility, TableName.valueOf(tableName1));
+      TestUtil.flush(utility, TableName.valueOf(tableName2));
       rs = stmt.executeQuery(sql);
-      assertOnReadsFromFs(tableName1, getQueryReadMetrics(rs));
+      // 1 Data block per table in UNION ALL
+      readMetrics = getQueryReadMetrics(rs);
+      assertOnReadsFromFs(tableName1, readMetrics, 1);
+      assertOnReadsFromFs(tableName2, readMetrics, 1);
       rs = stmt.executeQuery(sql);
-      assertOnReadsFromBlockcache(tableName1, getQueryReadMetrics(rs));
+      readMetrics = getQueryReadMetrics(rs);
+      assertOnReadsFromBlockcache(tableName1, readMetrics);
+      assertOnReadsFromBlockcache(tableName2, readMetrics);
+    }
+  }
+
+  @Test
+  public void testJoinQuery() throws Exception {
+    String tableName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTable(conn, tableName, "");
+      Statement stmt = conn.createStatement();
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (1, 'a', 'a1', 'v2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (1, 'b', 'b1', 'b2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (1, 'c', 'c1', 'v2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (3, 'd', 'd1', 'd2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (3, 'e', 'e1', 'v2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (3, 'f', 'f1', 'v2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (5, 'g', 'g1', 'v2')");
+      conn.commit();
+      String sql =
+        "SELECT a.k1 as k1, b.k2 as k2, b.v1 as v1, a.total_count as total_count FROM (SELECT k1, COUNT(*) as total_count FROM "
+          + tableName + " WHERE k1 IN (1, 3) GROUP BY k1) a JOIN (SELECT k1, k2, v1 FROM "
+          + tableName + " WHERE k1 IN (1, 3) AND k2 = 'a') b ON a.k1 = b.k1";
+      ResultSet rs = stmt.executeQuery(sql);
+      assertOnReadsFromMemstore(tableName, getQueryReadMetrics(rs));
+      TestUtil.flush(utility, TableName.valueOf(tableName));
       rs = stmt.executeQuery(sql);
+      // 1 Data Block for left table and data block for right table is read from block cache
+      assertOnReadsFromFs(tableName, getQueryReadMetrics(rs), 1, true);
+      rs = stmt.executeQuery(sql);
+      assertOnReadsFromBlockcache(tableName, getQueryReadMetrics(rs));
+    }
+  }
+
+  @Test
+  public void testQueryOnUncoveredIndex() throws Exception {
+    String tableName = generateUniqueName();
+    String indexName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTable(conn, tableName, "");
+      Statement stmt = conn.createStatement();
+      stmt.execute("CREATE UNCOVERED INDEX " + indexName + " ON " + tableName + " (v1)");
+      conn.commit();
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (1, 'a', 'a1', 'a2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (2, 'b', 'b1', 'b2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (3, 'c', 'c1', 'c2')");
+      conn.commit();
+      String sql = "SELECT k1, k2, v1, v2 FROM " + tableName + " WHERE v1 = 'b1'";
+      ExplainPlan explainPlan =
+        stmt.unwrap(PhoenixStatement.class).optimizeQuery(sql).getExplainPlan();
+      ExplainPlanAttributes planAttributes = explainPlan.getPlanStepsAsAttributes();
+      String tableNameFromExplainPlan = planAttributes.getTableName();
+      Assert.assertEquals(indexName, tableNameFromExplainPlan);
+      ResultSet rs = stmt.executeQuery(sql);
+      assertOnReadsFromMemstore(indexName, getQueryReadMetrics(rs));
+      TestUtil.flush(utility, TableName.valueOf(tableName));
+      TestUtil.flush(utility, TableName.valueOf(indexName));
+      rs = stmt.executeQuery(sql);
+      // 1 Data block from index table and 1 data block from data table as index is uncovered
+      assertOnReadsFromFs(indexName, getQueryReadMetrics(rs), 2);
+      rs = stmt.executeQuery(sql);
+      assertOnReadsFromBlockcache(indexName, getQueryReadMetrics(rs));
+    }
+  }
+
+  @Test
+  public void testQueryOnCoveredIndexWithoutReadRepair() throws Exception {
+    String tableName = generateUniqueName();
+    String indexName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTable(conn, tableName, "");
+      Statement stmt = conn.createStatement();
+      stmt.execute("CREATE INDEX " + indexName + " ON " + tableName + " (v1) INCLUDE (v2)");
+      conn.commit();
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (1, 'a', 'a1', 'a2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (2, 'b', 'b1', 'b2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (3, 'c', 'c1', 'c2')");
+      conn.commit();
+      String sql = "SELECT k1, k2, v1, v2 FROM " + tableName + " WHERE v1 = 'b1'";
+      ExplainPlan explainPlan =
+        stmt.unwrap(PhoenixStatement.class).optimizeQuery(sql).getExplainPlan();
+      ExplainPlanAttributes planAttributes = explainPlan.getPlanStepsAsAttributes();
+      String tableNameFromExplainPlan = planAttributes.getTableName();
+      Assert.assertEquals(indexName, tableNameFromExplainPlan);
+      ResultSet rs = stmt.executeQuery(sql);
+      assertOnReadsFromMemstore(indexName, getQueryReadMetrics(rs));
+      TestUtil.flush(utility, TableName.valueOf(tableName));
+      TestUtil.flush(utility, TableName.valueOf(indexName));
+      rs = stmt.executeQuery(sql);
+      // 1 Data Block from index table
+      assertOnReadsFromFs(indexName, getQueryReadMetrics(rs), 1);
+      rs = stmt.executeQuery(sql);
+      assertOnReadsFromBlockcache(indexName, getQueryReadMetrics(rs));
+    }
+  }
+
+  @Test
+  public void testQueryOnCoveredIndexWithReadRepair() throws Exception {
+    String tableName = generateUniqueName();
+    String indexName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTable(conn, tableName, "");
+      Statement stmt = conn.createStatement();
+      stmt.execute("CREATE INDEX " + indexName + " ON " + tableName + " (v1) INCLUDE (v2)");
+      conn.commit();
+      IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (1, 'a', 'a1', 'a2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (2, 'b', 'b1', 'b2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (3, 'c', 'c1', 'c2')");
+      conn.commit();
+      IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+      TestUtil.dumpTable(conn, TableName.valueOf(indexName));
+      String sql = "SELECT k1, k2, v1, v2 FROM " + tableName + " WHERE v1 = 'b1'";
+      ResultSet rs = stmt.executeQuery(sql);
+      assertOnReadsFromMemstore(indexName, getQueryReadMetrics(rs));
+      TestUtil.flush(utility, TableName.valueOf(tableName));
+      TestUtil.flush(utility, TableName.valueOf(indexName));
+      sql = "SELECT k1, k2, v1, v2 FROM " + tableName + " WHERE v1 = 'c1'";
+      rs = stmt.executeQuery(sql);
+      // 1 data block of index table from GlobalIndexScanner, 1 bloom block of data table while
+      // doing read repair, 2 times same data block of data table while doing read repair as read
+      // repair opens region scanner thrice and second time its done with caching to block cache
+      // disabled and third time its done with caching to block cache enabled. The newly repaired
+      // column qualifier will be in memstore of index table and
+      // GlobalIndexScanner verifies if row got repaired correctly so, read will even happen from
+      // memstore.
+      assertOnReadsFromFs(indexName, getQueryReadMetrics(rs), 4, true, true);
+      sql = "SELECT k1, k2, v1, v2 FROM " + tableName + " WHERE v1 = 'a1'";
+      rs = stmt.executeQuery(sql);
+      assertOnReadsFromBlockcache(indexName, getQueryReadMetrics(rs), true);
+    } finally {
+      IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
     }
   }
 
@@ -250,33 +388,59 @@ public class BytesAndBlocksReadIT extends BaseTest {
       (long) readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_BLOCKCACHE));
   }
 
-  private void assertOnReadsFromFs(String tableName, Map<String, Map<MetricType, Long>> readMetrics)
-    throws Exception {
-    assertOnReadsFromFs(tableName, readMetrics, false);
+  private void assertOnReadsFromFs(String tableName, Map<String, Map<MetricType, Long>> readMetrics,
+    long expectedBlocksReadOps) throws Exception {
+    assertOnReadsFromFs(tableName, readMetrics, expectedBlocksReadOps, false);
   }
 
   private void assertOnReadsFromFs(String tableName, Map<String, Map<MetricType, Long>> readMetrics,
-    boolean isMultiPointBloomFilterEnabled) throws Exception {
+    long expectedBlocksReadOps, boolean isReadFromBlockCacheExpected) throws Exception {
+    assertOnReadsFromFs(tableName, readMetrics, expectedBlocksReadOps, isReadFromBlockCacheExpected,
+      false);
+  }
+
+  private void assertOnReadsFromFs(String tableName, Map<String, Map<MetricType, Long>> readMetrics,
+    long expectedBlocksReadOps, boolean isReadFromBlockCacheExpected,
+    boolean isReadFromMemstoreExpected) throws Exception {
     Assert.assertTrue(readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_FS) > 0);
-    Assert.assertTrue(readMetrics.get(tableName).get(MetricType.BLOCK_READ_OPS_COUNT) > 0);
-    Assert.assertEquals(0,
-      (long) readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_MEMSTORE));
-    if (isMultiPointBloomFilterEnabled) {
+    Assert.assertEquals(expectedBlocksReadOps,
+      (long) readMetrics.get(tableName).get(MetricType.BLOCK_READ_OPS_COUNT));
+    if (isReadFromMemstoreExpected) {
+      Assert
+        .assertTrue((long) readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_MEMSTORE) > 0);
+    } else {
+      Assert.assertEquals(0,
+        (long) readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_MEMSTORE));
+    }
+    if (isReadFromBlockCacheExpected) {
       Assert.assertTrue(
         (long) readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_BLOCKCACHE) > 0);
     } else {
       Assert.assertEquals(0,
         (long) readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_BLOCKCACHE));
     }
+    Assert.assertTrue(readMetrics.get(tableName).get(MetricType.RPC_SCAN_PROCESSING_TIME) > 0);
+    Assert.assertTrue(readMetrics.get(tableName).get(MetricType.FS_READ_TIME) > 0);
   }
 
   private void assertOnReadsFromBlockcache(String tableName,
     Map<String, Map<MetricType, Long>> readMetrics) throws Exception {
+    assertOnReadsFromBlockcache(tableName, readMetrics, false);
+  }
+
+  private void assertOnReadsFromBlockcache(String tableName,
+    Map<String, Map<MetricType, Long>> readMetrics, boolean isReadFromMemstoreExpected)
+    throws Exception {
     Assert.assertTrue(readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_BLOCKCACHE) > 0);
     Assert.assertEquals(0, (long) readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_FS));
-    Assert.assertEquals(0,
-      (long) readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_MEMSTORE));
     Assert.assertEquals(0, (long) readMetrics.get(tableName).get(MetricType.BLOCK_READ_OPS_COUNT));
+    if (isReadFromMemstoreExpected) {
+      Assert
+        .assertTrue((long) readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_MEMSTORE) > 0);
+    } else {
+      Assert.assertEquals(0,
+        (long) readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_MEMSTORE));
+    }
   }
 
   private Map<String, Map<MetricType, Long>> getQueryReadMetrics(ResultSet rs) throws Exception {

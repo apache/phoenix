@@ -407,6 +407,7 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
       buildIndexScanForDataTable.setAttribute(BaseScannerRegionObserverConstants.INDEX_ROW_KEY,
         indexRowKey);
       Result result = null;
+      buildIndexScanForDataTable.setScanMetricsEnabled(isScanMetricsEnabled);
       try (ResultScanner resultScanner = dataHTable.getScanner(buildIndexScanForDataTable)) {
         result = resultScanner.next();
         if (isScanMetricsEnabled) {

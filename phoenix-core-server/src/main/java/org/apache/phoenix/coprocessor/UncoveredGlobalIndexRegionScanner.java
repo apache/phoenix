@@ -125,6 +125,7 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
     if (dataScan == null) {
       return;
     }
+    dataScan.setScanMetricsEnabled(isScanMetricsEnabled);
     try (ResultScanner resultScanner = dataHTable.getScanner(dataScan)) {
       for (Result result = resultScanner.next(); (result != null); result = resultScanner.next()) {
         if (ScanUtil.isDummy(result)) {
