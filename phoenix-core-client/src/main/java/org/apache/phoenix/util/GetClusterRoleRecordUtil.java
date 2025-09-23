@@ -127,6 +127,9 @@ public class GetClusterRoleRecordUtil {
      * until we get an Active ClusterRoleRecord
      * @param conn Connection to be used to get RegionServer Endpoint Service
      * @param haGroupName Name of the HA group
+     * @param properties Connection properties
+     * @param pollerInterval Interval in seconds to poll for ClusterRoleRecord
+     * @param haGroup HighAvailabilityGroup object to refresh the ClusterRoleRecord when an Active CRR is found
      * @throws SQLException if there is an error getting the ClusterRoleRecord
      */
     public static ClusterRoleRecord fetchClusterRoleRecord(String url, String haGroupName, HighAvailabilityGroup haGroup, long pollerInterval, Properties properties) throws SQLException {
@@ -151,6 +154,8 @@ public class GetClusterRoleRecordUtil {
      * @param haGroupName Name of the HA group
      * @param haGroup HighAvailabilityGroup object to refresh the ClusterRoleRecord when an Active CRR is found
      * @param pollerInterval Interval in seconds to poll for ClusterRoleRecord
+     * @param properties Connection properties
+     * @throws SQLException if there is an error getting or refreshing the ClusterRoleRecord when an Active CRR is found
      */
     private static void schedulePoller(String url, String haGroupName, HighAvailabilityGroup haGroup, long pollerInterval, Properties properties) {
 
@@ -176,7 +181,7 @@ public class GetClusterRoleRecordUtil {
                             //Refresh ClusterRoleRecord for the HAGroup with appropriate transition
                             haGroup.refreshClusterRoleRecord();
                             schedulerMap.get(haGroupName).shutdown();
-                            schedulerMap.remove(haGroupName); 
+                            schedulerMap.remove(haGroupName);
                         }
                     }
                 } catch (SQLException e) {
@@ -207,6 +212,7 @@ public class GetClusterRoleRecordUtil {
     /**
      * Method to get a connection to the given URL
      * @param url URL of the RegionServer Endpoint Service
+     * @param properties Connection properties
      * @return Connection to the given URL
      * @throws SQLException if there is an error getting the connection
      */

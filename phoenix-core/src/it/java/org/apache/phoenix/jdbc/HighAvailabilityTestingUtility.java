@@ -1073,6 +1073,17 @@ public class HighAvailabilityTestingUtility {
                 new PhoenixHAExecutorServiceProvider.PhoenixHAClusterExecutorServices(Executors.newFixedThreadPool(1), Executors.newFixedThreadPool(1)));
     }
 
+    public static void sleepThreadFor(long sleepTime) {
+        long start = System.currentTimeMillis();
+        while (System.currentTimeMillis() - start < sleepTime) {
+            try {
+                Thread.sleep(sleepTime - (System.currentTimeMillis() - start));
+            } catch (InterruptedException e) {
+                // Keep looping to complete the sleep duration.
+            }
+        }
+    }
+
     /**
      * Properties with tuned retry and timeout configuration to bring up and down miniclusters and connect to them
      * @return set properteis

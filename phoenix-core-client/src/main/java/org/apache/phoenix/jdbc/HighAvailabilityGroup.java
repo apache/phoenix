@@ -1036,7 +1036,15 @@ public class HighAvailabilityGroup {
             return false;
         } catch (ExecutionException | TimeoutException e) {
             LOG.error("HA group {} failed to transit cluster roles per policy {} to new record {}",
-                    info, roleRecord.getPolicy(), newRoleRecord, e);
+                info, roleRecord.getPolicy(), newRoleRecord, e);
+            //Rethrow the Role transitions not allowed exceptions
+            if (e.getCause() != null && e.getCause().getCause() != null) {
+                if (e.getCause().getCause() instanceof SQLException && ((SQLException)e.getCause()
+                        .getCause()).getErrorCode() == SQLExceptionCode.HA_ROLE_TRANSITION_NOT_ALLOWED.getErrorCode()) {
+                    state = State.READY;
+                    throw (SQLException)e.getCause().getCause();
+                }
+            }
             // Calling back HA policy function for cluster switch is conducted with best effort.
             // HA group continues transition when its HA policy fails to deal with context switch
             // (e.g. to close existing connections)

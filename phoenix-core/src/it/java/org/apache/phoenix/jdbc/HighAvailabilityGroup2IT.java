@@ -21,6 +21,7 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.curator.utils.ZKPaths;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
+import org.apache.phoenix.util.JDBCUtil;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -45,6 +46,7 @@ import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_ESTABLISH_CON
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.*;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithConnection;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
+import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.sleepThreadFor;
 import static org.junit.Assert.*;
 import static org.junit.Assert.assertTrue;
 
@@ -249,54 +251,6 @@ public class HighAvailabilityGroup2IT {
     }
 
     /**
-     * Test when one ZK starts after the HA group has been initialized.
-     *
-     * In this case, both cluster role managers will start and apply discovered cluster role record.
-     */
-    // @Test
-    public void testOneZKStartsAfterInit() throws Exception {
-        String haGroupName2 = testName.getMethodName() + RandomStringUtils.randomAlphabetic(3);
-        clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName2);
-
-        // create cluster role records with different versions on two ZK clusters
-        final String zpath = ZKPaths.PATH_SEPARATOR + haGroupName2;
-        ClusterRoleRecord record1 = new ClusterRoleRecord(
-                haGroupName2, HighAvailabilityPolicy.FAILOVER,
-                CLUSTERS.getURL(1, registryType), ClusterRoleRecord.ClusterRole.ACTIVE,
-                CLUSTERS.getURL(2, registryType), ClusterRoleRecord.ClusterRole.STANDBY,
-                1);
-        CLUSTERS.createCurator1().create().forPath(zpath, ClusterRoleRecord.toJson(record1));
-        ClusterRoleRecord record2 = new ClusterRoleRecord(
-                record1.getHaGroupName(), record1.getPolicy(),
-                record1.getUrl1(), record1.getRole1(),
-                record1.getUrl2(), record1.getRole2(),
-                record1.getVersion() + 1); // record2 is newer
-        CLUSTERS.createCurator2().create().forPath(zpath, ClusterRoleRecord.toJson(record2));
-
-        CLUSTERS.doTestWhenOneZKDown(CLUSTERS.getHBaseCluster2(), () -> {
-            Optional<HighAvailabilityGroup> haGroup2 = HighAvailabilityGroup.get(jdbcHAUrl, clientProperties);
-            assertTrue(haGroup2.isPresent());
-            assertNotSame(haGroup2.get(), haGroup);
-            // apparently the HA group cluster role record should be from the healthy cluster
-            assertEquals(record1, haGroup2.get().getRoleRecord());
-        });
-
-        // When ZK2 is connected, its cluster role manager should apply newer cluster role record
-        waitFor(() -> {
-            try {
-                Optional<HighAvailabilityGroup> haGroup2 = HighAvailabilityGroup.get(jdbcHAUrl, clientProperties);
-                return haGroup2.isPresent() && record2.equals(haGroup2.get().getRoleRecord());
-            } catch (SQLException e) {
-                LOG.warn("Fail to get HA group {}", haGroupName2);
-                return false;
-            }
-        }, 100, 30_000);
-
-        // clean up HA group 2
-        HighAvailabilityGroup.get(jdbcHAUrl, clientProperties).ifPresent(HighAvailabilityGroup::close);
-    }
-
-    /**
      * Test that HA connection request will fall back to the first cluster when HA group fails
      * to initialize due to missing cluster role record (CRR).
      */
@@ -377,4 +331,43 @@ public class HighAvailabilityGroup2IT {
             assertTrue(conn instanceof PhoenixConnection);
         }
     }
+
+    /**
+     * Test that poller should be running when we detect a non-active role record and should stop
+     * when we detect an active role record
+     */
+    @Test
+    public void testPollerShouldBeRunning() throws Exception {
+        // get and initialize a new HA group
+        String haGroupName2 = testName.getMethodName() + RandomStringUtils.randomAlphabetic(3);
+        clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName2);
+        CLUSTERS.initClusterRole(haGroupName2, HighAvailabilityPolicy.FAILOVER);
+        HighAvailabilityGroup haGroup2 = HighAvailabilityGroup.get(jdbcHAUrl, clientProperties).get();
+        //url1 should be active and url2 should be standby
+        assertTrue(haGroup2.getRoleRecord().getRole(JDBCUtil.formatUrl(CLUSTERS.getMasterAddress1(), registryType)).isActive());
+        assertEquals(haGroup2.getRoleRecord().getRole(JDBCUtil.formatUrl(CLUSTERS.getMasterAddress2(), registryType)), ClusterRole.STANDBY);
+
+        //transit url1 to standby and refresh the roleRecord as well which should have started the poller
+        //as there is no ACTIVE role in the new record
+        CLUSTERS.transitClusterRole(haGroup2, ClusterRole.STANDBY, ClusterRole.STANDBY);
+        assertEquals(haGroup2.getRoleRecord().getRole(JDBCUtil.formatUrl(CLUSTERS.getMasterAddress1(), registryType)), ClusterRole.STANDBY);
+        assertEquals(haGroup2.getRoleRecord().getRole(JDBCUtil.formatUrl(CLUSTERS.getMasterAddress2(), registryType)), ClusterRole.STANDBY);
+
+        //transit url1 to active and url2 to standby and don't refresh the roleRecord of haGroup2
+        CLUSTERS.transitClusterRole(haGroup2, ClusterRole.ACTIVE, ClusterRole.STANDBY, false);
+
+        //Sleep to let poller to detect the change and refresh the roleRecord
+        sleepThreadFor(5000);
+
+        assertEquals(haGroup2.getRoleRecord().getRole(JDBCUtil.formatUrl(CLUSTERS.getMasterAddress1(), registryType)), ClusterRole.ACTIVE);
+        assertEquals(haGroup2.getRoleRecord().getRole(JDBCUtil.formatUrl(CLUSTERS.getMasterAddress2(), registryType)), ClusterRole.STANDBY);
+
+        //transit url1 to standby and url2 to active and don't refresh the roleRecord of haGroup2
+        CLUSTERS.transitClusterRole(haGroup2, ClusterRole.STANDBY, ClusterRole.ACTIVE, false);
+        //Poller should have stopped and roleRecord should not have changed
+        assertEquals(haGroup2.getRoleRecord().getRole(JDBCUtil.formatUrl(CLUSTERS.getMasterAddress1(), registryType)), ClusterRole.ACTIVE);
+        assertEquals(haGroup2.getRoleRecord().getRole(JDBCUtil.formatUrl(CLUSTERS.getMasterAddress2(), registryType)), ClusterRole.STANDBY);
+
+    }
+
 }

@@ -327,41 +327,57 @@ public class HighAvailabilityGroupIT {
     }
 
     /**
-     * Test that client can get an HA group when ACTIVE ZK cluster is down.
+     * Test that client can get an HA group when ACTIVE HBase cluster is down.
      *
      * NOTE: we can not test with existing HA group because {@link HighAvailabilityGroup#get} would
      * get the cached object, which has also been initialized.
      *
-     * The reason this works is because getting an HA group depends on one ZK watcher connects to a
-     * ZK cluster to get the associated cluster role record. It does not depend on both ZK cluster
-     * being up and running. It does not actually create HBase connection either.
+     * The reason this works is because getting an HA group depends on doing rpc calls to both clusters
+     * to get the ClusterRoleRecord. If one cluster fails, the other cluster should be able to return
+     * clusterRoleRecord and start the HA group.
      */
     @Test
-    //Failing it fails to get connection to ACTIVE Cluster then it tries standby to get CRR
-    //But on serverside of standby cluster HAGroupStoreClient is trying to connect to stopped
-    //ACTIVE ZK Cluster, because HAGroupStoreManager is at JVM Level which gives back same for both
-    //minicluster. After fixing that it is failing while waiting for instantiating PEER cache.
-    //Expected was to be able to get a CRR, with OFFLINE value
-    public void testCanGetHaGroupWhenActiveZKClusterDown() throws Exception {
+    public void testCanGetHaGroupWhenOneHBaseClusterDown() throws Exception {
         String haGroupName2 = testName.getMethodName() + 2;
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName2);
         CLUSTERS.initClusterRole(haGroupName2, HighAvailabilityPolicy.FAILOVER);
 
-      CLUSTERS.doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
-          Optional<HighAvailabilityGroup> haGroup2 = null;
-          try {
-              haGroup2 = HighAvailabilityGroup.get(jdbcHAUrl, clientProperties);
-              LOG.info("Can get the new HA group {} after both ZK clusters restart", haGroup2);
-          } finally {
-              if (haGroup2 != null) {
-                  haGroup2.get().close();
-              }
-          }
-      });
+        //Try with ACTIVE HBase cluster down
+        CLUSTERS.doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
+            Optional<HighAvailabilityGroup> haGroup2 = null;
+            try {
+                haGroup2 = HighAvailabilityGroup.get(jdbcHAUrl, clientProperties);
+                LOG.info("Can get the new HA group {} after both ZK clusters restart", haGroup2);
+            } finally {
+                if (haGroup2 != null) {
+                    haGroup2.get().close();
+                    //Clear caches
+                    URLS.remove(haGroup2.get().getGroupInfo());
+                    GROUPS.remove(haGroup2.get().getGroupInfo());
+                }
+            }
+        });
+
+        //Try with STANDBY HBase cluster down
+        CLUSTERS.doTestWhenOneHBaseDown(CLUSTERS.getHBaseCluster2(), () -> {
+            Optional<HighAvailabilityGroup> haGroup2 = null;
+            try {
+                haGroup2 = HighAvailabilityGroup.get(jdbcHAUrl, clientProperties);
+                LOG.info("Can get the new HA group {} after both ZK clusters restart", haGroup2);
+            } finally {
+                if (haGroup2 != null) {
+                    haGroup2.get().close();
+                    //Clear caches
+                    URLS.remove(haGroup2.get().getGroupInfo());
+                    GROUPS.remove(haGroup2.get().getGroupInfo());
+                }
+            }
+        });
+
     }
 
     /**
-     * Test that client can not get an HA group when both ZK clusters are down.
+     * Test that client can not get an HA group when both HBase clusters are down.
      *
      * NOTE: we can not test with existing HA group because {@link HighAvailabilityGroup#get} would
      * get the cached object, which has also been initialized.
@@ -371,7 +387,7 @@ public class HighAvailabilityGroupIT {
      * should indeed fail when ACTIVE HBase cluster is down.
      */
     @Test
-    public void testCanNotGetHaGroupWhenTwoZKClustersDown() throws Exception {
+    public void testCanNotGetHaGroupWhenTwoHBaseClustersDown() throws Exception {
         String haGroupName2 = testName.getMethodName() + 2;
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName2);
         CLUSTERS.initClusterRole(haGroupName2, HighAvailabilityPolicy.FAILOVER);

@@ -19,7 +19,6 @@
 package org.apache.phoenix.jdbc;
 
 import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.ACTIVE;
-import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY;
 import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.STANDBY;
 import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.STANDBY_TO_ACTIVE;
 
@@ -108,7 +107,7 @@ public enum HighAvailabilityPolicy {
         /**
          * For FAILOVER Policy if there is a change in active url or there is no new active url then close all connections.
          * In below examples only a portion of CRR is shown, url1, url2 are current urls present in
-         * clusterRoleRecord and url3, url4 are new urls in clusterRoleRecord 
+         * clusterRoleRecord and url3, url4 are new urls in clusterRoleRecord
          * HERE ACTIVE means ACTIVE or ACTIVE_TO_STANDBY
          * (url1, ACTIVE, url2, STANDBY) --> (url1, ACTIVE, url3, STANDBY) //Nothing is needed as only Standby url changed
          * (url1, ACTIVE, url2, STANDBY) --> (url3, ACTIVE, url2, STANDBY) //Active url change close connections

@@ -24,10 +24,11 @@ import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.ACTIVE;
 import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY;
 import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.STANDBY;
 import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.STANDBY_TO_ACTIVE;
-import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithConnection;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_CRR_CACHE_FREQUENCY_MS_KEY;
+import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithConnection;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
+import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.sleepThreadFor;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -50,6 +51,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.FailoverSQLException;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.util.JDBCUtil;
@@ -598,20 +600,106 @@ public class FailoverPhoenixConnection2IT {
     }
 
     /**
+     * Testing different possible transitions and their effects on connections and cqsi
+     */
+    @Test(timeout = 300000)
+    public void testDifferentPossibleTransitions() throws Exception {
+        short numberOfConnections = 3;
+        //Create FailoverPhoenixConnections with default urls
+        List<Connection> connectionList = new ArrayList<>(numberOfConnections);
+        for (short i = 0; i < numberOfConnections; i++) {
+            connectionList.add(createFailoverConnection());
+        }
+        ConnectionQueryServicesImpl cqsi = (ConnectionQueryServicesImpl) PhoenixDriver.INSTANCE.
+            getConnectionQueryServices(CLUSTERS.getJdbcUrl1(haGroup), clientProperties);
+        ConnectionInfo connInfo = ConnectionInfo.create(CLUSTERS.getJdbcUrl1(haGroup),
+            PhoenixDriver.INSTANCE.getQueryServices().getProps(), clientProperties);
+        
+
+        //transit url1 to ACTIVE_TO_STANDBY and url2 to STANDBY_TO_ACTIVE and refresh the roleRecord of haGroup
+        //This transition should not affect the connections as ACTIVE --> ACTIVE_TO_STANDBY is noop
+        CLUSTERS.transitClusterRole(haGroup, ACTIVE_TO_STANDBY, STANDBY_TO_ACTIVE, true);
+        for (short i = 0; i < numberOfConnections; i++) {
+            LOG.info("Asserting connection number {}", i);
+            FailoverPhoenixConnection conn = ((FailoverPhoenixConnection) connectionList.get(i));
+            assertFalse(conn.isClosed());
+            assertFalse(conn.getWrappedConnection().isClosed());
+        }
+
+        //transit url1 to STANDBY and url2 to ACTIVE and refresh the roleRecord of haGroup
+        //This transition should affect the connections as we are failing over to url2
+        CLUSTERS.transitClusterRole(haGroup, STANDBY, ACTIVE, true);
+        for (short i = 0; i < numberOfConnections; i++) {
+            LOG.info("Asserting connection number {}", i);
+            FailoverPhoenixConnection conn = ((FailoverPhoenixConnection) connectionList.get(i));
+            assertFalse(conn.isClosed());
+            assertTrue(conn.getWrappedConnection().isClosed());
+            conn.close();
+        }
+        //CQSI should be closed
+        try {
+            cqsi.checkClosed();
+            fail("Should have thrown an exception as cqsi should be closed");
+        } catch (IllegalStateException e) {
+            //Exception cqsi should not have been invalidated as well
+            assertTrue(PhoenixDriver.INSTANCE.checkIfCQSIIsInCache(connInfo));
+        } catch (Exception e) {
+            fail("Should have thrown on IllegalStateException as cqsi should be closed");
+        }
+
+        connectionList = new ArrayList<>(numberOfConnections);
+        for (short i = 0; i < numberOfConnections; i++) {
+            connectionList.add(createFailoverConnection());
+        }
+
+        //Get cqsi and connInfo for url2 as that is ACTIVE now.
+        ConnectionQueryServicesImpl cqsi2 = (ConnectionQueryServicesImpl) PhoenixDriver.INSTANCE.
+            getConnectionQueryServices(CLUSTERS.getJdbcUrl2(haGroup), clientProperties);
+        ConnectionInfo connInfo2 = ConnectionInfo.create(CLUSTERS.getJdbcUrl2(haGroup),
+            PhoenixDriver.INSTANCE.getQueryServices().getProps(), clientProperties);
+
+        //transit url1 back to ACTIVE and url2 to STANDBY and refresh the roleRecord of haGroup
+        //This transition should affect the connections as we are failing over to url1
+        CLUSTERS.transitClusterRole(haGroup, ACTIVE, STANDBY, true);
+        for (short i = 0; i < numberOfConnections; i++) {
+            LOG.info("Asserting connection number {}", i);
+            FailoverPhoenixConnection conn = ((FailoverPhoenixConnection) connectionList.get(i));
+            assertFalse(conn.isClosed());
+            assertTrue(conn.getWrappedConnection().isClosed());
+            conn.close();
+        }
+
+        //This should have invalidated the cqsi of url1 as it is becoming ACTIVE from STANDBY
+        assertFalse(PhoenixDriver.INSTANCE.checkIfCQSIIsInCache(connInfo));
+        //CQSI should be closed
+        try {
+            cqsi2.checkClosed();
+            fail("Should have thrown an exception as cqsi should be closed");
+        } catch (IllegalStateException e) {
+            //Exception cqsi should not have been invalidated as well
+            assertTrue(PhoenixDriver.INSTANCE.checkIfCQSIIsInCache(connInfo2));
+        } catch (Exception e) {
+            fail("Should have thrown on IllegalStateException as cqsi should be closed");
+        }
+
+        //Update the ZNodes and table with impossible role transition (ACTIVE, ACTIVE) and
+        //do not refresh the roleRecord of haGroup
+        CLUSTERS.transitClusterRole(haGroup, ACTIVE, ACTIVE, false);
+
+        try {
+            haGroup.refreshClusterRoleRecord();
+            fail("Should have thrown an exception as ACTIVE --> ACTIVE is not a valid transition");
+        } catch (SQLException e) {
+            assertEquals(e.getErrorCode(), SQLExceptionCode.HA_ROLE_TRANSITION_NOT_ALLOWED.getErrorCode());
+            //Expected
+        }
+    }
+
+    /**
      * Create a failover connection using {@link #clientProperties}.
      */
     private Connection createFailoverConnection() throws SQLException {
         return DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(), clientProperties);
     }
 
-    private void sleepThreadFor(long sleepTime) {
-        long start = System.currentTimeMillis();
-        while (System.currentTimeMillis() - start < sleepTime) {
-            try {
-                Thread.sleep(sleepTime - (System.currentTimeMillis() - start));
-            } catch (InterruptedException e) {
-                // Keep looping to complete the sleep duration.
-            }
-        }
-    }
 }
