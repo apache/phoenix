@@ -109,10 +109,7 @@ public class ReplicationReplay {
         ReplicationLogFileTracker replicationLogReplayFileTracker =
             new ReplicationLogFileTracker(conf, haGroupName, fileSystem, rootURI, ReplicationLogFileTracker.DirectoryType.IN, new MetricsReplicationLogReplayFileTrackerImpl(haGroupName));
         replicationLogReplayFileTracker.init();
-        ReplicationReplayStateTracker replicationStateTracker = new ReplicationReplayStateTracker();
-        replicationStateTracker.init(replicationLogReplayFileTracker);
-        this.replicationReplayLogDiscovery = new ReplicationReplayLogDiscovery(
-            replicationLogReplayFileTracker, replicationStateTracker);
+        this.replicationReplayLogDiscovery = new ReplicationReplayLogDiscovery(replicationLogReplayFileTracker);
         this.replicationReplayLogDiscovery.init();
     }
 

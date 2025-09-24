@@ -23,9 +23,10 @@ import org.apache.hadoop.fs.Path;
 import org.apache.phoenix.replication.ReplicationLogDiscovery;
 import org.apache.phoenix.replication.ReplicationLogFileTracker;
 import org.apache.phoenix.replication.ReplicationRound;
-import org.apache.phoenix.replication.ReplicationStateTracker;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscovery;
 import org.apache.phoenix.replication.metrics.MetricsReplicationReplayLogFileDiscoveryImpl;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Concrete implementation of ReplicationLogDiscovery for replay operations.
@@ -34,6 +35,8 @@ import org.apache.phoenix.replication.metrics.MetricsReplicationReplayLogFileDis
  * replay-specific settings for intervals, thread counts, and processing probabilities.
  */
 public class ReplicationReplayLogDiscovery extends ReplicationLogDiscovery {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ReplicationReplayLogDiscovery.class);
 
     public static final String EXECUTOR_THREAD_NAME_FORMAT = "Phoenix-ReplicationReplayLogDiscovery-%d";
 
@@ -96,9 +99,8 @@ public class ReplicationReplayLogDiscovery extends ReplicationLogDiscovery {
     public static final double DEFAULT_WAITING_BUFFER_PERCENTAGE = 15.0;
 
     public ReplicationReplayLogDiscovery(final ReplicationLogFileTracker
-        replicationLogReplayFileTracker, 
-        final ReplicationStateTracker replicationStateTracker) {
-        super(replicationLogReplayFileTracker, replicationStateTracker);
+        replicationLogReplayFileTracker) {
+        super(replicationLogReplayFileTracker);
     }
 
     @Override
@@ -109,11 +111,26 @@ public class ReplicationReplayLogDiscovery extends ReplicationLogDiscovery {
     }
 
     @Override
+    protected void initializeLastRoundInSync() throws IOException {
+        // TODO: Update this to check from HA Store Client
+        boolean isDegradedStandByForWriter = false;
+
+        if (isDegradedStandByForWriter) {
+            // TODO: Set the last successfully processed replication round to the last
+            // store-and-forward
+            // starting timestamp is obtained from the HA store record cached by HA Store Manager
+        } else {
+            super.initializeLastRoundInSync();
+        }
+        LOG.info("Initialized last round in sync as {}", lastRoundInSync);
+    }
+
+    @Override
     protected void updateStatePostRoundCompletion(final ReplicationRound replicationRound) 
         throws IOException {
         // TODO: update last round in sync conditionally, i.e. ONLY when cluster is not in 
         // DEGRADED_STANBY_FOR_WRITER state
-        replicationStateTracker.setLastRoundInSync(replicationRound);
+        setLastRoundInSync(replicationRound);
     }
 
     @Override
