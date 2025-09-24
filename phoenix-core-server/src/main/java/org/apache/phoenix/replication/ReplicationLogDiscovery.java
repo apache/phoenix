@@ -77,20 +77,19 @@ public abstract class ReplicationLogDiscovery {
     protected final Configuration conf;
     protected final String haGroupName;
     protected final ReplicationLogFileTracker replicationLogFileTracker;
-    protected final ReplicationStateTracker replicationStateTracker;
     protected ScheduledExecutorService scheduler;
     protected volatile boolean isRunning = false;
+    protected ReplicationRound lastRoundInSync;
     protected MetricsReplicationLogDiscovery metrics;
 
-    public ReplicationLogDiscovery(final ReplicationLogFileTracker replicationLogFileTracker,
-        final ReplicationStateTracker replicationStateTracker) {
+    public ReplicationLogDiscovery(final ReplicationLogFileTracker replicationLogFileTracker) {
         this.replicationLogFileTracker = replicationLogFileTracker;
-        this.replicationStateTracker = replicationStateTracker;
         this.haGroupName = replicationLogFileTracker.getHaGroupName();
         this.conf = replicationLogFileTracker.getConf();
     }
 
-    public void init() {
+    public void init() throws IOException {
+        initializeLastRoundInSync();
         this.metrics = createMetricsSource();
     }
 
@@ -184,7 +183,7 @@ public abstract class ReplicationLogDiscovery {
      */
     protected List<ReplicationRound> getRoundsToProcess() {
         long currentTime = EnvironmentEdgeManager.currentTimeMillis();
-        long previousRoundEndTime = replicationStateTracker.getLastRoundInSync().getEndTime();
+        long previousRoundEndTime = getLastRoundInSync().getEndTime();
         long roundTimeMills = replicationLogFileTracker.getReplicationShardDirectoryManager()
             .getReplicationRoundDurationSeconds() * 1000L;
         long bufferMillis = (long) (roundTimeMills * getWaitingBufferPercentage() / 100.0);
@@ -304,11 +303,57 @@ public abstract class ReplicationLogDiscovery {
      */
     protected abstract void processFile(Path path) throws IOException;
 
-    protected abstract void updateStatePostRoundCompletion(ReplicationRound replicationRound)
-        throws IOException;
+    protected void updateStatePostRoundCompletion(ReplicationRound replicationRound)
+        throws IOException {
+        setLastRoundInSync(replicationRound);
+    }
 
     /** Creates a new metrics source for monitoring operations. */
     protected abstract MetricsReplicationLogDiscovery createMetricsSource();
+
+    protected void initializeLastRoundInSync() throws IOException {
+        Optional<Long> minTimestampFromInProgressFiles =
+                getMinTimestampFromInProgressFiles();
+        if (minTimestampFromInProgressFiles.isPresent()) {
+            this.lastRoundInSync = replicationLogFileTracker.getReplicationShardDirectoryManager()
+                    .getReplicationRoundFromEndTime(minTimestampFromInProgressFiles.get());
+        } else {
+            Optional<Long> minTimestampFromNewFiles =
+                    getMinTimestampFromNewFiles();
+            if (minTimestampFromNewFiles.isPresent()) {
+                this.lastRoundInSync = replicationLogFileTracker.getReplicationShardDirectoryManager()
+                        .getReplicationRoundFromEndTime(minTimestampFromNewFiles.get());
+            } else {
+                this.lastRoundInSync = replicationLogFileTracker.getReplicationShardDirectoryManager()
+                        .getReplicationRoundFromEndTime(org.apache.hadoop.hbase.util.EnvironmentEdgeManager.currentTime());
+            }
+        }
+
+    }
+
+    protected Optional<Long> getMinTimestampFromInProgressFiles() throws IOException {
+        List<Path> inProgressFiles = replicationLogFileTracker.getInProgressFiles();
+        if(inProgressFiles.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(getMinTimestampFromFiles(inProgressFiles));
+    }
+
+    protected Optional<Long> getMinTimestampFromNewFiles() throws IOException {
+        List<Path> newFiles = replicationLogFileTracker.getNewFiles();
+        if(newFiles.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(getMinTimestampFromFiles(newFiles));
+    }
+
+    private long getMinTimestampFromFiles(List<Path> files) {
+        long minTimestamp = org.apache.hadoop.hbase.util.EnvironmentEdgeManager.currentTime();
+        for (Path file : files) {
+            minTimestamp = Math.min(minTimestamp, replicationLogFileTracker.getFileTimestamp(file));
+        }
+        return minTimestamp;
+    }
 
     /**
      * Returns the executor thread count. Subclasses can override this method to provide
@@ -364,10 +409,6 @@ public abstract class ReplicationLogDiscovery {
         return DEFAULT_WAITING_BUFFER_PERCENTAGE;
     }
 
-    public ReplicationStateTracker getReplicationStateTracker() {
-        return this.replicationStateTracker;
-    }
-
     public ReplicationLogFileTracker getReplicationLogFileTracker() {
         return this.replicationLogFileTracker;
     }
@@ -382,6 +423,14 @@ public abstract class ReplicationLogDiscovery {
 
     public boolean isRunning() {
         return isRunning;
+    }
+
+    public ReplicationRound getLastRoundInSync() {
+        return lastRoundInSync;
+    }
+
+    public void setLastRoundInSync(final ReplicationRound replicationRound) {
+        this.lastRoundInSync = replicationRound;
     }
 
     public MetricsReplicationLogDiscovery getMetrics() {
