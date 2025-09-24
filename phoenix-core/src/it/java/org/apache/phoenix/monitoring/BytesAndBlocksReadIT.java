@@ -20,8 +20,15 @@ package org.apache.phoenix.monitoring;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.regionserver.CompactSplit;
 import org.apache.hadoop.hbase.regionserver.HRegion;
@@ -359,6 +366,65 @@ public class BytesAndBlocksReadIT extends BaseTest {
       assertOnReadsFromBlockcache(indexName, getQueryReadMetrics(rs), true);
     } finally {
       IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+    }
+  }
+
+  @Test
+  public void testScanRpcQueueWaitTime() throws Exception {
+    int handlerCount =
+      Integer.parseInt(utility.getConfiguration().get(HConstants.REGION_SERVER_HANDLER_COUNT));
+    int threadPoolSize = 6 * handlerCount;
+    ThreadPoolExecutor executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(threadPoolSize);
+    String tableName = generateUniqueName();
+    int numRows = 10000;
+    CountDownLatch latch = new CountDownLatch(threadPoolSize);
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTable(conn, tableName, "");
+      Statement stmt = conn.createStatement();
+      for (int i = 1; i <= numRows; i++) {
+        stmt.execute(
+          "UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (" + i + ", 'a', 'v1', 'v2')");
+        if (i % 100 == 0) {
+          conn.commit();
+        }
+      }
+      conn.commit();
+      TestUtil.flush(utility, TableName.valueOf(tableName));
+      AtomicLong scanRpcQueueWaitTime = new AtomicLong(0);
+      AtomicLong rpcScanProcessingTime = new AtomicLong(0);
+      for (int i = 0; i < threadPoolSize; i++) {
+        executor.execute(new Runnable() {
+          @Override
+          public void run() {
+            try {
+              Statement stmt = conn.createStatement();
+              stmt.setFetchSize(2);
+              ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName);
+              int rowsRead = 0;
+              while (rs.next()) {
+                rowsRead++;
+              }
+              Assert.assertEquals(numRows, rowsRead);
+              Map<String, Map<MetricType, Long>> readMetrics =
+                PhoenixRuntime.getRequestReadMetricInfo(rs);
+              scanRpcQueueWaitTime
+                .addAndGet(readMetrics.get(tableName).get(MetricType.RPC_SCAN_QUEUE_WAIT_TIME));
+              rpcScanProcessingTime
+                .addAndGet(readMetrics.get(tableName).get(MetricType.RPC_SCAN_PROCESSING_TIME));
+            } catch (SQLException e) {
+              throw new RuntimeException(e);
+            } finally {
+              latch.countDown();
+            }
+          }
+        });
+      }
+      latch.await();
+      Assert.assertTrue(scanRpcQueueWaitTime.get() > 0);
+      Assert.assertTrue(rpcScanProcessingTime.get() > 0);
+    } finally {
+      executor.shutdown();
+      executor.awaitTermination(10, TimeUnit.SECONDS);
     }
   }
 

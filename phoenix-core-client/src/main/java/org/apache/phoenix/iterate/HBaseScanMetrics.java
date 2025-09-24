@@ -17,6 +17,14 @@
  */
 package org.apache.phoenix.iterate;
 
+/**
+ * Provides backward compatibility for HBase scan metrics across different HBase versions. This
+ * class contains constant String names for scan metrics that are only available in newer HBase
+ * versions. By duplicating these constants instead of importing them directly from HBase, we ensure
+ * that the same Phoenix version can be compiled against both older and newer HBase versions without
+ * compilation errors. The constants defined here should match exactly with the metric names as
+ * defined in HBase.
+ */
 public class HBaseScanMetrics {
 
   public static final String FS_READ_TIME_METRIC_NAME = "FS_READ_TIME";

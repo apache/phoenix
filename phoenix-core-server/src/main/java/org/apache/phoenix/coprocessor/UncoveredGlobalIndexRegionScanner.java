@@ -146,6 +146,8 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
       if (isScanMetricsEnabled) {
         Map<String, Long> scanMetrics = resultScanner.getScanMetrics().getMetricsMap();
         long scanTimeInMs = EnvironmentEdgeManager.currentTimeMillis() - startTime;
+        // Capture scan time to identify slowest parallel scan later as that's the one which slows
+        // down the whole merge operation from data table.
         dataTableScanMetrics.add(buildDataTableScanMetrics(scanMetrics, scanTimeInMs));
       }
     } catch (Throwable t) {

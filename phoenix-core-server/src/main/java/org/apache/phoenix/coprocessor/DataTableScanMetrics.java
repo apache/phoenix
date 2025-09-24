@@ -21,6 +21,16 @@ import java.util.Map;
 import org.apache.hadoop.hbase.monitoring.ThreadLocalServerSideScanMetrics;
 import org.apache.phoenix.iterate.HBaseScanMetrics;
 
+/**
+ * Stores scan metrics from data table operations performed during:
+ * <ul>
+ * <li>Uncovered global index scans</li>
+ * <li>Read repair operations</li>
+ * </ul>
+ * These metrics help identify latency variations that occur when both data table and index table
+ * are scanned together, and are used to populate {@link ThreadLocalServerSideScanMetrics} for index
+ * table RPC calls.
+ */
 public class DataTableScanMetrics {
   private final long fsReadTimeInMs;
   private final long bytesReadFromFS;
