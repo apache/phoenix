@@ -19,7 +19,8 @@ package org.apache.phoenix.coprocessor;
 
 import java.util.Map;
 import org.apache.hadoop.hbase.monitoring.ThreadLocalServerSideScanMetrics;
-import org.apache.phoenix.iterate.HBaseScanMetrics;
+import org.apache.phoenix.compat.hbase.CompatScanMetrics;
+import org.apache.phoenix.compat.hbase.CompatThreadLocalServerSideScanMetrics;
 
 /**
  * Stores scan metrics from data table operations performed during:
@@ -106,20 +107,18 @@ public class DataTableScanMetrics {
   }
 
   public static void buildDataTableScanMetrics(Map<String, Long> scanMetrics, Builder builder) {
-    builder.setFsReadTimeInMs(scanMetrics.get(HBaseScanMetrics.FS_READ_TIME_METRIC_NAME))
-      .setBytesReadFromFS(scanMetrics.get(HBaseScanMetrics.BYTES_READ_FROM_FS_METRIC_NAME))
-      .setBytesReadFromMemstore(
-        scanMetrics.get(HBaseScanMetrics.BYTES_READ_FROM_MEMSTORE_METRIC_NAME))
-      .setBytesReadFromBlockcache(
-        scanMetrics.get(HBaseScanMetrics.BYTES_READ_FROM_BLOCK_CACHE_METRIC_NAME))
-      .setBlockReadOps(scanMetrics.get(HBaseScanMetrics.BLOCK_READ_OPS_COUNT_METRIC_NAME));
+    builder.setFsReadTimeInMs(CompatScanMetrics.getFsReadTime(scanMetrics))
+      .setBytesReadFromFS(CompatScanMetrics.getBytesReadFromFs(scanMetrics))
+      .setBytesReadFromMemstore(CompatScanMetrics.getBytesReadFromMemstore(scanMetrics))
+      .setBytesReadFromBlockcache(CompatScanMetrics.getBytesReadFromBlockCache(scanMetrics))
+      .setBlockReadOps(CompatScanMetrics.getBlockReadOpsCount(scanMetrics));
   }
 
   public void populateThreadLocalServerSideScanMetrics() {
-    ThreadLocalServerSideScanMetrics.addFsReadTime(fsReadTimeInMs);
-    ThreadLocalServerSideScanMetrics.addBytesReadFromFs(bytesReadFromFS);
-    ThreadLocalServerSideScanMetrics.addBytesReadFromMemstore(bytesReadFromMemstore);
-    ThreadLocalServerSideScanMetrics.addBytesReadFromBlockCache(bytesReadFromBlockcache);
-    ThreadLocalServerSideScanMetrics.addBlockReadOpsCount(blockReadOps);
+    CompatThreadLocalServerSideScanMetrics.addFsReadTime(fsReadTimeInMs);
+    CompatThreadLocalServerSideScanMetrics.addBytesReadFromFs(bytesReadFromFS);
+    CompatThreadLocalServerSideScanMetrics.addBytesReadFromMemstore(bytesReadFromMemstore);
+    CompatThreadLocalServerSideScanMetrics.addBytesReadFromBlockCache(bytesReadFromBlockcache);
+    CompatThreadLocalServerSideScanMetrics.addBlockReadOpsCount(blockReadOps);
   }
 }

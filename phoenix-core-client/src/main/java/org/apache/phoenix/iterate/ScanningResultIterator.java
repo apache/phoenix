@@ -53,6 +53,7 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 import org.apache.hadoop.util.ReflectionUtils;
+import org.apache.phoenix.compat.hbase.CompatScanMetrics;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -164,19 +165,19 @@ public class ScanningResultIterator implements ResultIterator {
         scanMetricsMap.get(BYTES_IN_RESULTS_METRIC_NAME));
       changeMetric(scanMetricsHolder.getCountOfRowsPaged(), dummyRowCounter);
       changeMetric(scanMetricsHolder.getFsReadTime(),
-        scanMetricsMap.get(HBaseScanMetrics.FS_READ_TIME_METRIC_NAME));
+        CompatScanMetrics.getFsReadTime(scanMetricsMap));
       changeMetric(scanMetricsHolder.getCountOfBytesReadFromFS(),
-        scanMetricsMap.get(HBaseScanMetrics.BYTES_READ_FROM_FS_METRIC_NAME));
+        CompatScanMetrics.getBytesReadFromFs(scanMetricsMap));
       changeMetric(scanMetricsHolder.getCountOfBytesReadFromMemstore(),
-        scanMetricsMap.get(HBaseScanMetrics.BYTES_READ_FROM_MEMSTORE_METRIC_NAME));
+        CompatScanMetrics.getBytesReadFromMemstore(scanMetricsMap));
       changeMetric(scanMetricsHolder.getCountOfBytesReadFromBlockcache(),
-        scanMetricsMap.get(HBaseScanMetrics.BYTES_READ_FROM_BLOCK_CACHE_METRIC_NAME));
+        CompatScanMetrics.getBytesReadFromBlockCache(scanMetricsMap));
       changeMetric(scanMetricsHolder.getCountOfBlockReadOps(),
-        scanMetricsMap.get(HBaseScanMetrics.BLOCK_READ_OPS_COUNT_METRIC_NAME));
+        CompatScanMetrics.getBlockReadOpsCount(scanMetricsMap));
       changeMetric(scanMetricsHolder.getRpcScanProcessingTime(),
-        scanMetricsMap.get(HBaseScanMetrics.RPC_SCAN_PROCESSING_TIME_METRIC_NAME));
+        CompatScanMetrics.getRpcScanProcessingTime(scanMetricsMap));
       changeMetric(scanMetricsHolder.getRpcScanQueueWaitTime(),
-        scanMetricsMap.get(HBaseScanMetrics.RPC_SCAN_QUEUE_WAIT_TIME_METRIC_NAME));
+        CompatScanMetrics.getRpcScanQueueWaitTime(scanMetricsMap));
 
       changeMetric(GLOBAL_SCAN_BYTES, scanMetricsMap.get(BYTES_IN_RESULTS_METRIC_NAME));
       changeMetric(GLOBAL_HBASE_COUNT_RPC_CALLS, scanMetricsMap.get(RPC_CALLS_METRIC_NAME));
