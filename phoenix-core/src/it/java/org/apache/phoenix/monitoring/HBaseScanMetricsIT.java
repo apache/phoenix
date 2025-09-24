@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.regionserver.CompactSplit;
 import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
@@ -43,6 +44,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -50,10 +52,11 @@ import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 @Category(NeedsOwnMiniClusterTest.class)
-public class BytesAndBlocksReadIT extends BaseTest {
+public class HBaseScanMetricsIT extends BaseTest {
 
   @BeforeClass
   public static void setup() throws Exception {
+    Assume.assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.6.3") > 0);
     Map<String, String> props = Maps.newHashMapWithExpectedSize(4);
     props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, "true");
     props.put(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, "0");
