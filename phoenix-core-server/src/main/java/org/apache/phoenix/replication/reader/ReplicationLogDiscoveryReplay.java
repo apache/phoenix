@@ -21,10 +21,10 @@ import java.io.IOException;
 
 import org.apache.hadoop.fs.Path;
 import org.apache.phoenix.replication.ReplicationLogDiscovery;
-import org.apache.phoenix.replication.ReplicationLogFileTracker;
+import org.apache.phoenix.replication.ReplicationLogTracker;
 import org.apache.phoenix.replication.ReplicationRound;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscovery;
-import org.apache.phoenix.replication.metrics.MetricsReplicationReplayLogFileDiscoveryImpl;
+import org.apache.phoenix.replication.metrics.MetricsReplicationReplayLogDiscoveryReplayImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,11 +34,11 @@ import org.slf4j.LoggerFactory;
  * using ReplicationLogProcessor to process individual files and providing configurable
  * replay-specific settings for intervals, thread counts, and processing probabilities.
  */
-public class ReplicationReplayLogDiscovery extends ReplicationLogDiscovery {
+public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ReplicationReplayLogDiscovery.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogDiscoveryReplay.class);
 
-    public static final String EXECUTOR_THREAD_NAME_FORMAT = "Phoenix-ReplicationReplayLogDiscovery-%d";
+    public static final String EXECUTOR_THREAD_NAME_FORMAT = "Phoenix-ReplicationLogDiscoveryReplay-%d";
 
     /**
      * Configuration key for replay interval in seconds
@@ -98,7 +98,7 @@ public class ReplicationReplayLogDiscovery extends ReplicationLogDiscovery {
      */
     public static final double DEFAULT_WAITING_BUFFER_PERCENTAGE = 15.0;
 
-    public ReplicationReplayLogDiscovery(final ReplicationLogFileTracker
+    public ReplicationLogDiscoveryReplay(final ReplicationLogTracker
         replicationLogReplayFileTracker) {
         super(replicationLogReplayFileTracker);
     }
@@ -135,7 +135,7 @@ public class ReplicationReplayLogDiscovery extends ReplicationLogDiscovery {
 
     @Override
     protected MetricsReplicationLogDiscovery createMetricsSource() {
-        return new MetricsReplicationReplayLogFileDiscoveryImpl(haGroupName);
+        return new MetricsReplicationReplayLogDiscoveryReplayImpl(haGroupName);
     }
 
     @Override

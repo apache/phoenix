@@ -39,8 +39,8 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogFileTracker;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogReplayFileTrackerImpl;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogTracker;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogTrackerReplayImpl;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.ClassRule;
@@ -49,18 +49,18 @@ import org.junit.rules.TemporaryFolder;
 import org.mockito.Mockito;
 
 
-public class ReplicationLogFileTrackerTest {
+public class ReplicationLogTrackerTest {
 
     @ClassRule
     public static TemporaryFolder testFolder = new TemporaryFolder();
 
-    private ReplicationLogFileTracker tracker;
+    private ReplicationLogTracker tracker;
     private Configuration conf;
     private FileSystem localFs;
     private FileSystem mockFs;
     private URI rootURI;
     private static final String haGroupName = "testGroup";
-    private static final MetricsReplicationLogFileTracker metrics = new MetricsReplicationLogReplayFileTrackerImpl(haGroupName);
+    private static final MetricsReplicationLogTracker metrics = new MetricsReplicationLogTrackerReplayImpl(haGroupName);
 
     @Before
     public void setUp() throws IOException {
@@ -1060,8 +1060,8 @@ public class ReplicationLogFileTrackerTest {
         return count;
     }
 
-    private ReplicationLogFileTracker createReplicationLogFileTracker(final Configuration conf, final String haGroupName, final FileSystem fileSystem, final URI rootURI) {
-        return new ReplicationLogFileTracker(conf, haGroupName, fileSystem, rootURI, ReplicationLogFileTracker.DirectoryType.IN, metrics);
+    private ReplicationLogTracker createReplicationLogFileTracker(final Configuration conf, final String haGroupName, final FileSystem fileSystem, final URI rootURI) {
+        return new ReplicationLogTracker(conf, haGroupName, fileSystem, rootURI, ReplicationLogTracker.DirectoryType.IN, metrics);
     }
 
 

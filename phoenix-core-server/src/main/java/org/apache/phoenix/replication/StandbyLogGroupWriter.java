@@ -75,7 +75,7 @@ public class StandbyLogGroupWriter extends ReplicationLogGroupWriter {
     @Override
     protected void initializeReplicationShardDirectoryManager() {
         this.haGroupLogFilesPath = new Path(new Path(standbyUrl.getPath(), logGroup.getHaGroupName()), 
-            ReplicationLogFileTracker.DirectoryType.IN.getName());
+            ReplicationLogTracker.DirectoryType.IN.getName());
         this.replicationShardDirectoryManager = new ReplicationShardDirectoryManager(
             logGroup.getConfiguration(), haGroupLogFilesPath);
     }

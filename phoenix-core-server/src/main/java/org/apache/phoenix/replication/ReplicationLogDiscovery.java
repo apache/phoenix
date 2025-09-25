@@ -76,16 +76,16 @@ public abstract class ReplicationLogDiscovery {
 
     protected final Configuration conf;
     protected final String haGroupName;
-    protected final ReplicationLogFileTracker replicationLogFileTracker;
+    protected final ReplicationLogTracker replicationLogTracker;
     protected ScheduledExecutorService scheduler;
     protected volatile boolean isRunning = false;
     protected ReplicationRound lastRoundInSync;
     protected MetricsReplicationLogDiscovery metrics;
 
-    public ReplicationLogDiscovery(final ReplicationLogFileTracker replicationLogFileTracker) {
-        this.replicationLogFileTracker = replicationLogFileTracker;
-        this.haGroupName = replicationLogFileTracker.getHaGroupName();
-        this.conf = replicationLogFileTracker.getConf();
+    public ReplicationLogDiscovery(final ReplicationLogTracker replicationLogTracker) {
+        this.replicationLogTracker = replicationLogTracker;
+        this.haGroupName = replicationLogTracker.getHaGroupName();
+        this.conf = replicationLogTracker.getConf();
     }
 
     public void init() throws IOException {
@@ -184,14 +184,14 @@ public abstract class ReplicationLogDiscovery {
     protected List<ReplicationRound> getRoundsToProcess() {
         long currentTime = EnvironmentEdgeManager.currentTimeMillis();
         long previousRoundEndTime = getLastRoundInSync().getEndTime();
-        long roundTimeMills = replicationLogFileTracker.getReplicationShardDirectoryManager()
+        long roundTimeMills = replicationLogTracker.getReplicationShardDirectoryManager()
             .getReplicationRoundDurationSeconds() * 1000L;
         long bufferMillis = (long) (roundTimeMills * getWaitingBufferPercentage() / 100.0);
         final List<ReplicationRound> replicationRounds = new ArrayList<>();
         for(long startTime = previousRoundEndTime;
             startTime < currentTime - roundTimeMills - bufferMillis;
             startTime += roundTimeMills) {
-            replicationRounds.add(replicationLogFileTracker.getReplicationShardDirectoryManager()
+            replicationRounds.add(replicationLogTracker.getReplicationShardDirectoryManager()
                 .getReplicationRoundFromStartTime(startTime));
         }
         return replicationRounds;
@@ -238,11 +238,11 @@ public abstract class ReplicationLogDiscovery {
     protected void processNewFilesForRound(ReplicationRound replicationRound) throws IOException {
         LOG.info("Starting new files processing for round: {}", replicationRound);
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
-        List<Path> files = replicationLogFileTracker.getNewFilesForRound(replicationRound);
+        List<Path> files = replicationLogTracker.getNewFilesForRound(replicationRound);
         LOG.trace("Number of new files for round {} is {}", replicationRound, files.size());
         while(!files.isEmpty()) {
             processOneRandomFile(files);
-            files = replicationLogFileTracker.getNewFilesForRound(replicationRound);
+            files = replicationLogTracker.getNewFilesForRound(replicationRound);
         }
         long duration = EnvironmentEdgeManager.currentTimeMillis() - startTime;
         LOG.info("Finished new files processing for round: {} in {}ms", replicationRound, duration);
@@ -259,11 +259,11 @@ public abstract class ReplicationLogDiscovery {
         getMetrics().incrementNumInProgressDirectoryProcessed();
         LOG.info("Starting in progress directory processing");
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
-        List<Path> files = replicationLogFileTracker.getInProgressFiles();
+        List<Path> files = replicationLogTracker.getInProgressFiles();
         LOG.info("Number of new files for in_progress: {}", files.size());
         while(!files.isEmpty()) {
             processOneRandomFile(files);
-            files = replicationLogFileTracker.getInProgressFiles();
+            files = replicationLogTracker.getInProgressFiles();
         }
         long duration = EnvironmentEdgeManager.currentTimeMillis() - startTime;
         LOG.info("Starting in progress directory processing in {}ms", duration);
@@ -280,17 +280,17 @@ public abstract class ReplicationLogDiscovery {
         Path file = files.get(ThreadLocalRandom.current().nextInt(files.size()));
         Optional<Path> optionalInProgressFilePath = Optional.empty();
         try {
-            optionalInProgressFilePath = replicationLogFileTracker.markInProgress(file);
+            optionalInProgressFilePath = replicationLogTracker.markInProgress(file);
             System.out.println("Found optional in progress as " + optionalInProgressFilePath.isPresent());
             if(optionalInProgressFilePath.isPresent()) {
                 System.out.println("Starting processing");
                 processFile(file);
                 System.out.println("Finished processing");
-                replicationLogFileTracker.markCompleted(optionalInProgressFilePath.get());
+                replicationLogTracker.markCompleted(optionalInProgressFilePath.get());
             }
         } catch (IOException exception) {
             LOG.error("Failed to process the file {}", file, exception);
-            optionalInProgressFilePath.ifPresent(replicationLogFileTracker::markFailed);
+            optionalInProgressFilePath.ifPresent(replicationLogTracker::markFailed);
             // Not throwing this exception because next time another random file will be retried.
             // If it's persistent failure for in_progress directory, cluster state to be updated accordingly.
         }
@@ -315,16 +315,16 @@ public abstract class ReplicationLogDiscovery {
         Optional<Long> minTimestampFromInProgressFiles =
                 getMinTimestampFromInProgressFiles();
         if (minTimestampFromInProgressFiles.isPresent()) {
-            this.lastRoundInSync = replicationLogFileTracker.getReplicationShardDirectoryManager()
+            this.lastRoundInSync = replicationLogTracker.getReplicationShardDirectoryManager()
                     .getReplicationRoundFromEndTime(minTimestampFromInProgressFiles.get());
         } else {
             Optional<Long> minTimestampFromNewFiles =
                     getMinTimestampFromNewFiles();
             if (minTimestampFromNewFiles.isPresent()) {
-                this.lastRoundInSync = replicationLogFileTracker.getReplicationShardDirectoryManager()
+                this.lastRoundInSync = replicationLogTracker.getReplicationShardDirectoryManager()
                         .getReplicationRoundFromEndTime(minTimestampFromNewFiles.get());
             } else {
-                this.lastRoundInSync = replicationLogFileTracker.getReplicationShardDirectoryManager()
+                this.lastRoundInSync = replicationLogTracker.getReplicationShardDirectoryManager()
                         .getReplicationRoundFromEndTime(org.apache.hadoop.hbase.util.EnvironmentEdgeManager.currentTime());
             }
         }
@@ -332,7 +332,7 @@ public abstract class ReplicationLogDiscovery {
     }
 
     protected Optional<Long> getMinTimestampFromInProgressFiles() throws IOException {
-        List<Path> inProgressFiles = replicationLogFileTracker.getInProgressFiles();
+        List<Path> inProgressFiles = replicationLogTracker.getInProgressFiles();
         if(inProgressFiles.isEmpty()) {
             return Optional.empty();
         }
@@ -340,7 +340,7 @@ public abstract class ReplicationLogDiscovery {
     }
 
     protected Optional<Long> getMinTimestampFromNewFiles() throws IOException {
-        List<Path> newFiles = replicationLogFileTracker.getNewFiles();
+        List<Path> newFiles = replicationLogTracker.getNewFiles();
         if(newFiles.isEmpty()) {
             return Optional.empty();
         }
@@ -350,7 +350,7 @@ public abstract class ReplicationLogDiscovery {
     private long getMinTimestampFromFiles(List<Path> files) {
         long minTimestamp = org.apache.hadoop.hbase.util.EnvironmentEdgeManager.currentTime();
         for (Path file : files) {
-            minTimestamp = Math.min(minTimestamp, replicationLogFileTracker.getFileTimestamp(file));
+            minTimestamp = Math.min(minTimestamp, replicationLogTracker.getFileTimestamp(file));
         }
         return minTimestamp;
     }
@@ -409,8 +409,8 @@ public abstract class ReplicationLogDiscovery {
         return DEFAULT_WAITING_BUFFER_PERCENTAGE;
     }
 
-    public ReplicationLogFileTracker getReplicationLogFileTracker() {
-        return this.replicationLogFileTracker;
+    public ReplicationLogTracker getReplicationLogFileTracker() {
+        return this.replicationLogTracker;
     }
 
     public Configuration getConf() {
