@@ -36,7 +36,7 @@ import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
-public class ReplicationReplayTest {
+public class ReplicationLogReplayTest {
 
     @ClassRule
     public static TemporaryFolder testFolder = new TemporaryFolder();
@@ -53,8 +53,8 @@ public class ReplicationReplayTest {
         rootURI = new Path(testFolder.getRoot().toString()).toUri();
         haGroupName = "testGroup";
 
-        // Set the required configuration for ReplicationReplay
-        conf.set(ReplicationReplay.REPLICATION_LOG_REPLAY_HDFS_URL_KEY, rootURI.toString());
+        // Set the required configuration for ReplicationLogReplay
+        conf.set(ReplicationLogReplay.REPLICATION_LOG_REPLAY_HDFS_URL_KEY, rootURI.toString());
     }
 
     @After
@@ -65,24 +65,24 @@ public class ReplicationReplayTest {
     @Test
     public void testInit() throws IOException {
         // Create TestableReplicationReplay instance
-        ReplicationReplay replicationReplay = new ReplicationReplay(conf, haGroupName);
+        ReplicationLogReplay replicationLogReplay = new ReplicationLogReplay(conf, haGroupName);
 
         // Call init method
-        replicationReplay.init();
+        replicationLogReplay.init();
 
         // 1. Ensure filesystem and rootURI are initialized correctly
-        assertNotNull("FileSystem should be initialized", replicationReplay.getFileSystem());
-        assertNotNull("RootURI should be initialized", replicationReplay.getRootURI());
-        assertEquals("RootURI should match the configured URI", rootURI, replicationReplay.getRootURI());
+        assertNotNull("FileSystem should be initialized", replicationLogReplay.getFileSystem());
+        assertNotNull("RootURI should be initialized", replicationLogReplay.getRootURI());
+        assertEquals("RootURI should match the configured URI", rootURI, replicationLogReplay.getRootURI());
 
         // 2. Ensure expected haGroupFilesPath is created
         Path expectedHaGroupFilesPath = new Path(rootURI.getPath(), haGroupName);
         assertTrue("HA group files path should be created",
-            replicationReplay.getFileSystem().exists(expectedHaGroupFilesPath));
+            replicationLogReplay.getFileSystem().exists(expectedHaGroupFilesPath));
 
         // 3. Ensure replicationReplayLogDiscovery is initialized correctly
-        assertNotNull("ReplicationReplayLogDiscovery should be initialized",
-            replicationReplay.getReplicationReplayLogDiscovery());
+        assertNotNull("ReplicationLogDiscoveryReplay should be initialized",
+            replicationLogReplay.getReplicationReplayLogDiscovery());
     }
 
     @Test
@@ -91,22 +91,22 @@ public class ReplicationReplayTest {
         final String haGroupName2 = "testHAGroup_2";
 
         // Get instances for the first HA group
-        ReplicationReplay group1Instance1 = ReplicationReplay.get(conf, haGroupName1);
-        ReplicationReplay group1Instance2 = ReplicationReplay.get(conf, haGroupName1);
+        ReplicationLogReplay group1Instance1 = ReplicationLogReplay.get(conf, haGroupName1);
+        ReplicationLogReplay group1Instance2 = ReplicationLogReplay.get(conf, haGroupName1);
 
         // Verify same instance is returned for same haGroupName
-        assertNotNull("ReplicationReplay should not be null", group1Instance1);
-        assertNotNull("ReplicationReplay should not be null", group1Instance2);
+        assertNotNull("ReplicationLogReplay should not be null", group1Instance1);
+        assertNotNull("ReplicationLogReplay should not be null", group1Instance2);
         assertSame("Same instance should be returned for same haGroup", group1Instance1, group1Instance2);
 
         // Get instance for a different HA group
-        ReplicationReplay group2Instance1 = ReplicationReplay.get(conf, haGroupName2);
-        assertNotNull("ReplicationReplay should not be null", group2Instance1);
+        ReplicationLogReplay group2Instance1 = ReplicationLogReplay.get(conf, haGroupName2);
+        assertNotNull("ReplicationLogReplay should not be null", group2Instance1);
         assertNotSame("Different instance should be returned for different haGroup", group2Instance1, group1Instance1);
 
         // Verify multiple calls still return cached instances
-        ReplicationReplay group1Instance3 = ReplicationReplay.get(conf, haGroupName1);
-        ReplicationReplay group2Instance2 = ReplicationReplay.get(conf, haGroupName2);
+        ReplicationLogReplay group1Instance3 = ReplicationLogReplay.get(conf, haGroupName1);
+        ReplicationLogReplay group2Instance2 = ReplicationLogReplay.get(conf, haGroupName2);
         assertSame("Cached instance should be returned", group1Instance3, group1Instance1);
         assertSame("Cached instance should be returned", group2Instance2, group2Instance1);
     }
@@ -116,19 +116,19 @@ public class ReplicationReplayTest {
         final String haGroupName = "testHAGroup";
 
         // Get initial instance
-        ReplicationReplay group1Instance1 = ReplicationReplay.get(conf, haGroupName);
-        assertNotNull("ReplicationReplay should not be null", group1Instance1);
+        ReplicationLogReplay group1Instance1 = ReplicationLogReplay.get(conf, haGroupName);
+        assertNotNull("ReplicationLogReplay should not be null", group1Instance1);
 
         // Verify cached instance is returned
-        ReplicationReplay group1Instance2 = ReplicationReplay.get(conf, haGroupName);
+        ReplicationLogReplay group1Instance2 = ReplicationLogReplay.get(conf, haGroupName);
         assertSame("Same instance should be returned before close", group1Instance2, group1Instance1);
 
         // Close the replay instance
         group1Instance1.close();
 
         // Get instance after close - should be a new instance
-        ReplicationReplay group1Instance3 = ReplicationReplay.get(conf, haGroupName);
-        assertNotNull("ReplicationReplay should not be null after close", group1Instance3);
+        ReplicationLogReplay group1Instance3 = ReplicationLogReplay.get(conf, haGroupName);
+        assertNotNull("ReplicationLogReplay should not be null after close", group1Instance3);
         assertNotSame("New instance should be created after close", group1Instance1, group1Instance3);
         assertEquals("HA Group ID should match", haGroupName, group1Instance3.getHaGroupName());
 

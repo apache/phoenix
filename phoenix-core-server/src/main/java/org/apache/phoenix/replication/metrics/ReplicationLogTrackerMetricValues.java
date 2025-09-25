@@ -18,9 +18,9 @@
 package org.apache.phoenix.replication.metrics;
 
 /** 
- * Class to hold the values of all metrics tracked by the ReplicationLogFileTracker metrics source. 
+ * Class to hold the values of all metrics tracked by the ReplicationLogTracker metrics source.
  */
-public class ReplicationLogFileTrackerMetricValues {
+public class ReplicationLogTrackerMetricValues {
 
     private final long markFileInProgressRequestCount;
     private final long markFileCompletedRequestCount;
@@ -30,10 +30,10 @@ public class ReplicationLogFileTrackerMetricValues {
     private final long markFileCompletedTimeMs;
     private final long markFileFailedTimeMs;
 
-    public ReplicationLogFileTrackerMetricValues(long markFileInProgressRequestCount, 
-        long markFileCompletedRequestCount,
-        long markFileFailedRequestCount, long markFileCompletedRequestFailedCount,
-        long markFileInProgressTimeMs, long markFileCompletedTimeMs, long markFileFailedTimeMs) {
+    public ReplicationLogTrackerMetricValues(long markFileInProgressRequestCount,
+                                             long markFileCompletedRequestCount,
+                                             long markFileFailedRequestCount, long markFileCompletedRequestFailedCount,
+                                             long markFileInProgressTimeMs, long markFileCompletedTimeMs, long markFileFailedTimeMs) {
         this.markFileInProgressRequestCount = markFileInProgressRequestCount;
         this.markFileCompletedRequestCount = markFileCompletedRequestCount;
         this.markFileFailedRequestCount = markFileFailedRequestCount;

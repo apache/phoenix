@@ -70,6 +70,6 @@ public interface MetricsReplicationLogDiscovery extends BaseSource {
     void close();
 
     // Get current values for testing
-    ReplicationLogFileDiscoveryMetricValues getCurrentMetricValues();
+    ReplicationLogDiscoveryMetricValues getCurrentMetricValues();
 
 }

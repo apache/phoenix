@@ -185,7 +185,7 @@ public class ReplicationLogReplayService {
     protected void startReplicationReplay() throws IOException {
         List<String> replicationGroups = getReplicationGroups();
         for (String replicationGroup : replicationGroups) {
-            ReplicationReplay.get(conf, replicationGroup).startReplay();
+            ReplicationLogReplay.get(conf, replicationGroup).startReplay();
         }
     }
 
@@ -195,9 +195,9 @@ public class ReplicationLogReplayService {
     protected void stopReplicationReplay() throws IOException {
         List<String> replicationGroups = getReplicationGroups();
         for (String replicationGroup : replicationGroups) {
-            ReplicationReplay replicationReplay = ReplicationReplay.get(conf, replicationGroup);
-            replicationReplay.stopReplay();
-            replicationReplay.close();
+            ReplicationLogReplay replicationLogReplay = ReplicationLogReplay.get(conf, replicationGroup);
+            replicationLogReplay.stopReplay();
+            replicationLogReplay.close();
         }
     }
 

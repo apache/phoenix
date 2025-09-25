@@ -24,10 +24,10 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.phoenix.replication.ReplicationLogFileTracker;
+import org.apache.phoenix.replication.ReplicationLogTracker;
 import org.apache.phoenix.replication.ReplicationLogGroup;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogFileTracker;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogReplayFileTrackerImpl;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogTrackerReplayImpl;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogTracker;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.ClassRule;
@@ -36,7 +36,7 @@ import org.junit.rules.TemporaryFolder;
 
 import static org.junit.Assert.assertEquals;
 
-public class ReplicationReplayLogDiscoveryTest {
+public class ReplicationLogDiscoveryReplayTest {
 
     @ClassRule
     public static TemporaryFolder testFolder = new TemporaryFolder();
@@ -45,7 +45,7 @@ public class ReplicationReplayLogDiscoveryTest {
     private FileSystem localFs;
     private URI standbyUri;
     private static final String haGroupName = "testGroup";
-    private static final MetricsReplicationLogFileTracker metricsReplicationLogFileTracker = new MetricsReplicationLogReplayFileTrackerImpl(haGroupName);
+    private static final MetricsReplicationLogTracker METRICS_REPLICATION_LOG_TRACKER = new MetricsReplicationLogTrackerReplayImpl(haGroupName);
 
     @Before
     public void setUp() throws IOException {
@@ -62,29 +62,29 @@ public class ReplicationReplayLogDiscoveryTest {
 
     @Test
     public void testGetExecutorThreadNameFormat() {
-        // Create ReplicationReplayLogDiscovery instance
-        ReplicationLogFileTracker fileTracker = createReplicationLogFileTracker(conf, haGroupName, localFs, standbyUri);
-        ReplicationReplayLogDiscovery discovery = new ReplicationReplayLogDiscovery(fileTracker);
+        // Create ReplicationLogDiscoveryReplay instance
+        ReplicationLogTracker fileTracker = createReplicationLogFileTracker(conf, haGroupName, localFs, standbyUri);
+        ReplicationLogDiscoveryReplay discovery = new ReplicationLogDiscoveryReplay(fileTracker);
 
         // Test that it returns the expected constant value
         String result = discovery.getExecutorThreadNameFormat();
         assertEquals("Should return the expected thread name format",
-            "Phoenix-ReplicationReplayLogDiscovery-%d", result);
+            "Phoenix-ReplicationLogDiscoveryReplay-%d", result);
     }
 
     @Test
     public void testGetReplayIntervalSeconds() {
-        // Create ReplicationReplayLogDiscovery instance
-        ReplicationLogFileTracker fileTracker = createReplicationLogFileTracker(conf, haGroupName, localFs, standbyUri);
-        ReplicationReplayLogDiscovery discovery = new ReplicationReplayLogDiscovery(fileTracker);
+        // Create ReplicationLogDiscoveryReplay instance
+        ReplicationLogTracker fileTracker = createReplicationLogFileTracker(conf, haGroupName, localFs, standbyUri);
+        ReplicationLogDiscoveryReplay discovery = new ReplicationLogDiscoveryReplay(fileTracker);
 
         // Test default value when no custom config is set
         long defaultResult = discovery.getReplayIntervalSeconds();
         assertEquals("Should return default value when no custom config is set",
-            ReplicationReplayLogDiscovery.DEFAULT_REPLAY_INTERVAL_SECONDS, defaultResult);
+            ReplicationLogDiscoveryReplay.DEFAULT_REPLAY_INTERVAL_SECONDS, defaultResult);
 
         // Test custom value when config is set
-        conf.setLong(ReplicationReplayLogDiscovery.REPLICATION_REPLAY_INTERVAL_SECONDS_KEY, 120L);
+        conf.setLong(ReplicationLogDiscoveryReplay.REPLICATION_REPLAY_INTERVAL_SECONDS_KEY, 120L);
         long customResult = discovery.getReplayIntervalSeconds();
         assertEquals("Should return custom value when config is set",
             120L, customResult);
@@ -92,17 +92,17 @@ public class ReplicationReplayLogDiscoveryTest {
 
     @Test
     public void testGetShutdownTimeoutSeconds() {
-        // Create ReplicationReplayLogDiscovery instance
-        ReplicationLogFileTracker fileTracker = createReplicationLogFileTracker(conf, haGroupName, localFs, standbyUri);
-        ReplicationReplayLogDiscovery discovery = new ReplicationReplayLogDiscovery(fileTracker);
+        // Create ReplicationLogDiscoveryReplay instance
+        ReplicationLogTracker fileTracker = createReplicationLogFileTracker(conf, haGroupName, localFs, standbyUri);
+        ReplicationLogDiscoveryReplay discovery = new ReplicationLogDiscoveryReplay(fileTracker);
 
         // Test default value when no custom config is set
         long defaultResult = discovery.getShutdownTimeoutSeconds();
         assertEquals("Should return default value when no custom config is set",
-            ReplicationReplayLogDiscovery.DEFAULT_SHUTDOWN_TIMEOUT_SECONDS, defaultResult);
+            ReplicationLogDiscoveryReplay.DEFAULT_SHUTDOWN_TIMEOUT_SECONDS, defaultResult);
 
         // Test custom value when config is set
-        conf.setLong(ReplicationReplayLogDiscovery.REPLICATION_REPLAY_SHUTDOWN_TIMEOUT_SECONDS_KEY, 45L);
+        conf.setLong(ReplicationLogDiscoveryReplay.REPLICATION_REPLAY_SHUTDOWN_TIMEOUT_SECONDS_KEY, 45L);
         long customResult = discovery.getShutdownTimeoutSeconds();
         assertEquals("Should return custom value when config is set",
             45L, customResult);
@@ -110,17 +110,17 @@ public class ReplicationReplayLogDiscoveryTest {
 
     @Test
     public void testGetExecutorThreadCount() {
-        // Create ReplicationReplayLogDiscovery instance
-        ReplicationLogFileTracker fileTracker = createReplicationLogFileTracker(conf, haGroupName, localFs, standbyUri);
-        ReplicationReplayLogDiscovery discovery = new ReplicationReplayLogDiscovery(fileTracker);
+        // Create ReplicationLogDiscoveryReplay instance
+        ReplicationLogTracker fileTracker = createReplicationLogFileTracker(conf, haGroupName, localFs, standbyUri);
+        ReplicationLogDiscoveryReplay discovery = new ReplicationLogDiscoveryReplay(fileTracker);
 
         // Test default value when no custom config is set
         int defaultResult = discovery.getExecutorThreadCount();
         assertEquals("Should return default value when no custom config is set",
-            ReplicationReplayLogDiscovery.DEFAULT_EXECUTOR_THREAD_COUNT, defaultResult);
+            ReplicationLogDiscoveryReplay.DEFAULT_EXECUTOR_THREAD_COUNT, defaultResult);
 
         // Test custom value when config is set
-        conf.setInt(ReplicationReplayLogDiscovery.REPLICATION_REPLAY_EXECUTOR_THREAD_COUNT_KEY, 3);
+        conf.setInt(ReplicationLogDiscoveryReplay.REPLICATION_REPLAY_EXECUTOR_THREAD_COUNT_KEY, 3);
         int customResult = discovery.getExecutorThreadCount();
         assertEquals("Should return custom value when config is set",
             3, customResult);
@@ -128,17 +128,17 @@ public class ReplicationReplayLogDiscoveryTest {
 
     @Test
     public void testGetInProgressDirectoryProcessProbability() {
-        // Create ReplicationReplayLogDiscovery instance
-        ReplicationLogFileTracker fileTracker = createReplicationLogFileTracker(conf, haGroupName, localFs, standbyUri);
-        ReplicationReplayLogDiscovery discovery = new ReplicationReplayLogDiscovery(fileTracker);
+        // Create ReplicationLogDiscoveryReplay instance
+        ReplicationLogTracker fileTracker = createReplicationLogFileTracker(conf, haGroupName, localFs, standbyUri);
+        ReplicationLogDiscoveryReplay discovery = new ReplicationLogDiscoveryReplay(fileTracker);
 
         // Test default value when no custom config is set
         double defaultResult = discovery.getInProgressDirectoryProcessProbability();
         assertEquals("Should return default value when no custom config is set",
-            ReplicationReplayLogDiscovery.DEFAULT_IN_PROGRESS_DIRECTORY_PROCESSING_PROBABILITY, defaultResult, 0.001);
+            ReplicationLogDiscoveryReplay.DEFAULT_IN_PROGRESS_DIRECTORY_PROCESSING_PROBABILITY, defaultResult, 0.001);
 
         // Test custom value when config is set
-        conf.setDouble(ReplicationReplayLogDiscovery.REPLICATION_REPLAY_IN_PROGRESS_DIRECTORY_PROCESSING_PROBABILITY_KEY, 10.5);
+        conf.setDouble(ReplicationLogDiscoveryReplay.REPLICATION_REPLAY_IN_PROGRESS_DIRECTORY_PROCESSING_PROBABILITY_KEY, 10.5);
         double customResult = discovery.getInProgressDirectoryProcessProbability();
         assertEquals("Should return custom value when config is set",
             10.5, customResult, 0.001);
@@ -146,23 +146,23 @@ public class ReplicationReplayLogDiscoveryTest {
 
     @Test
     public void testGetWaitingBufferPercentage() {
-        // Create ReplicationReplayLogDiscovery instance
-        ReplicationLogFileTracker fileTracker = createReplicationLogFileTracker(conf, haGroupName, localFs, standbyUri);
-        ReplicationReplayLogDiscovery discovery = new ReplicationReplayLogDiscovery(fileTracker);
+        // Create ReplicationLogDiscoveryReplay instance
+        ReplicationLogTracker fileTracker = createReplicationLogFileTracker(conf, haGroupName, localFs, standbyUri);
+        ReplicationLogDiscoveryReplay discovery = new ReplicationLogDiscoveryReplay(fileTracker);
 
         // Test default value when no custom config is set
         double defaultResult = discovery.getWaitingBufferPercentage();
         assertEquals("Should return default value when no custom config is set",
-            ReplicationReplayLogDiscovery.DEFAULT_WAITING_BUFFER_PERCENTAGE, defaultResult, 0.001);
+            ReplicationLogDiscoveryReplay.DEFAULT_WAITING_BUFFER_PERCENTAGE, defaultResult, 0.001);
 
         // Test custom value when config is set
-        conf.setDouble(ReplicationReplayLogDiscovery.REPLICATION_REPLAY_WAITING_BUFFER_PERCENTAGE_KEY, 20.0);
+        conf.setDouble(ReplicationLogDiscoveryReplay.REPLICATION_REPLAY_WAITING_BUFFER_PERCENTAGE_KEY, 20.0);
         double customResult = discovery.getWaitingBufferPercentage();
         assertEquals("Should return custom value when config is set",
             20.0, customResult, 0.001);
     }
 
-    private ReplicationLogFileTracker createReplicationLogFileTracker(final Configuration conf, final String haGroupName, final FileSystem fileSystem, final URI rootURI) {
-        return new ReplicationLogFileTracker(conf, haGroupName, fileSystem, rootURI, ReplicationLogFileTracker.DirectoryType.IN, metricsReplicationLogFileTracker);
+    private ReplicationLogTracker createReplicationLogFileTracker(final Configuration conf, final String haGroupName, final FileSystem fileSystem, final URI rootURI) {
+        return new ReplicationLogTracker(conf, haGroupName, fileSystem, rootURI, ReplicationLogTracker.DirectoryType.IN, METRICS_REPLICATION_LOG_TRACKER);
     }
 }

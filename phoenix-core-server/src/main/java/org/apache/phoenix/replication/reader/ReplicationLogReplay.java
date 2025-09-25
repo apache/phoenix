@@ -25,8 +25,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.phoenix.replication.ReplicationLogFileTracker;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogReplayFileTrackerImpl;
+import org.apache.phoenix.replication.ReplicationLogTracker;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogTrackerReplayImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,9 +36,9 @@ import org.slf4j.LoggerFactory;
  * log discovery components.
  * It also handles starting and stopping replay operations through the log discovery service.
  */
-public class ReplicationReplay {
+public class ReplicationLogReplay {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ReplicationReplay.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogReplay.class);
 
     /**
      * The path on the HDFS where log files are to be read.
@@ -49,53 +49,53 @@ public class ReplicationReplay {
     /**
      * Singleton instances per group name
      */
-    private static final ConcurrentHashMap<String, ReplicationReplay> INSTANCES = 
+    private static final ConcurrentHashMap<String, ReplicationLogReplay> INSTANCES =
         new ConcurrentHashMap<>();
 
     private final Configuration conf;
     private final String haGroupName;
     private FileSystem fileSystem;
     private URI rootURI;
-    private ReplicationReplayLogDiscovery replicationReplayLogDiscovery;
+    private ReplicationLogDiscoveryReplay replicationLogDiscoveryReplay;
 
-    protected ReplicationReplay(final Configuration conf, final String haGroupName) {
+    protected ReplicationLogReplay(final Configuration conf, final String haGroupName) {
         this.conf = conf;
         this.haGroupName = haGroupName;
     }
 
     /**
-     * Gets or creates a singleton instance of ReplicationReplay for the specified group name.
+     * Gets or creates a singleton instance of ReplicationLogReplay for the specified group name.
      * @param conf The configuration
      * @param haGroupName The HA group name
      * @return The singleton instance for the group
      */
-    public static ReplicationReplay get(final Configuration conf, final String haGroupName) {
+    public static ReplicationLogReplay get(final Configuration conf, final String haGroupName) {
         return INSTANCES.computeIfAbsent(haGroupName, groupName -> {
             try {
-                ReplicationReplay instance = new ReplicationReplay(conf, groupName);
+                ReplicationLogReplay instance = new ReplicationLogReplay(conf, groupName);
                 instance.init();
                 return instance;
             } catch (IOException e) {
-                LOG.error("Failed to initialize ReplicationReplay for group: " + groupName, e);
-                throw new RuntimeException("Failed to initialize ReplicationReplay", e);
+                LOG.error("Failed to initialize ReplicationLogReplay for group: " + groupName, e);
+                throw new RuntimeException("Failed to initialize ReplicationLogReplay", e);
             }
         });
     }
 
     /**
-     * Delegate the start replay task to the {@link ReplicationReplayLogDiscovery}
+     * Delegate the start replay task to the {@link ReplicationLogDiscoveryReplay}
      * @throws IOException - in case the start operation fails
      */
     public void startReplay() throws IOException {
-        replicationReplayLogDiscovery.start();
+        replicationLogDiscoveryReplay.start();
     }
 
     /**
-     * Delegate the stop replay task to the {@link ReplicationReplayLogDiscovery}
+     * Delegate the stop replay task to the {@link ReplicationLogDiscoveryReplay}
      * @throws IOException - in case the stop operation fails
      */
     public void stopReplay() throws IOException {
-        replicationReplayLogDiscovery.stop();
+        replicationLogDiscoveryReplay.stop();
     }
 
     /**
@@ -106,16 +106,16 @@ public class ReplicationReplay {
      */
     protected void init() throws IOException {
         initializeFileSystem();
-        ReplicationLogFileTracker replicationLogReplayFileTracker =
-            new ReplicationLogFileTracker(conf, haGroupName, fileSystem, rootURI, ReplicationLogFileTracker.DirectoryType.IN, new MetricsReplicationLogReplayFileTrackerImpl(haGroupName));
+        ReplicationLogTracker replicationLogReplayFileTracker =
+            new ReplicationLogTracker(conf, haGroupName, fileSystem, rootURI, ReplicationLogTracker.DirectoryType.IN, new MetricsReplicationLogTrackerReplayImpl(haGroupName));
         replicationLogReplayFileTracker.init();
-        this.replicationReplayLogDiscovery = new ReplicationReplayLogDiscovery(replicationLogReplayFileTracker);
-        this.replicationReplayLogDiscovery.init();
+        this.replicationLogDiscoveryReplay = new ReplicationLogDiscoveryReplay(replicationLogReplayFileTracker);
+        this.replicationLogDiscoveryReplay.init();
     }
 
     public void close() {
-        replicationReplayLogDiscovery.getReplicationLogFileTracker().close();
-        replicationReplayLogDiscovery.close();
+        replicationLogDiscoveryReplay.getReplicationLogFileTracker().close();
+        replicationLogDiscoveryReplay.close();
         // Remove the instance from cache
         INSTANCES.remove(haGroupName);
     }
@@ -141,8 +141,8 @@ public class ReplicationReplay {
         }
     }
 
-    protected ReplicationReplayLogDiscovery getReplicationReplayLogDiscovery() {
-        return this.replicationReplayLogDiscovery;
+    protected ReplicationLogDiscoveryReplay getReplicationReplayLogDiscovery() {
+        return this.replicationLogDiscoveryReplay;
     }
 
     protected FileSystem getFileSystem() {

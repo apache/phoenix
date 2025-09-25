@@ -19,9 +19,9 @@ package org.apache.phoenix.replication.metrics;
 
 import org.apache.hadoop.hbase.metrics.BaseSource;
 
-public interface MetricsReplicationLogFileTracker extends BaseSource {
+public interface MetricsReplicationLogTracker extends BaseSource {
 
-    String METRICS_NAME = "MetricsReplicationLogFileTracker";
+    String METRICS_NAME = "MetricsReplicationLogTracker";
     String METRICS_CONTEXT = "phoenix";
     String METRICS_DESCRIPTION = "Metrics about Replication Log File Tracker for an HA Group";
     String METRICS_JMX_CONTEXT = "RegionServer,sub=" + METRICS_NAME;
@@ -95,6 +95,6 @@ public interface MetricsReplicationLogFileTracker extends BaseSource {
     void close();
 
     // Get current values for testing
-    ReplicationLogFileTrackerMetricValues getCurrentMetricValues();
+    ReplicationLogTrackerMetricValues getCurrentMetricValues();
 
 }

@@ -22,9 +22,9 @@ import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MutableFastCounter;
 import org.apache.hadoop.metrics2.lib.MutableHistogram;
 
-/** Implementation of metrics source for ReplicationLogFileTracker operations. */
-public class MetricsReplicationLogFileTrackerImpl extends BaseSourceImpl
-        implements MetricsReplicationLogFileTracker {
+/** Implementation of metrics source for ReplicationLogTracker operations. */
+public class MetricsReplicationLogTrackerImpl extends BaseSourceImpl
+        implements MetricsReplicationLogTracker {
 
     protected String groupMetricsContext;
     protected final MutableFastCounter markFileInProgressRequestCount;
@@ -35,8 +35,8 @@ public class MetricsReplicationLogFileTrackerImpl extends BaseSourceImpl
     protected final MutableHistogram markFileCompletedTime;
     protected final MutableHistogram markFileFailedTime;
 
-    public MetricsReplicationLogFileTrackerImpl(String metricsName, String metricsDescription,
-            String metricsContext, String metricsJmxContext) {
+    public MetricsReplicationLogTrackerImpl(String metricsName, String metricsDescription,
+                                            String metricsContext, String metricsJmxContext) {
         super(metricsName, metricsDescription, metricsContext, metricsJmxContext);
         markFileInProgressRequestCount = getMetricsRegistry()
             .newCounter(MARK_FILE_IN_PROGRESS_REQUEST_COUNT,
@@ -99,8 +99,8 @@ public class MetricsReplicationLogFileTrackerImpl extends BaseSourceImpl
     }
 
     @Override
-    public ReplicationLogFileTrackerMetricValues getCurrentMetricValues() {
-        return new ReplicationLogFileTrackerMetricValues(
+    public ReplicationLogTrackerMetricValues getCurrentMetricValues() {
+        return new ReplicationLogTrackerMetricValues(
             markFileInProgressRequestCount.value(),
             markFileCompletedRequestCount.value(),
             markFileFailedRequestCount.value(),

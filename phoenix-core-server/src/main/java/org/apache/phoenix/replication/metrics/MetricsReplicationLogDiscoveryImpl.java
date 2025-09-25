@@ -74,8 +74,8 @@ public class MetricsReplicationLogDiscoveryImpl extends BaseSourceImpl
     }
 
     @Override
-    public ReplicationLogFileDiscoveryMetricValues getCurrentMetricValues() {
-        return new ReplicationLogFileDiscoveryMetricValues(
+    public ReplicationLogDiscoveryMetricValues getCurrentMetricValues() {
+        return new ReplicationLogDiscoveryMetricValues(
             numRoundsProcessed.value(),
             numInProgressDirectoryProcessed.value(),
             timeToProcessNewFiles.getMax(),

@@ -63,13 +63,13 @@ public class PhoenixRegionServerEndpoint
         this.metricsSource = MetricsPhoenixCoprocessorSourceFactory
                                 .getInstance().getMetadataCachingSource();
         this.zkUrl = getLocalZkUrl(conf);
-        // Start log replication replay
+        // Start replication log replay
         ReplicationLogReplayService.getInstance(conf).start();
     }
 
     @Override
     public void stop(CoprocessorEnvironment env) throws IOException {
-        // Stop log replication replay
+        // Stop replication log replay
         ReplicationLogReplayService.getInstance(conf).stop();
         RegionServerCoprocessor.super.stop(env);
         ServerUtil.ConnectionFactory.shutdown();

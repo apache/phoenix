@@ -30,7 +30,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogFileTracker;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogTracker;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,9 +41,9 @@ import org.slf4j.LoggerFactory;
  *
  * This will be extended by specific implementations for tracking IN and OUT directory files.
  */
-public class ReplicationLogFileTracker {
+public class ReplicationLogTracker {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogFileTracker.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogTracker.class);
 
     /**
      * Configuration key for number of retries when deleting files
@@ -73,10 +73,10 @@ public class ReplicationLogFileTracker {
     private ReplicationShardDirectoryManager replicationShardDirectoryManager;
     protected final Configuration conf;
     protected final String haGroupName;
-    protected MetricsReplicationLogFileTracker metrics;
+    protected MetricsReplicationLogTracker metrics;
 
-    public ReplicationLogFileTracker(final Configuration conf, final String haGroupName,
-                                     final FileSystem fileSystem, final URI rootURI, final DirectoryType directoryType, final MetricsReplicationLogFileTracker metrics) {
+    public ReplicationLogTracker(final Configuration conf, final String haGroupName,
+                                 final FileSystem fileSystem, final URI rootURI, final DirectoryType directoryType, final MetricsReplicationLogTracker metrics) {
         this.conf = conf;
         this.fileSystem = fileSystem;
         this.haGroupName = haGroupName;
@@ -89,7 +89,7 @@ public class ReplicationLogFileTracker {
         return this.directoryType.getName();
     }
 
-    protected MetricsReplicationLogFileTracker getMetricsSource() {
+    protected MetricsReplicationLogTracker getMetricsSource() {
         return this.metrics;
     }
 
@@ -448,7 +448,7 @@ public class ReplicationLogFileTracker {
         return this.inProgressDirPath;
     }
 
-    protected MetricsReplicationLogFileTracker getMetrics() {
+    protected MetricsReplicationLogTracker getMetrics() {
         return this.metrics;
     }
 
