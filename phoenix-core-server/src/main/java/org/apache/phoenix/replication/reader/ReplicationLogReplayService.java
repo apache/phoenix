@@ -36,7 +36,7 @@ public class ReplicationLogReplayService {
     /**
      * Configuration key for enabling/disabling replication replay service
      */
-    public static final String PHOENIX_REPLICATION_REPLAY_ENABLED = 
+    public static final String PHOENIX_REPLICATION_REPLAY_ENABLED =
         "phoenix.replication.replay.enabled";
 
     /**
@@ -52,25 +52,25 @@ public class ReplicationLogReplayService {
     /**
      * Configuration key for executor thread frequency in seconds
      */
-    public static final String REPLICATION_REPLAY_SERVICE_EXECUTOR_THREAD_FREQUENCY_SECONDS_KEY = 
+    public static final String REPLICATION_REPLAY_SERVICE_EXECUTOR_THREAD_FREQUENCY_SECONDS_KEY =
         "phoenix.replication.replay.service.executor.frequency.seconds";
 
     /**
      * Default frequency in seconds for executor thread execution
      */
-    public static final int DEFAULT_REPLICATION_REPLAY_SERVICE_EXECUTOR_THREAD_FREQUENCY_SECONDS = 
+    public static final int DEFAULT_REPLICATION_REPLAY_SERVICE_EXECUTOR_THREAD_FREQUENCY_SECONDS =
         60;
 
     /**
      * Configuration key for executor shutdown timeout in seconds
      */
-    public static final String REPLICATION_REPLAY_SERVICE_EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS_KEY = 
+    public static final String REPLICATION_REPLAY_SERVICE_EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS_KEY =
         "phoenix.replication.replay.service.executor.shutdown.timeout.seconds";
 
     /**
      * Default shutdown timeout in seconds for graceful executor shutdown
      */
-    public static final int DEFAULT_REPLICATION_REPLAY_SERVICE_EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS = 
+    public static final int DEFAULT_REPLICATION_REPLAY_SERVICE_EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS =
         30;
 
     private static volatile ReplicationLogReplayService instance;
@@ -84,7 +84,7 @@ public class ReplicationLogReplayService {
     }
 
     /**
-     * Gets the singleton instance of the ReplicationLogReplayService using the lazy initializer 
+     * Gets the singleton instance of the ReplicationLogReplayService using the lazy initializer
      * pattern. Initializes the instance if it hasn't been created yet.
      * @param conf Configuration object.
      * @return The singleton ReplicationLogManager instance.
@@ -103,12 +103,12 @@ public class ReplicationLogReplayService {
     }
 
     /**
-     * Starts the replication log replay service by initializing the scheduler and scheduling 
+     * Starts the replication log replay service by initializing the scheduler and scheduling
      * periodic replay operations for each HA Group.
      * @throws IOException if there's an error during initialization
      */
     public void start() throws IOException {
-        boolean isEnabled = conf.getBoolean(PHOENIX_REPLICATION_REPLAY_ENABLED, 
+        boolean isEnabled = conf.getBoolean(PHOENIX_REPLICATION_REPLAY_ENABLED,
             DEFAULT_REPLICATION_REPLAY_ENABLED);
         if (!isEnabled) {
             LOG.info("Replication replay service is disabled. Skipping start operation.");
@@ -120,11 +120,11 @@ public class ReplicationLogReplayService {
                 return;
             }
             int executorFrequencySeconds = conf.getInt(
-                REPLICATION_REPLAY_SERVICE_EXECUTOR_THREAD_FREQUENCY_SECONDS_KEY, 
+                REPLICATION_REPLAY_SERVICE_EXECUTOR_THREAD_FREQUENCY_SECONDS_KEY,
                 DEFAULT_REPLICATION_REPLAY_SERVICE_EXECUTOR_THREAD_FREQUENCY_SECONDS);
             // Initialize and schedule the executors
             scheduler = Executors.newScheduledThreadPool(
-                REPLICATION_REPLAY_SERVICE_EXECUTOR_THREAD_COUNT, 
+                REPLICATION_REPLAY_SERVICE_EXECUTOR_THREAD_COUNT,
                 new ThreadFactoryBuilder()
                     .setNameFormat("ReplicationLogReplayService-%d").build());
             scheduler.scheduleAtFixedRate(() -> {
@@ -145,7 +145,7 @@ public class ReplicationLogReplayService {
      * @throws IOException if there's an error during shutdown
      */
     public void stop() throws IOException {
-        boolean isEnabled = conf.getBoolean(PHOENIX_REPLICATION_REPLAY_ENABLED, 
+        boolean isEnabled = conf.getBoolean(PHOENIX_REPLICATION_REPLAY_ENABLED,
             DEFAULT_REPLICATION_REPLAY_ENABLED);
         if (!isEnabled) {
             LOG.info("Replication replay service is disabled. Skipping stop operation.");
@@ -161,12 +161,12 @@ public class ReplicationLogReplayService {
             schedulerToShutdown = scheduler;
         }
         int executorShutdownTimeoutSeconds = conf.getInt(
-            REPLICATION_REPLAY_SERVICE_EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS_KEY, 
+            REPLICATION_REPLAY_SERVICE_EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS_KEY,
             DEFAULT_REPLICATION_REPLAY_SERVICE_EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS);
         if (schedulerToShutdown != null && !schedulerToShutdown.isShutdown()) {
             schedulerToShutdown.shutdown();
             try {
-                if (!schedulerToShutdown.awaitTermination(executorShutdownTimeoutSeconds, 
+                if (!schedulerToShutdown.awaitTermination(executorShutdownTimeoutSeconds,
                     TimeUnit.SECONDS)) {
                     schedulerToShutdown.shutdownNow();
                 }
@@ -195,7 +195,8 @@ public class ReplicationLogReplayService {
     protected void stopReplicationReplay() throws IOException {
         List<String> replicationGroups = getReplicationGroups();
         for (String replicationGroup : replicationGroups) {
-            ReplicationLogReplay replicationLogReplay = ReplicationLogReplay.get(conf, replicationGroup);
+            ReplicationLogReplay replicationLogReplay =
+                    ReplicationLogReplay.get(conf, replicationGroup);
             replicationLogReplay.stopReplay();
             replicationLogReplay.close();
         }

@@ -17,8 +17,8 @@
  */
 package org.apache.phoenix.replication.metrics;
 
-/** 
- * Class to hold the values of all metrics tracked by the ReplicationLogDiscovery metrics source. 
+/**
+ * Class to hold the values of all metrics tracked by the ReplicationLogDiscovery metrics source.
  */
 public class ReplicationLogDiscoveryMetricValues {
 
@@ -28,8 +28,8 @@ public class ReplicationLogDiscoveryMetricValues {
     private final long timeToProcessInProgressFilesMs;
 
     public ReplicationLogDiscoveryMetricValues(long numRoundsProcessed,
-                                               long numInProgressDirectoryProcessed,
-                                               long timeToProcessNewFilesMs, long timeToProcessInProgressFilesMs) {
+        long numInProgressDirectoryProcessed, long timeToProcessNewFilesMs,
+        long timeToProcessInProgressFilesMs) {
         this.numRoundsProcessed = numRoundsProcessed;
         this.numInProgressDirectoryProcessed = numInProgressDirectoryProcessed;
         this.timeToProcessNewFilesMs = timeToProcessNewFilesMs;

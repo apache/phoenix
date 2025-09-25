@@ -31,8 +31,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
-  * Manages replication replay operations for a specific HA group. Provides singleton instances per 
- * group name and orchestrates the initialization of file system, file tracker, state tracker, and 
+  * Manages replication replay operations for a specific HA group. Provides singleton instances per
+ * group name and orchestrates the initialization of file system, file tracker, state tracker, and
  * log discovery components.
  * It also handles starting and stopping replay operations through the log discovery service.
  */
@@ -100,16 +100,18 @@ public class ReplicationLogReplay {
 
     /**
      * Initializes the replication replay components including file system, file tracker,
-     * state tracker, and log discovery service. Sets up the complete replay components 
+     * state tracker, and log discovery service. Sets up the complete replay components
      * for the HA group.
      * @throws IOException if there's an error during initialization
      */
     protected void init() throws IOException {
         initializeFileSystem();
-        ReplicationLogTracker replicationLogReplayFileTracker =
-            new ReplicationLogTracker(conf, haGroupName, fileSystem, rootURI, ReplicationLogTracker.DirectoryType.IN, new MetricsReplicationLogTrackerReplayImpl(haGroupName));
+        ReplicationLogTracker replicationLogReplayFileTracker = new ReplicationLogTracker(
+            conf, haGroupName, fileSystem, rootURI, ReplicationLogTracker.DirectoryType.IN,
+            new MetricsReplicationLogTrackerReplayImpl(haGroupName));
         replicationLogReplayFileTracker.init();
-        this.replicationLogDiscoveryReplay = new ReplicationLogDiscoveryReplay(replicationLogReplayFileTracker);
+        this.replicationLogDiscoveryReplay =
+                new ReplicationLogDiscoveryReplay(replicationLogReplayFileTracker);
         this.replicationLogDiscoveryReplay.init();
     }
 

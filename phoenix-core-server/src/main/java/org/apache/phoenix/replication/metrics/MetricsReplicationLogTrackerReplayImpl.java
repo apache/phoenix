@@ -21,7 +21,7 @@ public class MetricsReplicationLogTrackerReplayImpl
     extends MetricsReplicationLogTrackerImpl {
 
     private static final String METRICS_NAME = "ReplicationLogReplayFileTracker";
-    private static final String METRICS_DESCRIPTION = 
+    private static final String METRICS_DESCRIPTION =
         "Metrics about Replication Log Replay File Tracker for an HA Group";
     private static final String METRICS_JMX_CONTEXT = "RegionServer,sub=" + METRICS_NAME;
 
@@ -29,11 +29,11 @@ public class MetricsReplicationLogTrackerReplayImpl
         super(MetricsReplicationLogTrackerReplayImpl.METRICS_NAME,
             MetricsReplicationLogTrackerReplayImpl.METRICS_DESCRIPTION,
             MetricsReplicationLogTracker.METRICS_CONTEXT,
-            MetricsReplicationLogTrackerReplayImpl.METRICS_JMX_CONTEXT +
-                ",haGroup=" + haGroupName);
-        super.groupMetricsContext = 
-            MetricsReplicationLogTrackerReplayImpl.METRICS_JMX_CONTEXT +
-            ",haGroup=" + haGroupName;
+            MetricsReplicationLogTrackerReplayImpl.METRICS_JMX_CONTEXT
+                    + ",haGroup=" + haGroupName);
+        super.groupMetricsContext =
+            MetricsReplicationLogTrackerReplayImpl.METRICS_JMX_CONTEXT
+                    + ",haGroup=" + haGroupName;
     }
 
 }
