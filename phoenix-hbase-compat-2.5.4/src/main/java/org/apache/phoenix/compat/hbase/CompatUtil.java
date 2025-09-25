@@ -21,7 +21,11 @@ import java.io.IOException;
 import java.util.List;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
+import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
+import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto.MutationType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,4 +42,11 @@ public class CompatUtil {
     return MetaTableAccessor.getMergeRegions(conn, regionInfo);
   }
 
+  public static Mutation toMutation(MutationProto mProto) throws IOException {
+    return ProtobufUtil.toMutation(mProto);
+  }
+
+  public static MutationProto toMutation(MutationType type, Mutation mutation) throws IOException {
+    return ProtobufUtil.toMutation(type, mutation);
+  }
 }

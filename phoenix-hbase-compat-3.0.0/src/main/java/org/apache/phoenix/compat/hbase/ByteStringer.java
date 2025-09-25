@@ -15,25 +15,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hbase.ipc.controller;
+package org.apache.phoenix.compat.hbase;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
+import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
+import org.apache.hbase.thirdparty.com.google.protobuf.UnsafeByteOperations;
 
-/**
- * Factory that should only be used when making server-server remote RPCs to the region servers
- * hosting Phoenix SYSTEM tables. Despite the name, this does NOT implement
- * {@link RpcControllerFactory}
- */
-public class ServerSideRPCControllerFactory {
-
-  protected final Configuration conf;
-
-  public ServerSideRPCControllerFactory(Configuration conf) {
-    this.conf = conf;
-  }
-
-  public ServerToServerRpcController newController() {
-    return new ServerToServerRpcControllerImpl(this.conf);
+// This has different signature in the HBase 2 and 3 modules
+// This only comes together after the maven-replacer plugin relocates all protobuf code.
+public class ByteStringer {
+  public static ByteString wrap(final byte[] array) {
+    return UnsafeByteOperations.unsafeWrap(array);
   }
 }

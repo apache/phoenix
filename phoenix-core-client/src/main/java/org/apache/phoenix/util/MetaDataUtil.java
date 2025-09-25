@@ -408,14 +408,18 @@ public class MetaDataUtil {
             cell.getQualifierLength(), qualifier, 0, qualifier.length) == 0
             && (valueArray == null || !CellUtil.matchingValue(cell, valueArray))
         ) {
-          ExtendedCell extendedCell =
-            cellBuilder.setRow(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength())
-              .setFamily(cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength())
-              .setQualifier(cell.getQualifierArray(), cell.getQualifierOffset(),
-                cell.getQualifierLength())
-              .setValue(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength())
-              .setTimestamp(cell.getTimestamp()).setType(cell.getType())
-              .setTags(TagUtil.concatTags(tagArray, cell)).build();
+          // This is a safety play. In all current versions
+          // org.apache.hadoop.hbase.client.Mutation.getFamilyCellMap() returns ExtendedCells only.
+          byte[] concatTags = (cell instanceof ExtendedCell)
+            ? TagUtil.concatTags(tagArray, (ExtendedCell) cell)
+            : tagArray;
+          ExtendedCell extendedCell = cellBuilder
+            .setRow(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength())
+            .setFamily(cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength())
+            .setQualifier(cell.getQualifierArray(), cell.getQualifierOffset(),
+              cell.getQualifierLength())
+            .setValue(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength())
+            .setTimestamp(cell.getTimestamp()).setType(cell.getType()).setTags(concatTags).build();
           // Replace existing cell with a cell that has the custom tags list
           newCells.add(extendedCell);
         } else {
@@ -583,7 +587,7 @@ public class MetaDataUtil {
     List<Cell> kvs = headerRow.getFamilyCellMap().get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES);
     if (kvs != null) {
       for (Cell cell : kvs) {
-        KeyValue kv = org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(cell);
+        KeyValue kv = PhoenixKeyValueUtil.ensureKeyValue(cell);
         if (builder.compareQualifier(kv, key, 0, key.length) == 0) {
           return kv;
         }
@@ -597,7 +601,7 @@ public class MetaDataUtil {
     List<Cell> kvs = headerRow.getFamilyCellMap().get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES);
     if (kvs != null) {
       for (Cell cell : kvs) {
-        KeyValue kv = org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(cell);
+        KeyValue kv = PhoenixKeyValueUtil.ensureKeyValue(cell);
         if (builder.compareQualifier(kv, key, 0, key.length) == 0) {
           KeyValueBuilder.addQuietly(headerRow, keyValue);
           return true;

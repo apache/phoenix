@@ -15,25 +15,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hbase.ipc.controller;
+package org.apache.phoenix.compat.hbase;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
+import java.io.IOException;
+import org.apache.hadoop.hbase.client.RegionLocator;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.RowMutations;
+import org.apache.hadoop.hbase.client.Table;
 
-/**
- * Factory that should only be used when making server-server remote RPCs to the region servers
- * hosting Phoenix SYSTEM tables. Despite the name, this does NOT implement
- * {@link RpcControllerFactory}
- */
-public class ServerSideRPCControllerFactory {
+public abstract class CompatDelegateHTable implements Table {
 
-  protected final Configuration conf;
+  protected final Table delegate;
 
-  public ServerSideRPCControllerFactory(Configuration conf) {
-    this.conf = conf;
+  public CompatDelegateHTable(Table delegate) {
+    this.delegate = delegate;
   }
 
-  public ServerToServerRpcController newController() {
-    return new ServerToServerRpcControllerImpl(this.conf);
+  @Override
+  public RegionLocator getRegionLocator() throws IOException {
+    return delegate.getRegionLocator();
+  }
+
+  @Override
+  public Result mutateRow(RowMutations rm) throws IOException {
+    return delegate.mutateRow(rm);
   }
 }

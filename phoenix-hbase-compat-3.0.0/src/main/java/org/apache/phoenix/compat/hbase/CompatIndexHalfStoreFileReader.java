@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.io.Reference;
 import org.apache.hadoop.hbase.io.hfile.CacheConfig;
 import org.apache.hadoop.hbase.io.hfile.HFileInfo;
+import org.apache.hadoop.hbase.io.hfile.HFileScanner;
 import org.apache.hadoop.hbase.io.hfile.ReaderContext;
 import org.apache.hadoop.hbase.regionserver.StoreFileInfo;
 import org.apache.hadoop.hbase.regionserver.StoreFileReader;
@@ -33,7 +34,12 @@ public class CompatIndexHalfStoreFileReader extends StoreFileReader {
   public CompatIndexHalfStoreFileReader(final FileSystem fs, final CacheConfig cacheConf,
     final Configuration conf, final ReaderContext readerContext, final HFileInfo hFileInfo, Path p,
     Reference r) throws IOException {
-    super(readerContext, hFileInfo, cacheConf, new StoreFileInfo(conf, fs, p, true), conf);
+    super(readerContext, hFileInfo, cacheConf, new StoreFileInfo(conf, fs,
+      readerContext.getFileSize(), p, 0l, r, null, readerContext.isPrimaryReplicaReader()), conf);
   }
 
+  // getScanner is private in HBase 3.0, expose it
+  public HFileScanner getCompatScanner(boolean cacheBlocks, boolean pread, boolean isCompaction) {
+    return getScanner(cacheBlocks, pread, isCompaction);
+  }
 }

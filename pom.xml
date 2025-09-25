@@ -45,6 +45,7 @@
   </licenses>
 
   <modules>
+    <module>phoenix-hbase-compat-3.0.0</module>
     <module>phoenix-hbase-compat-2.6.0</module>
     <module>phoenix-hbase-compat-2.5.4</module>
     <module>phoenix-hbase-compat-2.5.0</module>
@@ -79,6 +80,11 @@
     <hbase-2.5.runtime.version>2.5.12-hadoop3</hbase-2.5.runtime.version>
     <hbase-2.6.0.runtime.version>2.6.1-hadoop3</hbase-2.6.0.runtime.version>
     <hbase-2.6.runtime.version>2.6.3-hadoop3</hbase-2.6.runtime.version>
+    <hbase-3.0.runtime.version>3.0.0-beta-2-SNAPSHOT</hbase-3.0.runtime.version>
+
+    <!-- This is a hack to work around Eclipse m2 integration brokennes. It is set to hbase.version
+    when building with Hbase 2.x, and a random existing version for Hbase 3.x -->
+    <hbase2.version>${hbase.version}</hbase2.version>
 
     <compileSource>1.8</compileSource>
     <maven.compiler.source>${compileSource}</maven.compiler.source>
@@ -260,12 +266,17 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-embedded-hbase-2.6.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-client-embedded-hbase-2.6</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-client-embedded-hbase-2.6.0</artifactId>
+        <artifactId>phoenix-client-embedded-hbase-3.0</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -295,6 +306,11 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-lite-hbase-3.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-server-hbase-2.5.0</artifactId>
         <version>${project.version}</version>
       </dependency>
@@ -320,6 +336,11 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server-hbase-3.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-mapreduce-byo-shaded-hbase-hbase-2.5.0</artifactId>
         <version>${project.version}</version>
       </dependency>
@@ -341,6 +362,11 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-mapreduce-byo-shaded-hbase-hbase-2.6</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-mapreduce-byo-shaded-hbase-hbase-3.0</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -371,6 +397,11 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-hbase-compat-2.6.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-hbase-compat-3.0.0</artifactId>
         <version>${project.version}</version>
       </dependency>
       <!-- Intra-project test dependencies -->
@@ -2210,6 +2241,22 @@
       </properties>
     </profile>
     <profile>
+      <!-- This WILL work with the public -hadoop3 artifacts -->
+      <id>phoenix-hbase-compat-3.0.0</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>3.0</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>3.0</hbase.profile>
+        <hbase.compat.version>3.0.0</hbase.compat.version>
+        <hadoop.version>3.4.2</hadoop.version>
+        <hbase.version>${hbase-3.0.runtime.version}</hbase.version>
+      </properties>
+    </profile>
+    <profile>
       <id>owasp-dependency-check</id>
       <activation>
         <property>
@@ -2378,6 +2425,10 @@
           <family>linux</family>
           <arch>aarch64</arch>
         </os>
+        <property>
+          <name>hbase.profile</name>
+          <value>!3.0</value>
+        </property>
       </activation>
       <properties>
         <!-- PHOENIX-6475 Use custom protoc for Linux ARM64 -->
@@ -2393,6 +2444,10 @@
           <family>mac</family>
           <arch>aarch64</arch>
         </os>
+        <property>
+          <name>hbase.profile</name>
+          <value>!3.0</value>
+        </property>
       </activation>
       <properties>
         <protoc.arch>osx-x86_64</protoc.arch>
