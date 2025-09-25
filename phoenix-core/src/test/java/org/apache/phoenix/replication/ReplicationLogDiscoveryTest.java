@@ -45,7 +45,7 @@ import org.apache.hadoop.hbase.util.EnvironmentEdge;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscovery;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogTracker;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogTrackerReplayImpl;
-import org.apache.phoenix.replication.metrics.MetricsReplicationReplayLogDiscoveryReplayImpl;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscoveryReplayImpl;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.junit.After;
@@ -72,7 +72,7 @@ public class ReplicationLogDiscoveryTest {
     private Path testFolderPath;
     private static final String haGroupName = "testGroup";
     private static final MetricsReplicationLogTracker metricsLogTracker = new MetricsReplicationLogTrackerReplayImpl(haGroupName);
-    private static final MetricsReplicationLogDiscovery metricsLogDiscovery = new MetricsReplicationReplayLogDiscoveryReplayImpl(haGroupName);
+    private static final MetricsReplicationLogDiscovery metricsLogDiscovery = new MetricsReplicationLogDiscoveryReplayImpl(haGroupName);
 
     @Before
     public void setUp() throws IOException {

@@ -87,7 +87,8 @@ public class ReplicationShardDirectoryManager {
             REPLICATION_SHARD_SUB_DIRECTORY_NAME);
         this.numShards = conf.getInt(REPLICATION_NUM_SHARDS_KEY, DEFAULT_REPLICATION_NUM_SHARDS);
         this.replicationRoundDurationSeconds = conf.getInt(
-            PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY, DEFAULT_REPLICATION_ROUND_DURATION_SECONDS);
+            PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY,
+            DEFAULT_REPLICATION_ROUND_DURATION_SECONDS);
     }
 
     /**
@@ -129,8 +130,8 @@ public class ReplicationShardDirectoryManager {
 
 
     /**
-     * Returns a ReplicationRound object based on the given round start time, calculating the end time
-     * as start time + round duration.
+     * Returns a ReplicationRound object based on the given round start time,
+     * calculating the end time as start time + round duration.
      * @param roundStartTime - start time of the given round.
      * @return The round to which input roundStartTime belongs to
      */
@@ -141,8 +142,8 @@ public class ReplicationShardDirectoryManager {
     }
 
     /**
-     * Returns a ReplicationRound object based on the given round end time, calculating the start time
-     * as end time - round duration.
+     * Returns a ReplicationRound object based on the given round end time,
+     * calculating the start time as end time - round duration.
      * @param roundEndTime - end time of the given round.
      * @return The round to which input roundEndTime belongs to
      */
@@ -153,7 +154,8 @@ public class ReplicationShardDirectoryManager {
     }
 
     /**
-     * Returns a list of all shard directory paths, formatted with 3-digit zero-padded shard numbers.
+     * Returns a list of all shard directory paths, formatted with
+     * 3-digit zero-padded shard numbers.
      */
     public List<Path> getAllShardPaths() {
         List<Path> shardPaths = new ArrayList<>();

@@ -18,22 +18,22 @@
 package org.apache.phoenix.replication.metrics;
 
 /** Implementation of metrics source for ReplicationReplayLogFileDiscovery operations. */
-public class MetricsReplicationReplayLogDiscoveryReplayImpl
+public class MetricsReplicationLogDiscoveryReplayImpl
     extends MetricsReplicationLogDiscoveryImpl {
 
     private static final String METRICS_NAME = "ReplicationLogDiscoveryReplay";
-    private static final String METRICS_DESCRIPTION = 
+    private static final String METRICS_DESCRIPTION =
         "Metrics about Replication Replay Log Discovery for an HA Group";
     private static final String METRICS_JMX_CONTEXT = "RegionServer,sub=" + METRICS_NAME;
 
-    public MetricsReplicationReplayLogDiscoveryReplayImpl(final String haGroupName) {
-        super(MetricsReplicationReplayLogDiscoveryReplayImpl.METRICS_NAME,
-            MetricsReplicationReplayLogDiscoveryReplayImpl.METRICS_DESCRIPTION,
+    public MetricsReplicationLogDiscoveryReplayImpl(final String haGroupName) {
+        super(MetricsReplicationLogDiscoveryReplayImpl.METRICS_NAME,
+            MetricsReplicationLogDiscoveryReplayImpl.METRICS_DESCRIPTION,
             MetricsReplicationLogDiscoveryImpl.METRICS_CONTEXT,
-            MetricsReplicationReplayLogDiscoveryReplayImpl.METRICS_JMX_CONTEXT +
-                ",haGroup=" + haGroupName);
-        super.groupMetricsContext = 
-            MetricsReplicationReplayLogDiscoveryReplayImpl.METRICS_JMX_CONTEXT +
-            ",haGroup=" + haGroupName;
+            MetricsReplicationLogDiscoveryReplayImpl.METRICS_JMX_CONTEXT
+                    + ",haGroup=" + haGroupName);
+        super.groupMetricsContext =
+            MetricsReplicationLogDiscoveryReplayImpl.METRICS_JMX_CONTEXT
+                    + ",haGroup=" + haGroupName;
     }
 }

@@ -36,9 +36,9 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Abstract base class for discovering and processing replication log files (to be implemented for
- * replication replay on target and store and forward mode on source).
- * It manages the lifecycle of replication log processing including start/stop of replication log discovery,
- * scheduling periodic replay operations, and processing files from both new and in-progress directories.
+ * replication replay on target and store and forward mode on source). It manages the lifecycle
+ * of replication log processing including start/stop of replication log discovery, scheduling
+ * periodic replay operations, and processing files from both new and in-progress directories.
  */
 public abstract class ReplicationLogDiscovery {
 
@@ -94,7 +94,7 @@ public abstract class ReplicationLogDiscovery {
     }
 
     public void close() {
-        if(this.metrics != null) {
+        if (this.metrics != null) {
             this.metrics.close();
         }
     }
@@ -170,7 +170,7 @@ public abstract class ReplicationLogDiscovery {
     public void replay() throws IOException {
         List<ReplicationRound> replicationRoundList = getRoundsToProcess();
         LOG.info("Number of rounds to process: {}", replicationRoundList.size());
-        for(ReplicationRound replicationRound : replicationRoundList) {
+        for (ReplicationRound replicationRound : replicationRoundList) {
             processRound(replicationRound);
             updateStatePostRoundCompletion(replicationRound);
         }
@@ -188,7 +188,7 @@ public abstract class ReplicationLogDiscovery {
             .getReplicationRoundDurationSeconds() * 1000L;
         long bufferMillis = (long) (roundTimeMills * getWaitingBufferPercentage() / 100.0);
         final List<ReplicationRound> replicationRounds = new ArrayList<>();
-        for(long startTime = previousRoundEndTime;
+        for (long startTime = previousRoundEndTime;
             startTime < currentTime - roundTimeMills - bufferMillis;
             startTime += roundTimeMills) {
             replicationRounds.add(replicationLogTracker.getReplicationShardDirectoryManager()
@@ -211,7 +211,7 @@ public abstract class ReplicationLogDiscovery {
 
         // Process new files for the round
         processNewFilesForRound(replicationRound);
-        if(shouldProcessInProgressDirectory()) {
+        if (shouldProcessInProgressDirectory()) {
             // Conditionally process the in progress files for the round
             processInProgressDirectory();
         }
@@ -225,8 +225,8 @@ public abstract class ReplicationLogDiscovery {
      * @return true if in-progress directory should be processed, false otherwise
      */
     protected boolean shouldProcessInProgressDirectory() {
-        return ThreadLocalRandom.current().nextDouble(100.0) <
-            getInProgressDirectoryProcessProbability();
+        return ThreadLocalRandom.current().nextDouble(100.0)
+                < getInProgressDirectoryProcessProbability();
     }
 
     /**
@@ -240,7 +240,7 @@ public abstract class ReplicationLogDiscovery {
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
         List<Path> files = replicationLogTracker.getNewFilesForRound(replicationRound);
         LOG.trace("Number of new files for round {} is {}", replicationRound, files.size());
-        while(!files.isEmpty()) {
+        while (!files.isEmpty()) {
             processOneRandomFile(files);
             files = replicationLogTracker.getNewFilesForRound(replicationRound);
         }
@@ -261,7 +261,7 @@ public abstract class ReplicationLogDiscovery {
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
         List<Path> files = replicationLogTracker.getInProgressFiles();
         LOG.info("Number of new files for in_progress: {}", files.size());
-        while(!files.isEmpty()) {
+        while (!files.isEmpty()) {
             processOneRandomFile(files);
             files = replicationLogTracker.getInProgressFiles();
         }
@@ -281,8 +281,7 @@ public abstract class ReplicationLogDiscovery {
         Optional<Path> optionalInProgressFilePath = Optional.empty();
         try {
             optionalInProgressFilePath = replicationLogTracker.markInProgress(file);
-            System.out.println("Found optional in progress as " + optionalInProgressFilePath.isPresent());
-            if(optionalInProgressFilePath.isPresent()) {
+            if (optionalInProgressFilePath.isPresent()) {
                 System.out.println("Starting processing");
                 processFile(file);
                 System.out.println("Finished processing");
@@ -292,7 +291,8 @@ public abstract class ReplicationLogDiscovery {
             LOG.error("Failed to process the file {}", file, exception);
             optionalInProgressFilePath.ifPresent(replicationLogTracker::markFailed);
             // Not throwing this exception because next time another random file will be retried.
-            // If it's persistent failure for in_progress directory, cluster state to be updated accordingly.
+            // If it's persistent failure for in_progress directory,
+            // cluster state should to be DEGRADED_STANDBY_FOR_WRITER.
         }
     }
 
@@ -325,7 +325,7 @@ public abstract class ReplicationLogDiscovery {
                         .getReplicationRoundFromEndTime(minTimestampFromNewFiles.get());
             } else {
                 this.lastRoundInSync = replicationLogTracker.getReplicationShardDirectoryManager()
-                        .getReplicationRoundFromEndTime(org.apache.hadoop.hbase.util.EnvironmentEdgeManager.currentTime());
+                        .getReplicationRoundFromEndTime(EnvironmentEdgeManager.currentTimeMillis());
             }
         }
 
@@ -333,7 +333,7 @@ public abstract class ReplicationLogDiscovery {
 
     protected Optional<Long> getMinTimestampFromInProgressFiles() throws IOException {
         List<Path> inProgressFiles = replicationLogTracker.getInProgressFiles();
-        if(inProgressFiles.isEmpty()) {
+        if (inProgressFiles.isEmpty()) {
             return Optional.empty();
         }
         return Optional.of(getMinTimestampFromFiles(inProgressFiles));
@@ -341,7 +341,7 @@ public abstract class ReplicationLogDiscovery {
 
     protected Optional<Long> getMinTimestampFromNewFiles() throws IOException {
         List<Path> newFiles = replicationLogTracker.getNewFiles();
-        if(newFiles.isEmpty()) {
+        if (newFiles.isEmpty()) {
             return Optional.empty();
         }
         return Optional.of(getMinTimestampFromFiles(newFiles));

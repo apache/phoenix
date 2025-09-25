@@ -59,7 +59,7 @@ public class ReplicationLogTracker {
      * Configuration key for delay between file deletion retry attempts
      */
      private static final String FILE_DELETE_RETRY_DELAY_MS_KEY =
-         "phoenix.replication.file.delete.retry.delay.ms";
+        "phoenix.replication.file.delete.retry.delay.ms";
 
      /**
      * Default delay in milliseconds between file deletion retry attempts
@@ -76,13 +76,14 @@ public class ReplicationLogTracker {
     protected MetricsReplicationLogTracker metrics;
 
     public ReplicationLogTracker(final Configuration conf, final String haGroupName,
-                                 final FileSystem fileSystem, final URI rootURI, final DirectoryType directoryType, final MetricsReplicationLogTracker metrics) {
-        this.conf = conf;
-        this.fileSystem = fileSystem;
-        this.haGroupName = haGroupName;
-        this.rootURI = rootURI;
-        this.directoryType = directoryType;
-        this.metrics = metrics;
+        final FileSystem fileSystem, final URI rootURI, final DirectoryType directoryType,
+        final MetricsReplicationLogTracker metrics) {
+            this.conf = conf;
+            this.fileSystem = fileSystem;
+            this.haGroupName = haGroupName;
+            this.rootURI = rootURI;
+            this.directoryType = directoryType;
+            this.metrics = metrics;
     }
 
     protected String getNewLogSubDirectoryName() {
@@ -113,7 +114,7 @@ public class ReplicationLogTracker {
     }
 
     public void close() {
-        if(this.metrics != null) {
+        if (this.metrics != null) {
             System.out.println("Closing the metrics");
             this.metrics.close();
         }
@@ -140,15 +141,15 @@ public class ReplicationLogTracker {
 
         // Filter the files belonging to current round
         for (FileStatus status : fileStatuses) {
-            if(status.isFile()) {
+            if (status.isFile()) {
                 if (!isValidLogFile(status.getPath())) {
                     LOG.warn("Invalid log file found at {}", status.getPath());
                     continue; // Skip invalid files
                 }
                 try {
                     long fileTimestamp = getFileTimestamp(status.getPath());
-                    if(fileTimestamp >= replicationRound.getStartTime() &&
-                        fileTimestamp <= replicationRound.getEndTime()) {
+                    if (fileTimestamp >= replicationRound.getStartTime()
+                            && fileTimestamp <= replicationRound.getEndTime()) {
                         filesInRound.add(status.getPath());
                     }
                 } catch (NumberFormatException exception) {
@@ -192,10 +193,10 @@ public class ReplicationLogTracker {
     public List<Path> getNewFiles() throws IOException {
         List<Path> shardPaths = replicationShardDirectoryManager.getAllShardPaths();
         List<Path> newFiles = new ArrayList<>();
-        for(Path shardPath : shardPaths) {
-            if(fileSystem.exists(shardPath)) {
+        for (Path shardPath : shardPaths) {
+            if (fileSystem.exists(shardPath)) {
                 FileStatus[] fileStatuses = fileSystem.listStatus(shardPath);
-                for(FileStatus fileStatus : fileStatuses) {
+                for (FileStatus fileStatus : fileStatuses) {
                     if (fileStatus.isFile() && isValidLogFile(fileStatus.getPath())) {
                         newFiles.add(fileStatus.getPath());
                     }
@@ -276,17 +277,15 @@ public class ReplicationLogTracker {
                         getMetrics().updateMarkFileCompletedTime(endTime - startTime);
                         return false;
                     } else {
-                        LOG.warn("No matching in-progress file found for prefix: {}. File must " +
-                            "have " +
-                            "been deleted by some other process.", filePrefix);
+                        LOG.warn("No matching in-progress file found for prefix: {}. File must "
+                                + "have " + "been deleted by some other process.", filePrefix);
                         long endTime = EnvironmentEdgeManager.currentTimeMillis();
                         getMetrics().updateMarkFileCompletedTime(endTime - startTime);
                         return true;
                     }
                 } catch (IOException e) {
-                    LOG.warn("IOException while searching for matching in-progress file (attempt {}): " +
-                        "{}",
-                        attempt + 1, file, e);
+                    LOG.warn("IOException while searching for matching in-progress file "
+                            + "(attempt {}): " + "{}", attempt + 1, file, e);
                 }
             }
         }
@@ -313,7 +312,7 @@ public class ReplicationLogTracker {
             final Path targetDirectory;
 
             // Check if file is already in in-progress directory
-            if(file.getParent().toUri().getPath().equals(getInProgressDirPath().toString())) {
+            if (file.getParent().toUri().getPath().equals(getInProgressDirPath().toString())) {
                 // File is already in in-progress directory, replace UUID with a new one
                 // keep the directory same as in progress
                 String[] parts = fileName.split("_");
@@ -340,7 +339,7 @@ public class ReplicationLogTracker {
             Path newPath = new Path(targetDirectory, newFileName);
             if (fileSystem.rename(file, newPath)) {
                 LOG.debug("Successfully marked file as in progress: {} -> {}", file.getName(),
-                newFileName);
+                    newFileName);
                 return Optional.of(newPath);
             } else {
                 LOG.warn("Failed to rename file for in-progress marking: {}", file);
@@ -386,10 +385,10 @@ public class ReplicationLogTracker {
      */
     protected Optional<String> getFileUUID(Path file) throws NumberFormatException {
         String[] parts = file.getName().split("_");
-        if(parts.length < 3) {
+        if (parts.length < 3) {
             return Optional.empty();
         }
-        return Optional.of(parts[parts.length-1].split("\\.")[0]);
+        return Optional.of(parts[parts.length - 1].split("\\.")[0]);
     }
 
     /**
@@ -465,8 +464,8 @@ public class ReplicationLogTracker {
     }
 
     public enum DirectoryType {
-        IN ("in"),
-        OUT ("out");
+        IN("in"),
+        OUT("out");
 
         private final String name;
 
