@@ -109,7 +109,7 @@ public class PhoenixHAAdmin implements Closeable {
     }
 
     String portStr = conf.get(HConstants.ZOOKEEPER_CLIENT_PORT);
-    int port = HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT;
+    int port = HConstants.DEFAULT_ZOOKEEPER_CLIENT_PORT;
     if (portStr != null) {
       try {
         port = Integer.parseInt(portStr);

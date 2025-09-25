@@ -15,25 +15,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hbase.ipc.controller;
+package org.apache.phoenix.compat.hbase;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
+import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
+import org.apache.hadoop.hbase.regionserver.StoreFileScanner;
 
-/**
- * Factory that should only be used when making server-server remote RPCs to the region servers
- * hosting Phoenix SYSTEM tables. Despite the name, this does NOT implement
- * {@link RpcControllerFactory}
- */
-public class ServerSideRPCControllerFactory {
+public class CompatLocalIndexStoreFileScanner extends StoreFileScanner {
 
-  protected final Configuration conf;
-
-  public ServerSideRPCControllerFactory(Configuration conf) {
-    this.conf = conf;
+  public CompatLocalIndexStoreFileScanner(CompatIndexHalfStoreFileReader reader,
+    boolean cacheBlocks, boolean pread, boolean isCompaction, long readPt, long scannerOrder,
+    boolean canOptimizeForNonNullColumn) {
+    super(reader, reader.getCompatScanner(cacheBlocks, pread, isCompaction), !isCompaction,
+      reader.getHFileReader().hasMVCCInfo(), readPt, scannerOrder, canOptimizeForNonNullColumn,
+      reader.getHFileReader().getDataBlockEncoding() == DataBlockEncoding.ROW_INDEX_V1);
   }
 
-  public ServerToServerRpcController newController() {
-    return new ServerToServerRpcControllerImpl(this.conf);
-  }
 }

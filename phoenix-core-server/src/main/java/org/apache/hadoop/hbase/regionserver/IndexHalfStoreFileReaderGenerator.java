@@ -180,7 +180,7 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
           ctx.getEnvironment().getConfiguration(), indexMaintainers, viewConstants, childRegion,
           regionStartKeyInHFile, splitKey,
           childRegion.getReplicaId() == RegionInfo.DEFAULT_REPLICA_ID, new AtomicInteger(0),
-          region.getRegionInfo());
+          region.getRegionInfo(), reader);
       } catch (SQLException e) {
         throw new IOException(e);
       } finally {

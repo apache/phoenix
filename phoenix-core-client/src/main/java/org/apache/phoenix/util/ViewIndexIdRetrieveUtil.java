@@ -19,6 +19,7 @@ package org.apache.phoenix.util;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.ExtendedCell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.schema.types.PLong;
@@ -33,7 +34,7 @@ public final class ViewIndexIdRetrieveUtil {
 
   }
 
-  public static Cell buildNewCell(Cell viewIndexIdCell, byte[] newVal) {
+  public static Cell buildNewCell(ExtendedCell viewIndexIdCell, byte[] newVal) {
     KeyValue keyValue = new KeyValue(viewIndexIdCell.getRowArray(), viewIndexIdCell.getRowOffset(),
       viewIndexIdCell.getRowLength(), viewIndexIdCell.getFamilyArray(),
       viewIndexIdCell.getFamilyOffset(), viewIndexIdCell.getFamilyLength(),
@@ -44,7 +45,8 @@ public final class ViewIndexIdRetrieveUtil {
     return keyValue;
   }
 
-  public static Cell getRetrievedViewIndexIdCell(Cell viewIndexIdCell, boolean isShortToLong) {
+  public static Cell getRetrievedViewIndexIdCell(ExtendedCell viewIndexIdCell,
+    boolean isShortToLong) {
 
     ImmutableBytesWritable columnValue =
       new ImmutableBytesWritable(CellUtil.cloneValue(viewIndexIdCell));

@@ -15,25 +15,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hbase.ipc.controller;
+package org.apache.phoenix.compat.hbase;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
+import org.apache.hadoop.hbase.regionserver.wal.ProtobufWALStreamReader;
 
-/**
- * Factory that should only be used when making server-server remote RPCs to the region servers
- * hosting Phoenix SYSTEM tables. Despite the name, this does NOT implement
- * {@link RpcControllerFactory}
- */
-public class ServerSideRPCControllerFactory {
+public abstract class CompatIndexedHLogReader extends ProtobufWALStreamReader {
 
-  protected final Configuration conf;
-
-  public ServerSideRPCControllerFactory(Configuration conf) {
-    this.conf = conf;
-  }
-
-  public ServerToServerRpcController newController() {
-    return new ServerToServerRpcControllerImpl(this.conf);
-  }
 }

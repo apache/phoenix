@@ -371,8 +371,15 @@ public class UpgradeUtil {
       } finally {
         try {
           admin.close();
-        } catch (IOException e) {
-          LOGGER.warn("Exception while closing admin during pre-split", e);
+        } catch (Throwable t) {
+          // Workaround for HBase 2/3 API changes
+          if (t instanceof IOException) {
+            LOGGER.warn("Exception while closing admin during pre-split", 5);
+          } else if (t instanceof RuntimeException) {
+            throw (RuntimeException) t;
+          } else if (t instanceof Error) {
+            throw (Error) t;
+          }
         }
       }
     }
@@ -2343,8 +2350,15 @@ public class UpgradeUtil {
             if (admin != null) {
               admin.close();
             }
-          } catch (IOException e) {
-            LOGGER.warn("Unable to close admin after upgrade:", e);
+          } catch (Throwable t) {
+            // Workaround for HBase 2/3 API changes
+            if (t instanceof IOException) {
+              LOGGER.warn("Exception while closing admin during pre-split", 5);
+            } else if (t instanceof RuntimeException) {
+              throw (RuntimeException) t;
+            } else if (t instanceof Error) {
+              throw (Error) t;
+            }
           }
         }
       }
