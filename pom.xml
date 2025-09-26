@@ -69,7 +69,7 @@
     along with hbase.version (defined in profiles) -->
     <hadoop.version>3.4.2</hadoop.version>
 
-    <phoenix.thirdparty.version>2.1.0</phoenix.thirdparty.version>
+    <phoenix.thirdparty.version>2.2.0</phoenix.thirdparty.version>
     <hbase.suffix>hbase-${hbase.profile}</hbase.suffix>
 
     <!-- This is used by the release script only -->
@@ -378,6 +378,11 @@
       <dependency>
         <groupId>org.apache.phoenix.thirdparty</groupId>
         <artifactId>phoenix-shaded-guava</artifactId>
+        <version>${phoenix.thirdparty.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix.thirdparty</groupId>
+        <artifactId>phoenix-shaded-protobuf</artifactId>
         <version>${phoenix.thirdparty.version}</version>
       </dependency>
       <dependency>
