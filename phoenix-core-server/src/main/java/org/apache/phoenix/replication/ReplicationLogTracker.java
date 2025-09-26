@@ -58,7 +58,7 @@ public class ReplicationLogTracker {
     /**
      * Configuration key for delay between file deletion retry attempts
      */
-     private static final String FILE_DELETE_RETRY_DELAY_MS_KEY =
+    private static final String FILE_DELETE_RETRY_DELAY_MS_KEY =
         "phoenix.replication.file.delete.retry.delay.ms";
 
      /**
@@ -78,12 +78,12 @@ public class ReplicationLogTracker {
     public ReplicationLogTracker(final Configuration conf, final String haGroupName,
         final FileSystem fileSystem, final URI rootURI, final DirectoryType directoryType,
         final MetricsReplicationLogTracker metrics) {
-            this.conf = conf;
-            this.fileSystem = fileSystem;
-            this.haGroupName = haGroupName;
-            this.rootURI = rootURI;
-            this.directoryType = directoryType;
-            this.metrics = metrics;
+        this.conf = conf;
+        this.fileSystem = fileSystem;
+        this.haGroupName = haGroupName;
+        this.rootURI = rootURI;
+        this.directoryType = directoryType;
+        this.metrics = metrics;
     }
 
     protected String getNewLogSubDirectoryName() {
