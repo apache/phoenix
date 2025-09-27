@@ -285,7 +285,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
       }
       // Add FirstKeyOnlyFilter or EmptyColumnOnlyFilter if there are no references
       // to key value columns. We use FirstKeyOnlyFilter when possible
-      if (keyOnlyFilter) {
+      if (keyOnlyFilter && !context.hasRowSizeFunction()) {
         byte[] ecf = SchemaUtil.getEmptyColumnFamily(table);
         byte[] ecq = table.getEncodingScheme() == NON_ENCODED_QUALIFIERS
           ? QueryConstants.EMPTY_COLUMN_BYTES
@@ -361,12 +361,19 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
       if (optimizeProjection) {
         optimizeProjection(context, scan, table, statement);
       }
+      if (context.hasRowSizeFunction()) {
+        scan.getFamilyMap().clear();
+        ScanUtil.removePageFilter(scan);
+      }
     }
   }
 
   private static void setQualifierRanges(boolean keyOnlyFilter, PTable table, Scan scan,
     StatementContext context) throws SQLException {
-    if (EncodedColumnsUtil.useEncodedQualifierListOptimization(table, scan)) {
+    if (
+      !context.hasRowSizeFunction()
+        && EncodedColumnsUtil.useEncodedQualifierListOptimization(table, scan, context)
+    ) {
       Pair<Integer, Integer> minMaxQualifiers = new Pair<>();
       for (Pair<byte[], byte[]> whereCol : context.getWhereConditionColumns()) {
         byte[] cq = whereCol.getSecond();
@@ -476,7 +483,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     if (statement.getHint().hasHint(Hint.SEEK_TO_COLUMN)) {
       // Allow seeking to column during filtering
       preventSeekToColumn = false;
-    } else if (!EncodedColumnsUtil.useEncodedQualifierListOptimization(table, scan)) {
+    } else if (!EncodedColumnsUtil.useEncodedQualifierListOptimization(table, scan, context)) {
       /*
        * preventSeekToColumn cannot be true, even if hinted, when encoded qualifier list
        * optimization is being used. When using the optimization, it is necessary that we explicitly

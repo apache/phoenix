@@ -23,6 +23,7 @@ import static org.apache.phoenix.util.TestUtil.assertResultSet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -33,9 +34,17 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
 import java.util.Properties;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.types.PChar;
@@ -255,6 +264,94 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
     assertTrue(rs.next());
     assertEquals(8, rs.getLong(1));
     assertFalse(rs.next());
+    conn.close();
+  }
+
+  @Test
+  public void testRowSizeFunction() throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    Connection conn = DriverManager.getConnection(getUrl(), props);
+    String tableName = generateUniqueName();
+    initData(conn, tableName);
+
+    // Let us establish that there are 8 rows
+    QueryBuilder queryBuilder =
+      new QueryBuilder().setSelectExpression("count(1)").setFullTableName(tableName);
+    ResultSet rs = executeQuery(conn, queryBuilder);
+    assertTrue(rs.next());
+    assertEquals(8, rs.getLong(1));
+    assertFalse(rs.next());
+
+    // Let collect row sizes from HBase
+    int[] rowSizes = new int[8];
+    int rowIndex = 0;
+    ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
+    TableName hTableName = TableName.valueOf(tableName);
+    Table table = cqs.getTable(hTableName.getName());
+    Scan scan = new Scan();
+    try (ResultScanner scanner = table.getScanner(scan)) {
+      Result result;
+      while ((result = scanner.next()) != null) {
+        int size = 0;
+        for (Cell cell : result.rawCells()) {
+          size += cell.getSerializedSize();
+        }
+        rowSizes[rowIndex++] = size;
+      }
+    }
+
+    // Verify that each row sizes is computed correctly
+    queryBuilder = new QueryBuilder().setSelectExpression("sum(row_size())")
+      .setFullTableName(tableName).setGroupByClause("ID");
+    rs = executeQuery(conn, queryBuilder);
+    for (int i = 0; i < 8; i++) {
+      assertTrue(rs.next());
+      assertEquals(rowSizes[i], rs.getLong(1));
+    }
+    assertFalse(rs.next());
+
+    // Find the total of row sizes
+    int totalRowSize = 0;
+    for (int i = 0; i < 8; i++) {
+      totalRowSize += rowSizes[i];
+    }
+
+    // Verify that the sum function over row sizes return the expected total
+    queryBuilder =
+      new QueryBuilder().setSelectExpression("sum(row_size())").setFullTableName(tableName);
+    rs = executeQuery(conn, queryBuilder);
+    assertTrue(rs.next());
+    assertEquals(totalRowSize, rs.getLong(1));
+    assertFalse(rs.next());
+
+    // Verify that some other aggregation functions works with row_size()
+    queryBuilder =
+      new QueryBuilder().setSelectExpression("avg(row_size()), min(row_size()), max(row_size())")
+        .setFullTableName(tableName);
+    rs = executeQuery(conn, queryBuilder);
+    assertTrue(rs.next());
+    assertEquals(totalRowSize / 8, rs.getLong(1));
+    // There are four 90 byte rows and four 92 byte rows
+    assertEquals(90, rs.getLong(2));
+    assertEquals(92, rs.getLong(3));
+    assertFalse(rs.next());
+
+    queryBuilder = new QueryBuilder().setSelectExpression("count(1)").setFullTableName(tableName)
+      .setWhereClause("row_size() = 90 and appcpu = 10");
+    rs = executeQuery(conn, queryBuilder);
+    assertTrue(rs.next());
+    assertEquals(2, rs.getLong(1));
+    assertFalse(rs.next());
+
+    // Verify that the row size function is not allowed without an aggregation function in a select
+    // clause
+    queryBuilder = new QueryBuilder().setSelectExpression("row_size()").setFullTableName(tableName);
+    try {
+      executeQuery(conn, queryBuilder);
+      fail();
+    } catch (SQLException e) {
+      // expected
+    }
     conn.close();
   }
 

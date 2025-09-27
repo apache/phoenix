@@ -27,6 +27,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.expression.DelegateExpression;
 import org.apache.phoenix.expression.Expression;
@@ -133,13 +134,14 @@ public class EncodedColumnsUtil {
     return new Pair<>(minQ, maxQ);
   }
 
-  public static boolean useEncodedQualifierListOptimization(PTable table, Scan scan) {
+  public static boolean useEncodedQualifierListOptimization(PTable table, Scan scan,
+    StatementContext context) {
     /*
      * HBase doesn't allow raw scans to have columns set. And we need columns to be set explicitly
      * on the scan to use this optimization. Disabling this optimization for tables with more than
      * one column family. See PHOENIX-3890.
      */
-    return !scan.isRaw() && table.getColumnFamilies().size() == 1
+    return !scan.isRaw() && !context.hasRowSizeFunction() && table.getColumnFamilies().size() == 1
       && table.getImmutableStorageScheme() != null
       && table.getImmutableStorageScheme() == ImmutableStorageScheme.ONE_CELL_PER_COLUMN
       && usesEncodedColumnNames(table) && !table.isTransactional()

@@ -36,6 +36,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 public enum ExpressionType {
   ReverseFunction(ReverseFunction.class),
   RowKey(RowKeyColumnExpression.class),
+  RowSizeFunction(RowSizeFunction.class),
   KeyValue(KeyValueColumnExpression.class),
   LiteralValue(LiteralExpression.class),
   RoundFunction(RoundFunction.class),
