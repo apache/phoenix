@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.replication.metrics;
 
-/** Implementation of metrics source for ReplicationReplayLogFileDiscovery operations. */
+/** Implementation of metrics source for ReplicationLogDiscoveryReplay operations. */
 public class MetricsReplicationLogDiscoveryReplayImpl
     extends MetricsReplicationLogDiscoveryImpl {
 

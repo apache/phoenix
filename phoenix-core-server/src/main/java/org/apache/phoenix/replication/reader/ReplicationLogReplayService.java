@@ -29,6 +29,10 @@ import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFac
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * This component is responsible to start/stop replication log replay via
+ * {@link ReplicationLogReplay} for all the HA groups
+ */
 public class ReplicationLogReplayService {
 
     private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogReplayService.class);

@@ -127,7 +127,7 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
     }
 
     @Override
-    protected void updateStatePostRoundCompletion(final ReplicationRound replicationRound)
+    protected void postRoundCompletion(final ReplicationRound replicationRound)
         throws IOException {
         // TODO: update last round in sync conditionally, i.e. ONLY when cluster is not in
         // DEGRADED_STANBY_FOR_WRITER state
