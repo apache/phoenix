@@ -758,9 +758,9 @@ public class QueryCompiler {
         throw new SQLException(
           "ROW_SIZE() can only be an argument to an aggregation function in a select clause. \n"
             + "To get the size of a single row, an aggregation function can be used over the row, e.g., \n"
-            + "SELECT SUM(ROW_SIZE) ... WHERE PK = <my PK>. To return the row sizes for multiple rows, \n"
+            + "SELECT SUM(ROW_SIZE()) ... WHERE PK = <my PK>. To return the row sizes for multiple rows, \n"
             + "a group by clause can be used to have single row groups, e.g., \n"
-            + "SELECT SUM(ROW_SIZE) ... WHERE PK = <my PK> GROUP BY PK ");
+            + "SELECT SUM(ROW_SIZE()) ... WHERE PK = <my PK> GROUP BY PK ");
       }
     }
     boolean isApplicable = true;

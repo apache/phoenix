@@ -29,7 +29,7 @@ import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 /**
- * Filter for use when expressions reference to the entire row
+ * Filter used when expressions reference to the entire row
  */
 public class RowLevelFilter extends BooleanExpressionFilter {
   private boolean keepRow = false;
@@ -47,10 +47,6 @@ public class RowLevelFilter extends BooleanExpressionFilter {
     keepRow = false;
   }
 
-  /**
-   * Evaluate in filterKeyValue instead of filterRowKey, because HBASE-6562 causes filterRowKey to
-   * be called with deleted or partial row keys.
-   */
   // No @Override for HBase 3 compatibility
   public ReturnCode filterKeyValue(Cell v) {
     return filterCell(v);

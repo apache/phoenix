@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.end2end.ParallelStatsDisabledIT.validateQueryPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.assertResultSet;
 import static org.junit.Assert.assertEquals;
@@ -274,7 +273,7 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
     String tableName = generateUniqueName();
     initData(conn, tableName);
 
-    // Let us establish that there are 8 rows
+    // There are 8 rows
     QueryBuilder queryBuilder =
       new QueryBuilder().setSelectExpression("count(1)").setFullTableName(tableName);
     ResultSet rs = executeQuery(conn, queryBuilder);
@@ -282,7 +281,7 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
     assertEquals(8, rs.getLong(1));
     assertFalse(rs.next());
 
-    // Let collect row sizes from HBase
+    // Row sizes from HBase
     int[] rowSizes = new int[8];
     int rowIndex = 0;
     ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
@@ -300,7 +299,7 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
       }
     }
 
-    // Verify that each row sizes is computed correctly
+    // Verify that each row sizes is computed correctly by the function row_size()
     queryBuilder = new QueryBuilder().setSelectExpression("sum(row_size())")
       .setFullTableName(tableName).setGroupByClause("ID");
     rs = executeQuery(conn, queryBuilder);
@@ -316,7 +315,7 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
       totalRowSize += rowSizes[i];
     }
 
-    // Verify that the sum function over row sizes return the expected total
+    // Verify that the sum function over row sizes returns the expected total
     queryBuilder =
       new QueryBuilder().setSelectExpression("sum(row_size())").setFullTableName(tableName);
     rs = executeQuery(conn, queryBuilder);
@@ -324,13 +323,14 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
     assertEquals(totalRowSize, rs.getLong(1));
     assertFalse(rs.next());
 
-    // Verify that some other aggregation functions works with row_size()
+    // Verify that some other aggregation functions work with row_size()
     queryBuilder =
       new QueryBuilder().setSelectExpression("avg(row_size()), min(row_size()), max(row_size())")
         .setFullTableName(tableName);
     rs = executeQuery(conn, queryBuilder);
     assertTrue(rs.next());
     assertEquals(totalRowSize / 8, rs.getLong(1));
+
     // There are four 90 byte rows and four 92 byte rows
     assertEquals(90, rs.getLong(2));
     assertEquals(92, rs.getLong(3));
