@@ -172,7 +172,7 @@ public abstract class ReplicationLogDiscovery {
         LOG.info("Number of rounds to process: {}", replicationRoundList.size());
         for (ReplicationRound replicationRound : replicationRoundList) {
             processRound(replicationRound);
-            updateStatePostRoundCompletion(replicationRound);
+            postRoundCompletion(replicationRound);
         }
     }
 
@@ -303,14 +303,25 @@ public abstract class ReplicationLogDiscovery {
      */
     protected abstract void processFile(Path path) throws IOException;
 
-    protected void updateStatePostRoundCompletion(ReplicationRound replicationRound)
-        throws IOException {
-        setLastRoundInSync(replicationRound);
-    }
-
     /** Creates a new metrics source for monitoring operations. */
     protected abstract MetricsReplicationLogDiscovery createMetricsSource();
 
+    /**
+     * Set of action to be done once single round processing is done. The default implementation
+     * updates the last round in sync to last successfully processed round.
+     * This can be overridden by specific implementation to do more actions after round is processed.
+     * @param replicationRound - last successfully processed round
+     * @throws IOException
+     */
+    protected void postRoundCompletion(ReplicationRound replicationRound)
+            throws IOException {
+        setLastRoundInSync(replicationRound);
+    }
+
+    /**
+     * Initialize the last round in sync to be the latest round from in progress files or new files.
+     * @throws IOException
+     */
     protected void initializeLastRoundInSync() throws IOException {
         Optional<Long> minTimestampFromInProgressFiles =
                 getMinTimestampFromInProgressFiles();
@@ -331,6 +342,10 @@ public abstract class ReplicationLogDiscovery {
 
     }
 
+    /**
+     * Get minimum timestamp from in progress files. If no in progress files, return empty.
+     * @return minimum timestamp from in progress files.
+     */
     protected Optional<Long> getMinTimestampFromInProgressFiles() throws IOException {
         List<Path> inProgressFiles = replicationLogTracker.getInProgressFiles();
         if (inProgressFiles.isEmpty()) {
@@ -339,6 +354,10 @@ public abstract class ReplicationLogDiscovery {
         return Optional.of(getMinTimestampFromFiles(inProgressFiles));
     }
 
+    /**
+     * Get minimum timestamp from new files. If no new files, return empty.
+     * @return minimum timestamp from new files.
+     */
     protected Optional<Long> getMinTimestampFromNewFiles() throws IOException {
         List<Path> newFiles = replicationLogTracker.getNewFiles();
         if (newFiles.isEmpty()) {

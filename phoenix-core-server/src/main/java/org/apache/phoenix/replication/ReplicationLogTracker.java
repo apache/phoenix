@@ -36,10 +36,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Abstract base class for tracking and managing replication log files across different states.
+ * This is responsible to track and managing replication log files across different states.
  * Handles file lifecycle management including new files, in-progress files, and completed files.
- *
- * This will be extended by specific implementations for tracking IN and OUT directory files.
  */
 public class ReplicationLogTracker {
 
@@ -463,6 +461,11 @@ public class ReplicationLogTracker {
         }
     }
 
+    /**
+     * Enum representing the type of replication log directory.
+     * IN: Directory created on standby cluster for Incoming replication log files
+     * OUT: Directory created on primary cluster for Outgoing replication log files
+     */
     public enum DirectoryType {
         IN("in"),
         OUT("out");
