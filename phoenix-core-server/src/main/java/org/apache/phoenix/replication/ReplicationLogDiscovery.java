@@ -309,7 +309,7 @@ public abstract class ReplicationLogDiscovery {
     /**
      * Set of action to be done once single round processing is done. The default implementation
      * updates the last round in sync to last successfully processed round.
-     * This can be overridden by specific implementation to do more actions after round is processed.
+     * This can be overridden by specific implementation for different post round processing.
      * @param replicationRound - last successfully processed round
      * @throws IOException
      */
