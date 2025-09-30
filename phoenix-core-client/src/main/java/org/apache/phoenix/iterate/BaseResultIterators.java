@@ -285,7 +285,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
       }
       // Add FirstKeyOnlyFilter or EmptyColumnOnlyFilter if there are no references
       // to key value columns. We use FirstKeyOnlyFilter when possible
-      if (keyOnlyFilter && !context.hasRowSizeFunction()) {
+      if (keyOnlyFilter && !context.hasRowSizeFunction() && !context.hasRawRowSizeFunction()) {
         byte[] ecf = SchemaUtil.getEmptyColumnFamily(table);
         byte[] ecq = table.getEncodingScheme() == NON_ENCODED_QUALIFIERS
           ? QueryConstants.EMPTY_COLUMN_BYTES
@@ -361,9 +361,12 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
       if (optimizeProjection) {
         optimizeProjection(context, scan, table, statement);
       }
-      if (context.hasRowSizeFunction()) {
+      if (context.hasRowSizeFunction() || context.hasRawRowSizeFunction()) {
         scan.getFamilyMap().clear();
-        ScanUtil.removePageFilter(scan);
+        if (context.hasRawRowSizeFunction()) {
+          scan.setRaw(true);
+          scan.readAllVersions();
+        }
       }
     }
   }
@@ -371,7 +374,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
   private static void setQualifierRanges(boolean keyOnlyFilter, PTable table, Scan scan,
     StatementContext context) throws SQLException {
     if (
-      !context.hasRowSizeFunction()
+      !context.hasRowSizeFunction() && !context.hasRawRowSizeFunction()
         && EncodedColumnsUtil.useEncodedQualifierListOptimization(table, scan, context)
     ) {
       Pair<Integer, Integer> minMaxQualifiers = new Pair<>();

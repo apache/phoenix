@@ -543,7 +543,7 @@ public class WhereCompiler {
       }
     } else if (
       whereClause != null && !ExpressionUtil.evaluatesToTrue(whereClause)
-        && !context.hasRowSizeFunction()
+        && !context.hasRowSizeFunction() && !context.hasRawRowSizeFunction()
     ) {
       Filter filter = null;
       final Counter counter = new Counter();
@@ -604,7 +604,11 @@ public class WhereCompiler {
       }
       scan.setFilter(filter);
     } else if (whereClause != null && !ExpressionUtil.evaluatesToTrue(whereClause)) {
-      scan.setFilter(new RowLevelFilter(whereClause));
+      if (context.hasRawRowSizeFunction()) {
+        scan.setFilter(new RowLevelFilter(whereClause, true));
+      } else {
+        scan.setFilter(new RowLevelFilter(whereClause, false));
+      }
     }
 
     ScanRanges scanRanges = context.getScanRanges();

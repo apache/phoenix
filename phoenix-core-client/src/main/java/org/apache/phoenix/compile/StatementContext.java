@@ -90,6 +90,7 @@ public class StatementContext {
   private boolean totalSegmentsFunction = false;
   private Integer totalSegmentsValue;
   private boolean hasRowSizeFunction = false;
+  private boolean hasRawRowSizeFunction = false;
 
   public StatementContext(PhoenixStatement statement) {
     this(statement, new Scan());
@@ -123,6 +124,7 @@ public class StatementContext {
     this.totalSegmentsFunction = context.totalSegmentsFunction;
     this.totalSegmentsValue = context.totalSegmentsValue;
     this.hasRowSizeFunction = context.hasRowSizeFunction;
+    this.hasRawRowSizeFunction = context.hasRawRowSizeFunction;
   }
 
   /**
@@ -454,8 +456,16 @@ public class StatementContext {
     return hasRowSizeFunction;
   }
 
+  public boolean hasRawRowSizeFunction() {
+    return hasRawRowSizeFunction;
+  }
+
   public void setHasRowSizeFunctionFunction(boolean hasRowSizeFunction) {
     this.hasRowSizeFunction = hasRowSizeFunction;
+  }
+
+  public void setHasRawRowSizeFunctionFunction(boolean hasRawRowSizeFunction) {
+    this.hasRawRowSizeFunction = hasRawRowSizeFunction;
   }
 
   public Integer getTotalSegmentsValue() {

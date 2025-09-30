@@ -37,6 +37,7 @@ public enum ExpressionType {
   ReverseFunction(ReverseFunction.class),
   RowKey(RowKeyColumnExpression.class),
   RowSizeFunction(RowSizeFunction.class),
+  RawRowSizeFunction(RawRowSizeFunction.class),
   KeyValue(KeyValueColumnExpression.class),
   LiteralValue(LiteralExpression.class),
   RoundFunction(RoundFunction.class),

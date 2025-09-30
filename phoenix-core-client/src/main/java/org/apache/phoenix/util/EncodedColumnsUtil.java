@@ -141,8 +141,8 @@ public class EncodedColumnsUtil {
      * on the scan to use this optimization. Disabling this optimization for tables with more than
      * one column family. See PHOENIX-3890.
      */
-    return !scan.isRaw() && !context.hasRowSizeFunction() && table.getColumnFamilies().size() == 1
-      && table.getImmutableStorageScheme() != null
+    return !scan.isRaw() && !context.hasRowSizeFunction() && !context.hasRawRowSizeFunction()
+      && table.getColumnFamilies().size() == 1 && table.getImmutableStorageScheme() != null
       && table.getImmutableStorageScheme() == ImmutableStorageScheme.ONE_CELL_PER_COLUMN
       && usesEncodedColumnNames(table) && !table.isTransactional()
       && !ScanUtil.hasDynamicColumns(table);

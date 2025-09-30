@@ -267,7 +267,7 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
   }
 
   @Test
-  public void testRowSizeFunction() throws Exception {
+  public void testRowSizeFunctions() throws Exception {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     Connection conn = DriverManager.getConnection(getUrl(), props);
     String tableName = generateUniqueName();
@@ -352,6 +352,64 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
     } catch (SQLException e) {
       // expected
     }
+
+    // Make sure row size functions works with multi-tenant tables
+    tableName = generateUniqueName();
+    String sql = "CREATE TABLE " + tableName
+      + " (ORGANIZATION_ID VARCHAR NOT NULL, CONTAINER_ID VARCHAR, ENTITY_ID INTEGER,"
+      + " CONSTRAINT PK PRIMARY KEY (ORGANIZATION_ID, CONTAINER_ID)) MULTI_TENANT = TRUE";
+    conn.createStatement().execute(sql);
+
+    conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('a','1', 11)");
+    conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('b','2', 22)");
+    conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('c','3', 33)");
+    conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('d','1', 44)");
+    conn.commit();
+    conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('a','1', 12)");
+    conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('a','2', 11)");
+    conn.commit();
+    conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('c','9', 11)");
+    conn.commit();
+    conn.createStatement().execute("DELETE FROM " + tableName + " WHERE organization_id='d'");
+    conn.commit();
+
+    queryBuilder = new QueryBuilder().setSelectExpression("ORGANIZATION_ID, sum(row_size())")
+      .setFullTableName(tableName).setGroupByClause("ORGANIZATION_ID");
+    rs = executeQuery(conn, queryBuilder);
+    assertTrue(rs.next());
+    assertEquals("a", rs.getString(1));
+    assertEquals(118, rs.getLong(2));
+    assertTrue(rs.next());
+    assertEquals("b", rs.getString(1));
+    assertEquals(59, rs.getLong(2));
+    assertTrue(rs.next());
+    assertEquals("c", rs.getString(1));
+    assertEquals(118, rs.getLong(2));
+    assertFalse(rs.next());
+
+    // Make sure raw_row_size() computation includes all cell versions and delete markers
+    queryBuilder = new QueryBuilder().setSelectExpression("ORGANIZATION_ID, sum(raw_row_size())")
+      .setFullTableName(tableName).setGroupByClause("ORGANIZATION_ID");
+    rs = executeQuery(conn, queryBuilder);
+
+    assertTrue(rs.next());
+    assertEquals("a", rs.getString(1));
+    // There are 3 row versions, each version is 59 bytes and so 3 * 59 = 177
+    assertEquals(177, rs.getLong(2));
+    assertTrue(rs.next());
+    assertEquals("b", rs.getString(1));
+    // There is one row version and one version is 59 bytes
+    assertEquals(59, rs.getLong(2));
+    assertTrue(rs.next());
+    assertEquals("c", rs.getString(1));
+    // There are two versions, 2 * 59 = 118
+    assertEquals(118, rs.getLong(2));
+    assertTrue(rs.next());
+    assertEquals("d", rs.getString(1));
+    // One row version (59 bytes) and plus delete family marker
+    assertEquals(83, rs.getLong(2));
+    assertFalse(rs.next());
+
     conn.close();
   }
 

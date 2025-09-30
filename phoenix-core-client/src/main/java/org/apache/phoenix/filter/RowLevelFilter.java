@@ -32,13 +32,15 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * Filter used when expressions reference to the entire row
  */
 public class RowLevelFilter extends BooleanExpressionFilter {
+  private boolean allVersions = false;
   private boolean keepRow = false;
 
   public RowLevelFilter() {
   }
 
-  public RowLevelFilter(Expression expression) {
+  public RowLevelFilter(Expression expression, boolean allVersions) {
     super(expression);
+    this.allVersions = allVersions;
   }
 
   @Override
@@ -54,7 +56,7 @@ public class RowLevelFilter extends BooleanExpressionFilter {
 
   @Override
   public ReturnCode filterCell(Cell v) {
-    return ReturnCode.INCLUDE_AND_NEXT_COL;
+    return allVersions ? ReturnCode.INCLUDE : ReturnCode.INCLUDE_AND_NEXT_COL;
   }
 
   @Override
@@ -72,11 +74,13 @@ public class RowLevelFilter extends BooleanExpressionFilter {
   @Override
   public void readFields(DataInput input) throws IOException {
     super.readFields(input);
+    allVersions = input.readBoolean();
   }
 
   @Override
   public void write(DataOutput output) throws IOException {
     super.write(output);
+    output.writeBoolean(allVersions);
   }
 
   public static RowLevelFilter parseFrom(final byte[] pbBytes) throws DeserializationException {
