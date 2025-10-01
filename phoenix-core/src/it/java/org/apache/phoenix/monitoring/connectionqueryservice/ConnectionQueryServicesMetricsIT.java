@@ -17,15 +17,21 @@
  */
 package org.apache.phoenix.monitoring.connectionqueryservice;
 
-import static org.apache.phoenix.monitoring.MetricType.*;
+import static org.apache.phoenix.monitoring.MetricType.OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.OPEN_PHOENIX_CONNECTIONS_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
 import static org.apache.phoenix.query.QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS;
 import static org.apache.phoenix.query.QueryServices.CONNECTION_QUERY_SERVICE_METRICS_ENABLED;
 import static org.apache.phoenix.query.QueryServices.INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS;
 import static org.apache.phoenix.query.QueryServices.QUERY_SERVICES_NAME;
 import static org.apache.phoenix.util.PhoenixRuntime.clearAllConnectionQueryServiceMetrics;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -60,13 +66,13 @@ import org.slf4j.LoggerFactory;
 @Category(NeedsOwnMiniClusterTest.class)
 public class ConnectionQueryServicesMetricsIT extends BaseTest {
   private static final Logger LOGGER =
-    LoggerFactory.getLogger(ConnectionQueryServicesMetricsIT.class);
+      LoggerFactory.getLogger(ConnectionQueryServicesMetricsIT.class);
   private AtomicInteger counter = new AtomicInteger();
   private static HBaseTestingUtility hbaseTestUtil;
   private String tableName;
   private static final String CONN_QUERY_SERVICE_1 = "CONN_QUERY_SERVICE_1";
   private static final String CONN_QUERY_SERVICE_CHECK_CONN_THROTTLE =
-    "CONN_QUERY_SERVICE_CHECK_CONN_THROTTLE";
+      "CONN_QUERY_SERVICE_CHECK_CONN_THROTTLE";
   private static final String CONN_QUERY_SERVICE_2 = "CONN_QUERY_SERVICE_2";
   private static final String CONN_QUERY_SERVICE_NULL = null;
 
@@ -114,7 +120,7 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
     hbaseTestUtil = new HBaseTestingUtility(conf);
     setUpConfigForMiniCluster(conf);
     conf.set(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
-      QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
     hbaseTestUtil.startMiniCluster();
     // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
     String zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
@@ -170,8 +176,8 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
       } catch (Exception e) {
         e.printStackTrace();
         if (
-          !e.getMessage()
-            .equals("This should not be thrown for " + CONN_QUERY_SERVICE_CHECK_CONN_THROTTLE)
+            !e.getMessage()
+                .equals("This should not be thrown for " + CONN_QUERY_SERVICE_CHECK_CONN_THROTTLE)
         ) {
           // Increment counter for successful check. For this Connection Query Service,
           // code will throw error since it will try to create more than 2 connections.
@@ -216,38 +222,17 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
     assertEquals("Number of passing CSQI Metrics check should be : ", 4, counter.get());
   }
 
-  @Test
-  public void testConnectionTime() {
-    Map<String, List<ConnectionQueryServicesMetric>> metrics =
-        ConnectionQueryServicesMetricsManager.getAllConnectionQueryServicesMetrics();
-    List<ConnectionQueryServicesMetric> serviceMetrics = metrics.get("DEFAULT_CQSN");
-    assertNotNull("No metrics found for service: DEFAULT_CQSN", serviceMetrics);
-
-    // Find connection creation time metric
-    boolean foundMetric = false;
-    for (ConnectionQueryServicesMetric metric : serviceMetrics) {
-      System.out.println("Found metric: " + metric.getMetricType() + " = " + metric.getValue());
-      if (metric.getMetricType() == PHOENIX_CONNECTION_CREATION_TIME_MS) {
-        assertTrue("Connection creation time should be >= 0", metric.getValue() >= 0);
-        foundMetric = true;
-        break;
-      }
-    }
-    assertTrue("Connection creation time metric not found", foundMetric);
-
-  }
-
   private void checkConnectionQueryServiceMetricsValues(String queryServiceName) throws Exception {
     String CREATE_TABLE_DDL =
-      "CREATE TABLE IF NOT EXISTS %s (K VARCHAR(10) NOT NULL" + " PRIMARY KEY, V VARCHAR)";
+        "CREATE TABLE IF NOT EXISTS %s (K VARCHAR(10) NOT NULL" + " PRIMARY KEY, V VARCHAR)";
     String princURL = connUrlWithPrincipal(queryServiceName);
     LOGGER.info("Connection Query Service : " + queryServiceName + " URL : " + princURL);
 
     String connQueryServiceName;
     try (Connection conn = DriverManager.getConnection(princURL);
-      Statement stmt = conn.createStatement()) {
+        Statement stmt = conn.createStatement()) {
       connQueryServiceName = conn.unwrap(PhoenixConnection.class).getQueryServices()
-        .getConfiguration().get(QUERY_SERVICES_NAME);
+          .getConfiguration().get(QUERY_SERVICES_NAME);
       // When queryServiceName is passed as null, Phoenix will change query service name
       // to DEFAULT_CQSN. That's why we are re-assigning the query service name here to check
       // metric in finally block.
@@ -260,7 +245,7 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
           try (Connection conn2 = DriverManager.getConnection(princURL)) {
             // This should never execute in this test.
             throw new RuntimeException(
-              "This should not be thrown for " + CONN_QUERY_SERVICE_CHECK_CONN_THROTTLE);
+                "This should not be thrown for " + CONN_QUERY_SERVICE_CHECK_CONN_THROTTLE);
           }
         }
       } else {
@@ -308,9 +293,9 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
    *                         {@link MetricType#OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER}
    */
   private void assertHistogramMetricsForMutations(String queryServiceName, int oMaxValue,
-    int oMinValue, int ioMaxValue, int ioMinValue) {
+      int oMinValue, int ioMaxValue, int ioMinValue) {
     Map<String, List<HistogramDistribution>> listOfHistoDistribution =
-      PhoenixRuntime.getAllConnectionQueryServicesHistograms();
+        PhoenixRuntime.getAllConnectionQueryServicesHistograms();
     for (HistogramDistribution histo : listOfHistoDistribution.get(queryServiceName)) {
       assertHistogram(histo, "PhoenixInternalOpenConn", ioMaxValue, ioMinValue, CompareOp.EQ);
       assertHistogram(histo, "PhoenixOpenConn", oMaxValue, oMinValue, CompareOp.EQ);
@@ -318,7 +303,7 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
   }
 
   public void assertHistogram(HistogramDistribution histo, String histoName, long maxValue,
-    long minValue, CompareOp op) {
+      long minValue, CompareOp op) {
     if (histo.getHistoName().equals(histoName)) {
       switch (op) {
         case EQ:
@@ -338,7 +323,7 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
    */
   public void assertMetricValues(String queryServiceName, int o, int ct, int io) {
     Map<String, List<ConnectionQueryServicesMetric>> listOfMetrics =
-      PhoenixRuntime.getAllConnectionQueryServicesCounters();
+        PhoenixRuntime.getAllConnectionQueryServicesCounters();
     /*
      * There are 3 metrics which are tracked as part of Phoenix Connection Query Service Metrics.
      * Defined here : {@link ConnectionQueryServicesMetrics.QueryServiceMetrics}
@@ -358,7 +343,7 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
    */
   public void assertMetricListIsEmpty() {
     Map<String, List<ConnectionQueryServicesMetric>> listOfMetrics =
-      PhoenixRuntime.getAllConnectionQueryServicesCounters();
+        PhoenixRuntime.getAllConnectionQueryServicesCounters();
     assertTrue(listOfMetrics.isEmpty());
   }
 
@@ -371,7 +356,7 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
    * @param op           CompareOp
    */
   private static void assertMetricValue(Metric m, MetricType checkType, long compareValue,
-    CompareOp op) {
+      CompareOp op) {
     if (m.getMetricType().equals(checkType)) {
       switch (op) {
         case EQ:

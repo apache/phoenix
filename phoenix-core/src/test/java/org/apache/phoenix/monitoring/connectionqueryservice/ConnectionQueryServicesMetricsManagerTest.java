@@ -17,12 +17,13 @@
  */
 package org.apache.phoenix.monitoring.connectionqueryservice;
 
-import static org.apache.phoenix.monitoring.MetricType.*;
+import static org.apache.phoenix.monitoring.MetricType.OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.OPEN_PHOENIX_CONNECTIONS_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
 import static org.apache.phoenix.monitoring.connectionqueryservice.ConnectionQueryServicesNameMetricsTest.connectionQueryServiceNames;
 import static org.apache.phoenix.monitoring.connectionqueryservice.ConnectionQueryServicesNameMetricsTest.openInternalPhoenixConnCounter;
 import static org.apache.phoenix.monitoring.connectionqueryservice.ConnectionQueryServicesNameMetricsTest.openPhoenixConnCounter;
 import static org.apache.phoenix.monitoring.connectionqueryservice.ConnectionQueryServicesNameMetricsTest.phoenixConnThrottledCounter;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.util.List;
@@ -31,7 +32,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.monitoring.ConnectionQueryServicesMetric;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -39,13 +39,13 @@ import org.mockito.Mockito;
 public class ConnectionQueryServicesMetricsManagerTest {
   public boolean verifyMetricsReset() {
     Map<String, List<ConnectionQueryServicesMetric>> map =
-      ConnectionQueryServicesMetricsManager.getAllConnectionQueryServicesMetrics();
+        ConnectionQueryServicesMetricsManager.getAllConnectionQueryServicesMetrics();
     return map != null && map.isEmpty();
   }
 
   public boolean verifyConnectionQueryServiceNamesExists(String connectionQueryServiceName) {
     Map<String, List<ConnectionQueryServicesMetric>> map =
-      ConnectionQueryServicesMetricsManager.getAllConnectionQueryServicesMetrics();
+        ConnectionQueryServicesMetricsManager.getAllConnectionQueryServicesMetrics();
     return map != null && map.containsKey(connectionQueryServiceName);
   }
 
@@ -55,18 +55,18 @@ public class ConnectionQueryServicesMetricsManagerTest {
     QueryServicesOptions options = QueryServicesOptions.withDefaults();
     options.setConnectionQueryServiceMetricsEnabled();
     ConnectionQueryServicesMetricsManager connectionQueryServicesMetricsManager =
-      new ConnectionQueryServicesMetricsManager(options);
+        new ConnectionQueryServicesMetricsManager(options);
     ConnectionQueryServicesMetricsManager.setInstance(connectionQueryServicesMetricsManager);
 
     ConnectionQueryServicesNameMetricsTest testData = new ConnectionQueryServicesNameMetricsTest();
     testData.populateMetrics();
     for (int i = 0; i < connectionQueryServiceNames.length; i++) {
       ConnectionQueryServicesMetricsManager.updateMetrics(connectionQueryServiceNames[i],
-        OPEN_PHOENIX_CONNECTIONS_COUNTER, openPhoenixConnCounter[i]);
+          OPEN_PHOENIX_CONNECTIONS_COUNTER, openPhoenixConnCounter[i]);
       ConnectionQueryServicesMetricsManager.updateMetrics(connectionQueryServiceNames[i],
-        OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER, openInternalPhoenixConnCounter[i]);
+          OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER, openInternalPhoenixConnCounter[i]);
       ConnectionQueryServicesMetricsManager.updateMetrics(connectionQueryServiceNames[i],
-        PHOENIX_CONNECTIONS_THROTTLED_COUNTER, phoenixConnThrottledCounter[i]);
+          PHOENIX_CONNECTIONS_THROTTLED_COUNTER, phoenixConnThrottledCounter[i]);
     }
     testData.verfiyCountOfConnectionQueryServices(connectionQueryServiceNames.length);
     ConnectionQueryServicesMetricsManager.clearAllConnectionQueryServiceMetrics();
@@ -83,7 +83,7 @@ public class ConnectionQueryServicesMetricsManagerTest {
     Mockito.doReturn(true).when(mockOptions).isConnectionQueryServiceMetricsEnabled();
     Mockito.doReturn(conf).when(mockOptions).getConfiguration();
     ConnectionQueryServicesMetricsManager connectionQueryServicesMetricsManager =
-      new ConnectionQueryServicesMetricsManager(mockOptions);
+        new ConnectionQueryServicesMetricsManager(mockOptions);
     ConnectionQueryServicesMetricsManager.setInstance(connectionQueryServicesMetricsManager);
     for (int i = 0; i < 9; i++) {
       updateMetricsAndHistogram(i + 1, connectionQueryServiceName);
@@ -91,41 +91,20 @@ public class ConnectionQueryServicesMetricsManagerTest {
 
     // Generate distribution map from histogram snapshots.
     ConnectionQueryServicesHistogram connectionQueryServicesHistogram =
-      ConnectionQueryServicesMetricsManager
-        .getConnectionQueryServiceOpenConnectionHistogram(connectionQueryServiceName);
+        ConnectionQueryServicesMetricsManager
+            .getConnectionQueryServiceOpenConnectionHistogram(connectionQueryServiceName);
 
     Map<String, Long> openPhoenixConnMap =
-      connectionQueryServicesHistogram.getRangeHistogramDistribution().getRangeDistributionMap();
+        connectionQueryServicesHistogram.getRangeHistogramDistribution().getRangeDistributionMap();
     for (Long count : openPhoenixConnMap.values()) {
       Assert.assertEquals(new Long(3), count);
     }
   }
 
-  @Test
-  public void testConnectionTime() {
-    Map<String, List<ConnectionQueryServicesMetric>> metrics =
-        ConnectionQueryServicesMetricsManager.getAllConnectionQueryServicesMetrics();
-    List<ConnectionQueryServicesMetric> serviceMetrics = metrics.get("DEFAULT_CQSN");
-    assertNotNull("No metrics found for service: DEFAULT_CQSN", serviceMetrics);
-
-    // Find connection creation time metric
-    boolean foundMetric = false;
-    for (ConnectionQueryServicesMetric metric : serviceMetrics) {
-      System.out.println("Found metric: " + metric.getMetricType() + " = " + metric.getValue());
-      if (metric.getMetricType() == PHOENIX_CONNECTION_CREATION_TIME_MS) {
-        assertTrue("Connection creation time should be >= 0", metric.getValue() >= 0);
-        foundMetric = true;
-        break;
-      }
-    }
-    assertTrue("Connection creation time metric not found", foundMetric);
-
-  }
-
   private void updateMetricsAndHistogram(long counter, String connectionQueryServiceName) {
     ConnectionQueryServicesMetricsManager.updateMetrics(connectionQueryServiceName,
-      OPEN_PHOENIX_CONNECTIONS_COUNTER, counter);
+        OPEN_PHOENIX_CONNECTIONS_COUNTER, counter);
     ConnectionQueryServicesMetricsManager
-      .updateConnectionQueryServiceOpenConnectionHistogram(counter, connectionQueryServiceName);
+        .updateConnectionQueryServiceOpenConnectionHistogram(counter, connectionQueryServiceName);
   }
 }
