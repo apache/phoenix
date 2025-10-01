@@ -196,10 +196,8 @@ public class ParallelPhoenixResultSetTest {
   @Test
   public void testRS1FailsImmediatelyNext() throws Exception {
     ResultSet rs2 = Mockito.mock(ResultSet.class);
-
     Executor rsExecutor2 = Mockito.mock(Executor.class);
     CountDownLatch latch = new CountDownLatch(1);
-
     // inject a sleep
     doAnswer((InvocationOnMock invocation) -> {
       Thread thread = new Thread(() -> {
