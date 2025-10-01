@@ -22,7 +22,6 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.when;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -73,10 +72,6 @@ public class ParallelPhoenixResultSetTest {
 
     ResultSet rs1 = Mockito.mock(ResultSet.class);
     ResultSet rs2 = Mockito.mock(ResultSet.class);
-
-    // Mock the next() behavior
-    when(rs1.next()).thenReturn(true);
-    when(rs2.next()).thenReturn(false);
 
     Executor rsExecutor2 = Mockito.mock(Executor.class);
 
@@ -132,16 +127,15 @@ public class ParallelPhoenixResultSetTest {
 
     // Verify rs1 (winner) was not closed
     Mockito.verify(rs1, Mockito.never()).close();
+
+    rs1.close();
+    Mockito.verify(rs1).close();
   }
 
   @Test
   public void testRS2WinsNext() throws Exception {
     ResultSet rs1 = Mockito.mock(ResultSet.class);
     ResultSet rs2 = Mockito.mock(ResultSet.class);
-
-    // Mock the next() behavior
-    when(rs1.next()).thenReturn(false);
-    when(rs2.next()).thenReturn(true);
 
     Executor rsExecutor1 = Mockito.mock(Executor.class);
     CountDownLatch latch = new CountDownLatch(1);
@@ -182,7 +176,7 @@ public class ParallelPhoenixResultSetTest {
     // rs1 is not done yet, so it should NOT be closed immediately
     Mockito.verify(rs1, Mockito.never()).close();
 
-    // Now complete rs1 and verify it gets closed asynchronously
+    // Complete rs1 and verify it gets closed asynchronously
     latch.countDown();
 
     // Wait for async close to happen (with timeout)
@@ -194,14 +188,14 @@ public class ParallelPhoenixResultSetTest {
 
     // Verify rs2 (winner) was not closed
     Mockito.verify(rs2, Mockito.never()).close();
+
+    rs2.close();
+    Mockito.verify(rs2).close();
   }
 
   @Test
   public void testRS1FailsImmediatelyNext() throws Exception {
     ResultSet rs2 = Mockito.mock(ResultSet.class);
-
-    // Mock the next() behavior
-    when(rs2.next()).thenReturn(true);
 
     Executor rsExecutor2 = Mockito.mock(Executor.class);
     CountDownLatch latch = new CountDownLatch(1);
@@ -234,12 +228,9 @@ public class ParallelPhoenixResultSetTest {
 
     assertEquals(rs2, resultSet.getResultSet());
 
-    // rs1 failed exceptionally, so it should NOT be closed (correct behavior)
+    // rs1 failed exceptionally, so it should NOT be closed
     // rs2 won and is the active result set, so it should NOT be closed
     Mockito.verify(rs2, Mockito.never()).close();
-
-    // Note: rs1 is not a real ResultSet since it failed, so no close verification needed
-    // The async closing logic correctly handles failed futures by not attempting to close them
 
     // Cleanup
     latch.countDown();
@@ -249,10 +240,6 @@ public class ParallelPhoenixResultSetTest {
   public void testRS1SucceedsDuringNext() throws Exception {
     ResultSet rs1 = Mockito.mock(ResultSet.class);
     ResultSet rs2 = Mockito.mock(ResultSet.class);
-
-    // Mock the next() behavior
-    when(rs1.next()).thenReturn(true);
-    when(rs2.next()).thenReturn(false);
 
     Executor rsExecutor1 = Mockito.mock(Executor.class);
     Executor rsExecutor2 = Mockito.mock(Executor.class);
