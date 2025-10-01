@@ -29,6 +29,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.HighAvailabilityGroup.HAGroupInfo;
 import org.junit.Before;
@@ -193,5 +196,66 @@ public class ParallelPhoenixNullComparingResultSetTest {
     assertTrue(ncrs.next());
     assertEquals(rs1, ncrs.getResultSet());
     assertEquals("test", ncrs.getString(0));
+  }
+
+  @Test
+  public void testAsyncIdleResultSetClosing() throws SQLException, InterruptedException {
+    ResultSet rs1 = Mockito.mock(ResultSet.class);
+    ResultSet rs2 = Mockito.mock(ResultSet.class);
+
+    // Mock the next() behavior
+    when(rs1.next()).thenReturn(true);
+    when(rs2.next()).thenReturn(false);
+
+    Executor rsExecutor2 = Mockito.mock(Executor.class);
+    CountDownLatch latch = new CountDownLatch(1);
+    CountDownLatch closeLatch = new CountDownLatch(1);
+
+    // Set up rs2 to notify when close() is called for async verification
+    doAnswer(invocation -> {
+      closeLatch.countDown();
+      return null;
+    }).when(rs2).close();
+
+    // inject a sleep for rs2
+    doAnswer(invocation -> {
+      Thread thread = new Thread(() -> {
+        try {
+          latch.await(5, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+          throw new RuntimeException();
+        }
+        ((Runnable) invocation.getArguments()[0]).run();
+      });
+      thread.start();
+      return null;
+    }).when(rsExecutor2).execute(Mockito.any(Runnable.class));
+
+    CompletableFuture<ResultSet> completableRs1 = CompletableFuture.completedFuture(rs1);
+    CompletableFuture<ResultSet> completableRs2 =
+      CompletableFuture.supplyAsync(() -> rs2, rsExecutor2);
+
+    ParallelPhoenixNullComparingResultSet ncrs =
+      new ParallelPhoenixNullComparingResultSet(context, completableRs1, completableRs2);
+
+    // Call next() - rs1 should win because it's already completed
+    assertTrue(ncrs.next());
+    assertEquals(rs1, ncrs.getResultSet());
+
+    // rs2 is not done yet, so it should NOT be closed immediately
+    Mockito.verify(rs2, Mockito.never()).close();
+
+    // Now complete rs2 and verify it gets closed asynchronously
+    latch.countDown();
+
+    // Wait for async close to happen (with timeout)
+    assertTrue("rs2 should be closed asynchronously within 1 second",
+      closeLatch.await(1, TimeUnit.SECONDS));
+
+    // Explicitly verify rs2 (idle) was closed
+    Mockito.verify(rs2).close();
+
+    // Verify rs1 (winner) was not closed
+    Mockito.verify(rs1, Mockito.never()).close();
   }
 }

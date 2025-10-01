@@ -116,6 +116,8 @@ public class ParallelPhoenixNullComparingResultSet extends DelegateResultSet
           // If first result is not empty
           if (firstResult) {
             this.rs = candidateResultPair.getFirst().getRs().get();
+            // Close the idle result set immediately to release server resources
+            closeIdleResultSet(candidateResultPair.getSecond().getRs());
             logIfTraceEnabled(candidateResultPair.getFirst());
             incrementClusterUsedCount(candidateResultPair.getFirst());
             return true;
@@ -139,12 +141,14 @@ public class ParallelPhoenixNullComparingResultSet extends DelegateResultSet
                   .buildException();
             }
             this.rs = candidateResultPair.getFirst().getRs().get();
+            closeIdleResultSet(candidateResultPair.getSecond().getRs());
             logIfTraceEnabled(candidateResultPair.getFirst());
             incrementClusterUsedCount(candidateResultPair.getFirst());
             return false;
           }
           // TODO: track which rs came back first and is potentially faster. Bind accordingly
           this.rs = candidateResultPair.getSecond().getRs().get();
+          closeIdleResultSet(candidateResultPair.getFirst().getRs());
           logIfTraceEnabled(candidateResultPair.getSecond());
           incrementClusterUsedCount(candidateResultPair.getSecond());
           return secondResult;
@@ -159,8 +163,24 @@ public class ParallelPhoenixNullComparingResultSet extends DelegateResultSet
     return rs.next();
   }
 
-  private Object runOnResultSets(Function<ResultSet, ?> function) throws SQLException {
-    return ParallelPhoenixUtil.INSTANCE.runFutures(function, rs1, rs2, context, true);
+  /**
+   * Closes the idle result set to release server resources asynchronously. This is called after
+   * we've bound to the winning result set.
+   */
+  private void closeIdleResultSet(CompletableFuture<ResultSet> idleResultSetFuture) {
+    idleResultSetFuture.whenComplete((resultSet, throwable) -> {
+      if (throwable == null && resultSet != null) {
+        try {
+          if (!resultSet.isClosed()) {
+            resultSet.close();
+          }
+        } catch (Exception e) {
+          // Log the exception but don't throw it, as this is cleanup
+          // The main result set should still work fine
+          LOG.warn("Failed to close idle result set: {}", e.getMessage(), e);
+        }
+      }
+    });
   }
 
   /**
@@ -174,10 +194,12 @@ public class ParallelPhoenixNullComparingResultSet extends DelegateResultSet
     CompletableFuture<Boolean> candidate2 = candidateResult2.getCandidate();
     if (candidate1.isDone() && !candidate1.isCompletedExceptionally() && candidate1.get()) {
       this.rs = candidateResult1.getRs().get();
+      closeIdleResultSet(candidateResult2.getRs());
       logIfTraceEnabled(candidateResult1);
       incrementClusterUsedCount(candidateResult1);
     } else if (candidate2.isDone() && !candidate2.isCompletedExceptionally() && candidate2.get()) {
       this.rs = candidateResult2.getRs().get();
+      closeIdleResultSet(candidateResult1.getRs());
       logIfTraceEnabled(candidateResult2);
       incrementClusterUsedCount(candidateResult2);
     } else {
@@ -204,23 +226,11 @@ public class ParallelPhoenixNullComparingResultSet extends DelegateResultSet
       pair.setFirst(candidateResult2);
       pair.setSecond(candidateResult1);
     } else {
+
       throw new SQLException(
         "Unexpected exception, one of the RS should've completed successfully");
     }
     return pair;
-  }
-
-  @Override
-  public void close() throws SQLException {
-    Function<ResultSet, Void> function = (T) -> {
-      try {
-        T.close();
-        return null;
-      } catch (SQLException exception) {
-        throw new CompletionException(exception);
-      }
-    };
-    runOnResultSets(function);
   }
 
   @VisibleForTesting
