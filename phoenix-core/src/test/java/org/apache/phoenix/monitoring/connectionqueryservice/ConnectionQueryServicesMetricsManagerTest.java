@@ -39,13 +39,13 @@ import org.mockito.Mockito;
 public class ConnectionQueryServicesMetricsManagerTest {
   public boolean verifyMetricsReset() {
     Map<String, List<ConnectionQueryServicesMetric>> map =
-        ConnectionQueryServicesMetricsManager.getAllConnectionQueryServicesMetrics();
+      ConnectionQueryServicesMetricsManager.getAllConnectionQueryServicesMetrics();
     return map != null && map.isEmpty();
   }
 
   public boolean verifyConnectionQueryServiceNamesExists(String connectionQueryServiceName) {
     Map<String, List<ConnectionQueryServicesMetric>> map =
-        ConnectionQueryServicesMetricsManager.getAllConnectionQueryServicesMetrics();
+      ConnectionQueryServicesMetricsManager.getAllConnectionQueryServicesMetrics();
     return map != null && map.containsKey(connectionQueryServiceName);
   }
 
@@ -55,18 +55,18 @@ public class ConnectionQueryServicesMetricsManagerTest {
     QueryServicesOptions options = QueryServicesOptions.withDefaults();
     options.setConnectionQueryServiceMetricsEnabled();
     ConnectionQueryServicesMetricsManager connectionQueryServicesMetricsManager =
-        new ConnectionQueryServicesMetricsManager(options);
+      new ConnectionQueryServicesMetricsManager(options);
     ConnectionQueryServicesMetricsManager.setInstance(connectionQueryServicesMetricsManager);
 
     ConnectionQueryServicesNameMetricsTest testData = new ConnectionQueryServicesNameMetricsTest();
     testData.populateMetrics();
     for (int i = 0; i < connectionQueryServiceNames.length; i++) {
       ConnectionQueryServicesMetricsManager.updateMetrics(connectionQueryServiceNames[i],
-          OPEN_PHOENIX_CONNECTIONS_COUNTER, openPhoenixConnCounter[i]);
+        OPEN_PHOENIX_CONNECTIONS_COUNTER, openPhoenixConnCounter[i]);
       ConnectionQueryServicesMetricsManager.updateMetrics(connectionQueryServiceNames[i],
-          OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER, openInternalPhoenixConnCounter[i]);
+        OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER, openInternalPhoenixConnCounter[i]);
       ConnectionQueryServicesMetricsManager.updateMetrics(connectionQueryServiceNames[i],
-          PHOENIX_CONNECTIONS_THROTTLED_COUNTER, phoenixConnThrottledCounter[i]);
+        PHOENIX_CONNECTIONS_THROTTLED_COUNTER, phoenixConnThrottledCounter[i]);
     }
     testData.verfiyCountOfConnectionQueryServices(connectionQueryServiceNames.length);
     ConnectionQueryServicesMetricsManager.clearAllConnectionQueryServiceMetrics();
@@ -83,7 +83,7 @@ public class ConnectionQueryServicesMetricsManagerTest {
     Mockito.doReturn(true).when(mockOptions).isConnectionQueryServiceMetricsEnabled();
     Mockito.doReturn(conf).when(mockOptions).getConfiguration();
     ConnectionQueryServicesMetricsManager connectionQueryServicesMetricsManager =
-        new ConnectionQueryServicesMetricsManager(mockOptions);
+      new ConnectionQueryServicesMetricsManager(mockOptions);
     ConnectionQueryServicesMetricsManager.setInstance(connectionQueryServicesMetricsManager);
     for (int i = 0; i < 9; i++) {
       updateMetricsAndHistogram(i + 1, connectionQueryServiceName);
@@ -91,11 +91,11 @@ public class ConnectionQueryServicesMetricsManagerTest {
 
     // Generate distribution map from histogram snapshots.
     ConnectionQueryServicesHistogram connectionQueryServicesHistogram =
-        ConnectionQueryServicesMetricsManager
-            .getConnectionQueryServiceOpenConnectionHistogram(connectionQueryServiceName);
+      ConnectionQueryServicesMetricsManager
+        .getConnectionQueryServiceOpenConnectionHistogram(connectionQueryServiceName);
 
     Map<String, Long> openPhoenixConnMap =
-        connectionQueryServicesHistogram.getRangeHistogramDistribution().getRangeDistributionMap();
+      connectionQueryServicesHistogram.getRangeHistogramDistribution().getRangeDistributionMap();
     for (Long count : openPhoenixConnMap.values()) {
       Assert.assertEquals(new Long(3), count);
     }
@@ -103,8 +103,8 @@ public class ConnectionQueryServicesMetricsManagerTest {
 
   private void updateMetricsAndHistogram(long counter, String connectionQueryServiceName) {
     ConnectionQueryServicesMetricsManager.updateMetrics(connectionQueryServiceName,
-        OPEN_PHOENIX_CONNECTIONS_COUNTER, counter);
+      OPEN_PHOENIX_CONNECTIONS_COUNTER, counter);
     ConnectionQueryServicesMetricsManager
-        .updateConnectionQueryServiceOpenConnectionHistogram(counter, connectionQueryServiceName);
+      .updateConnectionQueryServiceOpenConnectionHistogram(counter, connectionQueryServiceName);
   }
 }

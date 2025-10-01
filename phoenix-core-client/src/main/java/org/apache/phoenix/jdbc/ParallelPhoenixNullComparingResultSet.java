@@ -204,7 +204,6 @@ public class ParallelPhoenixNullComparingResultSet extends DelegateResultSet
       pair.setFirst(candidateResult2);
       pair.setSecond(candidateResult1);
     } else {
-
       throw new SQLException(
         "Unexpected exception, one of the RS should've completed successfully");
     }
