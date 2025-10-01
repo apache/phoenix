@@ -71,9 +71,9 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
           @Override
           public void run() {
             final Configuration config =
-                HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+              HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
             final ThreadFactory threadFactory = new ThreadFactoryBuilder().setDaemon(true)
-                .setNameFormat("PHOENIX-DRIVER-SHUTDOWNHOOK" + "-thread-%s").build();
+              .setNameFormat("PHOENIX-DRIVER-SHUTDOWNHOOK" + "-thread-%s").build();
             final ExecutorService svc = Executors.newSingleThreadExecutor(threadFactory);
             try {
               Future<?> future = svc.submit(new Runnable() {
@@ -84,7 +84,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
               });
               // Pull the timeout value (default 5s).
               long millisBeforeShutdown = config.getLong(QueryServices.DRIVER_SHUTDOWN_TIMEOUT_MS,
-                  QueryServicesOptions.DEFAULT_DRIVER_SHUTDOWN_TIMEOUT_MS);
+                QueryServicesOptions.DEFAULT_DRIVER_SHUTDOWN_TIMEOUT_MS);
 
               // Close with a timeout. If this is running, we know the JVM wants to
               // go down. There may be other threads running that are holding the
@@ -109,7 +109,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
         DriverManager.registerDriver(INSTANCE);
       } catch (IllegalStateException e) {
         LOGGER.warn(
-            "Failed to register PhoenixDriver shutdown hook as the JVM is already shutting down");
+          "Failed to register PhoenixDriver shutdown hook as the JVM is already shutting down");
 
         // Close the instance now because we don't have the shutdown hook
         closeInstance(INSTANCE);
@@ -118,7 +118,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
       }
     } catch (SQLException e) {
       throw new IllegalStateException(
-          "Unable to register " + PhoenixDriver.class.getName() + ": " + e.getMessage());
+        "Unable to register " + PhoenixDriver.class.getName() + ": " + e.getMessage());
     }
   }
 
@@ -135,7 +135,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
   // One entry per cluster here
   // TODO that's not true, we can have multiple connections with different configs / principals
   private final Cache<ConnectionInfo, ConnectionQueryServices> connectionQueryServicesCache =
-      initializeConnectionCache();
+    initializeConnectionCache();
 
   public PhoenixDriver() { // for Squirrel
     // Use production services implementation
@@ -145,26 +145,26 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
   private Cache<ConnectionInfo, ConnectionQueryServices> initializeConnectionCache() {
     Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
     int maxCacheDuration =
-        config.getInt(QueryServices.CLIENT_CONNECTION_CACHE_MAX_DURATION_MILLISECONDS,
-            QueryServicesOptions.DEFAULT_CLIENT_CONNECTION_CACHE_MAX_DURATION);
+      config.getInt(QueryServices.CLIENT_CONNECTION_CACHE_MAX_DURATION_MILLISECONDS,
+        QueryServicesOptions.DEFAULT_CLIENT_CONNECTION_CACHE_MAX_DURATION);
     RemovalListener<ConnectionInfo, ConnectionQueryServices> cacheRemovalListener =
-        new RemovalListener<ConnectionInfo, ConnectionQueryServices>() {
-          @Override
-          public void
+      new RemovalListener<ConnectionInfo, ConnectionQueryServices>() {
+        @Override
+        public void
           onRemoval(RemovalNotification<ConnectionInfo, ConnectionQueryServices> notification) {
-            String connInfoIdentifier = notification.getKey().toString();
-            LOGGER.debug(
-                "Expiring " + connInfoIdentifier + " because of " + notification.getCause().name());
+          String connInfoIdentifier = notification.getKey().toString();
+          LOGGER.debug(
+            "Expiring " + connInfoIdentifier + " because of " + notification.getCause().name());
 
-            try {
-              notification.getValue().close();
-            } catch (SQLException se) {
-              LOGGER.error("Error while closing expired cache connection " + connInfoIdentifier, se);
-            }
+          try {
+            notification.getValue().close();
+          } catch (SQLException se) {
+            LOGGER.error("Error while closing expired cache connection " + connInfoIdentifier, se);
           }
-        };
+        }
+      };
     return CacheBuilder.newBuilder().expireAfterAccess(maxCacheDuration, TimeUnit.MILLISECONDS)
-        .removalListener(cacheRemovalListener).build();
+      .removalListener(cacheRemovalListener).build();
   }
 
   // writes guarded by "this"
@@ -229,7 +229,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
 
   @Override
   protected ConnectionQueryServices getConnectionQueryServices(String url, final Properties infoIn)
-      throws SQLException {
+    throws SQLException {
     lockInterruptibly(LockMode.READ);
     try {
       checkClosed();
@@ -244,20 +244,20 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
       info.putAll(connInfo.asProps().asMap());
       try {
         connectionQueryServices =
-            connectionQueryServicesCache.get(connInfo, new Callable<ConnectionQueryServices>() {
-              @Override
-              public ConnectionQueryServices call() throws Exception {
-                ConnectionQueryServices connectionQueryServices;
-                if (connInfo.isConnectionless()) {
-                  connectionQueryServices =
-                      new ConnectionlessQueryServicesImpl(services, connInfo, info);
-                } else {
-                  connectionQueryServices = new ConnectionQueryServicesImpl(services, connInfo, info);
-                }
-
-                return connectionQueryServices;
+          connectionQueryServicesCache.get(connInfo, new Callable<ConnectionQueryServices>() {
+            @Override
+            public ConnectionQueryServices call() throws Exception {
+              ConnectionQueryServices connectionQueryServices;
+              if (connInfo.isConnectionless()) {
+                connectionQueryServices =
+                  new ConnectionlessQueryServicesImpl(services, connInfo, info);
+              } else {
+                connectionQueryServices = new ConnectionQueryServicesImpl(services, connInfo, info);
               }
-            });
+
+              return connectionQueryServices;
+            }
+          });
         connectionQueryServices.init(url, info);
         success = true;
       } catch (ExecutionException ee) {
@@ -292,7 +292,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
 
   private void throwDriverClosedException() {
     throw new IllegalStateException(
-        driverShutdownMsg != null ? driverShutdownMsg : "The Phoenix jdbc driver has been closed.");
+      driverShutdownMsg != null ? driverShutdownMsg : "The Phoenix jdbc driver has been closed.");
   }
 
   /**
@@ -306,7 +306,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
     LOGGER.info("Invalidating the CQS from cache for connInfo={}", connInfo);
     connectionQueryServicesCache.invalidate(connInfo);
     LOGGER.debug(connectionQueryServicesCache.asMap().keySet().stream().map(Objects::toString)
-        .collect(Collectors.joining(",")));
+      .collect(Collectors.joining(",")));
   }
 
   @Override
@@ -354,7 +354,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
           throw new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION).setRootCause(e)
-              .build().buildException();
+            .build().buildException();
         }
         break;
       case WRITE:
@@ -363,7 +363,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
           throw new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION).setRootCause(e)
-              .build().buildException();
+            .build().buildException();
         }
     }
   }

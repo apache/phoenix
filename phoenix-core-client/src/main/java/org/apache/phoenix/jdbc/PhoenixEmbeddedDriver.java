@@ -50,13 +50,13 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
   private final static String DNC_JDBC_PROTOCOL_SUFFIX = "//";
   private final static String DRIVER_NAME = "PhoenixEmbeddedDriver";
   private static final String TEST_URL_AT_END =
-      "" + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
+    "" + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
   private static final String TEST_URL_IN_MIDDLE =
-      TEST_URL_AT_END + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
+    TEST_URL_AT_END + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
 
   private static final String[] SUPPORTED_PROTOCOLS =
-      new String[] { PhoenixRuntime.JDBC_PROTOCOL, PhoenixRuntime.JDBC_PROTOCOL_ZK,
-          PhoenixRuntime.JDBC_PROTOCOL_MASTER, PhoenixRuntime.JDBC_PROTOCOL_RPC };
+    new String[] { PhoenixRuntime.JDBC_PROTOCOL, PhoenixRuntime.JDBC_PROTOCOL_ZK,
+      PhoenixRuntime.JDBC_PROTOCOL_MASTER, PhoenixRuntime.JDBC_PROTOCOL_RPC };
 
   private final static DriverPropertyInfo[] EMPTY_INFO = new DriverPropertyInfo[0];
   public final static String MAJOR_VERSION_PROP = "DriverMajorVersion";
@@ -64,9 +64,9 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
   public final static String DRIVER_NAME_PROP = "DriverName";
 
   public static final ReadOnlyProps DEFAULT_PROPS =
-      new ReadOnlyProps(ImmutableMap.of(MAJOR_VERSION_PROP,
-          Integer.toString(MetaDataProtocol.PHOENIX_MAJOR_VERSION), MINOR_VERSION_PROP,
-          Integer.toString(MetaDataProtocol.PHOENIX_MINOR_VERSION), DRIVER_NAME_PROP, DRIVER_NAME));
+    new ReadOnlyProps(ImmutableMap.of(MAJOR_VERSION_PROP,
+      Integer.toString(MetaDataProtocol.PHOENIX_MAJOR_VERSION), MINOR_VERSION_PROP,
+      Integer.toString(MetaDataProtocol.PHOENIX_MINOR_VERSION), DRIVER_NAME_PROP, DRIVER_NAME));
 
   PhoenixEmbeddedDriver() {
   }
@@ -139,7 +139,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
       } else {
         // If empty HA group is returned, fall back to single cluster.
         url = HighAvailabilityGroup.getFallbackCluster(url, info).orElseThrow(
-            () -> new SQLException("HA group can not be initialized, fallback to single cluster"));
+          () -> new SQLException("HA group can not be initialized, fallback to single cluster"));
       }
     }
     ConnectionQueryServices cqs = getConnectionQueryServices(url, augmentedInfo);
@@ -155,7 +155,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
    * @return new or cached QuerySerices used to establish a new Connection.
    */
   protected abstract ConnectionQueryServices getConnectionQueryServices(String url, Properties info)
-      throws SQLException;
+    throws SQLException;
 
   @Override
   public int getMajorVersion() {
