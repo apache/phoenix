@@ -56,7 +56,6 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.Waiter.Predicate;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.protobuf.generated.AccessControlProtos;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.security.AccessDeniedException;
@@ -67,6 +66,7 @@ import org.apache.hadoop.hbase.security.access.AccessController;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.security.access.UserPermission;
 import org.apache.hadoop.hbase.util.JVMClusterUtil.RegionServerThread;
+import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -1765,7 +1765,7 @@ public abstract class BasePermissionsIT extends BaseTest {
         final List<UserPermission> perms = new ArrayList<>();
         if (request.getType() == AccessControlProtos.Permission.Type.Table) {
           final TableName table =
-            request.hasTableName() ? ProtobufUtil.toTableName(request.getTableName()) : null;
+            request.hasTableName() ? CompatUtil.toTableName(request.getTableName()) : null;
           perms.addAll(AccessControlClient.getUserPermissions(connection, table.getNameAsString()));
         } else if (request.getType() == AccessControlProtos.Permission.Type.Namespace) {
           final String namespace =

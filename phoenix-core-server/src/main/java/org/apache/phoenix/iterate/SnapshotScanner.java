@@ -43,6 +43,10 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.hfile.BlockCacheFactory;
 import org.apache.hadoop.hbase.metrics.MetricRegistry;
 import org.apache.hadoop.hbase.mob.MobFileCache;
+import org.apache.hadoop.hbase.quotas.OperationQuota;
+import org.apache.hadoop.hbase.quotas.OperationQuota.OperationType;
+import org.apache.hadoop.hbase.quotas.RpcQuotaManager;
+import org.apache.hadoop.hbase.quotas.RpcThrottlingException;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.MemStoreLAB;
 import org.apache.hadoop.hbase.regionserver.OnlineRegions;
@@ -274,6 +278,29 @@ public class SnapshotScanner extends AbstractClientScanner {
 
       @Override
       public ExtendedCellBuilder getCellBuilder() {
+        throw new UnsupportedOperationException();
+      }
+
+      // HBase 3 only, no override
+      public OperationQuota checkBatchQuota(Region arg0, OperationType arg1)
+        throws IOException, RpcThrottlingException {
+        throw new UnsupportedOperationException();
+      }
+
+      // HBase 3 only, no override
+      public RpcQuotaManager getRpcQuotaManager() {
+        throw new UnsupportedOperationException();
+      }
+
+      // HBase 3 only, no override
+      public OperationQuota checkScanQuota(Scan scan, long maxBlockBytesScanned,
+        long prevBlockBytesScannedDifference) throws IOException, RpcThrottlingException {
+        throw new UnsupportedOperationException();
+      }
+
+      // HBase 3 only, no override
+      public OperationQuota checkBatchQuota(Region region, int numWrites, int numReads)
+        throws IOException, RpcThrottlingException {
         throw new UnsupportedOperationException();
       }
     };

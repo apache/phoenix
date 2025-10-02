@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,25 +15,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hbase.ipc.controller;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.ipc.HBaseRpcController;
-import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
-import org.apache.phoenix.compat.hbase.CompatRPCControllerFactory;
-
-/**
- * {@link RpcControllerFactory} that sets the appropriate priority of server-server RPC calls
- * destined for Phoenix SYSTEM tables.
- */
-public class ServerRpcControllerFactory extends CompatRPCControllerFactory {
-
-  public ServerRpcControllerFactory(Configuration conf) {
-    super(conf);
-  }
-
-  protected HBaseRpcController getController(HBaseRpcController delegate) {
-    return new ServerRpcController(delegate, conf);
-  }
-
+public class UrlTest {
+    public static void main(String[ argv]) {
+        String uri = "hbase:zk://host1:1111,host2:2222/hbase"
+    }
 }

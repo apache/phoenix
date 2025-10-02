@@ -69,7 +69,6 @@ import org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTrack
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
@@ -325,8 +324,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver
   }
 
   @Override
-  public void preScannerOpen(ObserverContext<RegionCoprocessorEnvironment> e, Scan scan)
-    throws IOException {
+  public void preScannerOpen(ObserverContext e, Scan scan) throws IOException {
     super.preScannerOpen(e, scan);
     if (ScanUtil.isAnalyzeTable(scan)) {
       scan.setAttribute(BaseScannerRegionObserverConstants.SCAN_ANALYZE_ACTUAL_START_ROW,
@@ -613,11 +611,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver
   }
 
   @Override
-  public InternalScanner preCompact(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
-    InternalScanner scanner, ScanType scanType, CompactionLifeCycleTracker tracker,
-    CompactionRequest request) throws IOException {
+  public InternalScanner preCompact(ObserverContext c, Store store, InternalScanner scanner,
+    ScanType scanType, CompactionLifeCycleTracker tracker, CompactionRequest request)
+    throws IOException {
 
-    final TableName tableName = c.getEnvironment().getRegion().getRegionInfo().getTable();
+    RegionCoprocessorEnvironment e = (RegionCoprocessorEnvironment) c.getEnvironment();
+
+    final TableName tableName = e.getRegion().getRegionInfo().getTable();
     // Compaction and split upcalls run with the effective user context of the requesting user.
     // This will lead to failure of cross cluster RPC if the effective user is not
     // the login user. Switch to the login user context to ensure we have the expected
@@ -655,7 +655,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver
         // indexing design.
         if (
           table != null && !PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME.equals(fullTableName)
-            && !ServerUtil.hasCoprocessor(c.getEnvironment(), GlobalIndexChecker.class.getName())
+            && !ServerUtil.hasCoprocessor(e, GlobalIndexChecker.class.getName())
         ) {
           List<PTable> indexes = PTableType.INDEX.equals(table.getType())
             ? Lists.newArrayList(table)
@@ -671,7 +671,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver
           }
         }
         if (table != null && isPhoenixCompactionEnabled(c.getEnvironment().getConfiguration())) {
-          internalScanner = new CompactionScanner(c.getEnvironment(), store, scanner,
+          internalScanner = new CompactionScanner(e, store, scanner,
             BaseScannerRegionObserverConstants
               .getMaxLookbackInMillis(c.getEnvironment().getConfiguration()),
             request.isMajor() || request.isAllFiles(), keepDeleted, table);
@@ -683,8 +683,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver
           try {
             long clientTimeStamp = EnvironmentEdgeManager.currentTimeMillis();
             DelegateRegionCoprocessorEnvironment compactionConfEnv =
-              new DelegateRegionCoprocessorEnvironment(c.getEnvironment(),
-                ConnectionType.COMPACTION_CONNECTION);
+              new DelegateRegionCoprocessorEnvironment(e, ConnectionType.COMPACTION_CONNECTION);
             StatisticsCollector statisticsCollector = StatisticsCollectorFactory
               .createStatisticsCollector(compactionConfEnv, tableName.getNameAsString(),
                 clientTimeStamp, store.getColumnFamilyDescriptor().getName());
@@ -817,17 +816,17 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver
       }
 
       @Override
-      public boolean next(List<Cell> results, ScannerContext scannerContext) throws IOException {
+      public boolean next(List results, ScannerContext scannerContext) throws IOException {
         return next(results);
       }
 
       @Override
-      public boolean nextRaw(List<Cell> results, ScannerContext scannerContext) throws IOException {
+      public boolean nextRaw(List results, ScannerContext scannerContext) throws IOException {
         return next(results, scannerContext);
       }
 
       @Override
-      public boolean next(List<Cell> results) throws IOException {
+      public boolean next(List results) throws IOException {
         results.add(aggKeyValue);
         return false;
       }
@@ -1015,8 +1014,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver
   }
 
   @Override
-  public void preBulkLoadHFile(ObserverContext<RegionCoprocessorEnvironment> c,
-    List<Pair<byte[], String>> familyPaths) throws IOException {
+  public void preBulkLoadHFile(ObserverContext c, List familyPaths) throws IOException {
     // Don't allow bulkload if operations need read and write to same region are going on in the
     // the coprocessors to avoid dead lock scenario. See PHOENIX-3111.
     synchronized (lock) {
@@ -1028,8 +1026,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver
   }
 
   @Override
-  public void preClose(ObserverContext<RegionCoprocessorEnvironment> c, boolean abortRequested)
-    throws IOException {
+  public void preClose(ObserverContext c, boolean abortRequested) throws IOException {
     waitForScansToFinish(c);
   }
 
@@ -1039,8 +1036,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver
   }
 
   @Override
-  public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-    MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+  public void preBatchMutate(ObserverContext c, MiniBatchOperationInProgress miniBatchOp)
+    throws IOException {
     final Configuration conf = c.getEnvironment().getConfiguration();
     try {
       final HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(conf);

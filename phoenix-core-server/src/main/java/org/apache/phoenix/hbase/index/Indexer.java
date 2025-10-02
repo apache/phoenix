@@ -293,9 +293,10 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
    * clauses for this row.
    */
   @Override
-  public Result preIncrementAfterRowLock(final ObserverContext<RegionCoprocessorEnvironment> e,
-    final Increment inc) throws IOException {
+  public Result preIncrementAfterRowLock(final ObserverContext c, final Increment inc)
+    throws IOException {
     long start = EnvironmentEdgeManager.currentTimeMillis();
+    RegionCoprocessorEnvironment e = (RegionCoprocessorEnvironment) c.getEnvironment();
     try {
       List<Mutation> mutations = this.builder.executeAtomicOp(inc);
       if (mutations == null) {
@@ -304,18 +305,18 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
 
       // Causes the Increment to be ignored as we're committing the mutations
       // ourselves below.
-      e.bypass();
+      c.bypass();
       // ON DUPLICATE KEY IGNORE will return empty list if row already exists
       // as no action is required in that case.
       if (!mutations.isEmpty()) {
-        Region region = e.getEnvironment().getRegion();
+        Region region = e.getRegion();
         // Otherwise, submit the mutations directly here
         region.batchMutate(mutations.toArray(new Mutation[0]));
       }
       return Result.EMPTY_RESULT;
     } catch (Throwable t) {
       throw ClientUtil.createIOException("Unable to process ON DUPLICATE IGNORE for "
-        + e.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString() + "("
+        + e.getRegion().getRegionInfo().getTable().getNameAsString() + "("
         + Bytes.toStringBinary(inc.getRow()) + ")", t);
     } finally {
       long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
@@ -331,8 +332,8 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
   }
 
   @Override
-  public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-    MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+  public void preBatchMutate(ObserverContext c, MiniBatchOperationInProgress miniBatchOp)
+    throws IOException {
     if (this.disabled) {
       return;
     }
@@ -552,8 +553,8 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
   }
 
   @Override
-  public void postBatchMutateIndispensably(ObserverContext<RegionCoprocessorEnvironment> c,
-    MiniBatchOperationInProgress<Mutation> miniBatchOp, final boolean success) throws IOException {
+  public void postBatchMutateIndispensably(ObserverContext c,
+    MiniBatchOperationInProgress miniBatchOp, final boolean success) throws IOException {
     if (this.disabled) {
       return;
     }
@@ -648,9 +649,9 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
   }
 
   @Override
-  public void postOpen(final ObserverContext<RegionCoprocessorEnvironment> c) {
-    Multimap<HTableInterfaceReference, Mutation> updates =
-      failedIndexEdits.getEdits(c.getEnvironment().getRegion());
+  public void postOpen(final ObserverContext c) {
+    RegionCoprocessorEnvironment e = (RegionCoprocessorEnvironment) c.getEnvironment();
+    Multimap<HTableInterfaceReference, Mutation> updates = failedIndexEdits.getEdits(e.getRegion());
 
     if (this.disabled) {
       return;
@@ -670,9 +671,9 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
       // writes succeed again
       try {
         writer.writeAndHandleFailure(updates, true, ScanUtil.UNKNOWN_CLIENT_VERSION);
-      } catch (IOException e) {
+      } catch (IOException ex) {
         LOGGER.error("During WAL replay of outstanding index updates, "
-          + "Exception is thrown instead of killing server during index writing", e);
+          + "Exception is thrown instead of killing server during index writing", ex);
       }
     } finally {
       long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
@@ -686,7 +687,9 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
     }
   }
 
-  @Override
+  // FIXME This callback does not exist in HBase 3+
+  // We probably need to drop support for the old indexing on HBase 3.0
+  // Should we enforce that ?
   public void preWALRestore(
     org.apache.hadoop.hbase.coprocessor.ObserverContext<? extends RegionCoprocessorEnvironment> ctx,
     org.apache.hadoop.hbase.client.RegionInfo info, org.apache.hadoop.hbase.wal.WALKey logKey,

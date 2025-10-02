@@ -35,7 +35,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentMap;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
@@ -368,12 +367,12 @@ public class SpillableGroupByCache implements GroupByCache {
         }
       }
 
-      public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+      public boolean next(List result, ScannerContext scannerContext) throws IOException {
         return next(result);
       }
 
       @Override
-      public boolean next(List<Cell> results) throws IOException {
+      public boolean next(List results) throws IOException {
         if (!cacheIter.hasNext()) {
           return false;
         }

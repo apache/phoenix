@@ -104,10 +104,9 @@ public class SequenceRegionObserver implements RegionObserver, RegionCoprocessor
    * @since 3.0.0
    */
   @Override
-  public Result preIncrement(
-    org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> e,
+  public Result preIncrement(org.apache.hadoop.hbase.coprocessor.ObserverContext e,
     Increment increment) throws IOException {
-    RegionCoprocessorEnvironment env = e.getEnvironment();
+    RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) e.getEnvironment();
     // We need to set this to prevent region.increment from being called
     e.bypass();
     Region region = env.getRegion();
@@ -342,9 +341,8 @@ public class SequenceRegionObserver implements RegionObserver, RegionCoprocessor
    */
   @SuppressWarnings("deprecation")
   @Override
-  public Result preAppend(
-    org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> e,
-    Append append) throws IOException {
+  public Result preAppend(org.apache.hadoop.hbase.coprocessor.ObserverContext e, Append append)
+    throws IOException {
     byte[] opBuf = append.getAttribute(OPERATION_ATTRIB);
     if (opBuf == null) {
       return null;
@@ -383,7 +381,7 @@ public class SequenceRegionObserver implements RegionObserver, RegionCoprocessor
       }
     }
 
-    RegionCoprocessorEnvironment env = e.getEnvironment();
+    RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) e.getEnvironment();
     // We need to set this to prevent region.append from being called
     e.bypass();
     Region region = env.getRegion();

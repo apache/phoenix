@@ -517,9 +517,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * clauses for this row.
    */
   @Override
-  public Result preIncrementAfterRowLock(final ObserverContext<RegionCoprocessorEnvironment> e,
-    final Increment inc) throws IOException {
+  public Result preIncrementAfterRowLock(final ObserverContext c, final Increment inc)
+    throws IOException {
     long start = EnvironmentEdgeManager.currentTimeMillis();
+    RegionCoprocessorEnvironment e = (RegionCoprocessorEnvironment) c.getEnvironment();
     try {
       List<Mutation> mutations = this.builder.executeAtomicOp(inc);
       if (mutations == null) {
@@ -528,18 +529,18 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
       // Causes the Increment to be ignored as we're committing the mutations
       // ourselves below.
-      e.bypass();
+      c.bypass();
       // ON DUPLICATE KEY IGNORE will return empty list if row already exists
       // as no action is required in that case.
       if (!mutations.isEmpty()) {
-        Region region = e.getEnvironment().getRegion();
+        Region region = e.getRegion();
         // Otherwise, submit the mutations directly here
         region.batchMutate(mutations.toArray(new Mutation[0]));
       }
       return Result.EMPTY_RESULT;
     } catch (Throwable t) {
       throw ClientUtil.createIOException("Unable to process ON DUPLICATE IGNORE for "
-        + e.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString() + "("
+        + e.getRegion().getRegionInfo().getTable().getNameAsString() + "("
         + Bytes.toStringBinary(inc.getRow()) + ")", t);
     } finally {
       long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
@@ -558,8 +559,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * Also checks for mutationBlockEnabled if CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is enabled.
    */
   @Override
-  public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-    MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+  public void preBatchMutate(ObserverContext c, MiniBatchOperationInProgress miniBatchOp)
+    throws IOException {
     if (this.disabled) {
       return;
     }
@@ -1693,8 +1694,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   @Override
-  public void preWALAppend(ObserverContext<RegionCoprocessorEnvironment> c, WALKey key,
-    WALEdit edit) {
+  public void preWALAppend(ObserverContext c, WALKey key, WALEdit edit) {
     if (shouldWALAppend) {
       BatchMutateContext context = getBatchMutateContext(c);
       appendMutationAttributesToWALKey(key, context);
@@ -1725,8 +1725,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * batch fails.
    */
   @Override
-  public void postBatchMutateIndispensably(ObserverContext<RegionCoprocessorEnvironment> c,
-    MiniBatchOperationInProgress<Mutation> miniBatchOp, final boolean success) throws IOException {
+  public void postBatchMutateIndispensably(ObserverContext c,
+    MiniBatchOperationInProgress miniBatchOp, final boolean success) throws IOException {
     if (this.disabled) {
       return;
     }
@@ -1746,9 +1746,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         if ((context.hasAtomic || context.returnResult) && miniBatchOp.size() == 1) {
           if (!isAtomicOperationComplete(miniBatchOp.getOperationStatus(0))) {
             byte[] retVal = PInteger.INSTANCE.toBytes(1);
-            Cell cell = PhoenixKeyValueUtil.newKeyValue(miniBatchOp.getOperation(0).getRow(),
-              Bytes.toBytes(UPSERT_CF), Bytes.toBytes(UPSERT_STATUS_CQ), 0, retVal, 0,
-              retVal.length);
+            Cell cell = PhoenixKeyValueUtil.newKeyValue(
+              ((Mutation) miniBatchOp.getOperation(0)).getRow(), Bytes.toBytes(UPSERT_CF),
+              Bytes.toBytes(UPSERT_STATUS_CQ), 0, retVal, 0, retVal.length);
             List<Cell> cells = new ArrayList<>();
             cells.add(cell);
 

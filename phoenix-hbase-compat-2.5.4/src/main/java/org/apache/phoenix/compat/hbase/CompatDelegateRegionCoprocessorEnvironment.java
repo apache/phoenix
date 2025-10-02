@@ -15,25 +15,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hbase.ipc.controller;
+package org.apache.phoenix.compat.hbase;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.ipc.HBaseRpcController;
-import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
-import org.apache.phoenix.compat.hbase.CompatRPCControllerFactory;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 
-/**
- * {@link RpcControllerFactory} that sets the appropriate priority of server-server RPC calls
- * destined for Phoenix SYSTEM tables.
- */
-public class ServerRpcControllerFactory extends CompatRPCControllerFactory {
+public abstract class CompatDelegateRegionCoprocessorEnvironment
+  implements RegionCoprocessorEnvironment {
+  protected RegionCoprocessorEnvironment delegate;
 
-  public ServerRpcControllerFactory(Configuration conf) {
-    super(conf);
-  }
-
-  protected HBaseRpcController getController(HBaseRpcController delegate) {
-    return new ServerRpcController(delegate, conf);
+  public CompatDelegateRegionCoprocessorEnvironment(RegionCoprocessorEnvironment delegate) {
+    super();
+    this.delegate = delegate;
   }
 
 }

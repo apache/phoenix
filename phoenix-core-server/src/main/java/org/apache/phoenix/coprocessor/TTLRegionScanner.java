@@ -121,13 +121,13 @@ public class TTLRegionScanner extends BaseRegionScanner {
     ttl *= 1000;
   }
 
-  private boolean isExpired(List<Cell> result) throws IOException {
+  private boolean isExpired(List result) throws IOException {
     long maxTimestamp = 0;
     long minTimestamp = Long.MAX_VALUE;
     long ts;
     boolean found = false;
     setTTLContextForRow(result);
-    for (Cell c : result) {
+    for (Cell c : (List<Cell>) result) {
       ts = c.getTimestamp();
       if (!found && ScanUtil.isEmptyColumn(c, emptyCF, emptyCQ)) {
         if (ts < ttlWindowStart) {
@@ -180,7 +180,7 @@ public class TTLRegionScanner extends BaseRegionScanner {
       row.clear(); // reset the row on every iteration
       Scan singleRowScan = new Scan();
       singleRowScan.setTimeRange(wndStartTS, wndEndTS);
-      byte[] rowKey = CellUtil.cloneRow(result.get(0));
+      byte[] rowKey = CellUtil.cloneRow((Cell) result.get(0));
       singleRowScan.withStartRow(rowKey, true);
       singleRowScan.withStopRow(rowKey, true);
       RegionScanner scanner = ((DelegateRegionScanner) delegate).getNewRegionScanner(singleRowScan);
@@ -286,22 +286,22 @@ public class TTLRegionScanner extends BaseRegionScanner {
   }
 
   @Override
-  public boolean next(List<Cell> results) throws IOException {
+  public boolean next(List results) throws IOException {
     return next(results, false, null);
   }
 
   @Override
-  public boolean nextRaw(List<Cell> results) throws IOException {
+  public boolean nextRaw(List results) throws IOException {
     return next(results, true, null);
   }
 
   @Override
-  public boolean next(List<Cell> results, ScannerContext scannerContext) throws IOException {
+  public boolean next(List results, ScannerContext scannerContext) throws IOException {
     return next(results, false, scannerContext);
   }
 
   @Override
-  public boolean nextRaw(List<Cell> results, ScannerContext scannerContext) throws IOException {
+  public boolean nextRaw(List results, ScannerContext scannerContext) throws IOException {
     return next(results, true, scannerContext);
   }
 

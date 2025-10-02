@@ -25,9 +25,9 @@ import java.util.ListIterator;
 import org.apache.hadoop.hbase.ArrayBackedTag;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
+import org.apache.hadoop.hbase.ExtendedCell;
 import org.apache.hadoop.hbase.PhoenixTagType;
 import org.apache.hadoop.hbase.PrivateCellUtil;
-import org.apache.hadoop.hbase.RawCell;
 import org.apache.hadoop.hbase.Tag;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
@@ -53,7 +53,7 @@ public class ServerIndexUtil {
     while (itr.hasNext()) {
       final Cell cell = itr.next();
       // TODO: Create DelegateCell class instead
-      Cell newCell = new OffsetCell(cell, offset);
+      Cell newCell = new OffsetCell((ExtendedCell) cell, offset);
       itr.set(newCell);
     }
   }
@@ -78,10 +78,9 @@ public class ServerIndexUtil {
       Tag sourceOpTag = new ArrayBackedTag(PhoenixTagType.SOURCE_OPERATION_TAG_TYPE, sourceOpAttr);
       List<Cell> updatedCells = new ArrayList<>();
       for (CellScanner cellScanner = m.cellScanner(); cellScanner.advance();) {
-        Cell cell = cellScanner.current();
-        RawCell rawCell = (RawCell) cell;
+        ExtendedCell cell = (ExtendedCell) cellScanner.current();
         List<Tag> tags = new ArrayList<>();
-        Iterator<Tag> tagsIterator = rawCell.getTags();
+        Iterator<Tag> tagsIterator = cell.getTags();
         while (tagsIterator.hasNext()) {
           tags.add(tagsIterator.next());
         }

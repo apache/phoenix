@@ -80,12 +80,12 @@ public class DataTableLocalIndexRegionScanner extends DelegateRegionScanner {
   }
 
   @Override
-  public boolean next(List<Cell> outResult, ScannerContext scannerContext) throws IOException {
+  public boolean next(List outResult, ScannerContext scannerContext) throws IOException {
     return next(outResult);
   }
 
   @Override
-  public boolean next(List<Cell> results) throws IOException {
+  public boolean next(List results) throws IOException {
     List<Cell> dataTableResults = new ArrayList<Cell>();
     boolean next = super.next(dataTableResults);
     addMutations(dataTableResults);
@@ -99,18 +99,17 @@ public class DataTableLocalIndexRegionScanner extends DelegateRegionScanner {
     return next;
   }
 
-  private void addMutations(List<Cell> dataTableResults) throws IOException {
+  private void addMutations(List dataTableResults) throws IOException {
     if (!dataTableResults.isEmpty()) {
       result.setKeyValues(dataTableResults);
       for (IndexMaintainer maintainer : indexMaintainers) {
         result.getKey(ptr);
         ValueGetter valueGetter = maintainer
           .createGetterFromKeyValues(ImmutableBytesPtr.copyBytesIfNecessary(ptr), dataTableResults);
-        List<Cell> list =
-          maintainer
-            .buildUpdateMutation(kvBuilder, valueGetter, ptr,
-              dataTableResults.get(0).getTimestamp(), startKey, endKey, false)
-            .getFamilyCellMap().get(localIndexFamily);
+        List<Cell> list = maintainer
+          .buildUpdateMutation(kvBuilder, valueGetter, ptr,
+            ((Cell) dataTableResults.get(0)).getTimestamp(), startKey, endKey, false)
+          .getFamilyCellMap().get(localIndexFamily);
         Put put = null;
         Delete del = null;
         for (Cell cell : list) {

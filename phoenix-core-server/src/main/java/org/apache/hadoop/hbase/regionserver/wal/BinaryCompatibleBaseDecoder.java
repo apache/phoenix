@@ -22,7 +22,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PushbackInputStream;
 import javax.annotation.Nonnull;
-import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.ExtendedCell;
 import org.apache.hadoop.hbase.codec.Codec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,7 +37,7 @@ public abstract class BinaryCompatibleBaseDecoder implements Codec.Decoder {
   protected static final Logger LOGGER = LoggerFactory.getLogger(BinaryCompatibleBaseDecoder.class);
 
   protected final InputStream in;
-  private Cell current = null;
+  private ExtendedCell current = null;
 
   protected static class PBIS extends PushbackInputStream {
     public PBIS(InputStream in, int size) {
@@ -99,10 +99,10 @@ public abstract class BinaryCompatibleBaseDecoder implements Codec.Decoder {
    *         thrown if EOF is reached prematurely. Does not return null.
    */
   @Nonnull
-  protected abstract Cell parseCell() throws IOException;
+  protected abstract ExtendedCell parseCell() throws IOException;
 
   @Override
-  public Cell current() {
+  public ExtendedCell current() {
     return this.current;
   }
 }
