@@ -455,12 +455,12 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
       }
 
       @Override
-      public boolean next(List<Cell> results) throws IOException {
+      public boolean next(List results) throws IOException {
         return next(results, null);
       }
 
       @Override
-      public boolean next(List<Cell> results, ScannerContext scannerContext) throws IOException {
+      public boolean next(List results, ScannerContext scannerContext) throws IOException {
         try {
           if (isFilterDone()) {
             return false;
@@ -510,7 +510,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
       }
 
       @Override
-      public boolean nextRaw(List<Cell> results, ScannerContext scannerContext) throws IOException {
+      public boolean nextRaw(List results, ScannerContext scannerContext) throws IOException {
         return next(results, scannerContext);
       }
 
@@ -594,12 +594,12 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
       }
 
       @Override
-      public boolean next(List<Cell> results) throws IOException {
+      public boolean next(List results) throws IOException {
         return next(results, null);
       }
 
       @Override
-      public boolean next(List<Cell> results, ScannerContext scannerContext) throws IOException {
+      public boolean next(List results, ScannerContext scannerContext) throws IOException {
         try {
           if (isFilterDone()) {
             return false;
@@ -632,7 +632,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
       }
 
       @Override
-      public boolean nextRaw(List<Cell> results, ScannerContext scannerContext) throws IOException {
+      public boolean nextRaw(List results, ScannerContext scannerContext) throws IOException {
         return next(results, scannerContext);
       }
 

@@ -1613,11 +1613,11 @@ public class ScanUtil {
     return isDummy(cell);
   }
 
-  public static boolean isDummy(List<Cell> result) {
+  public static boolean isDummy(List result) {
     if (result.size() != 1) {
       return false;
     }
-    Cell cell = result.get(0);
+    Cell cell = (Cell) result.get(0);
     return isDummy(cell);
   }
 

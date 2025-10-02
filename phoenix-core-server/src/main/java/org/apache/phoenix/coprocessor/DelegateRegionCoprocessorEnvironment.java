@@ -29,6 +29,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.metrics.MetricRegistry;
 import org.apache.hadoop.hbase.regionserver.OnlineRegions;
 import org.apache.hadoop.hbase.regionserver.Region;
+import org.apache.phoenix.compat.hbase.CompatDelegateRegionCoprocessorEnvironment;
 import org.apache.phoenix.util.ServerUtil.ConnectionFactory;
 import org.apache.phoenix.util.ServerUtil.ConnectionType;
 
@@ -37,15 +38,15 @@ import org.apache.phoenix.util.ServerUtil.ConnectionType;
  * clone the configuration provided by the HBase coprocessor environment before modifying it. So
  * this class comes in handy where we have to return our custom config.
  */
-public class DelegateRegionCoprocessorEnvironment implements RegionCoprocessorEnvironment {
+public class DelegateRegionCoprocessorEnvironment extends CompatDelegateRegionCoprocessorEnvironment
+  implements RegionCoprocessorEnvironment {
 
   private final Configuration config;
-  private RegionCoprocessorEnvironment delegate;
   private ConnectionType connectionType;
 
   public DelegateRegionCoprocessorEnvironment(RegionCoprocessorEnvironment delegate,
     ConnectionType connectionType) {
-    this.delegate = delegate;
+    super(delegate);
     this.connectionType = connectionType;
     this.config =
       ConnectionFactory.getTypeSpecificConfiguration(connectionType, delegate.getConfiguration());

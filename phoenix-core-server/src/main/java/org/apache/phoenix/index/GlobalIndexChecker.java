@@ -36,7 +36,6 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.PackagePrivateFieldAccessor;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -56,6 +55,7 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.coprocessor.BaseRegionScanner;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.DelegateRegionScanner;
@@ -250,7 +250,7 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
       return true;
     }
 
-    public boolean next(List<Cell> result, boolean raw, ScannerContext scannerContext)
+    public boolean next(List result, boolean raw, ScannerContext scannerContext)
       throws IOException {
       try {
         if (!initialized) {
@@ -273,7 +273,7 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
           if (isDummy(result)) {
             return true;
           }
-          Cell cell = result.get(0);
+          Cell cell = (Cell) (result.get(0));
           if (verifyRowAndRepairIfNecessary(result)) {
             break;
           }
@@ -301,22 +301,22 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
     }
 
     @Override
-    public boolean next(List<Cell> result) throws IOException {
+    public boolean next(List result) throws IOException {
       return next(result, false, null);
     }
 
     @Override
-    public boolean nextRaw(List<Cell> result) throws IOException {
+    public boolean nextRaw(List result) throws IOException {
       return next(result, true, null);
     }
 
     @Override
-    public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+    public boolean next(List result, ScannerContext scannerContext) throws IOException {
       return next(result, false, scannerContext);
     }
 
     @Override
-    public boolean nextRaw(List<Cell> result, ScannerContext scannerContext) throws IOException {
+    public boolean nextRaw(List result, ScannerContext scannerContext) throws IOException {
       return next(result, true, scannerContext);
     }
 
@@ -357,8 +357,8 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
         // mvcc value of -1 will ensure that new scanners opened on index table using
         // indexScan and singleRowIndexScan are able to read the latest snapshot of the
         // index updates.
-        PackagePrivateFieldAccessor.setMvccReadPoint(indexScan, -1);
-        PackagePrivateFieldAccessor.setMvccReadPoint(singleRowIndexScan, -1);
+        CompatUtil.setMvccReadPoint(indexScan, -1);
+        CompatUtil.setMvccReadPoint(singleRowIndexScan, -1);
         byte[] dataTableName =
           scan.getAttribute(BaseScannerRegionObserverConstants.PHYSICAL_DATA_TABLE_NAME);
         dataHTable = ServerUtil.ConnectionFactory

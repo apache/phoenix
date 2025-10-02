@@ -27,7 +27,6 @@ import java.util.Set;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
@@ -343,7 +342,7 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
           incrementRow = false;
         }
       }
-      int kvLength = KeyValueUtil.getSerializedSize(cell, true);
+      int kvLength = cell.getSerializedSize();
       long byteCount = gps.getFirst() + kvLength;
       gps.setFirst(byteCount);
       if (byteCount >= guidePostDepth) {

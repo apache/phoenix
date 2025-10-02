@@ -17,42 +17,22 @@
  */
 package org.apache.hadoop.hbase.ipc.controller;
 
-import java.util.List;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.CellScannable;
-import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
+import org.apache.phoenix.compat.hbase.CompatRPCControllerFactory;
 
 /**
  * {@link RpcControllerFactory} that should only be used when creating Table for making remote RPCs
  * to the region servers hosting Phoenix SYSTEM tables.
  */
-public class InterRegionServerMetadataRpcControllerFactory extends RpcControllerFactory {
+public class InterRegionServerMetadataRpcControllerFactory extends CompatRPCControllerFactory {
 
   public InterRegionServerMetadataRpcControllerFactory(Configuration conf) {
     super(conf);
   }
 
-  @Override
-  public HBaseRpcController newController() {
-    HBaseRpcController delegate = super.newController();
-    return getController(delegate);
-  }
-
-  @Override
-  public HBaseRpcController newController(CellScanner cellScanner) {
-    HBaseRpcController delegate = super.newController(cellScanner);
-    return getController(delegate);
-  }
-
-  @Override
-  public HBaseRpcController newController(List<CellScannable> cellIterables) {
-    HBaseRpcController delegate = super.newController(cellIterables);
-    return getController(delegate);
-  }
-
-  private HBaseRpcController getController(HBaseRpcController delegate) {
+  protected HBaseRpcController getController(HBaseRpcController delegate) {
     // construct a chain of controllers: metadata and delegate controller
     return new MetadataRpcController(delegate, conf);
   }

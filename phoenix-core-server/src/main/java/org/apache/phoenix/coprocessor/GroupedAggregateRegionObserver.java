@@ -334,7 +334,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver
       return new BaseRegionScanner(s) {
         private int index = 0;
 
-        public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+        public boolean next(List result, ScannerContext scannerContext) throws IOException {
           return next(result);
         }
 
@@ -348,7 +348,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver
         }
 
         @Override
-        public boolean next(List<Cell> results) throws IOException {
+        public boolean next(List results) throws IOException {
           if (index >= aggResults.size()) {
             return false;
           }
@@ -468,18 +468,17 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver
     }
 
     @Override
-    public boolean nextRaw(List<Cell> results, ScannerContext scannerContext) throws IOException {
+    public boolean nextRaw(List results, ScannerContext scannerContext) throws IOException {
       return next(results, scannerContext);
     }
 
     @Override
-    public boolean next(List<Cell> resultsToReturn) throws IOException {
+    public boolean next(List resultsToReturn) throws IOException {
       return next(resultsToReturn, null);
     }
 
     @Override
-    public boolean next(List<Cell> resultsToReturn, ScannerContext scannerContext)
-      throws IOException {
+    public boolean next(List resultsToReturn, ScannerContext scannerContext) throws IOException {
       if (firstScan && actualScanStartRowKey != null) {
         if (scanStartRowKey.length > 0 && !ScanUtil.isLocalIndex(scan)) {
           if (hasRegionMoved()) {
@@ -526,11 +525,11 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver
           if (!moreRows) {
             skipValidRowsSent = false;
             if (resultsToReturn.size() > 0) {
-              lastReturnedRowKey = CellUtil.cloneRow(resultsToReturn.get(0));
+              lastReturnedRowKey = CellUtil.cloneRow((Cell) resultsToReturn.get(0));
             }
             return moreRows;
           }
-          Cell firstCell = resultsToReturn.get(0);
+          Cell firstCell = (Cell) resultsToReturn.get(0);
           byte[] resultRowKey = new byte[firstCell.getRowLength()];
           System.arraycopy(firstCell.getRowArray(), firstCell.getRowOffset(), resultRowKey, 0,
             resultRowKey.length);
@@ -548,7 +547,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver
             skipValidRowsSent = false;
             if (includeStartRowKey) {
               if (resultsToReturn.size() > 0) {
-                lastReturnedRowKey = CellUtil.cloneRow(resultsToReturn.get(0));
+                lastReturnedRowKey = CellUtil.cloneRow((Cell) resultsToReturn.get(0));
               }
               return moreRows;
             }
@@ -560,7 +559,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver
               return true;
             }
             if (resultsToReturn.size() > 0) {
-              lastReturnedRowKey = CellUtil.cloneRow(resultsToReturn.get(0));
+              lastReturnedRowKey = CellUtil.cloneRow((Cell) resultsToReturn.get(0));
             }
             return moreRows;
           } else if (
@@ -577,7 +576,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver
                 return true;
               }
               if (resultsToReturn.size() > 0) {
-                lastReturnedRowKey = CellUtil.cloneRow(resultsToReturn.get(0));
+                lastReturnedRowKey = CellUtil.cloneRow((Cell) resultsToReturn.get(0));
               }
               return moreRows;
             }
@@ -591,7 +590,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver
         }
       }
       if (resultsToReturn.size() > 0) {
-        lastReturnedRowKey = CellUtil.cloneRow(resultsToReturn.get(0));
+        lastReturnedRowKey = CellUtil.cloneRow((Cell) resultsToReturn.get(0));
       }
       return moreRows;
     }
@@ -771,17 +770,17 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver
     }
 
     @Override
-    public boolean nextRaw(List<Cell> results, ScannerContext scannerContext) throws IOException {
+    public boolean nextRaw(List results, ScannerContext scannerContext) throws IOException {
       return next(results, scannerContext);
     }
 
     @Override
-    public boolean next(List<Cell> results) throws IOException {
+    public boolean next(List results) throws IOException {
       return next(results, null);
     }
 
     @Override
-    public boolean next(List<Cell> results, ScannerContext scannerContext) throws IOException {
+    public boolean next(List results, ScannerContext scannerContext) throws IOException {
       boolean hasMore;
       boolean atLimit;
       boolean aggBoundary = false;
@@ -899,7 +898,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver
         // Continue if there are more
         if (!atLimit && (hasMore || aggBoundary)) {
           if (!results.isEmpty()) {
-            previousResultRowKey = CellUtil.cloneRow(results.get(results.size() - 1));
+            previousResultRowKey = CellUtil.cloneRow((Cell) results.get(results.size() - 1));
           }
           return true;
         }

@@ -112,8 +112,7 @@ public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
   }
 
   @Override
-  public void preClose(final ObserverContext<RegionCoprocessorEnvironment> c,
-    boolean abortRequested) {
+  public void preClose(final ObserverContext c, boolean abortRequested) {
     executor.shutdownNow();
   }
 
@@ -134,10 +133,11 @@ public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
   }
 
   @Override
-  public void postOpen(ObserverContext<RegionCoprocessorEnvironment> e) {
-    final RegionCoprocessorEnvironment env = e.getEnvironment();
+  public void postOpen(ObserverContext e) {
+    final RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) e.getEnvironment();
 
-    SelfHealingTask task = new SelfHealingTask(e.getEnvironment(), timeMaxInterval);
+    SelfHealingTask task =
+      new SelfHealingTask((RegionCoprocessorEnvironment) e.getEnvironment(), timeMaxInterval);
     executor.scheduleWithFixedDelay(task, initialDelay, timeInterval, TimeUnit.MILLISECONDS);
   }
 

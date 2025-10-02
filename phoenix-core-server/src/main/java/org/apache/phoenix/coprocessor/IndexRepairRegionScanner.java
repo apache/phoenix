@@ -433,7 +433,7 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
   }
 
   @Override
-  public boolean next(List<Cell> results) throws IOException {
+  public boolean next(List results) throws IOException {
     Map<byte[], List<Mutation>> indexMutationMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
     Cell lastCell = null;
     int rowCount = 0;
@@ -524,7 +524,7 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
     return hasMore || hasMoreIncr;
   }
 
-  public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+  public boolean next(List result, ScannerContext scannerContext) throws IOException {
     return next(result);
   }
 }

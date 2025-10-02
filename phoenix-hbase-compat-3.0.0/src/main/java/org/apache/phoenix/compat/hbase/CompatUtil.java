@@ -24,9 +24,12 @@ import org.apache.hadoop.hbase.CatalogFamilyFormat;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ClientInternalHelper;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.compress.Compression.Algorithm;
@@ -63,6 +66,10 @@ public class CompatUtil {
     throws IOException {
     return CatalogFamilyFormat
       .getMergeRegions(MetaTableAccessor.getRegionResult(conn, regionInfo).rawCells());
+  }
+
+  public static RegionInfo getRegionInfo(Result result) throws IOException {
+    return CatalogFamilyFormat.getRegionInfo(result);
   }
 
   public static ChecksumType getChecksumType(Configuration conf) {
@@ -102,5 +109,17 @@ public class CompatUtil {
   public static TableName toTableName(HBaseProtos.TableName tableNamePB) {
     return TableName.valueOf(tableNamePB.getNamespace().asReadOnlyByteBuffer(),
       tableNamePB.getQualifier().asReadOnlyByteBuffer());
+  }
+
+  public static void setMvccReadPoint(Scan scan, long mvccReadPoint) {
+    ClientInternalHelper.setMvccReadPoint(scan, mvccReadPoint);
+  }
+
+  public static long getMvccReadPoint(Scan scan) {
+    return ClientInternalHelper.getMvccReadPoint(scan);
+  }
+
+  public static void closeAdminAndLog(Admin admin, Logger logger) {
+    admin.close();
   }
 }

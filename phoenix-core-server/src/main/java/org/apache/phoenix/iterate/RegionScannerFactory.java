@@ -195,12 +195,12 @@ public abstract class RegionScannerFactory {
       }
 
       @Override
-      public boolean next(List<Cell> results) throws IOException {
+      public boolean next(List results) throws IOException {
         return next(results, null);
       }
 
       @Override
-      public boolean next(List<Cell> results, ScannerContext scannerContext) throws IOException {
+      public boolean next(List results, ScannerContext scannerContext) throws IOException {
         try {
           boolean next =
             (scannerContext == null) ? s.next(results) : s.next(results, scannerContext);
@@ -240,12 +240,12 @@ public abstract class RegionScannerFactory {
       }
 
       @Override
-      public boolean nextRaw(List<Cell> result) throws IOException {
+      public boolean nextRaw(List result) throws IOException {
         return nextRaw(result, null);
       }
 
       @Override
-      public boolean nextRaw(List<Cell> result, ScannerContext scannerContext) throws IOException {
+      public boolean nextRaw(List result, ScannerContext scannerContext) throws IOException {
         try {
           boolean next =
             (scannerContext == null) ? s.nextRaw(result) : s.nextRaw(result, scannerContext);
@@ -285,7 +285,7 @@ public abstract class RegionScannerFactory {
           ) {
             int resultPosition = replaceServerParsedExpressionElement(serverParsedKVRefs,
               serverParsedFuncRefs, result);
-            serverParsedResultCell = result.get(resultPosition);
+            serverParsedResultCell = (Cell) result.get(resultPosition);
           }
           if (projector != null) {
             Tuple toProject = useQualifierAsListIndex
