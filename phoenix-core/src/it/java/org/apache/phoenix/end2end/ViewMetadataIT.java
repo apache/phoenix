@@ -173,8 +173,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
       TableDescriptorBuilder.newBuilder(TableName.valueOf(tableNameStr));
     builder.setColumnFamily(ColumnFamilyDescriptorBuilder.of(familyNameStr));
 
-    HBaseTestingUtility testUtil = getUtility();
-    Admin admin = testUtil.getAdmin();
+    Admin admin = getUtility().getAdmin();
     admin.createTable(builder.build());
     Connection conn = DriverManager.getConnection(getUrl());
 

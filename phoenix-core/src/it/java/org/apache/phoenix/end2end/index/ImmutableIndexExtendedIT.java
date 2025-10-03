@@ -125,8 +125,8 @@ public class ImmutableIndexExtendedIT extends ParallelStatsDisabledIT {
     implements FailingRegionObserver {
 
     @Override
-    public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-      MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+    public void preBatchMutate(ObserverContext c,
+      MiniBatchOperationInProgress miniBatchOp) throws IOException {
       throw new IOException();
     }
 
@@ -140,8 +140,8 @@ public class ImmutableIndexExtendedIT extends ParallelStatsDisabledIT {
     implements FailingRegionObserver {
 
     @Override
-    public void postBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-      MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+    public void postBatchMutate(ObserverContext c,
+      MiniBatchOperationInProgress miniBatchOp) throws IOException {
       throw new IOException();
     }
 
@@ -157,8 +157,8 @@ public class ImmutableIndexExtendedIT extends ParallelStatsDisabledIT {
     private boolean failOnce = true;
 
     @Override
-    public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-      MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+    public void preBatchMutate(ObserverContext c,
+      MiniBatchOperationInProgress miniBatchOp) throws IOException {
       if (failOnce) {
         // next attempt don't raise
         failOnce = false;

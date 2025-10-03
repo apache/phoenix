@@ -258,8 +258,7 @@ public class ViewIT extends SplitSystemCatalogIT {
     Connection conn1 = DriverManager.getConnection(getUrl(), props);
     conn1.setAutoCommit(true);
 
-    HBaseTestingUtility testUtil = getUtility();
-    Admin admin = testUtil.getAdmin();
+    Admin admin = getUtility().getAdmin();
 
     String nameSpace = generateUniqueName();
     admin.createNamespace(NamespaceDescriptor.create(nameSpace).build());

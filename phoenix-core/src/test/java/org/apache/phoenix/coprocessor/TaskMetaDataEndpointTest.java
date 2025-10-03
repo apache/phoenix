@@ -29,11 +29,16 @@ import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils;
 import org.apache.hadoop.hbase.metrics.MetricRegistry;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos;
+import org.apache.hadoop.hbase.quotas.OperationQuota;
+import org.apache.hadoop.hbase.quotas.OperationQuota.OperationType;
+import org.apache.hadoop.hbase.quotas.RpcQuotaManager;
+import org.apache.hadoop.hbase.quotas.RpcThrottlingException;
 import org.apache.hadoop.hbase.regionserver.OnlineRegions;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -151,6 +156,29 @@ public class TaskMetaDataEndpointTest {
       public ClassLoader getClassLoader() {
         return null;
       }
+
+      //HBase 3 only
+    public OperationQuota checkBatchQuota(Region arg0, OperationType arg1)
+            throws IOException, RpcThrottlingException {
+        return null;
+    }
+
+  //HBase 3 only
+    public RpcQuotaManager getRpcQuotaManager() {
+        return null;
+    }
+
+  //HBase 3 only
+    public OperationQuota checkScanQuota(Scan scan, long maxBlockBytesScanned,
+            long prevBlockBytesScannedDifference) throws IOException, RpcThrottlingException {
+        return null;
+    }
+
+  //HBase 3 only
+    public OperationQuota checkBatchQuota(Region region, int numWrites, int numReads)
+            throws IOException, RpcThrottlingException {
+        return null;
+    }
     };
     taskMetaDataEndpoint = new TaskMetaDataEndpoint();
     taskMetaDataEndpoint.start(environment);

@@ -141,7 +141,7 @@ public class QueryTimeoutIT extends BaseTest {
 
   public static class SleepingRegionObserver extends SimpleRegionObserver {
     @Override
-    public void preScannerClose(ObserverContext<RegionCoprocessorEnvironment> c, InternalScanner s)
+    public void preScannerClose(ObserverContext c, InternalScanner s)
       throws IOException {
       try {
         Thread.sleep(1200); // Wait long enough

@@ -476,16 +476,16 @@ public abstract class BaseImmutableIndexIT extends BaseTest {
 
   public static class DeleteFailingRegionObserver extends SimpleRegionObserver {
     @Override
-    public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-      MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+    public void preBatchMutate(ObserverContext c,
+      MiniBatchOperationInProgress miniBatchOp) throws IOException {
       throw new DoNotRetryIOException();
     }
   }
 
   public static class UpsertFailingRegionObserver extends SimpleRegionObserver {
     @Override
-    public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-      MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+    public void preBatchMutate(ObserverContext c,
+      MiniBatchOperationInProgress miniBatchOp) throws IOException {
       throw new DoNotRetryIOException();
     }
   }
@@ -538,10 +538,11 @@ public abstract class BaseImmutableIndexIT extends BaseTest {
   public static class CreateIndexRegionObserver extends SimpleRegionObserver {
     @Override
     public void postPut(
-      org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c, Put put,
+      org.apache.hadoop.hbase.coprocessor.ObserverContext c, Put put,
       org.apache.hadoop.hbase.wal.WALEdit edit, Durability durability) throws java.io.IOException {
+        RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment)c.getEnvironment();
       String tableName =
-        c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
+        env.getRegion().getRegionInfo().getTable().getNameAsString();
       if (
         tableName.equalsIgnoreCase(TABLE_NAME)
           // create the index after the second batch

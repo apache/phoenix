@@ -409,7 +409,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
 
     @Override
     public void preClose(
-      org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
+      org.apache.hadoop.hbase.coprocessor.ObserverContext c,
       boolean abortRequested) throws IOException {
       if (DELAY_OPEN) {
         try {
@@ -422,7 +422,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
 
     @Override
     public void preScannerOpen(
-      org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
+      org.apache.hadoop.hbase.coprocessor.ObserverContext c,
       Scan scan) throws IOException {
       if (DELAY_OPEN && retryCount == 1) {
         latch.countDown();

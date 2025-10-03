@@ -898,7 +898,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
     }
 
     @Override
-    public void preScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
+    public void preScannerOpen(final ObserverContext c,
       final Scan scan) {
       if (scan.getFilter() instanceof SkipScanFilter) {
         List<List<KeyRange>> slots = ((SkipScanFilter) scan.getFilter()).getSlots();

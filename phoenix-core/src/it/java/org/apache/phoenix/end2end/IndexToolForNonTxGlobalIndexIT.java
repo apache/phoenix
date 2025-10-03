@@ -1648,7 +1648,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
   public static class FastFailRegionObserver implements RegionObserver, RegionCoprocessor {
     @Override
-    public RegionScanner postScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
+    public RegionScanner postScannerOpen(final ObserverContext c,
       final Scan scan, final RegionScanner s) throws IOException {
       throw new DoNotRetryIOException("I'm just a coproc that's designed to fail fast");
     }
