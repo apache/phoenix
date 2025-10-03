@@ -68,6 +68,7 @@ import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
@@ -834,12 +835,12 @@ public class TestUtil {
     conn.createStatement().execute(ddl);
   }
 
-  public static void flush(HBaseTestingUtility utility, TableName table) throws IOException {
+  public static void flush(IntegrationTestingUtility utility, TableName table) throws IOException {
     Admin admin = utility.getAdmin();
     admin.flush(table);
   }
 
-  public static void minorCompact(HBaseTestingUtility utility, TableName table)
+  public static void minorCompact(IntegrationTestingUtility utility, TableName table)
     throws IOException, InterruptedException {
     try {
       CompactionScanner.setForceMinorCompaction(true);
@@ -858,7 +859,7 @@ public class TestUtil {
     }
   }
 
-  public static void majorCompact(HBaseTestingUtility utility, TableName table)
+  public static void majorCompact(IntegrationTestingUtility utility, TableName table)
     throws IOException, InterruptedException {
     long compactionRequestedSCN = EnvironmentEdgeManager.currentTimeMillis();
     Admin admin = utility.getAdmin();

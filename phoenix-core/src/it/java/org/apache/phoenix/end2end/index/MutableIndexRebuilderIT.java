@@ -169,11 +169,12 @@ public class MutableIndexRebuilderIT extends BaseTest {
     public static volatile AtomicInteger attempts = new AtomicInteger(0);
 
     @Override
-    public void postBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-      MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+    public void postBatchMutate(ObserverContext c,
+      MiniBatchOperationInProgress miniBatchOp) throws IOException {
+        RegionCoprocessorEnvironment env =(RegionCoprocessorEnvironment)c.getEnvironment();
       attempts.incrementAndGet();
       throw new DoNotRetryIOException("Simulating write failure on "
-        + c.getEnvironment().getRegionInfo().getTable().getNameAsString());
+        + env.getRegionInfo().getTable().getNameAsString());
     }
   }
 }

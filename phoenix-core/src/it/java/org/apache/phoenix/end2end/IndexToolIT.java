@@ -415,8 +415,8 @@ public class IndexToolIT extends BaseTest {
     }
 
     @Override
-    public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-      MiniBatchOperationInProgress<Mutation> miniBatchOp) throws HBaseIOException {
+    public void preBatchMutate(ObserverContext c,
+      MiniBatchOperationInProgress miniBatchOp) throws HBaseIOException {
       mutationCount.addAndGet(miniBatchOp.size());
     }
   }

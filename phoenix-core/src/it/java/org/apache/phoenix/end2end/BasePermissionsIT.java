@@ -48,7 +48,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.AuthUtil;
 import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
-import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.LocalHBaseCluster;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
@@ -93,7 +93,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.hbase.shaded.protobuf.ResponseConverter;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public abstract class BasePermissionsIT extends BaseTest {
+public abstract class BasePermissionsIT  {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(BasePermissionsIT.class);
 
@@ -101,7 +101,7 @@ public abstract class BasePermissionsIT extends BaseTest {
 
   private static final String SUPER_USER = System.getProperty("user.name");
 
-  static HBaseTestingUtility testUtil;
+  static IntegrationTestingUtility testUtil;
   private static final Set<String> PHOENIX_SYSTEM_TABLES =
     new HashSet<>(Arrays.asList("SYSTEM.CATALOG", "SYSTEM.SEQUENCE", "SYSTEM.STATS",
       "SYSTEM.FUNCTION", "SYSTEM.MUTEX", "SYSTEM.CHILD_LINK", "SYSTEM.TRANSFORM",
@@ -165,7 +165,7 @@ public abstract class BasePermissionsIT extends BaseTest {
 
   BasePermissionsIT(final boolean isNamespaceMapped) throws Exception {
     this.isNamespaceMapped = isNamespaceMapped;
-    this.tableName = generateUniqueName();
+    this.tableName = BaseTest.generateUniqueName();
   }
 
   static void initCluster(boolean isNamespaceMapped) throws Exception {
@@ -179,7 +179,7 @@ public abstract class BasePermissionsIT extends BaseTest {
       testUtil = null;
     }
 
-    testUtil = new HBaseTestingUtility();
+    testUtil = new IntegrationTestingUtility();
 
     Configuration config = testUtil.getConfiguration();
     enablePhoenixHBaseAuthorization(config, useCustomAccessController);
@@ -198,23 +198,23 @@ public abstract class BasePermissionsIT extends BaseTest {
   public void initUsersAndTables() {
     Configuration configuration = testUtil.getConfiguration();
 
-    regularUser1 = User.createUserForTesting(configuration, "regularUser1_" + generateUniqueName(),
+    regularUser1 = User.createUserForTesting(configuration, "regularUser1_" + BaseTest.generateUniqueName(),
       new String[0]);
-    regularUser2 = User.createUserForTesting(configuration, "regularUser2_" + generateUniqueName(),
+    regularUser2 = User.createUserForTesting(configuration, "regularUser2_" + BaseTest.generateUniqueName(),
       new String[0]);
-    regularUser3 = User.createUserForTesting(configuration, "regularUser3_" + generateUniqueName(),
+    regularUser3 = User.createUserForTesting(configuration, "regularUser3_" + BaseTest.generateUniqueName(),
       new String[0]);
-    regularUser4 = User.createUserForTesting(configuration, "regularUser4_" + generateUniqueName(),
+    regularUser4 = User.createUserForTesting(configuration, "regularUser4_" + BaseTest.generateUniqueName(),
       new String[0]);
 
     groupUser = User.createUserForTesting(testUtil.getConfiguration(),
-      "groupUser_" + generateUniqueName(), new String[] { GROUP_SYSTEM_ACCESS });
+      "groupUser_" + BaseTest.generateUniqueName(), new String[] { GROUP_SYSTEM_ACCESS });
 
     unprivilegedUser = User.createUserForTesting(configuration,
-      "unprivilegedUser_" + generateUniqueName(), new String[0]);
+      "unprivilegedUser_" + BaseTest.generateUniqueName(), new String[0]);
 
-    schemaName = generateUniqueName();
-    tableName = generateUniqueName();
+    schemaName = BaseTest.generateUniqueName();
+    tableName = BaseTest.generateUniqueName();
     fullTableName = schemaName + "." + tableName;
     idx1TableName = tableName + "_IDX1";
     idx2TableName = tableName + "_IDX2";
@@ -258,7 +258,7 @@ public abstract class BasePermissionsIT extends BaseTest {
     conf.set(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(true));
   }
 
-  public static HBaseTestingUtility getUtility() {
+  public static IntegrationTestingUtility getUtility() {
     return testUtil;
   }
 
@@ -1662,8 +1662,8 @@ public abstract class BasePermissionsIT extends BaseTest {
 
   @Test
   public void testUpsertIntoImmutableTable() throws Throwable {
-    final String schema = generateUniqueName();
-    final String tableName = generateUniqueName();
+    final String schema = BaseTest.generateUniqueName();
+    final String tableName = BaseTest.generateUniqueName();
     final String phoenixTableName = schema + "." + tableName;
     grantSystemTableAccess();
     superUser1.runAs(new PrivilegedExceptionAction<Void>() {
@@ -1790,9 +1790,9 @@ public abstract class BasePermissionsIT extends BaseTest {
 
   // Copied from org.apache.hadoop.hbase.security.access.SecureTestUtil because it's not visible
   // there
-  private static List<AccessController> getAccessControllers(MiniHBaseCluster cluster) {
+  private static List<AccessController> getAccessControllers() {
     List<AccessController> result = Lists.newArrayList();
-    for (RegionServerThread t : cluster.getLiveRegionServerThreads()) {
+    for (RegionServerThread t : testUtil.getHBaseCluster().getLiveRegionServerThreads()) {
       for (HRegion region : t.getRegionServer().getOnlineRegionsLocalContext()) {
         Coprocessor cp =
           region.getCoprocessorHost().findCoprocessor(AccessController.class.getName());
@@ -1806,9 +1806,9 @@ public abstract class BasePermissionsIT extends BaseTest {
 
   // Copied from org.apache.hadoop.hbase.security.access.SecureTestUtil because it's not visible
   // there
-  private static Map<AccessController, Long> getAuthManagerMTimes(MiniHBaseCluster cluster) {
+  private static Map<AccessController, Long> getAuthManagerMTimes() {
     Map<AccessController, Long> result = Maps.newHashMap();
-    for (AccessController ac : getAccessControllers(cluster)) {
+    for (AccessController ac : getAccessControllers()) {
       result.put(ac, ac.getAuthManager().getMTime());
     }
     return result;
@@ -1817,9 +1817,9 @@ public abstract class BasePermissionsIT extends BaseTest {
   // Copied from org.apache.hadoop.hbase.security.access.SecureTestUtil because it's not visible
   // there
   @SuppressWarnings("rawtypes")
-  public static void updateACLs(final HBaseTestingUtility util, Callable c) throws Exception {
+  public static void updateACLs(final IntegrationTestingUtility util, Callable c) throws Exception {
     // Get the current mtimes for all access controllers
-    final Map<AccessController, Long> oldMTimes = getAuthManagerMTimes(util.getHBaseCluster());
+    final Map<AccessController, Long> oldMTimes = getAuthManagerMTimes();
 
     // Run the update action
     c.call();
@@ -1828,7 +1828,7 @@ public abstract class BasePermissionsIT extends BaseTest {
     util.waitFor(WAIT_TIME, 100, new Predicate<IOException>() {
       @Override
       public boolean evaluate() {
-        Map<AccessController, Long> mtimes = getAuthManagerMTimes(util.getHBaseCluster());
+        Map<AccessController, Long> mtimes = getAuthManagerMTimes();
         for (Map.Entry<AccessController, Long> e : mtimes.entrySet()) {
           if (!oldMTimes.containsKey(e.getKey())) {
             LOGGER.error("Snapshot of AccessController state does not include instance on region "

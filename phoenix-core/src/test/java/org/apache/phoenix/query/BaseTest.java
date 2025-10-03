@@ -341,7 +341,10 @@ public abstract class BaseTest {
   protected static String url;
   protected static PhoenixTestDriver driver;
   protected static boolean clusterInitialized = false;
-  protected static HBaseTestingUtility utility;
+  // We're using IntegrationTestingUtility because that extends HBaseTestingUtil/HBaseTestingUtility
+  // and works with either HBase 2/3. We could have also created a PhoenixTestingUtility in the
+  // compatibility moduley that does the same, and used that.
+  protected static IntegrationTestingUtility utility;
   protected static final Configuration config = HBaseConfiguration.create();
 
   protected static String getUrl() {
@@ -473,16 +476,11 @@ public abstract class BaseTest {
   private static synchronized String initMiniCluster(Configuration conf,
     ReadOnlyProps overrideProps) throws Exception {
     setUpConfigForMiniCluster(conf, overrideProps);
-    utility = new HBaseTestingUtility(conf);
+    utility = new IntegrationTestingUtility(conf);
     try {
       long startTime = System.currentTimeMillis();
-      StartMiniClusterOption.Builder builder = StartMiniClusterOption.builder();
-      builder.numMasters(overrideProps.getInt(QueryServices.TESTS_MINI_CLUSTER_NUM_MASTERS, 1));
-      int numSlaves =
-        overrideProps.getInt(QueryServices.TESTS_MINI_CLUSTER_NUM_REGION_SERVERS, NUM_SLAVES_BASE);
-      builder.numRegionServers(numSlaves);
-      builder.numDataNodes(numSlaves);
-      utility.startMiniCluster(builder.build());
+      utility.startMiniCluster(
+          overrideProps.getInt(QueryServices.TESTS_MINI_CLUSTER_NUM_REGION_SERVERS, NUM_SLAVES_BASE));
       long startupTime = System.currentTimeMillis() - startTime;
       LOGGER.info("HBase minicluster startup complete in {} ms", startupTime);
       return getLocalClusterUrl(utility);
@@ -491,12 +489,12 @@ public abstract class BaseTest {
     }
   }
 
-  protected static String getLocalClusterUrl(HBaseTestingUtility util) throws Exception {
+  protected static String getLocalClusterUrl(IntegrationTestingUtility util) throws Exception {
     String url = QueryUtil.getConnectionUrl(new Properties(), util.getConfiguration());
     return url + PHOENIX_TEST_DRIVER_URL_PARAM;
   }
 
-  protected static String getLocalClusterUrl(HBaseTestingUtility util, String principal)
+  protected static String getLocalClusterUrl(IntegrationTestingUtility util, String principal)
     throws Exception {
     String url = QueryUtil.getConnectionUrl(new Properties(), util.getConfiguration(), principal);
     return url + PHOENIX_TEST_DRIVER_URL_PARAM;
@@ -559,7 +557,10 @@ public abstract class BaseTest {
      * really needed by phoenix for test purposes. Limiting these threads helps us in running
      * several mini clusters at the same time without hitting the threads limit imposed by the OS.
      */
-    conf.setInt(HConstants.REGION_SERVER_HANDLER_COUNT, 5);
+    // This was set to 5, which worked with HBase 2, but HBase 3 runs out of handlers and tests
+    // hang even with 10 handlers.
+    // TODO is this expected and normal, or does this indicate a bug in HBase 3 or Phoenix ?
+    conf.setInt(HConstants.REGION_SERVER_HANDLER_COUNT, 20);
     conf.setInt("hbase.regionserver.metahandler.count", 2);
     conf.setInt("dfs.namenode.handler.count", 2);
     conf.setInt("dfs.namenode.service.handler.count", 2);
@@ -594,7 +595,7 @@ public abstract class BaseTest {
    * PhoenixRegionServerEndpoint by default, if some other regionserver coprocs are not already
    * present.
    */
-  protected static void setPhoenixRegionServerEndpoint(Configuration conf) {
+  public static void setPhoenixRegionServerEndpoint(Configuration conf) {
     String value = conf.get(REGIONSERVER_COPROCESSOR_CONF_KEY);
     if (value == null) {
       value = PhoenixRegionServerEndpointTestImpl.class.getName();
@@ -1713,7 +1714,7 @@ public abstract class BaseTest {
     assertEquals(expectedCount, count);
   }
 
-  public static HBaseTestingUtility getUtility() {
+  public static IntegrationTestingUtility getUtility() {
     return utility;
   }
 
@@ -1919,9 +1920,8 @@ public abstract class BaseTest {
     assertTrue(
       "Number of split points should be less than or equal to the number of region servers ",
       splitPoints.size() <= NUM_SLAVES_BASE);
-    HBaseTestingUtility util = getUtility();
-    MiniHBaseCluster cluster = util.getHBaseCluster();
-    HMaster master = cluster.getMaster();
+    IntegrationTestingUtility util = getUtility();
+    HMaster master = util.getHBaseCluster().getMaster();
     // We don't want BalancerChore to undo our hard work
     assertFalse("Balancer must be off", master.isBalancerOn());
     AssignmentManager am = master.getAssignmentManager();
@@ -2010,9 +2010,8 @@ public abstract class BaseTest {
   private static void moveRegion(RegionInfo regionInfo, ServerName srcServerName,
     ServerName dstServerName) throws Exception {
     Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-    HBaseTestingUtility util = getUtility();
-    MiniHBaseCluster cluster = util.getHBaseCluster();
-    HMaster master = cluster.getMaster();
+    IntegrationTestingUtility util = getUtility();
+    HMaster master = util.getHBaseCluster().getMaster();
     AssignmentManager am = master.getAssignmentManager();
 
     HRegionServer dstServer = util.getHBaseCluster().getRegionServer(dstServerName);

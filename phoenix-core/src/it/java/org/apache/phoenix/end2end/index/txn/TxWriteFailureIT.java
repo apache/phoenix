@@ -190,7 +190,7 @@ public class TxWriteFailureIT extends BaseTest {
   public static class FailingRegionObserver extends SimpleRegionObserver {
     @Override
     public void prePut(
-      org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c, Put put,
+      org.apache.hadoop.hbase.coprocessor.ObserverContext c, Put put,
       org.apache.hadoop.hbase.wal.WALEdit edit, Durability durability) throws java.io.IOException {
       if (shouldFailUpsert(c, put)) {
         // throwing anything other than instances of IOException result
@@ -201,7 +201,7 @@ public class TxWriteFailureIT extends BaseTest {
       }
     }
 
-    private boolean shouldFailUpsert(ObserverContext<RegionCoprocessorEnvironment> c, Put put) {
+    private boolean shouldFailUpsert(ObserverContext c, Put put) {
       return Bytes.contains(put.getRow(), Bytes.toBytes(ROW_TO_FAIL));
     }
 

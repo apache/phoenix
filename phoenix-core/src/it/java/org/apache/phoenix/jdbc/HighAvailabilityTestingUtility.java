@@ -55,6 +55,7 @@ import org.apache.curator.framework.CuratorFramework;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.*;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.replication.ReplicationPeerConfig;
@@ -663,7 +664,6 @@ public class HighAvailabilityTestingUtility {
        */
       conf.setInt(HConstants.REGION_SERVER_HANDLER_COUNT, 5);
       conf.setInt("hbase.regionserver.metahandler.count", 2);
-      conf.setInt(HConstants.MASTER_HANDLER_COUNT, 2);
       conf.setInt("dfs.namenode.handler.count", 2);
       conf.setInt("dfs.namenode.service.handler.count", 2);
       conf.setInt("dfs.datanode.handler.count", 2);
@@ -730,7 +730,7 @@ public class HighAvailabilityTestingUtility {
   public static HighAvailabilityGroup getHighAvailibilityGroup(String jdbcUrl,
     Properties clientProperties) throws TimeoutException, InterruptedException {
     AtomicReference<HighAvailabilityGroup> haGroupRef = new AtomicReference<>();
-    GenericTestUtils.waitFor(() -> {
+    Waiter.waitFor(HBaseConfiguration.create(), 180_000, 1000, () -> {
       try {
         Optional<HighAvailabilityGroup> haGroup =
           HighAvailabilityGroup.get(jdbcUrl, clientProperties);
@@ -742,7 +742,7 @@ public class HighAvailabilityTestingUtility {
       } catch (SQLException throwables) {
         return false;
       }
-    }, 1_000, 180_000);
+    });
     return haGroupRef.get();
   }
 

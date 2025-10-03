@@ -89,11 +89,12 @@ public class HashJoinCacheIT extends BaseJoinIT {
     public static List<ImmutableBytesPtr> lastRemovedJoinIds = new ArrayList<ImmutableBytesPtr>();
 
     @Override
-    public void preScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
+    public void preScannerOpen(final ObserverContext c,
       final Scan scan) {
+        RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment)c.getEnvironment();
       final HashJoinInfo joinInfo = HashJoinInfo.deserializeHashJoinFromScan(scan);
       if (joinInfo != null) {
-        TenantCache cache = GlobalCache.getTenantCache(c.getEnvironment(), null);
+        TenantCache cache = GlobalCache.getTenantCache(env, null);
         int count = joinInfo.getJoinIds().length;
         for (int i = 0; i < count; i++) {
           ImmutableBytesPtr joinId = joinInfo.getJoinIds()[i];
