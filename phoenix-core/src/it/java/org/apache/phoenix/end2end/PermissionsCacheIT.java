@@ -25,7 +25,7 @@ import java.util.Collections;
 import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.AuthUtil;
-import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.security.access.Permission.Action;
 import org.apache.hadoop.hbase.security.access.PermissionStorage;
@@ -36,6 +36,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.apache.phoenix.query.BaseTest;
 
 import org.apache.hbase.thirdparty.com.google.common.collect.ListMultimap;
 
@@ -56,8 +57,8 @@ public class PermissionsCacheIT extends BasePermissionsIT {
     if (!isNamespaceMapped) {
       return;
     }
-    final String schema = generateUniqueName();
-    final String tableName = generateUniqueName();
+    final String schema = BaseTest.generateUniqueName();
+    final String tableName = BaseTest.generateUniqueName();
     final String phoenixTableName = SchemaUtil.getTableName(schema, tableName);
     try (Connection conn = getConnection()) {
       grantPermissions(regularUser1.getShortName(), PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES,
@@ -82,9 +83,9 @@ public class PermissionsCacheIT extends BasePermissionsIT {
         }
       });
       verifyAllowed(createTable(phoenixTableName), regularUser1);
-      HBaseTestingUtility utility = getUtility();
+      IntegrationTestingUtility utility = getUtility();
       Configuration conf = utility.getConfiguration();
-      ZKWatcher zkw = HBaseTestingUtility.getZooKeeperWatcher(utility);
+      ZKWatcher zkw = utility.getZooKeeperWatcher();
       String aclZnodeParent = conf.get("zookeeper.znode.acl.parent", "acl");
       String aclZNode = ZNodePaths.joinZNode(zkw.getZNodePaths().baseZNode, aclZnodeParent);
       String tableZNode = ZNodePaths.joinZNode(aclZNode, "@" + schema);
