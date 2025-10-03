@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.ExtendedCell;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
@@ -138,7 +139,7 @@ public class ReadWriteKeyValuesWithCodecTest {
     Codec.Encoder cellEncoder = codec.getEncoder(out);
     // We interleave the two lists for code simplicity
     for (Cell kv : kvs) {
-      cellEncoder.write(kv);
+      cellEncoder.write((ExtendedCell)kv);
     }
   }
 

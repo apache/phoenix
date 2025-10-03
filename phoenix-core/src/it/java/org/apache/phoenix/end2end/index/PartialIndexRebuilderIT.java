@@ -1143,8 +1143,9 @@ public class PartialIndexRebuilderIT extends BaseTest {
 
   public static class WriteFailingRegionObserver extends SimpleRegionObserver {
     @Override
-    public void postBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-      MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+    public void postBatchMutate(ObserverContext c,
+      MiniBatchOperationInProgress miniBatchOp) throws IOException {
+        RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment)c.getEnvironment();
       // we need to advance the clock, since the index retry logic (copied from HBase) has a time
       // component
       EnvironmentEdge delegate = EnvironmentEdgeManager.getDelegate();
@@ -1153,7 +1154,7 @@ public class PartialIndexRebuilderIT extends BaseTest {
         myClock.time += 1000;
       }
       throw new DoNotRetryIOException("Simulating write failure on "
-        + c.getEnvironment().getRegionInfo().getTable().getNameAsString());
+        + env.getRegionInfo().getTable().getNameAsString());
     }
   }
 

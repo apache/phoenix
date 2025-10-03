@@ -135,8 +135,8 @@ public class TransactionIT extends ParallelStatsDisabledIT {
 
   public static class WriteFailingRegionObserver extends SimpleRegionObserver {
     @Override
-    public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-      MiniBatchOperationInProgress<Mutation> miniBatchOp) throws HBaseIOException {
+    public void preBatchMutate(ObserverContext c,
+      MiniBatchOperationInProgress miniBatchOp) throws HBaseIOException {
       throw new DoNotRetryIOException();
     }
   }
