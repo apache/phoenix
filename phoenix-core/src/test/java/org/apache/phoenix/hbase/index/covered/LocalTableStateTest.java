@@ -182,7 +182,7 @@ public class LocalTableStateTest {
     LocalTableState table = new LocalTableState(cachedLocalTable, m);
 
     // add the kvs from the mutation
-    KeyValue kv = KeyValueUtil.ensureKeyValue((ExtendedCell)m.get(fam, qual).get(0));
+    KeyValue kv = KeyValueUtil.ensureKeyValue((ExtendedCell) m.get(fam, qual).get(0));
     kv.setSequenceId(0);
     table.addPendingUpdates(kv);
 

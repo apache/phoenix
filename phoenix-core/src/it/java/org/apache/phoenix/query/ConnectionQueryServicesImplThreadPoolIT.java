@@ -26,7 +26,6 @@ import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_MAX_THREAD
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertTrue;
 
 import java.lang.reflect.Field;
 import java.sql.Connection;

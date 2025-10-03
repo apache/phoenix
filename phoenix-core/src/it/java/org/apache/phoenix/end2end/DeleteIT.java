@@ -40,9 +40,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.ExtendedCell;
-
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.ExtendedCell;
 import org.apache.hadoop.hbase.PhoenixTagType;
 import org.apache.hadoop.hbase.PrivateCellUtil;
 import org.apache.hadoop.hbase.RawCell;
@@ -1109,7 +1108,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
       }
     }
     assertFalse("Values shouldn't be empty", values.isEmpty());
-    ExtendedCell first = (ExtendedCell)values.get(0);
+    ExtendedCell first = (ExtendedCell) values.get(0);
     assertTrue("First cell should be delete marker ", CellUtil.isDelete(first));
     List<Tag> tags = PrivateCellUtil.getTags(first);
     if (tagPresent) {

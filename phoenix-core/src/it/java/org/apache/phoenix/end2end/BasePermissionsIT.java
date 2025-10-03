@@ -50,7 +50,6 @@ import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.LocalHBaseCluster;
-import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.Waiter.Predicate;
@@ -93,7 +92,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.hbase.shaded.protobuf.ResponseConverter;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public abstract class BasePermissionsIT  {
+public abstract class BasePermissionsIT {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(BasePermissionsIT.class);
 
@@ -198,14 +197,14 @@ public abstract class BasePermissionsIT  {
   public void initUsersAndTables() {
     Configuration configuration = testUtil.getConfiguration();
 
-    regularUser1 = User.createUserForTesting(configuration, "regularUser1_" + BaseTest.generateUniqueName(),
-      new String[0]);
-    regularUser2 = User.createUserForTesting(configuration, "regularUser2_" + BaseTest.generateUniqueName(),
-      new String[0]);
-    regularUser3 = User.createUserForTesting(configuration, "regularUser3_" + BaseTest.generateUniqueName(),
-      new String[0]);
-    regularUser4 = User.createUserForTesting(configuration, "regularUser4_" + BaseTest.generateUniqueName(),
-      new String[0]);
+    regularUser1 = User.createUserForTesting(configuration,
+      "regularUser1_" + BaseTest.generateUniqueName(), new String[0]);
+    regularUser2 = User.createUserForTesting(configuration,
+      "regularUser2_" + BaseTest.generateUniqueName(), new String[0]);
+    regularUser3 = User.createUserForTesting(configuration,
+      "regularUser3_" + BaseTest.generateUniqueName(), new String[0]);
+    regularUser4 = User.createUserForTesting(configuration,
+      "regularUser4_" + BaseTest.generateUniqueName(), new String[0]);
 
     groupUser = User.createUserForTesting(testUtil.getConfiguration(),
       "groupUser_" + BaseTest.generateUniqueName(), new String[] { GROUP_SYSTEM_ACCESS });

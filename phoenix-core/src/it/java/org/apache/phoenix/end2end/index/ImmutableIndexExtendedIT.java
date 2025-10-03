@@ -31,13 +31,11 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -125,8 +123,8 @@ public class ImmutableIndexExtendedIT extends ParallelStatsDisabledIT {
     implements FailingRegionObserver {
 
     @Override
-    public void preBatchMutate(ObserverContext c,
-      MiniBatchOperationInProgress miniBatchOp) throws IOException {
+    public void preBatchMutate(ObserverContext c, MiniBatchOperationInProgress miniBatchOp)
+      throws IOException {
       throw new IOException();
     }
 
@@ -140,8 +138,8 @@ public class ImmutableIndexExtendedIT extends ParallelStatsDisabledIT {
     implements FailingRegionObserver {
 
     @Override
-    public void postBatchMutate(ObserverContext c,
-      MiniBatchOperationInProgress miniBatchOp) throws IOException {
+    public void postBatchMutate(ObserverContext c, MiniBatchOperationInProgress miniBatchOp)
+      throws IOException {
       throw new IOException();
     }
 
@@ -157,8 +155,8 @@ public class ImmutableIndexExtendedIT extends ParallelStatsDisabledIT {
     private boolean failOnce = true;
 
     @Override
-    public void preBatchMutate(ObserverContext c,
-      MiniBatchOperationInProgress miniBatchOp) throws IOException {
+    public void preBatchMutate(ObserverContext c, MiniBatchOperationInProgress miniBatchOp)
+      throws IOException {
       if (failOnce) {
         // next attempt don't raise
         failOnce = false;

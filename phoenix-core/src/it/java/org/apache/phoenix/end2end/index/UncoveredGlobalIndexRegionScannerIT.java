@@ -38,7 +38,6 @@ import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.PhoenixParserException;
@@ -898,8 +897,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
     }
 
     @Override
-    public void preScannerOpen(final ObserverContext c,
-      final Scan scan) {
+    public void preScannerOpen(final ObserverContext c, final Scan scan) {
       if (scan.getFilter() instanceof SkipScanFilter) {
         List<List<KeyRange>> slots = ((SkipScanFilter) scan.getFilter()).getSlots();
         for (List<KeyRange> ranges : slots) {

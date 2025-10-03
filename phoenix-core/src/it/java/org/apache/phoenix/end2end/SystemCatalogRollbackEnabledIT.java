@@ -103,7 +103,7 @@ public class SystemCatalogRollbackEnabledIT extends BaseTest {
    */
   @Test
   public void testSystemCatalogDoesNotSplit() throws Exception {
-      IntegrationTestingUtility testUtil = getUtility();
+    IntegrationTestingUtility testUtil = getUtility();
     for (int i = 0; i < 10; i++) {
       createTableAndTenantViews("schema" + i + ".table_" + i);
     }

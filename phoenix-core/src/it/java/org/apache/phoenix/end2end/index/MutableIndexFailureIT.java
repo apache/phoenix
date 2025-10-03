@@ -618,16 +618,16 @@ public class MutableIndexFailureIT extends BaseTest {
     public static final String FAIL_TABLE_NAME = "FAIL_TABLE";
 
     @Override
-    public void preBatchMutate(ObserverContext c,
-      MiniBatchOperationInProgress miniBatchOp) throws IOException {
-        RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment)c.getEnvironment();
+    public void preBatchMutate(ObserverContext c, MiniBatchOperationInProgress miniBatchOp)
+      throws IOException {
+      RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) c.getEnvironment();
       boolean throwException = false;
       if (FAIL_NEXT_WRITE) {
         throwException = true;
         FAIL_NEXT_WRITE = false;
       } else if (
-        env.getRegionInfo().getTable().getNameAsString()
-          .endsWith("A_" + FAIL_INDEX_NAME) && FAIL_WRITE
+        env.getRegionInfo().getTable().getNameAsString().endsWith("A_" + FAIL_INDEX_NAME)
+          && FAIL_WRITE
       ) {
         throwException = true;
         if (TOGGLE_FAIL_WRITE_FOR_RETRY) {
@@ -636,7 +636,7 @@ public class MutableIndexFailureIT extends BaseTest {
       } else {
         // When local index updates are atomic with data updates, testing a write failure to a local
         // index won't make sense.
-        Mutation operation = (Mutation)miniBatchOp.getOperation(0);
+        Mutation operation = (Mutation) miniBatchOp.getOperation(0);
         if (FAIL_WRITE) {
           Map<byte[], List<Cell>> cellMap = operation.getFamilyCellMap();
           for (Map.Entry<byte[], List<Cell>> entry : cellMap.entrySet()) {

@@ -419,9 +419,9 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
     private volatile boolean lockedTableRow;
 
     @Override
-    public void postBatchMutate(ObserverContext c,
-      MiniBatchOperationInProgress miniBatchOp) throws IOException {
-        RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment)c.getEnvironment();
+    public void postBatchMutate(ObserverContext c, MiniBatchOperationInProgress miniBatchOp)
+      throws IOException {
+      RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) c.getEnvironment();
       try {
         String tableName = env.getRegionInfo().getTable().getNameAsString();
         if (tableName.startsWith(MVCC_LOCK_TEST_TABLE_PREFIX)) {
@@ -433,16 +433,16 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
     }
 
     @Override
-    public void preBatchMutate(ObserverContext c,
-      MiniBatchOperationInProgress miniBatchOp) throws HBaseIOException {
-        RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment)c.getEnvironment();
+    public void preBatchMutate(ObserverContext c, MiniBatchOperationInProgress miniBatchOp)
+      throws HBaseIOException {
+      RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) c.getEnvironment();
       try {
         String tableName = env.getRegionInfo().getTable().getNameAsString();
         if (tableName.startsWith(LOCK_TEST_TABLE_PREFIX)) {
           if (lockedTableRow) {
             throw new DoNotRetryIOException(
               "Expected lock in preBatchMutate to be exclusive, but it wasn't for row "
-                + Bytes.toStringBinary(((Mutation)miniBatchOp.getOperation(0)).getRow()));
+                + Bytes.toStringBinary(((Mutation) miniBatchOp.getOperation(0)).getRow()));
           }
           lockedTableRow = true;
           Thread.sleep(ROW_LOCK_WAIT_TIME + 2000);
