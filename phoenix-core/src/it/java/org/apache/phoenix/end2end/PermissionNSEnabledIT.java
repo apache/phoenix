@@ -39,11 +39,11 @@ import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-import org.apache.phoenix.query.BaseTest;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class PermissionNSEnabledIT extends BasePermissionsIT {

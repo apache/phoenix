@@ -36,14 +36,13 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.hadoop.hbase.HBaseIOException;
-import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.Waiter;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.DoNotRetryRegionException;
-import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -296,10 +295,10 @@ public class UpsertSelectOverlappingBatchesIT extends BaseTest {
     public static volatile boolean SLOW_MUTATE = false;
 
     @Override
-    public void preBatchMutate(ObserverContext c,
-      MiniBatchOperationInProgress miniBatchOp) throws HBaseIOException {
+    public void preBatchMutate(ObserverContext c, MiniBatchOperationInProgress miniBatchOp)
+      throws HBaseIOException {
       // model a slow batch that takes a long time
-        RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment)c.getEnvironment();
+      RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) c.getEnvironment();
       if (
         (miniBatchOp.size() == 100 || SLOW_MUTATE)
           && env.getRegionInfo().getTable().getNameAsString().equals(dataTable)

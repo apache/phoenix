@@ -501,7 +501,7 @@
     <sourceDirectory>set/in/profiles/by/build-helper-plugin</sourceDirectory>
     <testSourceDirectory>set/in/profiles/by/build-helper-plugin</testSourceDirectory>
   </build>
-    <profiles>
+  <profiles>
     <profile>
       <id>phoenix-hbase-compat-2.x</id>
       <activation>

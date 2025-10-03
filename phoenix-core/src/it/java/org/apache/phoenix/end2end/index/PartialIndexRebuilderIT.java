@@ -40,7 +40,6 @@ import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -1143,9 +1142,9 @@ public class PartialIndexRebuilderIT extends BaseTest {
 
   public static class WriteFailingRegionObserver extends SimpleRegionObserver {
     @Override
-    public void postBatchMutate(ObserverContext c,
-      MiniBatchOperationInProgress miniBatchOp) throws IOException {
-        RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment)c.getEnvironment();
+    public void postBatchMutate(ObserverContext c, MiniBatchOperationInProgress miniBatchOp)
+      throws IOException {
+      RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) c.getEnvironment();
       // we need to advance the clock, since the index retry logic (copied from HBase) has a time
       // component
       EnvironmentEdge delegate = EnvironmentEdgeManager.getDelegate();
@@ -1153,8 +1152,8 @@ public class PartialIndexRebuilderIT extends BaseTest {
         MyClock myClock = (MyClock) delegate;
         myClock.time += 1000;
       }
-      throw new DoNotRetryIOException("Simulating write failure on "
-        + env.getRegionInfo().getTable().getNameAsString());
+      throw new DoNotRetryIOException(
+        "Simulating write failure on " + env.getRegionInfo().getTable().getNameAsString());
     }
   }
 

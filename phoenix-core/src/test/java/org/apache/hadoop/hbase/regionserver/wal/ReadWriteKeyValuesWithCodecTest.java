@@ -139,7 +139,7 @@ public class ReadWriteKeyValuesWithCodecTest {
     Codec.Encoder cellEncoder = codec.getEncoder(out);
     // We interleave the two lists for code simplicity
     for (Cell kv : kvs) {
-      cellEncoder.write((ExtendedCell)kv);
+      cellEncoder.write((ExtendedCell) kv);
     }
   }
 

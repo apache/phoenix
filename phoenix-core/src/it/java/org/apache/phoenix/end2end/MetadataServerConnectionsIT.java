@@ -127,39 +127,38 @@ public class MetadataServerConnectionsIT extends BaseTest {
         ThreadPoolExecutor htpe = null;
 
         // Get the thread pool executor from the connection.
-        
-          Field props = null;
-          props = conn.getClass().getDeclaredField("batchPool");
-          props.setAccessible(true);
-          ctpe = (ThreadPoolExecutor) props.get(conn);
-          LOGGER.debug("ConnectionImplementation Thread pool info :" + ctpe.toString());
 
+        Field props = null;
+        props = conn.getClass().getDeclaredField("batchPool");
+        props.setAccessible(true);
+        ctpe = (ThreadPoolExecutor) props.get(conn);
+        LOGGER.debug("ConnectionImplementation Thread pool info :" + ctpe.toString());
 
         // Get the thread pool executor from the HTable.
         Table hTable =
           ServerUtil.getHTableForCoprocessorScan(env, TableName.valueOf(fullTableName));
 
-          props = hTable.getClass().getDeclaredField("pool");
-          props.setAccessible(true);
-          htpe = ((ThreadPoolExecutor) props.get(hTable));
-          LOGGER.debug("HTable Thread pool info :" + htpe.toString());
-          // Assert the HTable thread pool config match the Connection pool configs.
-          // Since we are not overriding any defaults, it should match the defaults.
-          assertEquals(htpe.getMaximumPoolSize(), DEFAULT_HCONNECTION_POOL_MAX_SIZE);
-          assertEquals(htpe.getCorePoolSize(), DEFAULT_HCONNECTION_POOL_CORE_SIZE);
-          LOGGER.debug("HTable threadpool info {}, {}, {}, {}", htpe.getCorePoolSize(),
-            htpe.getMaximumPoolSize(), htpe.getQueue().remainingCapacity(),
-            htpe.getKeepAliveTime(TimeUnit.SECONDS));
+        props = hTable.getClass().getDeclaredField("pool");
+        props.setAccessible(true);
+        htpe = ((ThreadPoolExecutor) props.get(hTable));
+        LOGGER.debug("HTable Thread pool info :" + htpe.toString());
+        // Assert the HTable thread pool config match the Connection pool configs.
+        // Since we are not overriding any defaults, it should match the defaults.
+        assertEquals(htpe.getMaximumPoolSize(), DEFAULT_HCONNECTION_POOL_MAX_SIZE);
+        assertEquals(htpe.getCorePoolSize(), DEFAULT_HCONNECTION_POOL_CORE_SIZE);
+        LOGGER.debug("HTable threadpool info {}, {}, {}, {}", htpe.getCorePoolSize(),
+          htpe.getMaximumPoolSize(), htpe.getQueue().remainingCapacity(),
+          htpe.getKeepAliveTime(TimeUnit.SECONDS));
 
-          int count = Thread.activeCount();
-          Thread[] th = new Thread[count];
-          // returns the number of threads put into the array
-          Thread.enumerate(th);
-          long hTablePoolCount =
-            Arrays.stream(th).filter(s -> s.getName().equals("htable-pool-0")).count();
-          // Assert no default HTable threadpools are created.
-          assertEquals(0, hTablePoolCount);
-          LOGGER.debug("htable-pool-0 threads {}", hTablePoolCount);
+        int count = Thread.activeCount();
+        Thread[] th = new Thread[count];
+        // returns the number of threads put into the array
+        Thread.enumerate(th);
+        long hTablePoolCount =
+          Arrays.stream(th).filter(s -> s.getName().equals("htable-pool-0")).count();
+        // Assert no default HTable threadpools are created.
+        assertEquals(0, hTablePoolCount);
+        LOGGER.debug("htable-pool-0 threads {}", hTablePoolCount);
 
         // Assert that the threadpool from Connection and HTable are the same.
         assertEquals(ctpe, htpe);

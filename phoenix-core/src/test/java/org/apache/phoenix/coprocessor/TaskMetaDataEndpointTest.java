@@ -157,28 +157,28 @@ public class TaskMetaDataEndpointTest {
         return null;
       }
 
-      //HBase 3 only
-    public OperationQuota checkBatchQuota(Region arg0, OperationType arg1)
-            throws IOException, RpcThrottlingException {
+      // HBase 3 only
+      public OperationQuota checkBatchQuota(Region arg0, OperationType arg1)
+        throws IOException, RpcThrottlingException {
         return null;
-    }
+      }
 
-  //HBase 3 only
-    public RpcQuotaManager getRpcQuotaManager() {
+      // HBase 3 only
+      public RpcQuotaManager getRpcQuotaManager() {
         return null;
-    }
+      }
 
-  //HBase 3 only
-    public OperationQuota checkScanQuota(Scan scan, long maxBlockBytesScanned,
-            long prevBlockBytesScannedDifference) throws IOException, RpcThrottlingException {
+      // HBase 3 only
+      public OperationQuota checkScanQuota(Scan scan, long maxBlockBytesScanned,
+        long prevBlockBytesScannedDifference) throws IOException, RpcThrottlingException {
         return null;
-    }
+      }
 
-  //HBase 3 only
-    public OperationQuota checkBatchQuota(Region region, int numWrites, int numReads)
-            throws IOException, RpcThrottlingException {
+      // HBase 3 only
+      public OperationQuota checkBatchQuota(Region region, int numWrites, int numReads)
+        throws IOException, RpcThrottlingException {
         return null;
-    }
+      }
     };
     taskMetaDataEndpoint = new TaskMetaDataEndpoint();
     taskMetaDataEndpoint.start(environment);

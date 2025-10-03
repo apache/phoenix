@@ -50,7 +50,6 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
@@ -114,10 +113,9 @@ public class TestWALRecoveryCaching {
       return Optional.of(this);
     }
 
-    //FIXME this hook does not exist in HBase 3.
+    // FIXME this hook does not exist in HBase 3.
     // Skip test ?
-    public void preWALRestore(
-      org.apache.hadoop.hbase.coprocessor.ObserverContext ctx,
+    public void preWALRestore(org.apache.hadoop.hbase.coprocessor.ObserverContext ctx,
       org.apache.hadoop.hbase.client.RegionInfo info, WALKey logKey,
       org.apache.hadoop.hbase.wal.WALEdit logEdit) throws IOException {
       try {
@@ -186,8 +184,10 @@ public class TestWALRecoveryCaching {
     // create the primary table w/ indexing enabled
     TableDescriptor primaryTable =
       TableDescriptorBuilder.newBuilder(TableName.valueOf(testTable.getTableName()))
-      .setColumnFamilies(Arrays.asList(new ColumnFamilyDescriptor[] {ColumnFamilyDescriptorBuilder.of(family),ColumnFamilyDescriptorBuilder.of(nonIndexedFamily)}))
-      .build();
+        .setColumnFamilies(
+          Arrays.asList(new ColumnFamilyDescriptor[] { ColumnFamilyDescriptorBuilder.of(family),
+            ColumnFamilyDescriptorBuilder.of(nonIndexedFamily) }))
+        .build();
     builder.addArbitraryConfigForTesting(Indexer.RecoveryFailurePolicyKeyForTesting,
       ReleaseLatchOnFailurePolicy.class.getName());
     builder.build(primaryTable);

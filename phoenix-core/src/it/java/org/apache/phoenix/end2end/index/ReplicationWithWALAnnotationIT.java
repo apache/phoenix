@@ -33,8 +33,8 @@ import java.util.Optional;
 import java.util.Properties;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
@@ -46,7 +46,6 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorHost;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.replication.ReplicationPeerConfig;
@@ -510,17 +509,17 @@ public class ReplicationWithWALAnnotationIT extends BaseTest {
     }
 
     @Override
-    public void preBatchMutate(ObserverContext c,
-      MiniBatchOperationInProgress miniBatchOp) throws IOException {
-        Mutation m = (Mutation)miniBatchOp.getOperation(0);
-      String tenantId = Bytes.toString(m
-        .getAttribute(MutationState.MutationMetadataType.TENANT_ID.toString()));
-      String schemaName = Bytes.toString(m
-        .getAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString()));
-      String logicalTableName = Bytes.toString(m
-        .getAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString()));
-      String tableType = Bytes.toString(m
-        .getAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString()));
+    public void preBatchMutate(ObserverContext c, MiniBatchOperationInProgress miniBatchOp)
+      throws IOException {
+      Mutation m = (Mutation) miniBatchOp.getOperation(0);
+      String tenantId =
+        Bytes.toString(m.getAttribute(MutationState.MutationMetadataType.TENANT_ID.toString()));
+      String schemaName =
+        Bytes.toString(m.getAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString()));
+      String logicalTableName = Bytes
+        .toString(m.getAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString()));
+      String tableType =
+        Bytes.toString(m.getAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString()));
 
       LOGGER.info(
         "TestCoprocessorForWALAnnotationAtSink preBatchMutate: tenantId: {}, schemaName: {}, "
@@ -547,18 +546,18 @@ public class ReplicationWithWALAnnotationIT extends BaseTest {
     }
 
     @Override
-    public void preBatchMutate(ObserverContext c,
-      MiniBatchOperationInProgress miniBatchOp) throws IOException {
-        Mutation m = (Mutation)miniBatchOp.getOperation(0);
+    public void preBatchMutate(ObserverContext c, MiniBatchOperationInProgress miniBatchOp)
+      throws IOException {
+      Mutation m = (Mutation) miniBatchOp.getOperation(0);
 
-      String tenantId = Bytes.toString(m
-        .getAttribute(MutationState.MutationMetadataType.TENANT_ID.toString()));
-      String schemaName = Bytes.toString(m
-        .getAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString()));
-      String logicalTableName = Bytes.toString(m
-        .getAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString()));
-      String tableType = Bytes.toString(m
-        .getAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString()));
+      String tenantId =
+        Bytes.toString(m.getAttribute(MutationState.MutationMetadataType.TENANT_ID.toString()));
+      String schemaName =
+        Bytes.toString(m.getAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString()));
+      String logicalTableName = Bytes
+        .toString(m.getAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString()));
+      String tableType =
+        Bytes.toString(m.getAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString()));
 
       LOGGER.info(
         "TestCoprocessorForWALAnnotationAtSink preBatchMutate: tenantId: {}, schemaName: {}, "

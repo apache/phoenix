@@ -1550,39 +1550,39 @@
             developers can run unit tests conveniently from the IDE or via
             "mvn package" from the command line without triggering time
             consuming integration tests. -->
-<!--        <plugin>-->
-<!--          <groupId>org.codehaus.mojo</groupId>-->
-<!--          <artifactId>build-helper-maven-plugin</artifactId>-->
-<!--          <version>${maven-build-helper-plugin.version}</version>-->
-<!--          <executions>-->
-<!--            <execution>-->
-<!--              <id>add-test-source</id>-->
-<!--              <goals>-->
-<!--                <goal>add-test-source</goal>-->
-<!--              </goals>-->
-<!--              <phase>validate</phase>-->
-<!--              <configuration>-->
-<!--                <sources>-->
-<!--                  <source>${basedir}/src/it/java</source>-->
-<!--                </sources>-->
-<!--              </configuration>-->
-<!--            </execution>-->
-<!--            <execution>-->
-<!--              <id>add-test-resource</id>-->
-<!--              <goals>-->
-<!--                <goal>add-test-resource</goal>-->
-<!--              </goals>-->
-<!--              <phase>validate</phase>-->
-<!--              <configuration>-->
-<!--                <resources>-->
-<!--                  <resource>-->
-<!--                    <directory>${basedir}/src/it/resources</directory>-->
-<!--                  </resource>-->
-<!--                </resources>-->
-<!--              </configuration>-->
-<!--            </execution>-->
-<!--          </executions>-->
-<!--        </plugin>-->
+        <!--        <plugin>-->
+        <!--          <groupId>org.codehaus.mojo</groupId>-->
+        <!--          <artifactId>build-helper-maven-plugin</artifactId>-->
+        <!--          <version>${maven-build-helper-plugin.version}</version>-->
+        <!--          <executions>-->
+        <!--            <execution>-->
+        <!--              <id>add-test-source</id>-->
+        <!--              <goals>-->
+        <!--                <goal>add-test-source</goal>-->
+        <!--              </goals>-->
+        <!--              <phase>validate</phase>-->
+        <!--              <configuration>-->
+        <!--                <sources>-->
+        <!--                  <source>${basedir}/src/it/java</source>-->
+        <!--                </sources>-->
+        <!--              </configuration>-->
+        <!--            </execution>-->
+        <!--            <execution>-->
+        <!--              <id>add-test-resource</id>-->
+        <!--              <goals>-->
+        <!--                <goal>add-test-resource</goal>-->
+        <!--              </goals>-->
+        <!--              <phase>validate</phase>-->
+        <!--              <configuration>-->
+        <!--                <resources>-->
+        <!--                  <resource>-->
+        <!--                    <directory>${basedir}/src/it/resources</directory>-->
+        <!--                  </resource>-->
+        <!--                </resources>-->
+        <!--              </configuration>-->
+        <!--            </execution>-->
+        <!--          </executions>-->
+        <!--        </plugin>-->
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-failsafe-plugin</artifactId>
