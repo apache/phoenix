@@ -36,8 +36,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 public enum ExpressionType {
   ReverseFunction(ReverseFunction.class),
   RowKey(RowKeyColumnExpression.class),
-  RowSizeFunction(RowSizeFunction.class),
-  RawRowSizeFunction(RawRowSizeFunction.class),
   KeyValue(KeyValueColumnExpression.class),
   LiteralValue(LiteralExpression.class),
   RoundFunction(RoundFunction.class),
@@ -208,7 +206,9 @@ public enum ExpressionType {
   SubBinaryFunction(SubBinaryFunction.class),
   ScanStartKeyFunction(ScanStartKeyFunction.class),
   ScanEndKeyFunction(ScanEndKeyFunction.class),
-  TotalSegmentsFunction(TotalSegmentsFunction.class);
+  TotalSegmentsFunction(TotalSegmentsFunction.class),
+  RowSizeFunction(RowSizeFunction.class),
+  RawRowSizeFunction(RawRowSizeFunction.class);
 
   ExpressionType(Class<? extends Expression> clazz) {
     this.clazz = clazz;
