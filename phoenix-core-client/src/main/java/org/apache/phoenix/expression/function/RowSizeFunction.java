@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.expression.function;
 
-import java.sql.SQLException;
 import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Determinism;
@@ -25,7 +24,8 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.RowSizeParseNode;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.schema.types.*;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PUnsignedLong;
 
 /**
  * Function to return the total size of the HBase cells that constitute a given row
@@ -38,7 +38,7 @@ public class RowSizeFunction extends ScalarFunction {
   public RowSizeFunction() {
   }
 
-  public RowSizeFunction(List<Expression> children) throws SQLException {
+  public RowSizeFunction(List<Expression> children) {
     super(children);
   }
 

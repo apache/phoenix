@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.expression.function;
 
-import java.sql.SQLException;
 import java.util.List;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
@@ -35,7 +34,7 @@ public class RawRowSizeFunction extends RowSizeFunction {
   public RawRowSizeFunction() {
   }
 
-  public RawRowSizeFunction(List<Expression> children) throws SQLException {
+  public RawRowSizeFunction(List<Expression> children) {
     super(children);
   }
 }
