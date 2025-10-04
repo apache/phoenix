@@ -161,9 +161,7 @@ public class ParallelPhoenixResultSet extends DelegateResultSet
     idleFuture.whenComplete((resultSet, throwable) -> {
       if (throwable == null && resultSet != null) {
         try {
-          if (!resultSet.isClosed()) {
-            resultSet.close();
-          }
+          resultSet.close();
         } catch (Exception e) {
           LOGGER.warn("Failed to close idle result set: {}", e.getMessage(), e);
         }
