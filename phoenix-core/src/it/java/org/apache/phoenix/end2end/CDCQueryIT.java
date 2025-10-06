@@ -47,7 +47,10 @@ import java.util.Random;
 import java.util.Set;
 import java.util.TreeMap;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
@@ -57,6 +60,7 @@ import org.apache.phoenix.iterate.RowKeyOrderedAggregateResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.mapreduce.index.IndexTool;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.CDCUtil;
@@ -531,15 +535,21 @@ public class CDCQueryIT extends CDCBaseIT {
     if (tableSaltBuckets == null) {
       return 1;
     }
-    Set<String> nonEmptySaltBuckets = Sets.newHashSet();
-    String query = "SELECT /*+ NO_INDEX */ ROWKEY_BYTES_STRING() FROM " + tableName;
-    try (ResultSet rs = conn.createStatement().executeQuery(query)) {
-      while (rs.next()) {
-        String rowKey = rs.getString(1); // StringBinary format
-        // the first 4 bytes will have the salt bucket id like "\x02"
-        String bucketID = rowKey.substring(0, 4);
-        nonEmptySaltBuckets.add(bucketID);
+    Set<Integer> nonEmptySaltBuckets = Sets.newHashSet();
+    TableName hTableName = TableName.valueOf(tableName);
+    ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
+    Table table = cqs.getTable(hTableName.getName());
+    Scan scan = new Scan();
+    scan.setRaw(true);
+    try (ResultScanner scanner = table.getScanner(scan)) {
+      Result result;
+      while ((result = scanner.next()) != null) {
+        byte[] row = result.getRow();
+        Integer bucketId = ((int) row[0]);
+        nonEmptySaltBuckets.add(bucketId);
       }
+    } catch (Exception e) {
+      throw new SQLException(e);
     }
     return nonEmptySaltBuckets.size();
   }
