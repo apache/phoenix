@@ -17,17 +17,38 @@
  */
 package org.apache.phoenix.hbase.index.write;
 
+import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
+import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
+
 /**
  * Like the {@link ParallelWriterIndexCommitter}, but does not block
  */
 public class LazyParallelWriterIndexCommitter extends AbstractParallelWriterIndexCommitter {
 
-  // for testing
-  public LazyParallelWriterIndexCommitter(String hbaseVersion) {
-    super(hbaseVersion);
-  }
+  private static final Logger LOGGER =
+    LoggerFactory.getLogger(LazyParallelWriterIndexCommitter.class);
 
   public LazyParallelWriterIndexCommitter() {
     super();
   }
+
+  @Override
+  public void write(Multimap<HTableInterfaceReference, Mutation> toWrite,
+    final boolean allowLocalUpdates, final int clientVersion)
+    throws SingleIndexWriteFailureException {
+
+    super.write(toWrite, allowLocalUpdates, clientVersion);
+    try {
+      pool.submitOnly(tasks);
+    } catch (Exception e) {
+      LOGGER.error("Error while submitting the task.", e);
+      propagateFailure(e.getCause());
+    }
+  }
+
 }
