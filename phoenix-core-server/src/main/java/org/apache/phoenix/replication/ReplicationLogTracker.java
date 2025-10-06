@@ -113,7 +113,6 @@ public class ReplicationLogTracker {
 
     public void close() {
         if (this.metrics != null) {
-            System.out.println("Closing the metrics");
             this.metrics.close();
         }
     }

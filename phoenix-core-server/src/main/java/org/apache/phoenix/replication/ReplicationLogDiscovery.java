@@ -28,17 +28,37 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscovery;
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Abstract base class for discovering and processing replication log files (to be implemented for
- * replication replay on target and store and forward mode on source). It manages the lifecycle
- * of replication log processing including start/stop of replication log discovery, scheduling
- * periodic replay operations, and processing files from both new and in-progress directories.
+ * Abstract base class for discovering and processing replication log files in a round-by-round manner.
+ * 
+ * This class provides the core framework for:
+ * - Discovering replication log files from configured directories (new files and in-progress files)
+ * - Processing files in time-based rounds with configurable duration and buffer periods
+ * - Tracking progress via lastRoundProcessed to enable resumable processing
+ * - Scheduling periodic replay operations via a configurable executor service
+ * 
+ * Round-based Processing:
+ * - Files are organized into replication rounds based on timestamps
+ * - Each round represents a time window (e.g., 1 minute) of replication activity
+ * - Processing waits for round completion + buffer time before processing to ensure all files are available
+ * 
+ * Subclasses must implement:
+ * - processFile(Path): Defines how individual replication log files are processed
+ * - createMetricsSource(): Provides metrics tracking for monitoring
+ * - Configuration methods: Thread counts, intervals, probabilities, etc.
+ * 
+ * File Processing Flow:
+ * 1. Discover new files for the current round
+ * 2. Mark files as in-progress (move to in-progress directory)
+ * 3. Process each file via abstract processFile() method
+ * 4. Mark successfully processed files as completed (delete from in-progress)
+ * 5. Update lastRoundProcessed to track progress
  */
 public abstract class ReplicationLogDiscovery {
 
@@ -79,17 +99,22 @@ public abstract class ReplicationLogDiscovery {
     protected final ReplicationLogTracker replicationLogTracker;
     protected ScheduledExecutorService scheduler;
     protected volatile boolean isRunning = false;
-    protected ReplicationRound lastRoundInSync;
+    protected ReplicationRound lastRoundProcessed;
     protected MetricsReplicationLogDiscovery metrics;
+    protected long roundTimeMills;
+    protected long bufferMillis;
 
     public ReplicationLogDiscovery(final ReplicationLogTracker replicationLogTracker) {
         this.replicationLogTracker = replicationLogTracker;
         this.haGroupName = replicationLogTracker.getHaGroupName();
         this.conf = replicationLogTracker.getConf();
+        this.roundTimeMills = replicationLogTracker.getReplicationShardDirectoryManager()
+                .getReplicationRoundDurationSeconds() * 1000L;
+        this.bufferMillis = (long) (roundTimeMills * getWaitingBufferPercentage() / 100.0);
     }
 
     public void init() throws IOException {
-        initializeLastRoundInSync();
+        initializeLastRoundProcessed();
         this.metrics = createMetricsSource();
     }
 
@@ -163,38 +188,48 @@ public abstract class ReplicationLogDiscovery {
     }
 
     /**
-     * Executes a replay operation for next set of rounds. Retrieves rounds to process and
-     * processes each round sequentially.
+     * Executes a replay operation for the next set of replication rounds.
+     * 
+     * This method continuously retrieves and processes rounds using getNextRoundToProcess() until:
+     * - No more rounds are ready to process (not enough time has elapsed), or
+     * - An error occurs during processing (will retry in next scheduled run)
+     * 
+     * For each round:
+     * 1. Calls processRound() to handle new files and optionally in-progress files
+     * 2. Updates lastRoundProcessed to mark progress
+     * 3. Retrieves the next round to process
+     * 
      * @throws IOException if there's an error during replay processing
      */
     public void replay() throws IOException {
-        List<ReplicationRound> replicationRoundList = getRoundsToProcess();
-        LOG.info("Number of rounds to process: {}", replicationRoundList.size());
-        for (ReplicationRound replicationRound : replicationRoundList) {
-            processRound(replicationRound);
-            postRoundCompletion(replicationRound);
+        Optional<ReplicationRound> optionalNextRound = getNextRoundToProcess();
+        while (optionalNextRound.isPresent()) {
+            ReplicationRound replicationRound = optionalNextRound.get();
+            try {
+                processRound(replicationRound);
+            } catch (IOException e) {
+                LOG.error("Failed processing replication round {}. Will retry in next scheduled run.", replicationRound, e);
+                break; // stop this run, retry later
+            }
+            setLastRoundProcessed(replicationRound);
+            optionalNextRound = getNextRoundToProcess();
         }
     }
 
     /**
-     * Determines which replication rounds need to be processed based on current time and last sync
-     * timestamp.
-     * @return List of replication rounds that need to be processed
+     * Returns the next replication round to process based on lastRoundProcessed.
+     * Ensures sufficient time (round duration + buffer) has elapsed before returning the next round.
+     * 
+     * @return Optional containing the next round to process, or empty if not enough time has passed
      */
-    protected List<ReplicationRound> getRoundsToProcess() {
-        long currentTime = EnvironmentEdgeManager.currentTimeMillis();
-        long previousRoundEndTime = getLastRoundInSync().getEndTime();
-        long roundTimeMills = replicationLogTracker.getReplicationShardDirectoryManager()
-            .getReplicationRoundDurationSeconds() * 1000L;
-        long bufferMillis = (long) (roundTimeMills * getWaitingBufferPercentage() / 100.0);
-        final List<ReplicationRound> replicationRounds = new ArrayList<>();
-        for (long startTime = previousRoundEndTime;
-            startTime < currentTime - roundTimeMills - bufferMillis;
-            startTime += roundTimeMills) {
-            replicationRounds.add(replicationLogTracker.getReplicationShardDirectoryManager()
-                .getReplicationRoundFromStartTime(startTime));
+    protected Optional<ReplicationRound> getNextRoundToProcess() {
+        long lastRoundEndTimestamp = getLastRoundProcessed().getEndTime();
+        long currentTime = EnvironmentEdgeManager.currentTime();
+        if (currentTime - lastRoundEndTimestamp < roundTimeMills + bufferMillis) {
+            // nothing more to process
+            return Optional.empty();
         }
-        return replicationRounds;
+        return Optional.of(new ReplicationRound(lastRoundEndTimestamp, lastRoundEndTimestamp + roundTimeMills));
     }
 
     /**
@@ -237,14 +272,14 @@ public abstract class ReplicationLogDiscovery {
      */
     protected void processNewFilesForRound(ReplicationRound replicationRound) throws IOException {
         LOG.info("Starting new files processing for round: {}", replicationRound);
-        long startTime = EnvironmentEdgeManager.currentTimeMillis();
+        long startTime = EnvironmentEdgeManager.currentTime();
         List<Path> files = replicationLogTracker.getNewFilesForRound(replicationRound);
-        LOG.trace("Number of new files for round {} is {}", replicationRound, files.size());
+        LOG.info("Number of new files for round {} is {}", replicationRound, files.size());
         while (!files.isEmpty()) {
             processOneRandomFile(files);
             files = replicationLogTracker.getNewFilesForRound(replicationRound);
         }
-        long duration = EnvironmentEdgeManager.currentTimeMillis() - startTime;
+        long duration = EnvironmentEdgeManager.currentTime() - startTime;
         LOG.info("Finished new files processing for round: {} in {}ms", replicationRound, duration);
         getMetrics().updateTimeToProcessNewFiles(duration);
     }
@@ -258,15 +293,14 @@ public abstract class ReplicationLogDiscovery {
         // Increase the count for number of times in progress directory is processed
         getMetrics().incrementNumInProgressDirectoryProcessed();
         LOG.info("Starting in progress directory processing");
-        long startTime = EnvironmentEdgeManager.currentTimeMillis();
+        long startTime = EnvironmentEdgeManager.currentTime();
         List<Path> files = replicationLogTracker.getInProgressFiles();
-        LOG.info("Number of new files for in_progress: {}", files.size());
+        LOG.info("Number of In Progress files is {}", files.size());
         while (!files.isEmpty()) {
             processOneRandomFile(files);
             files = replicationLogTracker.getInProgressFiles();
         }
-        long duration = EnvironmentEdgeManager.currentTimeMillis() - startTime;
-        LOG.info("Starting in progress directory processing in {}ms", duration);
+        long duration = EnvironmentEdgeManager.currentTime() - startTime;
         getMetrics().updateTimeToProcessInProgressFiles(duration);
     }
 
@@ -282,9 +316,7 @@ public abstract class ReplicationLogDiscovery {
         try {
             optionalInProgressFilePath = replicationLogTracker.markInProgress(file);
             if (optionalInProgressFilePath.isPresent()) {
-                System.out.println("Starting processing");
                 processFile(file);
-                System.out.println("Finished processing");
                 replicationLogTracker.markCompleted(optionalInProgressFilePath.get());
             }
         } catch (IOException exception) {
@@ -292,7 +324,7 @@ public abstract class ReplicationLogDiscovery {
             optionalInProgressFilePath.ifPresent(replicationLogTracker::markFailed);
             // Not throwing this exception because next time another random file will be retried.
             // If it's persistent failure for in_progress directory,
-            // cluster state should to be DEGRADED_STANDBY_FOR_WRITER.
+            // cluster state should to be DEGRADED_STANDBY_FOR_READER.
         }
     }
 
@@ -307,39 +339,36 @@ public abstract class ReplicationLogDiscovery {
     protected abstract MetricsReplicationLogDiscovery createMetricsSource();
 
     /**
-     * Set of action to be done once single round processing is done. The default implementation
-     * updates the last round in sync to last successfully processed round.
-     * This can be overridden by specific implementation for different post round processing.
-     * @param replicationRound - last successfully processed round
-     * @throws IOException
+     * Initializes lastRoundProcessed based on minimum timestamp from
+     * 1. In-progress files (highest priority) - indicates partially processed rounds
+     * 2. New files (medium priority) - indicates unprocessed rounds waiting to be replayed
+     * 3. Current time (fallback) - used when no files exist, starts from current time
+     * 
+     * The minimum timestamp is converted to a replication round using getReplicationRoundFromEndTime(),
+     * which rounds down to the nearest round boundary to ensure we start from a complete round.
+     * 
+     * @throws IOException if there's an error reading file timestamps
      */
-    protected void postRoundCompletion(ReplicationRound replicationRound)
-            throws IOException {
-        setLastRoundInSync(replicationRound);
-    }
-
-    /**
-     * Initialize the last round in sync to be the latest round from in progress files or new files.
-     * @throws IOException
-     */
-    protected void initializeLastRoundInSync() throws IOException {
+    protected void initializeLastRoundProcessed() throws IOException {
         Optional<Long> minTimestampFromInProgressFiles =
                 getMinTimestampFromInProgressFiles();
         if (minTimestampFromInProgressFiles.isPresent()) {
-            this.lastRoundInSync = replicationLogTracker.getReplicationShardDirectoryManager()
+            LOG.info("Initializing lastRoundProcessed from IN PROGRESS files with minimum timestamp as {}", minTimestampFromInProgressFiles.get());
+            this.lastRoundProcessed = replicationLogTracker.getReplicationShardDirectoryManager()
                     .getReplicationRoundFromEndTime(minTimestampFromInProgressFiles.get());
         } else {
-            Optional<Long> minTimestampFromNewFiles =
-                    getMinTimestampFromNewFiles();
+            Optional<Long> minTimestampFromNewFiles = getMinTimestampFromNewFiles();
             if (minTimestampFromNewFiles.isPresent()) {
-                this.lastRoundInSync = replicationLogTracker.getReplicationShardDirectoryManager()
+                LOG.info("Initializing lastRoundProcessed from IN files with minimum timestamp as {}", minTimestampFromNewFiles.get());
+                this.lastRoundProcessed = replicationLogTracker.getReplicationShardDirectoryManager()
                         .getReplicationRoundFromEndTime(minTimestampFromNewFiles.get());
             } else {
-                this.lastRoundInSync = replicationLogTracker.getReplicationShardDirectoryManager()
-                        .getReplicationRoundFromEndTime(EnvironmentEdgeManager.currentTimeMillis());
+                long currentTime = EnvironmentEdgeManager.currentTime();
+                LOG.info("Initializing lastRoundProcessed from current time {}", currentTime);
+                this.lastRoundProcessed = replicationLogTracker.getReplicationShardDirectoryManager()
+                        .getReplicationRoundFromEndTime(EnvironmentEdgeManager.currentTime());
             }
         }
-
     }
 
     /**
@@ -444,12 +473,12 @@ public abstract class ReplicationLogDiscovery {
         return isRunning;
     }
 
-    public ReplicationRound getLastRoundInSync() {
-        return lastRoundInSync;
+    public ReplicationRound getLastRoundProcessed() {
+        return lastRoundProcessed;
     }
 
-    public void setLastRoundInSync(final ReplicationRound replicationRound) {
-        this.lastRoundInSync = replicationRound;
+    public void setLastRoundProcessed(final ReplicationRound replicationRound) {
+        this.lastRoundProcessed = replicationRound;
     }
 
     public MetricsReplicationLogDiscovery getMetrics() {
