@@ -27,6 +27,7 @@ import static org.junit.Assert.assertTrue;
 import java.util.Map;
 import java.util.Properties;
 import org.apache.hadoop.hbase.client.Consistency;
+import org.apache.phoenix.jdbc.ClusterRoleRecord.RegistryType;
 import org.apache.phoenix.query.QueryServices;
 import org.junit.Test;
 
@@ -152,28 +153,28 @@ public class JDBCUtilTest {
   @Test
   public void formatZookeeperUrlSameOrderTest() {
     String zk1 = "zk1.net\\:2181,zk2.net\\:2181,zk3.net\\:2181::/hbase";
-    String result = JDBCUtil.formatUrl(zk1);
+    String result = JDBCUtil.formatUrl(zk1, RegistryType.ZK);
     assertEquals(zk1, result);
   }
 
   @Test
   public void formatZookeeperUrlDifferentOrderTest() {
     String zk1 = "zk3.net,zk2.net,zk1.net:2181:/hbase";
-    String result = JDBCUtil.formatUrl(zk1);
+    String result = JDBCUtil.formatUrl(zk1, RegistryType.ZK);
     assertEquals("zk1.net\\:2181,zk2.net\\:2181,zk3.net\\:2181::/hbase", result);
   }
 
   @Test
   public void formatZookeeperUrlNoTrailersTest() {
     String zk1 = "zk1.net,zk2.net,zk3.net";
-    String result = JDBCUtil.formatUrl(zk1);
+    String result = JDBCUtil.formatUrl(zk1, RegistryType.ZK);
     assertEquals("zk1.net\\:2181,zk2.net\\:2181,zk3.net\\:2181::/hbase", result);
   }
 
   @Test
   public void formatZookeeperUrlToLowercaseTest() {
     String zk1 = "MYHOST1.NET,MYHOST2.NET";
-    String result = JDBCUtil.formatUrl(zk1);
+    String result = JDBCUtil.formatUrl(zk1, RegistryType.ZK);
     assertEquals("myhost1.net\\:2181,myhost2.net\\:2181::/hbase", result);
   }
 

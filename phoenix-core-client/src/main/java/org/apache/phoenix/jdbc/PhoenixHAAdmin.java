@@ -40,7 +40,7 @@ import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+import org.apache.phoenix.jdbc.ClusterRoleRecord.RegistryType;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
@@ -91,7 +91,7 @@ public class PhoenixHAAdmin implements Closeable {
     Preconditions.checkNotNull(zkUrl);
     Preconditions.checkNotNull(conf);
     Preconditions.checkNotNull(highAvailibilityCuratorProvider);
-    this.zkUrl = JDBCUtil.formatUrl(zkUrl);
+    this.zkUrl = JDBCUtil.formatUrl(zkUrl, RegistryType.ZK);
     this.conf = conf;
     conf.iterator().forEachRemaining(k -> properties.setProperty(k.getKey(), k.getValue()));
     this.highAvailibilityCuratorProvider = highAvailibilityCuratorProvider;
