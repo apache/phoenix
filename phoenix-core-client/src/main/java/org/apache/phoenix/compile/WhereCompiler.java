@@ -87,6 +87,7 @@ import org.apache.phoenix.filter.MultiCFCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.MultiCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.MultiEncodedCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.RowKeyComparisonFilter;
+import org.apache.phoenix.filter.RowLevelFilter;
 import org.apache.phoenix.filter.SingleCFCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.SingleCQKeyValueComparisonFilter;
 import org.apache.phoenix.parse.ColumnParseNode;
@@ -540,7 +541,10 @@ public class WhereCompiler {
         scan.setAttribute(BaseScannerRegionObserverConstants.INDEX_FILTER_STR,
           Bytes.toBytes(whereClause.toString()));
       }
-    } else if (whereClause != null && !ExpressionUtil.evaluatesToTrue(whereClause)) {
+    } else if (
+      whereClause != null && !ExpressionUtil.evaluatesToTrue(whereClause)
+        && !context.hasRowSizeFunction() && !context.hasRawRowSizeFunction()
+    ) {
       Filter filter = null;
       final Counter counter = new Counter();
       whereClause.accept(new KeyValueExpressionVisitor() {
@@ -599,6 +603,12 @@ public class WhereCompiler {
           break;
       }
       scan.setFilter(filter);
+    } else if (whereClause != null && !ExpressionUtil.evaluatesToTrue(whereClause)) {
+      if (context.hasRawRowSizeFunction()) {
+        scan.setFilter(new RowLevelFilter(whereClause, true));
+      } else {
+        scan.setFilter(new RowLevelFilter(whereClause, false));
+      }
     }
 
     ScanRanges scanRanges = context.getScanRanges();
