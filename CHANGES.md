@@ -318,5 +318,3 @@
 | [PHOENIX-7362](https://issues.apache.org/jira/browse/PHOENIX-7362) | Update owasp plugin to 10.0.2 |  Major | connectors, core, queryserver |
 | [PHOENIX-7371](https://issues.apache.org/jira/browse/PHOENIX-7371) | Update Hbase 2.5 version to 2.5.10 |  Major | . |
 | [PHOENIX-7365](https://issues.apache.org/jira/browse/PHOENIX-7365) | ExplainPlanV2 should get trimmed list for regionserver location |  Major | . |
-
-
