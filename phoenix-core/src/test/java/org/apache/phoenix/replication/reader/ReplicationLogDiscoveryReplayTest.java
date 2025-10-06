@@ -67,6 +67,9 @@ public class ReplicationLogDiscoveryReplayTest {
         localFs.delete(new Path(testFolder.getRoot().toURI()), true);
     }
 
+    /**
+     * Tests that the executor thread name format is correctly configured.
+     */
     @Test
     public void testGetExecutorThreadNameFormat() throws IOException {
         // Create ReplicationLogDiscoveryReplay instance
@@ -79,6 +82,9 @@ public class ReplicationLogDiscoveryReplayTest {
             "Phoenix-ReplicationLogDiscoveryReplay-%d", result);
     }
 
+    /**
+     * Tests the replay interval configuration with default and custom values.
+     */
     @Test
     public void testGetReplayIntervalSeconds() throws IOException  {
         // Create ReplicationLogDiscoveryReplay instance
@@ -97,6 +103,9 @@ public class ReplicationLogDiscoveryReplayTest {
             120L, customResult);
     }
 
+    /**
+     * Tests the shutdown timeout configuration with default and custom values.
+     */
     @Test
     public void testGetShutdownTimeoutSeconds() throws IOException  {
         // Create ReplicationLogDiscoveryReplay instance
@@ -115,6 +124,9 @@ public class ReplicationLogDiscoveryReplayTest {
             45L, customResult);
     }
 
+    /**
+     * Tests the executor thread count configuration with default and custom values.
+     */
     @Test
     public void testGetExecutorThreadCount() throws IOException {
         // Create ReplicationLogDiscoveryReplay instance
@@ -133,6 +145,9 @@ public class ReplicationLogDiscoveryReplayTest {
             3, customResult);
     }
 
+    /**
+     * Tests the in-progress directory processing probability configuration.
+     */
     @Test
     public void testGetInProgressDirectoryProcessProbability() throws IOException {
         // Create ReplicationLogDiscoveryReplay instance
@@ -151,6 +166,9 @@ public class ReplicationLogDiscoveryReplayTest {
             10.5, customResult, 0.001);
     }
 
+    /**
+     * Tests the waiting buffer percentage configuration with default and custom values.
+     */
     @Test
     public void testGetWaitingBufferPercentage() throws IOException {
         // Create ReplicationLogDiscoveryReplay instance
@@ -169,315 +187,288 @@ public class ReplicationLogDiscoveryReplayTest {
             20.0, customResult, 0.001);
     }
 
+    /**
+     * Tests initialization in DEGRADED state with both in-progress and new files present.
+     * Validates that lastRoundProcessed uses minimum timestamp and lastRoundInSync is preserved.
+     */
     @Test
     public void testInitializeLastRoundProcessed_DegradedStateWithInProgressAndNewFiles() throws IOException {
-        TestableReplicationLogTracker fileTracker = createReplicationLogTracker(conf, haGroupName, localFs, standbyUri);
-        fileTracker.init();
+        long currentTime = 1704153600000L; // 2024-01-02 00:00:00
+        long inProgressFileTimestamp = 1704153420000L; // Earlier timestamp (00:57:00) - 3 min before current
+        long newFileTimestamp = 1704153540000L; // Middle timestamp (00:59:00) - 1 min before current
+        long lastSyncStateTime = 1704153480000L; // Between in-progress and new file (00:58:00)
+        long roundTimeMills = 60000L; // 1 minute
         
-        try {
-            long currentTime = 1704153600000L; // 2024-01-02 00:00:00
-            long inProgressFileTimestamp = 1704153540000L; // Earlier timestamp (00:59:00)
-            long newFileTimestamp = 1704153570000L; // Middle timestamp (00:59:30)
-            long lastSyncStateTime = 1704153550000L; // Between in-progress and new file
-            
-            // Create in-progress file
-            Path inProgressDir = fileTracker.getInProgressDirPath();
-            localFs.mkdirs(inProgressDir);
-            Path inProgressFile = new Path(inProgressDir, inProgressFileTimestamp + "_rs-1_uuid.plog");
-            localFs.create(inProgressFile, true).close();
-            
-            // Create new file
-            long roundTimeMills = fileTracker.getReplicationShardDirectoryManager().getReplicationRoundDurationSeconds() * 1000L;
-            ReplicationRound newFileRound = new ReplicationRound(newFileTimestamp - roundTimeMills, newFileTimestamp);
-            Path shardPath = fileTracker.getReplicationShardDirectoryManager().getShardDirectory(newFileRound.getStartTime());
-            localFs.mkdirs(shardPath);
-            Path newFile = new Path(shardPath, newFileTimestamp + "_rs-1.plog");
-            localFs.create(newFile, true).close();
-            
-            // Create HAGroupStoreRecord for DEGRADED state
-            HAGroupStoreRecord mockRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
-                    HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY_FOR_WRITER, lastSyncStateTime);
-            
-            EnvironmentEdge edge = () -> currentTime;
-            EnvironmentEdgeManager.injectEdge(edge);
-            
-            try {
-                TestableReplicationLogDiscoveryReplay discovery = 
-                        new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord);
-                discovery.initializeLastRoundProcessed();
-                
-                // Verify lastRoundProcessed uses minimum of in-progress, new files, and current time
-                ReplicationRound lastRoundProcessed = discovery.getLastRoundProcessed();
-                assertNotNull("Last round processed should not be null", lastRoundProcessed);
-                long expectedEndTime = (inProgressFileTimestamp / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
-                assertEquals("Should use minimum timestamp (in-progress file)", 
-                        expectedEndTime, lastRoundProcessed.getEndTime());
-                
-                // Verify lastRoundInSync uses minimum of lastSyncStateTime and minimumTimestampFromFiles
-                ReplicationRound lastRoundInSync = discovery.getLastRoundInSync();
-                assertNotNull("Last round in sync should not be null", lastRoundInSync);
-                long expectedSyncEndTime = (Math.min(lastSyncStateTime, inProgressFileTimestamp) / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
-                assertEquals("Should use minimum of lastSyncStateTime and file timestamps", 
-                        expectedSyncEndTime, lastRoundInSync.getEndTime());
-                
-                // Verify state is set to DEGRADED
-                assertEquals("State should be DEGRADED", 
-                        ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED, 
-                        discovery.getReplicationReplayState());
-            } finally {
-                EnvironmentEdgeManager.reset();
-            }
-        } finally {
-            fileTracker.close();
-        }
+        // Expected: lastRoundProcessed uses minimum timestamp (in-progress file)
+        long expectedEndTime = (inProgressFileTimestamp / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
+        ReplicationRound expectedLastRoundProcessed = new ReplicationRound(expectedEndTime - roundTimeMills, expectedEndTime);
+        
+        // Expected: lastRoundInSync uses minimum of lastSyncStateTime and file timestamps
+        long expectedSyncEndTime = (inProgressFileTimestamp / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
+        ReplicationRound expectedLastRoundInSync = new ReplicationRound(expectedSyncEndTime - roundTimeMills, expectedSyncEndTime);
+        
+        testInitializeLastRoundProcessedHelper(
+                currentTime,
+                lastSyncStateTime,
+                newFileTimestamp,
+                inProgressFileTimestamp,
+                HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY_FOR_WRITER,
+                expectedLastRoundProcessed,
+                expectedLastRoundInSync,
+                ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED);
     }
     
     @Test
-    public void testInitializeLastRoundProcessed_DegradedStateWithOnlyNewFiles() throws IOException {
-        TestableReplicationLogTracker fileTracker = createReplicationLogTracker(conf, haGroupName, localFs, standbyUri);
-        fileTracker.init();
+    public void testInitializeLastRoundProcessed_DegradedStateWithBothFilesNewFileIsMin() throws IOException {
+        long currentTime = 1704153600000L; // 2024-01-02 00:00:00
+        long newFileTimestamp = 1704153420000L; // Earlier timestamp (00:57:00) - 3 min before current
+        long inProgressFileTimestamp = 1704153540000L; // Later timestamp (00:59:00) - 1 min before current
+        long lastSyncStateTime = 1704153480000L; // Between new and in-progress file (00:58:00)
+        long roundTimeMills = 60000L; // 1 minute
         
-        try {
-            long newFileTimestamp = 1704240060000L;
-            long lastSyncStateTime = 1704240030000L;
-            long currentTime = 1704240900000L;
+        // Expected: lastRoundProcessed uses minimum timestamp (new file)
+        long expectedEndTime = (newFileTimestamp / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
+        ReplicationRound expectedLastRoundProcessed = new ReplicationRound(expectedEndTime - roundTimeMills, expectedEndTime);
+        
+        // Expected: lastRoundInSync uses minimum of lastSyncStateTime and file timestamps
+        long expectedSyncEndTime = (newFileTimestamp / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
+        ReplicationRound expectedLastRoundInSync = new ReplicationRound(expectedSyncEndTime - roundTimeMills, expectedSyncEndTime);
+        
+        testInitializeLastRoundProcessedHelper(
+                currentTime,
+                lastSyncStateTime,
+                newFileTimestamp,
+                inProgressFileTimestamp,
+                HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY_FOR_WRITER,
+                expectedLastRoundProcessed,
+                expectedLastRoundInSync,
+                ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED);
+    }
+    
+    @Test
+    public void testInitializeLastRoundProcessed_DegradedStateWithLastSyncStateAsMin() throws IOException {
+        long newFileTimestamp = 1704240060000L;
+        long lastSyncStateTime = 1704240030000L;
+        long currentTime = 1704240900000L;
+        long roundTimeMills = 60000L; // 1 minute
 
-            // Create new file
-            long roundTimeMills = fileTracker.getReplicationShardDirectoryManager().getReplicationRoundDurationSeconds() * 1000L;
-            ReplicationRound newFileRound = new ReplicationRound(newFileTimestamp - roundTimeMills, newFileTimestamp);
-            Path shardPath = fileTracker.getReplicationShardDirectoryManager().getShardDirectory(newFileRound.getStartTime());
-            localFs.mkdirs(shardPath);
-            Path newFile = new Path(shardPath, newFileTimestamp + "_rs-1.plog");
-            localFs.create(newFile, true).close();
-            
-            // Create HAGroupStoreRecord for DEGRADED state
-            HAGroupStoreRecord mockRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
-                    HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY, lastSyncStateTime);
-            
-            EnvironmentEdge edge = () -> currentTime;
-            EnvironmentEdgeManager.injectEdge(edge);
-            
-            try {
-                TestableReplicationLogDiscoveryReplay discovery = 
-                        new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord);
-                discovery.initializeLastRoundProcessed();
-                
-                // Verify lastRoundProcessed uses minimum of new files and current time
-                ReplicationRound lastRoundProcessed = discovery.getLastRoundProcessed();
-                assertNotNull("Last round processed should not be null", lastRoundProcessed);
-                long expectedEndTime = (newFileTimestamp / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
-                assertEquals("Should use minimum timestamp (new file)", 
-                        expectedEndTime, lastRoundProcessed.getEndTime());
-                
-                // Verify lastRoundInSync uses minimum of lastSyncStateTime and minimumTimestampFromFiles
-                ReplicationRound lastRoundInSync = discovery.getLastRoundInSync();
-                assertNotNull("Last round in sync should not be null", lastRoundInSync);
-                long expectedSyncEndTime = (Math.min(lastSyncStateTime, newFileTimestamp) / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
-                assertEquals("Should use minimum of lastSyncStateTime and file timestamps", 
-                        expectedSyncEndTime, lastRoundInSync.getEndTime());
-                
-                // Verify state is DEGRADED
-                assertEquals("State should be DEGRADED", 
-                        ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED, 
-                        discovery.getReplicationReplayState());
-            } finally {
-                EnvironmentEdgeManager.reset();
-            }
-        } finally {
-            fileTracker.close();
-        }
+        // Expected: lastRoundProcessed uses minimum of new files and current time
+        long expectedEndTime = (newFileTimestamp / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
+        ReplicationRound expectedLastRoundProcessed = new ReplicationRound(expectedEndTime - roundTimeMills, expectedEndTime);
+        
+        // Expected: lastRoundInSync uses minimum of lastSyncStateTime and file timestamps
+        long expectedSyncEndTime = (lastSyncStateTime / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
+        ReplicationRound expectedLastRoundInSync = new ReplicationRound(expectedSyncEndTime - roundTimeMills, expectedSyncEndTime);
+        
+        testInitializeLastRoundProcessedHelper(
+                currentTime,
+                lastSyncStateTime,
+                newFileTimestamp,
+                null, // no in-progress file
+                HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY,
+                expectedLastRoundProcessed,
+                expectedLastRoundInSync,
+                ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED);
     }
     
     @Test
     public void testInitializeLastRoundProcessed_DegradedStateWithNoFiles() throws IOException {
-        TestableReplicationLogTracker fileTracker = createReplicationLogTracker(conf, haGroupName, localFs, standbyUri);
-        fileTracker.init();
+        long currentTime = 1704326400000L;
+        long lastSyncStateTime = 1704326300000L;
+        long roundTimeMills = 60000L; // 1 minute
         
-        try {
-            long currentTime = 1704326400000L;
-            long lastSyncStateTime = 1704326300000L;
-            
-            // Create HAGroupStoreRecord for DEGRADED state
-            HAGroupStoreRecord mockRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
-                    HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY_FOR_WRITER, lastSyncStateTime);
-            
-            EnvironmentEdge edge = () -> currentTime;
-            EnvironmentEdgeManager.injectEdge(edge);
-            
-            try {
-                TestableReplicationLogDiscoveryReplay discovery = 
-                        new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord);
-                discovery.initializeLastRoundProcessed();
-                
-                // Verify lastRoundProcessed uses current time
-                ReplicationRound lastRoundProcessed = discovery.getLastRoundProcessed();
-                assertNotNull("Last round processed should not be null", lastRoundProcessed);
-                long expectedEndTime = (currentTime / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
-                assertEquals("Should use current time when no files exist", 
-                        expectedEndTime, lastRoundProcessed.getEndTime());
-                
-                // Verify lastRoundInSync uses minimum of lastSyncStateTime and current time
-                ReplicationRound lastRoundInSync = discovery.getLastRoundInSync();
-                assertNotNull("Last round in sync should not be null", lastRoundInSync);
-                long expectedSyncEndTime = (Math.min(lastSyncStateTime, currentTime) / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
-                assertEquals("Should use minimum of lastSyncStateTime and current time", 
-                        expectedSyncEndTime, lastRoundInSync.getEndTime());
-                
-                // Verify state is DEGRADED
-                assertEquals("State should be DEGRADED", 
-                        ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED, 
-                        discovery.getReplicationReplayState());
-            } finally {
-                EnvironmentEdgeManager.reset();
-            }
-        } finally {
-            fileTracker.close();
-        }
+        // Expected: lastRoundProcessed uses current time
+        long expectedEndTime = (currentTime / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
+        ReplicationRound expectedLastRoundProcessed = new ReplicationRound(expectedEndTime - roundTimeMills, expectedEndTime);
+        
+        // Expected: lastRoundInSync uses minimum of lastSyncStateTime and current time
+        long expectedSyncEndTime = (lastSyncStateTime / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
+        ReplicationRound expectedLastRoundInSync = new ReplicationRound(expectedSyncEndTime - roundTimeMills, expectedSyncEndTime);
+        
+        testInitializeLastRoundProcessedHelper(
+                currentTime,
+                lastSyncStateTime,
+                null, // no new file
+                null, // no in-progress file
+                HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY_FOR_WRITER,
+                expectedLastRoundProcessed,
+                expectedLastRoundInSync,
+                ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED);
     }
     
     @Test
     public void testInitializeLastRoundProcessed_SyncStateWithInProgressFiles() throws IOException {
-        TestableReplicationLogTracker fileTracker = createReplicationLogTracker(conf, haGroupName, localFs, standbyUri);
-        fileTracker.init();
+        long currentTime = 1704412800000L;
+        long inProgressTimestamp = 1704412680000L; // 2 min before current time
+        long roundTimeMills = 60000L; // 1 minute
         
-        try {
-            long currentTime = 1704412800000L;
-            long inProgressTimestamp = 1704412740000L;
-            
-            // Create in-progress file
-            Path inProgressDir = fileTracker.getInProgressDirPath();
-            localFs.mkdirs(inProgressDir);
-            Path inProgressFile = new Path(inProgressDir, inProgressTimestamp + "_rs-1_uuid.plog");
-            localFs.create(inProgressFile, true).close();
-            
-            // Create HAGroupStoreRecord for STANDBY state
-            HAGroupStoreRecord mockRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
-                    HAGroupStoreRecord.HAGroupState.STANDBY, currentTime);
-            
-            EnvironmentEdge edge = () -> currentTime;
-            EnvironmentEdgeManager.injectEdge(edge);
-            
-            try {
-                TestableReplicationLogDiscoveryReplay discovery = 
-                        new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord);
-                discovery.initializeLastRoundProcessed();
-                
-                // Verify calls super.initializeLastRoundProcessed() and uses in-progress file
-                ReplicationRound lastRoundProcessed = discovery.getLastRoundProcessed();
-                assertNotNull("Last round processed should not be null", lastRoundProcessed);
-                long expectedEndTime = (inProgressTimestamp / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
-                assertEquals("Should use in-progress file timestamp", 
-                        expectedEndTime, lastRoundProcessed.getEndTime());
-                
-                // Verify lastRoundInSync equals lastRoundProcessed
-                ReplicationRound lastRoundInSync = discovery.getLastRoundInSync();
-                assertNotNull("Last round in sync should not be null", lastRoundInSync);
-                assertEquals("Last round in sync should equal last round processed", 
-                        lastRoundProcessed, lastRoundInSync);
-                
-                // Verify state is SYNC
-                assertEquals("State should be SYNC", 
-                        ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC, 
-                        discovery.getReplicationReplayState());
-            } finally {
-                EnvironmentEdgeManager.reset();
-            }
-        } finally {
-            fileTracker.close();
-        }
+        // Expected: uses in-progress file timestamp
+        long expectedEndTime = (inProgressTimestamp / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
+        ReplicationRound expectedLastRoundProcessed = new ReplicationRound(expectedEndTime - roundTimeMills, expectedEndTime);
+        
+        // Expected: lastRoundInSync equals lastRoundProcessed in SYNC state
+        ReplicationRound expectedLastRoundInSync = expectedLastRoundProcessed;
+
+        testInitializeLastRoundProcessedHelper(
+                currentTime,
+                null, // SYNC state - lastSyncStateTime not used
+                null, // no new file
+                inProgressTimestamp,
+                HAGroupStoreRecord.HAGroupState.STANDBY,
+                expectedLastRoundProcessed,
+                expectedLastRoundInSync,
+                ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
     }
     
     @Test
     public void testInitializeLastRoundProcessed_SyncStateWithNewFiles() throws IOException {
-        TestableReplicationLogTracker fileTracker = createReplicationLogTracker(conf, haGroupName, localFs, standbyUri);
-        fileTracker.init();
+        long currentTime = 1704499200000L;
+        long newFileTimestamp = 1704499080000L; // 2 min before current time
+        long roundTimeMills = 60000L; // 1 minute
         
-        try {
-            long currentTime = 1704499200000L;
-            long newFileTimestamp = 1704499140000L;
-            
-            // Create new file
-            long roundTimeMills = fileTracker.getReplicationShardDirectoryManager().getReplicationRoundDurationSeconds() * 1000L;
-            ReplicationRound newFileRound = new ReplicationRound(newFileTimestamp - roundTimeMills, newFileTimestamp);
-            Path shardPath = fileTracker.getReplicationShardDirectoryManager().getShardDirectory(newFileRound.getStartTime());
-            localFs.mkdirs(shardPath);
-            Path newFile = new Path(shardPath, newFileTimestamp + "_rs-1.plog");
-            localFs.create(newFile, true).close();
-            
-            // Create HAGroupStoreRecord for STANDBY state
-            HAGroupStoreRecord mockRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
-                    HAGroupStoreRecord.HAGroupState.STANDBY, currentTime);
-            
-            EnvironmentEdge edge = () -> currentTime;
-            EnvironmentEdgeManager.injectEdge(edge);
-            
-            try {
-                TestableReplicationLogDiscoveryReplay discovery = 
-                        new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord);
-                discovery.initializeLastRoundProcessed();
-                
-                // Verify uses new file timestamp
-                ReplicationRound lastRoundProcessed = discovery.getLastRoundProcessed();
-                assertNotNull("Last round processed should not be null", lastRoundProcessed);
-                long expectedEndTime = (newFileTimestamp / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
-                assertEquals("Should use new file timestamp", 
-                        expectedEndTime, lastRoundProcessed.getEndTime());
-                
-                // Verify lastRoundInSync equals lastRoundProcessed
-                ReplicationRound lastRoundInSync = discovery.getLastRoundInSync();
-                assertNotNull("Last round in sync should not be null", lastRoundInSync);
-                assertEquals("Last round in sync should equal last round processed", 
-                        lastRoundProcessed, lastRoundInSync);
-                
-                // Verify state is SYNC
-                assertEquals("State should be SYNC", 
-                        ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC, 
-                        discovery.getReplicationReplayState());
-            } finally {
-                EnvironmentEdgeManager.reset();
-            }
-        } finally {
-            fileTracker.close();
-        }
+        // Expected: uses new file timestamp
+        long expectedEndTime = (newFileTimestamp / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
+        ReplicationRound expectedLastRoundProcessed = new ReplicationRound(expectedEndTime - roundTimeMills, expectedEndTime);
+        
+        // Expected: lastRoundInSync equals lastRoundProcessed in SYNC state
+        ReplicationRound expectedLastRoundInSync = expectedLastRoundProcessed;
+        
+        testInitializeLastRoundProcessedHelper(
+                currentTime,
+                null, // SYNC state - lastSyncStateTime not used
+                newFileTimestamp,
+                null, // no in-progress file
+                HAGroupStoreRecord.HAGroupState.STANDBY,
+                expectedLastRoundProcessed,
+                expectedLastRoundInSync,
+                ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
+    }
+    
+    @Test
+    public void testInitializeLastRoundProcessed_SyncStateWithBothFiles() throws IOException {
+        long currentTime = 1704499200000L;
+        long inProgressTimestamp = 1704499020000L; // Earlier timestamp - 3 min before current
+        long newFileTimestamp = 1704499140000L; // Later timestamp - 1 min before current
+        long roundTimeMills = 60000L; // 1 minute
+        
+        // Expected: uses minimum timestamp (in-progress file)
+        long expectedEndTime = (inProgressTimestamp / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
+        ReplicationRound expectedLastRoundProcessed = new ReplicationRound(expectedEndTime - roundTimeMills, expectedEndTime);
+        
+        // Expected: lastRoundInSync equals lastRoundProcessed in SYNC state
+        ReplicationRound expectedLastRoundInSync = expectedLastRoundProcessed;
+        
+        testInitializeLastRoundProcessedHelper(
+                currentTime,
+                null, // SYNC state - lastSyncStateTime not used
+                newFileTimestamp,
+                inProgressTimestamp,
+                HAGroupStoreRecord.HAGroupState.STANDBY,
+                expectedLastRoundProcessed,
+                expectedLastRoundInSync,
+                ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
     }
     
     @Test
     public void testInitializeLastRoundProcessed_SyncStateWithNoFiles() throws IOException {
+        long currentTime = 1704585600000L;
+        long roundTimeMills = 60000L; // 1 minute
+        
+        // Expected: uses current time when no files exist
+        long expectedEndTime = (currentTime / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
+        ReplicationRound expectedLastRoundProcessed = new ReplicationRound(expectedEndTime - roundTimeMills, expectedEndTime);
+        
+        // Expected: lastRoundInSync equals lastRoundProcessed in SYNC state
+        ReplicationRound expectedLastRoundInSync = expectedLastRoundProcessed;
+        
+        testInitializeLastRoundProcessedHelper(
+                currentTime,
+                null, // SYNC state - lastSyncStateTime not used
+                null, // no new file
+                null, // no in-progress file
+                HAGroupStoreRecord.HAGroupState.STANDBY,
+                expectedLastRoundProcessed,
+                expectedLastRoundInSync,
+                ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
+    }
+
+    /**
+     * Helper method to test initializeLastRoundProcessed with various file and state configurations.
+     * Handles file creation, state setup, and validation of lastRoundProcessed and lastRoundInSync.
+     *
+     * @param currentTime Current time for the test
+     * @param lastSyncStateTime Last sync state time for HAGroupStoreRecord (use null for SYNC state)
+     * @param newFileTimestamp Timestamp for new file (use null to skip creating new file)
+     * @param inProgressFileTimestamp Timestamp for in-progress file (use null to skip creating in-progress file)
+     * @param haGroupState HAGroupState for the test
+     * @param expectedLastRoundProcessed Expected lastRoundProcessed after initialization
+     * @param expectedLastRoundInSync Expected lastRoundInSync after initialization
+     * @param expectedReplayState Expected ReplicationReplayState after initialization
+     */
+    private void testInitializeLastRoundProcessedHelper(
+            long currentTime,
+            Long lastSyncStateTime,
+            Long newFileTimestamp,
+            Long inProgressFileTimestamp,
+            HAGroupStoreRecord.HAGroupState haGroupState,
+            ReplicationRound expectedLastRoundProcessed,
+            ReplicationRound expectedLastRoundInSync,
+            ReplicationLogDiscoveryReplay.ReplicationReplayState expectedReplayState) throws IOException {
+
         TestableReplicationLogTracker fileTracker = createReplicationLogTracker(conf, haGroupName, localFs, standbyUri);
         fileTracker.init();
-        
+
         try {
-            long currentTime = 1704585600000L;
-            
-            // Create HAGroupStoreRecord for STANDBY state
-            HAGroupStoreRecord mockRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
-                    HAGroupStoreRecord.HAGroupState.STANDBY, currentTime);
-            
+            long roundTimeMills = fileTracker.getReplicationShardDirectoryManager()
+                    .getReplicationRoundDurationSeconds() * 1000L;
+
+            // Create in-progress file if timestamp provided
+            if (inProgressFileTimestamp != null) {
+                Path inProgressDir = fileTracker.getInProgressDirPath();
+                localFs.mkdirs(inProgressDir);
+                Path inProgressFile = new Path(inProgressDir, inProgressFileTimestamp + "_rs-1_uuid.plog");
+                localFs.create(inProgressFile, true).close();
+            }
+
+            // Create new file if timestamp provided
+            if (newFileTimestamp != null) {
+                ReplicationRound newFileRound = new ReplicationRound(
+                        newFileTimestamp - roundTimeMills, newFileTimestamp);
+                Path shardPath = fileTracker.getReplicationShardDirectoryManager()
+                        .getShardDirectory(newFileRound.getStartTime());
+                localFs.mkdirs(shardPath);
+                Path newFile = new Path(shardPath, newFileTimestamp + "_rs-1.plog");
+                localFs.create(newFile, true).close();
+            }
+
+            // Create HAGroupStoreRecord
+            long recordTime = lastSyncStateTime != null ? lastSyncStateTime : currentTime;
+            HAGroupStoreRecord mockRecord = new HAGroupStoreRecord(
+                    HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, haGroupState, recordTime);
+
             EnvironmentEdge edge = () -> currentTime;
             EnvironmentEdgeManager.injectEdge(edge);
-            
+
             try {
-                TestableReplicationLogDiscoveryReplay discovery = 
+                TestableReplicationLogDiscoveryReplay discovery =
                         new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord);
                 discovery.initializeLastRoundProcessed();
-                
-                // Verify uses current time
+
+                // Verify lastRoundProcessed
                 ReplicationRound lastRoundProcessed = discovery.getLastRoundProcessed();
                 assertNotNull("Last round processed should not be null", lastRoundProcessed);
-                long expectedEndTime = (currentTime / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
-                assertEquals("Should use current time when no files exist", 
-                        expectedEndTime, lastRoundProcessed.getEndTime());
-                
-                // Verify lastRoundInSync equals lastRoundProcessed
+                assertEquals("Last round processed should match expected",
+                        expectedLastRoundProcessed, lastRoundProcessed);
+
+                // Verify lastRoundInSync
                 ReplicationRound lastRoundInSync = discovery.getLastRoundInSync();
                 assertNotNull("Last round in sync should not be null", lastRoundInSync);
-                assertEquals("Last round in sync should equal last round processed", 
-                        lastRoundProcessed, lastRoundInSync);
-                
-                // Verify state is SYNC
-                assertEquals("State should be SYNC", 
-                        ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC, 
-                        discovery.getReplicationReplayState());
+                assertEquals("Last round in sync should match expected",
+                        expectedLastRoundInSync, lastRoundInSync);
+
+                // Verify state
+                assertEquals("Replication replay state should match expected",
+                        expectedReplayState, discovery.getReplicationReplayState());
             } finally {
                 EnvironmentEdgeManager.reset();
             }
@@ -486,6 +477,10 @@ public class ReplicationLogDiscoveryReplayTest {
         }
     }
 
+    /**
+     * Tests replay in SYNC state processing multiple rounds.
+     * Validates that both lastRoundProcessed and lastRoundInSync advance together.
+     */
     @Test
     public void testReplay_SyncState_ProcessMultipleRounds() throws IOException {
         TestableReplicationLogTracker fileTracker = createReplicationLogTracker(conf, haGroupName, localFs, standbyUri);
@@ -508,8 +503,9 @@ public class ReplicationLogDiscoveryReplayTest {
             try {
                 TestableReplicationLogDiscoveryReplay discovery = 
                         new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord);
-                discovery.setLastRoundProcessed(new ReplicationRound(initialEndTime - roundTimeMills, initialEndTime));
-                discovery.setLastRoundInSync(new ReplicationRound(initialEndTime - roundTimeMills, initialEndTime));
+                ReplicationRound initialRound = new ReplicationRound(initialEndTime - roundTimeMills, initialEndTime);
+                discovery.setLastRoundProcessed(initialRound);
+                discovery.setLastRoundInSync(initialRound);
                 discovery.setReplicationReplayState(ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
                 
                 discovery.replay();
@@ -528,11 +524,17 @@ public class ReplicationLogDiscoveryReplayTest {
                 ReplicationRound expectedRound3 = new ReplicationRound(initialEndTime + (2 * roundTimeMills), initialEndTime + (3 * roundTimeMills));
                 assertEquals("Third round should match expected", expectedRound3, processedRounds.get(2));
                 
-                // Verify 3 rounds were processed
+                // Verify lastRoundProcessed was updated to 3rd round
                 ReplicationRound lastRoundProcessed = discovery.getLastRoundProcessed();
                 assertNotNull("Last round processed should not be null", lastRoundProcessed);
-                assertEquals("Should have processed 3 rounds", 
-                        initialEndTime + (3 * roundTimeMills), lastRoundProcessed.getEndTime());
+                assertEquals("Last round processed should be updated to 3rd round", 
+                        expectedRound3, lastRoundProcessed);
+                
+                // Verify lastRoundInSync was also updated in SYNC state
+                ReplicationRound lastRoundInSync = discovery.getLastRoundInSync();
+                assertNotNull("Last round in sync should not be null", lastRoundInSync);
+                assertEquals("Last round in sync should be updated to match last round processed in SYNC state", 
+                        expectedRound3, lastRoundInSync);
                 
                 // Verify state remains SYNC
                 assertEquals("State should remain SYNC", 
@@ -546,6 +548,10 @@ public class ReplicationLogDiscoveryReplayTest {
         }
     }
     
+    /**
+     * Tests replay in DEGRADED state processing multiple rounds.
+     * Validates that lastRoundProcessed advances but lastRoundInSync is preserved.
+     */
     @Test
     public void testReplay_DegradedState_MultipleRounds() throws IOException {
         TestableReplicationLogTracker fileTracker = createReplicationLogTracker(conf, haGroupName, localFs, standbyUri);
@@ -569,7 +575,8 @@ public class ReplicationLogDiscoveryReplayTest {
                 TestableReplicationLogDiscoveryReplay discovery = 
                         new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord);
                 discovery.setLastRoundProcessed(new ReplicationRound(initialEndTime - roundTimeMills, initialEndTime));
-                discovery.setLastRoundInSync(new ReplicationRound(initialEndTime - roundTimeMills, initialEndTime));
+                ReplicationRound lastRoundInSyncBeforeReplay = new ReplicationRound(initialEndTime - roundTimeMills, initialEndTime);
+                discovery.setLastRoundInSync(lastRoundInSyncBeforeReplay);
                 discovery.setReplicationReplayState(ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED);
                 
                 ReplicationRound lastRoundBeforeReplay = discovery.getLastRoundProcessed();
@@ -590,10 +597,15 @@ public class ReplicationLogDiscoveryReplayTest {
                 ReplicationRound expectedRound3 = new ReplicationRound(initialEndTime + (2 * roundTimeMills), initialEndTime + (3 * roundTimeMills));
                 assertEquals("Third round should match expected", expectedRound3, processedRounds.get(2));
                 
-                // Verify lastRoundProcessed was updated (DEGRADED updates in memory, doesn't persist to store)
+                // Verify lastRoundProcessed was updated
                 ReplicationRound lastRoundAfterReplay = discovery.getLastRoundProcessed();
                 assertEquals("Last round processed should be updated to 3rd round in DEGRADED state", 
                         expectedRound3, lastRoundAfterReplay);
+                
+                // Verify lastRoundInSync was NOT updated (preserved in DEGRADED state)
+                ReplicationRound lastRoundInSyncAfterReplay = discovery.getLastRoundInSync();
+                assertEquals("Last round in sync should NOT be updated in DEGRADED state", 
+                        lastRoundInSyncBeforeReplay, lastRoundInSyncAfterReplay);
                 
                 // Verify state remains DEGRADED
                 assertEquals("State should remain DEGRADED", 
@@ -607,6 +619,10 @@ public class ReplicationLogDiscoveryReplayTest {
         }
     }
     
+    /**
+     * Tests replay in SYNCED_RECOVERY state with rewind to lastRoundInSync.
+     * Validates that processing rewinds and re-processes from lastRoundInSync.
+     */
     @Test
     public void testReplay_SyncedRecoveryState_RewindToLastInSync() throws IOException {
         TestableReplicationLogTracker fileTracker = createReplicationLogTracker(conf, haGroupName, localFs, standbyUri);
@@ -675,14 +691,17 @@ public class ReplicationLogDiscoveryReplayTest {
                 assertEquals("Sixth round should match expected", 
                         expectedSixthRound, processedRounds.get(5));
                 
-                // Verify it rewound to lastRoundInSync and then processed forward
+                // Verify lastRoundProcessed was updated
                 ReplicationRound lastRoundProcessed = discovery.getLastRoundProcessed();
                 assertNotNull("Last round processed should not be null", lastRoundProcessed);
+                assertEquals("Last round processed should be updated to 5th round", 
+                        expectedSixthRound, lastRoundProcessed);
                 
-                // Should have rewound to lastInSyncRound.endTime and processed from there
-                // With 5 rounds worth of time, it should process multiple rounds from lastInSyncRound
-                assertEquals("Should have processed rounds starting from lastRoundInSync", 
-                        initialEndTime + (5 * roundTimeMills), lastRoundProcessed.getEndTime());
+                // Verify lastRoundInSync was also updated in SYNC state (after rewind and transition)
+                ReplicationRound lastRoundInSync = discovery.getLastRoundInSync();
+                assertNotNull("Last round in sync should not be null", lastRoundInSync);
+                assertEquals("Last round in sync should be updated to match last round processed after SYNC transition", 
+                        expectedSixthRound, lastRoundInSync);
                 
                 // Verify state transitioned to SYNC
                 assertEquals("State should transition to SYNC", 
@@ -696,6 +715,10 @@ public class ReplicationLogDiscoveryReplayTest {
         }
     }
     
+    /**
+     * Tests state transition from SYNC to DEGRADED during replay processing.
+     * Validates that lastRoundInSync is preserved at the last SYNC round.
+     */
     @Test
     public void testReplay_StateTransition_SyncToDegradedDuringProcessing() throws IOException {
         TestableReplicationLogTracker fileTracker = createReplicationLogTracker(conf, haGroupName, localFs, standbyUri);
@@ -718,8 +741,9 @@ public class ReplicationLogDiscoveryReplayTest {
             try {
                 TestableReplicationLogDiscoveryReplay discovery = 
                         new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord);
-                discovery.setLastRoundProcessed(new ReplicationRound(initialEndTime - roundTimeMills, initialEndTime));
-                discovery.setLastRoundInSync(new ReplicationRound(initialEndTime - roundTimeMills, initialEndTime));
+                ReplicationRound initialRound = new ReplicationRound(initialEndTime - roundTimeMills, initialEndTime);
+                discovery.setLastRoundProcessed(initialRound);
+                discovery.setLastRoundInSync(initialRound);
                 discovery.setReplicationReplayState(ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
                 
                 // Simulate listener changing state to DEGRADED after 2 rounds
@@ -752,13 +776,18 @@ public class ReplicationLogDiscoveryReplayTest {
                 ReplicationRound expectedRound5 = new ReplicationRound(initialEndTime + (4 * roundTimeMills), initialEndTime + (5 * roundTimeMills));
                 assertEquals("Fifth round should match expected", expectedRound5, processedRounds.get(4));
                 
-                // Verify it processed 2 rounds in SYNC mode, then continued in DEGRADED mode
+                // Verify lastRoundProcessed was updated to 5th round
                 ReplicationRound lastRoundAfterReplay = discovery.getLastRoundProcessed();
+                assertEquals("Last round processed should be updated to 5th round", 
+                        expectedRound5, lastRoundAfterReplay);
                 
-                // Both SYNC and DEGRADED modes update lastRoundProcessed (DEGRADED doesn't persist to store, but updates in memory)
-                // So lastRoundProcessed should be updated to the 5th round
-                assertEquals("Should have updated lastRoundProcessed to 5th round", 
-                        initialEndTime + (5 * roundTimeMills), lastRoundAfterReplay.getEndTime());
+                // Verify lastRoundInSync was updated only for first round (SYNC), then preserved
+                // State changed to DEGRADED AFTER processing round 2, but BEFORE updating lastRoundInSync for round 2
+                // So lastRoundInSync should remain at round 1 (the last round fully completed in SYNC state)
+                ReplicationRound lastRoundInSync = discovery.getLastRoundInSync();
+                assertNotNull("Last round in sync should not be null", lastRoundInSync);
+                assertEquals("Last round in sync should be preserved at round 1 (last fully completed SYNC round)", 
+                        expectedRound1, lastRoundInSync);
                 
                 // Verify state is now DEGRADED
                 assertEquals("State should be DEGRADED", 
@@ -772,6 +801,10 @@ public class ReplicationLogDiscoveryReplayTest {
         }
     }
     
+    /**
+     * Tests state transition from DEGRADED to SYNCED_RECOVERY and then to SYNC.
+     * Validates rewind behavior and lastRoundInSync update after SYNC transition.
+     */
     @Test
     public void testReplay_StateTransition_DegradedToSyncedRecovery() throws IOException {
         TestableReplicationLogTracker fileTracker = createReplicationLogTracker(conf, haGroupName, localFs, standbyUri);
@@ -839,12 +872,17 @@ public class ReplicationLogDiscoveryReplayTest {
                 ReplicationRound expectedRound7 = new ReplicationRound(initialEndTime + (4 * roundTimeMills), initialEndTime + (5 * roundTimeMills));
                 assertEquals("Seventh round should match expected", expectedRound7, processedRounds.get(6));
                 
-                // Verify it processed in DEGRADED mode, then transitioned to SYNCED_RECOVERY and rewound
+                // Verify lastRoundProcessed was updated to 7th round
                 ReplicationRound lastRoundAfterReplay = discovery.getLastRoundProcessed();
+                assertEquals("Last round processed should be updated to 7th round", 
+                        expectedRound7, lastRoundAfterReplay);
                 
-                // After SYNCED_RECOVERY rewind and re-processing, should end at initialEndTime + 5*round
-                assertEquals("Should have rewound and processed from lastRoundInSync", 
-                        initialEndTime + (5 * roundTimeMills), lastRoundAfterReplay.getEndTime());
+                // Verify lastRoundInSync was preserved during DEGRADED, then updated during SYNC
+                // After transition to SYNC (from SYNCED_RECOVERY), lastRoundInSync should match lastRoundProcessed
+                ReplicationRound lastRoundInSync = discovery.getLastRoundInSync();
+                assertNotNull("Last round in sync should not be null", lastRoundInSync);
+                assertEquals("Last round in sync should be updated to match last round processed after SYNC transition", 
+                        expectedRound7, lastRoundInSync);
                 
                 // Verify state transitioned to SYNC (from SYNCED_RECOVERY)
                 assertEquals("State should be SYNC after SYNCED_RECOVERY", 
@@ -858,6 +896,144 @@ public class ReplicationLogDiscoveryReplayTest {
         }
     }
     
+    /**
+     * Tests state transition from SYNC to DEGRADED and back through SYNCED_RECOVERY to SYNC.
+     * Validates lastRoundInSync preservation during DEGRADED, rewind in SYNCED_RECOVERY, and update in SYNC.
+     */
+    @Test
+    public void testReplay_StateTransition_SyncToDegradedAndBackToSync() throws IOException {
+        TestableReplicationLogTracker fileTracker = createReplicationLogTracker(conf, haGroupName, localFs, standbyUri);
+        
+        try {
+            long initialEndTime = 1704672000000L;
+            long roundTimeMills = fileTracker.getReplicationShardDirectoryManager().getReplicationRoundDurationSeconds() * 1000L;
+            long bufferMillis = (long) (roundTimeMills * 0.15);
+            long totalWaitTime = roundTimeMills + bufferMillis;
+            
+            // Create HAGroupStoreRecord for STANDBY state
+            HAGroupStoreRecord mockRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
+                    HAGroupStoreRecord.HAGroupState.STANDBY, initialEndTime);
+            
+            // Set current time to allow processing enough rounds (including rewind)
+            long currentTime = initialEndTime + (10 * roundTimeMills) + bufferMillis;
+            EnvironmentEdge edge = () -> currentTime;
+            EnvironmentEdgeManager.injectEdge(edge);
+            
+            try {
+                TestableReplicationLogDiscoveryReplay discovery = 
+                        new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord);
+                ReplicationRound initialRound = new ReplicationRound(initialEndTime - roundTimeMills, initialEndTime);
+                discovery.setLastRoundProcessed(initialRound);
+                discovery.setLastRoundInSync(initialRound);
+                discovery.setReplicationReplayState(ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
+                
+                // Simulate state transitions:
+                // - After 2 rounds: SYNC -> DEGRADED
+                // - After 5 rounds: DEGRADED -> SYNCED_RECOVERY (triggers rewind to lastRoundInSync)
+                TestableReplicationLogDiscoveryReplay discoveryWithTransitions = 
+                        new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord) {
+                    private int roundCount = 0;
+                    
+                    @Override
+                    protected void processRound(ReplicationRound replicationRound) throws IOException {
+                        super.processRound(replicationRound);
+                        roundCount++;
+                        
+                        // Transition to DEGRADED after 2 rounds
+                        if (roundCount == 2) {
+                            setReplicationReplayState(ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED);
+                        }
+                        // Transition to SYNCED_RECOVERY after 5 rounds (will trigger rewind)
+                        else if (roundCount == 5) {
+                            setReplicationReplayState(ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY);
+                        }
+                    }
+                };
+                
+                discoveryWithTransitions.setLastRoundProcessed(initialRound);
+                discoveryWithTransitions.setLastRoundInSync(initialRound);
+                discoveryWithTransitions.setReplicationReplayState(ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
+                
+                discoveryWithTransitions.replay();
+                
+                // Verify processRound was called exactly 15 times:
+                // - 2 rounds in SYNC (rounds 1-2)
+                // - 3 rounds in DEGRADED (rounds 3-5)
+                // - 1 round in SYNCED_RECOVERY (round 6, triggers rewind to lastRoundInSync)
+                // - After rewind, continues from lastRoundInSync.endTime = firstRound
+                // - 8 more rounds in SYNC (rounds 7-14, from initialEndTime to initialEndTime + 8*roundTimeMills)
+                int totalRoundsProcessed = discoveryWithTransitions.getProcessRoundCallCount();
+                assertEquals("processRound should be called exactly 14 times", 14, totalRoundsProcessed);
+                
+                // Verify the rounds passed to processRound
+                List<ReplicationRound> processedRounds = discoveryWithTransitions.getProcessedRounds();
+                
+                // Rounds 1-2: SYNC mode (starting from initialEndTime)
+                for (int i = 0; i < 2; i++) {
+                    long startTime = initialEndTime + (i * roundTimeMills);
+                    long endTime = initialEndTime + ((i + 1) * roundTimeMills);
+                    ReplicationRound expectedRound = new ReplicationRound(startTime, endTime);
+                    assertEquals("Round " + (i + 1) + " (SYNC) should match expected", 
+                            expectedRound, processedRounds.get(i));
+                }
+                
+                // Rounds 3-5: DEGRADED mode (continuing from round 2)
+                for (int i = 2; i < 5; i++) {
+                    long startTime = initialEndTime + (i * roundTimeMills);
+                    long endTime = initialEndTime + ((i + 1) * roundTimeMills);
+                    ReplicationRound expectedRound = new ReplicationRound(startTime, endTime);
+                    assertEquals("Round " + (i + 1) + " (DEGRADED) should match expected", 
+                            expectedRound, processedRounds.get(i));
+                }
+                
+                // Round 6-14: SYNC mode after SYNCED_RECOVERY rewind
+                // After rewind, starts from lastRoundInSync.endTime = initialEndTime + roundTimeMills
+                for (int i = 5; i < 14; i++) {
+                    // Offset by 1 because rewind goes back to lastRoundInSync.endTime
+                    long startTime = initialEndTime + ((i - 4) * roundTimeMills);
+                    long endTime = initialEndTime + ((i - 3) * roundTimeMills);
+                    ReplicationRound expectedRound = new ReplicationRound(startTime, endTime);
+                    assertEquals("Round " + (i + 1) + " (SYNC after rewind) should match expected", 
+                            expectedRound, processedRounds.get(i));
+                }
+                
+                // Verify lastRoundProcessed was updated to the last processed round (round 14)
+                ReplicationRound lastRoundAfterReplay = discoveryWithTransitions.getLastRoundProcessed();
+                assertNotNull("Last round processed should not be null", lastRoundAfterReplay);
+                ReplicationRound expectedLastRound = new ReplicationRound(
+                        initialEndTime + (9 * roundTimeMills), 
+                        initialEndTime + (10 * roundTimeMills));
+                assertEquals("Last round processed should be the 14th round", 
+                        expectedLastRound, lastRoundAfterReplay);
+                
+                // Verify lastRoundInSync behavior:
+                // - Updated for round 1 (SYNC)
+                // - State changed to DEGRADED after round 2, so lastRoundInSync stays at round 1
+                // - Preserved during rounds 3-5 (DEGRADED)
+                // - SYNCED_RECOVERY triggers rewind to lastRoundInSync
+                // - After transition to SYNC, lastRoundInSync updates for rounds 6-14
+                // - Final lastRoundInSync should match lastRoundProcessed (round 14)
+                ReplicationRound lastRoundInSync = discoveryWithTransitions.getLastRoundInSync();
+                assertNotNull("Last round in sync should not be null", lastRoundInSync);
+                assertEquals("Last round in sync should match last round processed after returning to SYNC", 
+                        expectedLastRound, lastRoundInSync);
+                
+                // Verify state transitioned to SYNC (from SYNCED_RECOVERY)
+                assertEquals("State should be SYNC after SYNCED_RECOVERY", 
+                        ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC, 
+                        discoveryWithTransitions.getReplicationReplayState());
+            } finally {
+                EnvironmentEdgeManager.reset();
+            }
+        } finally {
+            fileTracker.close();
+        }
+    }
+    
+    /**
+     * Tests replay when no rounds are ready to process.
+     * Validates that lastRoundProcessed and lastRoundInSync remain unchanged.
+     */
     @Test
     public void testReplay_NoRoundsToProcess() throws IOException {
         TestableReplicationLogTracker fileTracker = createReplicationLogTracker(conf, haGroupName, localFs, standbyUri);
@@ -878,11 +1054,13 @@ public class ReplicationLogDiscoveryReplayTest {
             try {
                 TestableReplicationLogDiscoveryReplay discovery = 
                         new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord);
-                discovery.setLastRoundProcessed(new ReplicationRound(initialEndTime - roundTimeMills, initialEndTime));
-                discovery.setLastRoundInSync(new ReplicationRound(initialEndTime - roundTimeMills, initialEndTime));
+                ReplicationRound initialRound = new ReplicationRound(initialEndTime - roundTimeMills, initialEndTime);
+                discovery.setLastRoundProcessed(initialRound);
+                discovery.setLastRoundInSync(initialRound);
                 discovery.setReplicationReplayState(ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
                 
                 ReplicationRound lastRoundBeforeReplay = discovery.getLastRoundProcessed();
+                ReplicationRound lastRoundInSyncBeforeReplay = discovery.getLastRoundInSync();
                 
                 discovery.replay();
                 
@@ -890,10 +1068,15 @@ public class ReplicationLogDiscoveryReplayTest {
                 assertEquals("processRound should not be called when no rounds to process", 
                         0, discovery.getProcessRoundCallCount());
                 
-                // Verify no rounds were processed
+                // Verify lastRoundProcessed was not changed
                 ReplicationRound lastRoundAfterReplay = discovery.getLastRoundProcessed();
                 assertEquals("Last round processed should not change when no rounds to process", 
                         lastRoundBeforeReplay, lastRoundAfterReplay);
+                
+                // Verify lastRoundInSync was not changed
+                ReplicationRound lastRoundInSyncAfterReplay = discovery.getLastRoundInSync();
+                assertEquals("Last round in sync should not change when no rounds to process", 
+                        lastRoundInSyncBeforeReplay, lastRoundInSyncAfterReplay);
                 
                 // Verify state remains SYNC
                 assertEquals("State should remain SYNC", 
@@ -912,7 +1095,11 @@ public class ReplicationLogDiscoveryReplayTest {
         testableReplicationLogTracker.init();
         return testableReplicationLogTracker;
     }
- 
+
+    /**
+     * Testable implementation of ReplicationLogTracker for unit testing.
+     * Exposes protected methods to allow test access.
+     */
     private class TestableReplicationLogTracker extends ReplicationLogTracker {
         public TestableReplicationLogTracker(Configuration conf, String haGroupName, FileSystem fileSystem, URI rootURI, DirectoryType directoryType, MetricsReplicationLogTracker metrics) {
             super(conf, haGroupName, fileSystem, rootURI, directoryType, metrics);
@@ -922,6 +1109,11 @@ public class ReplicationLogDiscoveryReplayTest {
         }
     }
     
+    /**
+     * Testable implementation of ReplicationLogDiscoveryReplay for unit testing.
+     * Provides dependency injection for HAGroupStoreRecord, tracks processed rounds,
+     * and supports simulating state changes during replay.
+     */
     private static class TestableReplicationLogDiscoveryReplay extends ReplicationLogDiscoveryReplay {
         private final HAGroupStoreRecord haGroupStoreRecord;
         private int roundsProcessed = 0;

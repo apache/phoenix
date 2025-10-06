@@ -268,13 +268,13 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
                     // Normal processing, update last round processed and in-sync
                     setLastRoundProcessed(replicationRound);
                     setLastRoundInSync(replicationRound);
-                    LOG.info("Processed round {} successfully, lastRoundInSync={}", replicationRound, lastRoundInSync.getEndTime());
+                    LOG.info("Processed round {} successfully, lastRoundProcessed={}, lastRoundInSync={}", replicationRound, lastRoundProcessed, lastRoundInSync);
                     break;
 
                 case DEGRADED:
                     // Only update last round processed, and NOT last round in sync
                     setLastRoundProcessed(replicationRound);
-                    LOG.info("Processed round {} successfully with cluster in DEGRADED state, setting lastRoundProcessed", replicationRound);
+                    LOG.info("Processed round {} successfully with cluster in DEGRADED state, lastRoundProcessed={}, lastRoundInSync={}", replicationRound, lastRoundProcessed, lastRoundInSync);
                     break;
             }
             optionalNextRound = getNextRoundToProcess();

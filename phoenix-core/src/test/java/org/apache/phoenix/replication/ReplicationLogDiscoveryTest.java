@@ -99,6 +99,10 @@ public class ReplicationLogDiscoveryTest {
         localFs.delete(new Path(testFolder.getRoot().toURI()), true);
     }
 
+    /**
+     * Tests the start and stop lifecycle of ReplicationLogDiscovery.
+     * Validates scheduler initialization, thread naming, and proper cleanup.
+     */
     @Test
     public void testStartAndStop() throws IOException {
         // 1. Validate that it's not running initially
@@ -142,6 +146,10 @@ public class ReplicationLogDiscoveryTest {
         assertFalse("Discovery should not be running after stop", discovery.isRunning());
     }
 
+    /**
+     * Tests processRound with in-progress directory processing enabled.
+     * Validates that both new files and in-progress files are processed correctly.
+     */
     @Test
     public void testProcessRoundWithInProgressDirectoryProcessing() throws IOException {
         // 1. Create new files with start of the day round (00:00:00)
@@ -218,6 +226,10 @@ public class ReplicationLogDiscoveryTest {
         }
     }
 
+    /**
+     * Tests processRound with in-progress directory processing disabled.
+     * Validates that only new files for the current round are processed.
+     */
     @Test
     public void testProcessRoundWithoutInProgressDirectoryProcessing() throws IOException {
         // 1. Create new files with start of the day round (00:00:00)
@@ -304,6 +316,10 @@ public class ReplicationLogDiscoveryTest {
         }
     }
 
+    /**
+     * Tests the probability-based in-progress directory processing decision.
+     * Validates that the actual probability matches the configured probability.
+     */
     @Test
     public void testShouldProcessInProgressDirectory() {
         // Test multiple times to verify probability-based behavior
@@ -340,6 +356,10 @@ public class ReplicationLogDiscoveryTest {
         LOG.info("Variance: " + variance + "%");
     }
 
+    /**
+     * Tests processing of new files for a specific round.
+     * Validates that only files belonging to the current round are processed.
+     */
     @Test
     public void testProcessNewFilesForRound() throws IOException {
         // 1. Create new files with start of the day round (00:00:00)
@@ -423,6 +443,10 @@ public class ReplicationLogDiscoveryTest {
         }
     }
 
+    /**
+     * Tests partial failure handling during new file processing.
+     * Validates that successful files are marked completed while failed files are marked failed.
+     */
     @Test
     public void testProcessNewFilesForRoundWithPartialFailure() throws IOException {
         // Create new files with start of the day round (00:00:00)
@@ -481,6 +505,10 @@ public class ReplicationLogDiscoveryTest {
                 Mockito.argThat(path -> path.getName().startsWith(newFilesForRound.get(4).getName().split("\\.")[0])));
     }
 
+    /**
+     * Tests complete failure handling during new file processing.
+     * Validates that all failed files are marked as failed with no completed files.
+     */
     @Test
     public void testProcessNewFilesForRoundWithAllFailures() throws IOException {
         // Create new files with start of the day round (00:00:00)
@@ -521,6 +549,10 @@ public class ReplicationLogDiscoveryTest {
         }
     }
 
+    /**
+     * Tests processing of all files in the in-progress directory.
+     * Validates that only in-progress files are processed, not new files.
+     */
     @Test
     public void testProcessInProgressDirectory() throws IOException {
         // 1. Create in-progress files for different timestamps
@@ -1349,14 +1381,20 @@ public class ReplicationLogDiscoveryTest {
         }
     }
 
-
-
+    /**
+     * Testable implementation of ReplicationLogTracker for unit testing.
+     * Exposes protected methods and provides minimal implementation for testing.
+     */
     private static class TestableReplicationLogTracker extends ReplicationLogTracker {
         public TestableReplicationLogTracker(final Configuration conf, final String haGroupName, final FileSystem fileSystem, final URI rootURI) {
             super(conf, haGroupName, fileSystem, rootURI, DirectoryType.IN, metricsLogTracker);
         }
     }
 
+    /**
+     * Testable implementation of ReplicationLogDiscovery for unit testing.
+     * Tracks processed files and rounds, and provides access to protected methods.
+     */
     private static class TestableReplicationLogDiscovery extends ReplicationLogDiscovery {
         private final List<Path> processedFiles = new ArrayList<>();
         private final List<ReplicationRound> processedRounds = new ArrayList<>();
