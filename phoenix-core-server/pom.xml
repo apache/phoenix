@@ -409,7 +409,7 @@
 <!--                    <source>${basedir}/target/generated-sources/replaced/it/java</source>-->
 <!--                  </sources>-->
 <!--                </configuration>-->
-<!--              </execution>-->a
+<!--              </execution>-->
 <!--              <execution>-->
 <!--                <id>add-it-resource</id>-->
 <!--                <goals>-->
