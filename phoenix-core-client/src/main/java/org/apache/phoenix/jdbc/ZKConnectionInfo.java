@@ -26,12 +26,15 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.slf4j.LoggerFactory;
 
 /**
  * ConnectionInfo class for org.apache.hadoop.hbase.client.ZKConnectionRegistry This used to be the
  * only supported Registry in Phoenix (and the only one implemented by HBase)
  */
 public class ZKConnectionInfo extends ConnectionInfo {
+
+    private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger(ZKConnectionInfo.class);
 
   public static final String ZK_REGISTRY_NAME =
     "org.apache.hadoop.hbase.client.ZKConnectionRegistry";
@@ -295,17 +298,27 @@ public class ZKConnectionInfo extends ConnectionInfo {
         }
       }
 
+      LOGGER.error("1:" + zkPort);
+      
       // Normalize connInfo so that a url explicitly specifying versus implicitly inheriting
       // the default values will both share the same ConnectionQueryServices.
       if (zkPort == null) {
         String zkPortString = get(HConstants.CLIENT_ZOOKEEPER_CLIENT_PORT);
+        LOGGER.error("2:" + zkPortString);
+
         if (zkPortString == null) {
           zkPortString = get(HConstants.ZOOKEEPER_CLIENT_PORT);
+          LOGGER.error("3:" + zkPortString);
+
         }
         if (zkPortString == null) {
           zkPort = HConstants.DEFAULT_ZOOKEEPER_CLIENT_PORT;
+          LOGGER.error("4:" + zkPort);
+
         } else {
           zkPort = Integer.parseInt(zkPortString);
+          LOGGER.error("5:" + zkPort);
+
         }
       }
 
