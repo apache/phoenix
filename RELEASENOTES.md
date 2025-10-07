@@ -150,6 +150,3 @@ This enhancement empowers applications to maintain an accurate and timely reflec
 * [PHOENIX-628](https://issues.apache.org/jira/browse/PHOENIX-628) | *Blocker* | **Support native JSON data type**
 
 Initial support for JSON datatype in Phoenix. More follow-up work is expected in future.
-
-
-
