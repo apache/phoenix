@@ -45,7 +45,6 @@ import org.apache.hadoop.hbase.metrics.MetricRegistry;
 import org.apache.hadoop.hbase.mob.MobFileCache;
 import org.apache.hadoop.hbase.quotas.OperationQuota;
 import org.apache.hadoop.hbase.quotas.OperationQuota.OperationType;
-import org.apache.hadoop.hbase.quotas.RpcQuotaManager;
 import org.apache.hadoop.hbase.quotas.RpcThrottlingException;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.MemStoreLAB;
@@ -65,6 +64,7 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.phoenix.compat.hbase.CompatRegionCoprocessorEnvironment;
 
 /**
  * Scan over a region from restored snapshot
@@ -200,7 +200,7 @@ public class SnapshotScanner extends AbstractClientScanner {
   }
 
   private RegionCoprocessorEnvironment getSnapshotContextEnvironment(final Configuration conf) {
-    return new RegionCoprocessorEnvironment() {
+    return new CompatRegionCoprocessorEnvironment() {
       @Override
       public Region getRegion() {
         return region;
@@ -281,28 +281,6 @@ public class SnapshotScanner extends AbstractClientScanner {
         throw new UnsupportedOperationException();
       }
 
-      // HBase 3 only, no override
-      public OperationQuota checkBatchQuota(Region arg0, OperationType arg1)
-        throws IOException, RpcThrottlingException {
-        throw new UnsupportedOperationException();
-      }
-
-      // HBase 3 only, no override
-      public RpcQuotaManager getRpcQuotaManager() {
-        throw new UnsupportedOperationException();
-      }
-
-      // HBase 3 only, no override
-      public OperationQuota checkScanQuota(Scan scan, long maxBlockBytesScanned,
-        long prevBlockBytesScannedDifference) throws IOException, RpcThrottlingException {
-        throw new UnsupportedOperationException();
-      }
-
-      // HBase 3 only, no override
-      public OperationQuota checkBatchQuota(Region region, int numWrites, int numReads)
-        throws IOException, RpcThrottlingException {
-        throw new UnsupportedOperationException();
-      }
     };
   }
 }

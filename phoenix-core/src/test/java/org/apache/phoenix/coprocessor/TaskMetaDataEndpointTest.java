@@ -37,7 +37,6 @@ import org.apache.hadoop.hbase.metrics.MetricRegistry;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos;
 import org.apache.hadoop.hbase.quotas.OperationQuota;
 import org.apache.hadoop.hbase.quotas.OperationQuota.OperationType;
-import org.apache.hadoop.hbase.quotas.RpcQuotaManager;
 import org.apache.hadoop.hbase.quotas.RpcThrottlingException;
 import org.apache.hadoop.hbase.regionserver.OnlineRegions;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -50,6 +49,7 @@ import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
+import org.apache.phoenix.compat.hbase.CompatRegionCoprocessorEnvironment;
 
 /**
  * Unit tests for TaskMetaDataEndpoint
@@ -75,7 +75,7 @@ public class TaskMetaDataEndpointTest {
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
     configuration = new Configuration();
-    RegionCoprocessorEnvironment environment = new RegionCoprocessorEnvironment() {
+    RegionCoprocessorEnvironment environment = new CompatRegionCoprocessorEnvironment() {
 
       @Override
       public Region getRegion() {
@@ -157,28 +157,6 @@ public class TaskMetaDataEndpointTest {
         return null;
       }
 
-      // HBase 3 only
-      public OperationQuota checkBatchQuota(Region arg0, OperationType arg1)
-        throws IOException, RpcThrottlingException {
-        return null;
-      }
-
-      // HBase 3 only
-      public RpcQuotaManager getRpcQuotaManager() {
-        return null;
-      }
-
-      // HBase 3 only
-      public OperationQuota checkScanQuota(Scan scan, long maxBlockBytesScanned,
-        long prevBlockBytesScannedDifference) throws IOException, RpcThrottlingException {
-        return null;
-      }
-
-      // HBase 3 only
-      public OperationQuota checkBatchQuota(Region region, int numWrites, int numReads)
-        throws IOException, RpcThrottlingException {
-        return null;
-      }
     };
     taskMetaDataEndpoint = new TaskMetaDataEndpoint();
     taskMetaDataEndpoint.start(environment);
