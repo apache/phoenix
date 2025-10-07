@@ -20,6 +20,7 @@ package org.apache.phoenix.compat.hbase;
 import java.io.IOException;
 import java.util.List;
 import org.apache.hadoop.hbase.MetaTableAccessor;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -31,6 +32,7 @@ import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto.MutationType;
+import org.apache.hadoop.hbase.protobuf.generated.TableProtos;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,12 +61,21 @@ public class CompatUtil {
     return ProtobufUtil.toMutation(type, mutation);
   }
 
+  public static TableProtos.TableName toProtoTableName(TableName tableName) {
+    return ProtobufUtil.toProtoTableName(tableName);
+  }
+
   public static Scan toScan(final ClientProtos.Scan proto) throws IOException {
     return ProtobufUtil.toScan(proto);
   }
 
   public static ClientProtos.Scan toScan(Scan scan) throws IOException {
     return ProtobufUtil.toScan(scan);
+  }
+
+  public static TableName toTableName(TableProtos.TableName tableNamePB) {
+    return TableName.valueOf(tableNamePB.getNamespace().asReadOnlyByteBuffer(),
+      tableNamePB.getQualifier().asReadOnlyByteBuffer());
   }
 
   public static void setMvccReadPoint(Scan scan, long mvccReadPoint) {
