@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.hbase.index.IndexRegionObserver.INDEX_LAZY_POST_BATCH_WRITE;
 import static org.apache.phoenix.mapreduce.PhoenixJobCounters.INPUT_RECORDS;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT;
@@ -1064,8 +1065,13 @@ public class IndexToolIT extends BaseTest {
         IndexTool.IndexVerifyType.ONLY);
       counters = indexTool.getJob().getCounters();
       LOGGER.info(counters.toString());
+      Configuration conf =
+        conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin().getConfiguration();
+      boolean isPostBatchLazyMode = conf.getBoolean(INDEX_LAZY_POST_BATCH_WRITE, false);
       assertEquals(0, counters.findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
-      assertEquals(0, counters.findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
+      if (!isPostBatchLazyMode) {
+        assertEquals(0, counters.findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
+      }
       assertEquals(0, counters.findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
       assertEquals(0,
         counters.findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
