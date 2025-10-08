@@ -112,12 +112,9 @@ public abstract class AbstractParallelWriterIndexCommitter implements IndexCommi
   }
 
   @Override
-  public void write(Multimap<HTableInterfaceReference, Mutation> toWrite,
+  public abstract void write(Multimap<HTableInterfaceReference, Mutation> toWrite,
     final boolean allowLocalUpdates, final int clientVersion)
-    throws SingleIndexWriteFailureException {
-    TaskBatch<Void> tasks = new TaskBatch<>(toWrite.asMap().size());
-    addTasks(toWrite, allowLocalUpdates, clientVersion, tasks);
-  }
+    throws SingleIndexWriteFailureException;
 
   /**
    * Adds parallel index write tasks to the provided task batch for execution across multiple index
