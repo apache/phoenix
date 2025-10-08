@@ -21,6 +21,7 @@ import java.util.concurrent.ExecutionException;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.parallel.EarlyExitFailure;
+import org.apache.phoenix.hbase.index.parallel.TaskBatch;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,7 +54,8 @@ public class ParallelWriterIndexCommitter extends AbstractParallelWriterIndexCom
     final boolean allowLocalUpdates, final int clientVersion)
     throws SingleIndexWriteFailureException {
 
-    super.write(toWrite, allowLocalUpdates, clientVersion);
+    TaskBatch<Void> tasks = new TaskBatch<>(toWrite.asMap().size());
+    super.addTasks(toWrite, allowLocalUpdates, clientVersion, tasks);
     // actually submit the tasks to the pool and wait for them to finish/fail
     try {
       pool.submitUninterruptible(tasks);

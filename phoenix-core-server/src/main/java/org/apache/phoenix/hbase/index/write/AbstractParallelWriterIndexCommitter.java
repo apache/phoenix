@@ -63,7 +63,6 @@ public abstract class AbstractParallelWriterIndexCommitter implements IndexCommi
   protected QuickFailingTaskRunner pool;
   protected KeyValueBuilder kvBuilder;
   protected RegionCoprocessorEnvironment env;
-  protected TaskBatch<Void> tasks;
   protected boolean disableIndexOnFailure = false;
 
   // This relies on Hadoop Configuration to handle warning about deprecated configs and
@@ -116,6 +115,12 @@ public abstract class AbstractParallelWriterIndexCommitter implements IndexCommi
   public void write(Multimap<HTableInterfaceReference, Mutation> toWrite,
     final boolean allowLocalUpdates, final int clientVersion)
     throws SingleIndexWriteFailureException {
+    TaskBatch<Void> tasks = new TaskBatch<>(toWrite.asMap().size());
+    addTasks(toWrite, allowLocalUpdates, clientVersion, tasks);
+  }
+
+  protected void addTasks(Multimap<HTableInterfaceReference, Mutation> toWrite,
+    boolean allowLocalUpdates, int clientVersion, TaskBatch<Void> tasks) {
     /*
      * This bit here is a little odd, so let's explain what's going on. Basically, we want to do the
      * writes in parallel to each index table, so each table gets its own task and is submitted to
@@ -128,7 +133,6 @@ public abstract class AbstractParallelWriterIndexCommitter implements IndexCommi
      */
 
     Set<Entry<HTableInterfaceReference, Collection<Mutation>>> entries = toWrite.asMap().entrySet();
-    tasks = new TaskBatch<Void>(entries.size());
     for (Entry<HTableInterfaceReference, Collection<Mutation>> entry : entries) {
       // get the mutations for each table. We leak the implementation here a little bit to save
       // doing a complete copy over of all the index update for each table.

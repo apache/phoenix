@@ -19,6 +19,7 @@ package org.apache.phoenix.hbase.index.write;
 
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
+import org.apache.phoenix.hbase.index.parallel.TaskBatch;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,7 +43,8 @@ public class LazyParallelWriterIndexCommitter extends AbstractParallelWriterInde
     final boolean allowLocalUpdates, final int clientVersion)
     throws SingleIndexWriteFailureException {
 
-    super.write(toWrite, allowLocalUpdates, clientVersion);
+    TaskBatch<Void> tasks = new TaskBatch<>(toWrite.asMap().size());
+    super.addTasks(toWrite, allowLocalUpdates, clientVersion, tasks);
     try {
       pool.submitOnly(tasks);
     } catch (Exception e) {
