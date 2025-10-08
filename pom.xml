@@ -45,6 +45,7 @@
   </licenses>
 
   <modules>
+    <module>phoenix-hbase-compat-2.6.4</module>
     <module>phoenix-hbase-compat-2.6.0</module>
     <module>phoenix-hbase-compat-2.5.4</module>
     <module>phoenix-hbase-compat-2.5.0</module>
@@ -53,7 +54,6 @@
     <module>phoenix-core</module>
     <module>phoenix-pherf</module>
     <module>phoenix-tracing-webapp</module>
-    <!-- shaded artifact and assembly modules are added in shade-and-assembly profile -->
   </modules>
 
   <scm>
@@ -2189,17 +2189,6 @@
         <hbase.compat.version>2.6.4</hbase.compat.version>
         <hbase.version>${hbase-2.6.runtime.version}</hbase.version>
       </properties>
-      <modules>
-        <module>phoenix-hbase-compat-2.6.4</module>
-        <module>phoenix-hbase-compat-2.6.0</module>
-        <module>phoenix-hbase-compat-2.5.4</module>
-        <module>phoenix-hbase-compat-2.5.0</module>
-        <module>phoenix-core-client</module>
-        <module>phoenix-core-server</module>
-        <module>phoenix-core</module>
-        <module>phoenix-pherf</module>
-        <module>phoenix-tracing-webapp</module>
-      </modules>
     </profile>
     <profile>
       <!-- This WILL work with the public -hadoop3 artifacts -->
