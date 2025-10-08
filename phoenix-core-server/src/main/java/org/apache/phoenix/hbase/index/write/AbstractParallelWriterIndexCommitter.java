@@ -119,6 +119,22 @@ public abstract class AbstractParallelWriterIndexCommitter implements IndexCommi
     addTasks(toWrite, allowLocalUpdates, clientVersion, tasks);
   }
 
+  /**
+   * Adds parallel index write tasks to the provided task batch for execution across multiple index
+   * tables. Each index table gets its own task that will be executed in parallel to optimize write
+   * performance. It is recommended that implementations of AbstractParallelWriterIndexCommitter
+   * class use this method rather than calling super.write() to use their own copy of tasks.
+   * @param toWrite           a multimap containing index table references as keys and their
+   *                          corresponding mutations as values. Each table will get its own
+   *                          parallel task.
+   * @param allowLocalUpdates if false, skips creating tasks for writes to the same table as the
+   *                          current region to prevent potential deadlocks
+   * @param clientVersion     the Phoenix client version, used for compatibility checks and
+   *                          version-specific behavior in the index write operations
+   * @param tasks             the task batch to which the newly created index write tasks will be
+   *                          added. This batch needs to be submitted for parallel execution by the
+   *                          caller.
+   */
   protected void addTasks(Multimap<HTableInterfaceReference, Mutation> toWrite,
     boolean allowLocalUpdates, int clientVersion, TaskBatch<Void> tasks) {
     /*
