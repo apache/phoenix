@@ -92,10 +92,6 @@ public class RegionScannerResultIterator extends BaseResultIterator {
     }
   }
 
-  public ScannerContext getRegionScannerContext() {
-    return scannerContext;
-  }
-
   public void setRegionScannerContext(ScannerContext scannerContext) {
     this.scannerContext = scannerContext;
   }
