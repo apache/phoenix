@@ -687,9 +687,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
     }
   }
 
-  // FIXME This callback does not exist in HBase 3+
-  // We probably need to drop support for the old indexing on HBase 3.0
-  // Should we enforce that ?
+  @Override
   public void preWALRestore(
     org.apache.hadoop.hbase.coprocessor.ObserverContext<? extends RegionCoprocessorEnvironment> ctx,
     org.apache.hadoop.hbase.client.RegionInfo info, org.apache.hadoop.hbase.wal.WALKey logKey,
