@@ -17,38 +17,16 @@
  */
 package org.apache.phoenix.compat.hbase;
 
-import java.util.Map;
+import com.google.protobuf.ByteString;
 
-public class CompatScanMetrics {
-  private CompatScanMetrics() {
-    // Not to be instantiated
+// This has different signature in the HBase 2 and 3 modules
+// This only comes together after the maven-replacer plugin relocates all protobuf code.
+public class ByteStringer {
+
+  private ByteStringer() {
   }
 
-  public static Long getFsReadTime(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getBytesReadFromFs(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getBytesReadFromMemstore(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getBytesReadFromBlockCache(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getBlockReadOpsCount(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getRpcScanProcessingTime(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getRpcScanQueueWaitTime(Map<String, Long> scanMetrics) {
-    return 0L;
+  public static ByteString wrap(final byte[] array) {
+    return org.apache.hadoop.hbase.util.ByteStringer.wrap(array);
   }
 }

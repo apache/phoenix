@@ -17,38 +17,8 @@
  */
 package org.apache.phoenix.compat.hbase;
 
-import java.util.Map;
+import org.apache.hadoop.hbase.regionserver.wal.ProtobufWALStreamReader;
 
-public class CompatScanMetrics {
-  private CompatScanMetrics() {
-    // Not to be instantiated
-  }
+public abstract class CompatIndexedHLogReader extends ProtobufWALStreamReader {
 
-  public static Long getFsReadTime(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getBytesReadFromFs(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getBytesReadFromMemstore(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getBytesReadFromBlockCache(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getBlockReadOpsCount(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getRpcScanProcessingTime(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getRpcScanQueueWaitTime(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
 }

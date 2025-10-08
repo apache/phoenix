@@ -17,23 +17,30 @@
  */
 package org.apache.phoenix.compat.hbase;
 
+import org.apache.hadoop.hbase.monitoring.ThreadLocalServerSideScanMetrics;
+
 public class CompatThreadLocalServerSideScanMetrics {
   private CompatThreadLocalServerSideScanMetrics() {
     // Not to be instantiated
   }
 
   public static void addFsReadTime(long fsReadTimeInMs) {
+    ThreadLocalServerSideScanMetrics.addFsReadTime(fsReadTimeInMs);
   }
 
   public static void addBytesReadFromFs(long bytesReadFromFS) {
+    ThreadLocalServerSideScanMetrics.addBytesReadFromFs(bytesReadFromFS);
   }
 
   public static void addBytesReadFromMemstore(long bytesReadFromMemstore) {
+    ThreadLocalServerSideScanMetrics.addBytesReadFromMemstore(bytesReadFromMemstore);
   }
 
   public static void addBytesReadFromBlockCache(long bytesReadFromBlockCache) {
+    ThreadLocalServerSideScanMetrics.addBytesReadFromBlockCache(bytesReadFromBlockCache);
   }
 
   public static void addBlockReadOpsCount(long blockReadOpsCount) {
+    ThreadLocalServerSideScanMetrics.addBlockReadOpsCount(blockReadOpsCount);
   }
 }

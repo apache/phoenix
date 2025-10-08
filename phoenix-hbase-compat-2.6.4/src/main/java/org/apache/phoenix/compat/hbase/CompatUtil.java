@@ -17,38 +17,25 @@
  */
 package org.apache.phoenix.compat.hbase;
 
-import java.util.Map;
+import java.io.IOException;
+import java.util.List;
+import org.apache.hadoop.hbase.MetaTableAccessor;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.RegionInfo;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-public class CompatScanMetrics {
-  private CompatScanMetrics() {
+public class CompatUtil {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(CompatUtil.class);
+
+  private CompatUtil() {
     // Not to be instantiated
   }
 
-  public static Long getFsReadTime(Map<String, Long> scanMetrics) {
-    return 0L;
+  public static List<RegionInfo> getMergeRegions(Connection conn, RegionInfo regionInfo)
+    throws IOException {
+    return MetaTableAccessor.getMergeRegions(conn, regionInfo);
   }
 
-  public static Long getBytesReadFromFs(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getBytesReadFromMemstore(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getBytesReadFromBlockCache(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getBlockReadOpsCount(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getRpcScanProcessingTime(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getRpcScanQueueWaitTime(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
 }

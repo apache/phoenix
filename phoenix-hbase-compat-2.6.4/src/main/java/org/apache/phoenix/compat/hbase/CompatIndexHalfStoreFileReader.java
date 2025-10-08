@@ -17,38 +17,22 @@
  */
 package org.apache.phoenix.compat.hbase;
 
-import java.util.Map;
+import java.io.IOException;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.io.hfile.CacheConfig;
+import org.apache.hadoop.hbase.io.hfile.HFileInfo;
+import org.apache.hadoop.hbase.io.hfile.ReaderContext;
+import org.apache.hadoop.hbase.regionserver.StoreFileInfo;
+import org.apache.hadoop.hbase.regionserver.StoreFileReader;
 
-public class CompatScanMetrics {
-  private CompatScanMetrics() {
-    // Not to be instantiated
+public class CompatIndexHalfStoreFileReader extends StoreFileReader {
+
+  public CompatIndexHalfStoreFileReader(final FileSystem fs, final CacheConfig cacheConf,
+    final Configuration conf, final ReaderContext readerContext, final HFileInfo hFileInfo, Path p)
+    throws IOException {
+    super(readerContext, hFileInfo, cacheConf, new StoreFileInfo(conf, fs, p, true), conf);
   }
 
-  public static Long getFsReadTime(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getBytesReadFromFs(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getBytesReadFromMemstore(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getBytesReadFromBlockCache(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getBlockReadOpsCount(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getRpcScanProcessingTime(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getRpcScanQueueWaitTime(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
 }

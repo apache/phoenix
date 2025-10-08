@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,25 +15,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+/**
+ * This package contains compatibility classes for bridging differences
+ * between different versions of HBase.
+ */
 package org.apache.phoenix.compat.hbase;
-
-public class CompatThreadLocalServerSideScanMetrics {
-  private CompatThreadLocalServerSideScanMetrics() {
-    // Not to be instantiated
-  }
-
-  public static void addFsReadTime(long fsReadTimeInMs) {
-  }
-
-  public static void addBytesReadFromFs(long bytesReadFromFS) {
-  }
-
-  public static void addBytesReadFromMemstore(long bytesReadFromMemstore) {
-  }
-
-  public static void addBytesReadFromBlockCache(long bytesReadFromBlockCache) {
-  }
-
-  public static void addBlockReadOpsCount(long blockReadOpsCount) {
-  }
-}

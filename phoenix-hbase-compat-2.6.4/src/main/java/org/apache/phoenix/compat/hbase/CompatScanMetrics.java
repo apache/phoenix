@@ -18,37 +18,39 @@
 package org.apache.phoenix.compat.hbase;
 
 import java.util.Map;
+import org.apache.hadoop.hbase.client.metrics.ServerSideScanMetrics;
 
 public class CompatScanMetrics {
+
   private CompatScanMetrics() {
     // Not to be instantiated
   }
 
   public static Long getFsReadTime(Map<String, Long> scanMetrics) {
-    return 0L;
+    return scanMetrics.get(ServerSideScanMetrics.FS_READ_TIME_METRIC_NAME);
   }
 
   public static Long getBytesReadFromFs(Map<String, Long> scanMetrics) {
-    return 0L;
+    return scanMetrics.get(ServerSideScanMetrics.BYTES_READ_FROM_FS_METRIC_NAME);
   }
 
   public static Long getBytesReadFromMemstore(Map<String, Long> scanMetrics) {
-    return 0L;
+    return scanMetrics.get(ServerSideScanMetrics.BYTES_READ_FROM_MEMSTORE_METRIC_NAME);
   }
 
   public static Long getBytesReadFromBlockCache(Map<String, Long> scanMetrics) {
-    return 0L;
+    return scanMetrics.get(ServerSideScanMetrics.BYTES_READ_FROM_BLOCK_CACHE_METRIC_NAME);
   }
 
   public static Long getBlockReadOpsCount(Map<String, Long> scanMetrics) {
-    return 0L;
+    return scanMetrics.get(ServerSideScanMetrics.BLOCK_READ_OPS_COUNT_METRIC_NAME);
   }
 
   public static Long getRpcScanProcessingTime(Map<String, Long> scanMetrics) {
-    return 0L;
+    return scanMetrics.get(ServerSideScanMetrics.RPC_SCAN_PROCESSING_TIME_METRIC_NAME);
   }
 
   public static Long getRpcScanQueueWaitTime(Map<String, Long> scanMetrics) {
-    return 0L;
+    return scanMetrics.get(ServerSideScanMetrics.RPC_SCAN_QUEUE_WAIT_TIME_METRIC_NAME);
   }
 }

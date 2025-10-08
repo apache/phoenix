@@ -17,38 +17,21 @@
  */
 package org.apache.phoenix.compat.hbase;
 
-import java.util.Map;
+import java.io.IOException;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.filter.FilterBase;
 
-public class CompatScanMetrics {
-  private CompatScanMetrics() {
-    // Not to be instantiated
+public class CompatDelegateFilter extends FilterBase {
+  protected Filter delegate = null;
+
+  public CompatDelegateFilter(Filter delegate) {
+    this.delegate = delegate;
   }
 
-  public static Long getFsReadTime(Map<String, Long> scanMetrics) {
-    return 0L;
+  @Override
+  public ReturnCode filterKeyValue(Cell v) throws IOException {
+    return delegate.filterKeyValue(v);
   }
 
-  public static Long getBytesReadFromFs(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getBytesReadFromMemstore(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getBytesReadFromBlockCache(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getBlockReadOpsCount(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getRpcScanProcessingTime(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
-
-  public static Long getRpcScanQueueWaitTime(Map<String, Long> scanMetrics) {
-    return 0L;
-  }
 }
