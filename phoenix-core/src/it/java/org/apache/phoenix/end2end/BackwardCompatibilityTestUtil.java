@@ -43,6 +43,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 import java.util.regex.Matcher;
@@ -57,10 +58,15 @@ import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public final class BackwardCompatibilityTestUtil {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(BackwardCompatibilityTestUtil.class);
+
   public static final String SQL_DIR = "sql_files/";
   public static final String RESULTS_AND_GOLD_FILES_DIR = "gold_files/";
   public static final String COMPATIBLE_CLIENTS_JSON = "compatible_client_versions.json";
@@ -115,7 +121,7 @@ public final class BackwardCompatibilityTestUtil {
   private BackwardCompatibilityTestUtil() {
   }
 
-  public static List<MavenCoordinates> computeClientVersions() throws Exception {
+  public static List<ClientVersionGroup> computeClientVersionGroups() throws Exception {
     String hbaseVersion = VersionInfo.getVersion();
     Pattern p = Pattern.compile("\\d+\\.\\d+");
     Matcher m = p.matcher(hbaseVersion);
@@ -123,7 +129,7 @@ public final class BackwardCompatibilityTestUtil {
     if (m.find()) {
       hbaseProfile = m.group();
     }
-    List<MavenCoordinates> clientVersions = Lists.newArrayList();
+    List<ClientVersionGroup> clientVersionGroups = Lists.newArrayList();
     ObjectMapper mapper = new ObjectMapper();
     mapper.configure(JsonParser.Feature.ALLOW_COMMENTS, true);
     try (InputStream inputStream =
@@ -131,26 +137,41 @@ public final class BackwardCompatibilityTestUtil {
       assertNotNull(inputStream);
       JsonNode jsonNode = mapper.readTree(inputStream);
       JsonNode HBaseProfile = jsonNode.get(hbaseProfile);
+      List<MavenCoordinates> artifacts = new ArrayList<>();
       for (final JsonNode clientVersion : HBaseProfile) {
-        clientVersions.add(mapper.treeToValue(clientVersion, MavenCoordinates.class));
+        artifacts.add(mapper.treeToValue(clientVersion, MavenCoordinates.class));
+      }
+      if (!artifacts.isEmpty()) {
+        MavenCoordinates primary = artifacts.get(0);
+        clientVersionGroups.add(new ClientVersionGroup(primary, artifacts));
       }
     }
-    return clientVersions;
+    return clientVersionGroups;
   }
 
-  // Executes the queries listed in the operation file with a given client version
-  public static void executeQueryWithClientVersion(MavenCoordinates clientVersion, String operation,
-    String zkQuorum) throws Exception {
+  public static List<MavenCoordinates> computeClientVersions() throws Exception {
+    List<ClientVersionGroup> groups = computeClientVersionGroups();
+    List<MavenCoordinates> result = new ArrayList<>();
+    for (ClientVersionGroup group : groups) {
+      result.add(group.getPrimaryArtifact());
+    }
+    return result;
+  }
+
+  public static void executeQueryWithClientVersionGroup(ClientVersionGroup clientVersionGroup,
+    String operation, String zkQuorum) throws Exception {
     List<String> cmdParams = Lists.newArrayList();
     cmdParams.add(BASH);
-    // Note that auto-commit is true for queries executed via SQLline
     URL fileUrl = BackwardCompatibilityIT.class.getClassLoader().getResource(EXECUTE_QUERY_SH);
     assertNotNull(fileUrl);
     cmdParams.add(new File(fileUrl.getFile()).getAbsolutePath());
     cmdParams.add(zkQuorum);
-    cmdParams.add(clientVersion.getGroupId());
-    cmdParams.add(clientVersion.getArtifactId());
-    cmdParams.add(clientVersion.getVersion());
+    cmdParams.add(String.valueOf(clientVersionGroup.getAllArtifacts().size()));
+    for (MavenCoordinates artifact : clientVersionGroup.getAllArtifacts()) {
+      cmdParams.add(artifact.getGroupId());
+      cmdParams.add(artifact.getArtifactId());
+      cmdParams.add(artifact.getVersion());
+    }
 
     fileUrl = BackwardCompatibilityIT.class.getClassLoader()
       .getResource(SQL_DIR + operation + SQL_EXTENSION);
@@ -171,50 +192,65 @@ public final class BackwardCompatibilityTestUtil {
     ProcessBuilder pb = new ProcessBuilder(cmdParams);
     final Process p = pb.start();
     final StringBuffer sb = new StringBuffer();
-    // Capture the output stream if any from the execution of the script
-    Thread outputStreamThread = new Thread() {
-      @Override
-      public void run() {
-        try (
-          BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
-          String line;
-          while ((line = reader.readLine()) != null) {
-            sb.append(line);
-          }
-        } catch (final Exception e) {
-          sb.append(e.getMessage());
+    Thread outputStreamThread = new Thread(() -> {
+      try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+        String line;
+        while ((line = reader.readLine()) != null) {
+          sb.append(line);
         }
+      } catch (final Exception e) {
+        sb.append(e.getMessage());
       }
-    };
+    });
     outputStreamThread.start();
-    // Capture the error stream if any from the execution of the script
-    Thread errorStreamThread = new Thread() {
-      @Override
-      public void run() {
-        try (
-          BufferedReader reader = new BufferedReader(new InputStreamReader(p.getErrorStream()))) {
-          String line;
-          while ((line = reader.readLine()) != null) {
-            sb.append(line);
-          }
-        } catch (final Exception e) {
-          sb.append(e.getMessage());
+    Thread errorStreamThread = new Thread(() -> {
+      try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getErrorStream()))) {
+        String line;
+        while ((line = reader.readLine()) != null) {
+          sb.append(line);
         }
+      } catch (final Exception e) {
+        sb.append(e.getMessage());
       }
-    };
+    });
     errorStreamThread.start();
     p.waitFor();
     String resultDump = "PLACEHOLDER. Could not read result file";
     try {
       resultDump = new String(Files.readAllBytes(Paths.get(resultFilePath)));
     } catch (Exception e) {
-      // We return the placeholder
+      LOGGER.error(resultFilePath + " could not be read", e);
     }
     assertEquals(
       String.format(
         "Executing the query failed%s. Check the result file: %s\nResult file dump follows:\n%s",
         sb.length() > 0 ? sb.append(" with : ").toString() : "", resultFilePath, resultDump),
       0, p.exitValue());
+  }
+
+  public static void executeQueryWithClientVersion(MavenCoordinates clientVersion, String operation,
+    String zkQuorum) throws Exception {
+    List<ClientVersionGroup> groups = computeClientVersionGroups();
+    ClientVersionGroup targetGroup = null;
+
+    for (ClientVersionGroup group : groups) {
+      if (
+        group.getPrimaryArtifact().getArtifactId().equals(clientVersion.getArtifactId())
+          && group.getPrimaryArtifact().getVersion().equals(clientVersion.getVersion())
+      ) {
+        targetGroup = group;
+        break;
+      }
+    }
+
+    if (targetGroup != null) {
+      executeQueryWithClientVersionGroup(targetGroup, operation, zkQuorum);
+    } else {
+      List<MavenCoordinates> artifacts = Lists.newArrayList();
+      artifacts.add(clientVersion);
+      ClientVersionGroup group = new ClientVersionGroup(clientVersion, artifacts);
+      executeQueryWithClientVersionGroup(group, operation, zkQuorum);
+    }
   }
 
   public static void checkForPreConditions(MavenCoordinates compatibleClientVersion,
@@ -383,5 +419,34 @@ public final class BackwardCompatibilityTestUtil {
       return groupId + ":" + artifactId + ":" + version;
     }
 
+  }
+
+  /**
+   * Represents a group of Maven artifacts that should be used together for a client version
+   */
+  public static class ClientVersionGroup {
+
+    private final MavenCoordinates primaryArtifact;
+    private final List<MavenCoordinates> allArtifacts;
+
+    public ClientVersionGroup(MavenCoordinates primaryArtifact,
+      List<MavenCoordinates> allArtifacts) {
+      this.primaryArtifact = primaryArtifact;
+      this.allArtifacts = allArtifacts;
+    }
+
+    public MavenCoordinates getPrimaryArtifact() {
+      return primaryArtifact;
+    }
+
+    public List<MavenCoordinates> getAllArtifacts() {
+      return allArtifacts;
+    }
+
+    @Override
+    public String toString() {
+      return "ClientVersionGroup{primary=" + primaryArtifact + ", artifacts=" + allArtifacts.size()
+        + "}";
+    }
   }
 }

@@ -88,4 +88,16 @@ public interface Expression extends PDatum, Writable {
   default boolean contains(Expression other) {
     return this.equals(other);
   }
+
+  /**
+   * Determine if the expression should be evaluated over the entire row
+   */
+  default boolean isRowLevel() {
+    for (Expression child : getChildren()) {
+      if (child.isRowLevel()) {
+        return true;
+      }
+    }
+    return false;
+  }
 }

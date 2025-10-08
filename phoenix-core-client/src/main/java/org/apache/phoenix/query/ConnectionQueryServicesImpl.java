@@ -1730,16 +1730,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       ConnectionQueryServicesImpl.this.props.getLong(QueryServices.DELAY_FOR_SCHEMA_UPDATE_CHECK,
         QueryServicesOptions.DEFAULT_DELAY_FOR_SCHEMA_UPDATE_CHECK);
     boolean success = false;
-    int numTries = 1;
+    int numTries = 0;
     PhoenixStopWatch watch = new PhoenixStopWatch();
     watch.start();
     do {
       try {
         success = op.checkForCompletion();
       } catch (Exception ex) {
-        // If we encounter any exception on the first or last try, propagate the exception and fail.
+        // If we encounter any exception on the first try, propagate the exception and fail.
         // Else, we swallow the exception and retry till we reach maxRetries.
-        if (numTries == 1 || numTries == maxRetries) {
+        if (numTries == 0) {
           watch.stop();
           TimeoutException toThrow = new TimeoutException("Operation " + op.getOperationName()
             + " didn't complete because of exception. Time elapsed: " + watch.elapsedMillis());
@@ -1748,7 +1748,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
         }
       }
       numTries++;
-      Thread.sleep(sleepInterval);
+      if (numTries < maxRetries && !success) {
+        Thread.sleep(sleepInterval);
+      }
     } while (numTries < maxRetries && !success);
 
     watch.stop();
@@ -4140,9 +4142,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
               if (lastDDLTimestampValidationEnabled) {
                 refreshLiveRegionServers();
               }
-              String skipSystemExistenceCheck =
-                props.getProperty(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK);
-              if (skipSystemExistenceCheck != null && Boolean.valueOf(skipSystemExistenceCheck)) {
+              boolean skipSystemExistenceCheck =
+                getProps().getBoolean(QueryServices.SKIP_SYSTEM_TABLES_EXISTENCE_CHECK,
+                  QueryServicesOptions.DEFAULT_SKIP_SYSTEM_TABLES_EXISTENCE_CHECK);
+              if (skipSystemExistenceCheck) {
                 initialized = true;
                 success = true;
                 return null;
