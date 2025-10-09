@@ -35,12 +35,13 @@ import org.apache.curator.utils.ZKPaths;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.PairOfSameType;
+import org.apache.phoenix.jdbc.ClusterRoleRecord.RegistryType;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.apache.phoenix.jdbc.ClusterRoleRecord.RegistryType;
+
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**

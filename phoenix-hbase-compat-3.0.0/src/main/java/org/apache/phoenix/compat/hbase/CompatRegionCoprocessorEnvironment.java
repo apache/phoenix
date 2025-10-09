@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,13 +18,12 @@
 package org.apache.phoenix.compat.hbase;
 
 import java.io.IOException;
-
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.quotas.OperationQuota;
+import org.apache.hadoop.hbase.quotas.OperationQuota.OperationType;
 import org.apache.hadoop.hbase.quotas.RpcQuotaManager;
 import org.apache.hadoop.hbase.quotas.RpcThrottlingException;
-import org.apache.hadoop.hbase.quotas.OperationQuota.OperationType;
 import org.apache.hadoop.hbase.regionserver.Region;
 
 public abstract class CompatRegionCoprocessorEnvironment implements RegionCoprocessorEnvironment {

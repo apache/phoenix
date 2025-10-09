@@ -34,7 +34,7 @@ import org.slf4j.LoggerFactory;
  */
 public class ZKConnectionInfo extends ConnectionInfo {
 
-    private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger(ZKConnectionInfo.class);
+  private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger(ZKConnectionInfo.class);
 
   public static final String ZK_REGISTRY_NAME =
     "org.apache.hadoop.hbase.client.ZKConnectionRegistry";
@@ -299,7 +299,7 @@ public class ZKConnectionInfo extends ConnectionInfo {
       }
 
       LOGGER.error("1:" + zkPort);
-      
+
       // Normalize connInfo so that a url explicitly specifying versus implicitly inheriting
       // the default values will both share the same ConnectionQueryServices.
       if (zkPort == null) {
