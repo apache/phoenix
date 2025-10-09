@@ -36,12 +36,12 @@ import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.regionserver.FlushLifeCycleTracker;
+import org.apache.hadoop.hbase.regionserver.PhoenixScannerContext;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScanOptions;
 import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
-import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTracker;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
@@ -182,6 +182,8 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     private final Scan scan;
     private final ObserverContext<RegionCoprocessorEnvironment> c;
     private boolean wasOverriden;
+    // tracks the current phoenix scanner context corresponding to the hbase scanner context
+    private PhoenixScannerContext phoenixScannerContext;
 
     public RegionScannerHolder(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan,
       final RegionScanner scanner) {
@@ -239,10 +241,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
 
     @Override
     public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
-      overrideDelegate();
-      boolean res = super.next(result, scannerContext);
-      ScannerContextUtil.incrementSizeProgress(scannerContext, result);
-      return res;
+      return nextInternal(result, scannerContext, false);
     }
 
     @Override
@@ -253,9 +252,30 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
 
     @Override
     public boolean nextRaw(List<Cell> result, ScannerContext scannerContext) throws IOException {
+      return nextInternal(result, scannerContext, true);
+    }
+
+    private boolean nextInternal(List<Cell> result, ScannerContext scannerContext, boolean isRaw)
+      throws IOException {
       overrideDelegate();
-      boolean res = super.nextRaw(result, scannerContext);
-      ScannerContextUtil.incrementSizeProgress(scannerContext, result);
+      if (scannerContext instanceof PhoenixScannerContext) {
+        // This is an optimization to avoid creating multiple phoenix scanner context objects for
+        // the same scan rpc request when multiple RegionScannerHolder objects are stacked which
+        // happens if multiple coprocs (not scanners) are processing the scan like
+        // UngroupedAggregateRegionObserver and GlobalIndexChecker
+        phoenixScannerContext = (PhoenixScannerContext) scannerContext;
+      } else if (PhoenixScannerContext.isNewScanRpcRequest(scannerContext)) {
+        // An open scanner can process multiple scan rpcs during its lifetime.
+        // We need to create a new phoenix scanner context for every new scan rpc request.
+        phoenixScannerContext = new PhoenixScannerContext(scannerContext);
+      }
+      boolean res = isRaw
+        ? super.nextRaw(result, phoenixScannerContext)
+        : super.next(result, phoenixScannerContext);
+      if (!(scannerContext instanceof PhoenixScannerContext)) {
+        // only update the top level hbase scanner context
+        phoenixScannerContext.updateHBaseScannerContext(scannerContext, result);
+      }
       return res;
     }
 

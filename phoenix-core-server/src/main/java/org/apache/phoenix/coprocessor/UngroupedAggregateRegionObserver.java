@@ -62,7 +62,6 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
-import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTracker;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
@@ -743,13 +742,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver
 
   private RegionScanner collectStats(final RegionScanner innerScanner, StatisticsCollector stats,
     final Region region, final Scan scan, Configuration config) throws IOException {
-    ScannerContext groupScannerContext;
-    if (scan.isScanMetricsEnabled()) {
-      groupScannerContext =
-        ScannerContext.newBuilder().setTrackMetrics(scan.isScanMetricsEnabled()).build();
-    } else {
-      groupScannerContext = null;
-    }
     StatsCollectionCallable callable =
       new StatsCollectionCallable(stats, region, innerScanner, config, scan);
     byte[] asyncBytes =
@@ -803,9 +795,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver
 
       @Override
       public boolean next(List<Cell> results, ScannerContext scannerContext) throws IOException {
-        if (groupScannerContext != null && scannerContext != null) {
-          ScannerContextUtil.updateMetrics(groupScannerContext, scannerContext);
-        }
         return next(results);
       }
 

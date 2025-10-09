@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.PageFilter;
+import org.apache.hadoop.hbase.regionserver.PhoenixScannerContext;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.phoenix.query.QueryServices;
@@ -181,7 +182,8 @@ public class TTLRegionScanner extends BaseRegionScanner {
     return false;
   }
 
-  private boolean skipExpired(List<Cell> result, boolean raw, boolean hasMore) throws IOException {
+  private boolean skipExpired(List<Cell> result, boolean raw, boolean hasMore,
+    ScannerContext scannerContext) throws IOException {
     boolean expired = isExpired(result);
     if (!expired) {
       return hasMore;
@@ -190,23 +192,28 @@ public class TTLRegionScanner extends BaseRegionScanner {
     if (!hasMore) {
       return false;
     }
-    long startTime = EnvironmentEdgeManager.currentTimeMillis();
     do {
-      hasMore = raw ? delegate.nextRaw(result) : delegate.next(result);
+      hasMore =
+        raw ? delegate.nextRaw(result, scannerContext) : delegate.next(result, scannerContext);
       if (result.isEmpty() || ScanUtil.isDummy(result)) {
-        return hasMore;
+        break;
       }
+      // non dummy result check if it is expired
       if (!isExpired(result)) {
-        return hasMore;
+        break;
       }
+      // result is expired
       Cell cell = result.get(0);
       result.clear();
-      if (EnvironmentEdgeManager.currentTimeMillis() - startTime > pageSizeMs) {
+      if (
+        PhoenixScannerContext.isReturnImmediately(scannerContext)
+          || PhoenixScannerContext.isTimedOut(scannerContext, pageSizeMs)
+      ) {
         ScanUtil.getDummyResult(CellUtil.cloneRow(cell), result);
-        return hasMore;
+        break;
       }
     } while (hasMore);
-    return false;
+    return hasMore;
   }
 
   private boolean next(List<Cell> result, boolean raw, ScannerContext scannerContext)
@@ -236,7 +243,7 @@ public class TTLRegionScanner extends BaseRegionScanner {
     if (result.isEmpty() || ScanUtil.isDummy(result)) {
       return hasMore;
     }
-    hasMore = skipExpired(result, raw, hasMore);
+    hasMore = skipExpired(result, raw, hasMore, scannerContext);
     if (result.isEmpty() || ScanUtil.isDummy(result)) {
       return hasMore;
     }

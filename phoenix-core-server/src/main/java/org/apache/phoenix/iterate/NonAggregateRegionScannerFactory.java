@@ -37,10 +37,10 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.regionserver.PhoenixScannerContext;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
-import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.cache.GlobalCache;
@@ -177,7 +177,11 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         ScanUtil.isIncompatibleClientForServerReturnValidRowKey(scan);
       RegionScannerResultIterator iterator = new RegionScannerResultIterator(scan, innerScanner,
         getMinMaxQualifiersFromScan(scan), encodingScheme);
-      ScannerContext sc = iterator.getRegionScannerContext();
+      // we need to create our own scanner context because we are still opening the scanner and
+      // and don't have a rpc scanner context which is created in the next() call. This scanner
+      // context is used when we are skipping the rows until we hit the offset
+      PhoenixScannerContext sc = new PhoenixScannerContext(scan.isScanMetricsEnabled());
+      iterator.setRegionScannerContext(sc);
       innerScanner = getOffsetScanner(innerScanner,
         new OffsetResultIterator(iterator, scanOffset, getPageSizeMsForRegionScanner(scan),
           isIncompatibleClient),
@@ -237,10 +241,15 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         EncodedColumnsUtil.getQualifierEncodingScheme(scan);
       RegionScannerResultIterator inner = new RegionScannerResultIterator(scan, s,
         EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan), encodingScheme);
+      // we need to create our own scanner context because we are still opening the scanner and
+      // and don't have a rpc scanner context which is created in the next() call. This scanner
+      // context is used when we are iterating over the top n rows before the first next() call
+      PhoenixScannerContext sc = new PhoenixScannerContext(scan.isScanMetricsEnabled());
+      inner.setRegionScannerContext(sc);
       OrderedResultIterator iterator = new OrderedResultIterator(inner, orderByExpressions,
         spoolingEnabled, thresholdBytes, limit >= 0 ? limit : null, null, estimatedRowSize,
         getPageSizeMsForRegionScanner(scan), scan, s.getRegionInfo());
-      return new OrderedResultIteratorWithScannerContext(inner.getRegionScannerContext(), iterator);
+      return new OrderedResultIteratorWithScannerContext(sc, iterator);
     } catch (IOException e) {
       throw new RuntimeException(e);
     } finally {
@@ -253,15 +262,15 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
   }
 
   private static class OrderedResultIteratorWithScannerContext {
-    private ScannerContext scannerContext;
+    private PhoenixScannerContext scannerContext;
     private OrderedResultIterator iterator;
 
-    OrderedResultIteratorWithScannerContext(ScannerContext sc, OrderedResultIterator ori) {
+    OrderedResultIteratorWithScannerContext(PhoenixScannerContext sc, OrderedResultIterator ori) {
       this.scannerContext = sc;
       this.iterator = ori;
     }
 
-    public ScannerContext getScannerContext() {
+    public PhoenixScannerContext getScannerContext() {
       return scannerContext;
     }
 
@@ -310,7 +319,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
 
   private RegionScanner getOffsetScanner(final RegionScanner s, final OffsetResultIterator iterator,
     final boolean isLastScan, final boolean incompatibleClient, final Scan scan,
-    final ScannerContext sc) throws IOException {
+    final PhoenixScannerContext sc) throws IOException {
     final Tuple firstTuple;
     final Region region = getRegion();
     region.startRegionOperation();
@@ -383,7 +392,9 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
     return new BaseRegionScanner(s) {
       private Tuple tuple = firstTuple;
       private byte[] previousResultRowKey;
-      private ScannerContext regionScannerContext = sc;
+      // scanner context used when we are opening the scanner and skipping up to offset rows
+      // We copy this context to the hbase rpc context on the first next call
+      private PhoenixScannerContext regionScannerContext = sc;
 
       @Override
       public boolean isFilterDone() {
@@ -401,6 +412,18 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
           if (isFilterDone()) {
             return false;
           }
+          if (regionScannerContext != null) {
+            regionScannerContext.updateHBaseScannerContext(scannerContext, results);
+            // we no longer need this context
+            regionScannerContext = null;
+            if (PhoenixScannerContext.isReturnImmediately(scannerContext)) {
+              return true;
+            }
+          }
+          RegionScannerResultIterator delegate =
+            (RegionScannerResultIterator) (iterator.getDelegate());
+          // just use the scanner context passed to us from now on
+          delegate.setRegionScannerContext(scannerContext);
           Tuple nextTuple = iterator.next();
           if (tuple.size() > 0 && !isDummy(tuple)) {
             for (int i = 0; i < tuple.size(); i++) {
@@ -425,10 +448,6 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
             }
           }
           tuple = nextTuple;
-          if (regionScannerContext != null) {
-            ScannerContextUtil.updateMetrics(regionScannerContext, scannerContext);
-            regionScannerContext = null;
-          }
           return !isFilterDone();
         } catch (Throwable t) {
           LOGGER.error("Error while iterating Offset scanner.", t);
@@ -488,7 +507,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
    * region) since after this everything is held in memory
    */
   private RegionScanner getTopNScanner(RegionCoprocessorEnvironment env, final RegionScanner s,
-    final OrderedResultIterator iterator, ImmutableBytesPtr tenantId, ScannerContext sc)
+    final OrderedResultIterator iterator, ImmutableBytesPtr tenantId, PhoenixScannerContext sc)
     throws Throwable {
 
     final Tuple firstTuple;
@@ -512,7 +531,9 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
     }
     return new BaseRegionScanner(s) {
       private Tuple tuple = firstTuple;
-      private ScannerContext regionScannerContext = sc;
+      // scanner context used when we are opening the scanner and reading the topN rows
+      // We copy this context to the hbase rpc context on the first next call
+      private PhoenixScannerContext regionScannerContext = sc;
 
       @Override
       public boolean isFilterDone() {
@@ -530,6 +551,14 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
           if (isFilterDone()) {
             return false;
           }
+          if (regionScannerContext != null) {
+            regionScannerContext.updateHBaseScannerContext(scannerContext, results);
+            // we no longer need this context
+            regionScannerContext = null;
+            if (PhoenixScannerContext.isReturnImmediately(scannerContext)) {
+              return true;
+            }
+          }
           if (isDummy(tuple)) {
             ScanUtil.getDummyResult(CellUtil.cloneRow(tuple.getValue(0)), results);
           } else {
@@ -537,11 +566,11 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
               results.add(tuple.getValue(i));
             }
           }
+          RegionScannerResultIterator delegate =
+            (RegionScannerResultIterator) (iterator.getDelegate());
+          // just use the scanner context passed to us from now on
+          delegate.setRegionScannerContext(scannerContext);
           tuple = iterator.next();
-          if (regionScannerContext != null) {
-            ScannerContextUtil.updateMetrics(regionScannerContext, scannerContext);
-            regionScannerContext = null;
-          }
           return !isFilterDone();
         } catch (Throwable t) {
           ClientUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);

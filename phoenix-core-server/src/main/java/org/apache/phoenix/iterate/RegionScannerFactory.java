@@ -39,7 +39,6 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
-import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
@@ -296,11 +295,6 @@ public abstract class RegionScannerFactory {
           }
           if (extraLimit >= 0 && --extraLimit == 0) {
             return false;
-          }
-          // There is a scanattribute set to retrieve the specific array element
-          if (scannerContext != null) {
-            ScannerContextUtil.incrementSizeProgress(scannerContext, result);
-            ScannerContextUtil.updateTimeProgress(scannerContext);
           }
           return next;
         } catch (Throwable t) {
