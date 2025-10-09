@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -30,17 +32,18 @@ import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-
 //FIXME this class has no @Category, and is never run by maven
 public class GlobalConnectionTenantTableIT extends BaseTest {
 
@@ -56,7 +59,11 @@ public class GlobalConnectionTenantTableIT extends BaseTest {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
         createBaseTable(SCHEMA_NAME, TABLE_NAME, true, null, null);
         try (Connection conn = getTenantConnection(TENANT_NAME)) {
             createView(conn, SCHEMA_NAME, VIEW_NAME, TABLE_NAME);
@@ -66,7 +73,7 @@ public class GlobalConnectionTenantTableIT extends BaseTest {
 
     @Test
     public void testGetLatestTenantTable() throws SQLException {
-        try (PhoenixConnection conn = (PhoenixConnection) getConnection()) {
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) getConnection()) {
             PTable table = conn.getTable(TENANT_NAME, FULL_VIEW_NAME, null);
             assertNotNull(table);
             table = null;
@@ -78,7 +85,7 @@ public class GlobalConnectionTenantTableIT extends BaseTest {
     @Test
     public void testGetTenantViewAtTimestamp() throws SQLException {
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
-        try (PhoenixConnection conn = (PhoenixConnection) getConnection()) {
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) getConnection()) {
             PTable table = conn.getTable(TENANT_NAME, FULL_VIEW_NAME, null);
             long tableTimestamp = table.getTimeStamp();
             // Alter table
@@ -100,7 +107,7 @@ public class GlobalConnectionTenantTableIT extends BaseTest {
 
     @Test
     public void testGetTableWithoutTenantId() throws SQLException {
-        try (PhoenixConnection conn = (PhoenixConnection) getConnection()) {
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) getConnection()) {
             PTable table =
                     conn.getTable(null, SchemaUtil.getTableName(SCHEMA_NAME, TABLE_NAME));
             assertNotNull(table);
@@ -117,7 +124,7 @@ public class GlobalConnectionTenantTableIT extends BaseTest {
 
     @Test
     public void testTableNotFound() throws SQLException {
-        try (PhoenixConnection conn = (PhoenixConnection) getConnection()) {
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) getConnection()) {
             try {
                 PTable table = conn.getTable(TENANT_NAME, FULL_VIEW_NAME, 1L);
                 fail("Expected TableNotFoundException");
@@ -130,7 +137,7 @@ public class GlobalConnectionTenantTableIT extends BaseTest {
 
     @Test
     public void testGetTableFromCache() throws SQLException {
-        try (PhoenixConnection conn = (PhoenixConnection) getConnection()) {
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) getConnection()) {
             PTable table = conn.getTable(TENANT_NAME, FULL_VIEW_NAME, null);
             PTable newTable = conn.getTable(TENANT_NAME, FULL_VIEW_NAME, null);
             assertNotNull(newTable);
@@ -176,13 +183,13 @@ public class GlobalConnectionTenantTableIT extends BaseTest {
     }
 
     private static Connection getTenantConnection(String tenant) throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenant);
         return DriverManager.getConnection(getUrl(), props);
     }
 
     private static Connection getConnection() throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         return DriverManager.getConnection(getUrl(), props);
     }
 

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -27,9 +28,9 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 
 @Category(ParallelStatsDisabledTest.class)
 public class IsNullIT extends ParallelStatsDisabledIT {
@@ -37,7 +38,7 @@ public class IsNullIT extends ParallelStatsDisabledIT {
     public void testIsNullInPk() throws Exception {
         String tableName = generateUniqueName();
         ensureTableCreated(getUrl(), tableName, "IntIntKeyTest");
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String upsert = "UPSERT INTO " + tableName + " VALUES(4,2)";
         PreparedStatement upsertStmt = conn.prepareStatement(upsert);
         int rowsInserted = upsertStmt.executeUpdate();
@@ -65,7 +66,7 @@ public class IsNullIT extends ParallelStatsDisabledIT {
     @Test
     public void testIsNullWithLastPKColDesc() throws Exception {
         String tableName = generateUniqueName();
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 VARCHAR NOT NULL, k2 VARCHAR, k3 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1, k2, k3 DESC))");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('a')");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('b')");
@@ -90,7 +91,7 @@ public class IsNullIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testIsNullInCompositeKey() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 VARCHAR, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2))");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES (null,'a')");

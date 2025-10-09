@@ -34,6 +34,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -49,6 +50,7 @@ import java.sql.SQLException;
 import java.sql.SQLTimeoutException;
 import java.util.Properties;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -97,49 +99,49 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testNoConditionsOnSelect() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             createAndTestJob(conn, null, 91.04, null);
         }
     }
 
     @Test
     public void testConditionsOnSelect() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             createAndTestJob(conn, RECORDING_YEAR + "  < 2009", 81.04, null);
         }
     }
 
     @Test
     public void testMapReduceWithVerySmallPhoenixQueryTimeout() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             createPagedJobAndTestFailedJobDueToTimeOut(conn, RECORDING_YEAR + " % 2 = 0", 82.89, null, true);
         }
     }
 
     @Test
     public void testMapReduceWithVerySmallPhoenixQueryTimeoutWithTenantId() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             createPagedJobAndTestFailedJobDueToTimeOut(conn, RECORDING_YEAR + " % 2 = 0", 82.89, TENANT_ID, true);
         }
     }
 
     @Test
     public void testMapReduceWithNormalPhoenixQueryTimeout() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             createPagedJobAndTestFailedJobDueToTimeOut(conn, RECORDING_YEAR + " % 2 = 0", 82.89, null, false);
         }
     }
 
     @Test
     public void testMapReduceWithNormalPhoenixQueryTimeoutWithTenantId() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             createPagedJobAndTestFailedJobDueToTimeOut(conn, RECORDING_YEAR + " % 2 = 0", 81.04, TENANT_ID, false);
         }
     }
 
     @Test
     public void testWithTenantId() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())){
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             //tenant view will perform the same filter as the select conditions do in testConditionsOnSelect
             createAndTestJob(conn, null, 81.04, TENANT_ID);
         }
@@ -222,7 +224,7 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
             assertTrue("Job didn't complete successfully! Check logs for reason.", job.waitForCompletion(true));
 
             //verify
-            ResultSet stats = DriverManager.getConnection(getUrl()).createStatement()
+            ResultSet stats = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).createStatement()
                     .executeQuery("SELECT * FROM " + stockStatsTableName);
             assertTrue("No data stored in stats table!", stats.next());
             String name = stats.getString(1);
@@ -238,7 +240,7 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
     }
 
     private void setInputForTenant(Job job, String tenantId, String stockTableName, String s) throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, TENANT_ID);
         try (Connection tenantConn = DriverManager.getConnection(getUrl(), props)){
             PhoenixMapReduceUtil.setTenantId(job, tenantId);
@@ -273,7 +275,7 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
         assertTrue("Job didn't complete successfully! Check logs for reason.", job.waitForCompletion(true));
 
         // verify
-        ResultSet stats = DriverManager.getConnection(getUrl()).createStatement()
+        ResultSet stats = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).createStatement()
                 .executeQuery("SELECT * FROM " + stockStatsTableName);
         assertTrue("No data stored in stats table!", stats.next());
         String name = stats.getString(1);

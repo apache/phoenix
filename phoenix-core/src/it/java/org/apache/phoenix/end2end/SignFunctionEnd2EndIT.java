@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.closeStmtAndConn;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -28,6 +29,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 
 import org.apache.phoenix.expression.function.SignFunction;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -50,7 +52,7 @@ public class SignFunctionEnd2EndIT extends ParallelStatsDisabledIT {
         Connection conn = null;
         PreparedStatement stmt = null;
         try {
-            conn = DriverManager.getConnection(getUrl());
+            conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
             String ddl;
             ddl = "CREATE TABLE " + signedTableName
                 + " (k VARCHAR NOT NULL PRIMARY KEY, \"DEC\" DECIMAL, doub DOUBLE, fl FLOAT, inte INTEGER, lon BIGINT, smalli SMALLINT, tinyi TINYINT)";
@@ -139,7 +141,7 @@ public class SignFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSignedNumber() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES));
         testSignedNumberSpec(conn, 0.0, 0);
         testSignedNumberSpec(conn, 1.0, 1);
         testSignedNumberSpec(conn, -1.0, -1);
@@ -149,7 +151,7 @@ public class SignFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testUnsignedNumber() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES));
         testUnsignedNumberSpec(conn, 0.0, 0);
         testUnsignedNumberSpec(conn, 1.0, 1);
         testUnsignedNumberSpec(conn, 123.1234, 1);

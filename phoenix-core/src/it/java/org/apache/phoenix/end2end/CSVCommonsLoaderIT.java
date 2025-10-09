@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -34,6 +35,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Properties;
 
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
@@ -46,11 +48,11 @@ import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.util.CSVCommonsLoader;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.rules.TemporaryFolder;
-
 @Category(ParallelStatsDisabledTest.class)
 public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
 
@@ -110,14 +112,14 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
     @Test
     public void testCSVCommonsUpsert() throws Exception {
         CSVParser parser = null;
-        PhoenixConnection conn = null;
+        PhoenixMonitoredConnection conn = null;
         try {
             String stockTableName = generateUniqueName();
             // Create table
             String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
                     + "(SYMBOL VARCHAR NOT NULL PRIMARY KEY, COMPANY VARCHAR);";
-            conn = DriverManager.getConnection(getUrl()).unwrap(
-                    PhoenixConnection.class);
+            conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(
+                    PhoenixMonitoredConnection.class);
             PhoenixRuntime.executeStatements(conn,
                     new StringReader(statements), null);
 
@@ -153,8 +155,8 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
     @Test
     public void testCSVCommonsUpsert_MultiTenant() throws Exception {
         CSVParser parser = null;
-        PhoenixConnection globalConn = null;
-        PhoenixConnection tenantConn = null;
+        PhoenixMonitoredConnection globalConn = null;
+        PhoenixMonitoredConnection tenantConn = null;
         try {
             String stockTableMultiName = generateUniqueName();
 
@@ -162,14 +164,14 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
             String statements = "CREATE TABLE IF NOT EXISTS " + stockTableMultiName
                     + "(TENANT_ID VARCHAR NOT NULL, SYMBOL VARCHAR NOT NULL, COMPANY VARCHAR," +
                     " CONSTRAINT PK PRIMARY KEY(TENANT_ID,SYMBOL)) MULTI_TENANT = true;";
-            globalConn = DriverManager.getConnection(getUrl()).unwrap(
-                    PhoenixConnection.class);
+            globalConn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(
+                    PhoenixMonitoredConnection.class);
             PhoenixRuntime.executeStatements(globalConn,
                     new StringReader(statements), null);
             globalConn.close();
 
-            tenantConn = new PhoenixTestDriver().connect(getUrl() + ";TenantId=acme", new Properties()).unwrap(
-                    PhoenixConnection.class);
+            tenantConn = new PhoenixTestDriver().connect(getUrl() + ";TenantId=acme", PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(
+                    PhoenixMonitoredConnection.class);
 
             // Upsert CSV file
             CSVCommonsLoader csvUtil = new CSVCommonsLoader(tenantConn, stockTableMultiName,
@@ -203,15 +205,15 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
     @Test
     public void testTDVCommonsUpsert() throws Exception {
         CSVParser parser = null;
-        PhoenixConnection conn = null;
+        PhoenixMonitoredConnection conn = null;
         try {
             String stockTableName = generateUniqueName();
 
             // Create table
             String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
                     + "(SYMBOL VARCHAR NOT NULL PRIMARY KEY, COMPANY VARCHAR);";
-            conn = DriverManager.getConnection(getUrl()).unwrap(
-                    PhoenixConnection.class);
+            conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(
+                    PhoenixMonitoredConnection.class);
             PhoenixRuntime.executeStatements(conn,
                     new StringReader(statements), null);
 
@@ -247,15 +249,15 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
     @Test
     public void testCSVUpsertWithCustomDelimiters() throws Exception {
         CSVParser parser = null;
-        PhoenixConnection conn = null;
+        PhoenixMonitoredConnection conn = null;
         try {
             String stockTableName = generateUniqueName();
 
             // Create table
             String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
                     + "(SYMBOL VARCHAR NOT NULL PRIMARY KEY, COMPANY VARCHAR);";
-            conn = DriverManager.getConnection(getUrl()).unwrap(
-                    PhoenixConnection.class);
+            conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(
+                    PhoenixMonitoredConnection.class);
             PhoenixRuntime.executeStatements(conn,
                     new StringReader(statements), null);
 
@@ -292,15 +294,15 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
     @Test
     public void testCSVUpsertWithColumns() throws Exception {
         CSVParser parser = null;
-        PhoenixConnection conn = null;
+        PhoenixMonitoredConnection conn = null;
         try {
             String stockTableName = generateUniqueName();
 
             // Create table
             String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
                     + "(SYMBOL VARCHAR NOT NULL PRIMARY KEY, COMPANY VARCHAR);";
-            conn = DriverManager.getConnection(getUrl())
-                    .unwrap(PhoenixConnection.class);
+            conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES))
+                    .unwrap(PhoenixMonitoredConnection.class);
             PhoenixRuntime.executeStatements(conn,
                     new StringReader(statements), null);
 
@@ -338,15 +340,15 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
     @Test
     public void testCSVUpsertWithNoColumns() throws Exception {
         CSVParser parser = null;
-        PhoenixConnection conn = null;
+        PhoenixMonitoredConnection conn = null;
         try {
             String stockTableName = generateUniqueName();
 
             // Create table
             String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
                     + "(SYMBOL VARCHAR NOT NULL PRIMARY KEY, COMPANY VARCHAR);";
-            conn = DriverManager.getConnection(getUrl())
-                    .unwrap(PhoenixConnection.class);
+            conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))
+                    .unwrap(PhoenixMonitoredConnection.class);
             PhoenixRuntime.executeStatements(conn,
                     new StringReader(statements), null);
 
@@ -383,15 +385,15 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
     @Test
     public void testCSVUpsertWithBogusColumn() throws Exception {
         CSVParser parser = null;
-        PhoenixConnection conn = null;
+        PhoenixMonitoredConnection conn = null;
         try {
             String stockTableName = generateUniqueName();
 
             // Create table
             String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
                     + "(SYMBOL VARCHAR NOT NULL PRIMARY KEY, COMPANY VARCHAR);";
-            conn = DriverManager.getConnection(getUrl())
-                    .unwrap(PhoenixConnection.class);
+            conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))
+                    .unwrap(PhoenixMonitoredConnection.class);
             PhoenixRuntime.executeStatements(conn,
                     new StringReader(statements), null);
 
@@ -427,15 +429,15 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
     @Test
     public void testCSVUpsertWithInvalidNumericalData_StrictMode() throws Exception {
         CSVParser parser = null;
-        PhoenixConnection conn = null;
+        PhoenixMonitoredConnection conn = null;
         try {
             String stockTableName = generateUniqueName();
 
             // Create table
             String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
                     + "(SYMBOL VARCHAR NOT NULL PRIMARY KEY, COMPANY_ID BIGINT);";
-            conn = DriverManager.getConnection(getUrl())
-                    .unwrap(PhoenixConnection.class);
+            conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))
+                    .unwrap(PhoenixMonitoredConnection.class);
             PhoenixRuntime.executeStatements(conn,
                     new StringReader(statements), null);
 
@@ -461,15 +463,15 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
     @Test
     public void testCSVUpsertWithAllColumn() throws Exception {
         CSVParser parser = null;
-        PhoenixConnection conn = null;
+        PhoenixMonitoredConnection conn = null;
         try {
             String stockTableName = generateUniqueName();
 
             // Create table
             String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
                     + "(SYMBOL VARCHAR NOT NULL PRIMARY KEY, COMPANY VARCHAR);";
-            conn = DriverManager.getConnection(getUrl())
-                    .unwrap(PhoenixConnection.class);
+            conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))
+                    .unwrap(PhoenixMonitoredConnection.class);
             PhoenixRuntime.executeStatements(conn,
                     new StringReader(statements), null);
 
@@ -498,15 +500,15 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
     @Test
     public void testCSVUpsertWithBogusColumnStrict() throws Exception {
         CSVParser parser = null;
-        PhoenixConnection conn = null;
+        PhoenixMonitoredConnection conn = null;
         try {
             String stockTableName = generateUniqueName();
 
             // Create table
             String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
                     + "(SYMBOL VARCHAR NOT NULL PRIMARY KEY, COMPANY VARCHAR);";
-            conn = DriverManager.getConnection(getUrl())
-                    .unwrap(PhoenixConnection.class);
+            conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES))
+                    .unwrap(PhoenixMonitoredConnection.class);
             PhoenixRuntime.executeStatements(conn,
                     new StringReader(statements), null);
 
@@ -534,15 +536,15 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
     @Test
     public void testAllDatatypes() throws Exception {
         CSVParser parser = null;
-        PhoenixConnection conn = null;
+        PhoenixMonitoredConnection conn = null;
         try {
             // Create table
             String statements = "CREATE TABLE IF NOT EXISTS "
                     + DATATYPE_TABLE
                     + " (CKEY VARCHAR NOT NULL PRIMARY KEY,"
                     + "  CVARCHAR VARCHAR, CCHAR CHAR(10), CINTEGER INTEGER, CDECIMAL DECIMAL(31,10), CUNSIGNED_INT UNSIGNED_INT, CBOOLEAN BOOLEAN, CBIGINT BIGINT, CUNSIGNED_LONG UNSIGNED_LONG, CTIME TIME, CDATE DATE);";
-            conn = DriverManager.getConnection(getUrl())
-                    .unwrap(PhoenixConnection.class);
+            conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES))
+                    .unwrap(PhoenixMonitoredConnection.class);
             PhoenixRuntime.executeStatements(conn,
                     new StringReader(statements), null);
 
@@ -592,14 +594,14 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
     @Test
     public void testCSVCommonsUpsertEncapsulatedControlChars() throws Exception {
         CSVParser parser = null;
-        PhoenixConnection conn = null;
+        PhoenixMonitoredConnection conn = null;
         try {
             // Create table
             String statements = "CREATE TABLE IF NOT EXISTS "
                     + ENCAPSULATED_CHARS_TABLE
                     + "(MYKEY VARCHAR NOT NULL PRIMARY KEY, MYVALUE VARCHAR);";
-            conn = DriverManager.getConnection(getUrl())
-                    .unwrap(PhoenixConnection.class);
+            conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES))
+                    .unwrap(PhoenixMonitoredConnection.class);
             PhoenixRuntime.executeStatements(conn,
                     new StringReader(statements), null);
 
@@ -640,14 +642,14 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
     public void testCSVCommonsUpsertBadEncapsulatedControlChars()
             throws Exception {
         CSVParser parser = null;
-        PhoenixConnection conn = null;
+        PhoenixMonitoredConnection conn = null;
         try {
             // Create table
             String statements = "CREATE TABLE IF NOT EXISTS "
                     + ENCAPSULATED_CHARS_TABLE
                     + "(MYKEY VARCHAR NOT NULL PRIMARY KEY, MYVALUE VARCHAR);";
-            conn = DriverManager.getConnection(getUrl())
-                    .unwrap(PhoenixConnection.class);
+            conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES))
+                    .unwrap(PhoenixMonitoredConnection.class);
             PhoenixRuntime.executeStatements(conn,
                     new StringReader(statements), null);
 
@@ -677,14 +679,14 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
     @Test
     public void testCSVCommonsUpsert_WithArray() throws Exception {
         CSVParser parser = null;
-        PhoenixConnection conn = null;
+        PhoenixMonitoredConnection conn = null;
         try {
 
             // Create table
             String statements = "CREATE TABLE IF NOT EXISTS ARRAY_TABLE "
                     + "(ID BIGINT NOT NULL PRIMARY KEY, VALARRAY INTEGER ARRAY);";
-            conn = DriverManager.getConnection(getUrl()).unwrap(
-                    PhoenixConnection.class);
+            conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(
+                    PhoenixMonitoredConnection.class);
             PhoenixRuntime.executeStatements(conn,
                     new StringReader(statements), null);
 
@@ -716,14 +718,14 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
     @Test
     public void testCSVCommonsUpsert_WithTimestamp() throws Exception {
         CSVParser parser = null;
-        PhoenixConnection conn = null;
+        PhoenixMonitoredConnection conn = null;
         try {
 
             // Create table
             String statements = "CREATE TABLE IF NOT EXISTS TS_TABLE "
                     + "(ID BIGINT NOT NULL PRIMARY KEY, TS TIMESTAMP);";
-            conn = DriverManager.getConnection(getUrl()).unwrap(
-                    PhoenixConnection.class);
+            conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(
+                    PhoenixMonitoredConnection.class);
             PhoenixRuntime.executeStatements(conn,
                     new StringReader(statements), null);
 
@@ -756,10 +758,10 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCSVCommonsUpsert_NonExistentTable() throws Exception {
-        PhoenixConnection conn = null;
+        PhoenixMonitoredConnection conn = null;
         try {
-            conn = DriverManager.getConnection(getUrl()).unwrap(
-                    PhoenixConnection.class);
+            conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(
+                    PhoenixMonitoredConnection.class);
             CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, "NONEXISTENTTABLE",
                     null, true, ',', '"', null, "!");
             csvUtil.upsert(
@@ -777,7 +779,7 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
     }
 
     @Test public void testLowerCaseTable() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.setAutoCommit(true);
         String tableName = generateUniqueName().toLowerCase();
         String t1 = generateUniqueName();
@@ -789,7 +791,7 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
         FileUtils.writeStringToFile(tempFile, "'" + t1 + "','x'");
         try {
             CSVCommonsLoader csvLoader =
-                new CSVCommonsLoader(conn.unwrap(PhoenixConnection.class), "" + tableName + "",
+                new CSVCommonsLoader(conn.unwrap(PhoenixMonitoredConnection.class), "" + tableName + "",
                     null, false, ',', '"', '\\', null);
             csvLoader.upsert(tempFile.getAbsolutePath());
         } catch (Exception e) {

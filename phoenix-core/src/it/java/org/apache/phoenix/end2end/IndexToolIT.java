@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.mapreduce.PhoenixJobCounters.INPUT_RECORDS;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT;
@@ -84,7 +85,7 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.end2end.index.IndexTestUtil;
-import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
@@ -117,7 +118,6 @@ import org.junit.runners.Parameterized.BeforeParam;
 import org.junit.runners.Parameterized.Parameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class IndexToolIT extends BaseTest {
@@ -170,7 +170,7 @@ public class IndexToolIT extends BaseTest {
             String transactionProvider, boolean mutable, boolean localIndex,
             boolean useSnapshot, boolean useTenantId, boolean namespaceMapped)
                     throws Exception {
-        if (clusterInitialized && Boolean.valueOf(namespaceMapped).equals(utility.getConfiguration()
+        if (clusterInitialized && Boolean.valueOf(namespaceMapped).equals(getUtility().getConfiguration()
                 .getBoolean(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, true))) {
             //Perf optimization: no need to re-initialize the minicluster
             return;
@@ -199,8 +199,13 @@ public class IndexToolIT extends BaseTest {
             clientProps.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.TRUE.toString());
             clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED,
                 Boolean.toString(namespaceMapped));
-            setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
-                new ReadOnlyProps(clientProps.entrySet().iterator()));
+            if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+                setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()),
+                        new ReadOnlyProps(clientProps.entrySet().iterator()));
+            } else {
+                setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
+                        new ReadOnlyProps(clientProps.entrySet().iterator()));
+            }
         }
     }
 
@@ -257,7 +262,7 @@ public class IndexToolIT extends BaseTest {
         String indexTableName = generateUniqueName();
         String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(), props);
+        PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), props);
         try {
             if(namespaceMapped) {
                 conn.createStatement().execute("CREATE SCHEMA " + schemaName);
@@ -391,7 +396,7 @@ public class IndexToolIT extends BaseTest {
     }
 
     protected static void dropIndexToolTables(Connection conn) throws Exception {
-        Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+        Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin();
         TableName indexToolOutputTable =
             TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME_BYTES);
         admin.disableTable(indexToolOutputTable);
@@ -439,7 +444,7 @@ public class IndexToolIT extends BaseTest {
             throws Exception {
         byte[] indexTableFullNameBytes = Bytes.toBytes(indexTableFullName);
         byte[] dataTableFullNameBytes = Bytes.toBytes(dataTableFullName);
-        Table hIndexTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
+        Table hIndexTable = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices()
                 .getTable(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME_BYTES);
         Scan scan = new Scan();
         ResultScanner scanner = hIndexTable.getScanner(scan);
@@ -474,7 +479,7 @@ public class IndexToolIT extends BaseTest {
         assertTrue("IndexTableNameCheck was false", indexTableNameCheck);
         assertTrue("Error message cell was null", errorMessageCell != null);
         verifyIndexTableRowKey(CellUtil.cloneRow(errorMessageCell), indexTableFullName);
-        hIndexTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
+        hIndexTable = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices()
                 .getTable(IndexVerificationResultRepository.RESULT_TABLE_NAME_BYTES);
         scan = new Scan();
         scanner = hIndexTable.getScanner(scan);
@@ -544,7 +549,7 @@ public class IndexToolIT extends BaseTest {
             assertFalse(rs.next());
 
             // Remove from tenant view index and build.
-            ConnectionQueryServices queryServices = connGlobal.unwrap(PhoenixConnection.class).getQueryServices();
+            ConnectionQueryServices queryServices = connGlobal.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
             Admin admin = queryServices.getAdmin();
             TableName tableName = TableName.valueOf(viewIndexTableName);
             admin.disableTable(tableName);
@@ -638,7 +643,7 @@ public class IndexToolIT extends BaseTest {
         String indexTableName = generateUniqueName();
         try (Connection conn =
                 DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
-                Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+                Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin()) {
             if(namespaceMapped) {
                 conn.createStatement().execute("CREATE SCHEMA " + schemaName);
             }
@@ -988,8 +993,8 @@ public class IndexToolIT extends BaseTest {
             props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         }
 
-        try (PhoenixConnection conn =
-                (PhoenixConnection) DriverManager.getConnection(getUrl(), props)) {
+        try (PhoenixMonitoredConnection conn =
+                (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), props)) {
             PTable indexTable = conn.getTableNoCache(SchemaUtil
                     .normalizeFullTableName(SchemaUtil.getTableName(schemaName, indexTableName)));
             PTable dataTable = conn.getTableNoCache(SchemaUtil
@@ -1082,7 +1087,7 @@ public class IndexToolIT extends BaseTest {
             assertEquals(0, counters.findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
             // The index scrutiny run will trigger index repair on all unverified rows, and they will be repaired or
             // deleted (since the age threshold is set to zero ms for these tests
-            PTable pIndexTable = conn.unwrap(PhoenixConnection.class).getTable(fullIndexName);
+            PTable pIndexTable = conn.unwrap(PhoenixMonitoredConnection.class).getTable(fullIndexName);
             if (pIndexTable.getIndexType() != PTable.IndexType.UNCOVERED_GLOBAL) {
                 assertEquals(0, counters.findCounter(BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT).getValue());
             }
@@ -1102,7 +1107,7 @@ public class IndexToolIT extends BaseTest {
             assertEquals(0, counters.findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
             // Truncate, rebuild and verify the index table
             TableName physicalTableName = TableName.valueOf(pIndexTable.getPhysicalName().getBytes());
-            PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+            PhoenixMonitoredConnection pConn = conn.unwrap(PhoenixMonitoredConnection.class);
             try (Admin admin = pConn.getQueryServices().getAdmin()) {
                 admin.disableTable(physicalTableName);
                 admin.truncateTable(physicalTableName, true);

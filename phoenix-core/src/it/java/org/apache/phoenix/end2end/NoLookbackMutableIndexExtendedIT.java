@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 
@@ -35,6 +36,7 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
@@ -50,7 +52,6 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
 public class NoLookbackMutableIndexExtendedIT extends BaseTest {
@@ -61,6 +62,11 @@ public class NoLookbackMutableIndexExtendedIT extends BaseTest {
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     public NoLookbackMutableIndexExtendedIT(Boolean localIndex, String txProvider, Boolean columnEncoded) {
@@ -133,14 +139,14 @@ public class NoLookbackMutableIndexExtendedIT extends BaseTest {
             conn.commit();
 
             // disable the index, simulating an index write failure
-            PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+            PhoenixMonitoredConnection pConn = conn.unwrap(PhoenixMonitoredConnection.class);
             IndexUtil.updateIndexState(pConn, indexTableFullName, PIndexState.DISABLE,
                     EnvironmentEdgeManager.currentTimeMillis());
 
             // major compaction should not remove the deleted row
             hRegion.flush(true);
             hRegion.compact(true);
-            Table dataTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
+            Table dataTable = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices()
                             .getTable(Bytes.toBytes(dataTableFullName));
             assertEquals(1, TestUtil.getRawRowCount(dataTable));
 
@@ -151,7 +157,7 @@ public class NoLookbackMutableIndexExtendedIT extends BaseTest {
 
             // now major compaction should remove the deleted row
             hRegion.compact(true);
-            dataTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
+            dataTable = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices()
                             .getTable(Bytes.toBytes(dataTableFullName));
             assertEquals(0, TestUtil.getRawRowCount(dataTable));
         }

@@ -30,6 +30,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.AfterClass;
@@ -39,8 +40,9 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertFalse;
-
 @Category(NeedsOwnMiniClusterTest.class)
 public class IndexToolTimeRangeIT extends BaseTest {
     private static final String
@@ -113,8 +115,12 @@ public class IndexToolTimeRangeIT extends BaseTest {
         clientProps.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(5));
         clientProps.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         clientProps.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.TRUE.toString());
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
-                new ReadOnlyProps(clientProps.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
+                    new ReadOnlyProps(clientProps.entrySet().iterator()));
+        }
     }
 
     private int countRowsInIndex() throws SQLException {
@@ -129,7 +135,7 @@ public class IndexToolTimeRangeIT extends BaseTest {
     }
 
     private static Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(getUrl());
+        return DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
     }
 
     @Test

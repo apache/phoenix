@@ -32,6 +32,7 @@ import org.apache.commons.csv.CSVRecord;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.function.EncodeFormat;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.IllegalDataException;
@@ -130,7 +131,7 @@ public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
         SimpleDatatypeConversionFunction(PDataType dataType, Connection conn) {
             ReadOnlyProps props;
             try {
-                props = conn.unwrap(PhoenixConnection.class).getQueryServices().getProps();
+                props = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getProps();
             } catch (SQLException e) {
                 throw new RuntimeException(e);
             }

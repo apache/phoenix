@@ -32,7 +32,6 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(ParallelStatsDisabledTest.class)
 public class SerialIteratorsIT extends ParallelStatsDisabledIT {
     private String tableName = generateUniqueName();

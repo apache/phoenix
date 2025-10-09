@@ -67,7 +67,7 @@ import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -83,7 +83,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 
 @Category(ParallelStatsDisabledTest.class)
 public class DateTimeIT extends ParallelStatsDisabledIT {
@@ -207,7 +206,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Before
     public void setUp() throws SQLException {
-        conn = DriverManager.getConnection(getUrl());
+        conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES));
         this.tableName = initAtable();
     }
 
@@ -1786,7 +1785,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         String tablename=generateUniqueName();
         String tenantId = getOrganizationId();
         String query = "SELECT feature FROM "+tablename+" WHERE organization_id = ? and date + 1 >= ?";
-        Connection conn = DriverManager.getConnection(url);
+        Connection conn = DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             Date startDate = new Date(System.currentTimeMillis());
             Date endDate = new Date(startDate.getTime() + 8 * QueryConstants.MILLIS_IN_DAY);
@@ -1852,7 +1851,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         String tablename = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + tablename +
                 " (PK INTEGER PRIMARY KEY, A_TIMESTAMP TIMESTAMP)";
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty("phoenix.query.dateFormatTimeZone", TimeZone.getDefault().toString());
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
@@ -2154,7 +2153,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
     }
 
     public void testDateFormatTimeZone(String timeZoneId) throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty("phoenix.query.dateFormatTimeZone", timeZoneId);
         Connection conn1 = DriverManager.getConnection(getUrl(), props);
 
@@ -2167,7 +2166,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         try {
             conn1.createStatement().execute(ddl);
 
-            PhoenixConnection pConn = conn1.unwrap(PhoenixConnection.class);
+            PhoenixMonitoredConnection pConn = conn1.unwrap(PhoenixMonitoredConnection.class);
             verifyTimeZoneIDWithConn(pConn, PDate.INSTANCE, timeZoneId);
             verifyTimeZoneIDWithConn(pConn, PTime.INSTANCE, timeZoneId);
             verifyTimeZoneIDWithConn(pConn, PTimestamp.INSTANCE, timeZoneId);
@@ -2205,7 +2204,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         }
     }
 
-    private void verifyTimeZoneIDWithConn(PhoenixConnection conn, PDataType dataType, String timeZoneId) {
+    private void verifyTimeZoneIDWithConn(PhoenixMonitoredConnection conn, PDataType dataType, String timeZoneId) throws SQLException {
         Format formatter = conn.getFormatter(dataType);
         verifyTimeZoneIDWithFormatter(formatter, timeZoneId);
     }

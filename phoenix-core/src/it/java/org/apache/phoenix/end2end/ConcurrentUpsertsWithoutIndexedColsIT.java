@@ -23,6 +23,7 @@ import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.RunUntilFailure;
 import org.apache.phoenix.util.TestUtil;
@@ -44,8 +45,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static org.apache.phoenix.end2end.IndexToolIT.verifyIndexTable;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertTrue;
-
 
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(RunUntilFailure.class)
@@ -64,7 +66,11 @@ public class ConcurrentUpsertsWithoutIndexedColsIT
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
-        setUpTestDriver(new ReadOnlyProps(PROPS.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(PROPS.entrySet().iterator()),new ReadOnlyProps(PROPS.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(PROPS.entrySet().iterator()));
+        }
     }
 
     @Test
@@ -74,7 +80,7 @@ public class ConcurrentUpsertsWithoutIndexedColsIT
         final int nRows = 997;
         final String tableName = generateUniqueName();
         final String indexName = generateUniqueName();
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("CREATE TABLE " + tableName
             + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, a.v1 INTEGER, "
             + "b.v2 INTEGER, c.v3 INTEGER, d.v4 INTEGER,"
@@ -116,7 +122,7 @@ public class ConcurrentUpsertsWithoutIndexedColsIT
         @Override
         public void run() {
             try {
-                Connection conn = DriverManager.getConnection(getUrl());
+                Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                 for (int i = 0; i < 1000; i++) {
                     if (RANDOM.nextInt() % 1000 < 10) {
                         // Do not include the indexed column in upserts

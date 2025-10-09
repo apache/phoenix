@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -32,10 +33,10 @@ import java.sql.ResultSet;
 import java.sql.Time;
 import java.sql.Timestamp;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(ParallelStatsDisabledTest.class)
 public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
@@ -44,7 +45,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
     @Before
     public void initTable() throws Exception {
         tableName = generateUniqueName();
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String ddl = "CREATE TABLE " + tableName
             + " (region_name VARCHAR PRIMARY KEY,length1 INTEGER, length2 INTEGER,\"DATE\" DATE,\"time\" TIME,\"timestamp\" TIMESTAMP,\"varchar\" VARCHAR,\"integer\" INTEGER,\"double\" DOUBLE,\"bigint\" BIGINT,\"char\" CHAR(15),double1 DOUBLE,char1 CHAR(17),nullcheck INTEGER,chars2 CHAR(15)[], varchars2 VARCHAR[])";
         conn.createStatement().execute(ddl);
@@ -74,7 +75,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayFillFunctionVarchar() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
@@ -91,7 +92,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayFillFunctionInteger() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
@@ -108,7 +109,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayFillFunctionDouble() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         
 
         ResultSet rs;
@@ -126,7 +127,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayFillFunctionBigint() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         
 
         ResultSet rs;
@@ -144,7 +145,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayFillFunctionChar() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         
 
         ResultSet rs;
@@ -161,7 +162,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayFillFunctionVarChar() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         
 
         ResultSet rs;
@@ -178,7 +179,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayFillFunctionDate() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         
 
         ResultSet rs;
@@ -195,7 +196,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayFillFunctionTime() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         
 
         ResultSet rs;
@@ -212,7 +213,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayFillFunctionTimestamp() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         
 
         ResultSet rs;
@@ -229,7 +230,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test(expected = IllegalArgumentException.class)
     public void testArrayFillFunctionInvalidLength1() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         
 
         ResultSet rs;
@@ -247,7 +248,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test(expected = IllegalArgumentException.class)
     public void testArrayFillFunctionInvalidLength2() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         
 
         ResultSet rs;
@@ -265,7 +266,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayFillFunctionWithNestedFunctions1() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         
 
         ResultSet rs;
@@ -284,7 +285,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayFillFunctionWithNestedFunctions2() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         
 
         ResultSet rs;
@@ -303,7 +304,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayFillFunctionWithNestedFunctions3() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         
 
         ResultSet rs;
@@ -322,7 +323,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayFillFunctionWithUpsert1() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String regions = generateUniqueName();
         String ddl =
@@ -349,7 +350,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayFillFunctionWithUpsert2() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String regions = generateUniqueName();
         String ddl =
@@ -376,7 +377,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayFillFunctionWithUpsert3() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String regions = generateUniqueName();
         String ddl =
@@ -403,7 +404,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayFillFunctionWithUpsertSelect1() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String ddl = "CREATE TABLE source (region_name VARCHAR PRIMARY KEY,doubles DOUBLE[])";
         conn.createStatement().execute(ddl);
@@ -445,7 +446,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayFillFunctionWithUpsertSelect2() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String source = generateUniqueName();
         String ddl =
@@ -496,7 +497,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayFillFunctionInWhere1() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         
 
         ResultSet rs;
@@ -510,7 +511,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayFillFunctionInWhere2() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         
 
         ResultSet rs;
@@ -524,7 +525,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayFillFunctionInWhere3() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         
 
         ResultSet rs;
@@ -538,7 +539,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayFillFunctionInWhere4() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         
 
         ResultSet rs;
@@ -552,7 +553,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayFillFunctionInWhere5() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         
 
         ResultSet rs;
@@ -566,7 +567,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayFillFunctionInWhere6() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         
 
         ResultSet rs;
@@ -580,7 +581,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayFillFunctionInWhere7() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         
 
         ResultSet rs;

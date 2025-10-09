@@ -40,7 +40,6 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(ParallelStatsDisabledTest.class)
 public class Array2IT extends ArrayIT {
 

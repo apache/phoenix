@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -35,6 +37,7 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
@@ -42,7 +45,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
@@ -55,7 +58,6 @@ import org.junit.runners.Parameterized.Parameters;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.transaction.TransactionFactory;
-
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class IndexBuildTimestampIT extends BaseTest {
@@ -102,8 +104,13 @@ public class IndexBuildTimestampIT extends BaseTest {
         clientProps.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(5));
         clientProps.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         clientProps.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.TRUE.toString());
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
-            new ReadOnlyProps(clientProps.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
+                    new ReadOnlyProps(clientProps.entrySet().iterator()));
+        }
+        ;
     }
 
     @Parameters(
@@ -162,7 +169,7 @@ public class IndexBuildTimestampIT extends BaseTest {
     }
 
     private void populateTable(String tableName, MyClock clock1, MyClock clock2) throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("create table " + tableName +
                 " (id varchar(10) not null primary key, val varchar(10), ts timestamp)" + tableDDLOptions);
 
@@ -175,7 +182,7 @@ public class IndexBuildTimestampIT extends BaseTest {
         conn.commit();
         conn.close();
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty("CurrentSCN", Long.toString(clock1.initialTime()));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs = conn.createStatement().executeQuery("select * from " + tableName);
@@ -223,10 +230,10 @@ public class IndexBuildTimestampIT extends BaseTest {
             MyClock clock3 = new MyClock(300000);
             EnvironmentEdgeManager.injectEdge(clock3);
 
-            Properties props = new Properties();
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS, "true");
             props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS, "true");
-            PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(), props);
+            PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), props);
 
             String viewName = null;
             if (view) {
@@ -247,7 +254,7 @@ public class IndexBuildTimestampIT extends BaseTest {
 
             // Verify the index timestamps via Phoenix
             String selectSql = String.format("SELECT * FROM %s WHERE val = 'abc'", (view ? viewName : dataTableName));
-            conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
+            conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES));
             // assert we are pulling from index table
             assertExplainPlan(conn, localIndex, selectSql, dataTableName, (view && !localIndex ?
                     "_IDX_" + dataTableName : indexName));
@@ -271,7 +278,7 @@ public class IndexBuildTimestampIT extends BaseTest {
 
             // Verify the index timestamps via HBase
             PTable pIndexTable = conn.getTable(indexName);
-            Table table = conn.unwrap(PhoenixConnection.class).getQueryServices()
+            Table table = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices()
                     .getTable(pIndexTable.getPhysicalName().getBytes());
 
             Scan scan = new Scan();

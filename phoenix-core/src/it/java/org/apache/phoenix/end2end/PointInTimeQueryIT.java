@@ -43,7 +43,6 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
 
-
 @Category(NeedsOwnMiniClusterTest.class)
 public class PointInTimeQueryIT extends BaseQueryIT {
 
@@ -95,7 +94,7 @@ public class PointInTimeQueryIT extends BaseQueryIT {
         
         // Delete row at timestamp 3. This should not be seen by the query executing
         // Remove column value at ts + 1 (i.e. equivalent to setting the value to null)
-        try (Connection futureConn = DriverManager.getConnection(getUrl())) {
+        try (Connection futureConn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             PreparedStatement stmt = futureConn.prepareStatement("delete from " + tableName + " where organization_id=? and entity_id=?");
             stmt.setString(1, tenantId);
             stmt.setString(2, ROW6);

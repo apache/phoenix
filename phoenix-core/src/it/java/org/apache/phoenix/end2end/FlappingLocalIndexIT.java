@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -50,13 +51,13 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 public class FlappingLocalIndexIT extends BaseLocalIndexIT {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(FlappingLocalIndexIT.class);
@@ -71,7 +72,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
         String indexName = "IDX_" + generateUniqueName();
 
         createBaseTable(tableName, null, "('e','i','o')");
-        Connection conn1 = DriverManager.getConnection(getUrl());
+        Connection conn1 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             conn1.createStatement().execute("UPSERT INTO " + tableName + " values('b',1,2,4,'z')");
             conn1.createStatement().execute("UPSERT INTO " + tableName + " values('f',1,2,3,'a')");
@@ -81,7 +82,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
             conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
             conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + "2 ON " + tableName + "(k3)");
             conn1.commit();
-            conn1 = DriverManager.getConnection(getUrl());
+            conn1 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
             ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + tableName);
             assertTrue(rs.next());
             assertEquals(4, rs.getInt(1));
@@ -96,7 +97,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
         String indexName = "IDX_" + generateUniqueName();
 
         createBaseTable(tableName, 3, null);
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.SCAN_RESULT_CHUNK_SIZE, "2");
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
         Connection conn1 = DriverManager.getConnection(getUrl(), props);
@@ -145,7 +146,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
         String indexPhysicalTableName = physicalTableName.getNameAsString();
 
         createBaseTable(tableName, null, "('e','i','o')");
-        Connection conn1 = DriverManager.getConnection(getUrl());
+        Connection conn1 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try{
             conn1.createStatement().execute("UPSERT INTO " + tableName + " values('a',1,2,5,'y')");
             conn1.createStatement().execute("UPSERT INTO " + tableName + " values('b',1,2,4,'z')");
@@ -159,7 +160,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
             ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + indexTableName);
             assertTrue(rs.next());
             
-            Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+            Admin admin = driver.getConnectionQueryServices(getActiveUrl(), TEST_PROPERTIES).getAdmin();
             int numRegions = admin.getRegions(physicalTableName).size();
             int trimmedRegionLocations = admin.getConfiguration()
                 .getInt(QueryServices.MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN, -1);
@@ -335,7 +336,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
         String indexPhysicalTableName = physicalTableName.getNameAsString();
 
         createBaseTable(tableName, null, "('e','i','o')");
-        Connection conn1 = DriverManager.getConnection(getUrl());
+        Connection conn1 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn1.createStatement().execute("UPSERT INTO "+tableName+" values('b',1,2,4,'z')");
         conn1.createStatement().execute("UPSERT INTO "+tableName+" values('f',1,2,3,'z')");
         conn1.createStatement().execute("UPSERT INTO "+tableName+" values('j',2,4,2,'a')");
@@ -345,7 +346,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
         ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + indexTableName);
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
-        Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getActiveUrl(), TEST_PROPERTIES).getAdmin();
         org.apache.hadoop.hbase.client.Connection hbaseConn = admin.getConnection();
         Table indexTable = hbaseConn.getTable(TableName.valueOf(indexPhysicalTableName));
         Pair<byte[][], byte[][]> startEndKeys = hbaseConn.getRegionLocator(TableName.valueOf(indexPhysicalTableName)).getStartEndKeys();
@@ -384,13 +385,13 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
         TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
 
         createBaseTable(tableName, null, null, coveredIndex ? "cf" : null);
-        Connection conn1 = DriverManager.getConnection(getUrl());
+        Connection conn1 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn1.createStatement().execute("UPSERT INTO "+tableName+" values('b',1,2,4,'z')");
         conn1.createStatement().execute("UPSERT INTO "+tableName+" values('f',1,2,3,'z')");
         conn1.createStatement().execute("UPSERT INTO "+tableName+" values('j',2,4,2,'a')");
         conn1.createStatement().execute("UPSERT INTO "+tableName+" values('q',3,1,1,'c')");
         conn1.commit();
-        Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getActiveUrl(), TEST_PROPERTIES).getAdmin();
         TableDescriptor tableDescriptor = admin.getDescriptor(physicalTableName);
         tableDescriptor = TableDescriptorBuilder.newBuilder(tableDescriptor).setCoprocessor(
                 CoprocessorDescriptorBuilder

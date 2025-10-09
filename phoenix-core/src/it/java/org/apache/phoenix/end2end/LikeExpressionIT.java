@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.closeStmtAndConn;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -29,10 +30,10 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(ParallelStatsDisabledTest.class)
 public class LikeExpressionIT extends ParallelStatsDisabledIT {
 
@@ -44,7 +45,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
         Connection conn = null;
         PreparedStatement stmt = null;
         try {
-            conn = DriverManager.getConnection(getUrl());
+            conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
             String ddl;
             ddl = "CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY, i INTEGER)";
             conn.createStatement().execute(ddl);
@@ -84,7 +85,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testLikeExpression() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         // wildcard
         testLikeExpression(conn, "%1%3%7%2%", 3, 7);
         // CaseSensitive
@@ -94,7 +95,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testLikeEverythingExpression() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String table = generateUniqueName();
         String ddl = "CREATE TABLE " + table
                 + " (k1 VARCHAR, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2))";
@@ -153,7 +154,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testLikeWithEscapenLParen() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String t = generateUniqueName();
         String ddl = "CREATE TABLE " + t + " (k VARCHAR, v VARCHAR, CONSTRAINT pk PRIMARY KEY (k))";
         conn.createStatement().execute(ddl);
@@ -175,7 +176,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testNewLine() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String t = generateUniqueName();
         String ddl = "CREATE TABLE " + t + " (k VARCHAR NOT NULL PRIMARY KEY)";
         conn.createStatement().execute(ddl);
@@ -204,7 +205,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testOneChar() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String t = generateUniqueName();
         String ddl = "CREATE TABLE " + t + " (k VARCHAR NOT NULL PRIMARY KEY)";
         conn.createStatement().execute(ddl);
@@ -227,7 +228,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testNull() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String table = generateUniqueName();
         String ddl = "CREATE TABLE " + table
                 + " (pk INTEGER PRIMARY KEY, str VARCHAR)";
@@ -304,7 +305,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
                 "create table " + tableName
                         + " (id integer not null primary key, cf.col1 varchar, cf.col2 varchar, cf2.col3 varchar, cf2.col4 varchar)";
         String upsert = "UPSERT INTO " + tableName + " VALUES (?, ?, ?, ?, ?)";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(ddl);
             PreparedStatement stmt = conn.prepareStatement(upsert);
             for (int i = 1; i <= 10; i++) {
@@ -364,7 +365,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
                 "create table " + tableName
                         + " (id integer not null primary key, cf.col1 varchar, cf.col2 varchar, cf.col3 varchar, cf.col4 varchar)";
         String upsert = "UPSERT INTO " + tableName + " VALUES (?, ?, ?, ?, ?)";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(ddl);
             PreparedStatement stmt = conn.prepareStatement(upsert);
             for (int i = 1; i <= 10; i++) {
@@ -419,7 +420,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testParameterizedLikeExpression() throws Exception {
-        final Connection conn = DriverManager.getConnection(getUrl());
+        final Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         final PreparedStatement select = conn.prepareStatement(
                 "select k from " + tableName + " where k like ?");
         select.setString(1, "12%");
@@ -442,7 +443,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
         String likeSelect = "SELECT * FROM " + table + " WHERE USER_NAME LIKE 'Some Name'";
         String iLikeSelect = "SELECT * FROM " + table + " WHERE USER_NAME ILIKE 'soMe nAme'";
 
-        try(Connection conn = DriverManager.getConnection(getUrl())) {
+        try(Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.setAutoCommit(true);
             conn.createStatement().execute(createTable);
             conn.createStatement().executeUpdate(upsertTable);
@@ -462,7 +463,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String indexName = tableName + "_IDX";
 
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + tableName +
                     " (id integer primary key, name varchar, type integer, status integer )");
@@ -594,7 +595,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String indexName = tableName + "_IDX";
 
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + tableName +
                     " (id integer primary key, name char(5), type integer, status integer )");
@@ -726,7 +727,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String indexName = tableName + "_IDX";
 
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + tableName +
                     " (id integer primary key, name varchar, type integer, status integer )");
@@ -858,7 +859,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String indexName = tableName + "_IDX";
 
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + tableName +
                     " (id integer primary key, name char(5), type integer, status integer )");
@@ -989,7 +990,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
     public void testLikeWithDesc() throws Exception {
         String tableName = generateUniqueName();
 
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + tableName + " (id varchar, name varchar, type decimal, "
                     + "status integer CONSTRAINT pk PRIMARY KEY(id desc, type))");
@@ -1116,8 +1117,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
     @Test
     public void testLikeWithFixedWidthDesc() throws Exception {
         String tableName = generateUniqueName();
-
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + tableName + " (id char(5) not null, name varchar," +
                     " type decimal, status integer CONSTRAINT pk PRIMARY KEY(id desc, type))");
@@ -1245,7 +1245,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
     public void testLikeWithAsc() throws Exception {
         String tableName = generateUniqueName();
 
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + tableName + " (id varchar, name varchar, type decimal, "
                     + "status integer CONSTRAINT pk PRIMARY KEY(id, type))");
@@ -1373,7 +1373,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
     public void testLikeWithFixedWidthAsc() throws Exception {
         String tableName = generateUniqueName();
 
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + tableName + " (id char(5) not null, name varchar," +
                     " type decimal, status integer CONSTRAINT pk PRIMARY KEY(id, type))");
@@ -1502,7 +1502,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String indexName = tableName + "_IDX";
 
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + tableName +
                     " (id integer primary key, name varchar, type integer, status integer )");
@@ -1634,7 +1634,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String indexName = tableName + "_IDX";
 
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + tableName +
                     " (id integer primary key, name char(5), type integer, status integer )");
@@ -1766,7 +1766,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String indexName = tableName + "_IDX";
 
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + tableName +
                     " (id integer primary key, name varchar, type integer, status integer)");
@@ -1898,7 +1898,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String indexName = tableName + "_IDX";
 
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + tableName +
                     " (id integer primary key, name char(5), type integer, status integer)");

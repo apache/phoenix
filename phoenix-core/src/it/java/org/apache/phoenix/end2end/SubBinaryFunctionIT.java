@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Assert;
 import org.junit.Test;
@@ -28,13 +29,14 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 @Category(ParallelStatsDisabledTest.class)
 public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testBinary() throws Exception {
         String tableName = generateUniqueName();
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("CREATE TABLE " + tableName + "(" +
                 "    id INTEGER NOT NULL,\n" +
                 "    BIN_PK BINARY(4) NOT NULL,\n" +
@@ -98,7 +100,7 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testVarbinary() throws Exception {
         String tableName = generateUniqueName();
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("CREATE TABLE " + tableName + "(" +
                 "    id INTEGER NOT NULL,\n" +
                 "    BIN_PK VARBINARY NOT NULL,\n" +
@@ -163,7 +165,7 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testVarbinaryEncoded() throws Exception {
         String tableName = generateUniqueName();
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("CREATE TABLE " + tableName + "(" +
                 "    id INTEGER NOT NULL,\n" +
                 "    BIN_PK VARBINARY_ENCODED NOT NULL,\n" +
@@ -270,7 +272,7 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testSubBinaryFunction() throws Exception {
         String tableName = generateUniqueName();
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("CREATE TABLE " + tableName + "(" +
                 "    id INTEGER PRIMARY KEY,\n" +
                 "    VAR_BIN_COL VARBINARY,\n" +
@@ -333,7 +335,7 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testExplainPlanWithSubBinaryFunctionInPK() throws Exception {
         String tableName = generateUniqueName();
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("CREATE TABLE " + tableName
                 + " (id INTEGER NOT NULL, VAR_BIN_COL VARBINARY NOT NULL, DESCRIPTION VARCHAR CONSTRAINT pk PRIMARY KEY (id, VAR_BIN_COL))");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES (1, X'0102030405', 'desc1')");

@@ -55,6 +55,7 @@ import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.index.PhoenixIndexCodec;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
 import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
@@ -693,12 +694,12 @@ public class IndexUtil {
         return family.indexOf(LOCAL_INDEX_COLUMN_FAMILY_PREFIX) != -1;
     }
 
-    public static void updateIndexState(PhoenixConnection conn, String indexTableName,
-            PIndexState newState, Long indexDisableTimestamp) throws SQLException {
+    public static void updateIndexState(PhoenixMonitoredConnection conn, String indexTableName,
+                                        PIndexState newState, Long indexDisableTimestamp) throws SQLException {
         updateIndexState(conn, indexTableName, newState, indexDisableTimestamp, HConstants.LATEST_TIMESTAMP);
     }
     
-    public static void updateIndexState(PhoenixConnection conn, String indexTableName,
+    public static void updateIndexState(PhoenixMonitoredConnection conn, String indexTableName,
     		PIndexState newState, Long indexDisableTimestamp, Long expectedMaxTimestamp) throws SQLException {
     	byte[] indexTableKey = SchemaUtil.getTableKeyFromFullName(indexTableName);
     	String schemaName = SchemaUtil.getSchemaNameFromFullName(indexTableName);

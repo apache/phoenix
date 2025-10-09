@@ -30,6 +30,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.mapreduce.PhoenixJobCounters;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
 import org.apache.phoenix.mapreduce.index.SourceTargetColumnNames.DataSourceColNames;
@@ -249,7 +250,7 @@ public class IndexScrutinyTableOutput {
      */
     public static ResultSet queryAllMetadata(Connection conn, String qSourceTableName,
             String qTargetTableName, long scrutinyTimeMillis) throws SQLException {
-        PTable pMetadata = conn.unwrap(PhoenixConnection.class).getTable(
+        PTable pMetadata = conn.unwrap(PhoenixMonitoredConnection.class).getTable(
                 OUTPUT_METADATA_TABLE_NAME);
         List<String> metadataCols = SchemaUtil.getColumnNames(pMetadata.getColumns());
         return queryMetadata(conn, metadataCols, qSourceTableName, qTargetTableName,

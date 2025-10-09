@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -44,6 +45,7 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.QueryServices;
@@ -94,7 +96,11 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = getServerProperties();
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), ReadOnlyProps.EMPTY_PROPS);
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()), ReadOnlyProps.EMPTY_PROPS);
+        } else {
+            setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), ReadOnlyProps.EMPTY_PROPS);
+        }
     }
     
     @Test
@@ -107,10 +113,10 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
         props.setProperty(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         props.setProperty(QueryServices.EXPLAIN_ROW_COUNT_ATTRIB, Boolean.FALSE.toString());
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceEnabled));
-        final PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(),
+        final PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(),
                 props);
         Statement stmt = conn.createStatement();
-        try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();){
+        try (Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin();){
             if (isNamespaceEnabled) {
                 conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
             }

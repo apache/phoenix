@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.mapreduce.index.IndexUpgradeTool.ROLLBACK_OP;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
@@ -60,8 +61,8 @@ import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.mapreduce.index.IndexUpgradeTool;
 import org.apache.phoenix.query.BaseTest;
@@ -93,7 +94,6 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(NeedsOwnMiniClusterTest.class)
 public class CreateTableIT extends ParallelStatsDisabledIT {
     @BeforeClass
@@ -101,12 +101,16 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
         props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     @Test
     public void testStartKeyStopKey() throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE " + tableName
@@ -131,7 +135,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 writer.newLine();
                 writer.write("EZ");
             }
-            Properties props = new Properties();
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             Connection conn = DriverManager.getConnection(getUrl(), props);
             String tableName = generateUniqueName();
             conn.createStatement().execute("CREATE TABLE " + tableName
@@ -164,7 +168,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 writer.newLine();
                 writer.write("EZ");
             }
-            Properties props = new Properties();
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             Connection conn = DriverManager.getConnection(getUrl(), props);
             String tableName = generateUniqueName();
             String createTableSql = "CREATE TABLE " + tableName
@@ -191,7 +195,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
      */
     @Test
     public void testSplitsWithBadFileName() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         try {
@@ -211,7 +215,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
      */
     @Test
     public void testSplitsWithBothSplitPointsAndSplitFileProvided() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         try {
@@ -228,7 +232,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCreateAlterTableWithDuplicateColumn() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         int failureCount = 0;
         int expectedExecCount = 0;
         String tableName = generateUniqueName();
@@ -360,7 +364,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
     public void testCreateTable() throws Exception {
         String schemaName = "TEST";
         String tableName = schemaName + generateUniqueName();
-        Properties props = new Properties();
+        Properties props =PropertiesUtil.deepCopy(TEST_PROPERTIES);
 
         String ddl =
                 "CREATE TABLE " + tableName + "(                data.addtime VARCHAR ,\n"
@@ -391,7 +395,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute(ddl);
         }
-        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getActiveUrl(), props).getAdmin();
         assertNotNull(admin.getDescriptor(TableName.valueOf(tableName)));
         ColumnFamilyDescriptor[] columnFamilies =
                 admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
@@ -426,7 +430,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCreateMultiTenantTable() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String ddl =
@@ -459,10 +463,10 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                         + " col1 integer NOT NULL," + " col2 bigint NOT NULL,"
                         + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)"
                         + " ) TTL=86400, SALT_BUCKETS = 4";
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
-        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getActiveUrl(), props).getAdmin();
         ColumnFamilyDescriptor[] columnFamilies =
                 admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(1, columnFamilies.length);
@@ -480,11 +484,11 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             + "COL2 BIGINT,"
             + "COL3 BIGINT,"
             + "COL4 BIGINT) ";
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
         
-        int maxIndexes = conn.unwrap(PhoenixConnection.class).getQueryServices().getProps().getInt(
+        int maxIndexes = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getProps().getInt(
         		QueryServices.MAX_INDEXES_PER_TABLE, QueryServicesOptions.DEFAULT_MAX_INDEXES_PER_TABLE);
 
         // Use local indexes since there's only one physical table for all of them.
@@ -514,10 +518,10 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                         + " col1 integer NOT NULL," + " b.col2 bigint," + " c.col3 bigint, "
                         + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
                         + " ) TTL=86400, SALT_BUCKETS = 4";
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
-        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getActiveUrl(), props).getAdmin();
         ColumnFamilyDescriptor[] columnFamilies =
                 admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(2, columnFamilies.length);
@@ -543,10 +547,10 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                         + " col1 integer NOT NULL," + " b.col2 bigint," + " col3 bigint, "
                         + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
                         + " ) TTL=86400, SALT_BUCKETS = 4";
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
-        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getActiveUrl(), props).getAdmin();
         ColumnFamilyDescriptor[] columnFamilies =
                 admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(2, columnFamilies.length);
@@ -573,10 +577,10 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                         + " col1 integer NOT NULL," + " b.col2 bigint," + " col3 bigint, "
                         + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
                         + " ) b.BLOCKSIZE=50000, SALT_BUCKETS = 4";
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
-        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getActiveUrl(), props).getAdmin();
         ColumnFamilyDescriptor[] columnFamilies =
                 admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(2, columnFamilies.length);
@@ -600,10 +604,10 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                         + " col1 integer NOT NULL," + " b.col2 bigint," + " c.col3 bigint, "
                         + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
                         + " ) b.BLOCKSIZE=50000, c.BLOCKSIZE=60000, SALT_BUCKETS = 4";
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
-        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getActiveUrl(), props).getAdmin();
         ColumnFamilyDescriptor[] columnFamilies =
                 admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(2, columnFamilies.length);
@@ -625,10 +629,10 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                         + " col1 integer NOT NULL," + " col2 bigint," + " col3 bigint, "
                         + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
                         + " ) DEFAULT_COLUMN_FAMILY='a', TTL=10000, SALT_BUCKETS = 4";
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
-        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getActiveUrl(), props).getAdmin();
         ColumnFamilyDescriptor[] columnFamilies =
                 admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(1, columnFamilies.length);
@@ -650,10 +654,10 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 "create table IF NOT EXISTS  " + tableName + "  (" + " id char(1) NOT NULL,"
                         + " col1 integer NOT NULL," + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
                         + " ) DEFAULT_COLUMN_FAMILY='a', TTL=10000, SALT_BUCKETS = 4";
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
-        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getActiveUrl(), props).getAdmin();
         ColumnFamilyDescriptor[] columnFamilies =
                 admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(1, columnFamilies.length);
@@ -672,10 +676,10 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                         + " col1 integer NOT NULL," + " col2 bigint NOT NULL,"
                         + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)"
                         + " ) BLOOMFILTER = 'NONE', SALT_BUCKETS = 4";
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
-        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getActiveUrl(), props).getAdmin();
         ColumnFamilyDescriptor[] columnFamilies =
                 admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(BloomType.NONE, columnFamilies[0].getBloomFilterType());
@@ -700,7 +704,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                         + "     ORGANIZATION_ID, EVENT_TIME,USER_ID,ENTRY_POINT_ID, ENTRY_POINT_TYPE, APEX_LIMIT_ID "
                         + " ) ) VERSIONS=1";
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             conn.createStatement().execute(ddl);
@@ -716,7 +720,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String ddl = "create table  " + tableName + " (k integer primary key, v bigint not null)";
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             conn.createStatement().execute(ddl);
@@ -735,7 +739,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                         + " col1 integer NOT NULL," + " CF.col2 integer,"
                         + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
                         + " ) DEFAULT_COLUMN_FAMILY='a', CF.TTL=10000, SALT_BUCKETS = 4";
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             conn.createStatement().execute(ddl);
@@ -822,7 +826,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
     private void assertColumnEncodingMetadata(QualifierEncodingScheme expectedEncodingScheme,
             ImmutableStorageScheme expectedStorageScheme, String tableName, Connection conn)
             throws Exception {
-        PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+        PhoenixMonitoredConnection phxConn = conn.unwrap(PhoenixMonitoredConnection.class);
         PTable table = phxConn.getTable(new PTableKey(null, tableName));
         assertEquals(expectedEncodingScheme, table.getEncodingScheme());
         assertEquals(expectedStorageScheme, table.getImmutableStorageScheme());
@@ -911,7 +915,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         String schemaName = generateUniqueName();
         String tableName = generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES))) {
             String ddl = "CREATE TABLE " + fullTableName +
                 " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL," +
                 " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) " +
@@ -935,7 +939,6 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         String createTableDDL = "create IMMUTABLE TABLE " + tableName + "(id char(1) NOT NULL, col1 char(1), col2 char(1) "
                 + "CONSTRAINT NAME_PK PRIMARY KEY (id)) IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS";
         String createIndexDDL = "create INDEX " + indexName + " ON " + tableName + " (col1) INCLUDE (col2) IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN";
-
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(createTableDDL);
@@ -1043,7 +1046,6 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
     public void testCreateTableWithTableLevelUpdateCacheFreq() throws Exception {
         String tableName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-
         HashMap<String, Long> expectedUCF = new HashMap<>();
         expectedUCF.put("10", new Long(10L));
         expectedUCF.put("0", new Long(0L));
@@ -1113,7 +1115,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         final String TBL = "TBL_" + generateUniqueName();
         final String CF = "CF";
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -1167,7 +1169,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSetTableDescriptorPropertyOnView() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         final String dataTableFullName = generateUniqueName();
         String ddl =
                 "CREATE TABLE " + dataTableFullName + " (\n" + "ID1 VARCHAR(15) NOT NULL,\n"
@@ -1193,7 +1195,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCreateViewFromNonExistentTable() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(
                 "CREATE TABLE IF NOT EXISTS S.T1 (A INTEGER PRIMARY KEY, B INTEGER)");
             // 1. create view from non-existent table (without schema)
@@ -1226,7 +1228,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSettingGuidePostWidth() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String dataTable = generateUniqueName();
             int guidePostWidth = 20;
             String ddl =
@@ -1292,13 +1294,13 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         String fullIndexeName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         // Check system tables priorities.
-        try (Admin admin = driver.getConnectionQueryServices(getUrl(), new Properties()).getAdmin();
-                Connection c = DriverManager.getConnection(getUrl())) {
+        try (Admin admin = driver.getConnectionQueryServices(getActiveUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).getAdmin();
+                Connection c = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             ResultSet rs = c.getMetaData().getTables("", 
                     "\""+ PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA + "\"", 
                     null, 
                     new String[] {PTableType.SYSTEM.toString()});
-            ReadOnlyProps p = c.unwrap(PhoenixConnection.class).getQueryServices().getProps();
+            ReadOnlyProps p = c.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getProps();
             while (rs.next()) {
                 String schemaName = rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM);
                 String tName = rs.getString(PhoenixDatabaseMetaData.TABLE_NAME);
@@ -1307,7 +1309,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 String val = htd.getValue("PRIORITY");
                 assertNotNull("PRIORITY is not set for table:" + htd, val);
                 assertTrue(Integer.parseInt(val)
-                        >= IndexUtil.getMetadataPriority(config));
+                        >= IndexUtil.getMetadataPriority(getConfiguration()));
             }
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             String ddl ="CREATE TABLE " + fullTableName + TestUtil.TEST_TABLE_SCHEMA;
@@ -1331,13 +1333,13 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                     org.apache.hadoop.hbase.TableName.valueOf(fullIndexeName));
             val = indexTable.getValue("PRIORITY");
             assertNotNull("PRIORITY is not set for table:" + indexTable, val);
-            assertTrue(Integer.parseInt(val) >= IndexUtil.getIndexPriority(config));
+            assertTrue(Integer.parseInt(val) >= IndexUtil.getIndexPriority(getConfiguration()));
         }
     }
 
     @Test
     public void testCreateTableSchemaVersionAndTopicName() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         final String schemaName = generateUniqueName();
         final String tableName = generateUniqueName();
         final String version = "V1.0";
@@ -1361,7 +1363,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             ddl += ", STREAMING_TOPIC_NAME='" + topicName + "'";
         }
         conn.createStatement().execute(ddl);
-        PTable table = conn.unwrap(PhoenixConnection.class).getTableNoCache(dataTableFullName);
+        PTable table = conn.unwrap(PhoenixMonitoredConnection.class).getTableNoCache(dataTableFullName);
         assertEquals(dataTableVersion, table.getSchemaVersion());
         if (topicName != null) {
             assertEquals(topicName, table.getStreamingTopicName());
@@ -1372,7 +1374,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCreateTableDDLTimestamp() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         final String schemaName = generateUniqueName();
         final String tableName = generateUniqueName();
         final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
@@ -1390,7 +1392,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCreateTableWithColumnQualifiers() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
@@ -1398,7 +1400,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 "INT3 INTEGER ENCODED_QUALIFIER 14) COLUMN_QUALIFIER_COUNTER ('"
                 + QueryConstants.DEFAULT_COLUMN_FAMILY + "'=15)";
         conn.createStatement().execute(ddl);
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PhoenixMonitoredConnection pconn = conn.unwrap(PhoenixMonitoredConnection.class);
         PTable table = pconn.getTable(new PTableKey(null, tableName));
 
         QualifierEncodingScheme encodingScheme = table.getEncodingScheme();
@@ -1416,7 +1418,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCreateTableWithNotOrderedColumnQualifiers() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
@@ -1424,7 +1426,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 "INT2 INTEGER ENCODED_QUALIFIER 12) COLUMN_QUALIFIER_COUNTER ('"
                 + QueryConstants.DEFAULT_COLUMN_FAMILY + "'=15)";
         conn.createStatement().execute(ddl);
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PhoenixMonitoredConnection pconn = conn.unwrap(PhoenixMonitoredConnection.class);
         PTable table = pconn.getTable(new PTableKey(null, tableName));
 
         QualifierEncodingScheme encodingScheme = table.getEncodingScheme();
@@ -1442,14 +1444,14 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCreateTableWithColumnQualifiersWithoutCounter() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
                 "INT INTEGER ENCODED_QUALIFIER 11, INT2 INTEGER ENCODED_QUALIFIER 12, " +
                 "INT3 INTEGER ENCODED_QUALIFIER 14)";
         conn.createStatement().execute(ddl);
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PhoenixMonitoredConnection pconn = conn.unwrap(PhoenixMonitoredConnection.class);
         PTable table = pconn.getTable(new PTableKey(null, tableName));
 
         QualifierEncodingScheme encodingScheme = table.getEncodingScheme();
@@ -1467,7 +1469,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCreateTableWithColumnQualifiersMultipleFamilies() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String ddl = "CREATE IMMUTABLE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
@@ -1475,7 +1477,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 "B.INT3 INTEGER ENCODED_QUALIFIER 12) " +
                 "COLUMN_QUALIFIER_COUNTER ('A'=14, 'B'=13)";
         conn.createStatement().execute(ddl);
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PhoenixMonitoredConnection pconn = conn.unwrap(PhoenixMonitoredConnection.class);
         PTable table = pconn.getTable(new PTableKey(null, tableName));
 
         QualifierEncodingScheme encodingScheme = table.getEncodingScheme();
@@ -1494,14 +1496,14 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCreateTableWithColumnQualifiersMultipleFamiliesWithoutCounter() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String ddl = "CREATE IMMUTABLE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
                 "A.INT INTEGER ENCODED_QUALIFIER 11, A.INT2 INTEGER ENCODED_QUALIFIER 13, " +
                 "B.INT3 INTEGER ENCODED_QUALIFIER 12)";
         conn.createStatement().execute(ddl);
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PhoenixMonitoredConnection pconn = conn.unwrap(PhoenixMonitoredConnection.class);
         PTable table = pconn.getTable(new PTableKey(null, tableName));
 
         QualifierEncodingScheme encodingScheme = table.getEncodingScheme();
@@ -1520,7 +1522,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCreateTableWithColumnQualifiersDuplicateCQ() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
@@ -1539,7 +1541,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCreateTableInvalidColumnQualifier() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
@@ -1593,7 +1595,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCreateTableMissingColumnQualifier() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
@@ -1623,7 +1625,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCreateTableDefaultColumnQualifier() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String ddl = "CREATE IMMUTABLE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
@@ -1635,7 +1637,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 "\"B\".INT6 INTEGER) " +
                 "DEFAULT_COLUMN_FAMILY=dF";
         conn.createStatement().execute(ddl);
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PhoenixMonitoredConnection pconn = conn.unwrap(PhoenixMonitoredConnection.class);
         PTable table = pconn.getTable(new PTableKey(null, tableName));
 
         QualifierEncodingScheme encodingScheme = table.getEncodingScheme();
@@ -1673,10 +1675,10 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         String index1Ddl = "create index  " + index1Name + " on " + tableName + " (v1)";
         String index2Ddl = "create index  " + index2Name + " on " + tableName + " (v2)";
 
-        Properties props = new Properties();
-        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Admin admin = driver.getConnectionQueryServices(getActiveUrl(), props).getAdmin();
 
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                 Statement stmt = conn.createStatement();) {
             stmt.execute(ddl);
             stmt.execute(index1Ddl);
@@ -1719,10 +1721,10 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                         + " v2 integer) TRANSACTIONAL=TRUE";
         String index1Ddl = "create index  " + index1Name + " on " + tableName + " (v1)";
 
-        Properties props = new Properties();
-        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Admin admin = driver.getConnectionQueryServices(getActiveUrl(), props).getAdmin();
 
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                 Statement stmt = conn.createStatement();) {
             stmt.execute(ddl);
             stmt.execute(index1Ddl);
@@ -1759,8 +1761,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         final byte[] tableBytes = tableName.getBytes();
         final byte[] familyName = Bytes.toBytes(SchemaUtil.normalizeIdentifier("0"));
         final byte[][] splits = new byte[][] {Bytes.toBytes(20), Bytes.toBytes(30)};
-
-        try (Admin admin = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).getAdmin()) {
+        try (Admin admin = driver.getConnectionQueryServices(getActiveUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).getAdmin()) {
             admin.createTable(TableDescriptorBuilder.newBuilder(TableName.valueOf(tableBytes))
                     .addColumnFamily(ColumnFamilyDescriptorBuilder.newBuilder(familyName)
                             .setKeepDeletedCells(KeepDeletedCells.TRUE).build())
@@ -1773,7 +1774,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         final byte[] key_2 = ByteUtil.concat(Bytes.toBytes(40), Bytes.toBytes(400L), Bytes.toBytes("d"));
         final byte[] emptyColumnQualifier = Bytes.toBytes("_0");
 
-        ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        ConnectionQueryServices services = driver.getConnectionQueryServices(getActiveUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try (Table hTable = services.getTable(tableBytes)) {
             // Insert rows using standard HBase mechanism with standard HBase "types"
             List<Row> mutations = new ArrayList<>();
@@ -1805,7 +1806,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 "    ulong_col unsigned_long" +
                 "    CONSTRAINT pk PRIMARY KEY (uint_key, ulong_key, string_key)) noverify COLUMN_ENCODED_BYTES=NONE";
 
-        try (Connection conn = DriverManager.getConnection(url)) {
+        try (Connection conn = DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(ddl);
         }
 
@@ -1842,14 +1843,14 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
     }
 
     public static long getLastDDLTimestamp(Connection conn, String tableFullName) throws SQLException {
-        PTable table = conn.unwrap(PhoenixConnection.class).getTableNoCache(tableFullName);
+        PTable table = conn.unwrap(PhoenixMonitoredConnection.class).getTableNoCache(tableFullName);
         assertNotNull("PTable is null!", table);
         assertNotNull("DDL timestamp is null!", table.getLastDDLTimestamp());
         return table.getLastDDLTimestamp();
     }
 
     private int checkGuidePostWidth(String tableName) throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String query =
                     "SELECT GUIDE_POSTS_WIDTH FROM SYSTEM.CATALOG WHERE TABLE_NAME = ? AND COLUMN_FAMILY IS NULL AND COLUMN_NAME IS NULL";
             PreparedStatement stmt = conn.prepareStatement(query);

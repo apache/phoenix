@@ -47,7 +47,6 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(ParallelStatsDisabledTest.class)
 public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
 

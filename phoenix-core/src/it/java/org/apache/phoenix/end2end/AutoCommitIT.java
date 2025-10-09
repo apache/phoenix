@@ -32,7 +32,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
 @Category(ParallelStatsDisabledTest.class)
 public class AutoCommitIT extends ParallelStatsDisabledIT {
 

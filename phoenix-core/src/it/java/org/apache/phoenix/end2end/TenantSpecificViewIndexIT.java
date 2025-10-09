@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceName;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceSchemaName;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -41,12 +42,12 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(NeedsOwnMiniClusterTest.class)
 public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
 	
@@ -94,7 +95,7 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
     }
 
     private void createTableAndValidate(String tableName, boolean isNamespaceEnabled) throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         if (isNamespaceEnabled) {
             props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
         }
@@ -136,7 +137,7 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         String sequenceSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(tableName), isNamespaceEnabled);
         verifySequenceValue(null, sequenceNameA, sequenceSchemaName, Short.MIN_VALUE + 2L);
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId2);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute("DROP VIEW  " + viewName2);
@@ -145,14 +146,14 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute("DROP VIEW  " + viewName1);
         }
-        DriverManager.getConnection(getUrl()).createStatement().execute("DROP TABLE " + tableName + " CASCADE");
+        DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).createStatement().execute("DROP TABLE " + tableName + " CASCADE");
 
         verifySequenceNotExists(null, sequenceNameA, sequenceSchemaName);
     }
 
     private void createViewAndIndexesWithTenantId(String tableName, String viewName, boolean localIndex, String tenantId,
             boolean isNamespaceMapped, long indexIdOffset) throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String indexName = "I_"+ generateUniqueName();
         String schemaName = SchemaUtil.getSchemaNameFromFullName(viewName);
         String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
@@ -286,7 +287,7 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         String viewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         
         String ddl = "CREATE TABLE " + tableName + " (tenantId char(15) NOT NULL, pk1 varchar NOT NULL, pk2 INTEGER NOT NULL, val1 VARCHAR CONSTRAINT pk primary key (tenantId,pk1,pk2)) MULTI_TENANT = true";
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO " + tableName + " (tenantId, pk1, pk2, val1) VALUES (?, ?, ?, ?)";
         PreparedStatement stmt = conn.prepareStatement(dml);
@@ -309,7 +310,7 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         
         // get a tenant specific url.
         String tenantUrl = getUrl() + ';' + PhoenixRuntime.TENANT_ID_ATTRIB + '=' + tenantId1;
-        Connection tenantConn = DriverManager.getConnection(tenantUrl);
+        Connection tenantConn = DriverManager.getConnection(tenantUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES));
         
         // create a tenant specific view.
         tenantConn.createStatement().execute("CREATE VIEW " + viewName + " AS select * from " + tableName);
@@ -336,10 +337,9 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
                 + "PARENT_ID CHAR(15) NOT NULL,"
                 + "CREATED_DATE DATE NOT NULL "
                 + "CONSTRAINT PK PRIMARY KEY (ORGANIZATION_ID, PARENT_TYPE, PARENT_ID, CREATED_DATE DESC)"
-                + ") VERSIONS=1,MULTI_TENANT=true,REPLICATION_SCOPE=1"; 
-                
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                Connection viewConn = DriverManager.getConnection(tenantUrl) ) {
+                + ") VERSIONS=1,MULTI_TENANT=true,REPLICATION_SCOPE=1";
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+                Connection viewConn = DriverManager.getConnection(tenantUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES)) ) {
             // create table
             conn.createStatement().execute(ddl);
             // create index
@@ -397,9 +397,8 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         String TENANT_VIEW_TEMPLATE = "CREATE VIEW IF NOT EXISTS %s AS SELECT * FROM %s";
 
         String INDEX_TEMPLATE = "CREATE INDEX IF NOT EXISTS %s ON %s(%s) INCLUDE (%s)";
-
-        try (Connection globalConn = DriverManager.getConnection(getUrl());
-                Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl)) {
+        try (Connection globalConn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+                Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
 
             globalConn.createStatement().execute(String.format(BASE_TABLE_TEMPLATE, baseTable));
             globalConn.createStatement()
@@ -416,7 +415,7 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
             }
         }
 
-        try (Connection readConnection = DriverManager.getConnection(tenantConnectionUrl)) {
+        try (Connection readConnection = DriverManager.getConnection(tenantConnectionUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             // SQL where index is selected
             String
                     planWithIndex =

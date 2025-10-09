@@ -16,6 +16,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -31,11 +32,11 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-
 @Category(ParallelStatsDisabledTest.class)
 public class EncodeFunctionIT extends ParallelStatsDisabledIT {
 
@@ -83,14 +84,14 @@ public class EncodeFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testEncode() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         testEncode(conn, Lists.<Object> newArrayList(Long.MAX_VALUE, 62, 10, 1, 0, -1, -10, -62, Long.MIN_VALUE),
             Lists.newArrayList("AzL8n0Y58m7", "10", "A", "1", "0", "-1", "-A", "-10", "-AzL8n0Y58m8"));
     }
 
     @Test
     public void testEncodeNullInput() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = TestUtil.initTables(conn, "BIGINT", Collections.<Object> singletonList(0l));
         testEncodeHelper(conn, tableName, "kv", Collections.<String> singletonList(null), "ASC");
         testEncodeHelper(conn, tableName, "kv", Collections.<String> singletonList(null), "DESC");
@@ -98,7 +99,7 @@ public class EncodeFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testUpperCaseEncodingType() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " ( pk VARCHAR(10) NOT NULL CONSTRAINT PK PRIMARY KEY (pk))";
 
@@ -115,7 +116,7 @@ public class EncodeFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testNullEncodingType() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " ( pk VARCHAR(10) NOT NULL CONSTRAINT PK PRIMARY KEY (pk))";
         conn.createStatement().execute(ddl);
@@ -126,7 +127,7 @@ public class EncodeFunctionIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testNullValue() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " ( pk VARCHAR(10) NOT NULL, val INTEGER CONSTRAINT PK PRIMARY KEY (pk))";
         conn.createStatement().execute(ddl);
@@ -145,7 +146,7 @@ public class EncodeFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testUnsupportedEncodingType() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " ( pk VARCHAR(10) NOT NULL CONSTRAINT PK PRIMARY KEY (pk))";
         conn.createStatement().execute(ddl);
@@ -160,7 +161,7 @@ public class EncodeFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testInvalidEncodingType() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         String ddl =
             "CREATE TABLE " + tableName + " ( some_column BINARY(12) NOT NULL CONSTRAINT PK PRIMARY KEY (some_column))";

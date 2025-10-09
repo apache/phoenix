@@ -26,6 +26,7 @@ import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.phoenix.iterate.ScanningResultPostDummyResultCaller;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
 import org.junit.BeforeClass;
@@ -45,6 +46,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -95,7 +98,11 @@ public class ScanUncommittedWithRegionMovesIT extends ParallelStatsDisabledIT {
         props.put(HConstants.HBASE_CLIENT_SCANNER_MAX_RESULT_SIZE_KEY, String.valueOf(1));
         props.put(QueryServices.PHOENIX_POST_DUMMY_PROCESS,
                 TestScanningResultPostDummyResultCaller.class.getName());
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     @After
@@ -152,7 +159,7 @@ public class ScanUncommittedWithRegionMovesIT extends ParallelStatsDisabledIT {
         hasTestStarted = true;
         String dataTableName = generateUniqueName();
         populateTable(dataTableName);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE UNCOVERED INDEX "
                     + indexTableName + " on " + dataTableName + " (val1) ");
@@ -172,7 +179,7 @@ public class ScanUncommittedWithRegionMovesIT extends ParallelStatsDisabledIT {
                 assertEquals("abcd", rs.getString(2));
                 moveRegionsOfTable(dataTableName);
                 moveRegionsOfTable(indexTableName);
-                try (Connection newConn = DriverManager.getConnection(getUrl())) {
+                try (Connection newConn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                     newConn.createStatement().execute("upsert into " + dataTableName
                             + " (id, val1, val2, val3) values ('c1', 'cd1','cde1', 'cdef1')");
                     newConn.createStatement().execute("upsert into " + dataTableName
@@ -197,7 +204,7 @@ public class ScanUncommittedWithRegionMovesIT extends ParallelStatsDisabledIT {
         hasTestStarted = true;
         String dataTableName = generateUniqueName();
         populateTable(dataTableName);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE INDEX "
                     + indexTableName + " on " + dataTableName + " (val1) INCLUDE (val2, val3)");
@@ -217,7 +224,7 @@ public class ScanUncommittedWithRegionMovesIT extends ParallelStatsDisabledIT {
                 assertEquals("abcd", rs.getString(2));
                 moveRegionsOfTable(dataTableName);
                 moveRegionsOfTable(indexTableName);
-                try (Connection newConn = DriverManager.getConnection(getUrl())) {
+                try (Connection newConn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                     newConn.createStatement().execute("upsert into " + dataTableName
                             + " (id, val1, val2, val3) values ('c1', 'cd1','cde1', 'cdef1')");
                     newConn.createStatement().execute("upsert into " + dataTableName
@@ -242,7 +249,7 @@ public class ScanUncommittedWithRegionMovesIT extends ParallelStatsDisabledIT {
         hasTestStarted = true;
         String dataTableName = generateUniqueName();
         populateTable(dataTableName);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             populateTableWithAdditionalRows(dataTableName, conn);
             conn.commit();
             TABLE_NAMES.add(dataTableName);
@@ -257,7 +264,7 @@ public class ScanUncommittedWithRegionMovesIT extends ParallelStatsDisabledIT {
                 assertEquals("abc", rs.getString(1));
                 assertEquals("abcd", rs.getString(2));
                 moveRegionsOfTable(dataTableName);
-                try (Connection newConn = DriverManager.getConnection(getUrl())) {
+                try (Connection newConn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                     newConn.createStatement().execute("upsert into " + dataTableName
                             + " (id, val1, val2, val3) values ('c1', 'cd1','cde1', 'cdef1')");
                     newConn.createStatement().execute("upsert into " + dataTableName
@@ -282,7 +289,7 @@ public class ScanUncommittedWithRegionMovesIT extends ParallelStatsDisabledIT {
         hasTestStarted = true;
         String dataTableName = generateUniqueName();
         populateTable(dataTableName);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE UNCOVERED INDEX "
                     + indexTableName + " on " + dataTableName + " (val1) ");
@@ -298,7 +305,7 @@ public class ScanUncommittedWithRegionMovesIT extends ParallelStatsDisabledIT {
                 assertTrue(rs.next());
                 assertEquals("abc", rs.getString(1));
                 assertEquals("abcd", rs.getString(2));
-                try (Connection newConn = DriverManager.getConnection(getUrl())) {
+                try (Connection newConn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                     newConn.createStatement().execute("upsert into " + dataTableName
                             + " (id, val1, val2, val3) values ('c1', 'cd1','cde1', 'cdef1')");
                     newConn.createStatement().execute("upsert into " + dataTableName
@@ -323,7 +330,7 @@ public class ScanUncommittedWithRegionMovesIT extends ParallelStatsDisabledIT {
         hasTestStarted = true;
         String dataTableName = generateUniqueName();
         populateTable(dataTableName);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE INDEX "
                     + indexTableName + " on " + dataTableName + " (val1) INCLUDE (val2, val3)");
@@ -339,7 +346,7 @@ public class ScanUncommittedWithRegionMovesIT extends ParallelStatsDisabledIT {
                 assertTrue(rs.next());
                 assertEquals("abc", rs.getString(1));
                 assertEquals("abcd", rs.getString(2));
-                try (Connection newConn = DriverManager.getConnection(getUrl())) {
+                try (Connection newConn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                     newConn.createStatement().execute("upsert into " + dataTableName
                             + " (id, val1, val2, val3) values ('c1', 'cd1','cde1', 'cdef1')");
                     newConn.createStatement().execute("upsert into " + dataTableName
@@ -364,7 +371,7 @@ public class ScanUncommittedWithRegionMovesIT extends ParallelStatsDisabledIT {
         hasTestStarted = true;
         String dataTableName = generateUniqueName();
         populateTable(dataTableName);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             populateTableWithAdditionalRows(dataTableName, conn);
             conn.commit();
             TABLE_NAMES.add(dataTableName);
@@ -378,7 +385,7 @@ public class ScanUncommittedWithRegionMovesIT extends ParallelStatsDisabledIT {
                 assertTrue(rs.next());
                 assertEquals("abc", rs.getString(1));
                 assertEquals("abcd", rs.getString(2));
-                try (Connection newConn = DriverManager.getConnection(getUrl())) {
+                try (Connection newConn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                     newConn.createStatement().execute("upsert into " + dataTableName
                             + " (id, val1, val2, val3) values ('c1', 'cd1','cde1', 'cdef1')");
                     newConn.createStatement().execute("upsert into " + dataTableName
@@ -536,7 +543,7 @@ public class ScanUncommittedWithRegionMovesIT extends ParallelStatsDisabledIT {
     }
 
     private void populateTable(String tableName) throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("create table " + tableName +
                 " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10)," +
                 " val3 varchar(10)) SPLIT ON ('d', 'h', 'k')");

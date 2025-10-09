@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -26,8 +27,8 @@ import java.sql.DriverManager;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.metrics2.lib.DynamicMetricsRegistry;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MutationCode;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.monitoring.IndexMetricsIT;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
@@ -36,10 +37,10 @@ import org.apache.phoenix.schema.metrics.MetricsMetadataSourceFactory;
 import org.apache.phoenix.schema.metrics.MetricsMetadataSourceImpl;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(ParallelStatsDisabledTest.class)
 public class MetaDataEndPointIT extends ParallelStatsDisabledIT {
     @Test
@@ -49,11 +50,11 @@ public class MetaDataEndPointIT extends ParallelStatsDisabledIT {
         String indexName1 = generateUniqueName();
         final String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         String fullIndexName1 = SchemaUtil.getTableName(schemaName, indexName1);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute("CREATE TABLE " + fullTableName + "(k INTEGER PRIMARY KEY, v1 INTEGER, v2 INTEGER) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true, GUIDE_POSTS_WIDTH=1000");
             conn.createStatement().execute("CREATE INDEX " + indexName1 + " ON " + fullTableName + " (v1) INCLUDE (v2)");
             conn.commit();
-            Table metaTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
+            Table metaTable = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
             MutationCode code = IndexUtil.updateIndexState(fullIndexName1, 0L, metaTable, PIndexState.DISABLE).getMutationCode();
             assertEquals(MutationCode.TABLE_ALREADY_EXISTS, code);
             long ts = EnvironmentEdgeManager.currentTimeMillis();
@@ -67,7 +68,7 @@ public class MetaDataEndPointIT extends ParallelStatsDisabledIT {
         String schemaName = generateUniqueName();
         String tableName = generateUniqueName();
         final String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             MetricsMetadataSourceImpl metricsSource = (MetricsMetadataSourceImpl) MetricsMetadataSourceFactory.getMetadataMetricsSource();
             DynamicMetricsRegistry registry = metricsSource.getMetricsRegistry();
             long expectedCreateTableCount =
@@ -101,7 +102,7 @@ public class MetaDataEndPointIT extends ParallelStatsDisabledIT {
         String schemaName = generateUniqueName();
         String tableName = generateUniqueName();
         final String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             MetricsMetadataSourceImpl metricsSource = (MetricsMetadataSourceImpl) MetricsMetadataSourceFactory.getMetadataMetricsSource();
             DynamicMetricsRegistry registry = metricsSource.getMetricsRegistry();
 
@@ -133,7 +134,7 @@ public class MetaDataEndPointIT extends ParallelStatsDisabledIT {
         String schemaName = generateUniqueName();
         String tableName = generateUniqueName();
         final String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             MetricsMetadataSourceImpl metricsSource = (MetricsMetadataSourceImpl) MetricsMetadataSourceFactory.getMetadataMetricsSource();
             DynamicMetricsRegistry registry = metricsSource.getMetricsRegistry();
 

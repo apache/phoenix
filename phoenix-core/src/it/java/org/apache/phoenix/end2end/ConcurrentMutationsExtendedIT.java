@@ -18,6 +18,8 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.end2end.IndexToolIT.verifyIndexTable;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -44,6 +46,7 @@ import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -58,7 +61,6 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
@@ -88,7 +90,11 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         // The following sets the wait duration for the previous concurrent batch to 10 ms to test
         // the code path handling timeouts
         props.put("phoenix.index.concurrent.wait.duration.ms", "10");
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
     @Parameterized.Parameters(
             name = "uncovered={0}")
@@ -100,7 +106,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
     public void testSynchronousDeletesAndUpsertValues() throws Exception {
         final String tableName = generateUniqueName();
         final String indexName = generateUniqueName();
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("CREATE TABLE " + tableName
                 + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 INTEGER, CONSTRAINT pk PRIMARY KEY (k1,k2)) COLUMN_ENCODED_BYTES = 0");
         TestUtil.addCoprocessor(conn, tableName, DelayingRegionObserver.class);
@@ -111,12 +117,12 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
 
             @Override public void run() {
                 try {
-                    Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+                    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
                     for (int i = 0; i < 50; i++) {
                         Thread.sleep(20);
                         synchronized (lock) {
-                            try (PhoenixConnection conn = DriverManager.getConnection(getUrl(), props)
-                                .unwrap(PhoenixConnection.class)) {
+                            try (PhoenixMonitoredConnection conn = DriverManager.getConnection(getUrl(), props)
+                                .unwrap(PhoenixMonitoredConnection.class)) {
                                 conn.setAutoCommit(true);
                                 conn.createStatement().execute("DELETE FROM " + tableName);
                             }
@@ -137,12 +143,12 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
 
             @Override public void run() {
                 try {
-                    Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+                    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
                     int nRowsToUpsert = 1000;
                     for (int i = 0; i < nRowsToUpsert; i++) {
                         synchronized (lock) {
-                            try (PhoenixConnection conn = DriverManager.getConnection(getUrl(), props)
-                                .unwrap(PhoenixConnection.class)) {
+                            try (PhoenixMonitoredConnection conn = DriverManager.getConnection(getUrl(), props)
+                                .unwrap(PhoenixMonitoredConnection.class)) {
                                 conn.createStatement().execute(
                                     "UPSERT INTO " + tableName + " VALUES (" + (i % 10)
                                         + ", 0, 1)");
@@ -174,7 +180,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         final String tableName = generateUniqueName();
         final String indexName = generateUniqueName();
         final String singleCellindexName = "SC_" + generateUniqueName();
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("CREATE TABLE " + tableName
                 + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 INTEGER, CONSTRAINT pk PRIMARY KEY (k1,k2))");
         TestUtil.addCoprocessor(conn, tableName, DelayingRegionObserver.class);
@@ -188,7 +194,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
 
             @Override public void run() {
                 try {
-                    Connection conn = DriverManager.getConnection(getUrl());
+                    Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                     conn.setAutoCommit(true);
                     for (int i = 0; i < 50; i++) {
                         Thread.sleep(20);
@@ -209,7 +215,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
 
             @Override public void run() {
                 try {
-                    Connection conn = DriverManager.getConnection(getUrl());
+                    Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                     for (int i = 0; i < 1000; i++) {
                         conn.createStatement().execute(
                                 "UPSERT INTO " + tableName + " VALUES (" + (i % 10) + ", 0, 1)");
@@ -244,7 +250,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         final int nIndexValues = 23;
         final String tableName = generateUniqueName();
         final String indexName = generateUniqueName();
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("CREATE TABLE " + tableName
                 + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, a.v1 INTEGER, b.v2 INTEGER, c.v3 INTEGER, d.v4 INTEGER," +
                 "CONSTRAINT pk PRIMARY KEY (k1,k2))  COLUMN_ENCODED_BYTES = 0, VERSIONS=1");
@@ -258,7 +264,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
 
                 @Override public void run() {
                     try {
-                        Connection conn = DriverManager.getConnection(getUrl());
+                        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                         for (int i = 0; i < 10000; i++) {
                             conn.createStatement().execute(
                                     "UPSERT INTO " + tableName + " VALUES (" + (i % nRows) + ", 0, "
@@ -296,7 +302,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
     public void testRowLockDuringPreBatchMutateWhenIndexed() throws Exception {
         final String tableName = LOCK_TEST_TABLE_PREFIX + generateUniqueName();
         final String indexName = generateUniqueName();
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         conn.createStatement().execute("CREATE TABLE " + tableName
                 + "(k VARCHAR PRIMARY KEY, v INTEGER) COLUMN_ENCODED_BYTES = 0");
@@ -309,7 +315,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
 
             @Override public void run() {
                 try {
-                    Connection conn = DriverManager.getConnection(getUrl());
+                    Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                     conn.createStatement()
                             .execute("UPSERT INTO " + tableName + " VALUES ('foo',0)");
                     conn.createStatement()
@@ -328,7 +334,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
 
             @Override public void run() {
                 try {
-                    Connection conn = DriverManager.getConnection(getUrl());
+                    Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                     conn.createStatement()
                             .execute("UPSERT INTO " + tableName + " VALUES ('foo',2)");
                     conn.createStatement()
@@ -358,7 +364,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
     public void testLockUntilMVCCAdvanced() throws Exception {
         final String tableName = MVCC_LOCK_TEST_TABLE_PREFIX + generateUniqueName();
         final String indexName = generateUniqueName();
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("CREATE TABLE " + tableName
                 + "(k VARCHAR PRIMARY KEY, v INTEGER) COLUMN_ENCODED_BYTES = 0");
         conn.createStatement().execute("CREATE "+ (uncovered ? "UNCOVERED " : " ") + "INDEX " + indexName
@@ -372,7 +378,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
 
             @Override public void run() {
                 try {
-                    Connection conn = DriverManager.getConnection(getUrl());
+                    Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                     conn.createStatement()
                             .execute("UPSERT INTO " + tableName + " VALUES ('foo',1)");
                     conn.commit();
@@ -389,7 +395,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
 
             @Override public void run() {
                 try {
-                    Connection conn = DriverManager.getConnection(getUrl());
+                    Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                     conn.createStatement()
                             .execute("UPSERT INTO " + tableName + " VALUES ('foo',2)");
                     conn.commit();

@@ -23,6 +23,7 @@ import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.AfterClass;
@@ -38,6 +39,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 /**
  * Class which tests whether non-exclusive locking on metadata read path (getTable) works as expected.
  */
@@ -49,7 +52,11 @@ public class MetadataGetTableReadLockIT extends BaseTest {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         // Disable system task handling
         props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
-        setUpTestDriver(new ReadOnlyProps(props));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(props), new ReadOnlyProps(props));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props));
+        }
     }
 
     /**
@@ -62,7 +69,7 @@ public class MetadataGetTableReadLockIT extends BaseTest {
         long SLEEP_DURATION = 5000L;
         String tableName = generateUniqueName();
         CountDownLatch sleepSignal = new CountDownLatch(1);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             // create table
             conn.createStatement().execute("CREATE TABLE " + tableName
                     + "(k INTEGER NOT NULL PRIMARY KEY, v1 INTEGER, v2 INTEGER)");
@@ -143,7 +150,7 @@ public class MetadataGetTableReadLockIT extends BaseTest {
 
     @AfterClass
     public static synchronized void cleanup() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", BlockingMetaDataEndpointImpl.class);
             TestUtil.addCoprocessor(conn, "SYSTEM.CATALOG", MetaDataEndpointImpl.class);
         }

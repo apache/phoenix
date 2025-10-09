@@ -66,6 +66,7 @@ import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
@@ -82,7 +83,6 @@ import org.apache.phoenix.util.StringUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(ParallelStatsDisabledTest.class)
 public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
 
@@ -104,7 +104,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
     @Before
     // We need to clean up phoenix metadata to ensure tests don't step on each other
     public void deleteMetadata() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String delete =
                     "DELETE FROM SYSTEM.CATALOG WHERE TABLE_SCHEM IS NULL OR TABLE_SCHEM = '' OR TABLE_SCHEM != 'SYSTEM'";
             conn.createStatement().executeUpdate(delete);
@@ -112,7 +112,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             delete = "DELETE FROM \"SYSTEM\".\"SEQUENCE\"";
             conn.createStatement().executeUpdate(delete);
             conn.commit();
-            conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+            conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().clearCache();
         }
     }
 
@@ -120,14 +120,14 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
     public void testMetadataTenantSpecific() throws SQLException {
     	// create multi-tenant table
     	String tableName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
         	String baseTableDdl = "CREATE TABLE %s (K1 VARCHAR NOT NULL, K2 VARCHAR NOT NULL, V VARCHAR CONSTRAINT PK PRIMARY KEY(K1, K2)) MULTI_TENANT=true";
         	conn.createStatement().execute(String.format(baseTableDdl, tableName));
         }
     	
         // create tenant specific view and execute metdata data call with tenant specific connection
         String tenantId = generateUniqueName();
-        Properties tenantProps = new Properties();
+        Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
         	String viewName = generateUniqueName();
@@ -156,7 +156,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
         ensureTableCreated(getUrl(), tableCSchema + "." + tableC, CUSTOM_ENTITY_DATA_FULL_NAME,
             null);
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             DatabaseMetaData dbmd = conn.getMetaData();
             ResultSet rs = dbmd.getTables(null, tableASchema, tableAName, null);
             assertTrue(rs.next());
@@ -261,7 +261,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testTableTypes() throws SQLException {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             DatabaseMetaData dbmd = conn.getMetaData();
             ResultSet rs = dbmd.getTableTypes();
             assertTrue(rs.next());
@@ -282,7 +282,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSequenceMetadataScan() throws SQLException {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String schema1 = "B" + generateUniqueName();
             String seq1 = generateUniqueName();
             String seq1FullName = schema1 + "." + seq1;
@@ -391,7 +391,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testShowSchemas() throws SQLException {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             ResultSet rs = conn.prepareStatement("show schemas").executeQuery();
             assertTrue(rs.next());
             assertEquals("SYSTEM", rs.getString("TABLE_SCHEM"));
@@ -422,7 +422,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testShowTables() throws SQLException {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             // List all the tables in a particular schema.
             ResultSet rs = conn.prepareStatement("show tables in SYSTEM").executeQuery();
             Set<String> tables = new HashSet<>();
@@ -451,7 +451,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
         ensureTableCreated(getUrl(), fullTable1, CUSTOM_ENTITY_DATA_FULL_NAME, null);
         String fullTable2 = generateUniqueName();
         ensureTableCreated(getUrl(), fullTable2, PTSDB_NAME, null);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             DatabaseMetaData dbmd = conn.getMetaData();
             ResultSet rs;
             rs = dbmd.getSchemas(null, schema1);
@@ -489,7 +489,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testColumnMetadataScan() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String table = generateUniqueName();
         createMDTestTable(conn, table, "");
         DatabaseMetaData dbmd = conn.getMetaData();
@@ -684,7 +684,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testPrimaryKeyMetadataScan() throws SQLException {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String table1 = generateUniqueName();
             createMDTestTable(conn, table1, "");
             String schema2 = generateUniqueName();
@@ -804,7 +804,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testMultiTableColumnsMetadataScan() throws SQLException {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String table1 = "TEST" + generateUniqueName();
             String table2 = "TEST" + generateUniqueName();
             createGroupByTestTable(conn, table1);
@@ -868,8 +868,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCreateOnExistingTable() throws Exception {
-        try (PhoenixConnection pconn =
-                DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
+        try (PhoenixMonitoredConnection pconn =
+                DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixMonitoredConnection.class)) {
             String tableName = generateUniqueName();// MDTEST_NAME;
             String schemaName = "";// MDTEST_SCHEMA_NAME;
             byte[] cfA = Bytes.toBytes(SchemaUtil.normalizeIdentifier("a"));
@@ -948,9 +948,9 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
     @SuppressWarnings("deprecation")
     @Test
     public void testCreateViewOnExistingTable() throws Exception {
-        try (PhoenixConnection pconn =
+        try (PhoenixMonitoredConnection pconn =
                 DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))
-                        .unwrap(PhoenixConnection.class)) {
+                        .unwrap(PhoenixMonitoredConnection.class)) {
             String tableName = generateUniqueName();// MDTEST_NAME;
             String schemaName = "";// MDTEST_SCHEMA_NAME;
             byte[] cfB = Bytes.toBytes(SchemaUtil.normalizeIdentifier("b"));
@@ -1072,7 +1072,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         initATableValues(tableName, tenantId, getDefaultSplits(tenantId), null, null, getUrl(),
             null);
-        try (Connection conn1 = DriverManager.getConnection(getUrl())) {
+        try (Connection conn1 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn1.createStatement()
                     .executeUpdate("ALTER TABLE " + tableName + " ADD z_integer integer");
             String query = "SELECT z_integer FROM " + tableName;
@@ -1086,7 +1086,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
         String tableName =
                 initATableValues(null, tenantId, getDefaultSplits(tenantId), null, null, getUrl(),
                     null);
-        try (Connection conn1 = DriverManager.getConnection(getUrl())) {
+        try (Connection conn1 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn1.createStatement()
                     .executeUpdate("ALTER TABLE " + tableName + " ADD newcf.z_integer integer");
             String query = "SELECT z_integer FROM " + tableName;
@@ -1100,7 +1100,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
         String tableName =
                 initATableValues(null, tenantId, getDefaultSplits(tenantId), null, null, getUrl(),
                     null);
-        try (Connection conn1 = DriverManager.getConnection(getUrl())) {
+        try (Connection conn1 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             try {
                 conn1.createStatement().executeUpdate(
                     "ALTER TABLE " + tableName + " ADD z_string varchar not null primary key");
@@ -1122,7 +1122,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
         String tableName =
                 initATableValues(null, tenantId, getDefaultSplits(tenantId), null, null, getUrl(),
                     null);
-        try (Connection conn5 = DriverManager.getConnection(getUrl())) {
+        try (Connection conn5 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             assertTrue(conn5.createStatement()
                     .executeQuery("SELECT 1 FROM " + tableName + " WHERE b_string IS NOT NULL")
                     .next());
@@ -1151,7 +1151,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
         String tableName =
                 initATableValues(generateUniqueName(), tenantId, getDefaultSplits(tenantId), null,
                     null, getUrl(), null);
-        try (Connection conn1 = DriverManager.getConnection(getUrl())) {
+        try (Connection conn1 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn1.createStatement()
                     .executeUpdate("ALTER TABLE " + tableName + " DROP COLUMN entity_id");
             fail();
@@ -1192,7 +1192,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testTableWithScemaMetadataScan() throws SQLException {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String table1 = generateUniqueName();
             String schema1 = generateUniqueName();
             String fullTable1 = schema1 + "." + table1;
@@ -1233,7 +1233,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testRemarkColumn() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         // Retrieve the database metadata
         DatabaseMetaData dbmd = conn.getMetaData();
         ResultSet rs = dbmd.getColumns(null, null, null, null);

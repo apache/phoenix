@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -25,8 +26,8 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
-
 @Category(ParallelStatsDisabledTest.class)
 public class ImmutableTableIT extends ParallelStatsDisabledIT {
 
@@ -35,8 +36,8 @@ public class ImmutableTableIT extends ParallelStatsDisabledIT {
         throws Exception {
         final String tn = generateUniqueName();
         final String url = getUrl();
-        try (Connection conn = DriverManager.getConnection(url);
-            Statement stmt = conn.createStatement()) {
+        try (Connection conn = DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
+             Statement stmt = conn.createStatement()) {
             stmt.execute(String.format("CREATE TABLE %s (" +
                 "ID VARCHAR PRIMARY KEY," +
                 "COL1 VARCHAR," +
@@ -70,7 +71,7 @@ public class ImmutableTableIT extends ParallelStatsDisabledIT {
         throws Exception {
         final String tn = generateUniqueName();
         final String url = getUrl();
-        try (Connection conn = DriverManager.getConnection(url);
+        try (Connection conn = DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
             Statement stmt = conn.createStatement()) {
             stmt.execute(String.format("CREATE TABLE %s (" +
                 "ID VARCHAR PRIMARY KEY," +

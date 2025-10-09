@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static java.util.Collections.singletonList;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -98,7 +99,6 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class InListIT extends ParallelStatsDisabledIT {
@@ -200,8 +200,11 @@ public class InListIT extends ParallelStatsDisabledIT {
 
     @BeforeClass
     public static final void doSetup() throws Exception {
-
-        setUpTestDriver(ReadOnlyProps.EMPTY_PROPS, ReadOnlyProps.EMPTY_PROPS);
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(ReadOnlyProps.EMPTY_PROPS, ReadOnlyProps.EMPTY_PROPS);
+        } else {
+            setUpTestDriver(ReadOnlyProps.EMPTY_PROPS, ReadOnlyProps.EMPTY_PROPS);
+        }
         TENANT_SPECIFIC_URL1 = getUrl() + ';' + TENANT_ID_ATTRIB + "=tenant1";
         TENANT_URL = getUrl() + ";" + PhoenixRuntime.TENANT_ID_ATTRIB + '=' + TENANT_ID;
     }
@@ -381,8 +384,7 @@ public class InListIT extends ParallelStatsDisabledIT {
     }
 
     private static void createBaseTable(String baseTable) throws SQLException {
-
-        try (Connection globalConnection = DriverManager.getConnection(getUrl())) {
+        try (Connection globalConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             try (Statement cstmt = globalConnection.createStatement()) {
                 String CO_BASE_TBL_TEMPLATE = "CREATE TABLE IF NOT EXISTS %s(OID CHAR(15) NOT NULL,KP CHAR(3) NOT NULL,ROW_ID VARCHAR, COL1 VARCHAR,COL2 VARCHAR,COL3 VARCHAR,CREATED_DATE DATE,CREATED_BY CHAR(15),LAST_UPDATE DATE,LAST_UPDATE_BY CHAR(15),SYSTEM_MODSTAMP DATE CONSTRAINT pk PRIMARY KEY (OID,KP)) MULTI_TENANT=true,COLUMN_ENCODED_BYTES=0";
                 cstmt.execute(String.format(CO_BASE_TBL_TEMPLATE, baseTable));
@@ -394,7 +396,7 @@ public class InListIT extends ParallelStatsDisabledIT {
     private void dropTenantViewData(int tenant, String tenantView) throws SQLException {
 
         String tenantConnectionUrl = String.format("%s;%s=%s%06d", getUrl(), TENANT_ID_ATTRIB, TENANT_PREFIX, tenant);
-        try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl)) {
+        try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             tenantConnection.setAutoCommit(true);
             try (Statement cstmt = tenantConnection.createStatement()) {
                 cstmt.execute(String.format("DELETE FROM %s", tenantView));
@@ -414,7 +416,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         createBaseTable(baseTable);
 
         String tenantConnectionUrl = String.format("%s;%s=%s%06d", getUrl(), TENANT_ID_ATTRIB, TENANT_PREFIX, tenant);
-        try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl)) {
+        try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl,  PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             try (Statement cstmt = tenantConnection.createStatement()) {
                 String TENANT_VIEW_TEMPLATE = "CREATE VIEW IF NOT EXISTS %s(ID1 %s not null,ID2 %s not null,ID3 %s not null,COL4 VARCHAR,COL5 VARCHAR,COL6 VARCHAR CONSTRAINT pk PRIMARY KEY (ID1 %s, ID2 %s, ID3 %s)) "
                         + "AS SELECT * FROM %s WHERE KP = '%s'";
@@ -446,8 +448,8 @@ public class InListIT extends ParallelStatsDisabledIT {
         buildSchema(tableName, viewName1, true);
         buildSchema(tableName2, viewName2, false);
         for (boolean isMultiTenant : TENANCIES) {
-            Connection baseConn = DriverManager.getConnection(getUrl());
-            Connection conn = isMultiTenant ? DriverManager.getConnection(TENANT_URL) : baseConn;
+            Connection baseConn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+            Connection conn = isMultiTenant ? DriverManager.getConnection(TENANT_URL, PropertiesUtil.deepCopy(TEST_PROPERTIES)) : baseConn;
 
             try {
                 // test each combination of types and salting
@@ -489,9 +491,8 @@ public class InListIT extends ParallelStatsDisabledIT {
         List<String> expecteds) throws SQLException {
         // test single and multitenant tables
         for(boolean isMultiTenant : TENANCIES) {
-            Connection baseConn = DriverManager.getConnection(getUrl());
-            Connection conn = isMultiTenant ? DriverManager.getConnection(TENANT_URL)
-                    : baseConn;
+            Connection baseConn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+            Connection conn = isMultiTenant ? DriverManager.getConnection(TENANT_URL, PropertiesUtil.deepCopy(TEST_PROPERTIES)) : baseConn;
 
             try {
                 // test each combination of types and salting
@@ -804,7 +805,7 @@ public class InListIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testInListExpressionWithNull() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM SYSTEM.CATALOG WHERE " +
                     "TENANT_ID IN ('', 'FOO')");
@@ -821,7 +822,7 @@ public class InListIT extends ParallelStatsDisabledIT {
     @Test
     public void testUpperWithInChar() throws Exception {
         String baseTable = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE  TABLE " + baseTable +
                     " (ID BIGINT NOT NULL primary key, A CHAR(2))");
@@ -847,7 +848,7 @@ public class InListIT extends ParallelStatsDisabledIT {
     @Test
     public void testLowerWithInChar() throws Exception {
         String baseTable = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE  TABLE " + baseTable +
                     " (ID BIGINT NOT NULL primary key, A CHAR(2))");
@@ -872,7 +873,7 @@ public class InListIT extends ParallelStatsDisabledIT {
 
     @Test(expected = TypeMismatchException.class)
     public void testInListExpressionWithNotValidElements() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM SYSTEM.CATALOG WHERE " +
                     "TENANT_ID IN (4, 8)");
@@ -883,7 +884,7 @@ public class InListIT extends ParallelStatsDisabledIT {
 
     @Test(expected = SQLException.class)
     public void testInListExpressionWithNoElements() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM SYSTEM.CATALOG WHERE " +
                     "TENANT_ID IN ()");
@@ -894,7 +895,7 @@ public class InListIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testInListExpressionWithNullAndWrongTypedData() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM SYSTEM.CATALOG WHERE " +
                     "TENANT_ID IN ('', 4)");
@@ -909,7 +910,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String fullViewName = generateUniqueName();
         String tenantView = generateUniqueName();
         // create base table and global view using global connection
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             Statement stmt = conn.createStatement();
             stmt.execute("CREATE TABLE " + fullTableName + "(\n" +
                     "    TENANT_ID CHAR(15) NOT NULL,\n" +
@@ -935,7 +936,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         }
 
         // create and use a tenant specific view to write data
-        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1) ) {
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES)) ) {
             Statement stmt = viewConn.createStatement();
             stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + " AS SELECT * FROM " + fullViewName );
             viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(CREATED_BY, CREATED_DATE, SYSTEM_MODSTAMP, MODEL, MILEAGE, MILES_DRIVEN, MAKE) VALUES ('005xx000001Sv6o', 1532458254819, 1532458254819, 'a5', 23, 10000, 'AUDI')");
@@ -972,7 +973,7 @@ public class InListIT extends ParallelStatsDisabledIT {
     }
 
     private void buildSchema(String fullTableName, String fullViewName, boolean isDecOrder) throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.setAutoCommit(true);
             try (Statement stmt = conn.createStatement()) {
                 stmt.execute("CREATE TABLE " + fullTableName + "(\n" + " TENANT_ID CHAR(15) NOT NULL,\n" + " KEY_PREFIX CHAR(3) NOT NULL, ID5 BIGINT \n" +
@@ -981,7 +982,7 @@ public class InListIT extends ParallelStatsDisabledIT {
                     stmt.execute("CREATE VIEW " + fullViewName + "(\n" + " ID1 VARCHAR NOT NULL,\n" + " ID2 VARCHAR NOT NULL,\n" + " ID3 BIGINT, ID4 BIGINT \n" +
                             " CONSTRAINT PKVIEW PRIMARY KEY\n" + " (\n" + " ID1, ID2 DESC\n" + ")) " +
                             "AS SELECT * FROM " + fullTableName + " WHERE KEY_PREFIX = '0CY'");
-                    try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+                    try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                         viewConn.setAutoCommit(true);
                         try (Statement tenantStmt = viewConn.createStatement()) {
                             tenantStmt.execute("CREATE VIEW IF NOT EXISTS " + this.descViewName + " AS SELECT * FROM " + fullViewName);
@@ -991,7 +992,7 @@ public class InListIT extends ParallelStatsDisabledIT {
                     stmt.execute("CREATE VIEW " + fullViewName + "(\n" + " ID1 VARCHAR NOT NULL,\n" + " ID2 VARCHAR NOT NULL,\n" + " ID3 BIGINT, ID4 BIGINT \n" +
                             " CONSTRAINT PKVIEW PRIMARY KEY\n" + " (ID1, ID2)) " +
                             "AS SELECT * FROM " + fullTableName + " WHERE KEY_PREFIX = '0CY'");
-                    try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+                    try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                         viewConn.setAutoCommit(true);
                         try (Statement tenantStmt = viewConn.createStatement()) {
                             tenantStmt.execute("CREATE VIEW IF NOT EXISTS " + this.ascViewName + " AS SELECT * FROM " + fullViewName);
@@ -1005,8 +1006,7 @@ public class InListIT extends ParallelStatsDisabledIT {
     @Test
     public void testPkDescOrderedTenantViewOnGlobalViewWithRightQueryPlan() throws Exception {
         String tenantView = generateUniqueName();
-
-        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             viewConn.setAutoCommit(true);
             try (Statement stmt = viewConn.createStatement()) {
                 stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + " AS SELECT * FROM " + descViewName);
@@ -1053,7 +1053,7 @@ public class InListIT extends ParallelStatsDisabledIT {
     public void testColumnDescOrderedTenantViewOnGlobalViewWithStringValue() throws Exception {
         String tenantView = generateUniqueName();
 
-        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             viewConn.setAutoCommit(true);
             try (Statement stmt = viewConn.createStatement()) {
                 stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + " AS SELECT * FROM " + descViewName);
@@ -1110,7 +1110,7 @@ public class InListIT extends ParallelStatsDisabledIT {
     public void testInListExpressionWithRightQueryPlanForTenantViewOnGlobalView() throws Exception {
         String tenantView = generateUniqueName();
 
-        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             viewConn.setAutoCommit(true);
             try (Statement stmt = viewConn.createStatement()) {
                 stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + " AS SELECT * FROM " + ascViewName);
@@ -1178,7 +1178,7 @@ public class InListIT extends ParallelStatsDisabledIT {
 
     private void testFullPkListPlan(String tenantView) throws Exception {
         Long numberOfRowsToScan = new Long(2);
-        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1) ) {
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES)) ) {
             PreparedStatement preparedStmt = viewConn.prepareStatement("SELECT * FROM " + tenantView + " WHERE (ID1, ID2) IN " +
                     "(('005xx000001Sv6o', '000000000000500')," +
                     "('005xx000001Sv6o', '000000000000400'))");
@@ -1203,7 +1203,7 @@ public class InListIT extends ParallelStatsDisabledIT {
     }
 
     private void testPartialPkListPlan(String tenantView) throws Exception {
-        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1) ) {
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES)) ) {
             PreparedStatement preparedStmt = viewConn.prepareStatement("SELECT * FROM " + tenantView + " WHERE (ID1) IN " +
                     "(('005xx000001Sv6o')," +
                     "('005xx000001Sv6o'))");
@@ -1242,7 +1242,7 @@ public class InListIT extends ParallelStatsDisabledIT {
     }
 
     private void testPartialPkPlusNonPkListPlan(String tenantView) throws Exception {
-        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1) ) {
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES)) ) {
             PreparedStatement preparedStmt = viewConn.prepareStatement("SELECT * FROM " + tenantView + " WHERE (ID1, ID3) IN " +
                     "(('005xx000001Sv6o', 1)," +
                     "('005xx000001Sv6o', 2))");
@@ -1282,7 +1282,7 @@ public class InListIT extends ParallelStatsDisabledIT {
 
     private void testNonPkListPlan(String tenantView) throws Exception {
         // Tenant connection should generate a range scan because tenant id is the leading PK.
-        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1) ) {
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES)) ) {
             PreparedStatement preparedStmt = viewConn.prepareStatement("SELECT * FROM " + tenantView + " WHERE (ID3, ID4) IN " +
                     "((1, 1)," +
                     "(2, 2))");
@@ -1304,7 +1304,7 @@ public class InListIT extends ParallelStatsDisabledIT {
     }
 
     private void deleteTenantData(String tenantView) throws SQLException {
-        try (Connection tenantConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+        try (Connection tenantConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             tenantConn.createStatement().execute("DELETE FROM " + tenantView);
         }
     }
@@ -1312,8 +1312,7 @@ public class InListIT extends ParallelStatsDisabledIT {
     @Test
     public void testInListExpressionWithRightQueryPlanForNumericalValue() throws Exception {
         String tenantView = generateUniqueName();
-
-        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             viewConn.setAutoCommit(true);
             try (Statement stmt = viewConn.createStatement()) {
                 stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + "(DOUBLE1 DOUBLE NOT NULL, INT1 BIGINT NOT NULL " +
@@ -1346,8 +1345,7 @@ public class InListIT extends ParallelStatsDisabledIT {
     @Test
     public void testQueryPlanForPkDescOrderedTenantViewOnGlobalViewForStringValue() throws Exception {
         String tenantView = generateUniqueName();
-
-        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             viewConn.setAutoCommit(true);
             try (Statement stmt = viewConn.createStatement()) {
                 stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + " AS SELECT * FROM " + descViewName);
@@ -1385,8 +1383,7 @@ public class InListIT extends ParallelStatsDisabledIT {
     @Test
     public void testQueryPlanForTenantViewOnBaseTableWithVarcharValue() throws Exception {
         String tenantView = generateUniqueName();
-
-        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1,PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             viewConn.setAutoCommit(true);
             try (Statement stmt = viewConn.createStatement()) {
                 stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + "(DOUBLE1 VARCHAR NOT NULL, INT1 VARCHAR NOT NULL " +
@@ -1420,7 +1417,7 @@ public class InListIT extends ParallelStatsDisabledIT {
     public void testQueryPlanForTenantViewOnBaseTableWithNumericalValue() throws Exception {
         String tenantView = generateUniqueName();
 
-        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1,PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             viewConn.setAutoCommit(true);
             try (Statement stmt = viewConn.createStatement()) {
                 stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView +
@@ -1485,7 +1482,7 @@ public class InListIT extends ParallelStatsDisabledIT {
     public void testInListExpressionWithFunction() throws Exception {
         String tenantView = generateUniqueName();
 
-        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1,PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             viewConn.setAutoCommit(true);
             try (Statement stmt = viewConn.createStatement()) {
                 stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + "(ID1 BIGINT NOT NULL, ID2 BIGINT NOT NULL, ID4 BIGINT " +
@@ -1549,7 +1546,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String tenantView = generateUniqueName();
         String tenantIndexView = generateUniqueName();
 
-        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             viewConn.setAutoCommit(true);
             try (Statement stmt = viewConn.createStatement()) {
                 stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + "(ID1 BIGINT NOT NULL, ID2 BIGINT NOT NULL, ID4 BIGINT " +
@@ -1615,7 +1612,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String tenantView = generateUniqueName();
         String tenantIndexView = generateUniqueName();
 
-        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             viewConn.setAutoCommit(true);
             try (Statement stmt = viewConn.createStatement()) {
                 stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + "(ID1 BIGINT NOT NULL, ID2 BIGINT NOT NULL, ID4 BIGINT " +
@@ -1681,14 +1678,13 @@ public class InListIT extends ParallelStatsDisabledIT {
         String tenantView = generateUniqueName();
         String globalView = generateUniqueName();
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.setAutoCommit(true);
             try (Statement stmt = conn.createStatement()) {
                 stmt.execute("CREATE VIEW " + globalView + " AS SELECT * FROM " + tableName + " WHERE KEY_PREFIX = 'ABC'");
             }
         }
-
-        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             viewConn.setAutoCommit(true);
             try (Statement stmt = viewConn.createStatement()) {
                 stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + "(ID1 BIGINT NOT NULL, ID2 BIGINT NOT NULL, ID4 BIGINT " +
@@ -1752,14 +1748,14 @@ public class InListIT extends ParallelStatsDisabledIT {
         String tenantView = generateUniqueName();
         String globalView = generateUniqueName();
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.setAutoCommit(true);
             try (Statement stmt = conn.createStatement()) {
                 stmt.execute("CREATE VIEW " + globalView + " AS SELECT * FROM " + tableName + " WHERE KEY_PREFIX = 'ABC'");
             }
         }
 
-        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1,PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             viewConn.setAutoCommit(true);
             try (Statement stmt = viewConn.createStatement()) {
                 stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + "(ID1 DOUBLE NOT NULL, ID2 DOUBLE NOT NULL, ID4 BIGINT " +
@@ -1798,7 +1794,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String view = generateUniqueName();
         String index = generateUniqueName();
 
-        try (Connection conn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+        try (Connection conn = DriverManager.getConnection(TENANT_SPECIFIC_URL1,PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.setAutoCommit(true);
             try (Statement stmt = conn.createStatement()) {
                 stmt.execute("CREATE VIEW " + view + " (ID1 BIGINT NOT NULL, ID2 BIGINT NOT NULL, ID4 BIGINT " +
@@ -1867,7 +1863,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String view = generateUniqueName();
         String index = generateUniqueName();
 
-        try (Connection conn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+        try (Connection conn = DriverManager.getConnection(TENANT_SPECIFIC_URL1,PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.setAutoCommit(true);
             try (Statement stmt = conn.createStatement()) {
                 stmt.execute("CREATE VIEW " + view + " (ID1 BIGINT NOT NULL, ID2 BIGINT NOT NULL, ID4 BIGINT " +
@@ -1936,7 +1932,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String index = generateUniqueName();
         String fullTableName = generateUniqueName();
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.setAutoCommit(true);
             try (Statement stmt = conn.createStatement()) {
                 stmt.execute("CREATE TABLE " + fullTableName + "(ID1 BIGINT NOT NULL, ID2 BIGINT NOT NULL, " +
@@ -1958,7 +1954,7 @@ public class InListIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testInListExpressionWithVariableLengthColumnsRanges() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         final String schemaName = generateUniqueName();
         final String tableName = generateUniqueName();
         final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
@@ -2075,7 +2071,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String testMaxInList = String.format("SELECT ROW_ID FROM %s WHERE (ID1, ID2, ID3) IN ((%d, '4', '5'),(%d, '2', '3')", viewName, nowTime+1, nowTime+1);
 
         String tenantConnectionUrl = String.format("%s;%s=%s%06d", getUrl(), TENANT_ID_ATTRIB, TENANT_PREFIX, tenantId);
-        try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl)) {
+        try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             tenantConnection.setAutoCommit(true);
             try (Statement ustmt = tenantConnection.createStatement()) {
                 for (String upsertSql : UPSERT_SQLS) {
@@ -2125,7 +2121,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String testMaxInList = String.format("SELECT ROW_ID FROM %s WHERE (ID1, ID2, ID3) IN (('%s', '4', '5'),('%s', '2', '3')", viewName, nowTime+2, nowTime+1);
 
         String tenantConnectionUrl = String.format("%s;%s=%s%06d", getUrl(), TENANT_ID_ATTRIB, TENANT_PREFIX, tenantId);
-        try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl)) {
+        try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             tenantConnection.setAutoCommit(true);
             try (Statement ustmt = tenantConnection.createStatement()) {
                 for (String upsertSql : UPSERT_SQLS) {
@@ -2164,7 +2160,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String testMaxInList = String.format("SELECT ROW_ID FROM %s WHERE (ID1, ID2, ID3) IN ((%d, 21.0, 3),(%d, 2.0, 3)", viewName, nowTime+1, nowTime+1);
 
         String tenantConnectionUrl = String.format("%s;%s=%s%06d", getUrl(), TENANT_ID_ATTRIB, TENANT_PREFIX, tenantId);
-        try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl)) {
+        try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             tenantConnection.setAutoCommit(true);
             try (Statement ustmt = tenantConnection.createStatement()) {
                 for (String upsertSql : UPSERT_SQLS) {
@@ -2193,7 +2189,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String context = "sql: " + testSQL + ", type: " + testType;
 
         String tenantConnectionUrl = String.format("%s;%s=%s%06d", getUrl(), TENANT_ID_ATTRIB, TENANT_PREFIX, tenantId);
-        try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl)) {
+        try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             // perform the query
             ResultSet rs = tenantConnection.createStatement().executeQuery(testSQL);
             for (int i = 0; i < expectedSet.size();i++) {
@@ -2217,7 +2213,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         query.append(")");
 
         String tenantConnectionUrl = String.format("%s;%s=%s%06d", getUrl(), TENANT_ID_ATTRIB, TENANT_PREFIX, tenantId);
-        try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl)) {
+        try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             PhoenixPreparedStatement stmt = tenantConnection.prepareStatement(query.toString()).unwrap(PhoenixPreparedStatement.class);
             // perform the query
             int lastBoundCol = 0;
@@ -2250,7 +2246,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         final String viewName = String.format("Z_%s", baseTableName);
         int tenantId = 1;
 
-        try (Connection globalConnection = DriverManager.getConnection(getUrl())) {
+        try (Connection globalConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             try (Statement cstmt = globalConnection.createStatement()) {
                 String createDDL = "CREATE TABLE IF NOT EXISTS " + baseTableName +
                     "(OID CHAR(15) NOT NULL, KP CHAR(3) NOT NULL, CREATED_DATE DATE, CREATED_BY CHAR(15), SYSTEM_MODSTAMP DATE " +
@@ -2260,7 +2256,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         }
 
         String tenantConnectionUrl = String.format("%s;%s=%s%06d", getUrl(), TENANT_ID_ATTRIB, TENANT_PREFIX, tenantId);
-        try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl)) {
+        try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             try (Statement cstmt = tenantConnection.createStatement()) {
                 // DESC order in PK causes key explosion when creating skip scan
                 String TENANT_VIEW_TEMPLATE = "CREATE VIEW IF NOT EXISTS %s " +

@@ -31,6 +31,7 @@ import static org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TableInd
 import static org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TableOptions;
 import static org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TenantViewOptions;
 import static org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TenantViewIndexOptions;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 
 import java.io.IOException;
@@ -55,6 +56,7 @@ import org.apache.phoenix.query.PhoenixTestBuilder.DataWriter;
 import org.apache.phoenix.query.PhoenixTestBuilder.BasicDataWriter;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Ignore;
@@ -85,7 +87,7 @@ public class EmptyColumnIT extends ParallelStatsDisabledIT {
             byte[] emptyColumnFamilyName, byte[] emptyColumnName, long minTimestamp,
             int expectedRows) throws IOException, SQLException {
 
-        try (Table tbl = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES)
+        try (Table tbl = driver.getConnectionQueryServices(getActiveUrl(), TEST_PROPERTIES)
                 .getTable(hbaseTableName)) {
 
             Scan allRows = new Scan();
@@ -275,7 +277,7 @@ public class EmptyColumnIT extends ParallelStatsDisabledIT {
 
         // Create a test data writer for the above schema.
         DataWriter dataWriter = new BasicDataWriter();
-        try (Connection connection = DriverManager.getConnection(getUrl())) {
+        try (Connection connection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             connection.setAutoCommit(true);
             dataWriter.setConnection(connection);
             dataWriter.setDataSupplier(dataSupplier);
@@ -322,7 +324,7 @@ public class EmptyColumnIT extends ParallelStatsDisabledIT {
 
         // Create a test data writer for the above schema.
         DataWriter dataWriter = new BasicDataWriter();
-        try (Connection connection = DriverManager.getConnection(getUrl())) {
+        try (Connection connection = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             connection.setAutoCommit(true);
             dataWriter.setConnection(connection);
             dataWriter.setDataSupplier(dataSupplier);
@@ -372,7 +374,7 @@ public class EmptyColumnIT extends ParallelStatsDisabledIT {
                 tenantConnectUrl =
                 getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions()
                         .getTenantId();
-        try (Connection connection = DriverManager.getConnection(tenantConnectUrl)) {
+        try (Connection connection = DriverManager.getConnection(tenantConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             connection.setAutoCommit(true);
             dataWriter.setConnection(connection);
             dataWriter.setDataSupplier(dataSupplier);
@@ -437,7 +439,7 @@ public class EmptyColumnIT extends ParallelStatsDisabledIT {
 
                 // Create a test data writer for the above schema.
                 DataWriter dataWriter = new BasicDataWriter();
-                try (Connection connection = DriverManager.getConnection(getUrl())) {
+                try (Connection connection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                     connection.setAutoCommit(true);
                     dataWriter.setConnection(connection);
                     dataWriter.setDataSupplier(dataSupplier);
@@ -516,7 +518,7 @@ public class EmptyColumnIT extends ParallelStatsDisabledIT {
 
                     // Create a test data writer for the above schema.
                     DataWriter dataWriter = new BasicDataWriter();
-                    try (Connection connection = DriverManager.getConnection(getUrl())) {
+                    try (Connection connection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                         connection.setAutoCommit(true);
                         dataWriter.setConnection(connection);
                         dataWriter.setDataSupplier(dataSupplier);
@@ -611,7 +613,7 @@ public class EmptyColumnIT extends ParallelStatsDisabledIT {
                         tenantConnectUrl =
                         getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions()
                                 .getTenantId();
-                try (Connection connection = DriverManager.getConnection(tenantConnectUrl)) {
+                try (Connection connection = DriverManager.getConnection(tenantConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                     connection.setAutoCommit(true);
                     dataWriter.setConnection(connection);
                     dataWriter.setDataSupplier(dataSupplier);
@@ -723,7 +725,7 @@ public class EmptyColumnIT extends ParallelStatsDisabledIT {
                                 getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder
                                         .getDataOptions().getTenantId();
                         try (Connection connection = DriverManager
-                                .getConnection(tenantConnectUrl)) {
+                                .getConnection(tenantConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                             connection.setAutoCommit(true);
                             dataWriter.setConnection(connection);
                             dataWriter.setDataSupplier(dataSupplier);

@@ -58,6 +58,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -119,7 +120,11 @@ public abstract class ParallelStatsDisabledWithRegionMovesIT extends BaseTest {
         props.put(HConstants.HBASE_CLIENT_SCANNER_MAX_RESULT_SIZE_KEY, String.valueOf(1));
         props.put(QueryServices.PHOENIX_POST_DUMMY_PROCESS,
                 TestScanningResultPostDummyResultCaller.class.getName());
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     @AfterClass
@@ -217,7 +222,7 @@ public abstract class ParallelStatsDisabledWithRegionMovesIT extends BaseTest {
                                     regionStatesCount.getOpenRegions() ==
                                             regionStatesCount.getTotalRegions()) {
                                 try (Table table =
-                                             utility.getConnection()
+                                             getUtility().getConnection()
                                                      .getTable(TableName.valueOf(tableName))) {
                                     try (ResultScanner resultScanner = table.getScanner(
                                                     new Scan())) {

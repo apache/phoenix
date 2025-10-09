@@ -34,6 +34,7 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PVarchar;
@@ -62,7 +63,7 @@ public class NamespaceSchemaMappingIT extends ParallelStatsDisabledIT {
 
         String phoenixFullTableName = schemaName + "." + tableName;
         String hbaseFullTableName = schemaName + ":" + tableName;
-        Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getActiveUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         admin.createNamespace(NamespaceDescriptor.create(namespace).build());
         admin.createTable(TableDescriptorBuilder.newBuilder(TableName.valueOf(namespace, tableName))
                 .setColumnFamily(ColumnFamilyDescriptorBuilder.of(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES)).build());
@@ -95,14 +96,14 @@ public class NamespaceSchemaMappingIT extends ParallelStatsDisabledIT {
 
         Table metatable = admin.getConnection().getTable(
                 SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,
-                        (conn.unwrap(PhoenixConnection.class).getQueryServices().getProps())));
+                        (conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getProps())));
         Put p = new Put(SchemaUtil.getTableKey(null, schemaName, tableName));
         p.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED_BYTES,
                 PBoolean.INSTANCE.toBytes(true));
         metatable.put(p);
         metatable.close();
 
-        PhoenixConnection phxConn = (conn.unwrap(PhoenixConnection.class));
+        PhoenixMonitoredConnection phxConn = (conn.unwrap(PhoenixMonitoredConnection.class));
         phxConn.getQueryServices().clearCache();
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());

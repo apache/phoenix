@@ -28,6 +28,7 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
@@ -38,7 +39,7 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
 public class IndexScrutiny {
 
     public static long scrutinizeIndex(Connection conn, String fullTableName, String fullIndexName) throws SQLException {
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PhoenixMonitoredConnection pconn = conn.unwrap(PhoenixMonitoredConnection.class);
         PTable ptable = pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName));
         int tableColumnOffset = 0;
         List<PColumn> tableColumns = ptable.getColumns();

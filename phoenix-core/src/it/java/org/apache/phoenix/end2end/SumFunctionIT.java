@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -25,18 +26,17 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-
 @Category(ParallelStatsDisabledTest.class)
 public class SumFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testSumFunctionWithCaseWhenStatement() throws Exception {
         String tableName = generateUniqueName();
-
-        try (Connection c = DriverManager.getConnection(getUrl());
-          Statement s = c.createStatement()) {
+        try (Connection c = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+             Statement s = c.createStatement()) {
             s.execute("create table " + tableName + " (id varchar primary key, col1 varchar, "
               + "col2 integer)");
             s.execute("upsert into " + tableName + " values('id1', 'aaa', 2)");

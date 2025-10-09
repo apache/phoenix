@@ -16,6 +16,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -27,10 +28,10 @@ import java.sql.ResultSet;
 import java.util.Arrays;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(ParallelStatsDisabledTest.class)
 public class DecodeBinaryFunctionIT extends ParallelStatsDisabledIT {
 
@@ -42,7 +43,7 @@ public class DecodeBinaryFunctionIT extends ParallelStatsDisabledIT {
 
     @BeforeClass
     public static void setUpBeforeClass() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         testTable = generateUniqueName();
         String ddl = "CREATE TABLE " + testTable + " (id INTEGER PRIMARY KEY, data VARCHAR)";
         conn.createStatement().execute(ddl);
@@ -56,8 +57,7 @@ public class DecodeBinaryFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDecodeHBaseFromHexLiteral() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         ResultSet rs = conn.createStatement().executeQuery(
                 "SELECT DECODE_BINARY('\\x48\\x65\\x6C\\x6C\\x6F\\x50\\x68\\x6F\\x65\\x6E\\x69\\x78', " +
                         "'HBASE') FROM " + testTable);
@@ -68,7 +68,7 @@ public class DecodeBinaryFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testNullAndEmptyStringDecoding() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         ResultSet rs = conn.createStatement()
                 .executeQuery("SELECT DECODE_BINARY(data, 'HBASE') FROM " + testTable + " WHERE ID=-10");
@@ -87,7 +87,7 @@ public class DecodeBinaryFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testLongBase64Decoding() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         StringBuilder base64String = new StringBuilder();
         for (int i = 0; i < 20; i++) {
@@ -115,7 +115,7 @@ public class DecodeBinaryFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDecodeBase64WithPadding() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + testTable + " (id, data) VALUES (7, ?)");
         ps.setString(1, "SQ==");
@@ -133,7 +133,7 @@ public class DecodeBinaryFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDecodeEncodeRoundHex() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + testTable + " (id, data) VALUES (4, ?)");
         ps.setString(1, hex48String);
@@ -150,7 +150,7 @@ public class DecodeBinaryFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDecodeEncodeRoundBase64() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + testTable + " (id, data) VALUES (5, ?)");
         ps.setString(1, base64Chunk);
@@ -167,8 +167,7 @@ public class DecodeBinaryFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDecodeEncodeRoundHbase() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         ResultSet rs = conn.createStatement().executeQuery(
                 "SELECT ENCODE_BINARY(DECODE_BINARY(data, 'HBASE'), 'HBASE') FROM " + testTable + " WHERE ID=1");
         assertTrue(rs.next());

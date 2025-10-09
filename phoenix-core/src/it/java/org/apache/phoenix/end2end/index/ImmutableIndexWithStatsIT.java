@@ -37,7 +37,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
 @Category(ParallelStatsEnabledTest.class)
 public class ImmutableIndexWithStatsIT extends ParallelStatsEnabledIT {
     

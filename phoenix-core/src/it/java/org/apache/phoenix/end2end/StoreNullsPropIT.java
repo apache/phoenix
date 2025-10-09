@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
@@ -27,15 +28,15 @@ import java.sql.Statement;
 import java.util.Properties;
 
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(ParallelStatsDisabledTest.class)
 public class StoreNullsPropIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSetStoreNullsDefaultViaConfig() throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.DEFAULT_STORE_NULLS_ATTRIB, "true");
         Connection storeNullsConn = DriverManager.getConnection(getUrl(), props);
 

@@ -29,6 +29,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
@@ -49,13 +50,14 @@ import java.util.Map;
 import java.util.Properties;
 
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.assertRawCellCount;
 import static org.apache.phoenix.util.TestUtil.assertRawRowCount;
 import static org.apache.phoenix.util.TestUtil.assertRowExistsAtSCN;
 import static org.apache.phoenix.util.TestUtil.assertRowHasExpectedValueAtSCN;
 import static org.apache.phoenix.util.TestUtil.assertTableHasVersions;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertFalse;
-
 @Category(NeedsOwnMiniClusterTest.class)
 public class MaxLookbackIT extends BaseTest {
     private static final int MAX_LOOKBACK_AGE = 15;
@@ -73,7 +75,11 @@ public class MaxLookbackIT extends BaseTest {
         props.put(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(MAX_LOOKBACK_AGE));
         props.put(QueryServices.PHOENIX_COMPACTION_ENABLED, Boolean.toString(false));
         props.put("hbase.procedure.remote.dispatcher.delay.msec", "0");
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     @Before
@@ -105,7 +111,7 @@ public class MaxLookbackIT extends BaseTest {
         populateTable(dataTableName);
         long populateTime = EnvironmentEdgeManager.currentTimeMillis();
         injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000 + 1000);
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                 Long.toString(populateTime));
         try (Connection connscn = DriverManager.getConnection(getUrl(), props)) {
@@ -121,7 +127,7 @@ public class MaxLookbackIT extends BaseTest {
 
     @Test(timeout=120000L)
     public void testRecentlyDeletedRowsNotCompactedAway() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String dataTableName = generateUniqueName();
             String indexName = generateUniqueName();
             createTable(dataTableName);
@@ -196,7 +202,7 @@ public class MaxLookbackIT extends BaseTest {
         long oldMemstoreFlushInterval = conf.getLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL,
                 HRegion.DEFAULT_CACHE_FLUSH_INTERVAL);
         conf.setLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, 0L);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String dataTableName = generateUniqueName();
             String indexName = generateUniqueName();
             createTable(dataTableName);
@@ -266,7 +272,7 @@ public class MaxLookbackIT extends BaseTest {
         String firstValue = "abc";
         String secondValue = "def";
         String thirdValue = "ghi";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String dataTableName = generateUniqueName();
             String indexName = generateUniqueName();
             createTable(dataTableName);
@@ -363,7 +369,7 @@ public class MaxLookbackIT extends BaseTest {
     }
 
     private void createTable(String tableName) throws SQLException {
-        try(Connection conn = DriverManager.getConnection(getUrl())) {
+        try(Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String createSql = "create table " + tableName +
                     " (id varchar(10) not null primary key, val1 varchar(10), " +
                     "val2 varchar(10), val3 varchar(10))" + tableDDLOptions;
@@ -372,7 +378,7 @@ public class MaxLookbackIT extends BaseTest {
         }
     }
     private void populateTable(String tableName) throws SQLException {
-        try(Connection conn = DriverManager.getConnection(getUrl())) {
+        try(Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute("upsert into " + tableName + " values ('a', 'ab', 'abc', 'abcd')");
             conn.commit();
             conn.createStatement().execute("upsert into " + tableName + " values ('b', 'bc', 'bcd', 'bcde')");
@@ -382,7 +388,7 @@ public class MaxLookbackIT extends BaseTest {
 
     private void createIndex(String dataTableName, String indexTableName, int indexVersions)
             throws SQLException {
-        try(Connection conn = DriverManager.getConnection(getUrl())) {
+        try(Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
                     dataTableName + " (val1) include (val2, val3)" +
                     " VERSIONS=" + indexVersions);

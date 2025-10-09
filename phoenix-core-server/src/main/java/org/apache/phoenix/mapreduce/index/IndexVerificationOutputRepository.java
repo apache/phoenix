@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.mapreduce.index;
 
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 import org.apache.hadoop.hbase.TableExistsException;
@@ -115,7 +116,7 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
     @VisibleForTesting
     public IndexVerificationOutputRepository(byte[] indexName, Connection conn) throws SQLException {
         ConnectionQueryServices queryServices =
-            conn.unwrap(PhoenixConnection.class).getQueryServices();
+            conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
         outputTable = queryServices.getTable(OUTPUT_TABLE_NAME_BYTES);
         indexTable = queryServices.getTable(indexName);
     }
@@ -177,7 +178,7 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
     }
 
     public void createOutputTable(Connection connection) throws IOException, SQLException {
-        ConnectionQueryServices queryServices = connection.unwrap(PhoenixConnection.class).getQueryServices();
+        ConnectionQueryServices queryServices = connection.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
         try (Admin admin = queryServices.getAdmin()) {
             TableName outputTableName = TableName.valueOf(OUTPUT_TABLE_NAME);
             if (!admin.tableExists(outputTableName)) {

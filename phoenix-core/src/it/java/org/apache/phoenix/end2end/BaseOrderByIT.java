@@ -53,7 +53,6 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.Test;
 
-
 public abstract class BaseOrderByIT extends ParallelStatsDisabledIT {
 
     Properties props;

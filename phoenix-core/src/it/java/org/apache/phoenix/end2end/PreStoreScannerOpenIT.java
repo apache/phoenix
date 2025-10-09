@@ -38,6 +38,7 @@ import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -50,6 +51,8 @@ import net.bytebuddy.asm.Advice;
 import net.bytebuddy.dynamic.loading.ClassReloadingStrategy;
 import net.bytebuddy.matcher.ElementMatchers;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 @Category(NeedsOwnMiniClusterTest.class)
 public class PreStoreScannerOpenIT extends BaseTest {
 
@@ -102,7 +105,11 @@ public class PreStoreScannerOpenIT extends BaseTest {
         // Disable compactions
         props.put(CompactSplit.HBASE_REGION_SERVER_ENABLE_COMPACTION, "false");
         props.put("hbase.procedure.remote.dispatcher.delay.msec", "0");
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     /**
@@ -115,9 +122,8 @@ public class PreStoreScannerOpenIT extends BaseTest {
     @Test
     public void testStoreScannerNotDoingExtraSeeks() throws Exception {
         createTable(TABLE_NAME);
-
-        try (Connection conn = DriverManager.getConnection(getUrl());
-            Statement stmt = conn.createStatement()) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+             Statement stmt = conn.createStatement()) {
             stmt.execute("UPSERT INTO " + TABLE_NAME + " (id, col1) VALUES (1, 'a')");
             stmt.execute("UPSERT INTO " + TABLE_NAME + " (id, col1) VALUES (10, 'b')");
             conn.commit();
@@ -134,8 +140,7 @@ public class PreStoreScannerOpenIT extends BaseTest {
         }
 
         Assert.assertEquals(2, getStoreFileCount(TABLE_NAME));
-
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
             Statement stmt = conn.createStatement()) {
             ResultSet rs = stmt.executeQuery("SELECT col1 FROM " + TABLE_NAME + " WHERE id = 3");
             Assert.assertTrue(rs.next());
@@ -157,7 +162,7 @@ public class PreStoreScannerOpenIT extends BaseTest {
         createTable(tableName);
 
         long beforeRowWasDeleted;
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
             Statement stmt = conn.createStatement()) {
             stmt.execute("UPSERT INTO " + tableName + " (id, col1) VALUES (1, 'a')");
             conn.commit();
@@ -178,7 +183,7 @@ public class PreStoreScannerOpenIT extends BaseTest {
             Assert.assertFalse(rs.next());
         }
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(beforeRowWasDeleted));
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
             Statement stmt = conn.createStatement()) {
@@ -202,8 +207,7 @@ public class PreStoreScannerOpenIT extends BaseTest {
         ManualEnvironmentEdge injectEdge = new ManualEnvironmentEdge();
         injectEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
         EnvironmentEdgeManager.injectEdge(injectEdge);
-
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
             Statement stmt = conn.createStatement()) {
             stmt.execute("UPSERT INTO " + tableName + " (id, col1, col2) VALUES (1, 'a', 'ab')");
             conn.commit();
@@ -231,7 +235,7 @@ public class PreStoreScannerOpenIT extends BaseTest {
     }
 
     private void createTable(String tableName) throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
             Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + tableName
                 + " (id INTEGER PRIMARY KEY, col1 VARCHAR, col2 VARCHAR) BLOOMFILTER = NONE, TTL = "

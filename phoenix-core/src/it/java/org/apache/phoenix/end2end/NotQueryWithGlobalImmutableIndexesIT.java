@@ -24,7 +24,6 @@ import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-
 @Category(ParallelStatsDisabledTest.class)
 public class NotQueryWithGlobalImmutableIndexesIT extends NotQueryIT {
 

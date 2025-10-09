@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_DROP_PK;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MUTATE_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.TABLE_UNDEFINED;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
@@ -54,6 +55,7 @@ import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -70,7 +72,6 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
 @Category(ParallelStatsEnabledTest.class)
 public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
 
@@ -78,7 +79,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     public void testCreateTenantSpecificTable() throws Exception {
         // ensure we didn't create a physical HBase table for the tenant-specific table
         Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
-        Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+        Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin();
         assertEquals(0, admin.listTableDescriptors(Pattern.compile(TENANT_TABLE_NAME)).size());
     }
     
@@ -209,7 +210,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     
     @Test(expected=ColumnAlreadyExistsException.class)
     public void testTenantSpecificTableCannotOverrideParentCol() throws SQLException {
-        createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW " + generateUniqueName() + " ( \n" + 
+        createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW " + generateUniqueName() + " ( \n" +
                 "                \"user\" INTEGER) AS SELECT *\n" + 
                 "                FROM " + PARENT_TABLE_NAME);
     }
@@ -326,7 +327,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     @Test
     public void testAllowDropParentTableWithCascadeAndSingleTenantTable() throws Exception {
 	    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-	    Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
 	    Connection connTenant = null;
     
 		try {
@@ -424,11 +425,17 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
 
 	private void validateTenantViewIsDropped(Connection connTenant)	throws SQLException {
         try {
-            connTenant.unwrap(PhoenixConnection.class).getTableNoCache(TENANT_TABLE_NAME);
+            connTenant.unwrap(PhoenixMonitoredConnection.class).getTableNoCache(TENANT_TABLE_NAME);
             fail("Tenant specific view " + TENANT_TABLE_NAME
                     + " should have been dropped when parent was dropped");
-        } catch (TableNotFoundException e) {
+        } catch (Exception e) {
             //Expected
+            if (Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))) {
+                assertTrue(e.getCause() instanceof TableNotFoundException);
+            } else{
+                assertTrue(e instanceof TableNotFoundException);
+            }
+//
         }
 		// Try and drop tenant view, should throw TableNotFoundException
 		try {
@@ -544,7 +551,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             props.clear();
             conn.close();
         }
-        
+        props =  PropertiesUtil.deepCopy(TEST_PROPERTIES);
         conn = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL, props);
         try {   
             // make sure tenant-specific connections only see their own tables and the global tables
@@ -634,7 +641,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
         String viewName = generateUniqueName();
         String fullViewName = SchemaUtil.getTableName(schemaName, viewName);
         String viewIndexName = generateUniqueName();
-        try(Connection conn = DriverManager.getConnection(getUrl());
+        try(Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
             Statement stmt = conn.createStatement()) {
             String createDataTable = "create table " + fullDataTableName + " (orgid varchar(10) not null, "
                     + "id1 varchar(10) not null, id2 varchar(10) not null, id3 integer not null, "
@@ -644,12 +651,12 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             stmt.execute("create view " + fullViewName + " as select * from " + fullDataTableName);
             stmt.execute("create index " + viewIndexName + " on " + fullViewName + "(id3, id2, id1) include (val1, val2)");
         }
-        try(Connection conn = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL);
+        try(Connection conn = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL, PropertiesUtil.deepCopy(TEST_PROPERTIES));
             Statement stmt = conn.createStatement()) {
             String grandChildViewName = generateUniqueName();
             String fullGrandChildViewName = SchemaUtil.getTableName(schemaName, grandChildViewName);
             stmt.execute("create view " + fullGrandChildViewName + " as select * from " + fullViewName);
-            PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+            PhoenixMonitoredConnection pconn = conn.unwrap(PhoenixMonitoredConnection.class);
             pconn.getTableNoCache(pconn.getTenantId(), fullGrandChildViewName);
             stmt.execute("upsert into " + fullGrandChildViewName + " values ('a1', 'a2', 3, 'a4', 'a5')");
             conn.commit();

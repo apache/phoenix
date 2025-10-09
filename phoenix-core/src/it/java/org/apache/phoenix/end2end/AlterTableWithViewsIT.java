@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MUTATE_TABLE;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -48,6 +49,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -73,7 +75,6 @@ import org.junit.runners.Parameterized.Parameters;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
@@ -132,8 +133,8 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
     
     @Test
     public void testAddNewColumnsToBaseTableWithViews() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {       
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES)) : conn ) {
             String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
             String viewOfTable = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
 
@@ -160,8 +161,8 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
     
     @Test
     public void testAlterPropertiesOfParentTable() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {       
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES)) : conn ) {
             String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
             String viewOfTable1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
             String viewOfTable2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
@@ -178,9 +179,9 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null;
 
             // Initially all property values should be the same for the base table and its views
-            PTable table = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, tableName));
-            PTable viewTable1 = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable1));
-            PTable viewTable2 = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable2));
+            PTable table = conn.unwrap(PhoenixMonitoredConnection.class).getTable(new PTableKey(null, tableName));
+            PTable viewTable1 = viewConn.unwrap(PhoenixMonitoredConnection.class).getTable(new PTableKey(tenantId, viewOfTable1));
+            PTable viewTable2 = viewConn.unwrap(PhoenixMonitoredConnection.class).getTable(new PTableKey(tenantId, viewOfTable2));
             assertFalse(table.isImmutableRows());
             assertFalse(viewTable1.isImmutableRows());
             assertFalse(viewTable2.isImmutableRows());
@@ -196,7 +197,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
                     + " SET UPDATE_CACHE_FREQUENCY=1, USE_STATS_FOR_PARALLELIZATION=false");
             // query the view to force the table cache to be updated
             viewConn.createStatement().execute("SELECT * FROM "+viewOfTable2);
-            viewTable2 = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable2));
+            viewTable2 = viewConn.unwrap(PhoenixMonitoredConnection.class).getTable(new PTableKey(tenantId, viewOfTable2));
             assertEquals(1, viewTable2.getUpdateCacheFrequency());
             assertFalse(viewTable2.useStatsForParallelization());
 
@@ -208,9 +209,9 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             // query the views to force the table cache to be updated
             viewConn.createStatement().execute("SELECT * FROM "+viewOfTable1);
             viewConn.createStatement().execute("SELECT * FROM "+viewOfTable2);
-            table = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, tableName));
-            viewTable1 = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable1));
-            viewTable2 = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable2));
+            table = conn.unwrap(PhoenixMonitoredConnection.class).getTable(new PTableKey(null, tableName));
+            viewTable1 = viewConn.unwrap(PhoenixMonitoredConnection.class).getTable(new PTableKey(tenantId, viewOfTable1));
+            viewTable2 = viewConn.unwrap(PhoenixMonitoredConnection.class).getTable(new PTableKey(tenantId, viewOfTable2));
             assertTrue(table.isImmutableRows());
             assertTrue(viewTable1.isImmutableRows());
             assertTrue(viewTable2.isImmutableRows());
@@ -250,9 +251,9 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
 
     @Test
     public void testCreateViewWithPropsMaintainsOwnProps() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                 Connection viewConn = isMultiTenant ?
-                        DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn) {
+                        DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES)) : conn) {
             String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
             String viewOfTable1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
             String viewOfTable2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
@@ -272,11 +273,11 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
 
             // Initially, property values not specified during view creation should be the same for
             // the base table and its views those specified should have corresponding values
-            PTable table = conn.unwrap(PhoenixConnection.class)
+            PTable table = conn.unwrap(PhoenixMonitoredConnection.class)
                     .getTable(new PTableKey(null, tableName));
-            PTable viewTable1 = viewConn.unwrap(PhoenixConnection.class)
+            PTable viewTable1 = viewConn.unwrap(PhoenixMonitoredConnection.class)
                     .getTable(new PTableKey(tenantId, viewOfTable1));
-            PTable viewTable2 = viewConn.unwrap(PhoenixConnection.class)
+            PTable viewTable2 = viewConn.unwrap(PhoenixMonitoredConnection.class)
                     .getTable(new PTableKey(tenantId, viewOfTable2));
             assertEquals(2, table.getUpdateCacheFrequency());
             assertEquals(7, viewTable1.getUpdateCacheFrequency());
@@ -292,11 +293,11 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             // query the views to force the table cache to be updated
             viewConn.createStatement().execute("SELECT * FROM " + viewOfTable1);
             viewConn.createStatement().execute("SELECT * FROM " + viewOfTable2);
-            table = conn.unwrap(PhoenixConnection.class)
+            table = conn.unwrap(PhoenixMonitoredConnection.class)
                     .getTable(new PTableKey(null, tableName));
-            viewTable1 = viewConn.unwrap(PhoenixConnection.class)
+            viewTable1 = viewConn.unwrap(PhoenixMonitoredConnection.class)
                     .getTable(new PTableKey(tenantId, viewOfTable1));
-            viewTable2 = viewConn.unwrap(PhoenixConnection.class)
+            viewTable2 = viewConn.unwrap(PhoenixMonitoredConnection.class)
                     .getTable(new PTableKey(tenantId, viewOfTable2));
             assertEquals(3, table.getUpdateCacheFrequency());
             // The updated property value is only propagated to the view in which we did not specify
@@ -311,8 +312,8 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
     
     @Test
     public void testDropColumnsFromBaseTableWithView() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES)) : conn ) {
             String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
             String viewOfTable = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
 
@@ -342,8 +343,8 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
     
     @Test
     public void testAddExistingViewColumnToBaseTableWithViews() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES)) : conn ) {
             conn.setAutoCommit(false);
             viewConn.setAutoCommit(false);
             String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
@@ -462,7 +463,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
                 
                 // the base column count and ordinal positions of columns is updated in the ptable (at read time) 
                 PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null;
-                PTable view = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
+                PTable view = viewConn.unwrap(PhoenixMonitoredConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
                 assertBaseColumnCount(4, view.getBaseColumnCount());
                 assertColumnsMatch(view.getColumns(), "ID", "COL1", "COL2", "COL3", "VIEW_COL4", "VIEW_COL2", "VIEW_COL1", "VIEW_COL3", "VIEW_COL5", "VIEW_COL6");
             }
@@ -471,8 +472,8 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
     
     @Test
     public void testAddExistingViewPkColumnToBaseTableWithViews() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {      
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES)) : conn ) {
             conn.setAutoCommit(false);
             viewConn.setAutoCommit(false);
             String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
@@ -584,15 +585,15 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             // the base column count is updated in the ptable
             PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null;
             PTable view = viewConn.unwrap(PhoenixConnection.class).getTableNoCache(viewOfTable.toUpperCase());
-            view = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
+            view = viewConn.unwrap(PhoenixMonitoredConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
             assertBaseColumnCount(3, view.getBaseColumnCount());
         } 
     }
     
     @Test
     public void testAddExistingViewPkColumnToBaseTableWithMultipleViews() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES)) : conn ) {
             String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
             String viewOfTable1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
             String viewOfTable2 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
@@ -652,9 +653,9 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
     
     @Test
     public void testAddExistingViewPkColumnToBaseTableWithMultipleViewsHavingSamePks() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn;
-                Connection viewConn2 = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES)) : conn;
+                Connection viewConn2 = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES)) : conn) {
             conn.setAutoCommit(false);
             viewConn.setAutoCommit(false);
             viewConn2.setAutoCommit(false);
@@ -759,7 +760,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             assertFalse(rs.next());
             
             // the column count is updated in the base table
-            PTable table = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, tableName));
+            PTable table = conn.unwrap(PhoenixMonitoredConnection.class).getTable(new PTableKey(null, tableName));
             assertColumnsMatch(table.getColumns(), "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
         }
     }
@@ -823,9 +824,9 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
         String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
         String childView = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         String grandChildView = SchemaUtil.getTableName(SCHEMA4, generateUniqueName());
-        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
-                PhoenixConnection viewConn = isMultiTenant
-                        ? (PhoenixConnection) DriverManager.getConnection(TENANT_SPECIFIC_URL1)
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+                PhoenixMonitoredConnection viewConn = isMultiTenant
+                        ? (PhoenixMonitoredConnection) DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES))
                         : conn) {
             String ddlFormat =
                     "CREATE TABLE IF NOT EXISTS " + baseTable + "  ("
@@ -886,12 +887,12 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
         String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
         String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         String view2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
-        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
-                PhoenixConnection viewConn = isMultiTenant
-                        ? (PhoenixConnection) DriverManager.getConnection(TENANT_SPECIFIC_URL1)
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+                PhoenixMonitoredConnection viewConn = isMultiTenant
+                        ? (PhoenixMonitoredConnection) DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES))
                         : conn ;
-                PhoenixConnection viewConn2 = isMultiTenant
-                        ? (PhoenixConnection) DriverManager.getConnection(TENANT_SPECIFIC_URL2)
+                PhoenixMonitoredConnection viewConn2 = isMultiTenant
+                        ? (PhoenixMonitoredConnection) DriverManager.getConnection(TENANT_SPECIFIC_URL2, PropertiesUtil.deepCopy(TEST_PROPERTIES))
                         : conn) {
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + baseTable + " ("
                     + " %s PK1 VARCHAR NOT NULL, V0 VARCHAR, V1 VARCHAR, V2 VARCHAR "
@@ -991,10 +992,10 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
     
     @Test
     public void testMakeBaseTableTransactional() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {  
+                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES)) : conn ) {
             String baseTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
             String viewOfTable = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
             
@@ -1011,17 +1012,17 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, baseTableName, 0, 5, 3, true, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             
             PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null;
-            PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
+            PhoenixMonitoredConnection phoenixConn = conn.unwrap(PhoenixMonitoredConnection.class);
             Table table = phoenixConn.getQueryServices().getTable(Bytes.toBytes(baseTableName));
             assertFalse(phoenixConn.getTable(new PTableKey(null, baseTableName)).isTransactional());
-            assertFalse(viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable)).isTransactional());
+            assertFalse(viewConn.unwrap(PhoenixMonitoredConnection.class).getTable(new PTableKey(tenantId, viewOfTable)).isTransactional());
         } 
     }
 
     @Test
     public void testAlterTablePropertyOnView() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {  
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES)) : conn ) {
             String baseTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
             String viewOfTable = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
             
@@ -1044,7 +1045,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             viewConn.createStatement().execute("ALTER VIEW " + viewOfTable + " SET UPDATE_CACHE_FREQUENCY = 100");
             viewConn.createStatement().execute("SELECT * FROM "+ viewOfTable);
             PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null;
-            assertEquals(100, viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable)).getUpdateCacheFrequency());
+            assertEquals(100, viewConn.unwrap(PhoenixMonitoredConnection.class).getTable(new PTableKey(tenantId, viewOfTable)).getUpdateCacheFrequency());
             
             try {
                 viewConn.createStatement().execute("ALTER VIEW " + viewOfTable + " SET APPEND_ONLY_SCHEMA = true");
@@ -1057,8 +1058,8 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
     
     @Test
     public void testAlterAppendOnlySchema() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {  
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES)) : conn ) {
             String baseTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
             String viewOfTable = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
             
@@ -1071,11 +1072,11 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             ddl = "CREATE VIEW " + viewOfTable + " AS SELECT * FROM " + baseTableName;
             viewConn.createStatement().execute(ddl);
             
-            PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
+            PhoenixMonitoredConnection phoenixConn = conn.unwrap(PhoenixMonitoredConnection.class);
             PTable table = phoenixConn.getTable(new PTableKey(null, baseTableName));
             PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null;
             assertFalse(table.isAppendOnlySchema());
-            PTable viewTable = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
+            PTable viewTable = viewConn.unwrap(PhoenixMonitoredConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
             assertFalse(viewTable.isAppendOnlySchema());
             
             try {
@@ -1089,18 +1090,18 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             conn.createStatement().execute("ALTER TABLE " + baseTableName + " SET APPEND_ONLY_SCHEMA = true");
             viewConn.createStatement().execute("SELECT * FROM "+viewOfTable);
             
-            phoenixConn = conn.unwrap(PhoenixConnection.class);
+            phoenixConn = conn.unwrap(PhoenixMonitoredConnection.class);
             table = phoenixConn.getTable(new PTableKey(null, baseTableName));
             assertTrue(table.isAppendOnlySchema());
-            viewTable = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
+            viewTable = viewConn.unwrap(PhoenixMonitoredConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
             assertTrue(viewTable.isAppendOnlySchema());
         }
     }
     
     @Test
     public void testDroppingIndexedColDropsViewIndex() throws Exception {
-        try (Connection conn =DriverManager.getConnection(getUrl());
-                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn  ) {
+        try (Connection conn =DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES)) : conn  ) {
             String tableWithView = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
             String viewOfTable = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
             String viewSchemaName = SchemaUtil.getSchemaNameFromFullName(viewOfTable);
@@ -1143,7 +1144,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             viewConn.commit();
 
             // verify the index was created
-            PhoenixConnection pconn = viewConn.unwrap(PhoenixConnection.class);
+            PhoenixMonitoredConnection pconn = viewConn.unwrap(PhoenixMonitoredConnection.class);
             PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null; 
             PTable view = pconn.getTable(new PTableKey(tenantId,  viewOfTable ));
             PTable viewIndex = pconn.getTable(new PTableKey(tenantId,  fullNameViewIndex1 ));
@@ -1179,7 +1180,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             } catch (TableNotFoundException e) {
             }
             
-            pconn = viewConn.unwrap(PhoenixConnection.class);
+            pconn = viewConn.unwrap(PhoenixMonitoredConnection.class);
             view = pconn.getTableNoCache(viewOfTable);
             assertEquals("Unexpected number of indexes ", 1, view.getIndexes().size());
             assertEquals("Unexpected index ",  fullNameViewIndex2 , view.getIndexes().get(0).getName().getString());
@@ -1187,15 +1188,20 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             try {
                 viewIndex = pconn.getTableNoCache(fullNameViewIndex1);
                 fail("View index should have been dropped");
-            } catch (TableNotFoundException e) {
+            } catch (Exception e) {
+                if(e instanceof SQLException && e.getCause() instanceof TableNotFoundException) {
+                    //expected exception
+                } else if(e instanceof TableNotFoundException) {
+                    //expected exception
+                }
             }
             
             // verify that the physical index view table is *not* dropped
-            conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(viewIndexPhysicalTable);
+            conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getTableDescriptor(viewIndexPhysicalTable);
             
             // scan the physical table and verify there is a single row for the second local index
             Scan scan = new Scan();
-            Table table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(viewIndexPhysicalTable);
+            Table table = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getTable(viewIndexPhysicalTable);
             ResultScanner results = table.getScanner(scan);
             Result result = results.next();
             assertNotNull(result);
@@ -1210,7 +1216,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
 
     @Test
     public void testAddThenDropColumnTableDDLTimestamp() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String schemaName = SCHEMA1;
         String dataTableName = "T_" + generateUniqueName();
         String viewName = "V_" + generateUniqueName();
@@ -1282,7 +1288,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
         String tableColumnAddDDL = "ALTER TABLE " + dataTableFullName + " ADD COL5 varchar" +
             "(50) NULL";
         String tableColumnDropDDL = "ALTER TABLE " + dataTableFullName + " DROP COLUMN COL3 ";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(tableDDL);
             long tableDDLTimestamp = CreateTableIT.getLastDDLTimestamp(conn, dataTableFullName);
             conn.createStatement().execute(viewDDL);
@@ -1319,7 +1325,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
     @Test
     public void testLastDDLTimestampWithChildViews() throws Exception {
         Assume.assumeTrue(isMultiTenant);
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String schemaName = SCHEMA1;
         String dataTableName = "T_" + generateUniqueName();
         String globalViewName = "V_" + generateUniqueName();
@@ -1344,8 +1350,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
 
         long startTS = EnvironmentEdgeManager.currentTimeMillis();
         long tableDDLTimestamp, globalViewDDLTimestamp;
-
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(tableDDL);
             conn.createStatement().execute(globalViewDDL);
             tableDDLTimestamp = CreateTableIT.getLastDDLTimestamp(conn, dataTableFullName);
@@ -1358,7 +1363,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
         // First, check that adding a child view to the base table didn't change the base table's
         // timestamp, and that adding a child tenant view to the global view didn't change the
         // global view's timestamp
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             long newTableDDLTimestamp = CreateTableIT.getLastDDLTimestamp(conn, dataTableFullName);
             assertEquals(tableDDLTimestamp, newTableDDLTimestamp);
 
@@ -1397,7 +1402,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
         String tableColumnAddDDL = "ALTER TABLE " + dataTableFullName + " ADD COL4 varchar" +
             "(50) " + "NULL ";
         String tableColumnDropDDL = "ALTER TABLE " + dataTableFullName + " DROP COLUMN COL4 ";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(tableColumnAddDDL);
             tableDDLTimestamp = CreateTableIT.getLastDDLTimestamp(conn, dataTableFullName);
             try (Connection tenantConn = DriverManager.getConnection(getUrl(), props)) {
@@ -1426,7 +1431,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
         String globalViewColumnAddDDL = "ALTER VIEW " + globalViewFullName + " ADD COL5 varchar" +
             "(50) " + "NULL ";
         String globalViewColumnDropDDL = "ALTER VIEW " + globalViewFullName + " DROP COLUMN COL5 ";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(globalViewColumnAddDDL);
             globalViewDDLTimestamp = CreateTableIT.getLastDDLTimestamp(conn, globalViewFullName);
             long newTableDDLTimestamp = CreateTableIT.getLastDDLTimestamp(conn,
@@ -1458,13 +1463,13 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
 
     @Test
     public void testCreateViewSchemaVersion() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         final String schemaName = generateUniqueName();
         final String tableName = generateUniqueName();
         final String viewName = generateUniqueName();
         final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
         final String viewFullName = SchemaUtil.getTableName(schemaName, viewName);
-        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(),
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(),
                 props)) {
             String oldVersion = "V1.0";
             CreateTableIT.testCreateTableSchemaVersionAndTopicNameHelper(conn, schemaName, tableName, oldVersion, null);

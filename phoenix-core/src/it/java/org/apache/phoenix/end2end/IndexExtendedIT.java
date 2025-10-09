@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.checkIndexState;
 import static org.apache.phoenix.util.TestUtil.getRowCount;
@@ -42,6 +43,7 @@ import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.BaseTest;
@@ -107,6 +109,13 @@ public class IndexExtendedIT extends BaseTest {
         clientProps.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.TRUE.toString());
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet()
                 .iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet()
+                    .iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet()
+                    .iterator()));
+        }
     }
     
     @Parameters(name="mutable = {0} , localIndex = {1}, useViewIndex = {2}, useSnapshot = {3}")
@@ -327,7 +336,7 @@ public class IndexExtendedIT extends BaseTest {
                 baseTableNameOfIndex = viewName;
                 physicalTableNameOfIndex = "_IDX_" + dataTableFullName;
             }
-            Table hIndexTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(physicalTableNameOfIndex));
+            Table hIndexTable = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getTable(Bytes.toBytes(physicalTableNameOfIndex));
 
             stmt.execute(
                     String.format("CREATE INDEX %s ON %s (UPPER(NAME, 'en_US')) %s", indexName,

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -29,13 +30,13 @@ import java.util.Properties;
 
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertTrue;
-
 @Category(ParallelStatsDisabledTest.class)
 public class ShowCreateTableIT extends ParallelStatsDisabledIT {
     @Test
     public void testShowCreateTableBasic() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + "(K VARCHAR NOT NULL PRIMARY KEY, INT INTEGER, INT2 INTEGER)";
@@ -52,7 +53,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testShowCreateTableLowerCase() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = "lowercasetbl1";
         String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, INT INTEGER)";
@@ -69,7 +70,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testShowCreateTableUpperCase() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String schemaName = generateUniqueName();
@@ -88,7 +89,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testShowCreateTableDefaultFamily() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String ddl = "CREATE IMMUTABLE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
@@ -114,7 +115,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testShowCreateTableDefaultFamilyNonConsecutive() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String ddl = "CREATE IMMUTABLE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
@@ -146,7 +147,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testShowCreateTableCounter() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + "(K VARCHAR NOT NULL PRIMARY KEY, " +
@@ -164,7 +165,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testShowCreateTableColumnQualifierNonConsecutive() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + "(K VARCHAR NOT NULL PRIMARY KEY, " +
@@ -224,7 +225,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testShowCreateTableColumnQualifierDropAndAdd() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();;
         String ddl = "CREATE TABLE " + tableName + "(K VARCHAR NOT NULL PRIMARY KEY, " +
@@ -251,7 +252,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testShowCreateTableColumnQualifierMultipleFamilies() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();;
         String ddl = "CREATE IMMUTABLE TABLE " + tableName +
@@ -269,7 +270,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testShowCreateTableColumnQualifierMultipleFamiliesNonConsecutive() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();;
         String ddl = "CREATE IMMUTABLE TABLE " + tableName +
@@ -316,7 +317,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testShowCreateTableView() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String viewName = generateUniqueName();
@@ -337,7 +338,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testShowCreateTableIndex() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String indexname = generateUniqueName();
@@ -353,7 +354,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testShowCreateTableUsingGetResultSet() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String schemaName = generateUniqueName();

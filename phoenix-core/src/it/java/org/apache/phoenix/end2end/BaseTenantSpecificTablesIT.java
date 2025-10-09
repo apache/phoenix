@@ -24,7 +24,6 @@ import java.sql.SQLException;
 import org.apache.phoenix.query.BaseTest;
 import org.junit.Before;
 
-
 public abstract class BaseTenantSpecificTablesIT extends ParallelStatsEnabledIT {
     protected String TENANT_ID;
     protected String TENANT_TYPE_ID = "abc";

@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
@@ -92,6 +93,7 @@ import java.util.Properties;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.mapreduce.PhoenixJobCounters.INPUT_RECORDS;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.INDEX_TOOL_RUN_STATUS_BYTES;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RESULT_TABLE_COLUMN_FAMILY;
@@ -124,7 +126,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
@@ -191,8 +192,13 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
         clientProps.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         clientProps.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.TRUE.toString());
         destroyDriver();
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
-                new ReadOnlyProps(clientProps.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet()
+                    .iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet()
+                    .iterator()));
+        }
         //IndexToolIT.runIndexTool pulls from the minicluster's config directly
         getUtility().getConfiguration().set(QueryServices.INDEX_REBUILD_RPC_RETRIES_COUNTER, "1");
     }
@@ -309,7 +315,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
                     IndexTool.IndexVerifyType.AFTER);
 
             // Set ttl of index table ridiculously low so that all data is expired
-            Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+            Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin();
             TableName indexTable = TableName.valueOf(indexTableFullName);
             ColumnFamilyDescriptor desc =
                 admin.getDescriptor(indexTable).getColumnFamilies()[0];
@@ -326,7 +332,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
                     IndexTool.IndexVerifyType.ONLY);
             Scan scan = new Scan();
             Table hIndexToolTable =
-                    conn.unwrap(PhoenixConnection.class).getQueryServices()
+                    conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices()
                             .getTable(indexToolOutputTable.getName());
             Result r = hIndexToolTable.getScanner(scan).next();
             assertNull(r);
@@ -369,7 +375,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
             // Verify that the index table is in the ACTIVE state
             assertEquals(PIndexState.ACTIVE, TestUtil.getIndexState(conn, qIndexTableName));
 
-            ConnectionQueryServices queryServices = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            ConnectionQueryServices queryServices = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
             Admin admin = queryServices.getAdmin();
             TableName tn = TableName.valueOf(Bytes.toBytes(dataTableFullName));
             TableDescriptor td = admin.getDescriptor(tn);
@@ -1119,7 +1125,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
         String indexTableName = generateUniqueName();
         String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
 
-        try(Connection conn = DriverManager.getConnection(getUrl())) {
+        try(Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
 
             deleteAllRows(conn,
                 TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
@@ -1229,7 +1235,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
         String dataTableName = generateUniqueName();
         String fullDataTableName = SchemaUtil.getTableName(schemaName, dataTableName);
         String indexTableName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(
                 "CREATE TABLE " + fullDataTableName + "(k VARCHAR PRIMARY KEY, v VARCHAR)");
             conn.createStatement().execute("DELETE FROM " + fullDataTableName + " WHERE k = 'a'");
@@ -1275,7 +1281,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
         String dataTableName = generateUniqueName();
         String fullDataTableName = SchemaUtil.getTableName(schemaName, dataTableName);
         String indexTableName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             long minTs = EnvironmentEdgeManager.currentTimeMillis();
             conn.createStatement().execute(
                 "CREATE TABLE " + fullDataTableName + "(k VARCHAR PRIMARY KEY, v VARCHAR)");
@@ -1484,7 +1490,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
         int numPuts = 0;
         int numDeletes = 0;
         try (org.apache.hadoop.hbase.client.Connection hcon =
-                ConnectionFactory.createConnection(config)) {
+                ConnectionFactory.createConnection(getConfiguration())) {
             Table htable = hcon.getTable(TableName.valueOf(tableName));
             Scan scan = new Scan();
             scan.setRaw(true);
@@ -1506,7 +1512,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
     public void deleteAllRows(Connection conn, TableName tableName) throws SQLException,
         IOException, InterruptedException {
         Scan scan = new Scan();
-        Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().
+        Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().
             getAdmin();
         org.apache.hadoop.hbase.client.Connection hbaseConn = admin.getConnection();
         Table table = hbaseConn.getTable(tableName);
@@ -1573,7 +1579,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
     private void deleteOneRowFromResultTable(Connection conn,  Long scn, String indexTable)
             throws SQLException, IOException {
-        Table hIndexToolTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
+        Table hIndexToolTable = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices()
                 .getTable(RESULT_TABLE_NAME_BYTES);
         Scan s = new Scan();
         s.setRowPrefixFilter(Bytes.toBytes(String.format("%s%s%s", scn, ROW_KEY_SEPARATOR, indexTable)));
@@ -1582,7 +1588,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
     }
 
     private List<String> verifyRunStatusFromResultTable(Connection conn, Long scn, String indexTable, int totalRows, List<String> expectedStatus) throws SQLException, IOException {
-        Table hIndexToolTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
+        Table hIndexToolTable = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices()
                 .getTable(RESULT_TABLE_NAME_BYTES);
         Assert.assertEquals(totalRows, TestUtil.getRowCount(hIndexToolTable, false));
         List<String> output = new ArrayList<>();

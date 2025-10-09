@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.closeStmtAndConn;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -31,6 +32,7 @@ import org.apache.phoenix.expression.function.GetBitFunction;
 import org.apache.phoenix.expression.function.GetByteFunction;
 import org.apache.phoenix.expression.function.SetBitFunction;
 import org.apache.phoenix.expression.function.SetByteFunction;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -51,7 +53,7 @@ public class GetSetByteBitFunctionEnd2EndIT extends ParallelStatsDisabledIT {
         Connection conn = null;
         PreparedStatement stmt = null;
         try {
-            conn = DriverManager.getConnection(getUrl());
+            conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
             String ddl;
             ddl = "CREATE TABLE " + TABLE_NAME
                 + " (k VARCHAR NOT NULL PRIMARY KEY, b BINARY(4), vb VARBINARY)";
@@ -64,7 +66,7 @@ public class GetSetByteBitFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     @Test
     public void test() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         PreparedStatement stmt = conn.prepareStatement(
             "UPSERT INTO " + TABLE_NAME + " VALUES (?, ?, ?)");
         stmt.setString(1, KEY);

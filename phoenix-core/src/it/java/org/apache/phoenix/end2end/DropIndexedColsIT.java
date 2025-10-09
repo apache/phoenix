@@ -26,11 +26,13 @@ import java.util.Arrays;
 import java.util.Collection;
 
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Assert;
 import org.junit.Test;
@@ -39,7 +41,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
-
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class DropIndexedColsIT extends SplitSystemCatalogIT {
@@ -67,8 +69,8 @@ public class DropIndexedColsIT extends SplitSystemCatalogIT {
 
   @Test
   public void testDropIndexedColsMultiTables() throws Exception {
-    try (Connection conn = DriverManager.getConnection(getUrl());
-         Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL)) {
+    try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+         Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
       String tableWithView1 = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
       String tableWithView2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
 
@@ -156,7 +158,7 @@ public class DropIndexedColsIT extends SplitSystemCatalogIT {
       viewConn.commit();
 
       // verify the index was created
-      PhoenixConnection pconn = viewConn.unwrap(PhoenixConnection.class);
+      PhoenixMonitoredConnection pconn = viewConn.unwrap(PhoenixMonitoredConnection.class);
       PName tenantId = PNameFactory.newName(TENANT1);
       PTable view = pconn.getTable(new PTableKey(tenantId, viewOfTable1));
       PTable viewIndex = pconn.getTable(new PTableKey(tenantId, fullNameViewIndex1));
@@ -181,8 +183,8 @@ public class DropIndexedColsIT extends SplitSystemCatalogIT {
 
   @Test
   public void testDropIndexedColsSingleTable() throws Exception {
-    try (Connection conn = DriverManager.getConnection(getUrl());
-         Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL)) {
+    try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+         Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
       String tableWithView = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
       String viewOfTable = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
       String viewSchemaName = SchemaUtil.getSchemaNameFromFullName(viewOfTable);
@@ -228,7 +230,7 @@ public class DropIndexedColsIT extends SplitSystemCatalogIT {
       viewConn.commit();
 
       // verify the index was created
-      PhoenixConnection pconn = viewConn.unwrap(PhoenixConnection.class);
+      PhoenixMonitoredConnection pconn = viewConn.unwrap(PhoenixMonitoredConnection.class);
       PName tenantId = PNameFactory.newName(TENANT1);
       conn.createStatement().execute(ALTER_TABLE + tableWithView + " DROP COLUMN v2, v3, v5 ");
       // verify columns were dropped

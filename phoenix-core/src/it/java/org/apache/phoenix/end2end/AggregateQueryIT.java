@@ -41,13 +41,12 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
-
 @Category(ParallelStatsDisabledTest.class)
 public class AggregateQueryIT extends BaseQueryIT {
 
@@ -104,8 +103,8 @@ public class AggregateQueryIT extends BaseQueryIT {
             assertFalse(rs.next());
             
             TableName tn =TableName.valueOf(tableName);
-            admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-            Configuration configuration = conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration();
+            admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin();
+            Configuration configuration = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getConfiguration();
             org.apache.hadoop.hbase.client.Connection hbaseConn = ConnectionFactory.createConnection(configuration);
             RegionLocator regionLocator = hbaseConn.getRegionLocator(TableName.valueOf(tableName));
             regionLocator.clearRegionLocationCache();

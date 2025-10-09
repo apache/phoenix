@@ -28,6 +28,7 @@ import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.ClientUtil;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -44,7 +45,9 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Map;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.query.QueryServices.DISABLE_VIEW_SUBTREE_VALIDATION;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
 /**
  * Tests to ensure connection creation by metadata coproc does not need to make
@@ -61,7 +64,11 @@ public class MetadataServerConnectionsIT extends BaseTest {
         props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
                 Long.toString(Long.MAX_VALUE));
         props.put(DISABLE_VIEW_SUBTREE_VALIDATION, "true");
-        setUpTestDriver(new ReadOnlyProps(props));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(props), new ReadOnlyProps(props));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props));
+        }
     }
 
     public static class TestMetaDataEndpointImpl extends MetaDataEndpointImpl {
@@ -92,8 +99,7 @@ public class MetadataServerConnectionsIT extends BaseTest {
         final String index_view02 = "idx_v02_" + tableName;
         final String index_view03 = "idx_v03_" + tableName;
         final String index_view04 = "idx_v04_" + tableName;
-
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + tableName

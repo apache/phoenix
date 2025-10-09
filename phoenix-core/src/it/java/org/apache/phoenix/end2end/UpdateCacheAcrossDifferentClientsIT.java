@@ -10,17 +10,18 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.jdbc.ZKConnectionInfo;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.exception.PhoenixIOException;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.jdbc.PhoenixDriver;
-import org.apache.phoenix.jdbc.ZKConnectionInfo;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -31,6 +32,8 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -41,35 +44,47 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Map;
 import java.util.Properties;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-
 @Category(NeedsOwnMiniClusterTest.class)
 public class UpdateCacheAcrossDifferentClientsIT extends BaseTest {
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
-        Configuration conf = HBaseConfiguration.create();
-        HBaseTestingUtility hbaseTestUtil = new HBaseTestingUtility(conf);
-        setUpConfigForMiniCluster(conf);
-        conf.set(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
-        conf.set(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
-        conf.set(QueryServices.MUTATE_BATCH_SIZE_ATTRIB, Integer.toString(3000));
-        hbaseTestUtil.startMiniCluster();
-        // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
-        String zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
-        url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
-        DriverManager.registerDriver(PhoenixDriver.INSTANCE);
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+            props.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+            props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
+            props.put(QueryServices.MUTATE_BATCH_SIZE_ATTRIB, Integer.toString(3000));
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
+            url = CLUSTERS.getJdbcHAUrlWithoutPrincipal();
+
+        } else {
+            Configuration conf = HBaseConfiguration.create();
+            HBaseTestingUtility hbaseTestUtil = new HBaseTestingUtility(conf);
+            setUpConfigForMiniCluster(conf);
+            conf.set(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+            conf.set(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
+            conf.set(QueryServices.MUTATE_BATCH_SIZE_ATTRIB, Integer.toString(3000));
+            hbaseTestUtil.startMiniCluster();
+            // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
+            String zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
+            url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
+            DriverManager.registerDriver(PhoenixDriver.INSTANCE);
+        }
     }
 
     @Test
     public void testUpdateCacheFrequencyWithAddAndDropTable() throws Exception {
         // Create connections 1 and 2
-        Properties longRunningProps = new Properties(); // Must update config before starting server
+        Properties longRunningProps = PropertiesUtil.deepCopy(TEST_PROPERTIES); // Must update config before starting server
         longRunningProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         longRunningProps.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
@@ -136,7 +151,7 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseTest {
     @Test
     public void testTableSentWhenIndexStateChanges() throws Throwable {
         // Create connections 1 and 2
-        Properties longRunningProps = new Properties(); // Must update config before starting server
+        Properties longRunningProps = PropertiesUtil.deepCopy(TEST_PROPERTIES); // Must update config before starting server
         longRunningProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         longRunningProps.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
@@ -154,14 +169,14 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseTest {
             String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
             conn1.createStatement().execute("CREATE TABLE " + fullTableName + "(k INTEGER PRIMARY KEY, v1 INTEGER, v2 INTEGER) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true");
             conn1.createStatement().execute("CREATE INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE (v2)");
-            Table metaTable = conn2.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
+            Table metaTable = conn2.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
             IndexUtil.updateIndexState(fullIndexName, 0, metaTable, PIndexState.DISABLE);
             conn2.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES(1,2,3)");
             conn2.commit();
             conn1.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES(4,5,6)");
             conn1.commit();
             PTableKey key = new PTableKey(null,fullTableName);
-            PMetaData metaCache = conn1.unwrap(PhoenixConnection.class).getMetaDataCache();
+            PMetaData metaCache = conn1.unwrap(PhoenixMonitoredConnection.class).getMetaDataCache();
             PTable table = metaCache.getTableRef(key).getTable();
             for (PTable index : table.getIndexes()) {
                 assertEquals(PIndexState.DISABLE, index.getIndexState());
@@ -175,7 +190,7 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseTest {
     @Test
     public void testUpdateCacheFrequencyWithAddColumn() throws Exception {
         // Create connections 1 and 2
-        Properties longRunningProps = new Properties(); // Must update config before starting server
+        Properties longRunningProps = PropertiesUtil.deepCopy(TEST_PROPERTIES); // Must update config before starting server
         longRunningProps.put(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, ZKConnectionInfo.ZK_REGISTRY_NAME);
         Connection conn1 = DriverManager.getConnection(url, longRunningProps);
         Connection conn2 = DriverManager.getConnection(url, longRunningProps);
@@ -221,7 +236,7 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseTest {
     @Test
     public void testUpdateCacheFrequencyWithAddAndDropIndex() throws Exception {
         // Create connections 1 and 2
-        Properties longRunningProps = new Properties();
+        Properties longRunningProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         longRunningProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         longRunningProps.put(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, ZKConnectionInfo.ZK_REGISTRY_NAME);
@@ -273,7 +288,7 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseTest {
     @Test
     public void testUpdateCacheFrequencyWithAddAndDropView() throws Exception {
         // Create connections 1 and 2
-        Properties longRunningProps = new Properties();
+        Properties longRunningProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         longRunningProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         longRunningProps.put(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, ZKConnectionInfo.ZK_REGISTRY_NAME);
@@ -321,7 +336,7 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseTest {
     @Test
     public void testUpdateCacheFrequencyWithCreateTableAndViewOnDiffConns() throws Exception {
         // Create connections 1 and 2
-        Properties longRunningProps = new Properties();
+        Properties longRunningProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         longRunningProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         longRunningProps.put(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, ZKConnectionInfo.ZK_REGISTRY_NAME);

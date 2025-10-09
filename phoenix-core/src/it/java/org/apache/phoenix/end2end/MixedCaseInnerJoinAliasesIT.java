@@ -27,7 +27,6 @@ import java.util.Properties;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.fail;
-
 public class MixedCaseInnerJoinAliasesIT extends ParallelStatsDisabledIT {
     @BeforeClass
     public static void setUp() throws Exception {

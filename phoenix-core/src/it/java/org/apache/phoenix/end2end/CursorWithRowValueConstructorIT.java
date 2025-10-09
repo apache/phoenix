@@ -54,13 +54,12 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
 @Category(ParallelStatsDisabledTest.class)
 public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
     private String tableName = generateUniqueName();
 
     public void createAndInitializeTestTable() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         tableName = generateUniqueName();
         PreparedStatement stmt = conn.prepareStatement("CREATE TABLE " + tableName +
                 "(a_id INTEGER NOT NULL, " +
@@ -87,7 +86,7 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
     @Test
     public void testCursorsOnTestTablePK() throws SQLException {
         String cursorName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             createAndInitializeTestTable();
             String querySQL = "SELECT a_id FROM " + tableName;
 
@@ -112,7 +111,7 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
     @Test
     public void testCursorsOnRandomTableData() throws SQLException {
         String cursorName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             createAndInitializeTestTable();
             String querySQL = "SELECT a_id,a_data FROM " + tableName + " ORDER BY a_data";
             String cursorSQL = "DECLARE " + cursorName + " CURSOR FOR " + querySQL;
@@ -136,7 +135,7 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
     @Test
     public void testCursorsOnTestTablePKDesc() throws SQLException {
         String cursorName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             createAndInitializeTestTable();
             String dummySQL = "SELECT a_id FROM " + tableName + " ORDER BY a_id DESC";
 
@@ -160,7 +159,7 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
     @Test
     public void testCursorsOnTestTableNonPKDesc() throws SQLException {
         String cursorName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             createAndInitializeTestTable();
             String dummySQL = "SELECT a_data FROM " + tableName + " ORDER BY a_data DESC";
 
@@ -183,7 +182,7 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
     @Test
     public void testCursorsOnWildcardSelect() throws SQLException {
         String cursorName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             createAndInitializeTestTable();
             String querySQL = "SELECT * FROM " + tableName;
             ResultSet rs = conn.prepareStatement(querySQL).executeQuery();
@@ -212,7 +211,7 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
         final String aTable = initATableValues(null, tenantId,
             getDefaultSplits(tenantId), null, null, getUrl(), null);
         String query = "SELECT a_integer, x_integer FROM "+ aTable +" WHERE ?=organization_id AND (a_integer, x_integer) = (7, 5)";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String cursor = "DECLARE " + cursorName + " CURSOR FOR "+query;
             try {
                 PreparedStatement statement = conn.prepareStatement(cursor);

@@ -18,6 +18,8 @@
 
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -60,6 +62,7 @@ import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 import org.apache.phoenix.iterate.TestingMapReduceParallelScanGrouper;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.mapreduce.PhoenixOutputFormat;
 import org.apache.phoenix.mapreduce.PhoenixTestingInputFormat;
 import org.apache.phoenix.mapreduce.index.PhoenixIndexDBWritable;
@@ -69,6 +72,7 @@ import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Assert;
 import org.junit.Before;
@@ -79,7 +83,6 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class TableSnapshotReadsMapReduceIT extends BaseTest {
@@ -126,14 +129,18 @@ public class TableSnapshotReadsMapReduceIT extends BaseTest {
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
       Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
+    if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+      setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+    } else {
       setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
       getUtility().getAdmin().balancerSwitch(false, true);
   }
 
   @Before
   public void before() throws SQLException, IOException {
     // create table
-    try (Connection conn = DriverManager.getConnection(getUrl())) {
+    try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
       tableName = generateUniqueName();
       conn.createStatement().execute(String.format(CREATE_TABLE, tableName));
       conn.commit();
@@ -189,7 +196,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseTest {
 
     TestingMapReduceParallelScanGrouper.clearNumCallsToGetRegionBoundaries();
 
-    try (Connection conn = DriverManager.getConnection(getUrl())) {
+    try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
       // create table
       tableName = generateUniqueName();
       conn.createStatement().execute(String.format(CREATE_TABLE, tableName));
@@ -213,7 +220,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseTest {
     conn.createStatement().execute(String.format(CREATE_STOCK_TABLE, stockTableName));
     conn.createStatement().execute(String.format(CREATE_STOCK_STATS_TABLE, stockStatsTableName));
     conn.commit();
-    final Configuration conf = ((PhoenixConnection) conn).getQueryServices().getConfiguration();
+    final Configuration conf = ((PhoenixMonitoredConnection) conn).getQueryServices().getConfiguration();
     Job job = Job.getInstance(conf);
     PhoenixMapReduceUtil.setInput(job, MapReduceIT.StockWritable.class, PhoenixTestingInputFormat.class,
             stockTableName, null, STOCK_NAME, RECORDING_YEAR, "0." + RECORDINGS_QUARTER);
@@ -271,7 +278,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseTest {
       Assert.assertTrue(job.waitForCompletion(true));
 
       // verify the result, should match the values at the corresponding timestamp
-      Properties props = new Properties();
+      Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
       props.setProperty("CurrentSCN", Long.toString(timestamp));
 
       StringBuilder selectQuery = new StringBuilder("SELECT * FROM " + tableName);
@@ -330,7 +337,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseTest {
   }
 
   private void upsertData(String tableName) throws SQLException {
-    Connection conn = DriverManager.getConnection(getUrl());
+    Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
     PreparedStatement stmt = conn.prepareStatement(String.format(UPSERT, tableName));
     upsertRecord(stmt, "AAAA", "JHHD", 37);
     upsertRecord(stmt, "BBBB", "JSHJ", 224);
@@ -342,7 +349,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseTest {
   }
 
   private void upsertDataBeforeSplit(String tableName) throws SQLException {
-    Connection conn = DriverManager.getConnection(getUrl());
+    Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
     PreparedStatement stmt = conn.prepareStatement(String.format(UPSERT, tableName));
     upsertRecord(stmt, "CCCC", "SSDD", RANDOM.nextInt());
     for (int i = 0; i < 100; i++) {
@@ -378,8 +385,8 @@ public class TableSnapshotReadsMapReduceIT extends BaseTest {
     }
 
     TableName hbaseTableName = TableName.valueOf(tableName);
-    try (Connection conn = DriverManager.getConnection(getUrl());
-         Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+    try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+         Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin()) {
 
       if (shouldSplit) {
         splitTableSync(admin, hbaseTableName, Bytes.toBytes("CCCC"), 2);
@@ -449,8 +456,8 @@ public class TableSnapshotReadsMapReduceIT extends BaseTest {
   }
 
   private void deleteSnapshotIfExists(String snapshotName) throws Exception {
-    try (Connection conn = DriverManager.getConnection(getUrl());
-         Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+    try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+         Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin()) {
       List<SnapshotDescription> snapshotDescriptions = admin.listSnapshots();
       boolean isSnapshotPresent = false;
       if (snapshotDescriptions != null && !snapshotDescriptions.isEmpty()) {

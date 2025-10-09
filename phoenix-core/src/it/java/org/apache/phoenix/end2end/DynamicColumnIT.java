@@ -39,7 +39,7 @@ import org.apache.hadoop.hbase.client.Row;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
@@ -57,7 +57,6 @@ import org.junit.experimental.categories.Category;
  * @since 1.3
  */
 
-
 @Category(ParallelStatsDisabledTest.class)
 public class DynamicColumnIT extends ParallelStatsDisabledIT {
     private static final byte[] FAMILY_NAME_A = Bytes.toBytes(SchemaUtil.normalizeIdentifier("A"));
@@ -68,7 +67,7 @@ public class DynamicColumnIT extends ParallelStatsDisabledIT {
     @Before
     public void initTable() throws Exception {
         tableName = generateUniqueName();
-        try (PhoenixConnection pconn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
+        try (PhoenixMonitoredConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixMonitoredConnection.class)) {
             ConnectionQueryServices services = pconn.getQueryServices();
             try (Admin admin = services.getAdmin()) {
                 TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(TableName.valueOf(tableName));
@@ -227,7 +226,7 @@ public class DynamicColumnIT extends ParallelStatsDisabledIT {
             "    B.F2v1 varchar" +
             "    CONSTRAINT pk PRIMARY KEY (entry))";
         String dml = "UPSERT INTO " + tableName + " values (?, ?, ?, ?, ?)";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));) {
             conn.createStatement().execute(ddl);
             try (PreparedStatement stmt = conn.prepareStatement(dml)) {
                 stmt.setString(1, "entry");

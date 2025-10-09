@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.util.MergeViewIndexIdSequencesTool;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -28,7 +29,7 @@ import java.sql.ResultSet;
 
 import static junit.framework.TestCase.assertEquals;
 import static junit.framework.TestCase.assertTrue;
-
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 @Category(NeedsOwnMiniClusterTest.class)
 public class MergeViewIndexIdSequencesToolIT extends ParallelStatsDisabledIT {
     private final String CLEAN_QUERY = "DELETE FROM SYSTEM.\"SEQUENCE\"";
@@ -55,8 +56,8 @@ public class MergeViewIndexIdSequencesToolIT extends ParallelStatsDisabledIT {
     private void testSequenceRowCount(boolean isTestingOldFormat) throws Exception {
         int expectedRowCount = isTestingOldFormat ? 2 : 1;
         MergeViewIndexIdSequencesTool tool = new MergeViewIndexIdSequencesTool();
-        tool.setConf(config);
-        try(Connection conn = DriverManager.getConnection(getUrl())) {
+        tool.setConf(getConfiguration());
+        try(Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(CLEAN_QUERY);
             try (PreparedStatement preparedStatement = conn.prepareStatement(UPSERT_QUERY)) {
                 preparedStatement.setString(1, null);

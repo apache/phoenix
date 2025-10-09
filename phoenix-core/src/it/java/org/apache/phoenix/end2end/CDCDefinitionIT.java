@@ -22,6 +22,7 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Assert;
 import org.junit.Test;
@@ -39,10 +40,10 @@ import java.util.List;
 import java.util.Properties;
 
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-
 @RunWith(Parameterized.class)
 @Category(ParallelStatsDisabledTest.class)
 public class CDCDefinitionIT extends CDCBaseIT {
@@ -192,7 +193,7 @@ public class CDCDefinitionIT extends CDCBaseIT {
 
     @Test
     public void testCreateWithSchemaName() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String schemaName = generateUniqueName();
         String tableName = SchemaUtil.getTableName(schemaName, generateUniqueName());
@@ -225,7 +226,7 @@ public class CDCDefinitionIT extends CDCBaseIT {
 
     @Test
     public void testCreateCDCMultitenant() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE  " + tableName +
@@ -251,7 +252,7 @@ public class CDCDefinitionIT extends CDCBaseIT {
 
     @Test
     public void testCreateWithNonDefaultColumnEncoding() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         conn.createStatement().execute(
@@ -274,7 +275,7 @@ public class CDCDefinitionIT extends CDCBaseIT {
 
     @Test
     public void testDropCDC () throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         conn.createStatement().execute(
@@ -309,7 +310,7 @@ public class CDCDefinitionIT extends CDCBaseIT {
 
     @Test
     public void testDropCDCIndex () throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         conn.createStatement().execute(
@@ -330,7 +331,7 @@ public class CDCDefinitionIT extends CDCBaseIT {
 
     @Test
     public void testDropTable() throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         conn.createStatement().execute(

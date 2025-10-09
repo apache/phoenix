@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.BIND_PARAMETERS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLIENT_IP;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.EXCEPTION_TRACE;
@@ -32,6 +33,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCH
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_LOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USER;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -50,6 +52,7 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.log.QueryLogger;
@@ -58,18 +61,21 @@ import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class QueryLoggerIT extends BaseTest {
 
 
+    private static final Logger log = LoggerFactory.getLogger(QueryLoggerIT.class);
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
@@ -77,7 +83,11 @@ public class QueryLoggerIT extends BaseTest {
         props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
         // disable renewing leases as this will force spooling to happen.
         props.put(QueryServices.RENEW_LEASE_ENABLED, String.valueOf(false));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
         // need the non-test driver for some tests that check number of hconnections, etc.
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
     } 
@@ -100,10 +110,10 @@ public class QueryLoggerIT extends BaseTest {
     public void testDebugLogs() throws Exception {
         String tableName = generateUniqueName();
         createTableAndInsertValues(tableName, true);
-        Properties props= new Properties();
+        Properties props= PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.LOG_LEVEL, LogLevel.DEBUG.name());
         Connection conn = DriverManager.getConnection(getUrl(),props);
-        assertEquals(conn.unwrap(PhoenixConnection.class).getLogLevel(),LogLevel.DEBUG);
+        assertEquals(conn.unwrap(PhoenixMonitoredConnection.class).getLogLevel(),LogLevel.DEBUG);
         String query = "SELECT * FROM " + tableName;
         StatementContext context;
         try (ResultSet rs = conn.createStatement().executeQuery(query)) {
@@ -152,11 +162,11 @@ public class QueryLoggerIT extends BaseTest {
     public void testLogSampling() throws Exception {
         String tableName = generateUniqueName();
         createTableAndInsertValues(tableName, true);
-        Properties props= new Properties();
+        Properties props= PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.LOG_LEVEL, LogLevel.DEBUG.name());
         props.setProperty(QueryServices.LOG_SAMPLE_RATE, "0.5");
         Connection conn = DriverManager.getConnection(getUrl(),props);
-        assertEquals(conn.unwrap(PhoenixConnection.class).getLogLevel(),LogLevel.DEBUG);
+        assertEquals(conn.unwrap(PhoenixMonitoredConnection.class).getLogLevel(),LogLevel.DEBUG);
         String query = "SELECT * FROM " + tableName;
         int count=100;
         for (int i = 0; i < count; i++) {
@@ -187,10 +197,10 @@ public class QueryLoggerIT extends BaseTest {
     public void testInfoLogs() throws Exception{
         String tableName = generateUniqueName();
         createTableAndInsertValues(tableName, true);
-        Properties props= new Properties();
+        Properties props= PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.LOG_LEVEL, LogLevel.INFO.name());
         Connection conn = DriverManager.getConnection(getUrl(),props);
-        assertEquals(conn.unwrap(PhoenixConnection.class).getLogLevel(),LogLevel.INFO);
+        assertEquals(conn.unwrap(PhoenixMonitoredConnection.class).getLogLevel(),LogLevel.INFO);
         String query = "SELECT * FROM " + tableName;
         StatementContext context;
         try (ResultSet rs = conn.createStatement().executeQuery(query)) {
@@ -231,10 +241,10 @@ public class QueryLoggerIT extends BaseTest {
     public void testWithLoggingOFF() throws Exception{
         String tableName = generateUniqueName();
         createTableAndInsertValues(tableName, true);
-        Properties props= new Properties();
+        Properties props= PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.LOG_LEVEL, LogLevel.OFF.name());
         Connection conn = DriverManager.getConnection(getUrl(),props);
-        assertEquals(conn.unwrap(PhoenixConnection.class).getLogLevel(),LogLevel.OFF);
+        assertEquals(conn.unwrap(PhoenixMonitoredConnection.class).getLogLevel(),LogLevel.OFF);
 
         // delete old data
         conn.createStatement().executeUpdate("delete from " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"");
@@ -275,10 +285,10 @@ public class QueryLoggerIT extends BaseTest {
     private void testPreparedStatement(LogLevel loglevel) throws Exception{
         String tableName = generateUniqueName();
         createTableAndInsertValues(tableName, true);
-        Properties props= new Properties();
+        Properties props= PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.LOG_LEVEL, loglevel.name());
         Connection conn = DriverManager.getConnection(getUrl(),props);
-        assertEquals(conn.unwrap(PhoenixConnection.class).getLogLevel(),loglevel);
+        assertEquals(conn.unwrap(PhoenixMonitoredConnection.class).getLogLevel(),loglevel);
         final MyClock clock = new MyClock(100);
         EnvironmentEdgeManager.injectEdge(clock);
         try{
@@ -335,10 +345,10 @@ public class QueryLoggerIT extends BaseTest {
     @Test
     public void testFailedQuery() throws Exception {
         String tableName = generateUniqueName();
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.LOG_LEVEL, LogLevel.DEBUG.name());
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        assertEquals(conn.unwrap(PhoenixConnection.class).getLogLevel(), LogLevel.DEBUG);
+        assertEquals(conn.unwrap(PhoenixMonitoredConnection.class).getLogLevel(), LogLevel.DEBUG);
         // Table does not exists
         String query = "SELECT * FROM " + tableName;
 
@@ -374,7 +384,7 @@ public class QueryLoggerIT extends BaseTest {
     private static void createTableAndInsertValues(String tableName, boolean resetGlobalMetricsAfterTableCreate)
             throws Exception {
         String ddl = "CREATE TABLE " + tableName + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)";
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
         // executing 10 upserts/mutations.
         String dml = "UPSERT INTO " + tableName + " VALUES (?, ?)";

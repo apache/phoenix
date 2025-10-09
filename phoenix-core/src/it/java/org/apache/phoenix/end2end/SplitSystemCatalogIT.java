@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
@@ -32,6 +33,8 @@ import org.junit.BeforeClass;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 /**
  * Base class for tests that run with split SYSTEM.CATALOG.
  * 
@@ -58,7 +61,11 @@ public abstract class SplitSystemCatalogIT extends BaseTest {
             props = Collections.emptyMap();
         }
         boolean splitSystemCatalog = (driver == null);
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
         // Split SYSTEM.CATALOG once after the mini-cluster is started
         if (splitSystemCatalog) {
             // splitSystemCatalog is incompatible with the balancer chore
@@ -68,7 +75,7 @@ public abstract class SplitSystemCatalogIT extends BaseTest {
     }
     
     protected static void splitSystemCatalog() throws Exception {
-        try (Connection ignored = DriverManager.getConnection(getUrl())) {
+        try (Connection ignored = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
         }
         String tableName = "TABLE";
         String fullTableName1 = SchemaUtil.getTableName(SCHEMA1, tableName);

@@ -17,7 +17,9 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_ATTRIB;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -35,6 +37,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.phoenix.mapreduce.RegexBulkLoadTool;
 import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
@@ -42,7 +45,6 @@ import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(NeedsOwnMiniClusterTest.class)
 public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
 
@@ -51,9 +53,13 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
-        setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(ReadOnlyProps.EMPTY_PROPS,ReadOnlyProps.EMPTY_PROPS);
+        } else {
+            setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
+        }
         zkQuorum = TestUtil.LOCALHOST + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + getUtility().getZkCluster().getClientPort();
-        conn = DriverManager.getConnection(getUrl());
+        conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
     }
 
     @Test

@@ -29,6 +29,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.LiteralTTLExpression;
 import org.apache.phoenix.schema.PName;
@@ -37,7 +38,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TTLExpression;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
@@ -54,6 +55,8 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY;
@@ -92,13 +95,16 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
         props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }    }
 
     // Test that we disallow specifying synced properties to be set per column family when creating a table
     @Test
     public void testDisallowSyncedPropsToBeSetColFamSpecificCreateTable() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl(), new Properties());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         for (String propName: SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES) {
             try {
@@ -118,7 +124,7 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
     // Test that all column families have the same value of synced properties when creating a table
     @Test
     public void testSyncedPropsAllColFamsCreateTable() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl(), new Properties());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = createBaseTableWithProps(conn);
         verifyHBaseColumnFamilyProperties(tableName, conn, false, false);
         conn.close();
@@ -127,7 +133,7 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
     // Test that we disallow specifying synced properties to be set when creating an index on a physical table or a view
     @Test
     public void testDisallowSyncedPropsToBeSetCreateIndex() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl(), new Properties());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = createBaseTableWithProps(conn);
         String localIndexName = tableName + "_LOCAL_IDX";
         String globalIndexName = tableName + "_GLOBAL_IDX";
@@ -168,7 +174,7 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
     // Test that indexes have the same value of synced properties as their base table
     @Test
     public void testSyncedPropsBaseTableCreateIndex() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl(), new Properties());
+        Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = createBaseTableWithProps(conn);
         createIndexTable(conn, tableName, PTable.IndexType.LOCAL).getSecond();
         String globalIndexName = createIndexTable(conn, tableName, PTable.IndexType.GLOBAL).getSecond();
@@ -182,7 +188,7 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
     // Test that the physical view index table has the same value of synced properties as its base table
     @Test
     public void testSyncedPropsBaseTableCreateViewIndex() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl(), new Properties());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = createBaseTableWithProps(conn);
         String viewIndexName = createIndexTable(conn, tableName, null).getSecond();
 
@@ -194,7 +200,7 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
     // Test that we disallow specifying synced properties to be set per column family when altering a table
     @Test
     public void testDisallowSyncedPropsToBeSetColFamSpecificAlterTable() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl(), new Properties());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = createBaseTableWithProps(conn);
         StringBuilder alterAllSyncedPropsString = new StringBuilder();
         String modPropString = COL_FAM1 + ".%s=" + DUMMY_PROP_VALUE + ",";
@@ -225,7 +231,7 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
     // Test that any alteration of the synced properties gets propagated to all indexes and the physical view index table
     @Test
     public void testAlterSyncedPropsPropagateToAllIndexesAndViewIndex() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl(), new Properties());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = createBaseTableWithProps(conn);
         Set<String> tablesToCheck = new HashSet<>();
         tablesToCheck.add(tableName);
@@ -256,7 +262,7 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
     // Test that any if we add a column family to a base table, it gets the synced properties
     @Test
     public void testAlterTableAddColumnFamilyGetsSyncedProps() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl(), new Properties());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = createBaseTableWithProps(conn);
 
         // Test that we are not allowed to set any property to be kept in sync, specific to the new column family to be added
@@ -295,7 +301,7 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
         for (String table: tablesToCheck) {
             verifyHBaseColumnFamilyProperties(table, conn, true, true);
         }
-        try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+        try (Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin()) {
             ColumnFamilyDescriptor[] columnFamilies = admin.getDescriptor(TableName.valueOf(tableName))
                     .getColumnFamilies();
             for (ColumnFamilyDescriptor cfd: columnFamilies) {
@@ -314,7 +320,7 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
     // Test that we disallow altering a synced property for a global index table
     @Test
     public void testDisallowAlterGlobalIndexTable() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl(), new Properties());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = createBaseTableWithProps(conn);
         String globalIndexName = createIndexTable(conn, tableName, PTable.IndexType.GLOBAL).getSecond();
         for (String propName: SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES) {
@@ -334,7 +340,7 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
     // may have tables which have column families and indexes whose properties are out of sync
     @Test
     public void testOldClientSyncPropsUpgradePath() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl(), new Properties());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String baseTableName = createBaseTableWithProps(conn);
         String baseTableName1 = createBaseTableWithProps(conn);
@@ -360,7 +366,7 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
                 final ColumnFamilyDescriptor defaultCF;
                 if (MetaDataUtil.isViewIndex(tableName)) {
                     // We won't be able to get the PTable for a view index table
-                    tableDescriptor = conn.unwrap(PhoenixConnection.class).getQueryServices()
+                    tableDescriptor = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices()
                             .getTableDescriptor(Bytes.toBytes(tableName));
                     defaultCF = tableDescriptor.getColumnFamily(DEFAULT_COLUMN_FAMILY_BYTES);
                 } else {

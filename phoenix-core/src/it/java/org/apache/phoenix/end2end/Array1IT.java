@@ -42,7 +42,6 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Floats;
-
 @Category(ParallelStatsDisabledTest.class)
 public class Array1IT extends ArrayIT {
     private void assertArrayGetString(ResultSet rs, int arrayIndex, Array expectedArray, String expectedString)
@@ -87,7 +86,7 @@ public class Array1IT extends ArrayIT {
     }
 
     private static void initSimpleArrayTable(String tableName, String tenantId, Date date, boolean useNull) throws Exception {
-       Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {

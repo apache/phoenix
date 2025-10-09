@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.createGroupByTestTable;
 import static org.junit.Assert.assertEquals;
@@ -51,7 +52,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
  * and we wouldn't want that to be set for other tests sharing the same
  * cluster.
  */
-
 @Category(NeedsOwnMiniClusterTest.class)
 public class SpillableGroupByIT extends BaseOwnClusterIT {
 
@@ -85,7 +85,11 @@ public class SpillableGroupByIT extends BaseOwnClusterIT {
         props.put(QueryServices.EXPLAIN_ROW_COUNT_ATTRIB, Boolean.TRUE.toString());
         props.put(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Long.toString(60000));
         // Must update config before starting server
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     private void createTable(Connection conn, String tableName) throws Exception {

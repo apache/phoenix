@@ -56,7 +56,6 @@ import org.apache.phoenix.util.QueryBuilder;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(ParallelStatsEnabledTest.class)
 public class SaltedTableMergeBucketsIT extends ParallelStatsEnabledIT {
 
@@ -175,8 +174,7 @@ public class SaltedTableMergeBucketsIT extends ParallelStatsEnabledIT {
     private void assertExpectedWithWhere(String testType, String testSQL, Set<String> expectedSet,
             int expectedCount) throws SQLException {
         String context = "sql: " + testSQL + ", type: " + testType;
-
-        try (Connection tenantConnection = DriverManager.getConnection(getUrl())) {
+        try (Connection tenantConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             // perform the query
             ResultSet rs = tenantConnection.createStatement().executeQuery(testSQL);
             for (int i = 0; i < expectedCount; i++) {
@@ -192,7 +190,7 @@ public class SaltedTableMergeBucketsIT extends ParallelStatsEnabledIT {
 
     private void doTestGroupByOrderMatchPkColumnOrderBug4690(String tableName) throws Exception {
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             QueryBuilder queryBuilder =
                     new QueryBuilder().setSelectExpression("PK2,PK1,COUNT(V)")
                             .setSelectExpressionColumns(Lists.newArrayList("PK1", "PK2", "V"))
@@ -281,7 +279,7 @@ public class SaltedTableMergeBucketsIT extends ParallelStatsEnabledIT {
 
     public void mergeRegions(String testTableName) throws Exception {
         Admin admin =
-                driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+                driver.getConnectionQueryServices(getActiveUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         List<RegionInfo> regions = admin.getRegions(TableName.valueOf(testTableName));
 
         for (int i = 0; i < regions.size() - 1; i += 2) {
@@ -300,7 +298,7 @@ public class SaltedTableMergeBucketsIT extends ParallelStatsEnabledIT {
         String pkType2Str = getType(pkType2);
         String pkType3Str = getType(pkType3);
 
-        try (Connection tenantConnection = DriverManager.getConnection(getUrl())) {
+        try (Connection tenantConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             try (Statement cstmt = tenantConnection.createStatement()) {
                 String TABLE_TEMPLATE =
                         "CREATE TABLE IF NOT EXISTS %s(ID1 %s not null,ID2 %s not null, "
@@ -335,8 +333,7 @@ public class SaltedTableMergeBucketsIT extends ParallelStatsEnabledIT {
                 "UPSERT INTO %s(ID1, ID2, ID3, ROW_ID, V) VALUES (%d, %f, %d, '%s', '%s')",
                 baseTable, nowTime + i, 10.0, 13, "row" + i, "v" + i));
         }
-
-        try (Connection tenantConnection = DriverManager.getConnection(getUrl())) {
+        try (Connection tenantConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             tenantConnection.setAutoCommit(true);
             try (Statement ustmt = tenantConnection.createStatement()) {
                 for (String upsertSql : UPSERT_SQLS) {
@@ -357,7 +354,7 @@ public class SaltedTableMergeBucketsIT extends ParallelStatsEnabledIT {
         String pkType3Str = getType(pkType3);
         String pkType4Str = getType(pkType4);
 
-        try (Connection globalConnection = DriverManager.getConnection(getUrl())) {
+        try (Connection globalConnection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             try (Statement cstmt = globalConnection.createStatement()) {
                 String TABLE_TEMPLATE =
                         "CREATE TABLE IF NOT EXISTS %s(PK1 %s not null,PK2 %s not null, "
@@ -368,8 +365,7 @@ public class SaltedTableMergeBucketsIT extends ParallelStatsEnabledIT {
                     pk4Order.name(), saltBuckets));
             }
         }
-
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute("UPSERT INTO " + baseTable + " VALUES (1,8,10,20,30)");
             conn.createStatement().execute("UPSERT INTO " + baseTable + " VALUES (1,8,11,21,31)");
             conn.createStatement().execute("UPSERT INTO " + baseTable + " VALUES (1,9,5 ,22,32)");

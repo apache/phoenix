@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newHashSet;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 
 import java.sql.Connection;
@@ -35,10 +36,10 @@ import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-
 public abstract class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT {
     
     public static final String NON_STRING_TENANT_ID = "1234";
@@ -108,7 +109,7 @@ public abstract class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT
     }
     
     private void createBaseTable(String tableName, Integer saltBuckets, boolean hasStringTenantId) throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tenantIdType = hasStringTenantId ? "VARCHAR" : "BIGINT";
         String ddl = "CREATE TABLE " + tableName + " (t_id " + tenantIdType + " NOT NULL,\n" +
                 "k1 INTEGER NOT NULL,\n" +
@@ -216,7 +217,7 @@ public abstract class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT
     }
     
     private Connection createTenantConnection(String tenantId) throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         return DriverManager.getConnection(getUrl(), props);
     }

@@ -48,7 +48,6 @@ import org.apache.phoenix.util.QueryBuilder;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
-
 public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
 
     private static void initData(Connection conn, String tableName) throws SQLException {

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -35,6 +36,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
@@ -50,7 +52,6 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(NeedsOwnMiniClusterTest.class)
 public class RebuildIndexConnectionPropsIT extends BaseTest {
     private static HBaseTestingUtility hbaseTestUtil;
@@ -60,30 +61,41 @@ public class RebuildIndexConnectionPropsIT extends BaseTest {
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
-        Configuration conf = HBaseConfiguration.create();
-        hbaseTestUtil = new HBaseTestingUtility(conf);
-        Map<String, String> serverProps = new HashMap<>();
-        serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
-        // need at least one retry otherwise test fails
-        serverProps.put(QueryServices.INDEX_REBUILD_RPC_RETRIES_COUNTER, Long.toString(NUM_RPC_RETRIES));
-        setUpConfigForMiniCluster(conf, new ReadOnlyProps(serverProps.entrySet().iterator()));
-        hbaseTestUtil.startMiniCluster();
-        // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
-        zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
-        url = PhoenixRuntime.JDBC_PROTOCOL_ZK + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            Map<String, String> serverProps = new HashMap<>();
+            serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+            // need at least one retry otherwise test fails
+            serverProps.put(QueryServices.INDEX_REBUILD_RPC_RETRIES_COUNTER, Long.toString(NUM_RPC_RETRIES));
+            setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()), ReadOnlyProps.EMPTY_PROPS);
+            hbaseTestUtil = getUtility();
+            url = CLUSTERS.getJdbcHAUrlWithoutPrincipal();
+
+        } else {
+            Configuration conf = HBaseConfiguration.create();
+            hbaseTestUtil = new HBaseTestingUtility(conf);
+            Map<String, String> serverProps = new HashMap<>();
+            serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+            // need at least one retry otherwise test fails
+            serverProps.put(QueryServices.INDEX_REBUILD_RPC_RETRIES_COUNTER, Long.toString(NUM_RPC_RETRIES));
+            setUpConfigForMiniCluster(conf, new ReadOnlyProps(serverProps.entrySet().iterator()));
+            hbaseTestUtil.startMiniCluster();
+            // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
+            zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
+            url = PhoenixRuntime.JDBC_PROTOCOL_ZK + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
+            DriverManager.registerDriver(PhoenixDriver.INSTANCE);
+        }
         Properties driverProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        DriverManager.registerDriver(PhoenixDriver.INSTANCE);
-        try (PhoenixConnection phxConn =
-                DriverManager.getConnection(url, driverProps).unwrap(PhoenixConnection.class)) {
+        try (PhoenixMonitoredConnection phxConn =
+                DriverManager.getConnection(url, driverProps).unwrap(PhoenixMonitoredConnection.class)) {
         }
     }
 
     @Test
     public void testRebuildIndexConnectionProperties() throws Exception {
-        try (PhoenixConnection rebuildIndexConnection =
+        try (PhoenixMonitoredConnection rebuildIndexConnection =
                 MetaDataRegionObserver.getRebuildIndexConnection(hbaseTestUtil.getMiniHBaseCluster().getConfiguration())) {
-            try (PhoenixConnection regularConnection =
-                    DriverManager.getConnection(url).unwrap(PhoenixConnection.class)) {
+            try (PhoenixMonitoredConnection regularConnection =
+                    DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixMonitoredConnection.class)) {
                 String rebuildUrl = rebuildIndexConnection.getURL();
                 // assert that we are working with non-test urls
                 assertFalse(PhoenixEmbeddedDriver.isTestUrl(url));

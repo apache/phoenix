@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.analyzeTable;
 import static org.apache.phoenix.util.TestUtil.getAllSplits;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -42,17 +43,18 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-
 @Category(ParallelStatsEnabledTest.class)
 @RunWith(Parameterized.class)
 public abstract class BaseViewIT extends ParallelStatsEnabledIT {
@@ -87,8 +89,8 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
         String tableName = pair.getFirst();
         // Confirm that dropping the view also deletes the rows in the index
         if (saltBuckets == null) {
-            try (Connection conn = DriverManager.getConnection(getUrl())) {
-                Table htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName));
+            try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+                Table htable = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName));
                 if(ScanUtil.isLocalIndex(scan)) {
                     ScanUtil.setLocalIndexAttributes(scan, 0, HConstants.EMPTY_BYTE_ARRAY, HConstants.EMPTY_BYTE_ARRAY, scan.getStartRow(), scan.getStopRow());
                 }
@@ -108,7 +110,7 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
     }
 
     protected String testUpdatableView(Integer saltBuckets) throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 		if (saltBuckets!=null) {
 			if (tableDDLOptions.length()!=0)
 				tableDDLOptions+=",";
@@ -167,7 +169,7 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
 
     protected Pair<String,Scan> testUpdatableViewIndex(Integer saltBuckets, boolean localIndex, String viewName) throws Exception {
         ResultSet rs;
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String viewIndexName1 = "I_" + generateUniqueName();
         String viewIndexPhysicalName = MetaDataUtil.getViewIndexPhysicalName(fullTableName);
         if (localIndex) {

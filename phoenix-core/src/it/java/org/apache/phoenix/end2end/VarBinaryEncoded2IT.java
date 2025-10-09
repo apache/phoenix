@@ -40,7 +40,6 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.util.PropertiesUtil;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class VarBinaryEncoded2IT extends ParallelStatsDisabledIT {

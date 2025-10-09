@@ -46,8 +46,8 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
@@ -62,20 +62,17 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.mockito.AdditionalMatchers;
 import org.mockito.Mockito;
-
 @Category(ParallelStatsDisabledTest.class)
 public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
 
     
     private void testTableWithSameSchema(boolean notExists, boolean sameClient) throws Exception {
-
         // use a spyed ConnectionQueryServices so we can verify calls to getTable
         ConnectionQueryServices connectionQueryServices =
-                Mockito.spy(driver.getConnectionQueryServices(getUrl(),
+                Mockito.spy(driver.getConnectionQueryServices(getActiveUrl(),
                     PropertiesUtil.deepCopy(TEST_PROPERTIES)));
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.putAll(PhoenixEmbeddedDriver.DEFAULT_PROPS.asMap());
-
         try (Connection conn1 = connectionQueryServices.connect(getUrl(), props);
                 Connection conn2 = sameClient ? conn1 : connectionQueryServices.connect(getUrl(), props)) {
 
@@ -239,7 +236,7 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
             
             // verify the two columns were added correctly
             PTable table =
-                    conn2.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, viewName));
+                    conn2.unwrap(PhoenixMonitoredConnection.class).getTable(new PTableKey(null, viewName));
             List<PColumn> pkColumns = table.getPKColumns();
             assertEquals(3,table.getPKColumns().size());
             // even though the second create view statement changed the order of the pk, the original order is maintained
@@ -319,7 +316,7 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
                         + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=1000");
             conn.createStatement().execute(
                 "create view IF NOT EXISTS " + viewName + " (val1 integer) AS SELECT * FROM " + tableName);
-            PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+            PhoenixMonitoredConnection pconn = conn.unwrap(PhoenixMonitoredConnection.class);
             PTable view = pconn.getTable(new PTableKey(pconn.getTenantId(), viewName));
             assertEquals(true, view.isAppendOnlySchema());
             assertEquals(1000, view.getUpdateCacheFrequency());

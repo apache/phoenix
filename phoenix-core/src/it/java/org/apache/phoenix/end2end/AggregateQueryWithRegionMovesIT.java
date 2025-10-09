@@ -24,6 +24,7 @@ import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.After;
@@ -50,7 +51,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-
 @Category(NeedsOwnMiniClusterTest.class)
 public class AggregateQueryWithRegionMovesIT extends BaseQueryWithRegionMovesIT {
 
@@ -129,9 +129,9 @@ public class AggregateQueryWithRegionMovesIT extends BaseQueryWithRegionMovesIT 
             assertFalse(rs.next());
 
             TableName tn = TableName.valueOf(tableName);
-            admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+            admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin();
             Configuration configuration =
-                    conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration();
+                    conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getConfiguration();
             org.apache.hadoop.hbase.client.Connection hbaseConn =
                     ConnectionFactory.createConnection(configuration);
             RegionLocator regionLocator = hbaseConn.getRegionLocator(TableName.valueOf(tableName));

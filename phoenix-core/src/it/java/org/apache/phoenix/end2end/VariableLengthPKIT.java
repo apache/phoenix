@@ -47,7 +47,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
 @Category(ParallelStatsDisabledTest.class)
 public class VariableLengthPKIT extends ParallelStatsDisabledIT {
     private static final String DS1 = "1970-01-01 00:58:00";
@@ -1931,12 +1930,12 @@ public class VariableLengthPKIT extends ParallelStatsDisabledIT {
     public void testSubstrFunctionOnRowKeyInWhere() throws Exception {
         String substrTestTableName = generateUniqueName();
         String url = getUrl();
-        Connection conn = DriverManager.getConnection(url);
+        Connection conn = DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("CREATE TABLE "+substrTestTableName+" (s1 varchar not null, s2 varchar not null constraint pk primary key(s1,s2))");
         conn.close();
 
         url = getUrl();
-        conn = DriverManager.getConnection(url);
+        conn = DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("UPSERT INTO "+substrTestTableName+" VALUES('abc','a')");
         conn.createStatement().execute("UPSERT INTO "+substrTestTableName+" VALUES('abcd','b')");
         conn.createStatement().execute("UPSERT INTO "+substrTestTableName+" VALUES('abce','c')");
@@ -1945,7 +1944,7 @@ public class VariableLengthPKIT extends ParallelStatsDisabledIT {
         conn.close();
 
         url = getUrl();
-        conn = DriverManager.getConnection(url);
+        conn = DriverManager.getConnection(url,  PropertiesUtil.deepCopy(TEST_PROPERTIES));
         ResultSet rs = conn.createStatement().executeQuery("SELECT s1 from "+substrTestTableName+" where substr(s1,1,4) = 'abcd'");
         assertTrue(rs.next());
         assertEquals("abcd",rs.getString(1));
@@ -1958,12 +1957,12 @@ public class VariableLengthPKIT extends ParallelStatsDisabledIT {
     public void testRTrimFunctionOnRowKeyInWhere() throws Exception {
         String substrTestTableName = generateUniqueName();
         String url = getUrl();
-        Connection conn = DriverManager.getConnection(url);
+        Connection conn = DriverManager.getConnection(url,  PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("CREATE TABLE "+substrTestTableName+" (s1 varchar not null, s2 varchar not null constraint pk primary key(s1,s2))");
         conn.close();
 
         url = getUrl();
-        conn = DriverManager.getConnection(url);
+        conn = DriverManager.getConnection(url,   PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("UPSERT INTO "+substrTestTableName+" VALUES('abc','a')");
         conn.createStatement().execute("UPSERT INTO "+substrTestTableName+" VALUES('abcd','b')");
         conn.createStatement().execute("UPSERT INTO "+substrTestTableName+" VALUES('abcd ','c')");
@@ -1974,7 +1973,7 @@ public class VariableLengthPKIT extends ParallelStatsDisabledIT {
         conn.close();
 
         url = getUrl();
-        conn = DriverManager.getConnection(url);
+        conn = DriverManager.getConnection(url,   PropertiesUtil.deepCopy(TEST_PROPERTIES));
         ResultSet rs = conn.createStatement().executeQuery("SELECT s1 from "+substrTestTableName+" where rtrim(s1) = 'abcd'");
         assertTrue(rs.next());
         assertEquals("abcd",rs.getString(1));
@@ -1989,12 +1988,12 @@ public class VariableLengthPKIT extends ParallelStatsDisabledIT {
     public void testLikeFunctionOnRowKeyInWhere() throws Exception {
         String substrTestTableName = generateUniqueName();
         String url = getUrl();
-        Connection conn = DriverManager.getConnection(url);
+        Connection conn = DriverManager.getConnection(url,   PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("CREATE TABLE "+substrTestTableName+" (s1 varchar not null, s2 varchar not null constraint pk primary key(s1,s2))");
         conn.close();
 
         url = getUrl();
-        conn = DriverManager.getConnection(url);
+        conn = DriverManager.getConnection(url,   PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("UPSERT INTO "+substrTestTableName+" VALUES('abc','a')");
         conn.createStatement().execute("UPSERT INTO "+substrTestTableName+" VALUES('abcd','b')");
         conn.createStatement().execute("UPSERT INTO "+substrTestTableName+" VALUES('abcd-','c')");
@@ -2004,7 +2003,7 @@ public class VariableLengthPKIT extends ParallelStatsDisabledIT {
         conn.close();
 
         url = getUrl();
-        conn = DriverManager.getConnection(url);
+        conn = DriverManager.getConnection(url,    PropertiesUtil.deepCopy(TEST_PROPERTIES));
         ResultSet rs = conn.createStatement().executeQuery("SELECT s1 from "+substrTestTableName+" where s1 like 'abcd%1'");
         assertTrue(rs.next());
         assertEquals("abcd-1",rs.getString(1));

@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertEquals;
@@ -46,6 +47,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.types.PVarchar;
@@ -57,7 +59,6 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
-
 @Category(ParallelStatsDisabledTest.class)
 public class PhoenixRuntimeIT extends ParallelStatsDisabledIT {
     private static void assertTenantIds(Expression e, Table htable, Filter filter, String[] tenantIds) throws IOException {
@@ -90,10 +91,10 @@ public class PhoenixRuntimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testGenererateColumnInfoTenantTable() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.setAutoCommit(true);
         conn.createStatement().execute("CREATE TABLE MULTITENANT_TABLE (TENANT_ID VARCHAR NOT NULL, GLOBAL_COL1 VARCHAR, GLOBAL_COL2 VARCHAR CONSTRAINT pk PRIMARY KEY (TENANT_ID, GLOBAL_COL1)) MULTI_TENANT=true");
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "MyTenantId");
         Connection tconn = DriverManager.getConnection(getUrl(), props);
         tconn.setAutoCommit(true);
@@ -119,7 +120,7 @@ public class PhoenixRuntimeIT extends ParallelStatsDisabledIT {
     }
     
     private void testGetTenantIdExpression(boolean isSalted) throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.setAutoCommit(true);
         String tableName = generateUniqueName() ;
         String sequenceName = generateUniqueName();
@@ -130,22 +131,22 @@ public class PhoenixRuntimeIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('" + t1 + "','x')");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('" + t2 + "','y')");
         
-        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, t1);
         Connection tsconn = DriverManager.getConnection(getUrl(), props);
         tsconn.createStatement().execute("CREATE SEQUENCE " + sequenceName);
         Expression e1 = PhoenixRuntime.getTenantIdExpression(tsconn, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME);
-        Table htable1 = tsconn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
+        Table htable1 = tsconn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
         assertTenantIds(e1, htable1, new FirstKeyOnlyFilter(), new String[] {"", t1} );
 
         String viewName = generateUniqueName();
         tsconn.createStatement().execute("CREATE VIEW " + viewName + "(V1 VARCHAR) AS SELECT * FROM " + tableName);
         Expression e2 = PhoenixRuntime.getTenantIdExpression(tsconn, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
-        Table htable2 = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
+        Table htable2 = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
         assertTenantIds(e2, htable2, getUserTableAndViewsFilter(), new String[] {"", t1} );
         
         Expression e3 = PhoenixRuntime.getTenantIdExpression(conn, tableName);
-        Table htable3 = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName));
+        Table htable3 = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName));
         assertTenantIds(e3, htable3, new FirstKeyOnlyFilter(), new String[] {t1, t2} );
 
         String basTableName = generateUniqueName();
@@ -156,13 +157,13 @@ public class PhoenixRuntimeIT extends ParallelStatsDisabledIT {
         String indexName1 = generateUniqueName();
         tsconn.createStatement().execute("CREATE INDEX " + indexName1 + " ON " + viewName + "(V1)");
         Expression e5 = PhoenixRuntime.getTenantIdExpression(tsconn, indexName1);
-        Table htable5 = tsconn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX + tableName));
+        Table htable5 = tsconn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getTable(Bytes.toBytes(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX + tableName));
         assertTenantIds(e5, htable5, new FirstKeyOnlyFilter(), new String[] {t1} );
 
         String indexName2 = generateUniqueName();
         conn.createStatement().execute("CREATE INDEX " + indexName2 + " ON " + tableName + "(k2)");
         Expression e6 = PhoenixRuntime.getTenantIdExpression(conn, indexName2);
-        Table htable6 = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName2));
+        Table htable6 = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName2));
         assertTenantIds(e6, htable6, new FirstKeyOnlyFilter(), new String[] {t1, t2} );
         
         tableName = generateUniqueName() + "BAR_" + (isSalted ? "SALTED" : "UNSALTED");
@@ -170,7 +171,7 @@ public class PhoenixRuntimeIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('" + t1 + "','x')");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('" + t2 + "','y')");
         Expression e7 = PhoenixRuntime.getFirstPKColumnExpression(conn, tableName);
-        Table htable7 = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName));
+        Table htable7 = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName));
         assertTenantIds(e7, htable7, new FirstKeyOnlyFilter(), new String[] {t1, t2} );
     }
 }

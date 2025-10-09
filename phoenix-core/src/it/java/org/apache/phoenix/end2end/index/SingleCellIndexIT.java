@@ -28,6 +28,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -500,9 +501,9 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
     public static void dumpTable(String tableName) throws Exception {
         // this method is also used by CDCBaseIT where case sensitive tableNames are also used
         tableName = tableName.replaceAll("\"", "");
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             Table
-                    hTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(tableName.getBytes());
+                    hTable = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getTable(tableName.getBytes());
             Scan scan = new Scan();
             scan.setRaw(true);
             scan.readAllVersions();

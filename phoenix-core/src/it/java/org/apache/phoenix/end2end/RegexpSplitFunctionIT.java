@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -31,9 +32,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 
 @Category(ParallelStatsDisabledTest.class)
 public class RegexpSplitFunctionIT extends ParallelStatsDisabledIT {
@@ -71,7 +72,7 @@ public class RegexpSplitFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSplit_ArrayReference() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         initTable(conn, "ONE,TWO,THREE");
 
         ResultSet rs = conn.createStatement().executeQuery(
@@ -83,8 +84,8 @@ public class RegexpSplitFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayLenWithRegExpSplit() throws SQLException {
-    	Connection conn = DriverManager.getConnection(getUrl());
-    	String val = "T";
+    	Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        String val = "T";
     	for(int i = 1; i < Short.MAX_VALUE + 500; i++) {
     		val += ",T";
     	}
@@ -100,7 +101,7 @@ public class RegexpSplitFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSplit_InFilter() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         initTable(conn, "ONE,TWO,THREE");
 
         ResultSet rs = conn.createStatement().executeQuery(
@@ -112,7 +113,7 @@ public class RegexpSplitFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSplit_Upsert() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         initTable(conn, "ONE,TWO,THREE");
 
         conn.createStatement().executeUpdate(
@@ -129,7 +130,7 @@ public class RegexpSplitFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSplit_AlternateSeparator() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         initTable(conn, "ONE:TWO:THREE");
 
         ResultSet rs = conn.createStatement().executeQuery(
@@ -142,7 +143,7 @@ public class RegexpSplitFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSplit_DynamicPattern() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         initTable(conn, "ONE,TWO,THREE");
 
         ResultSet rs = conn.createStatement().executeQuery(
@@ -155,7 +156,7 @@ public class RegexpSplitFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSplit_NoSplitString() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         initTable(conn, "CANNOT BE SPLIT");
 
         ResultSet rs = conn.createStatement().executeQuery(
@@ -168,7 +169,7 @@ public class RegexpSplitFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSplit_PatternBasedSplit() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         initTable(conn, "ONE!:TWO:::!THREE::!:FOUR");
 
         ResultSet rs = conn.createStatement().executeQuery(
@@ -181,7 +182,7 @@ public class RegexpSplitFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSplit_PatternEscape() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         initTable(conn, "ONE|TWO|THREE");
 
         ResultSet rs = conn.createStatement().executeQuery(
@@ -194,7 +195,7 @@ public class RegexpSplitFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSplit_NullString() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         initTable(conn, null);
 
         ResultSet rs = conn.createStatement().executeQuery(
@@ -206,7 +207,7 @@ public class RegexpSplitFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSplit_NullSeparator() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         initTable(conn, "ONE,TWO,THREE");
 
         ResultSet rs = conn.createStatement().executeQuery(
@@ -218,7 +219,7 @@ public class RegexpSplitFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSplit_NullDynamicSeparator() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         initTable(conn, "ONE,TWO,THREE", null);
 
         ResultSet rs = conn.createStatement().executeQuery(

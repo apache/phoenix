@@ -47,7 +47,6 @@ import org.junit.experimental.categories.Category;
  * @since 1.3
  */
 
-
 @Category(ParallelStatsDisabledTest.class)
 public class DynamicUpsertIT extends ParallelStatsDisabledIT {
     private String tableName;

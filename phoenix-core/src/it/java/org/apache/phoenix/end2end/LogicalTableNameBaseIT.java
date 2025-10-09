@@ -24,6 +24,7 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.PhoenixTestBuilder;
 import org.apache.phoenix.query.QueryConstants;
@@ -56,6 +57,7 @@ import java.util.Properties;
 import java.util.Random;
 
 import static java.util.Arrays.asList;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.MAX_ROWS;
 import static org.apache.phoenix.query.QueryConstants.NAMESPACE_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
@@ -64,7 +66,6 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-
 
 public abstract class LogicalTableNameBaseIT extends BaseTest {
     protected String dataTableDdl = "";
@@ -78,7 +79,11 @@ public abstract class LogicalTableNameBaseIT extends BaseTest {
         if (isNamespaceMapped) {
             props.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
         }
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     protected Connection getConnection(Properties props) throws Exception {
@@ -87,7 +92,7 @@ public abstract class LogicalTableNameBaseIT extends BaseTest {
         // more than one ConnectionQueryService
         props.setProperty(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, StringUtil.EMPTY_STRING);
         // Create new ConnectionQueryServices so that we can set DROP_METADATA_ATTRIB
-        String url = QueryUtil.getConnectionUrl(props, config, "PRINCIPAL");
+        String url = QueryUtil.getConnectionUrl(props, getConfiguration(), "PRINCIPAL");
         return DriverManager.getConnection(url, props);
     }
 
@@ -105,7 +110,7 @@ public abstract class LogicalTableNameBaseIT extends BaseTest {
                 snapshotName =
                 new StringBuilder(tableName).append("-Snapshot").toString();
 
-        try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices()
+        try (Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices()
                 .getAdmin()) {
 
             admin.snapshot(snapshotName, TableName.valueOf(fullTableHName));
@@ -132,12 +137,12 @@ public abstract class LogicalTableNameBaseIT extends BaseTest {
         // Create another hbase table and add 1 more row
         String newTableName =  NEW_TABLE_PREFIX + tableName;
         String fullNewTableName = SchemaUtil.getTableName(schemaName, newTableName);
-        try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+        try (Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin()) {
             String snapshotName = new StringBuilder(fullTableName).append("-Snapshot").toString();
             admin.snapshot(snapshotName, TableName.valueOf(fullTableName));
             admin.cloneSnapshot(snapshotName, TableName.valueOf(fullNewTableName));
             admin.deleteSnapshot(snapshotName);
-            try (Table htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullNewTableName))) {
+            try (Table htable = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getTable(Bytes.toBytes(fullNewTableName))) {
                 Put put = new Put(ByteUtil.concat(Bytes.toBytes("PK3")));
                 put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES,
                         QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
@@ -184,13 +189,13 @@ public abstract class LogicalTableNameBaseIT extends BaseTest {
             fullNewTableName = schemaName + NAMESPACE_SEPARATOR + newTableName;
             fullIndexTableHbaseName = schemaName + NAMESPACE_SEPARATOR + indexName;
         }
-        try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices()
+        try (Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices()
                 .getAdmin()) {
             String snapshotName = new StringBuilder(indexName).append("-Snapshot").toString();
             admin.snapshot(snapshotName, TableName.valueOf(fullIndexTableHbaseName));
             admin.cloneSnapshot(snapshotName, TableName.valueOf(fullNewTableName));
             admin.deleteSnapshot(snapshotName);
-            try (Table htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullNewTableName))) {
+            try (Table htable = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getTable(Bytes.toBytes(fullNewTableName))) {
                 Put
                         put =
                         new Put(ByteUtil.concat(Bytes.toBytes("V13"), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes("PK3")));
@@ -243,13 +248,13 @@ public abstract class LogicalTableNameBaseIT extends BaseTest {
             fullNewTableName = schemaName + NAMESPACE_SEPARATOR + newTableName;
             fullTableHbaseName = schemaName + NAMESPACE_SEPARATOR + tableName;
         }
-        try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices()
+        try (Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices()
                 .getAdmin()) {
             String snapshotName = new StringBuilder(fullTableName).append("-Snapshot").toString();
             admin.snapshot(snapshotName, TableName.valueOf(fullTableHbaseName));
             admin.cloneSnapshot(snapshotName, TableName.valueOf(fullNewTableName));
             admin.deleteSnapshot(snapshotName);
-            try (Table htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullNewTableName))) {
+            try (Table htable = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getTable(Bytes.toBytes(fullNewTableName))) {
                 Put put = new Put(ByteUtil.concat(Bytes.toBytes("PK3")));
                 put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES,
                         QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
@@ -280,7 +285,7 @@ public abstract class LogicalTableNameBaseIT extends BaseTest {
         // Rename table to point to hbase table
         renameAndDropPhysicalTable(conn, "NULL", schemaName, tableName, newTableName, isNamespaceEnabled);
 
-        conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+        conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().clearCache();
         if (createChildAfterRename) {
             createViewAndIndex(conn2, schemaName, tableName, viewName1, v1_indexName1);
             createViewAndIndex(conn2, schemaName, tableName, viewName1, v1_indexName2);
@@ -382,7 +387,7 @@ public abstract class LogicalTableNameBaseIT extends BaseTest {
         String tenantConnectUrl =
                 getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
 
-        try (Connection tenantConnection = DriverManager.getConnection(tenantConnectUrl)) {
+        try (Connection tenantConnection = DriverManager.getConnection(tenantConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             tenantConnection.setAutoCommit(true);
             dataWriter.setConnection(tenantConnection);
             dataWriter.setDataSupplier(dataSupplier);
@@ -545,11 +550,11 @@ public abstract class LogicalTableNameBaseIT extends BaseTest {
         if (isNamespaceEnabled && !(Strings.isNullOrEmpty(schema) || NULL_STRING.equals(schema))) {
             fullTableName = schema + NAMESPACE_SEPARATOR + tableName;
         }
-        Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+        Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin();
         TableName hTableName = TableName.valueOf(fullTableName);
         admin.disableTable(hTableName);
         admin.deleteTable(hTableName);
-        conn.unwrap(PhoenixConnection.class).getQueryServices()
+        conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices()
                 .clearCache();
     }
 }

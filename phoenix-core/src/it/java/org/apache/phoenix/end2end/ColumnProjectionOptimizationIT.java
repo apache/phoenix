@@ -50,7 +50,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
@@ -58,7 +58,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 
 @Category(ParallelStatsDisabledTest.class)
 public class ColumnProjectionOptimizationIT extends ParallelStatsDisabledIT {
@@ -213,8 +212,8 @@ public class ColumnProjectionOptimizationIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSelectFromViewOnExistingTable() throws Exception {
-        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(
-                PhoenixConnection.class);
+        PhoenixMonitoredConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(
+                PhoenixMonitoredConnection.class);
         byte[] cfB = Bytes.toBytes(SchemaUtil.normalizeIdentifier("b"));
         byte[] cfC = Bytes.toBytes(SchemaUtil.normalizeIdentifier("c"));
         byte[][] familyNames = new byte[][] { cfB, cfC };
@@ -228,7 +227,7 @@ public class ColumnProjectionOptimizationIT extends ParallelStatsDisabledIT {
         }
         admin.createTable(builder.build());
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn1 = DriverManager.getConnection(getUrl(), props);
 
         String createStmt = "create view " + table + " (id integer not null primary key,"
@@ -236,7 +235,7 @@ public class ColumnProjectionOptimizationIT extends ParallelStatsDisabledIT {
         conn1.createStatement().execute(createStmt);
         conn1.close();
 
-        PhoenixConnection conn2 = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
+        PhoenixMonitoredConnection conn2 = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixMonitoredConnection.class);
         byte[] c1 = Bytes.toBytes("COL1");
         byte[] c2 = Bytes.toBytes("COL2");
         byte[] c3 = Bytes.toBytes("COL3");
@@ -310,7 +309,7 @@ public class ColumnProjectionOptimizationIT extends ParallelStatsDisabledIT {
     private static String initMultiCFTable() throws Exception {
         String url = getUrl();
         String tableName = generateUniqueName();
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String ddl = "create table " + tableName +
                 "   (id char(15) not null primary key,\n" +
                 "    a.unique_user_count integer,\n" +
@@ -323,7 +322,7 @@ public class ColumnProjectionOptimizationIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(url, props)) {
             conn.createStatement().execute(ddl);
         }
-        props = new Properties();
+        props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement stmt = conn.prepareStatement(
@@ -356,7 +355,7 @@ public class ColumnProjectionOptimizationIT extends ParallelStatsDisabledIT {
     public void testSelectWithConditionOnMultiCF() throws Exception {
         String tableName = initMultiCFTable();
         
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             String query = "SELECT c.db_cpu_utilization FROM " + tableName + " WHERE a.unique_user_count = ? and b.unique_org_count = ?";

@@ -86,6 +86,7 @@ import org.apache.phoenix.expression.function.TransactionProviderNameFunction;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.TableName;
@@ -408,7 +409,7 @@ public final class QueryUtil {
             throws SQLException {
         setServerConnection(props);
         Connection conn = getConnection(props, conf);
-        conn.unwrap(PhoenixConnection.class).getQueryServices().clearUpgradeRequired();
+        conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().clearUpgradeRequired();
         return conn;
     }
 

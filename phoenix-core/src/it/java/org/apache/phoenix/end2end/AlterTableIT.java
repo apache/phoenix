@@ -58,8 +58,8 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
@@ -246,7 +246,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         String schemaName = generateUniqueName();
         String tableName = generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String createDdl = "CREATE TABLE " + fullTableName +
                 " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL," +
                 " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) " +
@@ -277,7 +277,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         String schemaName = generateUniqueName();
         String tableName = generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String createDdl = "CREATE TABLE " + fullTableName + " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL,"
                 + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) "
                 + " SCHEMA_VERSION='OLD'";
@@ -297,7 +297,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         String schemaName = generateUniqueName();
         String tableName = generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String createDdl = "CREATE TABLE " + fullTableName + " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL,"
                 + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) "
                 + "CHANGE_DETECTION_ENABLED=false, SCHEMA_VERSION='OLD'";
@@ -345,7 +345,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         try {
             conn.createStatement().execute(ddl);
             conn.createStatement().execute("ALTER TABLE " + dataTableFullName + " ADD CF.col2 integer CF.IN_MEMORY=true");
-            try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+            try (Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin()) {
                 ColumnFamilyDescriptor[] columnFamilies = admin.getDescriptor(TableName.valueOf(dataTableFullName)).getColumnFamilies();
                 assertEquals(2, columnFamilies.length);
                 assertEquals("0", columnFamilies[0].getNameAsString());
@@ -407,11 +407,11 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSetPropertySchemaVersion() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         final String schemaName = generateUniqueName();
         final String tableName = generateUniqueName();
         final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
-        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(),
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(),
                 props)) {
             CreateTableIT.testCreateTableSchemaVersionAndTopicNameHelper(conn, schemaName, tableName, "V1.0", null);
             final String version = "V1.1";
@@ -620,7 +620,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     }
 
     private void asssertIsWALDisabled(Connection conn, String fullTableName, boolean expectedValue) throws SQLException {
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PhoenixMonitoredConnection pconn = conn.unwrap(PhoenixMonitoredConnection.class);
         assertEquals(expectedValue, pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName)).isWALDisabled());
     }
 
@@ -1007,10 +1007,11 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testAlterTableOnGlobalIndex() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
-             Statement stmt = conn.createStatement()) {
+        try (Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES)))
+        {
+            Statement stmt = conn.createStatement();
             conn.setAutoCommit(false);
-            Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+            Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin();
             String tableName = generateUniqueName();
             String globalIndexTableName = generateUniqueName();
 
@@ -1067,7 +1068,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testAddingPkColAndSettingProperties() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {       
             String ddl = "create table " + dataTableFullName + " ("
                     + " k1 char(1) NOT NULL,"
@@ -1122,7 +1123,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             assertEquals(3, rs.getShort("KEY_SEQ"));
             assertFalse(rs.next());
 
-            try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+            try (Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin()) {
                 TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(dataTableFullName));
                 ColumnFamilyDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
                 assertEquals(2, columnFamilies.length);
@@ -1141,7 +1142,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testClientCacheUpdatedOnChangingPhoenixTableProperties() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {       
             String ddl = "create table " + dataTableFullName + " ("
                     + " id char(1) NOT NULL,"
@@ -1165,7 +1166,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             ddl = "ALTER TABLE " + dataTableFullName + " SET MULTI_TENANT = true";
             conn.createStatement().execute(ddl);
             // check metadata cache is updated with MULTI_TENANT = true
-            PTable t = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, dataTableFullName));
+            PTable t = conn.unwrap(PhoenixMonitoredConnection.class).getTable(new PTableKey(null, dataTableFullName));
             assertTrue(t.isMultiTenant());
             
             // check table metadata updated server side
@@ -1184,11 +1185,11 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testIndexColumnAsRowTimestamp() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute("CREATE TABLE " + dataTableFullName
                     + " (PK1 DATE NOT NULL, PK2 VARCHAR NOT NULL, KV1 VARCHAR "
                     + "CONSTRAINT PK PRIMARY KEY(PK1 ROW_TIMESTAMP, PK2)) " + tableDDLOptions);
-            PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+            PhoenixMonitoredConnection phxConn = conn.unwrap(PhoenixMonitoredConnection.class);
             PTable table =
                     phxConn.getTable(new PTableKey(phxConn.getTenantId(), dataTableFullName));
             // Assert that the column shows up as row time stamp in the cache.
@@ -1221,11 +1222,11 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDeclaringColumnAsRowTimestamp() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute("CREATE TABLE " + dataTableFullName
                     + " (PK1 DATE NOT NULL, PK2 VARCHAR NOT NULL, KV1 VARCHAR "
                     + "CONSTRAINT PK PRIMARY KEY(PK1 ROW_TIMESTAMP, PK2)) " + tableDDLOptions);
-            PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+            PhoenixMonitoredConnection phxConn = conn.unwrap(PhoenixMonitoredConnection.class);
             PTable table =
                     phxConn.getTable(new PTableKey(phxConn.getTenantId(), dataTableFullName));
             // Assert that the column shows up as row time stamp in the cache.
@@ -1274,7 +1275,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         String sql = "SELECT IS_ROW_TIMESTAMP FROM \"SYSTEM\".\"CATALOG\" WHERE "
                 + "(TABLE_SCHEM, TABLE_NAME) = ('" + schemaName + "','"+ tableName + "') AND\n"
                 + "COLUMN_FAMILY IS NULL AND COLUMN_NAME = ?";
-        try(Connection conn = DriverManager.getConnection(getUrl())) {
+        try(Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             PreparedStatement stmt = conn.prepareStatement(sql);
             stmt.setString(1, columnName);
             ResultSet rs = stmt.executeQuery();
@@ -1285,7 +1286,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testAddingRowTimestampColumnNotAllowedViaAlterTable() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute("CREATE TABLE " + dataTableFullName + " (PK1 VARCHAR NOT NULL, PK2 VARCHAR NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2)) " + tableDDLOptions);
             // adding a new pk column that is also row_timestamp is not allowed
             try {
@@ -1327,8 +1328,8 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
 	    String viewName = generateUniqueName();
 	    String fullTableName = schemaName + "." + baseTableName;
 	    String fullViewName = schemaName + "." + viewName;
-	    try (Connection conn = DriverManager.getConnection(getUrl())) {
-	        PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+	    try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+	        PhoenixMonitoredConnection phxConn = conn.unwrap(PhoenixMonitoredConnection.class);
 	        conn.createStatement().execute("CREATE TABLE IF NOT EXISTS " + fullTableName + " ("
 	                + " ID char(1) NOT NULL,"
 	                + " COL1 integer NOT NULL,"
@@ -1377,8 +1378,8 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
 	    String viewName = generateUniqueName();
 	    String fullTableName = schemaName + "." + baseTableName;
 	    String fullViewName = schemaName + "." + viewName;
-	    try (Connection conn = DriverManager.getConnection(getUrl())) {
-	        PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+	    try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+	        PhoenixMonitoredConnection phxConn = conn.unwrap(PhoenixMonitoredConnection.class);
 	        conn.createStatement().execute("CREATE TABLE IF NOT EXISTS " + fullTableName + " ("
 	                + " ID char(1) NOT NULL,"
 	                + " COL1 integer NOT NULL,"
@@ -1425,11 +1426,11 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         String viewName = generateUniqueName();
         String fullTableName = schemaName + "." + baseTableName;
         String fullViewName = schemaName + "." + viewName;
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute("CREATE SCHEMA " + schemaName);
-            PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+            PhoenixMonitoredConnection phxConn = conn.unwrap(PhoenixMonitoredConnection.class);
             conn.createStatement().execute("CREATE TABLE " + fullTableName + " ("
                     + " ID char(1) NOT NULL,"
                     + " COL1 integer NOT NULL,"
@@ -1532,7 +1533,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         String columnAddDDL = "ALTER TABLE " + dataTableFullName + " ADD COL3 varchar(50) NULL ";
         String columnDropDDL = "ALTER TABLE " + dataTableFullName + " DROP COLUMN COL3 ";
         long startTS = EnvironmentEdgeManager.currentTimeMillis();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(tableDDL);
             //first get the original DDL timestamp when we created the table
             long tableDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(
@@ -1555,7 +1556,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
 	private void assertEncodedCQValue(String columnFamily, String columnName, String schemaName, String tableName, int expectedValue) throws Exception {
         String query = "SELECT " + COLUMN_QUALIFIER + " FROM \"SYSTEM\".CATALOG WHERE " + TABLE_SCHEM + " = ? AND " + TABLE_NAME
                 + " = ? " + " AND " + COLUMN_FAMILY + " = ?" + " AND " + COLUMN_NAME  + " = ?" + " AND " + COLUMN_QUALIFIER  + " IS NOT NULL";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             PreparedStatement stmt = conn.prepareStatement(query);
             stmt.setString(1, schemaName);
             stmt.setString(2, tableName);
@@ -1575,7 +1576,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     private void assertEncodedCQCounter(String columnFamily, String schemaName, String tableName, int expectedValue) throws Exception {
         String query = "SELECT " + COLUMN_QUALIFIER_COUNTER + " FROM \"SYSTEM\".CATALOG WHERE " + TABLE_SCHEM + " = ? AND " + TABLE_NAME
                 + " = ? " + " AND " + COLUMN_FAMILY + " = ? AND " + COLUMN_QUALIFIER_COUNTER + " IS NOT NULL";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             PreparedStatement stmt = conn.prepareStatement(query);
             stmt.setString(1, schemaName);
             stmt.setString(2, tableName);
@@ -1595,7 +1596,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         String query = "SELECT " + TABLE_SEQ_NUM + " FROM \"SYSTEM\".CATALOG WHERE " + TABLE_SCHEM + " = ? AND " + TABLE_NAME
                 + " = ? AND " +  TABLE_SEQ_NUM + " IS NOT NULL AND " + COLUMN_NAME + " IS NULL AND "
                 + COLUMN_FAMILY + " IS NULL ";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             PreparedStatement stmt = conn.prepareStatement(query);
             stmt.setString(1, schemaName);
             stmt.setString(2, tableName);
@@ -1666,9 +1667,9 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testTableExists() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             ConnectionQueryServices cqs =
-                conn.unwrap(PhoenixConnection.class).getQueryServices();
+                conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
             String tableName = "randomTable";
             // table never existed, still cqs.getTable() does not throw TNFE
             Table randomTable = cqs.getTable(Bytes.toBytes(tableName));
@@ -1735,7 +1736,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testAlterTableWithColumnQualifiers() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
@@ -1749,7 +1750,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         String addDdl = "ALTER TABLE \"" + tableName + "\" ADD CHAR1 char(10)";
         conn.createStatement().execute(addDdl);
 
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PhoenixMonitoredConnection pconn = conn.unwrap(PhoenixMonitoredConnection.class);
         PTable table = pconn.getTable(new PTableKey(null, tableName));
 
         QualifierEncodingScheme encodingScheme = table.getEncodingScheme();
@@ -1779,12 +1780,12 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
      */
     @Test
     public void testChangePropertiesUpdatesLASTDDLTimestamp() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String ddl = "CREATE TABLE  " + dataTableFullName +
                     "  (a_string varchar not null, a_binary VARCHAR not null, col1 integer" +
                     "  CONSTRAINT pk PRIMARY KEY (a_string, a_binary)) " + tableDDLOptions;
             conn.createStatement().execute(ddl);
-            PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+            PhoenixMonitoredConnection phxConn = conn.unwrap(PhoenixMonitoredConnection.class);
             PTable table = phxConn.getTable(new PTableKey(phxConn.getTenantId(), dataTableFullName));
             long oldLastDDLTimestamp = table.getLastDDLTimestamp();
             LOGGER.info("Last DDL timestamp before changing property: " + oldLastDDLTimestamp);

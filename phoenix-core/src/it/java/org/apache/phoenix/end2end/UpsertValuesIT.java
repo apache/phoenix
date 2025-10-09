@@ -21,6 +21,7 @@ import static org.apache.phoenix.util.PhoenixRuntime.REQUEST_METRIC_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.closeStatement;
 import static org.apache.phoenix.util.TestUtil.closeStmtAndConn;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -50,6 +51,7 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SequenceNotFoundException;
@@ -64,14 +66,13 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.function.ThrowingRunnable;
 
-
 @Category(ParallelStatsDisabledTest.class)
 public class UpsertValuesIT extends ParallelStatsDisabledIT {
     @Test
     public void testGroupByWithLimitOverRowKey() throws Exception {
         String tableName = generateUniqueName();
         ensureTableCreated(getUrl(), tableName, TestUtil.PTSDB_NAME, null, null, null);
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " (inst,host,\"DATE\") VALUES(?,'b',CURRENT_DATE())");
@@ -106,7 +107,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         Date now = new Date(EnvironmentEdgeManager.currentTimeMillis());
         ensureTableCreated(getUrl(), tableName, TestUtil.PTSDB_NAME, null, null, null);
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String dateString = "1999-01-01 02:00:00";
         PreparedStatement upsertStmt = conn.prepareStatement("upsert into " + tableName + "(inst,host,\"DATE\") values('aaa','bbb',to_date('" + dateString + "'))");
@@ -133,7 +134,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
     public void testUpsertValuesWithExpression() throws Exception {
         String tableName = generateUniqueName();
         ensureTableCreated(getUrl(), tableName, "IntKeyTest", null, null, null);
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String upsert = "UPSERT INTO " + tableName + " VALUES(-1)";
         PreparedStatement upsertStmt = conn.prepareStatement(upsert);
@@ -158,7 +159,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testUpsertValuesWithDate() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         conn.createStatement().execute("create table " + tableName + " (k VARCHAR not null primary key,\"DATE\" DATE)");
@@ -178,7 +179,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testUpsertValuesWithDescDecimal() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tableName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("create table " + tableName + " (k DECIMAL(12,3) NOT NULL PRIMARY KEY DESC)");
@@ -197,7 +198,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testUpsertRandomValues() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tableName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("create table " + tableName + " (k UNSIGNED_DOUBLE not null primary key, v1 UNSIGNED_DOUBLE, v2 UNSIGNED_DOUBLE, v3 UNSIGNED_DOUBLE, v4 UNSIGNED_DOUBLE)");
@@ -228,7 +229,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testUpsertVarCharWithMaxLength() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tableName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("create table " + tableName + " (mac_md5 VARCHAR not null primary key,raw_mac VARCHAR)");
@@ -261,7 +262,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
     @Test
     public void testUpsertValuesWithDescExpression() throws Exception {
         String tableName = generateUniqueName();
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("create table " + tableName + " (k VARCHAR not null primary key desc)");
         conn.close();
@@ -281,7 +282,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
     @Test
     public void testUpsertValuesWithMoreValuesThanNumColsInTable() throws Exception {
         String tableName = generateUniqueName();
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = null;
         Statement stmt = null;
         try {
@@ -307,7 +308,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
     @Test
     public void testTimestampSerializedAndDeserializedCorrectly() throws Exception {
         String tableName = generateUniqueName();
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = null;
         PreparedStatement stmt = null;
         try {
@@ -344,7 +345,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
     @Test
     public void testTimestampAddSubtractArithmetic() throws Exception {
         String tableName = generateUniqueName();
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = null;
         PreparedStatement stmt = null;
         try {
@@ -435,7 +436,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
     @Test
     public void testUpsertIntoFloat() throws Exception {
         String tableName = generateUniqueName();
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = null;
         PreparedStatement stmt = null;
         try {
@@ -469,7 +470,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
 
     private void testBatchedUpsert(boolean autocommit) throws Exception {
         String tableName = generateUniqueName();
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(REQUEST_METRIC_ATTRIB, "true");
         props.setProperty(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, "true");
         Connection conn = null;
@@ -499,7 +500,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
             if (!autocommit) {
                 conn.commit();
             }
-            PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+            PhoenixMonitoredConnection pConn = conn.unwrap(PhoenixMonitoredConnection.class);
             Map<String, Map<MetricType, Long>> mutationMetrics = pConn.getMutationMetrics();
             Assert.assertEquals(3, (long) mutationMetrics.get(tableName).get(MetricType.MUTATION_BATCH_SIZE));
             Assert.assertEquals(3, (long) mutationMetrics.get(tableName).get(MetricType.UPSERT_MUTATION_SQL_COUNTER));
@@ -604,7 +605,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
     @Test
     public void testBatchedUpsertMultipleBatches() throws Exception {
         String tableName = generateUniqueName();
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute("create table " + tableName + " (k varchar primary key, v integer)");
             PreparedStatement pstmt = conn.prepareStatement("upsert into " + tableName + " values (?, ?)");
@@ -629,7 +630,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
 
     private void testBatchRollback(boolean autocommit) throws Exception {
         String tableName = generateUniqueName();
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute("create table " + tableName + " (k varchar primary key, v integer)");
             conn.setAutoCommit(autocommit);
@@ -662,7 +663,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
     @Test
     public void testDQLFailsInBatch() throws Exception {
         String tableName = generateUniqueName();
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute("create table " + tableName + " (k varchar primary key, v integer)");
             Statement stmt = conn.createStatement();
@@ -680,7 +681,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
     @Test
     public void testUpsertDateIntoDescUnsignedDate() throws Exception {
         String tableName = generateUniqueName();
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = null;
         PreparedStatement stmt = null;
         try {
@@ -718,7 +719,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
     @Test
     public void testUpsertDateString() throws Exception {
         String tableName = generateUniqueName();
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = null;
         PreparedStatement stmt = null;
         try {
@@ -765,14 +766,14 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testAutoCastLongToBigDecimal() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute("CREATE TABLE LONG_BUG (NAME VARCHAR PRIMARY KEY, AMOUNT DECIMAL)");
         }
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute("UPSERT INTO LONG_BUG (NAME, AMOUNT) VALUES('HELLO1', -50000)");
             conn.commit();
         }
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             ResultSet rs = conn.createStatement().executeQuery("SELECT NAME, AMOUNT FROM LONG_BUG");
             assertTrue(rs.next());
             assertEquals("HELLO1", rs.getString(1));
@@ -789,7 +790,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
                 + " (" 
                 + " K varchar primary key,"
                 + " CF1.V1 varchar, CF2.V2 VARCHAR, CF2.V3 VARCHAR)";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(ddl);
         }
         String dml = "UPSERT INTO " + fullTableName + " VALUES (?, ?, ?, ?)";
@@ -803,8 +804,8 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
             conn.commit();
         }
         // Issue a raw hbase scan and assert that key values have the expected column qualifiers.
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            Table table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullTableName));
+        try (Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+            Table table = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getTable(Bytes.toBytes(fullTableName));
             ResultScanner scanner = table.getScanner(new Scan());
             Result next = scanner.next();
             assertTrue(next.containsColumn(Bytes.toBytes("CF1"), PInteger.INSTANCE.toBytes(1)));
@@ -816,7 +817,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
     @Test
     public void testUpsertValueWithDiffSequenceAndConnections() throws Exception {
         String tableName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.setAutoCommit(true);
             PreparedStatement createTableStatement = conn.prepareStatement(String.format("CREATE TABLE IF NOT EXISTS " +
                     "%s (SERVICE VARCHAR NOT NULL, SEQUENCE_NUMBER BIGINT NOT NULL , " +
@@ -841,8 +842,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
                     "IF NOT EXISTS %s", sequenceName));
             createSequenceStatement.execute();
         }
-
-        try (Connection tenantConn = DriverManager.getConnection(getUrl())) {
+        try (Connection tenantConn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             tenantConn.setAutoCommit(true);
             Statement executeUpdateStatement = tenantConn.createStatement();
             try {
@@ -904,8 +904,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
 
     private void testGlobalSequenceUpsertWithGlobalConnection(String tableName) throws Exception {
         String sequenceName = generateUniqueSequenceName();
-
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.setAutoCommit(true);
             PreparedStatement createSequenceStatement = conn.prepareStatement(String.format("CREATE SEQUENCE " +
                     "IF NOT EXISTS %s", sequenceName));
@@ -926,8 +925,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
 
     private void testGlobalSequenceUpsertWithTenantConnection(String tableName) throws Exception {
         String sequenceName = generateUniqueSequenceName();
-
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.setAutoCommit(true);
             PreparedStatement createSequenceStatement = conn.prepareStatement(String.format("CREATE SEQUENCE " +
                     "IF NOT EXISTS %s", sequenceName));

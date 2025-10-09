@@ -26,12 +26,14 @@ import org.apache.phoenix.coprocessor.PhoenixTTLRegionObserver;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.PhoenixTestBuilder;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ScanUtil;
 import org.junit.Assert;
@@ -47,9 +49,10 @@ import java.sql.Statement;
 import java.util.Map;
 import java.util.Properties;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.fail;
-
 @Category(NeedsOwnMiniClusterTest.class)
 public class ViewTTLNotEnabledIT extends ParallelStatsDisabledIT {
 
@@ -59,7 +62,11 @@ public class ViewTTLNotEnabledIT extends ParallelStatsDisabledIT {
         props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
         props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
         props.put(QueryServices.PHOENIX_VIEW_TTL_ENABLED, Boolean.toString(false));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
     @Test
     public void testCreateViewWithTTLWithConfigFalse() throws Exception {
@@ -85,7 +92,7 @@ public class ViewTTLNotEnabledIT extends ParallelStatsDisabledIT {
                     globalViewOptions).build();
 
         String dml = "ALTER VIEW " + schemaBuilder.getEntityGlobalViewName() + " SET TTL = 10000";
-        try (Connection connection = DriverManager.getConnection(getUrl())){
+        try (Connection connection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))){
             try {
                 connection.createStatement().execute(dml);
                 fail();
@@ -106,13 +113,13 @@ public class ViewTTLNotEnabledIT extends ParallelStatsDisabledIT {
         schemaBuilder.withTableOptions(tableOptions).withGlobalViewOptions(
                 globalViewOptions).build();
 
-        try (Connection connection = DriverManager.getConnection(getUrl())){
+        try (Connection connection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))){
 
             String dml = "ALTER TABLE " + schemaBuilder.getEntityTableName() + " SET TTL = NONE";
             connection.createStatement().execute(dml);
 
             //Clearing cache as  metaDataCaching is not there for TTL usecase
-            connection.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+            connection.unwrap(PhoenixMonitoredConnection.class).getQueryServices().clearCache();
 
             try {
                 dml = "ALTER VIEW " + schemaBuilder.getEntityGlobalViewName() + " SET TTL = 10000";

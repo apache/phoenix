@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -48,10 +49,12 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.Repeat;
 import org.apache.phoenix.util.RunUntilFailure;
 import org.apache.phoenix.util.SchemaUtil;
@@ -62,7 +65,6 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
-
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(RunUntilFailure.class)
 public class MutationStateIT extends ParallelStatsDisabledIT {
@@ -74,7 +76,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
 
     private static final Random RAND = new Random(5);
 
-    private void upsertRows(PhoenixConnection conn, String fullTableName) throws SQLException {
+    private void upsertRows(PhoenixMonitoredConnection conn, String fullTableName) throws SQLException {
         PreparedStatement stmt =
                 conn.prepareStatement("upsert into " + fullTableName
                         + " (organization_id, entity_id, score) values (?,?,?)");
@@ -100,7 +102,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
                 @Override
                 public void run() {
                     try {
-                        Connection conn = DriverManager.getConnection(getUrl());
+                        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                         for (int i = 0; i < nRows; i++) {
                             PreparedStatement statement = conn.prepareStatement(upsertStmt);
                             int index = 0;
@@ -273,7 +275,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
         int nIndexValues = 4000;
         int batchSize = 200;
         final CountDownLatch doneSignal = new CountDownLatch(nThreads);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             try {
                 conn.createStatement().execute(CREATE_DATA_TABLE);
                 conn.createStatement().execute(CREATE_INDEX_1);
@@ -316,7 +318,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         int NUMBER_OF_ROWS = 20;
         String ddl = "CREATE TABLE " + tableName + " (V BIGINT PRIMARY KEY, K BIGINT)";
-        PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
+        PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
 
         for(int i = 0; i < NUMBER_OF_ROWS; i++) {
@@ -325,11 +327,11 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
             conn.commit();
         }
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB,
                 String.valueOf(NUMBER_OF_ROWS / 2));
-        PhoenixConnection connection =
-                (PhoenixConnection) DriverManager.getConnection(getUrl(), props);
+        PhoenixMonitoredConnection connection =
+                (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), props);
         connection.setAutoCommit(false);
 
         try {
@@ -344,7 +346,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
 
         props.setProperty(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB, "10");
         props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, "10000");
-        connection = (PhoenixConnection) DriverManager.getConnection(getUrl(), props);
+        connection = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), props);
         connection.setAutoCommit(false);
 
         try {
@@ -357,11 +359,11 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testUpsertMaxMutationSize() throws Exception {
-        Properties connectionProperties = new Properties();
+        Properties connectionProperties = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         connectionProperties.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, "3");
         connectionProperties.setProperty(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB, "1000000");
-        PhoenixConnection connection =
-                (PhoenixConnection) DriverManager.getConnection(getUrl(), connectionProperties);
+        PhoenixMonitoredConnection connection =
+                (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), connectionProperties);
         String fullTableName = generateUniqueName();
         try (Statement stmt = connection.createStatement()) {
             stmt.execute(
@@ -383,7 +385,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
         connectionProperties.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, "1000");
         connectionProperties.setProperty(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB, "4");
         connection =
-                (PhoenixConnection) DriverManager.getConnection(getUrl(), connectionProperties);
+                (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), connectionProperties);
         try {
             upsertRows(connection, fullTableName);
             fail();
@@ -399,7 +401,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testMutationEstimatedSize() throws Exception {
-        PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
+        PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.setAutoCommit(false);
         String fullTableName = generateUniqueName();
         try (Statement stmt = conn.createStatement()) {
@@ -408,7 +410,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
         }
 
         // upserting rows should increase the mutation state size
-        MutationState state = conn.unwrap(PhoenixConnection.class).getMutationState();
+        MutationState state = conn.unwrap(PhoenixMonitoredConnection.class).getMutationState();
         long prevEstimatedSize = state.getEstimatedSize();
         upsertRows(conn, fullTableName);
         assertTrue("Mutation state size should have increased",
@@ -473,9 +475,9 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
     public void testSplitMutationsIntoSameGroupForSingleRow() throws Exception {
         String tableName = "TBL_" + generateUniqueName();
         String indexName = "IDX_" + generateUniqueName();
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.put("phoenix.mutate.batchSize", "2");
-        try (PhoenixConnection conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class)) {
+        try (PhoenixMonitoredConnection conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixMonitoredConnection.class)) {
             conn.setAutoCommit(false);
             conn.createStatement().executeUpdate(
                     "CREATE TABLE "  + tableName + " ("
@@ -515,7 +517,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
     public void testDDLwithPendingMutations() throws Exception {
         String tableName = generateUniqueName();
         ensureTableCreated(getUrl(), tableName, TestUtil.PTSDB_NAME, null, null, null);
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.PENDING_MUTATIONS_DDL_THROW_ATTRIB, Boolean.toString(true));
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             // setting auto commit to false
@@ -539,17 +541,17 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testNoPendingMutationsOnDDL() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.PENDING_MUTATIONS_DDL_THROW_ATTRIB, Boolean.toString(true));
         String tableName = generateUniqueName();
-        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(),
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(),
                 props)) {
             String ddl =
                     "create table " + tableName + " ( id1 UNSIGNED_INT not null primary key,"
                             + "appId1 VARCHAR)";
             conn.createStatement().execute(ddl);
             // ensure table got created
-            Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+            Admin admin = driver.getConnectionQueryServices(getActiveUrl(), props).getAdmin();
             assertNotNull(admin.getDescriptor(TableName.valueOf(tableName)));
             assertNotNull(conn.getTableNoCache(tableName));
         }
@@ -566,10 +568,10 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
     }
 
     public void testUpsertColumnExceedsMaxAllowanceSize(String storageScheme) throws Exception {
-        Properties connectionProperties = new Properties();
+        Properties connectionProperties = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         connectionProperties.setProperty(QueryServices.HBASE_CLIENT_KEYVALUE_MAXSIZE, "20");
-        try (PhoenixConnection connection =
-                     (PhoenixConnection) DriverManager.getConnection(getUrl(), connectionProperties)) {
+        try (PhoenixMonitoredConnection connection =
+                     (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), connectionProperties)) {
             String fullTableName = generateUniqueName();
             String pk1Name = generateUniqueName();
             String pk2Name = generateUniqueName();

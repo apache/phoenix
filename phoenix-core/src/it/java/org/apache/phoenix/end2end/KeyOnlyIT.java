@@ -45,7 +45,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
 @Category(ParallelStatsEnabledTest.class)
 public class KeyOnlyIT extends ParallelStatsEnabledIT {
     private String tableName;
@@ -122,7 +121,7 @@ public class KeyOnlyIT extends ParallelStatsEnabledIT {
     
     @Test
     public void testOr() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         initTableValues(conn);
         analyzeTable(conn, tableName);

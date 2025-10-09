@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -38,11 +39,11 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(ParallelStatsDisabledTest.class)
 public class UseSchemaIT extends ParallelStatsDisabledIT {
 
@@ -59,7 +60,7 @@ public class UseSchemaIT extends ParallelStatsDisabledIT {
     }
 
     public void testUseSchema(String schema) throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String ddl = "CREATE SCHEMA IF NOT EXISTS "+schema;
@@ -91,7 +92,7 @@ public class UseSchemaIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSchemaInJdbcUrl() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String schema = generateUniqueName();
         props.setProperty(QueryServices.SCHEMA_ATTRIB, schema);
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
@@ -124,7 +125,7 @@ public class UseSchemaIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testSequences() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String schema = generateUniqueName();
         props.setProperty(QueryServices.SCHEMA_ATTRIB, schema);
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
@@ -162,13 +163,13 @@ public class UseSchemaIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testMappedView() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String schema = generateUniqueName();
         String tableName = generateUniqueName();
         String fullTablename = schema + QueryConstants.NAME_SEPARATOR + tableName;
         props.setProperty(QueryServices.SCHEMA_ATTRIB, schema);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getActiveUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         admin.createNamespace(NamespaceDescriptor.create(schema).build());
         admin.createTable(TableDescriptorBuilder.newBuilder(TableName.valueOf(fullTablename)).
                 setColumnFamily(ColumnFamilyDescriptorBuilder.of(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES)).build());

@@ -33,7 +33,7 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
@@ -44,7 +44,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(ParallelStatsDisabledTest.class)
 public class ColumnEncodedBytesPropIT extends ParallelStatsDisabledIT {
 	
@@ -76,7 +75,7 @@ public class ColumnEncodedBytesPropIT extends ParallelStatsDisabledIT {
                     "  CONSTRAINT pk PRIMARY KEY (id)) COLUMN_ENCODED_BYTES=NONE";
             stmt.execute(ddl);
             
-            PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+            PhoenixMonitoredConnection phxConn = conn.unwrap(PhoenixMonitoredConnection.class);
             PTable dataTable1 = phxConn.getTable(new PTableKey(null, dataTableFullName1));
             assertEquals("Encoding scheme set incorrectly", QualifierEncodingScheme.FOUR_BYTE_QUALIFIERS, dataTable1.getEncodingScheme());
             
@@ -124,7 +123,7 @@ public class ColumnEncodedBytesPropIT extends ParallelStatsDisabledIT {
         String dataTableFullName = SchemaUtil.getTableName("", generateUniqueName());
         String view1 = SchemaUtil.getTableName("", generateUniqueName());
         String view2 = SchemaUtil.getTableName("", generateUniqueName());
-        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(), props);) {
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), props);) {
             Statement stmt = conn.createStatement();
             stmt.execute("CREATE IMMUTABLE TABLE  " + dataTableFullName +
                     "  (id varchar not null, v1 varchar " + 

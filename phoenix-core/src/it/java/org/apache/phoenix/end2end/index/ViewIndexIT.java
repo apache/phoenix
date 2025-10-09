@@ -63,6 +63,7 @@ import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.index.GlobalIndexChecker;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
@@ -82,7 +83,6 @@ import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class ViewIndexIT extends SplitSystemCatalogIT {
@@ -153,14 +153,14 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
         }
     }
 
-    private PhoenixConnection getConnection() throws SQLException{
-        Properties props = new Properties();
+    private PhoenixMonitoredConnection getConnection() throws SQLException{
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
-        return (PhoenixConnection) DriverManager.getConnection(getUrl(),props);
+        return (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(),props);
     }
 
     private Connection getTenantConnection(String tenant) throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenant);
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
         return DriverManager.getConnection(getUrl(),props);
@@ -307,7 +307,7 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
         String baseTable =  generateUniqueName();
         String globalView = generateUniqueName();
         String globalViewIdx =  generateUniqueName();
-        try (PhoenixConnection conn = getConnection()) {
+        try (PhoenixMonitoredConnection conn = getConnection()) {
             createBaseTable(conn, schemaName, baseTable, multiTenant, null, null, mutable);
             createView(conn, schemaName, globalView, baseTable);
             createViewIndex(conn, schemaName, globalViewIdx, globalView, "K1");
@@ -330,13 +330,13 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
         String globalViewIdx =  generateUniqueName();
         String tenantView =  generateUniqueName();
         String fullIndexName = SchemaUtil.getTableName(SCHEMA2, globalViewIdx);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute("CREATE TABLE " + baseTable + " (TENANT_ID CHAR(15) NOT NULL, PK2 DATE NOT NULL, PK3 INTEGER NOT NULL, KV1 VARCHAR, KV2 VARCHAR, KV3 CHAR(15) CONSTRAINT PK PRIMARY KEY(TENANT_ID, PK2, PK3)) MULTI_TENANT=true");
             conn.createStatement().execute("CREATE VIEW " + fullGlobalViewName + " AS SELECT * FROM " + baseTable);
             conn.createStatement().execute("CREATE INDEX " + globalViewIdx + " ON " + fullGlobalViewName + " (PK3 DESC, KV3) INCLUDE (KV1) ASYNC");
 
             String tenantId = "tenantId";
-            Properties tenantProps = new Properties();
+            Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
             // create a tenant specific view
             try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
@@ -426,7 +426,7 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
         String text2 ="text2";
         BigDecimal double1 = BigDecimal.valueOf(254.564);
         IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             // View fixed, index variable
             createTableForRowKeyTestsAndVerify(conn, "DATE_TIME1, INT1", "TEXT1", "INT1", int1);
             createTableForRowKeyTestsAndVerify(conn, "DATE_TIME1, INT1, TEXT4", "TEXT1", "INT1", int1);
@@ -682,7 +682,7 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
     }
     
     private void testHintForIndexOnView(boolean includeColumns) throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn1 = DriverManager.getConnection(getUrl(), props)) {
             conn1.setAutoCommit(true);
             String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
@@ -755,8 +755,8 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
         String tenantViewName = "TV_" + generateUniqueName();
         String globalViewIndexName = "GV_" + generateUniqueName();
         String tenantViewIndexName = "TV_" + generateUniqueName();
-        try(PhoenixConnection globalConn = getConnection();
-                PhoenixConnection tenantConn = (PhoenixConnection) getTenantConnection(TENANT1)) {
+        try(PhoenixMonitoredConnection globalConn = getConnection();
+            PhoenixMonitoredConnection tenantConn = (PhoenixMonitoredConnection) getTenantConnection(TENANT1)) {
             createBaseTable(globalConn, SCHEMA1, tableName, true, 0, null, true);
             createView(globalConn, SCHEMA1, globalViewName, tableName);
             createViewIndex(globalConn, SCHEMA1, globalViewIndexName, globalViewName, "v1");
@@ -831,7 +831,7 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
 
     @Test
     public void testCreateViewSchemaVersion() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         final String schemaName = generateUniqueName();
         final String tableName = generateUniqueName();
         final String viewName = generateUniqueName();
@@ -839,7 +839,7 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
         final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
         final String viewFullName = SchemaUtil.getTableName(schemaName, viewName);
         final String viewIndexFullName = SchemaUtil.getTableName(schemaName, viewIndexName);
-        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(),
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(),
                 props)) {
             String version = "V1.0";
             CreateTableIT.testCreateTableSchemaVersionAndTopicNameHelper(conn, schemaName, tableName, version, null);

@@ -49,7 +49,6 @@ import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-
 @Category(ParallelStatsDisabledTest.class)
 public class NullIT extends BaseQueryIT {
     
@@ -155,7 +154,7 @@ public class NullIT extends BaseQueryIT {
     // PHOENIX-6583
     @Test
     public void testBinaryNullAssignment() throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
         ResultSet rs;

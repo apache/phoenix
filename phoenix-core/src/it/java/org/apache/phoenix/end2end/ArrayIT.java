@@ -17,9 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.B_VALUE;
-import static org.apache.phoenix.util.TestUtil.ROW1;
-
 import java.sql.Array;
 import java.sql.Connection;
 import java.sql.Date;
@@ -30,7 +27,10 @@ import java.sql.Types;
 import java.util.Properties;
 
 import org.apache.phoenix.query.BaseTest;
-
+import org.apache.phoenix.util.PropertiesUtil;
+import static org.apache.phoenix.util.TestUtil.ROW1;
+import static org.apache.phoenix.util.TestUtil.B_VALUE;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 public abstract class ArrayIT extends ParallelStatsDisabledIT {
 
     protected static String createTableWithArray(String url, byte[][] bs, Object object) throws SQLException {
@@ -61,7 +61,7 @@ public abstract class ArrayIT extends ParallelStatsDisabledIT {
     }
 
     protected static void initTablesWithArrays(String tableName, String tenantId, Date date, boolean useNull, String url) throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             // Insert all rows at ts

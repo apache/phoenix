@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Lists
         .newArrayListWithExpectedSize;
 import static org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost
@@ -43,6 +44,7 @@ import static org.apache.phoenix.query.QueryServicesOptions
 import static org.apache.phoenix.schema.PTable.TaskType.DROP_CHILD_VIEWS;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
@@ -77,6 +79,7 @@ import org.apache.phoenix.coprocessorclient.TableInfo;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
@@ -89,6 +92,7 @@ import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ViewUtil;
@@ -144,8 +148,12 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         // server and pass in server-side properties when running the drop
         // child views tasks
         serverProps.put(DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
-                new ReadOnlyProps(clientProps.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()),
+                    new ReadOnlyProps(clientProps.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
+                    new ReadOnlyProps(clientProps.entrySet().iterator()));        }
         // Split SYSTEM.CATALOG once after the mini-cluster is started
         if (splitSystemCatalog) {
             // splitSystemCatalog is incompatible with the balancer chore
@@ -162,7 +170,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
     @Test
     public void testCreateViewWithUpdateCacheFrquency() throws Exception {
-      Properties props = new Properties();
+      Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
       Connection conn1 = DriverManager.getConnection(getUrl(), props);
       conn1.setAutoCommit(true);
       String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
@@ -194,7 +202,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         HBaseTestingUtility testUtil = getUtility();
         Admin admin = testUtil.getAdmin();
         admin.createTable(builder.build());
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         //PK is not specified, without where clause
         try {
@@ -244,12 +252,12 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         final String TBL = "TBL_" + generateUniqueName();
         final String CF = "CF";
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED,
                 Boolean.TRUE.toString());
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Admin admin = conn.unwrap(PhoenixConnection.class)
+                Admin admin = conn.unwrap(PhoenixMonitoredConnection.class)
                         .getQueryServices().getAdmin()) {
 
             conn.createStatement().execute("CREATE SCHEMA " + NS);
@@ -330,7 +338,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
     @Test
     public void testRecreateDroppedTableWithChildViews() throws Exception {
-        PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
+        PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String fullTableName = SchemaUtil.getTableName(SCHEMA1,
                 generateUniqueName());
         String fullViewName1 = SchemaUtil.getTableName(SCHEMA2,
@@ -385,8 +393,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         final String alterTableDDL = "ALTER TABLE %s ADD NEW_COL1 VARCHAR";
         createOrphanLink(SCHEMA1, parent1TableName, parent2TableName, SCHEMA2,
                 viewName);
-
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES));
                 Statement stmt = conn.createStatement()) {
             // Should not fail since this table is unrelated to the view
             // in spite of the orphan parent->child link
@@ -412,8 +419,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         final String dropTableNoCascadeDDL = "DROP TABLE %s ";
         createOrphanLink(SCHEMA1, parent1TableName, parent2TableName, SCHEMA2,
                 viewName);
-
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES));
                 Statement stmt = conn.createStatement()) {
             // Should not fail since this table is unrelated to the view
             // in spite of the orphan parent->child link
@@ -478,7 +484,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                 CHILD_VIEW_LEVEL_1_SCHEMA, level1ViewName1);
 
         // Create other legit views on top of parent1 and parent2
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(),  PropertiesUtil.deepCopy(TEST_PROPERTIES));) {
             conn.createStatement().execute(String.format(
                     CREATE_CHILD_VIEW_LEVEL_1_DDL,
                     CHILD_VIEW_LEVEL_1_SCHEMA, level1ViewName3,
@@ -501,7 +507,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                     CHILD_VIEW_LEVEL_1_SCHEMA, level1ViewName6,
                     BASE_TABLE_SCHEMA, parent2TableName));
         }
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.put(TENANT_ID_ATTRIB, tenantId);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(String.format(
@@ -581,9 +587,8 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
             t001.level2view2->t001.level3view1
          */
-
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class)
+        try (Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+            ConnectionQueryServices cqs = conn.unwrap(PhoenixMonitoredConnection.class)
                     .getQueryServices();
             try (Table childLinkTable = cqs.getTable(SchemaUtil.getPhysicalName(
                     SYSTEM_LINK_HBASE_TABLE_NAME.toBytes(),
@@ -697,8 +702,8 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                         + "TABLE_NAME='%s' AND COLUMN_FAMILY='%s' AND "
                         + LINK_TYPE + " = " +
                         PTable.LinkType.CHILD_TABLE.getSerializedValue();
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                Statement stmt = conn.createStatement()) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+             Statement stmt = conn.createStatement()) {
             stmt.execute(String.format(CREATE_BASE_TABLE_DDL, parentSchema,
                     parent1));
             stmt.execute(String.format(CREATE_BASE_TABLE_DDL, parentSchema,
@@ -732,7 +737,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
     @Test
     public void testRecreateIndexWhoseAncestorWasDropped() throws Exception {
-        PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
+        PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String fullTableName1 = SchemaUtil.getTableName(SCHEMA1,
                 generateUniqueName());
         String fullViewName1 = SchemaUtil.getTableName(SCHEMA2,
@@ -780,7 +785,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
     @Test
     public void testRecreateViewWhoseParentWasDropped() throws Exception {
-        PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
+        PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String fullTableName1 = SchemaUtil.getTableName(SCHEMA1,
                 generateUniqueName());
         String fullViewName1 = SchemaUtil.getTableName(SCHEMA2,
@@ -822,8 +827,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         String fullTableName = SchemaUtil.getTableName(SCHEMA1, tableName);
         String fullViewName = SchemaUtil.getTableName(SCHEMA2,
                 generateUniqueName());
-
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             createTableViewAndDropCascade(conn, fullTableName, fullViewName,
                     false);
             validateViewDoesNotExist(conn, fullViewName);
@@ -850,7 +854,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         String fullTableName = SchemaUtil.getTableName(SCHEMA1, tableName);
         String fullViewName = SchemaUtil.getTableName(SCHEMA2,
                 generateUniqueName());
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             createTableViewAndDropCascade(conn, fullTableName, fullViewName,
                     true);
             validateViewDoesNotExist(conn, fullViewName);
@@ -922,7 +926,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
     private void testViewAndTableInDifferentSchemas(boolean isNamespaceMapped)
             throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED,
                 Boolean.toString(isNamespaceMapped));
         Connection conn = DriverManager.getConnection(getUrl(),props);
@@ -945,12 +949,12 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         }
         String ddl = "CREATE TABLE " + fullTableName1
                 + " (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)";
-        Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices()
+        Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices()
                 .getAdmin();
         conn.createStatement().execute(ddl);
         assertTrue(admin.tableExists(SchemaUtil.getPhysicalTableName(
                 SchemaUtil.normalizeIdentifier(fullTableName1),
-                conn.unwrap(PhoenixConnection.class).getQueryServices()
+                conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices()
                         .getProps())));
 
         ddl = "CREATE VIEW " + fullViewName1
@@ -989,7 +993,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
     @Test
     public void testViewAndTableAndDropCascade() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String fullTableName = SchemaUtil.getTableName(SCHEMA1,
                 generateUniqueName());
         String fullViewName1 = SchemaUtil.getTableName(SCHEMA2,
@@ -1038,7 +1042,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                 generateUniqueName());
         String fullViewName = SchemaUtil.getTableName(SCHEMA2,
                 generateUniqueName());
-        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+        try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement()
                     .execute("create table " + fullTableName
                             + "(tenantId CHAR(15) NOT NULL, pk1 integer "
@@ -1064,7 +1068,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
     @Test
     public void testViewAddsPKColumnWhoseParentsLastPKIsVarLength()
             throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String fullTableName = SchemaUtil.getTableName(SCHEMA1,
                 generateUniqueName());
         String fullViewName = SchemaUtil.getTableName(SCHEMA2,
@@ -1102,7 +1106,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
     @Test(expected=ColumnAlreadyExistsException.class)
     public void testViewAddsClashingPKColumn() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String fullTableName = SchemaUtil.getTableName(SCHEMA1,
                 generateUniqueName());
         String fullViewName = SchemaUtil.getTableName(SCHEMA2,
@@ -1124,8 +1128,8 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
     @Test
     public void testQueryWithSeparateConnectionForViewOnTableThatHasIndex()
             throws SQLException {
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                Connection conn2 = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+                Connection conn2 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                 Statement s = conn.createStatement();
                 Statement s2 = conn2.createStatement()) {
             String tableName = SchemaUtil.getTableName(SCHEMA1,
@@ -1140,7 +1144,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
     @Test
     public void testQueryForViewOnTableThatHasIndex() throws SQLException {
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                 Statement s = conn.createStatement()) {
             String tableName = SchemaUtil.getTableName(SCHEMA1,
                     generateUniqueName());
@@ -1180,7 +1184,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
     @Test
     public void testViewAndTableAndDropCascadeWithIndexes() throws Exception {
         // Setup - Tables and Views with Indexes
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String fullTableName = SchemaUtil.getTableName(SCHEMA1,
                 generateUniqueName());
         String ddl = "CREATE TABLE " + fullTableName
@@ -1221,7 +1225,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
     @Test
     public void testViewAddsNotNullPKColumn() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String fullTableName = SchemaUtil.getTableName(SCHEMA1,
                 generateUniqueName());
         String fullViewName = SchemaUtil.getTableName(SCHEMA2,
@@ -1247,7 +1251,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
     @Test
     public void testDisallowDropOfColumnOnParentTable() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String fullTableName = SchemaUtil.getTableName(SCHEMA1,
                 generateUniqueName());
         String viewName = SchemaUtil.getTableName(SCHEMA2,
@@ -1271,7 +1275,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
     @Test
     public void testDisallowDropOfReferencedColumn() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String fullTableName = SchemaUtil.getTableName(SCHEMA1,
                 generateUniqueName());
         String fullViewName1 = SchemaUtil.getTableName(SCHEMA2,
@@ -1321,7 +1325,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
     @Test
     public void testViewAddsPKColumn() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String fullTableName = SchemaUtil.getTableName(SCHEMA1,
                 generateUniqueName());
         String viewName = generateUniqueName();
@@ -1347,7 +1351,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
     @Test
     public void testCreateViewDefinesPKConstraint() throws Exception {
-        PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
+        PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String fullTableName = SchemaUtil.getTableName(SCHEMA1,
                 generateUniqueName());
         String fullViewName = SchemaUtil.getTableName(SCHEMA2,
@@ -1392,7 +1396,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                         /
                     index2(tenant1)
         */
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
             conn.createStatement().execute(baseTableDDL);
             String index1DDL = "CREATE INDEX " + index1 + " ON " + baseTable + "(V1)";
@@ -1490,7 +1494,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
     }
 
     private Connection getTenantConnection(String tenantId) throws SQLException {
-        Properties tenantProps = new Properties();
+        Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         return DriverManager.getConnection(getUrl(), tenantProps);
     }

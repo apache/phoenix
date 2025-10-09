@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -27,9 +28,9 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 
 @Category(ParallelStatsDisabledTest.class)
 public class ReverseFunctionIT extends ParallelStatsDisabledIT {
@@ -67,7 +68,7 @@ public class ReverseFunctionIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testSingleByteReverseAscending() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String s = "abc";
         String tableName = initTable(conn, "ASC", s);
         testReverse(conn, s, tableName);
@@ -75,7 +76,7 @@ public class ReverseFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testMultiByteReverseAscending() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String s = "ɚɦɰɸ";
         String tableName = initTable(conn, "DESC", s);
         testReverse(conn, s, tableName);
@@ -84,7 +85,7 @@ public class ReverseFunctionIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testSingleByteReverseDecending() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String s = "abc";
         String tableName = initTable(conn, "DESC", s);
         testReverse(conn, s, tableName);
@@ -92,7 +93,7 @@ public class ReverseFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testMultiByteReverseDecending() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String s = "ɚɦɰɸ";
         String tableName = initTable(conn, "ASC", s);
         testReverse(conn, s, tableName);
@@ -100,7 +101,7 @@ public class ReverseFunctionIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testNullReverse() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String s = "abc";
         String tableName = initTable(conn, "ASC", s);
 

@@ -19,6 +19,7 @@
 package org.apache.phoenix.end2end;
 
 import static java.util.Arrays.asList;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.COLUMN_TYPES;
 import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.DEFAULT_SCHEMA_NAME;
 import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.MAX_ROWS;
@@ -28,6 +29,7 @@ import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.TENANT_VIE
 import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.TENANT_VIEW_PK_COLUMNS;
 import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.TENANT_VIEW_PK_TYPES;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
@@ -47,6 +49,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.PhoenixTestBuilder;
@@ -75,18 +78,13 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.ManualEnvironmentEdge;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.ScanUtil;
-import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.*;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(NeedsOwnMiniClusterTest.class)
 public class ViewTTLIT extends BaseViewTTLIT {
 
@@ -106,9 +104,14 @@ public class ViewTTLIT extends BaseViewTTLIT {
             put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(0));
             put(QueryServices.PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT, String.valueOf(1));
         }};
-
-        setUpTestDriver(new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS,
-                        DEFAULT_PROPERTIES.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS,
+                    DEFAULT_PROPERTIES.entrySet().iterator()),new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS,
+                    DEFAULT_PROPERTIES.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS,
+                    DEFAULT_PROPERTIES.entrySet().iterator()));
+        }
     }
 
     @Before
@@ -303,7 +306,7 @@ public class ViewTTLIT extends BaseViewTTLIT {
                 PTableType.INDEX.getSerializedValue(), "0");
 
         String tenantURL = getUrl() + ';' + TENANT_ID_ATTRIB + '=' + tenantId;
-        try (Connection connection = DriverManager.getConnection(tenantURL)) {
+        try (Connection connection = DriverManager.getConnection(tenantURL,PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             try (Statement stmt = connection.createStatement()) {
                 // View TTL is set to 120s => 120000 ms
                 String sql = String
@@ -371,7 +374,7 @@ public class ViewTTLIT extends BaseViewTTLIT {
                 PTableType.VIEW.getSerializedValue(), "0");
 
         String tenantURL = getUrl() + ';' + TENANT_ID_ATTRIB + '=' + tenantId;
-        try (Connection connection = DriverManager.getConnection(tenantURL)) {
+        try (Connection connection = DriverManager.getConnection(tenantURL, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             try (Statement stmt = connection.createStatement()) {
                 // View TTL is set to 120s => 120000 ms
                 String sql = String
@@ -414,7 +417,7 @@ public class ViewTTLIT extends BaseViewTTLIT {
         assertSyscatHavePhoenixTTLRelatedColumns(tenantId, schemaName, indexOnTenantViewName,
                 PTableType.INDEX.getSerializedValue(), "0");
 
-        try (Connection connection = DriverManager.getConnection(getUrl())) {
+        try (Connection connection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             try (Statement stmt = connection.createStatement()) {
                 // View TTL is set to 120s => 120000 ms
                 String sql = String
@@ -458,7 +461,7 @@ public class ViewTTLIT extends BaseViewTTLIT {
                 PTableType.INDEX.getSerializedValue(), "0");
 
         // ALTER global view
-        try (Connection connection = DriverManager.getConnection(getUrl())) {
+        try (Connection connection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             try (Statement stmt = connection.createStatement()) {
                 String sql = String
                         .format(ALTER_SQL_WITH_NO_TTL, schemaName, globalViewName, "COL_30");
@@ -468,7 +471,7 @@ public class ViewTTLIT extends BaseViewTTLIT {
 
         // ALTER tenant view
         String tenantURL = getUrl() + ';' + TENANT_ID_ATTRIB + '=' + tenantId;
-        try (Connection connection = DriverManager.getConnection(tenantURL)) {
+        try (Connection connection = DriverManager.getConnection(tenantURL, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             try (Statement stmt = connection.createStatement()) {
                 String sql = String
                         .format(ALTER_SQL_WITH_NO_TTL, schemaName, tenantViewName, "COL_100");
@@ -495,7 +498,7 @@ public class ViewTTLIT extends BaseViewTTLIT {
         String indexOnTenantViewName = String
                 .format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
 
-        try (Connection connection = DriverManager.getConnection(getUrl())) {
+        try (Connection connection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             try (Statement stmt = connection.createStatement()) {
                 // View TTL is set to 'NONE'
                 String sql = String
@@ -624,7 +627,7 @@ public class ViewTTLIT extends BaseViewTTLIT {
             String
                     tenantConnectUrl =
                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
-            try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl)) {
+            try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                 writeConnection.setAutoCommit(true);
                 dataWriter.setConnection(writeConnection);
                 dataWriter.setDataSupplier(dataSupplier);
@@ -731,7 +734,7 @@ public class ViewTTLIT extends BaseViewTTLIT {
             List<String> rowKeyColumns = Lists.newArrayList("COL6");
             String tenantConnectUrl =
                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
-            try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl)) {
+            try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                 writeConnection.setAutoCommit(true);
                 dataWriter.setConnection(writeConnection);
                 dataWriter.setDataSupplier(dataSupplier);
@@ -833,7 +836,7 @@ public class ViewTTLIT extends BaseViewTTLIT {
             List<String> rowKeyColumns = Lists.newArrayList("COL6");
             String tenantConnectUrl =
                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
-            try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl)) {
+            try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                 writeConnection.setAutoCommit(true);
                 dataWriter.setConnection(writeConnection);
                 dataWriter.setDataSupplier(dataSupplier);
@@ -943,7 +946,7 @@ public class ViewTTLIT extends BaseViewTTLIT {
                 schemaBuilder.getEntityTenantViewName());
         String tConnectUrl =
                 getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
-        try (Connection tConnection = DriverManager.getConnection(tConnectUrl)) {
+        try (Connection tConnection = DriverManager.getConnection(tConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             tConnection.createStatement().execute(level3ViewCreateSQL);
         }
 
@@ -982,7 +985,7 @@ public class ViewTTLIT extends BaseViewTTLIT {
         List<String> rowKeyColumns = Lists.newArrayList("COL6");
         String tenantConnectUrl =
                 getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
-        try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl)) {
+        try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             writeConnection.setAutoCommit(true);
             dataWriter.setConnection(writeConnection);
             dataWriter.setDataSupplier(dataSupplier);
@@ -1100,7 +1103,7 @@ public class ViewTTLIT extends BaseViewTTLIT {
         List<String> rowKeyColumns = Lists.newArrayList("ID", "ZID");
         String tenantConnectUrl =
                 getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
-        try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl)) {
+        try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             writeConnection.setAutoCommit(true);
             dataWriter.setConnection(writeConnection);
             dataWriter.setDataSupplier(dataSupplier);
@@ -1201,7 +1204,7 @@ public class ViewTTLIT extends BaseViewTTLIT {
             List<String> rowKeyColumns = Lists.newArrayList("ID", "ZID");
             String tenantConnectUrl =
                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
-            try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl)) {
+            try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                 writeConnection.setAutoCommit(true);
                 dataWriter.setConnection(writeConnection);
                 dataWriter.setDataSupplier(dataSupplier);
@@ -1291,7 +1294,7 @@ public class ViewTTLIT extends BaseViewTTLIT {
             List<String> rowKeyColumns = Lists.newArrayList("ZID");
             String tenantConnectUrl =
                     getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
-            try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl)) {
+            try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                 writeConnection.setAutoCommit(true);
                 dataWriter.setConnection(writeConnection);
                 dataWriter.setDataSupplier(dataSupplier);
@@ -1416,7 +1419,7 @@ public class ViewTTLIT extends BaseViewTTLIT {
         List<String> rowKeyColumns = Lists.newArrayList("ID", "ZID");
         String tenant1ConnectUrl =
                 getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
-        try (Connection writeConnection = DriverManager.getConnection(tenant1ConnectUrl)) {
+        try (Connection writeConnection = DriverManager.getConnection(tenant1ConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             writeConnection.setAutoCommit(true);
             dataWriter.setConnection(writeConnection);
             dataWriter.setDataSupplier(dataSupplier);
@@ -1532,7 +1535,7 @@ public class ViewTTLIT extends BaseViewTTLIT {
         List<String> rowKeyColumns = Lists.newArrayList("ID", "ZID");
         String tenant1ConnectUrl =
                 getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
-        try (Connection writeConnection = DriverManager.getConnection(tenant1ConnectUrl)) {
+        try (Connection writeConnection = DriverManager.getConnection(tenant1ConnectUrl, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             writeConnection.setAutoCommit(true);
             dataWriter.setConnection(writeConnection);
             dataWriter.setDataSupplier(dataSupplier);
@@ -1581,7 +1584,7 @@ public class ViewTTLIT extends BaseViewTTLIT {
 
         String viewName = schemaBuilder.getEntityTenantViewName();
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String
                 tenantConnectUrl =
                 getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions()

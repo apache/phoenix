@@ -61,7 +61,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class DerivedTableIT extends ParallelStatsDisabledIT {

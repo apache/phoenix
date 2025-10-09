@@ -50,7 +50,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
 @Category(ParallelStatsDisabledTest.class)
 public class DistinctCountIT extends ParallelStatsDisabledIT {
 
@@ -273,7 +272,7 @@ public class DistinctCountIT extends ParallelStatsDisabledIT {
             String tableName) throws Exception {
         ensureTableCreated(getUrl(), tableName, ATABLE_NAME, splits, null);
         
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             // Insert all rows at ts

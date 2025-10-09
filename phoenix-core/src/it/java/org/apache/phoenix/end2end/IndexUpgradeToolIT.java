@@ -39,7 +39,6 @@ import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-
 @RunWith(Parameterized.class)
 @Category(ParallelStatsDisabledTest.class)
 public class IndexUpgradeToolIT extends ParallelStatsDisabledIT {

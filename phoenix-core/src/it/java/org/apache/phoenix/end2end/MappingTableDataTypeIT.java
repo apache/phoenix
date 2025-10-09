@@ -44,11 +44,10 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 
 @Category(ParallelStatsDisabledTest.class)
 public class MappingTableDataTypeIT extends ParallelStatsDisabledIT {
@@ -57,7 +56,7 @@ public class MappingTableDataTypeIT extends ParallelStatsDisabledIT {
         String mtest = generateUniqueName();
         final TableName tableName = TableName.valueOf(mtest);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        PhoenixConnection conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
+        PhoenixMonitoredConnection conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixMonitoredConnection.class);
 
         try(Table t = conn.getQueryServices().getTable(Bytes.toBytes(mtest));
             Admin admin = conn.getQueryServices().getAdmin()) {

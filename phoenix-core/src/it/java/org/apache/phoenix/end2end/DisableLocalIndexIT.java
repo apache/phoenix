@@ -31,7 +31,7 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -39,7 +39,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(ParallelStatsDisabledTest.class)
 public class DisableLocalIndexIT extends ParallelStatsDisabledIT {
 
@@ -57,11 +56,11 @@ public class DisableLocalIndexIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT PK PRIMARY KEY(K1,K2)) MULTI_TENANT=true");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('t1','x')");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('t2','y')");
-        Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+        Admin admin = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getAdmin();
         assertFalse(admin.tableExists(TableName.valueOf(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + tableName)));
         admin.close();
         try {
-            Table t = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + tableName));
+            Table t = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getTable(Bytes.toBytes(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + tableName));
             t.getDescriptor(); // Exception no longer thrown by getTable, but instead need to force an RPC
             fail("Local index table should not have been created");
         } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
@@ -77,7 +76,7 @@ public class DisableLocalIndexIT extends ParallelStatsDisabledIT {
         
         tsconn.createStatement().execute("CREATE VIEW " + viewName + "(V1 VARCHAR) AS SELECT * FROM " + tableName);
         tsconn.createStatement().execute("CREATE INDEX " + indexName1 + " ON " + viewName + "(V1)");
-        tsconn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX + tableName));
+        tsconn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().getTable(Bytes.toBytes(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX + tableName));
 
         try {
             conn.createStatement().execute("CREATE LOCAL INDEX " + indexName2 + " ON " + tableName + "(k2)");

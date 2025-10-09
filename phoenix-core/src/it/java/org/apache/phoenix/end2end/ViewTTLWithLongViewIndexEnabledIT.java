@@ -31,6 +31,8 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
+
 @Category(NeedsOwnMiniClusterTest.class)
 public class ViewTTLWithLongViewIndexEnabledIT extends BaseViewTTLIT {
 
@@ -51,8 +53,14 @@ public class ViewTTLWithLongViewIndexEnabledIT extends BaseViewTTLIT {
             put(QueryServices.PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT, String.valueOf(1));
         }};
 
-        setUpTestDriver(new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS,
-                DEFAULT_PROPERTIES.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS,
+                    DEFAULT_PROPERTIES.entrySet().iterator()), new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS,
+                    DEFAULT_PROPERTIES.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS,
+                    DEFAULT_PROPERTIES.entrySet().iterator()));
+        }
     }
 
     @Test

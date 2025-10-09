@@ -58,7 +58,6 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
 @Category(ParallelStatsDisabledTest.class)
 public class PercentileIT extends ParallelStatsDisabledIT {
 
@@ -413,8 +412,7 @@ public class PercentileIT extends ParallelStatsDisabledIT {
         String indexDataTableName = generateUniqueName();
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTableName;
         String query = "SELECT PERCENTILE_CONT(1) WITHIN GROUP (ORDER BY long_pk ASC) FROM " + fullTableName;
-
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             conn.createStatement().execute("create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + "IMMUTABLE_ROWS=true");
             populateINDEX_DATA_TABLETable(indexDataTableName);
@@ -433,7 +431,7 @@ public class PercentileIT extends ParallelStatsDisabledIT {
     @Test
     public void testPercentRankOnDescPKColumn() throws Exception {
         String indexDataTableName = generateUniqueName();
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTableName;
             String query = "SELECT PERCENT_RANK(2) WITHIN GROUP (ORDER BY long_pk ASC) FROM " + fullTableName;
@@ -454,8 +452,7 @@ public class PercentileIT extends ParallelStatsDisabledIT {
     @Test
     public void testPercentileDiscOnDescPKColumn() throws Exception {
         String indexDataTableName = generateUniqueName();
-
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTableName;
             String query = "SELECT PERCENTILE_DISC(0.4) WITHIN GROUP (ORDER BY long_pk DESC) FROM " + fullTableName;
@@ -539,8 +536,7 @@ public class PercentileIT extends ParallelStatsDisabledIT {
         Date date) throws Exception {
         String tableName = generateUniqueName();
         ensureTableCreated(getUrl(), tableName, ATABLE_NAME, splits, null, null);
-
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             // Insert all rows at ts
             PreparedStatement stmt = conn.prepareStatement("upsert into " + tableName + "("

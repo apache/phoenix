@@ -18,9 +18,27 @@
 
 package org.apache.phoenix.jdbc;
 
+import org.apache.hadoop.hbase.client.Consistency;
+import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.monitoring.MetricType;
+import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.schema.PMetaData;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.types.PDataType;
 
+import javax.annotation.Nullable;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.io.Reader;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.text.Format;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -47,5 +65,30 @@ public interface PhoenixMonitoredConnection extends Connection {
      * metrics for individual DML.
      */
     void clearMetrics();
+    ConnectionQueryServices getQueryServices() throws SQLException;
+    PTable getTable(PTableKey key) throws SQLException;
+    PTable getTable(String name) throws SQLException;
+    PTable getTableNoCache(String name) throws SQLException;
+    Consistency getConsistency()  throws SQLException;
+    PName getTenantId() throws SQLException;
+    MutationState getMutationState() throws SQLException;
+    PMetaData getMetaDataCache() throws SQLException;
+    int getMutateBatchSize() throws SQLException;
+    int executeStatements(Reader reader, List<Object> binds,
+                          PrintStream out) throws IOException, SQLException;
+    Format getFormatter(PDataType type) throws SQLException;
+    void setRunningUpgrade(boolean isRunningUpgrade) throws SQLException;
+    PTable getTable(String tenantId, String fullTableName)
+            throws SQLException;
+     PTable getTableNoCache(PName tenantId, String name) throws SQLException;
+    void setIsClosing(boolean imitateIsClosing) throws SQLException;
+    PreparedStatement prepareStatement(String sql) throws SQLException;
+    String getDatePattern() throws SQLException;
+    PTable getTable(@Nullable String tenantId, String fullTableName,
+                           @Nullable Long timestamp) throws SQLException;
+    boolean isRunningUpgrade() throws SQLException;
+    String getURL() throws SQLException;
+    LogLevel getLogLevel() throws SQLException;
+    KeyValueBuilder getKeyValueBuilder() throws SQLException;
 
 }

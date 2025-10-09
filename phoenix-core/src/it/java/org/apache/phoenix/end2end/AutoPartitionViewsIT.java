@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -41,12 +42,12 @@ import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class AutoPartitionViewsIT extends ParallelStatsDisabledIT {
@@ -74,13 +75,13 @@ public class AutoPartitionViewsIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testValidateAttributes() throws SQLException {
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                Connection viewConn1 =
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+             Connection viewConn1 =
                         isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1)
-                                : DriverManager.getConnection(getUrl());
-                Connection viewConn2 =
-                        isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1)
-                                : DriverManager.getConnection(getUrl())) {
+                                : DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+             Connection viewConn2 =
+                        isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES))
+                                : DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));) {
             String tableName = generateUniqueName();
             String autoSeqName = generateUniqueName();
 
@@ -229,13 +230,13 @@ public class AutoPartitionViewsIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testViewCreationFailure() throws SQLException {
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                 Connection viewConn1 =
-                        isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1)
-                                : DriverManager.getConnection(getUrl());
+                        isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES))
+                                : DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                 Connection viewConn2 =
-                        isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL2)
-                                : DriverManager.getConnection(getUrl())) {
+                        isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL2, PropertiesUtil.deepCopy(TEST_PROPERTIES))
+                                : DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String tableName = generateUniqueName();
             String autoSeqName = generateUniqueName();
 
@@ -313,10 +314,10 @@ public class AutoPartitionViewsIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testAddDropColumns() throws SQLException {
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES));
                 Connection viewConn1 =
-                        isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1)
-                                : DriverManager.getConnection(getUrl())) {
+                        isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1, PropertiesUtil.deepCopy(TEST_PROPERTIES))
+                                : DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String tableName = generateUniqueName();
             String autoSeqName = generateUniqueName();
 

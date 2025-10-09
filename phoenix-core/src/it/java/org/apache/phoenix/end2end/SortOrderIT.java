@@ -57,7 +57,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
  * @since 1.2
  */
 
-
 @Category(ParallelStatsDisabledTest.class)
 public class SortOrderIT extends ParallelStatsDisabledIT {
     protected String baseTableName;
@@ -302,7 +301,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
         String table = generateUniqueName();
         TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (oid DECIMAL PRIMARY KEY DESC)";
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);
         conn.createStatement().execute("UPSERT INTO " + table + " VALUES(4.99)");
         conn.createStatement().execute("UPSERT INTO " + table + " VALUES(4.0)");

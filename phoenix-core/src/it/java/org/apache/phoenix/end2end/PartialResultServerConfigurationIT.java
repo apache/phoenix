@@ -28,8 +28,10 @@ import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.query.ConnectionQueryServices.Feature;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.AfterClass;
 import org.junit.Assume;
 import org.junit.BeforeClass;
@@ -41,13 +43,18 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.UUID;
 
 import static org.apache.hadoop.hbase.HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.query.BaseTest.generateUniqueName;
 import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
+import static org.apache.phoenix.query.BaseTest.setUpTestClusterForHA;
+import static org.apache.phoenix.query.BaseTest.getUtility;
+import static org.apache.phoenix.query.BaseTest.CLUSTERS;
 import static org.apache.phoenix.query.QueryServices.*;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
@@ -65,20 +72,30 @@ public class PartialResultServerConfigurationIT {
 
     @BeforeClass
     public static synchronized void setUp() throws Exception {
-        Configuration conf = HBaseConfiguration.create();
-        hbaseTestUtil = new HBaseTestingUtility(conf);
-        setUpConfigForMiniCluster(conf);
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+            //Enforce the limit of the result, so scans will stop between cells.
+            props.put(HConstants.HBASE_CLIENT_SCANNER_MAX_RESULT_SIZE_KEY, "5");
+            props.put(HConstants.HBASE_SERVER_SCANNER_MAX_RESULT_SIZE_KEY, "5");
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
+            hbaseTestUtil = getUtility();
+            url = CLUSTERS.getJdbcHAUrlWithoutPrincipal();
+        } else {
+            Configuration conf = HBaseConfiguration.create();
+            hbaseTestUtil = new HBaseTestingUtility(conf);
+            setUpConfigForMiniCluster(conf);
 
-        //Enforce the limit of the result, so scans will stop between cells.
-        conf.setLong(HConstants.HBASE_CLIENT_SCANNER_MAX_RESULT_SIZE_KEY, 5);
-        conf.setLong(HConstants.HBASE_SERVER_SCANNER_MAX_RESULT_SIZE_KEY, 5);
+            //Enforce the limit of the result, so scans will stop between cells.
+            conf.setLong(HConstants.HBASE_CLIENT_SCANNER_MAX_RESULT_SIZE_KEY, 5);
+            conf.setLong(HConstants.HBASE_SERVER_SCANNER_MAX_RESULT_SIZE_KEY, 5);
 
-        hbaseTestUtil.startMiniCluster();
-        zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
-        url = PhoenixRuntime.JDBC_PROTOCOL_ZK + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
+            hbaseTestUtil.startMiniCluster();
+            zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
+            url = PhoenixRuntime.JDBC_PROTOCOL_ZK + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
 
-        DriverManager.registerDriver(PhoenixDriver.INSTANCE);
-        DriverManager.registerDriver(new PhoenixTestDriver());
+            DriverManager.registerDriver(PhoenixDriver.INSTANCE);
+            DriverManager.registerDriver(new PhoenixTestDriver());
+        }
     }
 
     @AfterClass
@@ -102,7 +119,7 @@ public class PartialResultServerConfigurationIT {
         String tableNameL = generateUniqueName();
 
         int numRecords = 1000;
-        try (Connection conn = DriverManager.getConnection(url)) {
+        try (Connection conn = DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(
                     "CREATE TABLE " + tableNameR + " (PK1 INTEGER NOT NULL PRIMARY KEY, KV1 VARCHAR)");
             int i = 0;

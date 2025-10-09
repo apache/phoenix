@@ -24,7 +24,6 @@ import java.sql.ResultSet;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
 @Category(ParallelStatsDisabledTest.class)
 public class OrderByIT extends BaseOrderByIT {
 

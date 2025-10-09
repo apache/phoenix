@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -29,9 +30,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 
 @Category(ParallelStatsDisabledTest.class)
 public class ModulusExpressionIT extends ParallelStatsDisabledIT {
@@ -54,7 +55,7 @@ public class ModulusExpressionIT extends ParallelStatsDisabledIT {
     }
     
     private void testDividend(long dividend) throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         initTable(conn, dividend, tableName);
 
@@ -106,7 +107,7 @@ public class ModulusExpressionIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testZeroDivisor() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         initTable(conn, 0, tableName);
         
@@ -133,7 +134,7 @@ public class ModulusExpressionIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testNullDividend() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         initTable(conn, SMALL_VALUE, tableName);
         
@@ -149,7 +150,7 @@ public class ModulusExpressionIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testNullDivisor() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         initTable(conn, SMALL_VALUE, tableName);
         
@@ -171,7 +172,7 @@ public class ModulusExpressionIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testNullEverything() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)    );
         String tableName = generateUniqueName();
         initTable(conn, SMALL_VALUE, tableName);
         

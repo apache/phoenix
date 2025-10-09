@@ -18,7 +18,11 @@
 
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
+import static org.apache.phoenix.query.BaseTest.getConfiguration;
 import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
+import static org.apache.phoenix.query.BaseTest.setUpTestClusterForHA;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assume.assumeTrue;
 
@@ -28,6 +32,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Map;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -35,17 +40,20 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.jdbc.RPCConnectionInfo;
 import org.apache.phoenix.jdbc.ZKConnectionInfo;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.query.ConfigurationFactory;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.InstanceResolver;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(NeedsOwnMiniClusterTest.class)
 public class ConnectionIT {
 
@@ -56,29 +64,37 @@ public class ConnectionIT {
 
     @BeforeClass
     public static synchronized void setUp() throws Exception {
-        hbaseTestUtil = new HBaseTestingUtility();
-        conf = hbaseTestUtil.getConfiguration();
-        setUpConfigForMiniCluster(conf);
-        conf.set(HConstants.ZOOKEEPER_ZNODE_PARENT, "/hbase-test");
-        conf.set(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, ZKConnectionInfo.ZK_REGISTRY_NAME);
-        hbaseTestUtil.startMiniCluster();
-        Class.forName(PhoenixDriver.class.getName());
-        DriverManager.registerDriver(new PhoenixTestDriver());
-        InstanceResolver.clearSingletons();
-        // Make sure the ConnectionInfo doesn't try to pull a default Configuration
-        InstanceResolver.getSingleton(ConfigurationFactory.class, new ConfigurationFactory() {
-            @Override
-            public Configuration getConfiguration() {
-                return new Configuration(conf);
-            }
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+            props.put(HConstants.ZOOKEEPER_ZNODE_PARENT, "/hbase-test");
+            props.put(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, ZKConnectionInfo.ZK_REGISTRY_NAME);
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+            conf = getConfiguration();
+        } else {
+            hbaseTestUtil = new HBaseTestingUtility();
+            conf = hbaseTestUtil.getConfiguration();
+            setUpConfigForMiniCluster(conf);
+            conf.set(HConstants.ZOOKEEPER_ZNODE_PARENT, "/hbase-test");
+            conf.set(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, ZKConnectionInfo.ZK_REGISTRY_NAME);
+            hbaseTestUtil.startMiniCluster();
+            Class.forName(PhoenixDriver.class.getName());
+            DriverManager.registerDriver(new PhoenixTestDriver());
+            InstanceResolver.clearSingletons();
+            // Make sure the ConnectionInfo doesn't try to pull a default Configuration
+            InstanceResolver.getSingleton(ConfigurationFactory.class, new ConfigurationFactory() {
+                @Override
+                public Configuration getConfiguration() {
+                    return new Configuration(conf);
+                }
 
-            @Override
-            public Configuration getConfiguration(Configuration confToClone) {
-                Configuration copy = new Configuration(conf);
-                copy.addResource(confToClone);
-                return copy;
-            }
-        });
+                @Override
+                public Configuration getConfiguration(Configuration confToClone) {
+                    Configuration copy = new Configuration(conf);
+                    copy.addResource(confToClone);
+                    return copy;
+                }
+            });
+        }
     }
 
     @AfterClass
@@ -88,10 +104,10 @@ public class ConnectionIT {
 
     @Test
     public void testInputAndOutputConnections() throws SQLException {
-        try (Connection inputConnection = ConnectionUtil.getInputConnection(conf)) {
+        try (Connection inputConnection = ConnectionUtil.getInputConnection(conf, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             smoke(inputConnection);
         }
-        try (Connection outputConnection = ConnectionUtil.getOutputConnection(conf)) {
+        try (Connection outputConnection = ConnectionUtil.getOutputConnection(conf, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             smoke(outputConnection);
         }
     }
@@ -112,13 +128,13 @@ public class ConnectionIT {
     public void testZkConnections() throws SQLException {
         String zkQuorum = conf.get(HConstants.ZOOKEEPER_QUORUM);
         String zkPort = conf.get(HConstants.ZOOKEEPER_CLIENT_PORT);
-        try (PhoenixConnection conn1 =
-                (PhoenixConnection) DriverManager.getConnection("jdbc:phoenix");
-                PhoenixConnection conn2 =
-                        (PhoenixConnection) DriverManager.getConnection("jdbc:phoenix+zk");
-                PhoenixConnection conn3 =
-                        (PhoenixConnection) DriverManager
-                                .getConnection("jdbc:phoenix+zk:" + zkQuorum + ":" + zkPort);) {
+        try (PhoenixMonitoredConnection conn1 =
+                (PhoenixMonitoredConnection) DriverManager.getConnection("jdbc:phoenix", PropertiesUtil.deepCopy(TEST_PROPERTIES));
+             PhoenixMonitoredConnection conn2 =
+                        (PhoenixMonitoredConnection) DriverManager.getConnection("jdbc:phoenix+zk", PropertiesUtil.deepCopy(TEST_PROPERTIES));
+             PhoenixMonitoredConnection conn3 =
+                        (PhoenixMonitoredConnection) DriverManager
+                                .getConnection("jdbc:phoenix+zk:" + zkQuorum + ":" + zkPort, PropertiesUtil.deepCopy(TEST_PROPERTIES));) {
             smoke(conn1);
             smoke(conn2);
             smoke(conn3);
@@ -132,11 +148,11 @@ public class ConnectionIT {
         assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.3.0") >= 0);
         int masterPortString = conf.getInt(HConstants.MASTER_PORT, HConstants.DEFAULT_MASTER_PORT);
         String masterHosts = conf.get(HConstants.MASTER_ADDRS_KEY);
-        try (PhoenixConnection conn1 =
-                (PhoenixConnection) DriverManager.getConnection("jdbc:phoenix+master");
-                PhoenixConnection conn2 =
-                        (PhoenixConnection) DriverManager.getConnection("jdbc:phoenix+master:"
-                                + masterHosts.replaceAll(":", "\\\\:") + ":" + masterPortString);) {
+        try (PhoenixMonitoredConnection conn1 =
+                (PhoenixMonitoredConnection) DriverManager.getConnection("jdbc:phoenix+master", PropertiesUtil.deepCopy(TEST_PROPERTIES));
+                PhoenixMonitoredConnection conn2 =
+                        (PhoenixMonitoredConnection) DriverManager.getConnection("jdbc:phoenix+master:"
+                                + masterHosts.replaceAll(":", "\\\\:") + ":" + masterPortString, PropertiesUtil.deepCopy(TEST_PROPERTIES));) {
             smoke(conn1);
             smoke(conn2);
             assertEquals(conn1.getQueryServices(), conn2.getQueryServices());
@@ -153,11 +169,11 @@ public class ConnectionIT {
         // Set BOOTSTRAP_NODES so that we can test the default case
         conf.set(RPCConnectionInfo.BOOTSTRAP_NODES, masterHosts);
 
-        try (PhoenixConnection conn1 =
-                (PhoenixConnection) DriverManager.getConnection("jdbc:phoenix+rpc");
-                PhoenixConnection conn2 =
+        try (PhoenixMonitoredConnection conn1 =
+                (PhoenixMonitoredConnection) DriverManager.getConnection("jdbc:phoenix+rpc", PropertiesUtil.deepCopy(TEST_PROPERTIES));
+                PhoenixMonitoredConnection conn2 =
                         (PhoenixConnection) DriverManager.getConnection(
-                            "jdbc:phoenix+rpc:" + masterHosts.replaceAll(":", "\\\\:"));) {
+                            "jdbc:phoenix+rpc:" + masterHosts.replaceAll(":", "\\\\:"), PropertiesUtil.deepCopy(TEST_PROPERTIES));) {
             smoke(conn1);
             smoke(conn2);
             assertEquals(conn1.getQueryServices(), conn2.getQueryServices());

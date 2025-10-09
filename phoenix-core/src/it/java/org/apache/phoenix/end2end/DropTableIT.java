@@ -17,15 +17,16 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertFalse;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(ParallelStatsDisabledTest.class)
 public class DropTableIT extends ParallelStatsDisabledIT {
 
@@ -33,8 +34,8 @@ public class DropTableIT extends ParallelStatsDisabledIT {
     public void testRepeatedDropTable() throws Exception {
       final String tableName = generateUniqueName();
       final String url = getUrl();
-      try (final Connection conn = DriverManager.getConnection(url);
-          final Statement stmt = conn.createStatement()) {
+        try (final Connection conn = DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
+             final Statement stmt = conn.createStatement()) {
         assertFalse(stmt.execute(String.format("CREATE TABLE %s(pk varchar not null primary key)", tableName)));
         String dropTable = String.format("DROP TABLE IF EXISTS %s", tableName);
         for (int i = 0; i < 5; i++) {

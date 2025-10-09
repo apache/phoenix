@@ -68,7 +68,6 @@ import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.TestUtil;
-
 @Category(ParallelStatsDisabledTest.class)
 public class RowValueConstructorIT extends ParallelStatsDisabledIT {
     
@@ -1866,7 +1865,7 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
      */
     public void testRVCWithAndClause() throws Exception {
         final int numItemsInClause = 5;
-        Properties tenantProps = new Properties();
+        Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "tenant1");
         String fullTableName = SchemaUtil.getTableName("S", "T_" + generateUniqueName());
         String fullViewName = SchemaUtil.getTableName("S", "V_" + generateUniqueName());
@@ -1903,7 +1902,7 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
     public void testTrailingSeparator() throws Exception {
         Connection conn = null;
         try {
-            conn = DriverManager.getConnection(getUrl());
+            conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
             conn.createStatement().execute("CREATE TABLE test2961 (\n"
                     + "ACCOUNT_ID VARCHAR NOT NULL,\n" + "BUCKET_ID VARCHAR NOT NULL,\n"
                     + "OBJECT_ID VARCHAR NOT NULL,\n" + "OBJECT_VERSION VARCHAR NOT NULL,\n"
@@ -1932,7 +1931,7 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testRVCConjunction() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())){
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
 
             String tableName = generateUniqueName();
             String ddl = String.format("create table %s(a varchar(10) not null, b varchar(10) not null, c varchar(10) not null constraint pk primary key(a, b, c))",tableName);

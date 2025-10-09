@@ -43,7 +43,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 /**
  * Tests for the LPAD built-in function.
  */
-
 @Category(ParallelStatsDisabledTest.class)
 public class StringIT extends ParallelStatsDisabledIT {
     
@@ -120,7 +119,7 @@ public class StringIT extends ParallelStatsDisabledIT {
     @Test
     public void testCharPadding() throws Exception {
         ResultSet rs;
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k CHAR(3) PRIMARY KEY)");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a')");
@@ -148,7 +147,7 @@ public class StringIT extends ParallelStatsDisabledIT {
     @Test
     public void testBinaryPadding() throws Exception {
         ResultSet rs;
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k BINARY(3) PRIMARY KEY)");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a')");
@@ -176,28 +175,28 @@ public class StringIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testNullInputStringSB() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         testLpad(conn, Lists.newArrayList("X", "X"), 4, Lists.newArrayList("", ""), "kv",
             Lists.<String> newArrayList(null, null));
     }
 
     @Test
     public void testEmptyFillExpr() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         testLpad(conn, Lists.newArrayList("ABCD", "ണഫɰɸ"), 6, Lists.newArrayList("", ""),
             Lists.<String> newArrayList(null, null));
     }
 
     @Test
     public void testDefaultFill() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         testLpad(conn, Lists.newArrayList("ABCD", "ണഫɰɸ"), 6, Lists.<String> newArrayList(null, null),
             Lists.newArrayList("  ABCD", "  ണഫɰɸ"));
     }
 
     @Test
     public void testLpadFillLengthGreaterThanPadLength() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         testLpad(conn, Lists.newArrayList("ABCD", "ണഫɰɸ", "ണഫɰɸ", "ABCD"), 8,
             Lists.newArrayList("123456", "ɚɚɦɚɚɦ", "123456", "ണഫɰɸണഫ"),
             Lists.newArrayList("1234ABCD", "ɚɚɦɚണഫɰɸ", "1234ണഫɰɸ", "ണഫɰɸABCD"));
@@ -205,7 +204,7 @@ public class StringIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testLpadFillLengthLessThanPadLength() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         testLpad(conn, Lists.newArrayList("ABCD", "ɰɸɰɸ", "ɰɸɰɸ", "ABCD"), 8,
             Lists.newArrayList("12", "ഫɰ", "12", "ഫɰ"),
             Lists.newArrayList("1212ABCD", "ഫɰഫɰɰɸɰɸ", "1212ɰɸɰɸ", "ഫɰഫɰABCD"));
@@ -213,7 +212,7 @@ public class StringIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testLpadFillLengthEqualPadLength() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         testLpad(conn, Lists.newArrayList("ABCD", "ɰɸɰɸ", "ɰɸɰɸ", "ABCD"), 8,
             Lists.newArrayList("1234", "ണഫɰɸ", "1234", "ണഫɰɸ"),
             Lists.newArrayList("1234ABCD", "ണഫɰɸɰɸɰɸ", "1234ɰɸɰɸ", "ണഫɰɸABCD"));
@@ -221,35 +220,35 @@ public class StringIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testLpadZeroPadding() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         ArrayList<String> inputList = Lists.newArrayList("ABCD", "ണഫɰɸ", "ണഫɰɸ", "ABCD");
         testLpad(conn, inputList, 4, Lists.newArrayList("1234", "ɚɦɚɦ", "1234", "ɚɦɚɦ"), inputList);
     }
 
     @Test
     public void testLpadTrucate() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         testLpad(conn, Lists.newArrayList("ABCD", "ണഫɰɸ", "ണഫɰɸ", "ABCD"), 2,
             Lists.newArrayList("12", "ɚɦ", "12", "ɚɦ"), Lists.newArrayList("AB", "ണഫ", "ണഫ", "AB"));
     }
 
     @Test
     public void testLpadZeroOutputStringLength() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         testLpad(conn, Lists.newArrayList("ABCD", "ണഫɰɸ", "ണഫɰɸ", "ABCD"), 0,
             Lists.newArrayList("12", "ɚɦ", "12", "ɚɦ"), Lists.<String> newArrayList(null, null, null, null));
     }
 
     @Test
     public void testNegativeOutputStringLength() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES));
         testLpad(conn, Lists.newArrayList("ABCD", "ണഫɰɸ", "ണഫɰɸ", "ABCD"), -1,
             Lists.newArrayList("12", "ɚɦ", "12", "ɚɦ"), Lists.<String> newArrayList(null, null, null, null));
     }
 
     @Test
     public void testStrConcat() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         conn.createStatement().execute("create table " + tableName + " (PK1 integer, F1 varchar, F2 varchar, F3 varchar, F4 varchar, constraint PK primary key (PK1))");
         conn.createStatement().execute("upsert into " + tableName + "(PK1, F1,F3) values(0, 'tortilla', 'chip')");
@@ -264,7 +263,7 @@ public class StringIT extends ParallelStatsDisabledIT {
     @Test
     public void testLpadWithNullArgs() throws Exception {
         ResultSet rs;
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k CHAR(3) PRIMARY KEY, v1 VARCHAR, v2 INTEGER)");
         conn.createStatement().execute("UPSERT INTO " + tableName + "(k) VALUES('a')");

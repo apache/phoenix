@@ -29,10 +29,11 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(ParallelStatsDisabledTest.class)
 public class SCNIT extends ParallelStatsDisabledIT {
 
@@ -43,7 +44,7 @@ public class SCNIT extends ParallelStatsDisabledIT {
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         long timeBeforeDelete;
         long timeAfterDelete;
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v VARCHAR)");
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','aa')");
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('b','bb')");
@@ -56,7 +57,7 @@ public class SCNIT extends ParallelStatsDisabledIT {
             timeAfterDelete = EnvironmentEdgeManager.currentTime() + 1;
         }
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timeBeforeDelete));
         try (Connection connscn = DriverManager.getConnection(getUrl(), props)) {
             ResultSet rs = connscn.createStatement().executeQuery("select * from " + fullTableName);
@@ -70,6 +71,7 @@ public class SCNIT extends ParallelStatsDisabledIT {
             rs.close();
         }
         props.clear();
+        props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timeAfterDelete));
         try (Connection connscn = DriverManager.getConnection(getUrl(), props)) {
             ResultSet rs = connscn.createStatement().executeQuery("select * from " + fullTableName);
@@ -89,7 +91,7 @@ public class SCNIT extends ParallelStatsDisabledIT {
         String fullTableName = createTableWithTTL(ttl);
         //sleep for one second longer than ttl
         Thread.sleep(ttl * 1000 + 1000);
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                 Long.toString(EnvironmentEdgeManager.currentTime() - 1000));
         try (Connection connscn = DriverManager.getConnection(getUrl(), props)) {
@@ -109,7 +111,7 @@ public class SCNIT extends ParallelStatsDisabledIT {
         }
         String ddlOptions = optionsBuilder.toString();
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement()
                     .execute(String.format("CREATE TABLE %s" +
                             "(k VARCHAR PRIMARY KEY, f.v VARCHAR) %s", fullTableName, ddlOptions));

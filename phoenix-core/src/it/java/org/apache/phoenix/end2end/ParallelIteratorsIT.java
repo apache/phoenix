@@ -49,7 +49,6 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 
-
 @Category(ParallelStatsEnabledTest.class)
 public class ParallelIteratorsIT extends ParallelStatsEnabledIT {
 

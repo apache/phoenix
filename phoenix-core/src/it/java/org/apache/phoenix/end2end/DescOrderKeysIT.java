@@ -26,18 +26,19 @@ import java.sql.Statement;
 
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 @Category(ParallelStatsDisabledTest.class)
 public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 
   @Test
   public void testVarCharDescOrderPKs() throws Exception {
     final String tableName = generateUniqueName();
-
-    try (Connection conn = DriverManager.getConnection(getUrl())) {
+    try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
       conn.setAutoCommit(true);
       final Statement stmt = conn.createStatement();
 
@@ -94,8 +95,7 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
   @Test
   public void testVarCharDescOrderMultiplePKs() throws Exception {
     final String tableName = generateUniqueName();
-
-    try (Connection conn = DriverManager.getConnection(getUrl())) {
+    try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
       conn.setAutoCommit(true);
       final Statement stmt = conn.createStatement();
 
@@ -181,8 +181,7 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
   @Test
   public void testIntDescOrderMultiplePKs() throws Exception {
     final String tableName = generateUniqueName();
-
-    try (Connection conn = DriverManager.getConnection(getUrl())) {
+    try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
       conn.setAutoCommit(true);
       final Statement stmt = conn.createStatement();
 
@@ -268,8 +267,7 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
   @Test
   public void testDoubleDescOrderMultiplePKs() throws Exception {
     final String tableName = generateUniqueName();
-
-    try (Connection conn = DriverManager.getConnection(getUrl())) {
+    try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
       conn.setAutoCommit(true);
       final Statement stmt = conn.createStatement();
 
@@ -356,7 +354,7 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
   public void testDecimalDescOrderMultiplePKs() throws Exception {
     final String tableName = generateUniqueName();
 
-    try (Connection conn = DriverManager.getConnection(getUrl())) {
+    try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
       conn.setAutoCommit(true);
       final Statement stmt = conn.createStatement();
 
@@ -445,7 +443,7 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
     final String view01 = "v01_" + tableName;
     final String view02 = "v02_" + tableName;
 
-    try (Connection conn = DriverManager.getConnection(getUrl())) {
+    try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
       final Statement stmt = conn.createStatement();
 
       stmt.execute("CREATE TABLE " + tableName
@@ -562,7 +560,7 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
     final String view01 = "v01_" + tableName;
     final String view02 = "v02_" + tableName;
 
-    try (Connection conn = DriverManager.getConnection(getUrl())) {
+    try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
       final Statement stmt = conn.createStatement();
 
       stmt.execute("CREATE TABLE " + tableName
@@ -763,7 +761,7 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
     final String view01 = "v01_" + tableName;
     final String view02 = "v02_" + tableName;
 
-    try (Connection conn = DriverManager.getConnection(getUrl())) {
+    try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
       final Statement stmt = conn.createStatement();
 
       stmt.execute("CREATE TABLE " + tableName
@@ -966,7 +964,7 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
     final String index_view01 = "idx_v01_" + tableName;
     final String index_view02 = "idx_v02_" + tableName;
 
-    try (Connection conn = DriverManager.getConnection(getUrl())) {
+    try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
       final Statement stmt = conn.createStatement();
 
       stmt.execute("CREATE TABLE " + tableName
@@ -1159,7 +1157,7 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
     final String index_view01 = "idx_v01_" + tableName;
     final String index_view02 = "idx_v02_" + tableName;
 
-    try (Connection conn = DriverManager.getConnection(getUrl())) {
+    try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
       final Statement stmt = conn.createStatement();
 
       stmt.execute("CREATE TABLE " + tableName

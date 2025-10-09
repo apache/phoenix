@@ -35,17 +35,22 @@ import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Properties;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 @Category(ParallelStatsDisabledTest.class)
-public class UpsertBindNullParamToCaseExprIT extends BaseTest {
+public class TestUpsertBindNullParamToCaseExprIT extends BaseTest {
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
-        setUpTestDriver(new ReadOnlyProps(new HashMap<>()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(new HashMap<>()), new ReadOnlyProps(new HashMap<>()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(new HashMap<>()));
+        }
     }
 
     @AfterClass

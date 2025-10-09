@@ -50,8 +50,9 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.*;
-
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class TableTTLIT extends BaseTest {
@@ -87,7 +88,11 @@ public class TableTTLIT extends BaseTest {
         props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(MAX_LOOKBACK_AGE));
         props.put("hbase.procedure.remote.dispatcher.delay.msec", "0");
         props.put(QueryServices.PHOENIX_VIEW_TTL_ENABLED, Boolean.toString(false));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     @Before
@@ -162,7 +167,7 @@ public class TableTTLIT extends BaseTest {
         final int maxMaskingCounter = 2 * ttl;
         final int maxVerificationCounter = 2 * ttl;
         final byte[] rowKey = Bytes.toBytes("a");
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String tableName = generateUniqueName();
             createTable(tableName);
             conn.createStatement().execute("Alter Table " + tableName
@@ -234,7 +239,7 @@ public class TableTTLIT extends BaseTest {
                 long scnStart = Math.max(scn, startTime);
                 for (scn = scnEnd; scn >= scnStart; scn -= 1000) {
                     // Compare all row versions using scn queries
-                    Properties props = new Properties();
+                    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
                     props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn));
                     try (Connection scnConn = DriverManager.getConnection(url, props)) {
                         compareRow(scnConn, tableName, noCompactTableName, "a",
@@ -251,7 +256,7 @@ public class TableTTLIT extends BaseTest {
         if (tableLevelMaxLookback == null || tableLevelMaxLookback != 0) {
             return;
         }
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String tableName = generateUniqueName();
             createTable(tableName);
             conn.createStatement().execute("Alter Table " + tableName
@@ -279,7 +284,7 @@ public class TableTTLIT extends BaseTest {
                             rowUpdateCounter * (MAX_COLUMN_INDEX + 1));
                 }
                 // Run one minor compaction (in case no minor compaction has happened yet)
-                TestUtil.minorCompact(utility, TableName.valueOf(tableName));
+                TestUtil.minorCompact(getUtility(), TableName.valueOf(tableName));
                 assertEquals(TestUtil.getRawCellCount(conn, TableName.valueOf(tableName),
                                 Bytes.toBytes("a")), (MAX_COLUMN_INDEX + 1) * versions);
             } catch (AssertionError e) {
@@ -291,7 +296,7 @@ public class TableTTLIT extends BaseTest {
 
     @Test
     public void testRowSpansMultipleTTLWindows() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String tableName = generateUniqueName();
             createTable(tableName);
             String noCompactTableName = generateUniqueName();
@@ -320,7 +325,7 @@ public class TableTTLIT extends BaseTest {
         if (tableLevelMaxLookback == null || tableLevelMaxLookback != 0) {
             return;
         }
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String tableName = generateUniqueName();
             createTable(tableName);
             conn.createStatement().execute("Alter Table " + tableName
@@ -376,7 +381,7 @@ public class TableTTLIT extends BaseTest {
         if (tableLevelMaxLookback == null || tableLevelMaxLookback != 0) {
             return;
         }
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String tableName = generateUniqueName();
             createTable(tableName);
             conn.createStatement().execute("Alter Table " + tableName
@@ -435,7 +440,7 @@ public class TableTTLIT extends BaseTest {
         if (tableLevelMaxLookback == null || tableLevelMaxLookback != 0) {
             return;
         }
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String tableName = generateUniqueName();
             createTable(tableName);
             conn.createStatement().execute("Alter Table " + tableName
@@ -472,7 +477,7 @@ public class TableTTLIT extends BaseTest {
         if (multiCF == true) {
             return;
         }
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String tableName = "T_" + generateUniqueName();
             createTable(tableName);
             conn.createStatement().execute("Alter Table " + tableName
@@ -632,7 +637,7 @@ public class TableTTLIT extends BaseTest {
     }
 
     private void createTable(String tableName) throws SQLException {
-        try(Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String createSql;
             if (multiCF) {
                 createSql = "create table " + tableName +

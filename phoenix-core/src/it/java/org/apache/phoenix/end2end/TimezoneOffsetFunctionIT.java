@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -31,16 +32,16 @@ import java.util.Calendar;
 import java.util.TimeZone;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 
 @Category(ParallelStatsDisabledTest.class)
 public class TimezoneOffsetFunctionIT extends ParallelStatsDisabledIT {
 
 	@Test
 	public void testTimezoneOffset() throws Exception {
-		Connection conn = DriverManager.getConnection(getUrl());
+		Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 		String timezone_offset_test = generateUniqueName();
 		String ddl = "CREATE TABLE IF NOT EXISTS " + timezone_offset_test
 				+ " (k1 INTEGER NOT NULL, dates DATE CONSTRAINT pk PRIMARY KEY (k1))";
@@ -65,7 +66,7 @@ public class TimezoneOffsetFunctionIT extends ParallelStatsDisabledIT {
 
 	@Test
 	public void testUnknownTimezone() throws Exception {
-		Connection conn = DriverManager.getConnection(getUrl());
+		Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 		String timezone_offset_test = generateUniqueName();
 		String ddl = "CREATE TABLE IF NOT EXISTS " + timezone_offset_test
 				+ " (k1 INTEGER NOT NULL, dates DATE CONSTRAINT pk PRIMARY KEY (k1))";
@@ -90,7 +91,7 @@ public class TimezoneOffsetFunctionIT extends ParallelStatsDisabledIT {
 
 	@Test
 	public void testInRowKeyDSTTimezoneDesc() throws Exception {
-		Connection conn = DriverManager.getConnection(getUrl());
+		Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 		String timezone_offset_test = generateUniqueName();
 		String ddl = "CREATE TABLE IF NOT EXISTS " + timezone_offset_test + " "
 				+ "(k1 INTEGER NOT NULL, dates DATE NOT NULL CONSTRAINT pk PRIMARY KEY (k1, dates DESC))";
@@ -115,7 +116,7 @@ public class TimezoneOffsetFunctionIT extends ParallelStatsDisabledIT {
 
 	@Test
 	public void testBothParametersNull() throws Exception {
-		Connection conn = DriverManager.getConnection(getUrl());
+		Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 		String timezone_offset_test = generateUniqueName();
 		String ddl = "CREATE TABLE IF NOT EXISTS " + timezone_offset_test + " "
 				+ "(k1 INTEGER NOT NULL, dates DATE, v1 VARCHAR CONSTRAINT pk PRIMARY KEY (k1))";
@@ -135,7 +136,7 @@ public class TimezoneOffsetFunctionIT extends ParallelStatsDisabledIT {
 
 	@Test
 	public void timezoneParameterNull() throws Exception {
-		Connection conn = DriverManager.getConnection(getUrl());
+		Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 		String timezone_offset_test = generateUniqueName();
 		String ddl = "CREATE TABLE IF NOT EXISTS " + timezone_offset_test + " "
 				+ "(k1 INTEGER NOT NULL, dates DATE, v1 VARCHAR CONSTRAINT pk PRIMARY KEY (k1))";
@@ -156,7 +157,7 @@ public class TimezoneOffsetFunctionIT extends ParallelStatsDisabledIT {
 
 	@Test
 	public void dateParameterNull() throws Exception {
-		Connection conn = DriverManager.getConnection(getUrl());
+		Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 		String timezone_offset_test = generateUniqueName();
 		String ddl = "CREATE TABLE IF NOT EXISTS " + timezone_offset_test + " "
 				+ "(k1 INTEGER NOT NULL, dates DATE, v1 VARCHAR CONSTRAINT pk PRIMARY KEY (k1))";
@@ -177,7 +178,7 @@ public class TimezoneOffsetFunctionIT extends ParallelStatsDisabledIT {
 	
 	@Test
 	public void testInsertingRetrivingTimestamp() throws Exception {
-	    Connection conn = DriverManager.getConnection(getUrl());
+		Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 		String t = generateUniqueName();
 		String ddl = "CREATE TABLE " + t + " (K INTEGER NOT NULL PRIMARY KEY, V TIMESTAMP)";
         conn.createStatement().execute(ddl);

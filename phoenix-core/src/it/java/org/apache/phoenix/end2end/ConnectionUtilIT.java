@@ -18,7 +18,11 @@
 
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
+import static org.apache.phoenix.query.BaseTest.getConfiguration;
 import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
+import static org.apache.phoenix.query.BaseTest.setUpTestClusterForHA;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 
 import java.sql.Connection;
@@ -26,17 +30,21 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Map;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
+import org.apache.phoenix.jdbc.ZKConnectionInfo;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(NeedsOwnMiniClusterTest.class)
 public class ConnectionUtilIT {
 
@@ -45,18 +53,25 @@ public class ConnectionUtilIT {
   
     @BeforeClass
     public static synchronized void setUp() throws Exception {
-        hbaseTestUtil = new HBaseTestingUtility();
-        conf = hbaseTestUtil.getConfiguration();
-        setUpConfigForMiniCluster(conf);
-        conf.set(HConstants.ZOOKEEPER_ZNODE_PARENT, "/hbase-test");
-        hbaseTestUtil.startMiniCluster();
-        Class.forName(PhoenixDriver.class.getName());
-		DriverManager.registerDriver(new PhoenixTestDriver());
+		if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+			Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+			props.put(HConstants.ZOOKEEPER_ZNODE_PARENT, "/hbase-test");
+			setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+			conf = getConfiguration();
+		} else {
+			hbaseTestUtil = new HBaseTestingUtility();
+			conf = hbaseTestUtil.getConfiguration();
+			setUpConfigForMiniCluster(conf);
+			conf.set(HConstants.ZOOKEEPER_ZNODE_PARENT, "/hbase-test");
+			hbaseTestUtil.startMiniCluster();
+			Class.forName(PhoenixDriver.class.getName());
+			DriverManager.registerDriver(new PhoenixTestDriver());
+		}
     }
     
 	@Test
 	public void testInputAndOutputConnections() throws SQLException {
-		Connection inputConnection = ConnectionUtil.getInputConnection(conf);
+		Connection inputConnection = ConnectionUtil.getInputConnection(conf, PropertiesUtil.deepCopy(TEST_PROPERTIES));
 		Statement stmt = inputConnection.createStatement();
 		stmt.execute("create table t(a integer primary key,b varchar)");
 		stmt.execute("upsert into t values(1,'foo')");
@@ -64,7 +79,7 @@ public class ConnectionUtilIT {
 		ResultSet rs = stmt.executeQuery("select count(*) from t");
 		rs.next();
 		assertEquals(1, rs.getInt(1));
-		Connection outputConnection = ConnectionUtil.getOutputConnection(conf);
+		Connection outputConnection = ConnectionUtil.getOutputConnection(conf, PropertiesUtil.deepCopy(TEST_PROPERTIES));
 		stmt = outputConnection.createStatement();
 		stmt.execute("create table t1(a integer primary key,b varchar)");
 		stmt.execute("upsert into t1 values(1,'foo')");

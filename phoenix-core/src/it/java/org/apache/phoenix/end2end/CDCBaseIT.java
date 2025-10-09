@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.index.SingleCellIndexIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableProperty;
@@ -43,6 +44,7 @@ import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -85,12 +87,12 @@ import static org.apache.phoenix.query.QueryConstants.CDC_PRE_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_UPSERT_EVENT_TYPE;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexPhysicalName;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-
 public class CDCBaseIT extends ParallelStatsDisabledIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(CDCBaseIT.class);
     protected static final ObjectMapper mapper = new ObjectMapper();
@@ -213,7 +215,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
     protected void assertPTable(String cdcName, Set<PTable.CDCChangeScope> expIncludeScopes,
                                 String tableName, String datatableName)
             throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String schemaName = SchemaUtil.getSchemaNameFromFullName(tableName);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
@@ -257,7 +259,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
     }
 
     protected Connection newConnection(String tenantId) throws SQLException {
-        return newConnection(tenantId, new Properties());
+        return newConnection(tenantId, PropertiesUtil.deepCopy(TEST_PROPERTIES));
     }
 
     protected Connection newConnection(String tenantId, Properties props) throws SQLException {
@@ -728,7 +730,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                                               ChangeRow changeRow, long scnTimestamp)
                                               throws Exception {
         Map<String, Object> image = new HashMap<>();
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scnTimestamp));
         Map<String, String> projections = dataColumns.keySet().stream().collect(toMap(s -> s,
                 s -> s.replaceFirst(".*\\.", "")));
@@ -1020,7 +1022,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
     public String getStreamName(Connection conn, String tableName, String cdcName)
             throws SQLException {
         long creationTS = CDCUtil.getCDCCreationTimestamp(
-                conn.unwrap(PhoenixConnection.class).getTableNoCache(tableName));
+                conn.unwrap(PhoenixMonitoredConnection.class).getTableNoCache(tableName));
         return String.format(CDC_STREAM_NAME_FORMAT, tableName, cdcName, creationTS,
                 CDCUtil.getCDCCreationUTCDateTime(creationTS));
     }

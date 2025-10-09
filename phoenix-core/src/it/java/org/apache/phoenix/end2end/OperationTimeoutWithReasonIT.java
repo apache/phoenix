@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -31,6 +32,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.OPERATION_TIMED_OUT;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -60,8 +62,8 @@ public class OperationTimeoutWithReasonIT extends ParallelStatsDisabledIT {
         final String tableName = generateUniqueName();
         final String ddl = "CREATE TABLE " + tableName
             + " (COL1 VARCHAR NOT NULL PRIMARY KEY, COL2 VARCHAR)";
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                 Statement stmt = conn.createStatement()) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+             Statement stmt = conn.createStatement()) {
             stmt.execute(ddl);
             final String dml = String.format("UPSERT INTO %s VALUES (?, ?)",
                 tableName);
@@ -75,7 +77,7 @@ public class OperationTimeoutWithReasonIT extends ParallelStatsDisabledIT {
             conn.commit();
         }
 
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
              Statement stmt = conn.createStatement()) {
             stmt.setQueryTimeout(5); // 5 sec
             ResultSet rs = stmt.executeQuery(String.format("SELECT * FROM %s",

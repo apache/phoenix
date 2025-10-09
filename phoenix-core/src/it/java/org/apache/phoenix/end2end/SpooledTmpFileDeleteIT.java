@@ -34,7 +34,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(ParallelStatsDisabledTest.class)
 public class SpooledTmpFileDeleteIT extends ParallelStatsDisabledIT {
     private static final String PRINCIPAL = "noRenewLease";
@@ -50,7 +49,7 @@ public class SpooledTmpFileDeleteIT extends ParallelStatsDisabledIT {
         // TODO: review with Samarth - should a Noop iterator be used if pacing is not possible?
         props.setProperty(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(true));
         props.setProperty(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, StringUtil.EMPTY_STRING);
-        String url = QueryUtil.getConnectionUrl(props, config, PRINCIPAL);
+        String url = QueryUtil.getConnectionUrl(props, getConfiguration(), PRINCIPAL);
         return DriverManager.getConnection(url, props);
     }
 

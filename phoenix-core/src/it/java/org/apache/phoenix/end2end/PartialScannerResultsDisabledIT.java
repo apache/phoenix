@@ -10,6 +10,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
@@ -28,13 +29,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.util.IndexScrutiny;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 @Category(ParallelStatsDisabledTest.class)
 public class PartialScannerResultsDisabledIT extends ParallelStatsDisabledIT {
     public static final String TEST_TABLE_DDL =
@@ -97,7 +98,7 @@ public class PartialScannerResultsDisabledIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testWithEnoughData() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             // Write enough data to trigger partial scanner results
             // TODO: it's likely that less data could be written if whatever
             // config parameters decide this are lowered.
@@ -118,7 +119,7 @@ public class PartialScannerResultsDisabledIT extends ParallelStatsDisabledIT {
     @Test
     public void partialResultDuringSelect () throws SQLException {
         String tableName = generateUniqueName();
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(HConstants.HBASE_CLIENT_SCANNER_MAX_RESULT_SIZE_KEY, "5");
         int numRecords = 10;
         try (Connection conn = DriverManager.getConnection(url, props)) {

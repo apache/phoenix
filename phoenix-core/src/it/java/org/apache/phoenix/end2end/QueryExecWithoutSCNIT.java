@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
 import static org.apache.phoenix.util.TestUtil.C_VALUE;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -29,9 +30,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Properties;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 
 @Category(ParallelStatsDisabledTest.class)
 public class QueryExecWithoutSCNIT extends ParallelStatsDisabledIT {
@@ -40,7 +41,7 @@ public class QueryExecWithoutSCNIT extends ParallelStatsDisabledIT {
         String tenantId = getOrganizationId();
         String tableName = initATableValues(tenantId, getDefaultSplits(tenantId), null, null, getUrl());
         String query = "SELECT a_string, b_string FROM " + tableName + " WHERE organization_id=? and a_integer = 5";
-        Properties props = new Properties(); // Test with no CurrentSCN property set
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES); // Test with no CurrentSCN property set
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -27,9 +28,9 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 
 @Category(ParallelStatsDisabledTest.class)
 public class MD5FunctionIT extends ParallelStatsDisabledIT {
@@ -37,8 +38,7 @@ public class MD5FunctionIT extends ParallelStatsDisabledIT {
   @Test
   public void testRetrieve() throws Exception {
       String testString = "mwalsh";
-      
-      Connection conn = DriverManager.getConnection(getUrl());
+      Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
       String md5_retrieve_test = generateUniqueName();
       String ddl =
           "CREATE TABLE IF NOT EXISTS " + md5_retrieve_test + " (pk VARCHAR NOT NULL PRIMARY KEY)";
@@ -81,8 +81,8 @@ public class MD5FunctionIT extends ParallelStatsDisabledIT {
   public void testUpsert() throws Exception {
       String testString1 = "mwalsh1";
       String testString2 = "mwalsh2";
-      
-      Connection conn = DriverManager.getConnection(getUrl());
+
+      Connection conn  = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
       String md5_upsert_test = generateUniqueName();
       String ddl = "CREATE TABLE IF NOT EXISTS " + md5_upsert_test
           + " (k1 binary(16) NOT NULL,k2 binary(16) NOT NULL  CONSTRAINT pk PRIMARY KEY (k1, k2))";

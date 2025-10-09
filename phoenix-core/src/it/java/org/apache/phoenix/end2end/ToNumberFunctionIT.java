@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -33,6 +34,7 @@ import java.util.Locale;
 
 import org.apache.phoenix.expression.function.ToNumberFunction;
 import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -45,7 +47,6 @@ import org.junit.experimental.categories.Category;
  * 
  * @since 0.1
  */
-
 @Category(ParallelStatsDisabledTest.class)
 public class ToNumberFunctionIT extends ParallelStatsDisabledIT {
 
@@ -84,7 +85,7 @@ public class ToNumberFunctionIT extends ParallelStatsDisabledIT {
 
     public static void initTable() throws Exception {
         createTestTable(getUrl(), TO_NUMBER_TABLE_DDL, null, null);
-        try (Connection conn = DriverManager.getConnection(url)) {
+        try (Connection conn = DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.setAutoCommit(false);
 
             PreparedStatement stmt =
@@ -291,7 +292,7 @@ public class ToNumberFunctionIT extends ParallelStatsDisabledIT {
 
     private void runOneRowQueryTest(String oneRowQuery, boolean isIntegerColumn,
             Integer expectedIntValue, BigDecimal expectedDecimalValue) throws Exception {
-        try (Connection conn = DriverManager.getConnection(url)) {
+        try (Connection conn = DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             PreparedStatement statement = conn.prepareStatement(oneRowQuery);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());

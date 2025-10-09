@@ -17,12 +17,15 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
+import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotSame;
@@ -34,14 +37,17 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Map;
 import java.util.Properties;
 
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
 import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseTest;
@@ -52,13 +58,14 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(NeedsOwnMiniClusterTest.class)
 public class PhoenixDriverIT extends BaseTest {
     
@@ -69,19 +76,28 @@ public class PhoenixDriverIT extends BaseTest {
     
     @BeforeClass
     public static synchronized void setUp() throws Exception {
-        conf = HBaseConfiguration.create();
-        hbaseTestUtil = new HBaseTestingUtility(conf);
-        setUpConfigForMiniCluster(conf);
-        conf.set(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
-        hbaseTestUtil.startMiniCluster();
-        // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
-        zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
-        url = PhoenixRuntime.JDBC_PROTOCOL_ZK + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
-        DriverManager.registerDriver(PhoenixDriver.INSTANCE);
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
+            url = CLUSTERS.getJdbcHAUrlWithoutPrincipal()+";"+PHOENIX_TEST_DRIVER_URL_PARAM;
+            conf = getConfiguration();
+            conf.set(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+
+        } else {
+            conf = HBaseConfiguration.create();
+            hbaseTestUtil = new HBaseTestingUtility(conf);
+            setUpConfigForMiniCluster(conf);
+            conf.set(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+            hbaseTestUtil.startMiniCluster();
+            // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
+            zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
+            url = PhoenixRuntime.JDBC_PROTOCOL_ZK + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
+            DriverManager.registerDriver(PhoenixDriver.INSTANCE);
+        }
     }
     
     public Connection createConnection(String tenantId, boolean isDifferentClient) throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.RETURN_SEQUENCE_VALUES_ATTRIB, "false");
         // force the use of ConnectionQueryServicesImpl instead of ConnectionQueryServicesTestImpl
         props.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
@@ -145,7 +161,7 @@ public class PhoenixDriverIT extends BaseTest {
         final String viewName = generateUniqueName();
         try (Connection globalConn = createConnection(null, false);
                 Connection conn1 = createConnection("tenant1", false);
-                PhoenixConnection conn2 = (PhoenixConnection) createConnection("tenant1", false)) {
+                PhoenixMonitoredConnection conn2 = (PhoenixMonitoredConnection) createConnection("tenant1", false)) {
             // create base table
             String baseTableDdl = "CREATE TABLE " + baseTableName + " (" +
                     ( isMultiTenant ? "TENANT_ID VARCHAR(1) NOT NULL," : "") +
@@ -206,8 +222,8 @@ public class PhoenixDriverIT extends BaseTest {
         }
 
         try (Connection conn = createConnection(null, true)) {
-            String url = conn.unwrap(PhoenixConnection.class).getURL();
-            Properties props = new Properties();
+            String url = conn.unwrap(PhoenixMonitoredConnection.class).getURL();
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
             props.setProperty(QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE,
                 Boolean.toString(false));
@@ -245,11 +261,11 @@ public class PhoenixDriverIT extends BaseTest {
 
     @Test
     public void testDifferentQueryServiceForServerConnection() throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(QueryUtil.getConnectionUrl(props, conf), props);
         Connection serverConn = QueryUtil.getConnectionOnServer(props, conf);
-        ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        ConnectionQueryServices serverCqs = serverConn.unwrap(PhoenixConnection.class).getQueryServices();
+        ConnectionQueryServices cqs = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
+        ConnectionQueryServices serverCqs = serverConn.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
         assertNotSame(cqs, serverCqs);
     }
 }

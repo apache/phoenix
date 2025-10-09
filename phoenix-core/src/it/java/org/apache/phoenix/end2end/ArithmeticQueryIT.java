@@ -39,7 +39,6 @@ import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Doubles;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Floats;
 
-
 @Category(ParallelStatsDisabledTest.class)
 public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
 
@@ -745,7 +744,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testOrderOfOperationsAdditionSubtraction() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initIntegerTable(conn);
         ResultSet rs;
         
@@ -768,7 +767,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testOrderOfOperationsAdditionMultiplication() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initIntegerTable(conn);
         ResultSet rs;
         
@@ -791,7 +790,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testOrderOfOperationsAdditionDivision() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initIntegerTable(conn);
         ResultSet rs;
         
@@ -814,7 +813,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testOrderOfOperationsAdditionModulus() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initIntegerTable(conn);
         ResultSet rs;
         
@@ -837,7 +836,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testOrderOfOperationsSubtrationMultiplication() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initIntegerTable(conn);
         ResultSet rs;
         
@@ -860,7 +859,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testOrderOfOperationsSubtractionDivision() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initIntegerTable(conn);
         ResultSet rs;
         
@@ -883,7 +882,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testOrderOfOperationsSubtractionModulus() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initIntegerTable(conn);
         ResultSet rs;
         
@@ -906,7 +905,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testOrderOfOperationsMultiplicationDivision() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initIntegerTable(conn);
         ResultSet rs;
         
@@ -929,7 +928,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testOrderOfOperationsMultiplicationModulus() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initIntegerTable(conn);
         ResultSet rs;
         
@@ -952,7 +951,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testOrderOfOperationsDivisionModulus() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String tableName = initIntegerTable(conn);
         ResultSet rs;
         
@@ -975,7 +974,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testCastingOnConstantAddInArithmeticEvaluation() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String testTable = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + testTable
             + " (k1 INTEGER NOT NULL, v1 INTEGER CONSTRAINT pk PRIMARY KEY (k1))";
@@ -993,7 +992,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCastingOnConstantSubInArithmeticEvaluation() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String testTable = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + testTable
             + " (k1 INTEGER NOT NULL, v1 INTEGER CONSTRAINT pk PRIMARY KEY (k1))";
@@ -1010,7 +1009,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testFloatingPointUpsert() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String test = generateUniqueName();
         String ddl =
             "CREATE TABLE " + test + " (id VARCHAR not null primary key, name VARCHAR, lat FLOAT)";
@@ -1026,7 +1025,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testFloatingPointMultiplicationUpsert() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String test = generateUniqueName();
         String ddl =
             "CREATE TABLE " + test + " (id VARCHAR not null primary key, name VARCHAR, lat FLOAT)";
@@ -1043,7 +1042,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testSystemTableHasDoubleForExponentialNumber() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String test = generateUniqueName();
         String ddl = "CREATE TABLE " + test + " (id VARCHAR not null primary key, num FLOAT)";
         conn.createStatement().execute(ddl);
@@ -1077,7 +1076,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
     }
     
     private ResultSet createTableWithValues(String[] values, String valueType) throws SQLException {
-    	Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String test = generateUniqueName();
         StringBuilder ddl = new StringBuilder(
             "CREATE TABLE " + test + " (id VARCHAR not null primary key");

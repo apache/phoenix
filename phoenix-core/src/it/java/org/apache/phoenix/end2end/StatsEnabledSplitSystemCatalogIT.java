@@ -17,8 +17,10 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.analyzeTable;
 import static org.apache.phoenix.util.TestUtil.getAllSplits;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -42,12 +44,14 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -60,7 +64,6 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class StatsEnabledSplitSystemCatalogIT extends BaseTest {
@@ -91,7 +94,11 @@ public class StatsEnabledSplitSystemCatalogIT extends BaseTest {
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
         props.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(5));
         props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(true));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
 	/**
@@ -136,7 +143,7 @@ public class StatsEnabledSplitSystemCatalogIT extends BaseTest {
         String fullViewName2 = SchemaUtil.getTableName(generateUniqueName(), generateUniqueName());
         String ddl = "CREATE VIEW " + fullViewName2 + " AS SELECT * FROM " + fullViewName1 + " WHERE k3 = 2";
         ViewIT.testUpdatableView(fullTableName, fullViewName1, fullViewName2, ddl, null, tableDDLOptions);
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         ResultSet rs = conn.createStatement().executeQuery("SELECT k1, k2, k3 FROM " + fullViewName2);
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
@@ -179,8 +186,8 @@ public class StatsEnabledSplitSystemCatalogIT extends BaseTest {
         String physicalTableName = pair.getFirst();
         // Confirm that dropping the view also deletes the rows in the index
         if (saltBuckets == null) {
-            try (Connection conn = DriverManager.getConnection(getUrl())) {
-                Table htable = conn.unwrap(PhoenixConnection.class).getQueryServices()
+            try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+                Table htable = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices()
                         .getTable(Bytes.toBytes(physicalTableName));
                 if (ScanUtil.isLocalIndex(scan)) {
                     ScanUtil.setLocalIndexAttributes(scan, 0, HConstants.EMPTY_BYTE_ARRAY, HConstants.EMPTY_BYTE_ARRAY,
@@ -203,8 +210,8 @@ public class StatsEnabledSplitSystemCatalogIT extends BaseTest {
     
     @Test
     public void testReadOnlyOnReadOnlyView() throws Exception {
-        Connection earlierCon = DriverManager.getConnection(getUrl());
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection earlierCon = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         String fullTableName = SchemaUtil.getTableName(generateUniqueName(), generateUniqueName());
         String fullParentViewName = SchemaUtil.getTableName(generateUniqueName(), generateUniqueName());
         String fullViewName = SchemaUtil.getTableName(generateUniqueName(), generateUniqueName());
@@ -263,7 +270,7 @@ public class StatsEnabledSplitSystemCatalogIT extends BaseTest {
             conn.close();
         }
 
-        conn = DriverManager.getConnection(getUrl());
+        conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         count = 0;
         rs = conn.createStatement().executeQuery("SELECT k FROM " + fullViewName);
         while (rs.next()) {

@@ -38,7 +38,6 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.util.PropertiesUtil;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class VarBinaryEncoded1IT extends ParallelStatsDisabledIT {

@@ -22,6 +22,7 @@ import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
@@ -41,6 +42,8 @@ import java.util.Map;
 import java.util.Properties;
 
 import static org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost.PHOENIX_META_DATA_COPROCESSOR_CONF_KEY;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -63,8 +66,13 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
                 ViewConcurrencyAndFailureIT.TestMetaDataRegionObserver.class
                         .getName());
         serverProps.put("hbase.coprocessor.abortonerror", "false");
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
-                ReadOnlyProps.EMPTY_PROPS);
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()),
+                    ReadOnlyProps.EMPTY_PROPS);
+        } else {
+            setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
+                    ReadOnlyProps.EMPTY_PROPS);
+        }
         // Split SYSTEM.CATALOG once after the mini-cluster is started
         if (splitSystemCatalog) {
             // splitSystemCatalog is incompatible with the balancer chore
@@ -108,7 +116,7 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
     }
 
     private Connection getTenantConnection(final String tenantId) throws Exception {
-        Properties tenantProps = new Properties();
+        Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         tenantProps.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
         return DriverManager.getConnection(getUrl(), tenantProps);
@@ -135,7 +143,7 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
         String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
         String fullViewName = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(true);
@@ -162,7 +170,7 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
         String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
         String fullViewName = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(true);
@@ -189,7 +197,7 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
         String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
         String fullViewName = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(true);
@@ -220,7 +228,7 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
         String fullViewName = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
         String fullSiblingViewName = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(true);
@@ -258,7 +266,7 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
         String fullViewName = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
         String fullSiblingViewName = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(true);
@@ -296,7 +304,7 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
      */
     private void testUpdatableViewStartFromFirstPK(boolean multitenant, Integer nSaltBuckets) throws Exception {
         String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(true);
@@ -327,7 +335,7 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
         String fullViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         String tenantId = TENANT1;
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
         try (Connection globalConn = DriverManager.getConnection(getUrl(), props);
              Connection tenantConn = getTenantConnection(tenantId)) {
@@ -460,7 +468,7 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
         String fullViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         String fullChildViewName = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
@@ -493,7 +501,7 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
         String fullViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         String fullChildViewName = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
@@ -522,7 +530,7 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
         String fullViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         String fullChildViewName = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
@@ -557,7 +565,7 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
         String fullLeafViewName1 = SchemaUtil.getTableName(SCHEMA4, generateUniqueName());
         String fullLeafViewName2 = SchemaUtil.getTableName(SCHEMA4, generateUniqueName());
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             createTable(conn, fullTableName);
@@ -629,7 +637,7 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
         final String view02 = SchemaUtil.getTableName(SCHEMA3, "v02_" + tableName);
         final String view03 = SchemaUtil.getTableName(SCHEMA4, "v03_" + tableName);
 
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             final Statement stmt = conn.createStatement();

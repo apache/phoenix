@@ -25,6 +25,7 @@ import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.query.ConfigurationFactory;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.InstanceResolver;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
@@ -35,8 +36,9 @@ import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.query.QueryServices.SYSTEM_CATALOG_INDEXES_ENABLED;
-
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 @Category(NeedsOwnMiniClusterTest.class)
 public class LongViewIndexEnabledBaseRowKeyMatcherIT extends BaseRowKeyMatcherTestIT {
 
@@ -72,12 +74,18 @@ public class LongViewIndexEnabledBaseRowKeyMatcherIT extends BaseRowKeyMatcherTe
             put(QueryServices.LONG_VIEW_INDEX_ENABLED_ATTRIB, String.valueOf(true));
         }};
 
-        setUpTestDriver(new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS,
-                DEFAULT_PROPERTIES.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS,
+                    DEFAULT_PROPERTIES.entrySet().iterator()),new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS,
+                    DEFAULT_PROPERTIES.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS,
+                    DEFAULT_PROPERTIES.entrySet().iterator()));
+        }
 
         // Create the CATALOG indexes for additional verifications using the catalog indexes
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                Statement stmt = conn.createStatement()) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+             Statement stmt = conn.createStatement()) {
             //TestUtil.dumpTable(conn, TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES));
             stmt.execute("CREATE INDEX IF NOT EXISTS SYS_VIEW_HDR_IDX ON SYSTEM.CATALOG(TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY) INCLUDE (TABLE_TYPE, VIEW_STATEMENT, TTL, ROW_KEY_MATCHER) WHERE TABLE_TYPE = 'v'");
             stmt.execute("CREATE INDEX IF NOT EXISTS SYS_ROW_KEY_MATCHER_IDX ON SYSTEM.CATALOG(ROW_KEY_MATCHER, TTL, TABLE_TYPE, TENANT_ID, TABLE_SCHEM, TABLE_NAME) INCLUDE (VIEW_STATEMENT) WHERE TABLE_TYPE = 'v' AND ROW_KEY_MATCHER IS NOT NULL");

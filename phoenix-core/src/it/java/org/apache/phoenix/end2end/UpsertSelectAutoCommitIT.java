@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -36,7 +37,6 @@ import static org.junit.Assert.*;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
@@ -54,7 +54,7 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testAutoCommitUpsertSelect() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Properties props = props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
             allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -174,7 +174,7 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testUpsertSelectDoesntSeeUpsertedData() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Properties props = props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB, Integer.toString(512));
         props.setProperty(QueryServices.SCAN_CACHE_SIZE_ATTRIB, Integer.toString(3));
         props.setProperty(QueryServices.SCAN_RESULT_CHUNK_SIZE, Integer.toString(3));
@@ -198,7 +198,7 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
                 conn.prepareStatement("UPSERT INTO " + tableName
                         + " SELECT NEXT VALUE FOR "+ tableName + "_seq, val FROM " + tableName);
         Admin admin =
-                driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+                driver.getConnectionQueryServices(getActiveUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         for (int i=0; i<12; i++) {
             try {
                 admin.split(TableName.valueOf(tableName));
@@ -214,13 +214,13 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testMaxMutationSize() throws Exception {
-        Properties connectionProperties = new Properties();
+        Properties connectionProperties = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         connectionProperties.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, "3");
         connectionProperties.setProperty(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB, "50000");
         connectionProperties.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
             allowServerSideMutations);
-        PhoenixConnection connection =
-                (PhoenixConnection) DriverManager.getConnection(getUrl(), connectionProperties);
+        PhoenixMonitoredConnection connection =
+                (PhoenixMonitoredConnection) DriverManager.getConnection(getUrl(), connectionProperties);
         connection.setAutoCommit(true);
         String fullTableName = generateUniqueName();
         try (Statement stmt = connection.createStatement()) {

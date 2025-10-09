@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -42,6 +44,7 @@ import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
@@ -66,13 +69,17 @@ public class SystemCatalogRollbackEnabledIT extends BaseTest {
                 "true");
         clientProps.put(QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK,
                 "true");
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
-                new ReadOnlyProps(clientProps.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()),new ReadOnlyProps(clientProps.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
+                    new ReadOnlyProps(clientProps.entrySet().iterator()));
+        }
     }
 
     private void createTableAndTenantViews(String tableName) throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                Statement stmt = conn.createStatement();) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+             Statement stmt = conn.createStatement();) {
             stmt.execute("DROP TABLE IF EXISTS " + tableName);
             stmt.execute("CREATE TABLE " + tableName +
                     " (TENANT_ID VARCHAR NOT NULL, " +
@@ -94,7 +101,7 @@ public class SystemCatalogRollbackEnabledIT extends BaseTest {
 
     private Connection getTenantConnection(String tenantId)
             throws SQLException {
-        Properties tenantProps = new Properties();
+        Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         return DriverManager.getConnection(getUrl(), tenantProps);
     }
@@ -144,7 +151,7 @@ public class SystemCatalogRollbackEnabledIT extends BaseTest {
      */
     @Test
     public void testAddColumnOnParentFails() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final String parentTableName = SchemaUtil.getTableName(
                     generateUniqueName(), generateUniqueName());
             final String parentViewName = SchemaUtil.getTableName(
@@ -195,7 +202,7 @@ public class SystemCatalogRollbackEnabledIT extends BaseTest {
      */
     @Test
     public void testDropColumnOnParentFails() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             final String parentTableName = SchemaUtil.getTableName(
                     generateUniqueName(), generateUniqueName());
             final String parentViewName = SchemaUtil.getTableName(
@@ -249,7 +256,7 @@ public class SystemCatalogRollbackEnabledIT extends BaseTest {
                 generateUniqueName(), generateUniqueName());
         final String viewName = "V_" + SchemaUtil.getTableName(
                 generateUniqueName(), generateUniqueName());
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute("CREATE TABLE " + parentName
                     + " (A INTEGER PRIMARY KEY, B INTEGER, C"
                     + " VARCHAR, D INTEGER)");
@@ -263,7 +270,7 @@ public class SystemCatalogRollbackEnabledIT extends BaseTest {
             conn.commit();
         }
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             // Query from the parent table and assert expected values
             ResultSet rs = conn.createStatement().executeQuery(
                     "SELECT A,B,C,D FROM " + parentName);
@@ -287,7 +294,7 @@ public class SystemCatalogRollbackEnabledIT extends BaseTest {
             assertFalse(rs.next());
         }
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             // Drop a parent column from the view
             conn.createStatement().execute("ALTER VIEW " + viewName +
                     " DROP COLUMN C");

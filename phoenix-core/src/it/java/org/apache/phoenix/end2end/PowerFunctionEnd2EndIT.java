@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.closeStmtAndConn;
 import static org.junit.Assert.assertTrue;
 
@@ -26,6 +27,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 
 import org.apache.phoenix.expression.function.PowerFunction;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -47,7 +49,7 @@ public class PowerFunctionEnd2EndIT extends ParallelStatsDisabledIT {
         Connection conn = null;
         PreparedStatement stmt = null;
         try {
-            conn = DriverManager.getConnection(getUrl());
+            conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
             String ddl;
             ddl = "CREATE TABLE " + signedTableName
                 + " (k VARCHAR NOT NULL PRIMARY KEY, doub DOUBLE, fl FLOAT, inte INTEGER, lon BIGINT, smalli SMALLINT, tinyi TINYINT)";
@@ -125,7 +127,7 @@ public class PowerFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     @Test
     public void test() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         for (double d : new double[] { 0.0, 1.0, -1.0, 123.1234, -123.1234 }) {
             testNumberSpec(conn, d, signedTableName);
             if (d >= 0) testNumberSpec(conn, d, unsignedTableName);

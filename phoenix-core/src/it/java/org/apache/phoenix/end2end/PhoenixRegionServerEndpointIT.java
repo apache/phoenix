@@ -43,28 +43,32 @@ import java.sql.SQLException;
 import java.util.Map;
 import java.util.Properties;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-
 @Category({NeedsOwnMiniClusterTest.class })
 public class PhoenixRegionServerEndpointIT extends BaseTest {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
     }
 
     // Tests that PhoenixRegionServerEndpoint validates the last ddl timestamp for base table.
     @Test
     public void testValidateLastDDLTimestampNoException() throws SQLException {
-        HRegionServer regionServer = utility.getMiniHBaseCluster().getRegionServer(0);
+        HRegionServer regionServer = getUtility().getMiniHBaseCluster().getRegionServer(0);
         PhoenixRegionServerEndpoint coprocessor = getPhoenixRegionServerEndpoint(regionServer);
         assertNotNull(coprocessor);
         ServerRpcController controller = new ServerRpcController();
         String tableNameStr = generateUniqueName();
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(false);
             String ddl = getCreateTableStmt(tableNameStr);
@@ -88,12 +92,12 @@ public class PhoenixRegionServerEndpointIT extends BaseTest {
     // provided last ddl timestamp is less than server maintained last ddl timestamp.
     @Test
     public void testValidateLastDDLTimestampWithException() throws SQLException {
-        HRegionServer regionServer = utility.getMiniHBaseCluster().getRegionServer(0);
+        HRegionServer regionServer = getUtility().getMiniHBaseCluster().getRegionServer(0);
         PhoenixRegionServerEndpoint coprocessor = getPhoenixRegionServerEndpoint(regionServer);
         assertNotNull(coprocessor);
         ServerRpcController controller = new ServerRpcController();
         String tableNameStr = generateUniqueName();
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(false);
             String ddl = getCreateTableStmt(tableNameStr);
@@ -120,12 +124,12 @@ public class PhoenixRegionServerEndpointIT extends BaseTest {
     // views
     @Test
     public void testValidateLastDDLTimestampWithTenantID() throws SQLException {
-        HRegionServer regionServer = utility.getMiniHBaseCluster().getRegionServer(0);
+        HRegionServer regionServer = getUtility().getMiniHBaseCluster().getRegionServer(0);
         PhoenixRegionServerEndpoint coprocessor = getPhoenixRegionServerEndpoint(regionServer);
         assertNotNull(coprocessor);
         ServerRpcController controller = new ServerRpcController();
         String tableNameStr = generateUniqueName();
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(false);
             String ddl = getCreateTableStmt(tableNameStr);
@@ -159,7 +163,7 @@ public class PhoenixRegionServerEndpointIT extends BaseTest {
 
     @Test
     public void testInvalidateHAGroupStoreClient() {
-        HRegionServer regionServer = utility.getMiniHBaseCluster().getRegionServer(0);
+        HRegionServer regionServer = getUtility().getMiniHBaseCluster().getRegionServer(0);
         PhoenixRegionServerEndpoint coprocessor = getPhoenixRegionServerEndpoint(regionServer);
         assertNotNull(coprocessor);
         ServerRpcController controller = new ServerRpcController();

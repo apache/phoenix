@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -34,6 +35,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -41,24 +43,23 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class TenantIdTypeIT extends ParallelStatsDisabledIT {
 
     private Connection regularConnection(String url) throws SQLException {
-        return DriverManager.getConnection(url);
+        return DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
     }
 
     private Connection tenantConnection(String url) throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tenantIdProperty = this.tenantId.replaceAll("\'", "");
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantIdProperty);
         return DriverManager.getConnection(url, props);
     }
 
     private Connection inconvertibleConnection(String url) throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tenantIdProperty = "ABigOlString";
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantIdProperty);
         return DriverManager.getConnection(url, props);

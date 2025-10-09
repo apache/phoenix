@@ -10,6 +10,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -20,6 +21,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -56,9 +58,8 @@ public class BinaryStringLiteralIT extends ParallelStatsDisabledIT {
     @Test
     public void testBinary() throws Exception {
         String tableName = generateUniqueName();
-
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                Statement stmt = conn.createStatement();) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+             Statement stmt = conn.createStatement();) {
             String ddl =
                     "CREATE TABLE " + tableName
                             + " (id INTEGER NOT NULL PRIMARY KEY, b BINARY(10), vb VARBINARY)";
@@ -118,8 +119,7 @@ public class BinaryStringLiteralIT extends ParallelStatsDisabledIT {
     @Test
     public void testBinaryArray() throws Exception {
         String tableName = generateUniqueName();
-
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                 Statement stmt = conn.createStatement();) {
             String ddl =
                     "CREATE TABLE " + tableName

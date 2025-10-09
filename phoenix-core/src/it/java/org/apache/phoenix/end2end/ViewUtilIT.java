@@ -24,6 +24,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessorclient.TableInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.*;
@@ -52,24 +53,23 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-
 @Category(ParallelStatsDisabledTest.class)
 public class ViewUtilIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testGetSystemTableForChildLinks() throws Exception {
         assertEquals(SYSTEM_LINK_HBASE_TABLE_NAME, ViewUtil.getSystemTableForChildLinks(
-                MIN_SPLITTABLE_SYSTEM_CATALOG, config));
+                MIN_SPLITTABLE_SYSTEM_CATALOG, getConfiguration()));
 
         // lower version should also give CHILD_LINK table as server upgrade to advanced version
         assertEquals(SYSTEM_LINK_HBASE_TABLE_NAME, ViewUtil.getSystemTableForChildLinks(
-                MIN_SPLITTABLE_SYSTEM_CATALOG - 1, config));
+                MIN_SPLITTABLE_SYSTEM_CATALOG - 1, getConfiguration()));
     }
 
     @Test
     public void testHasChildViewsInGlobalViewCase() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        TableName catalogOrChildTableName = ViewUtil.getSystemTableForChildLinks(0, config);
+        TableName catalogOrChildTableName = ViewUtil.getSystemTableForChildLinks(0, getConfiguration());
         String schema = generateUniqueName();
         byte[] schemaInBytes = schema.getBytes(StandardCharsets.UTF_8);
         byte[] tenantIdInBytes = new byte[0];
@@ -94,9 +94,9 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(
                     String.format(viewDDLQuery, leafViewName2, thirdLevelViewName));
 
-            try (PhoenixConnection phoenixConnection =
-                    DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
-                    Table catalogOrChildTable = phoenixConnection.getQueryServices().getTable(
+            try (PhoenixMonitoredConnection phoenixConnection =
+                    DriverManager.getConnection(getUrl(), props).unwrap(PhoenixMonitoredConnection.class);
+                 Table catalogOrChildTable = phoenixConnection.getQueryServices().getTable(
                             SchemaUtil.getPhysicalName(catalogOrChildTableName.toBytes(),
                                     phoenixConnection.getQueryServices().getProps()).getName())) {
 
@@ -135,7 +135,7 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         tenantProps.setProperty(TENANT_ID_ATTRIB, tenantId);
-        TableName catalogOrChildTableName = ViewUtil.getSystemTableForChildLinks(0, config);
+        TableName catalogOrChildTableName = ViewUtil.getSystemTableForChildLinks(0, getConfiguration());
         String schema = generateUniqueName();
         byte[] schemaInBytes = schema.getBytes(StandardCharsets.UTF_8);
         byte[] tenantIdInBytes = tenantId.getBytes(StandardCharsets.UTF_8);
@@ -157,7 +157,7 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
         String viewIndexDDL = "CREATE INDEX " + tenantViewIndex + " ON " +
                 tenantViewOnMultiTenantTable2 + "(NUM DESC) INCLUDE (ID)";
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(multiTenantTableDDL);
             conn.createStatement().execute(globalViewDDL);
 
@@ -173,9 +173,9 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
                 tenantConn.createStatement().execute(viewIndexDDL);
             }
 
-            try (PhoenixConnection phoenixConnection = DriverManager.getConnection(getUrl(),
-                    props).unwrap(PhoenixConnection.class);
-                    Table catalogOrChildTable = phoenixConnection.getQueryServices().getTable(
+            try (PhoenixMonitoredConnection phoenixConnection = DriverManager.getConnection(getUrl(),
+                    props).unwrap(PhoenixMonitoredConnection.class);
+                 Table catalogOrChildTable = phoenixConnection.getQueryServices().getTable(
                             SchemaUtil.getPhysicalName(catalogOrChildTableName.toBytes(),
                                     phoenixConnection.getQueryServices().getProps()).getName())) {
 
@@ -211,7 +211,7 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
     @Test
     public void testFindAllRelativesForGlobalConnection() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        TableName catalogOrChildTableName = ViewUtil.getSystemTableForChildLinks(0, config);
+        TableName catalogOrChildTableName = ViewUtil.getSystemTableForChildLinks(0, getConfiguration());
         String schema = generateUniqueName();
         byte[] schemaInBytes = schema.getBytes(StandardCharsets.UTF_8);
         byte[] tenantIdInBytes = new byte[0];
@@ -234,8 +234,8 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(
                     String.format(viewDDLQuery, leafViewName2, middleLevelViewName));
 
-            try (PhoenixConnection phoenixConnection = DriverManager.getConnection(getUrl(),
-                    props).unwrap(PhoenixConnection.class);
+            try (PhoenixMonitoredConnection phoenixConnection = DriverManager.getConnection(getUrl(),
+                    props).unwrap(PhoenixMonitoredConnection.class);
                     Table catalogOrChildTable = phoenixConnection.getQueryServices().getTable(
                             SchemaUtil.getPhysicalName(catalogOrChildTableName.toBytes(),
                                     phoenixConnection.getQueryServices().getProps()).getName())) {
@@ -280,7 +280,7 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
         String tenantId2 = generateUniqueName();
         Properties tenantProps2 = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         tenantProps2.setProperty(TENANT_ID_ATTRIB, tenantId2);
-        TableName catalogOrChildTableName = ViewUtil.getSystemTableForChildLinks(0, config);
+        TableName catalogOrChildTableName = ViewUtil.getSystemTableForChildLinks(0 , getConfiguration());
         String schema = generateUniqueName();
         byte[] schemaInBytes = schema.getBytes(StandardCharsets.UTF_8);
         byte[] tenantId1InBytes = tenantId1.getBytes(StandardCharsets.UTF_8);
@@ -313,9 +313,9 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
                         String.format(viewDDL, tenant2LeafViewName, multiTenantTableName));
             }
 
-            try (PhoenixConnection phoenixConnection = DriverManager.getConnection(getUrl(),
-                    props).unwrap(PhoenixConnection.class);
-                    Table catalogOrChildTable = phoenixConnection.getQueryServices().getTable(
+            try (PhoenixMonitoredConnection phoenixConnection = DriverManager.getConnection(getUrl(),
+                    props).unwrap(PhoenixMonitoredConnection.class);
+                 Table catalogOrChildTable = phoenixConnection.getQueryServices().getTable(
                             SchemaUtil.getPhysicalName(catalogOrChildTableName.toBytes(),
                                     phoenixConnection.getQueryServices().getProps()).getName())) {
 
@@ -358,14 +358,14 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
         childViewNames.add("A_" + generateUniqueName());
         childViewNames.add("B_" + generateUniqueName());
         childViewNames.add("C_" + generateUniqueName());
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(String.format(CREATE_BASE_TABLE_DDL, BASE_TABLE_SCHEMA,
                     parentTable));
             for (String childViewName : childViewNames) {
                 conn.createStatement().execute(String.format(CREATE_CHILD_VIEW_LEVEL_1_DDL,
                         CHILD_VIEW_LEVEL_1_SCHEMA, childViewName, BASE_TABLE_SCHEMA, parentTable));
             }
-            ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            ConnectionQueryServices cqs = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
             try (Table childLinkTable = cqs.getTable(SchemaUtil.getPhysicalName(
                     SYSTEM_LINK_HBASE_TABLE_NAME.toBytes(), cqs.getProps()).getName())) {
                 Pair<List<PTable>, List<TableInfo>> allDescendants =
@@ -408,9 +408,8 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
         final String viewName = "V_" + generateUniqueName();
         createOrphanLink(BASE_TABLE_SCHEMA, parent1TableName, parent2TableName,
                 CHILD_VIEW_LEVEL_1_SCHEMA, viewName);
-
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+            ConnectionQueryServices cqs = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
             try (Table childLinkTable = cqs.getTable(SchemaUtil.getPhysicalName(
                     SYSTEM_LINK_HBASE_TABLE_NAME.toBytes(), cqs.getProps()).getName())) {
                 // The view is a legitimate child of parent1, so it should not be counted as
@@ -443,19 +442,19 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
     }
 
     /**
-     * Test {@link ViewUtil#getViewIndexIds(PhoenixConnection, String, boolean)} for a table which is not view index and ensure it throws {@link IllegalArgumentException}
+     * Test {@link ViewUtil#getViewIndexIds(PhoenixMonitoredConnection, String, boolean)} for a table which is not view index and ensure it throws {@link IllegalArgumentException}
      * @throws IOException
      * @throws SQLException
      */
     @Test(expected=IllegalArgumentException.class)
     public void testGetViewIndexIdsForNonViewIndexTable() throws IOException, SQLException {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            ViewUtil.getViewIndexIds(conn.unwrap(PhoenixConnection.class), "TEST_TABLE", true);
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+            ViewUtil.getViewIndexIds(conn.unwrap(PhoenixMonitoredConnection.class), "TEST_TABLE", true);
         }
     }
 
     /**
-     * Test {@link ViewUtil#getViewIndexIds(PhoenixConnection, String, boolean)} for a table with non-null schema
+     * Test {@link ViewUtil#getViewIndexIds(PhoenixMonitoredConnection, String, boolean)} for a table with non-null schema
      * @throws SQLException
      * @throws IOException
      */
@@ -465,7 +464,7 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
     }
 
     /**
-     * Test {@link ViewUtil#getViewIndexIds(PhoenixConnection, String, boolean)} for a table without schema
+     * Test {@link ViewUtil#getViewIndexIds(PhoenixMonitoredConnection, String, boolean)} for a table without schema
      * @throws SQLException
      * @throws IOException
      */
@@ -475,7 +474,7 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
     }
 
     /**
-     * Helper method to test {@link ViewUtil#getViewIndexIds(PhoenixConnection, String, boolean)} method
+     * Helper method to test {@link ViewUtil#getViewIndexIds(PhoenixMonitoredConnection, String, boolean)} method
      * 1. Create a multi-tenant table
      * 2. Create 2 global views (globalViewName1 & globalViewName2) and 5 global view indexes (2 on globalViewName1 & 3 on globalViewName2)
      * 3. Create 2 tenant views (tenantViewName1 & tenantViewName2) and 3 tenant view indexes (1 on tenantViewName1 & 2 on tenantViewName2)
@@ -512,7 +511,7 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
         final String viewIndexDDL = "CREATE INDEX %s ON %s (NUM DESC) INCLUDE (ID)";
         final String tenantViewDDL = "CREATE VIEW %s AS SELECT * FROM %s";
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
 
             // Create data table, global views and global view indexes
             conn.createStatement().execute(createTableDDL);
@@ -537,11 +536,11 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
             }
 
             // Get view indexes ids only for global view indexes (excluding tenant view indexes)
-            List<String> list = ViewUtil.getViewIndexIds(conn.unwrap(PhoenixConnection.class), MetaDataUtil.getViewIndexPhysicalName(tableName), false);
+            List<String> list = ViewUtil.getViewIndexIds(conn.unwrap(PhoenixMonitoredConnection.class), MetaDataUtil.getViewIndexPhysicalName(tableName), false);
             assertEquals(5, list.size());
 
             // Get view indexes ids for both global and tenant view indexes
-            list = ViewUtil.getViewIndexIds(conn.unwrap(PhoenixConnection.class), MetaDataUtil.getViewIndexPhysicalName(tableName), true);
+            list = ViewUtil.getViewIndexIds(conn.unwrap(PhoenixMonitoredConnection.class), MetaDataUtil.getViewIndexPhysicalName(tableName), true);
             assertEquals(8, list.size());
         }
     }

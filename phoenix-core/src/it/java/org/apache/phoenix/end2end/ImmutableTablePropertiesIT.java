@@ -30,7 +30,7 @@ import java.sql.Statement;
 import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -38,7 +38,6 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(ParallelStatsDisabledTest.class)
 public class ImmutableTablePropertiesIT extends ParallelStatsDisabledIT {
 
@@ -61,7 +60,7 @@ public class ImmutableTablePropertiesIT extends ParallelStatsDisabledIT {
                     "  CONSTRAINT pk PRIMARY KEY (a_string)) STORE_NULLS=true";
             stmt.execute(ddl);
             
-            PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+            PhoenixMonitoredConnection phxConn = conn.unwrap(PhoenixMonitoredConnection.class);
             PTable immutableTable = phxConn.getTable(new PTableKey(null, immutableDataTableFullName));
             assertTrue("IMMUTABLE_ROWS should be set to true", immutableTable.isImmutableRows());
             PTable mutableTable = phxConn.getTable(new PTableKey(null, mutableDataTableFullName));
@@ -88,7 +87,7 @@ public class ImmutableTablePropertiesIT extends ParallelStatsDisabledIT {
                     "  CONSTRAINT pk PRIMARY KEY (a_string))  IMMUTABLE_ROWS=false";
             stmt.execute(ddl);
             
-            PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+            PhoenixMonitoredConnection phxConn = conn.unwrap(PhoenixMonitoredConnection.class);
             PTable immutableTable = phxConn.getTable(new PTableKey(null, immutableDataTableFullName));
             assertTrue("IMMUTABLE_ROWS should be set to true", immutableTable.isImmutableRows());
             PTable mutableTable = phxConn.getTable(new PTableKey(null, mutableDataTableFullName));

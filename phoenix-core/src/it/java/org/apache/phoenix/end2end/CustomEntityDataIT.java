@@ -37,7 +37,6 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 
-
 @Category(ParallelStatsDisabledTest.class)
 public class CustomEntityDataIT extends ParallelStatsDisabledIT {
     

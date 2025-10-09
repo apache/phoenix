@@ -37,6 +37,7 @@ import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledWithRegionMovesIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -91,7 +92,6 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.junit.Assume.assumeFalse;
-
 @RunWith(Parameterized.class)
 public abstract class BaseIndexWithRegionMovesIT extends ParallelStatsDisabledWithRegionMovesIT {
     private static final Random RAND = new Random();
@@ -1027,7 +1027,7 @@ public abstract class BaseIndexWithRegionMovesIT extends ParallelStatsDisabledWi
             conn.commit();
 
             // the index table is one row
-            Table table = conn.unwrap(PhoenixConnection.class).getQueryServices()
+            Table table = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices()
                     .getTable(fullTableName.getBytes());
             ResultScanner resultScanner = table.getScanner(new Scan());
             for (Result result : resultScanner) {
@@ -1195,7 +1195,7 @@ public abstract class BaseIndexWithRegionMovesIT extends ParallelStatsDisabledWi
                     tableDDLOptions);
             query = "SELECT * FROM " + fullTableName;
             rs = conn.createStatement().executeQuery(query);
-            long ts = conn.unwrap(PhoenixConnection.class)
+            long ts = conn.unwrap(PhoenixMonitoredConnection.class)
                     .getTable(new PTableKey(null, fullTableName)).getTimeStamp();
             assertFalse(rs.next());
             conn.createStatement().execute(
@@ -1325,7 +1325,7 @@ public abstract class BaseIndexWithRegionMovesIT extends ParallelStatsDisabledWi
     private void assertNoIndexDeletes(Connection conn, long minTimestamp, String fullIndexName)
             throws IOException, SQLException {
         if (!this.mutable) {
-            PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+            PhoenixMonitoredConnection pconn = conn.unwrap(PhoenixMonitoredConnection.class);
             PTable index = pconn.getTable(new PTableKey(null, fullIndexName));
             byte[] physicalIndexTable = index.getPhysicalName().getBytes();
             try (Table hIndex = pconn.getQueryServices().getTable(physicalIndexTable)) {
@@ -1478,16 +1478,16 @@ public abstract class BaseIndexWithRegionMovesIT extends ParallelStatsDisabledWi
                                           String fullIndexName, boolean exists)
             throws Exception {
         PTable ptable =
-                conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, fullTableName));
+                conn.unwrap(PhoenixMonitoredConnection.class).getTable(new PTableKey(null, fullTableName));
         int nTableKVColumns = ptable.getColumns().size() - ptable.getPKColumns().size();
-        Table hTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
+        Table hTable = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices()
                 .getTable(Bytes.toBytes(fullTableName));
         ResultScanner tableScanner = hTable.getScanner(new Scan());
         Result tableResult;
         PTable pindex =
-                conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, fullIndexName));
+                conn.unwrap(PhoenixMonitoredConnection.class).getTable(new PTableKey(null, fullIndexName));
         int nIndexKVColumns = pindex.getColumns().size() - pindex.getPKColumns().size();
-        Table hIndex = conn.unwrap(PhoenixConnection.class).getQueryServices()
+        Table hIndex = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices()
                 .getTable(Bytes.toBytes(fullIndexName));
         ResultScanner indexScanner = hIndex.getScanner(new Scan());
         Result indexResult;

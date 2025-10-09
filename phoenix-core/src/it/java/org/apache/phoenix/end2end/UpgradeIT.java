@@ -106,7 +106,6 @@ import org.apache.phoenix.util.TestUtil;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
 @Category(NeedsOwnMiniClusterTest.class)
 public class UpgradeIT extends ParallelStatsDisabledIT {
         

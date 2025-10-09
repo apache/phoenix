@@ -47,6 +47,7 @@ import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.ByteUtil;
@@ -66,7 +67,6 @@ import org.junit.experimental.categories.Category;
  * 
  * @since 0.1
  */
-
 @Category(ParallelStatsDisabledTest.class)
 public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
     
@@ -75,7 +75,7 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
         final byte[] tableBytes = tableName.getBytes();
         final byte[] familyName = Bytes.toBytes(SchemaUtil.normalizeIdentifier("1"));
         final byte[][] splits = new byte[][] {Bytes.toBytes(20), Bytes.toBytes(30)};
-        Admin admin = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getActiveUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).getAdmin();
         try {
             admin.createTable(TableDescriptorBuilder.newBuilder(TableName.valueOf(tableBytes))
                     .setColumnFamily(ColumnFamilyDescriptorBuilder.newBuilder(familyName)
@@ -84,8 +84,7 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
         } finally {
             admin.close();
         }
-        
-        ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        ConnectionQueryServices services = driver.getConnectionQueryServices(getActiveUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         Table hTable = services.getTable(tableBytes);
         try {
             // Insert rows using standard HBase mechanism with standard HBase "types"
@@ -151,8 +150,7 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
                 "    \"1\".ulong_col unsigned_long" +
                 "    CONSTRAINT pk PRIMARY KEY (uint_key, ulong_key, string_key))\n" +
                 ColumnFamilyDescriptorBuilder.DATA_BLOCK_ENCODING + "='" + DataBlockEncoding.NONE + "'";
-        
-        try (Connection conn = DriverManager.getConnection(url)) {
+        try (Connection conn = DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(ddl);
         } 
         
@@ -163,7 +161,7 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
     public void testRangeQuery1() throws Exception {
         String tableName = initTableValues();
         String query = "SELECT uint_key, ulong_key, string_key FROM " + tableName + " WHERE uint_key > 20 and ulong_key >= 400";
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -181,7 +179,7 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
     public void testRangeQuery2() throws Exception {
         String tableName = initTableValues();
         String query = "SELECT uint_key, ulong_key, string_key FROM " + tableName + " WHERE uint_key > 20 and uint_key < 40";
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -218,7 +216,7 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
     public void testNegativeAgainstUnsignedNone() throws Exception {
         String tableName = initTableValues();
         String query = "SELECT uint_key, ulong_key, string_key FROM " + tableName + " WHERE ulong_key < -1";
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -232,7 +230,7 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
     public void testNegativeAgainstUnsignedAll() throws Exception {
         String tableName = initTableValues();
         String query = "SELECT string_key FROM " + tableName + " WHERE ulong_key > -100";
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -253,7 +251,7 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
     @Test
     public void testNegativeAddNegativeValue() throws Exception {
         String tableName = initTableValues();
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + "(uint_key,ulong_key,string_key, uint_col) VALUES(?,?,?,?)");
             stmt.setInt(1, -1);
@@ -271,7 +269,7 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
     public void testNegativeCompareNegativeValue() throws Exception {
         String tableName = initTableValues();
         String query = "SELECT string_key FROM " + tableName + " WHERE uint_key > 100000";
-        PhoenixConnection conn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class);
+        PhoenixMonitoredConnection conn = DriverManager.getConnection(getUrl(),PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixMonitoredConnection.class);
         Table hTable = conn.getQueryServices().getTable(tableName.getBytes());
         
         List<Row> mutations = new ArrayList<Row>();

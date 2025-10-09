@@ -28,7 +28,7 @@ import java.sql.Statement;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.client.Consistency;
-import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -63,7 +63,7 @@ public class AlterSessionIT extends ParallelStatsDisabledIT {
             Statement st = conn.createStatement();
             st.execute("alter session set Consistency = 'timeline'");
             ResultSet rs = st.executeQuery("explain select * from " + tableName);
-            assertEquals(Consistency.TIMELINE, conn.unwrap(PhoenixConnection.class).getConsistency());
+            assertEquals(Consistency.TIMELINE, conn.unwrap(PhoenixMonitoredConnection.class).getConsistency());
             String queryPlan = QueryUtil.getExplainPlan(rs);
             assertTrue(queryPlan.indexOf("TIMELINE") > 0);
 
@@ -80,7 +80,7 @@ public class AlterSessionIT extends ParallelStatsDisabledIT {
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl() + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR +
                     "Consistency=TIMELINE", props)) {
-            assertEquals(Consistency.TIMELINE, ((PhoenixConnection)conn).getConsistency());
+            assertEquals(Consistency.TIMELINE, ((PhoenixMonitoredConnection)conn).getConsistency());
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery("explain select * from " + tableName);
             String queryPlan = QueryUtil.getExplainPlan(rs);

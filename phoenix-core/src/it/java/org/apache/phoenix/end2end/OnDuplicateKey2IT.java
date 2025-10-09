@@ -51,6 +51,7 @@ import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryConstants;
@@ -70,7 +71,6 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
@@ -1379,7 +1379,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
     }
 
     private long getEmptyKVLatestCellTimestamp(String tableName) throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         PTable pTable = PhoenixRuntime.getTable(conn, tableName);
         byte[] emptyCQ = EncodedColumnsUtil.getEmptyKeyValueInfo(pTable).getFirst();
         return getColumnLatestCellTimestamp(tableName, emptyCQ);
@@ -1388,7 +1388,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
     private long getColumnLatestCellTimestamp(String tableName, byte[] cq) throws Exception {
         Scan scan = new Scan();
         try (org.apache.hadoop.hbase.client.Connection hconn =
-                     ConnectionFactory.createConnection(config)) {
+                     ConnectionFactory.createConnection(getConfiguration())) {
             Table table = hconn.getTable(TableName.valueOf(tableName));
             ResultScanner resultScanner = table.getScanner(scan);
             Result result = resultScanner.next();
@@ -1399,7 +1399,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
 
     private List<Long> getAllColumnsLatestCellTimestamp(Connection conn, String tableName) throws Exception {
         List<Long> timestampList = new ArrayList<>();
-        PTable pTable = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, tableName));
+        PTable pTable = conn.unwrap(PhoenixMonitoredConnection.class).getTable(new PTableKey(null, tableName));
         List<PColumn> columns = pTable.getColumns();
 
         // timestamp of the empty cell

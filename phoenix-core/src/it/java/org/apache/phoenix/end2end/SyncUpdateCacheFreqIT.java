@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
@@ -42,9 +43,9 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.UpgradeUtil.UPSERT_UPDATE_CACHE_FREQUENCY;
 import static org.junit.Assert.assertEquals;
-
 //FIXME this class no @Category, and will not be run by maven
 public class SyncUpdateCacheFreqIT extends BaseTest {
 
@@ -80,7 +81,11 @@ public class SyncUpdateCacheFreqIT extends BaseTest {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
+            setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
+        } else {
+            setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        }
         createBaseTable(SCHEMA_NAME, TABLE_NAME, true, TABLE_CACHE_FREQ);
         createIndex(getConnection(), SCHEMA_NAME, GLOBAL_INDEX, TABLE_NAME,
             VIEW_INDEX_COL, false);
@@ -107,7 +112,7 @@ public class SyncUpdateCacheFreqIT extends BaseTest {
                     false);
             }
 
-            try (PhoenixConnection conn = (PhoenixConnection) getConnection()) {
+            try (PhoenixMonitoredConnection conn = (PhoenixMonitoredConnection) getConnection()) {
                 PreparedStatement stmt =
                     conn.prepareStatement(UPSERT_UPDATE_CACHE_FREQUENCY);
 
@@ -132,7 +137,7 @@ public class SyncUpdateCacheFreqIT extends BaseTest {
                 }
 
                 // clear the server-side cache to get the latest built PTables
-                conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+                conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices().clearCache();
                 PhoenixConnection pcon = conn.unwrap(PhoenixConnection.class);
                 pcon.setRunningUpgrade(true);
 
