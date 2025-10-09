@@ -18,14 +18,11 @@
 package org.apache.phoenix.hbase.index.write;
 
 import java.util.concurrent.ExecutionException;
-import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.parallel.EarlyExitFailure;
-import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
+import org.apache.phoenix.hbase.index.parallel.TaskBatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 
 /**
  * Write index updates to the index tables in parallel. We attempt to early exit from the writes if
@@ -49,12 +46,7 @@ public class ParallelWriterIndexCommitter extends AbstractParallelWriterIndexCom
   }
 
   @Override
-  public void write(Multimap<HTableInterfaceReference, Mutation> toWrite,
-    final boolean allowLocalUpdates, final int clientVersion)
-    throws SingleIndexWriteFailureException {
-
-    super.write(toWrite, allowLocalUpdates, clientVersion);
-    // actually submit the tasks to the pool and wait for them to finish/fail
+  protected void submitTasks(TaskBatch<Void> tasks) throws SingleIndexWriteFailureException {
     try {
       pool.submitUninterruptible(tasks);
     } catch (EarlyExitFailure e) {
@@ -63,6 +55,5 @@ public class ParallelWriterIndexCommitter extends AbstractParallelWriterIndexCom
       LOGGER.error("Found a failed index update!");
       propagateFailure(e.getCause());
     }
-
   }
 }

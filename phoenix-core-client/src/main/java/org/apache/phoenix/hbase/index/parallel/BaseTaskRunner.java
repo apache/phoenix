@@ -117,6 +117,13 @@ public abstract class BaseTaskRunner implements TaskRunner {
   }
 
   @Override
+  public <R> void submitOnly(TaskBatch<R> tasks) {
+    for (Task<R> task : tasks.getTasks()) {
+      this.writerPool.submit(task);
+    }
+  }
+
+  @Override
   public void stop(String why) {
     if (this.stopped) {
       return;
