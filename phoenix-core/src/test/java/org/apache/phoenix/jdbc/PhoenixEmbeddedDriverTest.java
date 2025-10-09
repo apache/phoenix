@@ -567,14 +567,15 @@ public class PhoenixEmbeddedDriverTest {
       props.get(HConstants.CLIENT_ZOOKEEPER_QUORUM));
 
     connectionInfo = ConnectionInfo.create("jdbc:phoenix+rpc:"
-            + "localhost\\:2181,127.23.45.678\\:7634,v3\\:1,host123.48576\\:723::;" + "test=true", null,
-            null);
-          props = connectionInfo.asProps();
-          assertNull(props.get(HConstants.ZOOKEEPER_QUORUM));
-          assertNull(props.get(HConstants.CLIENT_ZOOKEEPER_QUORUM));
+      + "localhost\\:2181,127.23.45.678\\:7634,v3\\:1,host123.48576\\:723::;" + "test=true", null,
+      null);
+    props = connectionInfo.asProps();
+    assertNull(props.get(HConstants.ZOOKEEPER_QUORUM));
+    assertNull(props.get(HConstants.CLIENT_ZOOKEEPER_QUORUM));
 
-    connectionInfo = ConnectionInfo.create("jdbc:phoenix+zk:"
-      + "localhost\\:2181,127.23.45.678\\:7634,v3\\:1,host123.48576\\:723:/hbase;" + "test=true",
+    connectionInfo = ConnectionInfo.create(
+      "jdbc:phoenix+zk:"
+        + "localhost\\:2181,127.23.45.678\\:7634,v3\\:1,host123.48576\\:723:/hbase;" + "test=true",
       null, null);
     props = connectionInfo.asProps();
     assertEquals("127.23.45.678:7634,host123.48576:723,localhost:2181,v3:1",
@@ -590,6 +591,6 @@ public class PhoenixEmbeddedDriverTest {
       props.get(HConstants.ZOOKEEPER_QUORUM));
     assertEquals("127.23.45.678:12345,host987:12345,localhost:12345,v3:12345",
       props.get(HConstants.CLIENT_ZOOKEEPER_QUORUM));
-    
+
   }
 }
