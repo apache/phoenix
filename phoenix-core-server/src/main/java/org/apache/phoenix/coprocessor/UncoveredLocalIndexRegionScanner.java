@@ -105,9 +105,9 @@ public class UncoveredLocalIndexRegionScanner extends UncoveredIndexRegionScanne
   }
 
   @Override
-  protected boolean scanIndexTableRows(List<Cell> result, final long startTime,
-    ScannerContext scannerContext) throws IOException {
-    return scanIndexTableRows(result, startTime, actualStartKey, offset, scannerContext);
+  protected boolean scanIndexTableRows(List<Cell> result, ScannerContext scannerContext)
+    throws IOException {
+    return scanIndexTableRows(result, actualStartKey, offset, scannerContext);
   }
 
   @Override

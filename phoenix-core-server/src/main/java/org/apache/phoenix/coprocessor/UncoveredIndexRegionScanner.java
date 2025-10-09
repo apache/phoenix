@@ -43,6 +43,7 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.regionserver.PhoenixScannerContext;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
@@ -210,9 +211,8 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
     }
   }
 
-  protected boolean scanIndexTableRows(List<Cell> result, final long startTime,
-    final byte[] actualStartKey, final int offset, ScannerContext scannerContext)
-    throws IOException {
+  protected boolean scanIndexTableRows(List<Cell> result, final byte[] actualStartKey,
+    final int offset, ScannerContext scannerContext) throws IOException {
     boolean hasMore = false;
     if (actualStartKey != null) {
       do {
@@ -231,7 +231,10 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
             firstCell.getRowLength(), actualStartKey, 0, actualStartKey.length) < 0
         ) {
           result.clear();
-          if (EnvironmentEdgeManager.currentTimeMillis() - startTime >= pageSizeMs) {
+          if (
+            PhoenixScannerContext.isReturnImmediately(scannerContext)
+              || PhoenixScannerContext.isTimedOut(scannerContext, pageSizeMs)
+          ) {
             byte[] rowKey = CellUtil.cloneRow(firstCell);
             ScanUtil.getDummyResult(rowKey, result);
             return true;
@@ -270,7 +273,10 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
             viewConstants));
         indexRows.add(row);
         indexRowCount++;
-        if (hasMore && (EnvironmentEdgeManager.currentTimeMillis() - startTime) >= pageSizeMs) {
+        if (
+          hasMore && (PhoenixScannerContext.isTimedOut(scannerContext, pageSizeMs)
+            || PhoenixScannerContext.isReturnImmediately(scannerContext))
+        ) {
           getDummyResult(lastIndexRowKey, result);
           // We do not need to change the state, State.SCANNING_INDEX
           // since we will continue scanning the index table after
@@ -283,9 +289,9 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
     return hasMore;
   }
 
-  protected boolean scanIndexTableRows(List<Cell> result, final long startTime,
-    ScannerContext scannerContext) throws IOException {
-    return scanIndexTableRows(result, startTime, null, 0, scannerContext);
+  protected boolean scanIndexTableRows(List<Cell> result, ScannerContext scannerContext)
+    throws IOException {
+    return scanIndexTableRows(result, null, 0, scannerContext);
   }
 
   private boolean verifyIndexRowAndRepairIfNecessary(Result dataRow, byte[] indexRowKey,
@@ -393,7 +399,9 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
    */
   @Override
   public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
-    long startTime = EnvironmentEdgeManager.currentTimeMillis();
+    long startTime = (scannerContext != null)
+      ? ((PhoenixScannerContext) scannerContext).getStartTime()
+      : EnvironmentEdgeManager.currentTimeMillis();
     boolean hasMore;
     region.startRegionOperation();
     try {
@@ -409,7 +417,7 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
           state = State.SCANNING_INDEX;
         }
         if (state == State.SCANNING_INDEX) {
-          hasMore = scanIndexTableRows(result, startTime, scannerContext);
+          hasMore = scanIndexTableRows(result, scannerContext);
           if (isDummy(result)) {
             updateDummyWithPrevRowKey(result, initStartRowKey, includeInitStartRowKey, scan);
             return hasMore;

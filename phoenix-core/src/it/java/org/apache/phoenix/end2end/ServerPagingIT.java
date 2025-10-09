@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlan;
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlanWithLimit;
+import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.commitWithException;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PAGED_ROWS_COUNTER;
 import static org.apache.phoenix.query.QueryServices.USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -33,12 +34,17 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Random;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.PagingRegionScanner;
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -60,6 +66,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class ServerPagingIT extends ParallelStatsDisabledIT {
+  private static final Random RAND = new Random(11);
 
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
@@ -262,6 +269,210 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
         assertEquals(D2.getTime(), rs.getDate(1).getTime());
         assertFalse(rs.next());
         assertServerPagingMetric(tablename, rs, true);
+        Map<String, Map<MetricType, Long>> metrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
+        long numRows = getMetricValue(metrics, MetricType.COUNT_ROWS_SCANNED);
+        assertEquals(6, numRows);
+        long numRpcs = getMetricValue(metrics, MetricType.COUNT_RPC_CALLS);
+        // 3 regions * (2 rows per region + 1 scanner open with page timeout set to 0 ms)
+        assertEquals(9, numRpcs);
+      }
+    }
+  }
+
+  @Test
+  public void testMultiKeyPointLookup() throws Exception {
+    final String tablename = generateUniqueName();
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    // use a higher timeout value so that we can trigger a page timeout from the scanner
+    // rather than the page filter
+    props.put(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Long.toString(5));
+    String ddl = String.format("CREATE TABLE %s (id VARCHAR NOT NULL, k1 INTEGER NOT NULL, "
+      + "k2 INTEGER NOT NULL, k3 INTEGER, v1 VARCHAR CONSTRAINT pk PRIMARY KEY (id, k1, k2)) "
+      + "\"%s\" = true", tablename, USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP);
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.createStatement().execute(ddl);
+      String dml = "UPSERT INTO " + tablename + " VALUES(?, ?, ?, ?, ?)";
+      PreparedStatement ps = conn.prepareStatement(dml);
+      int totalRows = 10000;
+      for (int i = 0; i < totalRows; ++i) {
+        ps.setString(1, "id_" + i % 3);
+        ps.setInt(2, i % 20);
+        ps.setInt(3, i);
+        ps.setInt(4, i % 10);
+        ps.setString(5, "val");
+        ps.executeUpdate();
+        if (i != 0 && i % 100 == 0) {
+          conn.commit();
+        }
+      }
+      conn.commit();
+      int rowKeyCount = 1000;
+      List<String> inList =
+        Stream.generate(() -> "(?, ?, ?)").limit(rowKeyCount).collect(Collectors.toList());
+      String dql = String.format("select id, k1, k2 from %s where (id, k1, k2) IN (%s)", tablename,
+        String.join(",", inList));
+      ps = conn.prepareStatement(dql);
+      int expectedValidRows = 0;
+      for (int i = 0; i < rowKeyCount; i++) {
+        ps.setString(3 * i + 1, "id_" + i % 3);
+        if (RAND.nextBoolean()) {
+          ++expectedValidRows;
+          ps.setInt(3 * i + 2, i % 20);
+        } else {
+          // generate a non-existing row key
+          ps.setInt(3 * i + 2, 78123);
+        }
+        ps.setInt(3 * i + 3, i);
+      }
+      int actualValidRows = 0;
+      try (ResultSet rs = ps.executeQuery()) {
+        while (rs.next()) {
+          ++actualValidRows;
+        }
+        assertEquals(expectedValidRows, actualValidRows);
+        Map<String, Map<MetricType, Long>> metrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
+        long numRows = getMetricValue(metrics, MetricType.COUNT_ROWS_SCANNED);
+        assertEquals(expectedValidRows, numRows);
+        long numRpcs = getMetricValue(metrics, MetricType.COUNT_RPC_CALLS);
+        assertTrue(numRpcs > 1);
+      }
+    }
+  }
+
+  @Test
+  public void testPagingWithTTLMasking() throws Exception {
+    final String tablename = generateUniqueName();
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    // use a higher timeout value so that we can trigger a page timeout from the scanner
+    // rather than the page filter
+    props.put(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Long.toString(10));
+    int ttl = 2; // 2 seconds
+    String ddl = "CREATE TABLE " + tablename + " (id VARCHAR NOT NULL,\n" + "k1 INTEGER NOT NULL,\n"
+      + "k2 INTEGER NOT NULL,\n" + "k3 INTEGER,\n" + "v1 VARCHAR,\n"
+      + "CONSTRAINT pk PRIMARY KEY (id, k1, k2)) TTL=" + ttl;
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.createStatement().execute(ddl);
+      String dml = "UPSERT INTO " + tablename + " VALUES(?, ?, ?, ?, ?)";
+      PreparedStatement ps = conn.prepareStatement(dml);
+      int totalRows = 10000;
+      for (int i = 0; i < totalRows; ++i) {
+        ps.setString(1, "id_" + i % 3);
+        ps.setInt(2, i % 20);
+        ps.setInt(3, i);
+        ps.setInt(4, i % 10);
+        ps.setString(5, "val");
+        ps.executeUpdate();
+        if (i != 0 && i % 100 == 0) {
+          conn.commit();
+        }
+      }
+      conn.commit();
+      // Sleep so that the rows expire
+      // Can't use EnvironmentEdgeManager because that messes up page timeout calculations
+      Thread.sleep(ttl * 1000 + 50);
+      String dql = String.format("SELECT count(*) from %s where id = '%s'", tablename, "id_2");
+      try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
+        assertTrue(rs.next());
+        assertEquals(0, rs.getInt(1));
+        assertFalse(rs.next());
+        Map<String, Map<MetricType, Long>> metrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
+        long numRpc = getMetricValue(metrics, MetricType.COUNT_RPC_CALLS);
+        // multiple scan rpcs will be executed for every page timeout
+        assertTrue(String.format("Got %d", numRpc), numRpc > 1);
+      }
+      // Insert few more rows
+      int additionalRows = 5;
+      for (int i = 0; i < additionalRows; ++i) {
+        ps.setString(1, "id_2");
+        ps.setInt(2, i % 20);
+        ps.setInt(3, i + totalRows);
+        ps.setInt(4, i % 10);
+        ps.setString(5, "val");
+        ps.executeUpdate();
+      }
+      conn.commit();
+      try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
+        assertTrue(rs.next());
+        assertEquals(additionalRows, rs.getInt(1));
+        assertFalse(rs.next());
+        Map<String, Map<MetricType, Long>> metrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
+        long numRpc = getMetricValue(metrics, MetricType.COUNT_RPC_CALLS);
+        // multiple scan rpcs will be executed for every page timeout
+        assertTrue(String.format("Got %d", numRpc), numRpc > 1);
+      }
+    }
+  }
+
+  @Test
+  public void testPagingWithUnverifiedIndexRows() throws Exception {
+    final String tablename = generateUniqueName();
+    final String indexname = generateUniqueName();
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    // use a higher timeout value so that we can trigger a page timeout from the scanner
+    // rather than the page filter
+    props.put(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Long.toString(5));
+    String ddl = "CREATE TABLE " + tablename + " (id VARCHAR NOT NULL,\n" + "k1 INTEGER NOT NULL,\n"
+      + "k2 INTEGER NOT NULL,\n" + "k3 INTEGER,\n" + "v1 VARCHAR,\n"
+      + "CONSTRAINT pk PRIMARY KEY (id, k1, k2))";
+    String indexddl = "CREATE INDEX " + indexname + " ON " + tablename + "(k3) include(v1)";
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.createStatement().execute(ddl);
+      conn.createStatement().execute(indexddl);
+      String dml = "UPSERT INTO " + tablename + " VALUES(?, ?, ?, ?, ?)";
+      PreparedStatement ps = conn.prepareStatement(dml);
+      int totalRows = 10000;
+      for (int i = 0; i < totalRows; ++i) {
+        ps.setString(1, "id_" + i % 3);
+        ps.setInt(2, i % 20);
+        ps.setInt(3, i);
+        ps.setInt(4, i % 10);
+        ps.setString(5, "val");
+        ps.executeUpdate();
+        if (i != 0 && i % 100 == 0) {
+          conn.commit();
+        }
+      }
+      conn.commit();
+      String dql = String.format("SELECT count(*) from %s where k3 = 5", tablename);
+      try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
+        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
+        String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
+        assertTrue(explainPlan.contains(indexname));
+        assertTrue(rs.next());
+        assertEquals(totalRows / 10, rs.getInt(1));
+        assertFalse(rs.next());
+        Map<String, Map<MetricType, Long>> metrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
+        long numRpc = getMetricValue(metrics, MetricType.COUNT_RPC_CALLS);
+        // multiple scan rpcs will be executed for every page timeout
+        assertTrue(String.format("Got %d", numRpc), numRpc > 1);
+      }
+      // Insert few unverified index rows by failing phase 2
+      int additionalRows = 10;
+      for (int i = 0; i < additionalRows; ++i) {
+        ps.setString(1, "id_2");
+        ps.setInt(2, i % 20);
+        ps.setInt(3, i + totalRows);
+        ps.setInt(4, 5); // set k3=5
+        ps.setString(5, "val");
+        ps.executeUpdate();
+      }
+      IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+      try {
+        commitWithException(conn);
+      } finally {
+        IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+      }
+      try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
+        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
+        String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
+        assertTrue(explainPlan.contains(indexname));
+        assertTrue(rs.next());
+        assertEquals(totalRows / 10, rs.getInt(1));
+        assertFalse(rs.next());
+        Map<String, Map<MetricType, Long>> metrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
+        long numRpc = getMetricValue(metrics, MetricType.COUNT_RPC_CALLS);
+        // multiple scan rpcs will be executed for every page timeout
+        assertTrue(String.format("Got %d", numRpc), numRpc > 1);
       }
     }
   }
@@ -481,24 +692,46 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
     PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
     stmt.execute(
       "CREATE TABLE " + tableName + " (A UNSIGNED_LONG NOT NULL PRIMARY KEY, Z UNSIGNED_LONG)");
-    for (int i = 1; i <= 200; i++) {
+    final int rowCount = 200;
+    for (int i = 1; i <= rowCount; i++) {
       String sql = String.format("UPSERT INTO %s VALUES (%d, %d)", tableName, i, i);
       stmt.execute(sql);
     }
     conn.commit();
 
     // delete every alternate row
-    for (int i = 1; i <= 200; i = i + 2) {
+    for (int i = 1; i <= rowCount; i = i + 2) {
       stmt.execute("DELETE FROM " + tableName + " WHERE A = " + i);
       conn.commit();
     }
 
+    // full table scan
     ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName);
     while (rs.next()) {
     }
     Map<String, Map<MetricType, Long>> metrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
     long numRpc = getMetricValue(metrics, MetricType.COUNT_RPC_CALLS);
-    Assert.assertEquals(101, numRpc);
+    // with 0ms page timeout every row whether it is valid or a delete marker will generate a page
+    // timeout so the number of rpcs will be row count + 1
+    assertEquals(rowCount + 1, numRpc);
+
+    // aggregate query
+    rs = stmt.executeQuery("SELECT count(*) FROM " + tableName);
+    assertTrue(rs.next());
+    assertEquals(rowCount / 2, rs.getInt(1));
+    assertFalse(rs.next());
+    metrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
+    numRpc = getMetricValue(metrics, MetricType.COUNT_RPC_CALLS);
+    assertEquals(rowCount + 1, numRpc);
+
+    // aggregate query with a filter
+    rs = stmt.executeQuery("SELECT count(*) FROM " + tableName + " where Z % 4 = 0");
+    assertTrue(rs.next());
+    assertEquals(rowCount / 4, rs.getInt(1));
+    assertFalse(rs.next());
+    metrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
+    numRpc = getMetricValue(metrics, MetricType.COUNT_RPC_CALLS);
+    assertEquals(rowCount + 1, numRpc);
   }
 
   @Test

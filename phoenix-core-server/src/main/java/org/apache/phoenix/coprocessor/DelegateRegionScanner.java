@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import static org.apache.phoenix.util.ScanUtil.isDummy;
-
 import java.io.IOException;
 import java.util.List;
 import org.apache.hadoop.hbase.Cell;
@@ -27,7 +25,6 @@ import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
-import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
 
 public class DelegateRegionScanner implements RegionScanner {
 
@@ -103,17 +100,7 @@ public class DelegateRegionScanner implements RegionScanner {
   private boolean next(List<Cell> result, boolean raw, ScannerContext scannerContext)
     throws IOException {
     if (scannerContext != null) {
-      ScannerContext noLimitContext = ScannerContextUtil.copyNoLimitScanner(scannerContext);
-      boolean hasMore =
-        raw ? delegate.nextRaw(result, noLimitContext) : delegate.next(result, noLimitContext);
-      if (isDummy(result) || ScannerContextUtil.checkTimeLimit(noLimitContext)) {
-        // when a dummy row is returned by a lower layer or if the result is valid but the lower
-        // layer signals us to return immediately, we need to set returnImmediately
-        // on the ScannerContext to force HBase to return a response to the client
-        ScannerContextUtil.setReturnImmediately(scannerContext);
-      }
-      ScannerContextUtil.updateMetrics(noLimitContext, scannerContext);
-      return hasMore;
+      return raw ? delegate.nextRaw(result, scannerContext) : delegate.next(result, scannerContext);
     }
     return raw ? delegate.nextRaw(result) : delegate.next(result);
   }
