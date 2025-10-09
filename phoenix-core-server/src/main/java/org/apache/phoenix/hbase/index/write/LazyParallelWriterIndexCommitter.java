@@ -17,17 +17,31 @@
  */
 package org.apache.phoenix.hbase.index.write;
 
+import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
+import org.apache.phoenix.hbase.index.parallel.TaskBatch;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * Like the {@link ParallelWriterIndexCommitter}, but does not block
  */
 public class LazyParallelWriterIndexCommitter extends AbstractParallelWriterIndexCommitter {
 
-  // for testing
-  public LazyParallelWriterIndexCommitter(String hbaseVersion) {
-    super(hbaseVersion);
-  }
+  private static final Logger LOGGER =
+    LoggerFactory.getLogger(LazyParallelWriterIndexCommitter.class);
 
   public LazyParallelWriterIndexCommitter() {
     super();
   }
+
+  @Override
+  protected void submitTasks(TaskBatch<Void> tasks) throws SingleIndexWriteFailureException {
+    try {
+      pool.submitOnly(tasks);
+    } catch (Exception e) {
+      LOGGER.error("Error while submitting the task.", e);
+      propagateFailure(e.getCause());
+    }
+  }
+
 }
