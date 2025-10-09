@@ -134,8 +134,7 @@ public abstract class AbstractParallelWriterIndexCommitter implements IndexCommi
   /**
    * Adds parallel index write tasks to the provided task batch for execution across multiple index
    * tables. Each index table gets its own task that will be executed in parallel to optimize write
-   * performance. It is recommended that implementations of AbstractParallelWriterIndexCommitter
-   * class use this method rather than calling super.write() to use their own copy of tasks.
+   * performance.
    * @param toWrite           a multimap containing index table references as keys and their
    *                          corresponding mutations as values. Each table will get its own
    *                          parallel task.
