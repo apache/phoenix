@@ -112,8 +112,23 @@ public abstract class AbstractParallelWriterIndexCommitter implements IndexCommi
   }
 
   @Override
-  public abstract void write(Multimap<HTableInterfaceReference, Mutation> toWrite,
+  public void write(Multimap<HTableInterfaceReference, Mutation> toWrite,
     final boolean allowLocalUpdates, final int clientVersion)
+    throws SingleIndexWriteFailureException {
+    TaskBatch<Void> tasks = new TaskBatch<>(toWrite.asMap().size());
+    addTasks(toWrite, allowLocalUpdates, clientVersion, tasks);
+    submitTasks(tasks);
+  }
+
+  /**
+   * Submits the provided task batch for execution. This method defines the task submission strategy
+   * and must be implemented by concrete subclasses to specify whether tasks should be executed
+   * synchronously (blocking until completion) or asynchronously (fire-and-forget).
+   * @param tasks the batch of index write tasks to submit for execution
+   * @throws SingleIndexWriteFailureException if there is an error during task submission or
+   *                                          execution (implementation-dependent)
+   */
+  protected abstract void submitTasks(TaskBatch<Void> tasks)
     throws SingleIndexWriteFailureException;
 
   /**
@@ -132,7 +147,7 @@ public abstract class AbstractParallelWriterIndexCommitter implements IndexCommi
    *                          added. This batch needs to be submitted for parallel execution by the
    *                          caller.
    */
-  protected void addTasks(Multimap<HTableInterfaceReference, Mutation> toWrite,
+  private void addTasks(Multimap<HTableInterfaceReference, Mutation> toWrite,
     boolean allowLocalUpdates, int clientVersion, TaskBatch<Void> tasks) {
     /*
      * This bit here is a little odd, so let's explain what's going on. Basically, we want to do the

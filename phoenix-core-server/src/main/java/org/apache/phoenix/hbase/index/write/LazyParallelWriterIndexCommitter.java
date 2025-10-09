@@ -17,14 +17,10 @@
  */
 package org.apache.phoenix.hbase.index.write;
 
-import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.parallel.TaskBatch;
-import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 
 /**
  * Like the {@link ParallelWriterIndexCommitter}, but does not block
@@ -39,12 +35,7 @@ public class LazyParallelWriterIndexCommitter extends AbstractParallelWriterInde
   }
 
   @Override
-  public void write(Multimap<HTableInterfaceReference, Mutation> toWrite,
-    final boolean allowLocalUpdates, final int clientVersion)
-    throws SingleIndexWriteFailureException {
-
-    TaskBatch<Void> tasks = new TaskBatch<>(toWrite.asMap().size());
-    super.addTasks(toWrite, allowLocalUpdates, clientVersion, tasks);
+  protected void submitTasks(TaskBatch<Void> tasks) throws SingleIndexWriteFailureException {
     try {
       pool.submitOnly(tasks);
     } catch (Exception e) {
