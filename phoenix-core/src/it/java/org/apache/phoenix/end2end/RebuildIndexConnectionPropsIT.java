@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -51,7 +52,6 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class RebuildIndexConnectionPropsIT extends BaseTest {
     private static HBaseTestingUtility hbaseTestUtil;
@@ -61,7 +61,7 @@ public class RebuildIndexConnectionPropsIT extends BaseTest {
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             Map<String, String> serverProps = new HashMap<>();
             serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
             // need at least one retry otherwise test fails

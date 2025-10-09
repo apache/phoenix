@@ -53,7 +53,6 @@ import static org.junit.Assert.assertTrue;
 /**
  * Tests for the {@link IndexScrutinyTool}
  */
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public  class IndexScrutinyToolForTenantIT extends IndexScrutinyToolBaseIT {
     private Connection connGlobal = null;

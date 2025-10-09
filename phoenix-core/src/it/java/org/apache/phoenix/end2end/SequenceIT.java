@@ -63,7 +63,6 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class SequenceIT extends ParallelStatsDisabledIT {
     private static final String SELECT_NEXT_VALUE_SQL = "SELECT NEXT VALUE FOR %s";

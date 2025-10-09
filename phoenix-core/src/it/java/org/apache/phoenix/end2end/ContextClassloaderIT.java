@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_ZK;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
@@ -49,7 +50,6 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class ContextClassloaderIT  extends BaseTest {
 
@@ -59,7 +59,7 @@ public class ContextClassloaderIT  extends BaseTest {
 
     @BeforeClass
     public static synchronized void setUpBeforeClass() throws Exception {
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(ReadOnlyProps.EMPTY_PROPS, ReadOnlyProps.EMPTY_PROPS);
         } else {
             Configuration conf = HBaseConfiguration.create();
@@ -84,7 +84,7 @@ public class ContextClassloaderIT  extends BaseTest {
     }
 
     protected static String getUrl() {
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             return CLUSTERS.getJdbcHAUrlWithoutPrincipal()+";"+PHOENIX_TEST_DRIVER_URL_PARAM;
         }
         return "jdbc:phoenix:localhost:" + hbaseTestUtil.getZkCluster().getClientPort() + ";test=true";

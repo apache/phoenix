@@ -36,7 +36,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class UpsertWithSCNIT extends ParallelStatsDisabledIT {
 

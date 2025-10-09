@@ -36,7 +36,6 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class RowKeyBytesStringFunctionIT extends ParallelStatsDisabledIT {
 

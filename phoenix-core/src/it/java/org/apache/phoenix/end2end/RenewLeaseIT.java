@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -43,7 +44,6 @@ import org.junit.experimental.categories.Category;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
-//Failing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class RenewLeaseIT extends BaseTest {
     private static final long SCANNER_LEASE_TIMEOUT = 12000;
@@ -57,7 +57,7 @@ public class RenewLeaseIT extends BaseTest {
         Map<String,String> clientProps = Maps.newHashMapWithExpectedSize(1);
         // Must update config before starting server
         serverProps.put(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD, Long.toString(SCANNER_LEASE_TIMEOUT));
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));

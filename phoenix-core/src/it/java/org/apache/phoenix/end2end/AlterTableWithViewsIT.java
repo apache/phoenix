@@ -75,7 +75,6 @@ import org.junit.runners.Parameterized.Parameters;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-//Failing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
@@ -1191,9 +1190,9 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
                 fail("View index should have been dropped");
             } catch (Exception e) {
                 if(e instanceof SQLException && e.getCause() instanceof TableNotFoundException) {
-
+                    //expected exception
                 } else if(e instanceof TableNotFoundException) {
-
+                    //expected exception
                 }
             }
             

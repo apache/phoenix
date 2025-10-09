@@ -49,10 +49,10 @@ import java.sql.Statement;
 import java.util.Map;
 import java.util.Properties;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.fail;
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class ViewTTLNotEnabledIT extends ParallelStatsDisabledIT {
 
@@ -62,7 +62,7 @@ public class ViewTTLNotEnabledIT extends ParallelStatsDisabledIT {
         props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
         props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
         props.put(QueryServices.PHOENIX_VIEW_TTL_ENABLED, Boolean.toString(false));
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

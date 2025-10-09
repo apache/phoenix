@@ -31,7 +31,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import static org.apache.phoenix.util.TestUtil.ROW1;
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-//Passing with HA Connection
 public abstract class ArrayIT extends ParallelStatsDisabledIT {
 
     protected static String createTableWithArray(String url, byte[][] bs, Object object) throws SQLException {

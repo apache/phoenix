@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -52,7 +53,6 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class LocalIndexSplitMergeIT extends BaseTest {
 
@@ -64,7 +64,7 @@ public class LocalIndexSplitMergeIT extends BaseTest {
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
         clientProps.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         clientProps.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.TRUE.toString());
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),

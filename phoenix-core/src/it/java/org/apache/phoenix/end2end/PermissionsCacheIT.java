@@ -38,7 +38,6 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-//Passing with HA Connection - no changes needed
 @Category(NeedsOwnMiniClusterTest.class)
 public class PermissionsCacheIT extends BasePermissionsIT {
 

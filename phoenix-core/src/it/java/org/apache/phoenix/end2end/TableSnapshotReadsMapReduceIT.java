@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -82,7 +83,6 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class TableSnapshotReadsMapReduceIT extends BaseTest {
@@ -129,7 +129,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseTest {
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
       Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
-    if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+    if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
       setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
     } else {
       setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

@@ -43,7 +43,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 /**
  * Tests for the LPAD built-in function.
  */
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class StringIT extends ParallelStatsDisabledIT {
     

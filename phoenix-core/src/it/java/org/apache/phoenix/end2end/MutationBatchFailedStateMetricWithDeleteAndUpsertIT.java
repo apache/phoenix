@@ -44,7 +44,6 @@ import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class MutationBatchFailedStateMetricWithDeleteAndUpsertIT extends BaseMutationBatchFailedStateMetricIT {

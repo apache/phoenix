@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -43,7 +44,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-//Failing with HA Connection
 //FIXME this class has no @Category, and is never run by maven
 public class GlobalConnectionTenantTableIT extends BaseTest {
 
@@ -59,7 +59,7 @@ public class GlobalConnectionTenantTableIT extends BaseTest {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
@@ -185,13 +185,11 @@ public class GlobalConnectionTenantTableIT extends BaseTest {
     private static Connection getTenantConnection(String tenant) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenant);
-        System.out.println("Get url in getTenantConnection " + getUrl());
         return DriverManager.getConnection(getUrl(), props);
     }
 
     private static Connection getConnection() throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        System.out.println("Get url in getConnection " + getUrl());
         return DriverManager.getConnection(getUrl(), props);
     }
 

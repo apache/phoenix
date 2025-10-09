@@ -57,6 +57,7 @@ import java.sql.Timestamp;
 import java.util.Map;
 import java.util.Properties;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.UPSERT_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.A_VALUE;
@@ -74,7 +75,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegionMovesIT {
@@ -98,7 +98,7 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
         props.put(HConstants.HBASE_CLIENT_SCANNER_MAX_RESULT_SIZE_KEY, String.valueOf(1));
         props.put(QueryServices.PHOENIX_POST_DUMMY_PROCESS,
                 TestScanningResultPostDummyResultCaller.class.getName());
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

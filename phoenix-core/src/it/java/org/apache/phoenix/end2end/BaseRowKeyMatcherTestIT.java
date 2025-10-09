@@ -108,7 +108,6 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-//Failing with HA Connection
 public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BaseRowKeyMatcherTestIT.class);

@@ -49,6 +49,7 @@ import java.util.Random;
 import java.util.UUID;
 
 import static org.apache.hadoop.hbase.HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.query.BaseTest.generateUniqueName;
 import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
 import static org.apache.phoenix.query.BaseTest.setUpTestClusterForHA;
@@ -63,7 +64,6 @@ import static org.junit.Assert.fail;
 /**
  * This is a separate from @PartialResultDisabledIT because it requires server side configuration
  */
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class PartialResultServerConfigurationIT {
     private static HBaseTestingUtility hbaseTestUtil;
@@ -72,7 +72,7 @@ public class PartialResultServerConfigurationIT {
 
     @BeforeClass
     public static synchronized void setUp() throws Exception {
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
             //Enforce the limit of the result, so scans will stop between cells.
             props.put(HConstants.HBASE_CLIENT_SCANNER_MAX_RESULT_SIZE_KEY, "5");

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.BIND_PARAMETERS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLIENT_IP;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.EXCEPTION_TRACE;
@@ -70,7 +71,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-//Failing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class QueryLoggerIT extends BaseTest {
 
@@ -83,7 +83,7 @@ public class QueryLoggerIT extends BaseTest {
         props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
         // disable renewing leases as this will force spooling to happen.
         props.put(QueryServices.RENEW_LEASE_ENABLED, String.valueOf(false));
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

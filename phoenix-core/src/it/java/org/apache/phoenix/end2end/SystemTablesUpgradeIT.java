@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -52,7 +53,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 /**
  * Tests for upgrades of System tables.
  */
-//Passing with HA Connection
 //FIXME this class has no @Category, and will not be run by Maven
 public class SystemTablesUpgradeIT extends BaseTest {
     private static boolean reinitialize;
@@ -111,7 +111,7 @@ public class SystemTablesUpgradeIT extends BaseTest {
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newConcurrentMap();
         props.put(BaseTest.DRIVER_CLASS_NAME_ATTRIB, PhoenixUpgradeCountingDriver.class.getName());
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

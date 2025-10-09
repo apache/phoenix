@@ -24,7 +24,6 @@ import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-//Passing with HA Connection - No changes needed
 @Category(ParallelStatsDisabledTest.class)
 public class NotQueryWithLocalImmutableIndexesIT extends NotQueryIT {
 

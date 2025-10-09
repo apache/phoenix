@@ -57,6 +57,7 @@ import java.sql.Statement;
 import java.util.Map;
 import java.util.Properties;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.query.QueryServices.DISABLE_VIEW_SUBTREE_VALIDATION;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
@@ -64,7 +65,6 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
  * Tests that use UPDATE_CACHE_FREQUENCY with some of the disabled index states that require
  * clients to override UPDATE_CACHE_FREQUENCY and perform metadata calls to retrieve PTable.
  */
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class UCFWithDisabledIndexIT extends BaseTest {
 
@@ -80,7 +80,7 @@ public class UCFWithDisabledIndexIT extends BaseTest {
         props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
                 Long.toString(Long.MAX_VALUE));
         props.put(DISABLE_VIEW_SUBTREE_VALIDATION, "true");
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

@@ -29,7 +29,6 @@ import org.junit.experimental.categories.Category;
 /**
  * End to end tests for Hexadecimal and Binary literals
  */
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class BinaryStringLiteralIT extends ParallelStatsDisabledIT {
 

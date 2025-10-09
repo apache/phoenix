@@ -24,7 +24,6 @@ import java.sql.ResultSet;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-//Passing with HA Connection - No changes needed
 @Category(ParallelStatsDisabledTest.class)
 public class OrderByIT extends BaseOrderByIT {
 

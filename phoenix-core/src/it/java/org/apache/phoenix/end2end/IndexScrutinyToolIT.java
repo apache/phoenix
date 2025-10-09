@@ -77,7 +77,6 @@ import org.slf4j.LoggerFactory;
 /**
  * Tests for the {@link IndexScrutinyTool}
  */
-//Failing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {

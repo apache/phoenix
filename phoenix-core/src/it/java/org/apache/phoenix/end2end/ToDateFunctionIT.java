@@ -32,7 +32,6 @@ import java.util.Properties;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.*;
 
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class ToDateFunctionIT extends ParallelStatsDisabledIT {
 

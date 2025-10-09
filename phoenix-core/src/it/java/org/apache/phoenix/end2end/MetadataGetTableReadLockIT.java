@@ -39,11 +39,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 /**
  * Class which tests whether non-exclusive locking on metadata read path (getTable) works as expected.
  */
-//Failing with HA Conneection
 @Category(NeedsOwnMiniClusterTest.class)
 public class MetadataGetTableReadLockIT extends BaseTest {
 
@@ -52,7 +52,7 @@ public class MetadataGetTableReadLockIT extends BaseTest {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         // Disable system task handling
         props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props), new ReadOnlyProps(props));
         } else {
             setUpTestDriver(new ReadOnlyProps(props));

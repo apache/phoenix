@@ -55,7 +55,6 @@ import static org.apache.phoenix.mapreduce.index.PhoenixScrutinyJobCounters.VALI
 import static org.apache.phoenix.util.MetaDataUtil.VIEW_INDEX_TABLE_PREFIX;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.*;
-//Passing with HA Connection - No changes needed
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
 public class LogicalTableNameIT extends LogicalTableNameBaseIT {

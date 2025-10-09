@@ -62,7 +62,6 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.mockito.AdditionalMatchers;
 import org.mockito.Mockito;
-//Failing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
 

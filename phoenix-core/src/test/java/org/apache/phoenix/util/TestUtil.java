@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.query.BaseTest.generateUniqueName;
@@ -314,7 +315,7 @@ public class TestUtil {
     public static final String BINARY_NAME = "BinaryTable";
     private static Properties props_for_HA;
     static {
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             props_for_HA = HighAvailabilityTestingUtility.getHATestProperties();
             props_for_HA.setProperty(PHOENIX_HA_GROUP_ATTR, "HA_GROUP_"+generateUniqueName());
         }
@@ -1613,7 +1614,7 @@ public class TestUtil {
 
     private static void executeHBaseTableRegionOperation(Connection conn, String tableName,
                                                      TableOperation operation) throws Exception {
-        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        ConnectionQueryServices services = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
         Configuration configuration = services.getConfiguration();
         org.apache.hadoop.hbase.client.Connection hbaseConn
                 = ConnectionFactory.createConnection(configuration);
@@ -1637,7 +1638,7 @@ public class TestUtil {
 
     public static List<HRegionLocation> getAllTableRegions(Connection conn, String tableName)
             throws Exception {
-        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        ConnectionQueryServices services = conn.unwrap(PhoenixMonitoredConnection.class).getQueryServices();
         Configuration configuration = services.getConfiguration();
         RegionLocator regionLocator;
         org.apache.hadoop.hbase.client.Connection hbaseConn

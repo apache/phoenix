@@ -67,7 +67,6 @@ import org.junit.experimental.categories.Category;
  * 
  * @since 0.1
  */
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
     

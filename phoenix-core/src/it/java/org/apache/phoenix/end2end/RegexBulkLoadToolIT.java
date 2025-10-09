@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
@@ -44,7 +45,6 @@ import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
 
@@ -53,7 +53,7 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(ReadOnlyProps.EMPTY_PROPS,ReadOnlyProps.EMPTY_PROPS);
         } else {
             setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
@@ -218,7 +218,7 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
         stmt.close();
     }
 
-    //    @Test - ignoring local index test for HA Connection
+    @Test
     public void testImportWithLocalIndex() throws Exception {
 
         Statement stmt = conn.createStatement();
@@ -261,7 +261,7 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
         testImportOneIndexTable("TABLE4", false);
     }
 
-//    @Test - ignoring local index test for HA Connection
+    @Test
     public void testImportOneLocalIndexTable() throws Exception {
         testImportOneIndexTable("TABLE5", true);
     }

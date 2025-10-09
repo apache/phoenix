@@ -53,7 +53,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.rules.TemporaryFolder;
-//Passing with HA Connection - No changes needed
 @Category(ParallelStatsDisabledTest.class)
 public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
 
@@ -113,7 +112,6 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
     @Test
     public void testCSVCommonsUpsert() throws Exception {
         CSVParser parser = null;
-        System.out.println("get url " + getUrl());
         PhoenixMonitoredConnection conn = null;
         try {
             String stockTableName = generateUniqueName();

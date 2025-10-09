@@ -28,7 +28,6 @@ import java.sql.Statement;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class ImmutableTableIT extends ParallelStatsDisabledIT {
 

@@ -50,6 +50,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.assertRawCellCount;
 import static org.apache.phoenix.util.TestUtil.assertRawRowCount;
 import static org.apache.phoenix.util.TestUtil.assertRowExistsAtSCN;
@@ -57,7 +58,6 @@ import static org.apache.phoenix.util.TestUtil.assertRowHasExpectedValueAtSCN;
 import static org.apache.phoenix.util.TestUtil.assertTableHasVersions;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertFalse;
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class MaxLookbackIT extends BaseTest {
     private static final int MAX_LOOKBACK_AGE = 15;
@@ -75,7 +75,7 @@ public class MaxLookbackIT extends BaseTest {
         props.put(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(MAX_LOOKBACK_AGE));
         props.put(QueryServices.PHOENIX_COMPACTION_ENABLED, Boolean.toString(false));
         props.put("hbase.procedure.remote.dispatcher.delay.msec", "0");
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

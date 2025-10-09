@@ -32,7 +32,6 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertEquals;
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class IndexWithDefaultValueIT extends ParallelStatsDisabledIT {
 

@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -43,7 +44,6 @@ import static org.junit.Assert.assertTrue;
  * Note that this class is never run directly by Junit/Maven, as it has no @Tests, but
  * cannot be made abstract
  */
-//2 passing 2 failing
 public class IndexScrutinyToolBaseIT extends BaseTest {
     protected String outputDir;
 
@@ -61,7 +61,7 @@ public class IndexScrutinyToolBaseIT extends BaseTest {
         if (!previousIndexRegionObserverEnabled.equals(indexRegionObserverEnabled)) {
            driver = null;
         }
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));

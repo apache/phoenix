@@ -32,7 +32,6 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 

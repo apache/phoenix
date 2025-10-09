@@ -35,7 +35,6 @@ import org.apache.phoenix.util.QueryUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-//Passing with HA Connection - No changes needed
 @Category(ParallelStatsDisabledTest.class)
 public class DistinctPrefixFilterIT extends ParallelStatsDisabledIT {
     private static final String PREFIX = "SERVER DISTINCT PREFIX";

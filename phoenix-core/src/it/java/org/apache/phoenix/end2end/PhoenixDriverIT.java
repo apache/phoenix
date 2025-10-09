@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
@@ -65,7 +66,6 @@ import org.apache.phoenix.util.UpgradeUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-//Failing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class PhoenixDriverIT extends BaseTest {
     
@@ -76,11 +76,12 @@ public class PhoenixDriverIT extends BaseTest {
     
     @BeforeClass
     public static synchronized void setUp() throws Exception {
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
             url = CLUSTERS.getJdbcHAUrlWithoutPrincipal()+";"+PHOENIX_TEST_DRIVER_URL_PARAM;
             conf = getConfiguration();
+            conf.set(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
 
         } else {
             conf = HBaseConfiguration.create();

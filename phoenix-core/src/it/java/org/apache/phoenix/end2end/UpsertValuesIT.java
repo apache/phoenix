@@ -66,7 +66,6 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.function.ThrowingRunnable;
 
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class UpsertValuesIT extends ParallelStatsDisabledIT {
     @Test

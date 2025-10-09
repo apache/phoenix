@@ -41,7 +41,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 //FIXME this test is never run by maven, as it has no @Category
-//Passing with HA Connection - No changes needed
 public class NonParameterizedIndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
 
     @Test

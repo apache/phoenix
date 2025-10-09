@@ -37,7 +37,7 @@ import org.junit.experimental.categories.Category;
 /**
  * End to end tests for {@link AbsFunction}
  */
-//Passing with HA Connection
+
 @Category(ParallelStatsDisabledTest.class)
 public class AbsFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 

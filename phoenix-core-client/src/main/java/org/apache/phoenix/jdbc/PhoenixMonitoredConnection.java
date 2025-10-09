@@ -20,6 +20,7 @@ package org.apache.phoenix.jdbc;
 
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -88,5 +89,6 @@ public interface PhoenixMonitoredConnection extends Connection {
     boolean isRunningUpgrade() throws SQLException;
     String getURL() throws SQLException;
     LogLevel getLogLevel() throws SQLException;
+    KeyValueBuilder getKeyValueBuilder() throws SQLException;
 
 }

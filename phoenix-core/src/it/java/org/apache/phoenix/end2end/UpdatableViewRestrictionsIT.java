@@ -42,6 +42,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import static org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost.PHOENIX_META_DATA_COPROCESSOR_CONF_KEY;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -51,7 +52,6 @@ import static org.junit.Assert.fail;
 /**
  * Tests for restrictions associated with updatable view.
  */
-//Passing for HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(UpdatableViewRestrictionsIT.class);
@@ -66,7 +66,7 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
                 ViewConcurrencyAndFailureIT.TestMetaDataRegionObserver.class
                         .getName());
         serverProps.put("hbase.coprocessor.abortonerror", "false");
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()),
                     ReadOnlyProps.EMPTY_PROPS);
         } else {

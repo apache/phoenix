@@ -27,13 +27,14 @@ import org.junit.experimental.categories.Category;
 
 import java.util.Map;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
+
 /**
  * Tests that use UPDATE_CACHE_FREQUENCY with some of the disabled index states that require
  * clients to override UPDATE_CACHE_FREQUENCY and perform metadata calls to retrieve PTable.
  * The cluster is brought up with required configs at client and server side to enable
  * metadata caching redesign.
  */
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class UCFWithDisabledIndexWithDDLValidationIT extends UCFWithDisabledIndexIT {
 
@@ -46,7 +47,7 @@ public class UCFWithDisabledIndexWithDDLValidationIT extends UCFWithDisabledInde
         props.put(QueryServices.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED, Boolean.toString(true));
         props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
                 Long.toString(Long.MAX_VALUE));
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

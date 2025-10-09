@@ -45,10 +45,10 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static org.apache.phoenix.end2end.IndexToolIT.verifyIndexTable;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertTrue;
 
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(RunUntilFailure.class)
 public class ConcurrentUpsertsWithoutIndexedColsIT
@@ -66,7 +66,7 @@ public class ConcurrentUpsertsWithoutIndexedColsIT
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(PROPS.entrySet().iterator()),new ReadOnlyProps(PROPS.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(PROPS.entrySet().iterator()));

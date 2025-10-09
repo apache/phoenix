@@ -55,6 +55,7 @@ import java.util.concurrent.TimeoutException;
 
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlan;
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlanWithLimit;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PAGED_ROWS_COUNTER;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
@@ -65,7 +66,6 @@ import static org.junit.Assert.assertTrue;
 /**
  * Uncovered index tests that include some region moves while performing rs#next.
  */
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class UncoveredIndexWithRegionMovesIT extends ParallelStatsDisabledIT {
 
@@ -106,7 +106,7 @@ public class UncoveredIndexWithRegionMovesIT extends ParallelStatsDisabledIT {
         props.put(HConstants.HBASE_CLIENT_SCANNER_MAX_RESULT_SIZE_KEY, String.valueOf(1));
         props.put(QueryServices.PHOENIX_POST_DUMMY_PROCESS,
                 TestScanningResultPostDummyResultCaller.class.getName());
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

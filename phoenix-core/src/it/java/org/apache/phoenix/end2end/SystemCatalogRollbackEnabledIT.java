@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -56,7 +57,6 @@ import org.junit.experimental.categories.Category;
  * is set to true and SYSTEM.CATALOG should not be allowed to split.
  * Note that this config must be set on both the client and server
  */
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class SystemCatalogRollbackEnabledIT extends BaseTest {
 
@@ -69,7 +69,7 @@ public class SystemCatalogRollbackEnabledIT extends BaseTest {
                 "true");
         clientProps.put(QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK,
                 "true");
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()),new ReadOnlyProps(clientProps.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),

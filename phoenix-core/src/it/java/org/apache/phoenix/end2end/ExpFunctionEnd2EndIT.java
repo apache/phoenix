@@ -37,7 +37,6 @@ import org.junit.experimental.categories.Category;
 /**
  * End to end tests for {@link ExpFunction}
  */
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class ExpFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 

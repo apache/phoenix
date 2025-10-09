@@ -47,7 +47,6 @@ import static org.junit.Assert.assertTrue;
  * A set of lightweight ITs should run every build, and another fully covered ITs build for daily or
  * weekly.
  */
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class RowValueConstructorOffsetOptionalIT extends ParallelStatsDisabledIT {
     private final long TS = System.currentTimeMillis();

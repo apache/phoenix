@@ -76,7 +76,6 @@ import org.slf4j.LoggerFactory;
  * 2. Behavior under different CF's combinations.
  * 3. Behavior under different COLUMN ENCODINGS
  */
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class EmptyColumnIT extends ParallelStatsDisabledIT {
 

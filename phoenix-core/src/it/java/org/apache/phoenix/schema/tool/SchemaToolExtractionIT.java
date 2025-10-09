@@ -50,15 +50,15 @@ import java.util.Properties;
 import static junit.framework.TestCase.assertEquals;
 import static junit.framework.TestCase.assertTrue;
 import static junit.framework.TestCase.fail;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-//Passing with HA Connection
 @Category(ParallelStatsEnabledTest.class)
 public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
 
     @BeforeClass
     public static synchronized void setup() throws Exception {
         Map<String, String> props = Collections.emptyMap();
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

@@ -47,7 +47,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-//Passing with HA Connection
+
 @Category(ParallelStatsEnabledTest.class)
 public class StatisticsCollectionRunTrackerIT extends ParallelStatsEnabledIT {
     private static final StatisticsCollectionRunTracker tracker = StatisticsCollectionRunTracker

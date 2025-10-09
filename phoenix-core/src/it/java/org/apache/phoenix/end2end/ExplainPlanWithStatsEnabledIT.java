@@ -60,7 +60,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
  * This class has tests for asserting the bytes and rows information exposed in the explain plan
  * when statistics are enabled.
  */
-//Passing with HA Connection
 @Category(ParallelStatsEnabledTest.class)
 public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
 

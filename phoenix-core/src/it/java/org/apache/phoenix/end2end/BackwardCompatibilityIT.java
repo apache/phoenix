@@ -44,6 +44,7 @@ import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.executeQu
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.executeQueryWithClientVersion;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.UpgradeProps.NONE;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.UpgradeProps.SET_MAX_LOOK_BACK_AGE;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.query.BaseTest.getConfiguration;
 import static org.apache.phoenix.query.BaseTest.getUtility;
 import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
@@ -96,7 +97,6 @@ import org.slf4j.LoggerFactory;
  * against the current server version. It runs SQL queries with given 
  * client versions and compares the output against gold files
  */
-//Failing with HA Connection
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
 public class BackwardCompatibilityIT {
@@ -123,7 +123,7 @@ public class BackwardCompatibilityIT {
     @Before
     public synchronized void doSetup() throws Exception {
         tmpDir = System.getProperty("java.io.tmpdir");
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
             props.put(HConstants.ZOOKEEPER_ZNODE_PARENT, "/hbase-test");
             props.put(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, ZKConnectionInfo.ZK_REGISTRY_NAME);

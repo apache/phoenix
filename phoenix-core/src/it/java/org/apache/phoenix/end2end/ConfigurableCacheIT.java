@@ -32,7 +32,6 @@ import org.junit.experimental.categories.Category;
  * use a class ITGuidePostsCacheFactory which is for testing only that keeps track of the number
  * of cache instances generated.
  */
-//Passing with HA Connection
 @Category(ParallelStatsEnabledTest.class)
 public class ConfigurableCacheIT extends ParallelStatsEnabledIT {
 

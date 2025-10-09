@@ -31,11 +31,12 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import org.junit.BeforeClass;
 import org.junit.runners.Parameterized;
 
-//Passing with HA Connection
 public class BaseMutationBatchFailedStateMetricIT extends ParallelStatsDisabledIT {
     String create_table =
             "CREATE TABLE IF NOT EXISTS %s(ID VARCHAR NOT NULL PRIMARY KEY, VAL1 INTEGER, VAL2 INTEGER)";
@@ -68,7 +69,7 @@ public class BaseMutationBatchFailedStateMetricIT extends ParallelStatsDisabledI
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
         clientProps.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
         clientProps.put(QueryServices.TRANSACTIONS_ENABLED, "true");
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()),
                     new ReadOnlyProps(clientProps.entrySet().iterator()));
         } else {

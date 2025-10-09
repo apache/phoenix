@@ -38,7 +38,6 @@ import org.apache.phoenix.util.QueryBuilder;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class AggregateIT extends BaseAggregateIT {
 

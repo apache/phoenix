@@ -32,7 +32,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class UpperLowerFunctionIT extends ParallelStatsDisabledIT {
     private static String tableName = generateUniqueName();

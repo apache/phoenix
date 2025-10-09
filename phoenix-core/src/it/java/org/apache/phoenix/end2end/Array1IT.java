@@ -42,7 +42,6 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Floats;
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class Array1IT extends ArrayIT {
     private void assertArrayGetString(ResultSet rs, int arrayIndex, Array expectedArray, String expectedString)

@@ -52,7 +52,6 @@ import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Ordering;
 
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class ProductMetricsIT extends ParallelStatsDisabledIT {
     private static final String PRODUCT_METRICS_NAME = "PRODUCT_METRICS";

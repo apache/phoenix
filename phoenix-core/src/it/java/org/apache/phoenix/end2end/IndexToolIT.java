@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.mapreduce.PhoenixJobCounters.INPUT_RECORDS;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT;
@@ -117,7 +118,6 @@ import org.junit.runners.Parameterized.BeforeParam;
 import org.junit.runners.Parameterized.Parameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-//Passing with HA Connection - No changes needed
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class IndexToolIT extends BaseTest {
@@ -199,7 +199,7 @@ public class IndexToolIT extends BaseTest {
             clientProps.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.TRUE.toString());
             clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED,
                 Boolean.toString(namespaceMapped));
-            if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
                 setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()),
                         new ReadOnlyProps(clientProps.entrySet().iterator()));
             } else {

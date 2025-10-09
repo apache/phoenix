@@ -34,11 +34,11 @@ import java.util.Map;
 import java.util.Properties;
 
 import static org.apache.hadoop.hbase.coprocessor.CoprocessorHost.REGIONSERVER_COPROCESSOR_CONF_KEY;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_METADATA_CACHE_INVALIDATION_TIMEOUT_MS;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.fail;
-//Passing with HA Connection
 @Category({NeedsOwnMiniClusterTest.class })
 public class InvalidateMetadataCacheIT extends BaseTest {
     private static final Logger LOGGER = LoggerFactory.getLogger(InvalidateMetadataCacheIT.class);
@@ -54,7 +54,7 @@ public class InvalidateMetadataCacheIT extends BaseTest {
                 FailingPhoenixRegionServerEndpoint.class.getName());
         // Setting phoenix metadata cache invalidation timeout to a small number to fail fast.
         props.put(PHOENIX_METADATA_CACHE_INVALIDATION_TIMEOUT_MS, String.valueOf(2000));
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

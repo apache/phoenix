@@ -44,7 +44,6 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Doubles;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Floats;
-//Passing with HA Connection - No changes needed
 @Category(ParallelStatsDisabledTest.class)
 public class NumericArithmeticIT extends ParallelStatsDisabledIT {
     private String tableName;

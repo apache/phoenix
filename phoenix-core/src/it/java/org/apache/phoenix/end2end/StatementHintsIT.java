@@ -37,7 +37,6 @@ import org.junit.experimental.categories.Category;
  * End-to-End tests on various statement hints.
  */
 
-//Passing with HA Connection - No changes needed
 @Category(ParallelStatsDisabledTest.class)
 public class StatementHintsIT extends ParallelStatsDisabledIT {
 

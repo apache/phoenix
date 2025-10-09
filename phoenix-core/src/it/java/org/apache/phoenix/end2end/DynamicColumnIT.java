@@ -57,7 +57,6 @@ import org.junit.experimental.categories.Category;
  * @since 1.3
  */
 
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class DynamicColumnIT extends ParallelStatsDisabledIT {
     private static final byte[] FAMILY_NAME_A = Bytes.toBytes(SchemaUtil.normalizeIdentifier("A"));

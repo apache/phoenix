@@ -30,7 +30,6 @@ import java.sql.ResultSet;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class InstrFunctionIT extends ParallelStatsDisabledIT {
     private void initTable(Connection conn, String tableName, String sortOrder, String s, String subStr) throws Exception {

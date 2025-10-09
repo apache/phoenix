@@ -30,7 +30,6 @@ import java.sql.ResultSet;
 import static junit.framework.TestCase.assertEquals;
 import static junit.framework.TestCase.assertTrue;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class MergeViewIndexIdSequencesToolIT extends ParallelStatsDisabledIT {
     private final String CLEAN_QUERY = "DELETE FROM SYSTEM.\"SEQUENCE\"";

@@ -56,6 +56,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PAGED_ROWS_COUNTER;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
@@ -66,7 +67,6 @@ import static org.junit.Assert.assertTrue;
 /**
  * ServerPagingIT tests that include some region moves while performing rs#next.
  */
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
 
@@ -131,7 +131,7 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
                 TestScanningResultPostDummyResultCaller.class.getName());
         props.put(QueryServices.PHOENIX_POST_VALID_PROCESS,
                 TestScanningResultPostValidResultCaller.class.getName());
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

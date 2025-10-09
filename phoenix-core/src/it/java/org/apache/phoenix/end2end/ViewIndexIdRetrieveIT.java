@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
@@ -51,7 +52,6 @@ import org.junit.experimental.categories.Category;
     a coproc that checks the client request version and send it back to the client.
     For more information, please see PHOENIX-3547, PHOENIX-5712
  */
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class ViewIndexIdRetrieveIT extends BaseTest {
     private final String BASE_TABLE_DDL = "CREATE TABLE %s (TENANT_ID CHAR(15) NOT NULL, " +
@@ -68,7 +68,7 @@ public class ViewIndexIdRetrieveIT extends BaseTest {
     @BeforeClass
     public static synchronized void setUp() throws Exception {
         Map<String, String> props = new HashMap<>();
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

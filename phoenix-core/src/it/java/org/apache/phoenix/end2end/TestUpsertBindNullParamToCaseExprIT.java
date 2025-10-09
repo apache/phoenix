@@ -35,18 +35,18 @@ import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Properties;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 @Category(ParallelStatsDisabledTest.class)
-//Passing with HA Connection
 public class TestUpsertBindNullParamToCaseExprIT extends BaseTest {
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(new HashMap<>()), new ReadOnlyProps(new HashMap<>()));
         } else {
             setUpTestDriver(new ReadOnlyProps(new HashMap<>()));

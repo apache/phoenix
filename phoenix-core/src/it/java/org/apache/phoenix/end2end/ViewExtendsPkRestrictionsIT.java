@@ -43,7 +43,6 @@ import static org.junit.Assert.fail;
 /**
  * Tests for restrictions associated with view extending primary key of its parent.
  */
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
 

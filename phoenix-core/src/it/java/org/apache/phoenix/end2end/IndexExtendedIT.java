@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.checkIndexState;
 import static org.apache.phoenix.util.TestUtil.getRowCount;
@@ -65,7 +66,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 /**
  * Tests for the {@link IndexTool}
  */
-//Passing with HA Connection
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
 public class IndexExtendedIT extends BaseTest {
@@ -109,7 +109,7 @@ public class IndexExtendedIT extends BaseTest {
         clientProps.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.TRUE.toString());
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet()
                 .iterator()));
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet()
                     .iterator()));
         } else {

@@ -64,6 +64,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHANGE_DETECTION_ENABLED;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
@@ -74,7 +75,6 @@ import static org.junit.Assert.fail;
 
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
-//Passing with HA Connection
 public class WALAnnotationIT extends BaseTest {
     private final boolean isImmutable;
     private final boolean isMultiTenant;
@@ -98,7 +98,7 @@ public class WALAnnotationIT extends BaseTest {
             AnnotatedWALObserver.class.getName());
         props.put(IndexRegionObserver.PHOENIX_APPEND_METADATA_TO_WAL, "true");
         props.put(QueryServices.ENABLE_SERVER_UPSERT_SELECT, "true");
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

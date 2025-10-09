@@ -54,7 +54,6 @@ import org.apache.phoenix.thirdparty.com.google.common.primitives.Floats;
  * End to end tests for {@link RoundFunction}, {@link FloorFunction}, {@link CeilFunction} 
  *
  */
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
     private static final long millisPart = 660;

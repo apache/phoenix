@@ -43,9 +43,9 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.UpgradeUtil.UPSERT_UPDATE_CACHE_FREQUENCY;
 import static org.junit.Assert.assertEquals;
-//Failing with HA Connection
 //FIXME this class no @Category, and will not be run by maven
 public class SyncUpdateCacheFreqIT extends BaseTest {
 
@@ -81,7 +81,7 @@ public class SyncUpdateCacheFreqIT extends BaseTest {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

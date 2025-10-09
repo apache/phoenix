@@ -36,7 +36,6 @@ import org.junit.experimental.categories.Category;
 /**
  * End to end tests for {@link OctetLengthFunction}
  */
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class OctetLengthFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 

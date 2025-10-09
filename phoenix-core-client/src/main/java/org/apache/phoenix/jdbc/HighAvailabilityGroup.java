@@ -124,7 +124,7 @@ public class HighAvailabilityGroup {
     public static final String PHOENIX_HA_TRANSITION_TIMEOUT_MS_KEY =
             PHOENIX_HA_ATTR_PREFIX + "transition.timeout.ms";
     public static final long PHOENIX_HA_TRANSITION_TIMEOUT_MS_DEFAULT = 5 * 60 * 1000; // 5 mins
-
+    public static final String HA_GROUP_PROFILE = "phoenix.ha.profile.active";
     static final Logger LOG = LoggerFactory.getLogger(HighAvailabilityGroup.class);
 
     /**

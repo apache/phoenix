@@ -40,7 +40,6 @@ import org.junit.experimental.categories.Category;
  * {@link org.apache.phoenix.expression.function.SinFunction}
  * {@link org.apache.phoenix.expression.function.TanFunction}
  */
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class MathTrigFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 

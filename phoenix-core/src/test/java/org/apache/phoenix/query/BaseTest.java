@@ -19,6 +19,7 @@ package org.apache.phoenix.query;
 
 import static org.apache.hadoop.hbase.coprocessor.CoprocessorHost.REGIONSERVER_COPROCESSOR_CONF_KEY;
 import static org.apache.phoenix.hbase.index.write.ParallelWriterIndexCommitter.NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
@@ -447,7 +448,7 @@ public abstract class BaseTest {
 
     @AfterClass
     public static void tearDownForHA() throws Exception {
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             try {
             DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
             CLUSTERS.close();
@@ -465,7 +466,7 @@ public abstract class BaseTest {
         if (!clusterInitialized) {
             throw new IllegalStateException("Cluster must be initialized before attempting to get the URL");
         }
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             url = CLUSTERS.getJdbcHAUrlWithoutPrincipal()+";"+PHOENIX_TEST_DRIVER_URL_PARAM;
         }
         return url;
@@ -476,7 +477,7 @@ public abstract class BaseTest {
             throw new IllegalStateException("Cluster must be initialized before attempting to get the URL");
         }
         Optional<String> url;
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             url = haGroup.getRoleRecord().getActiveUrl();
             if (url.isPresent()) {
                 return url.get() + ";" + PHOENIX_TEST_DRIVER_URL_PARAM;
@@ -491,7 +492,7 @@ public abstract class BaseTest {
         if (!clusterInitialized) {
             throw new IllegalStateException("Cluster must be initialized before attempting to get the URL");
         }
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             return CLUSTERS.getJdbcHAUrl(principal)+";"+PHOENIX_TEST_DRIVER_URL_PARAM;
         }
         return getLocalClusterUrl(utility, principal);
@@ -1877,15 +1878,14 @@ public abstract class BaseTest {
     }
     
     public static HBaseTestingUtility getUtility() {
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             return CLUSTERS.getHBaseCluster1();
         }
         return utility;
     }
 
     public static Configuration getConfiguration() {
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
-            System.out.println("inside ha enabled config");
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             config = CLUSTERS.getHBaseCluster1().getConfiguration();
         } else {
             config = HBaseConfiguration.create();

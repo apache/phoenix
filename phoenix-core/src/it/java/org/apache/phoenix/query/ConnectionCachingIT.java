@@ -44,7 +44,6 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-//Passing with HA Connection
 @Category(ParallelStatsEnabledTest.class)
 @RunWith(Parameterized.class)
 public class ConnectionCachingIT extends ParallelStatsEnabledIT {

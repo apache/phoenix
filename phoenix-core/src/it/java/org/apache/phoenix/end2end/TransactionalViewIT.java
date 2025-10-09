@@ -39,7 +39,6 @@ import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-//Passing with HA Connection
 @Category(ParallelStatsEnabledTest.class)
 @RunWith(Parameterized.class)
 public class TransactionalViewIT extends ParallelStatsEnabledIT {

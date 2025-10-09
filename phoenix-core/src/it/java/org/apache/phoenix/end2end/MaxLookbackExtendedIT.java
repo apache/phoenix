@@ -58,6 +58,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Properties;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.assertRawCellCount;
 import static org.apache.phoenix.util.TestUtil.assertRawRowCount;
 import static org.apache.phoenix.util.TestUtil.assertRowExistsAtSCN;
@@ -68,7 +69,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class MaxLookbackExtendedIT extends BaseTest {
@@ -91,7 +91,7 @@ public class MaxLookbackExtendedIT extends BaseTest {
         props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(MAX_LOOKBACK_AGE));
         props.put("hbase.procedure.remote.dispatcher.delay.msec", "0");
         props.put(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, "0");
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

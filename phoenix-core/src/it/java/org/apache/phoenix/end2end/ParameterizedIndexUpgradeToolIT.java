@@ -69,12 +69,12 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.mapreduce.index.IndexUpgradeTool.ROLLBACK_OP;
 import static org.apache.phoenix.mapreduce.index.IndexUpgradeTool.UPGRADE_OP;
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.mockito.Mockito.times;
-//Failing with HA Connection
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
 public class ParameterizedIndexUpgradeToolIT extends BaseTest {
@@ -131,7 +131,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
 
         setClusterProperties();
 
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()),
                     new ReadOnlyProps(clientProps.entrySet().iterator()));
         } else {

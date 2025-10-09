@@ -59,7 +59,6 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class ColumnProjectionOptimizationIT extends ParallelStatsDisabledIT {
 

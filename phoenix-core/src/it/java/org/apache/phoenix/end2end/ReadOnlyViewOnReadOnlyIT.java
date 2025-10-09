@@ -32,7 +32,6 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class ReadOnlyViewOnReadOnlyIT extends BaseTenantSpecificViewIndexIT {
     private static final long DEFAULT_TTL_FOR_TEST = 86400;

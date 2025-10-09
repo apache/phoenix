@@ -455,7 +455,7 @@ public class PhoenixRuntime {
      * @throws SQLException
      */
     public static Iterator<Pair<byte[],List<Cell>>> getUncommittedDataIterator(Connection conn, boolean includeMutableIndexes) throws SQLException {
-        final PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        final PhoenixMonitoredConnection pconn = conn.unwrap(PhoenixMonitoredConnection.class);
         final Iterator<Pair<byte[],List<Mutation>>> iterator = pconn.getMutationState().toMutations(includeMutableIndexes);
         return new Iterator<Pair<byte[],List<Cell>>>() {
 
@@ -475,7 +475,11 @@ public class PhoenixRuntime {
                         }
                     }
                 }
-                Collections.sort(keyValues, pconn.getKeyValueBuilder().getKeyValueComparator());
+                try {
+                    Collections.sort(keyValues, pconn.getKeyValueBuilder().getKeyValueComparator());
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
                 return new Pair<byte[], List<Cell>>(pair.getFirst(),keyValues);
             }
 

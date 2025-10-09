@@ -58,7 +58,6 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-//Passing with HA Connection
 public class FlappingLocalIndexIT extends BaseLocalIndexIT {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(FlappingLocalIndexIT.class);

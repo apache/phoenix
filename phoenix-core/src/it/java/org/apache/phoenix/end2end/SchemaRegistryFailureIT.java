@@ -31,6 +31,8 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -44,7 +46,6 @@ import java.sql.SQLException;
 import java.util.Map;
 
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY;
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class SchemaRegistryFailureIT extends ParallelStatsDisabledIT{
 
@@ -54,7 +55,7 @@ public class SchemaRegistryFailureIT extends ParallelStatsDisabledIT{
         props.put(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
         props.put(SchemaRegistryRepository.SCHEMA_REGISTRY_IMPL_KEY,
             ExplodingSchemaRegistryRepository.class.getName());
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

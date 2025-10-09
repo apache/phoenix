@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Lists
         .newArrayListWithExpectedSize;
 import static org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost
@@ -92,7 +93,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 /**
  * Basic test suite for views
  */
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class ViewIT extends SplitSystemCatalogIT {
@@ -138,7 +138,7 @@ public class ViewIT extends SplitSystemCatalogIT {
                     .getName());
         serverProps.put("hbase.coprocessor.abortonerror", "false");
         serverProps.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()),
                     ReadOnlyProps.EMPTY_PROPS);
         } else {

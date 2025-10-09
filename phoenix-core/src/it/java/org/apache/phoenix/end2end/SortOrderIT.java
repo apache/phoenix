@@ -57,7 +57,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
  * @since 1.2
  */
 
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class SortOrderIT extends ParallelStatsDisabledIT {
     protected String baseTableName;

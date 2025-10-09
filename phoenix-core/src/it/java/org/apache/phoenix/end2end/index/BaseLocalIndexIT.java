@@ -38,6 +38,7 @@ import org.junit.runners.Parameterized.Parameters;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 @RunWith(Parameterized.class)
 public abstract class BaseLocalIndexIT extends BaseTest {
@@ -64,7 +65,7 @@ public abstract class BaseLocalIndexIT extends BaseTest {
         clientProps.put(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB, "120000");
         clientProps.put(QueryServices.MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN, "2");
 
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));

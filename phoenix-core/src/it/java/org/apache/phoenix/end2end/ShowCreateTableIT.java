@@ -32,7 +32,6 @@ import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertTrue;
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class ShowCreateTableIT extends ParallelStatsDisabledIT {
     @Test

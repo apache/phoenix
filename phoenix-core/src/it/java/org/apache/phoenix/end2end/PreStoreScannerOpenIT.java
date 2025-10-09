@@ -51,8 +51,8 @@ import net.bytebuddy.asm.Advice;
 import net.bytebuddy.dynamic.loading.ClassReloadingStrategy;
 import net.bytebuddy.matcher.ElementMatchers;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class PreStoreScannerOpenIT extends BaseTest {
 
@@ -105,7 +105,7 @@ public class PreStoreScannerOpenIT extends BaseTest {
         // Disable compactions
         props.put(CompactSplit.HBASE_REGION_SERVER_ENABLE_COMPACTION, "false");
         props.put("hbase.procedure.remote.dispatcher.delay.msec", "0");
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

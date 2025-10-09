@@ -44,7 +44,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-//Passing with HA Connection - no changes needed
 @Category(NeedsOwnMiniClusterTest.class)
 public class PermissionNSEnabledIT extends BasePermissionsIT {
 

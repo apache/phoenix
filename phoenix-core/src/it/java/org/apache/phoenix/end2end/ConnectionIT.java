@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.query.BaseTest.getConfiguration;
 import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
 import static org.apache.phoenix.query.BaseTest.setUpTestClusterForHA;
@@ -37,7 +38,12 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.VersionInfo;
-import org.apache.phoenix.jdbc.*;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
+import org.apache.phoenix.jdbc.PhoenixTestDriver;
+import org.apache.phoenix.jdbc.RPCConnectionInfo;
+import org.apache.phoenix.jdbc.ZKConnectionInfo;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.query.ConfigurationFactory;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -48,7 +54,6 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-//Failing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class ConnectionIT {
 
@@ -59,7 +64,7 @@ public class ConnectionIT {
 
     @BeforeClass
     public static synchronized void setUp() throws Exception {
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
             props.put(HConstants.ZOOKEEPER_ZNODE_PARENT, "/hbase-test");
             props.put(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, ZKConnectionInfo.ZK_REGISTRY_NAME);

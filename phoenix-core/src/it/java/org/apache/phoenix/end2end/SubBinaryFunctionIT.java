@@ -30,7 +30,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
 

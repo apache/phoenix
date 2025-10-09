@@ -35,7 +35,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-//Passing with HA Connection
 @Category(ParallelStatsEnabledTest.class)
 public class ReadIsolationLevelIT extends ParallelStatsEnabledIT {
     private static final String ENTITY_ID1= "000000000000001";

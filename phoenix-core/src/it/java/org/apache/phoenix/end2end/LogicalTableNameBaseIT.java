@@ -57,6 +57,7 @@ import java.util.Properties;
 import java.util.Random;
 
 import static java.util.Arrays.asList;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.MAX_ROWS;
 import static org.apache.phoenix.query.QueryConstants.NAMESPACE_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
@@ -66,7 +67,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-//Passing with HA Connection
 public abstract class LogicalTableNameBaseIT extends BaseTest {
     protected String dataTableDdl = "";
     public static final String NEW_TABLE_PREFIX = "NEW_TBL_";
@@ -79,7 +79,7 @@ public abstract class LogicalTableNameBaseIT extends BaseTest {
         if (isNamespaceMapped) {
             props.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
         }
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

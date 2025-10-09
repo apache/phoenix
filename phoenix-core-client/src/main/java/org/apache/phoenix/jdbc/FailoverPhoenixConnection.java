@@ -22,6 +22,7 @@ import org.apache.phoenix.exception.FailoverSQLException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -410,6 +411,11 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
     @Override
     public LogLevel getLogLevel() throws SQLException {
         return wrapActionDuringFailover(() -> connection.getLogLevel());
+    }
+
+    @Override
+    public KeyValueBuilder getKeyValueBuilder() throws SQLException {
+        return wrapActionDuringFailover(() -> connection.getKeyValueBuilder());
     }
 
 

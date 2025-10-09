@@ -37,7 +37,6 @@ import org.junit.experimental.categories.Category;
  * End2End test that tests the COLLATION_KEY in an ORDER BY clause
  * 
  */
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class CollationKeyFunctionIT extends ParallelStatsDisabledIT {
 

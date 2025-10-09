@@ -32,7 +32,6 @@ import org.junit.experimental.categories.Category;
 /**
  * End to end tests for {@link MathPIFunction}
  */
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class MathPIFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 

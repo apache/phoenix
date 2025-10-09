@@ -39,7 +39,6 @@ import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Doubles;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Floats;
 
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
 

@@ -43,7 +43,6 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
 
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class PointInTimeQueryIT extends BaseQueryIT {
 

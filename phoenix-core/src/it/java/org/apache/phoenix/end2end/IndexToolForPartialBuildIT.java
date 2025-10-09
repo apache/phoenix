@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -67,7 +68,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 /**
  * Tests for the {@link IndexToolForPartialBuildIT}
  */
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
     
@@ -96,7 +96,7 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = getServerProperties();
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()), ReadOnlyProps.EMPTY_PROPS);
         } else {
             setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), ReadOnlyProps.EMPTY_PROPS);

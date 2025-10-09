@@ -50,11 +50,11 @@ import java.sql.Timestamp;
 import java.util.HashMap;
 import java.util.Properties;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.waitForIndexRebuild;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
-//Failing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class IndexRebuildTaskIT extends BaseTest {
     protected static String TENANT1 = "tenant1";
@@ -64,7 +64,7 @@ public class IndexRebuildTaskIT extends BaseTest {
     public static synchronized void doSetup() throws Exception {
         HashMap<String, String> props = new HashMap<>();
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

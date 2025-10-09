@@ -49,7 +49,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
-//Passing with HA Connection - No changes needed
 @Category(ParallelStatsDisabledTest.class)
 public class InQueryIT extends BaseQueryIT {
 

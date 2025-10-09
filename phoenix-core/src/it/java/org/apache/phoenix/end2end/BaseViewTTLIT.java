@@ -121,7 +121,6 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-//Failing with HA Connection
 @RunWith(Parameterized.class)
 public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
     static final Logger LOGGER = LoggerFactory.getLogger(ViewTTLIT.class);

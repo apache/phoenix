@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
@@ -57,7 +58,6 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
 
@@ -68,7 +68,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
     public static synchronized void doSetup() throws Exception {
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
         clientProps.put(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB, Boolean.FALSE.toString());
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(ReadOnlyProps.EMPTY_PROPS, new ReadOnlyProps(clientProps.entrySet().iterator()));
         } else {
             setUpTestDriver(ReadOnlyProps.EMPTY_PROPS, new ReadOnlyProps(clientProps.entrySet().iterator()));
@@ -428,7 +428,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         IndexTestUtil.assertRowsForEmptyColValue(conn, "TABLE3_IDX", QueryConstants.VERIFIED_BYTES);
     }
 
-//    @Test - Ignoring tests with local index for HA
+    @Test
     public void testImportWithLocalIndex() throws Exception {
 
         Statement stmt = conn.createStatement();
@@ -473,7 +473,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         testImportOneIndexTable("TABLE4", false);
     }
 
-    //    @Test - Ignoring tests with local index for HA
+    @Test
     public void testImportOneLocalIndexTable() throws Exception {
         testImportOneIndexTable("TABLE5", true);
     }

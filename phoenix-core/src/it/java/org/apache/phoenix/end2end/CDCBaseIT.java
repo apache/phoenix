@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.index.SingleCellIndexIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableProperty;
@@ -92,7 +93,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-//Passing with HA Connection
 public class CDCBaseIT extends ParallelStatsDisabledIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(CDCBaseIT.class);
     protected static final ObjectMapper mapper = new ObjectMapper();
@@ -1022,7 +1022,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
     public String getStreamName(Connection conn, String tableName, String cdcName)
             throws SQLException {
         long creationTS = CDCUtil.getCDCCreationTimestamp(
-                conn.unwrap(PhoenixConnection.class).getTableNoCache(tableName));
+                conn.unwrap(PhoenixMonitoredConnection.class).getTableNoCache(tableName));
         return String.format(CDC_STREAM_NAME_FORMAT, tableName, cdcName, creationTS,
                 CDCUtil.getCDCCreationUTCDateTime(creationTS));
     }

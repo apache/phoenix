@@ -45,7 +45,6 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
 

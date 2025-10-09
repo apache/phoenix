@@ -46,6 +46,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -57,7 +58,6 @@ import static org.junit.Assert.assertTrue;
  * only be able to cover the region state that was present before the scanner was opened. HBase
  * provides this guarantee by using region level MVCC.
  */
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class ScanUncommittedWithRegionMovesIT extends ParallelStatsDisabledIT {
 
@@ -98,7 +98,7 @@ public class ScanUncommittedWithRegionMovesIT extends ParallelStatsDisabledIT {
         props.put(HConstants.HBASE_CLIENT_SCANNER_MAX_RESULT_SIZE_KEY, String.valueOf(1));
         props.put(QueryServices.PHOENIX_POST_DUMMY_PROCESS,
                 TestScanningResultPostDummyResultCaller.class.getName());
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

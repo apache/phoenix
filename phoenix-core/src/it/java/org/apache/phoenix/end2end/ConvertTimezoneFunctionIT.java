@@ -39,7 +39,6 @@ import org.junit.experimental.categories.Category;
  * CONVERT_TZ(date, 'from_timezone', 'to_timezone') tests
  *
  */
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class ConvertTimezoneFunctionIT extends ParallelStatsDisabledIT {
 

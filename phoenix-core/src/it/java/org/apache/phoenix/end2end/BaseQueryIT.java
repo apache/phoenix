@@ -42,7 +42,6 @@ import org.slf4j.LoggerFactory;
  * 
  * @since 0.1
  */
-//Passing with HA Connection - No changes needed
 @RunWith(Parameterized.class)
 public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
     protected static final String tenantId = getOrganizationId();

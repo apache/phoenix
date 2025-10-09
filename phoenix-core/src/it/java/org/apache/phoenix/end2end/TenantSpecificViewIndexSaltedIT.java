@@ -24,7 +24,6 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-//Passing with HA Connection - no changes needed
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class TenantSpecificViewIndexSaltedIT extends BaseTenantSpecificViewIndexIT {

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Lists
         .newArrayListWithExpectedSize;
 import static org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost
@@ -106,7 +107,6 @@ import org.junit.experimental.categories.Category;
 /**
  * Test suite related to view metadata
  */
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class ViewMetadataIT extends SplitSystemCatalogIT {
 
@@ -148,7 +148,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         // server and pass in server-side properties when running the drop
         // child views tasks
         serverProps.put(DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()),
                     new ReadOnlyProps(clientProps.entrySet().iterator()));
         } else {

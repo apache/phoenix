@@ -46,7 +46,6 @@ import org.junit.runner.RunWith;
 import org.junit.runners.MethodSorters;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
@@ -66,7 +65,6 @@ public class UngroupedIT extends BaseQueryIT {
         String query = "SELECT count(1) FROM " + tableName + " WHERE organization_id=? and a_string = ?";
         String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        System.out.println("Get url " + getUrl());
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -98,7 +96,6 @@ public class UngroupedIT extends BaseQueryIT {
         String query = "SELECT count(*) FROM " + tableName;
         String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        System.out.println("Get url " + getUrl());
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -116,7 +113,6 @@ public class UngroupedIT extends BaseQueryIT {
     public void zTestSumOverNullIntegerColumn() throws Exception {
         String query = "SELECT sum(a_integer) FROM " + tableName + " a";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        System.out.println("Get url " + getUrl());
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         conn.createStatement().execute("UPSERT INTO " + tableName + " (organization_id,entity_id,a_integer) VALUES('" + getOrganizationId() + "','" + ROW3 + "',NULL)");

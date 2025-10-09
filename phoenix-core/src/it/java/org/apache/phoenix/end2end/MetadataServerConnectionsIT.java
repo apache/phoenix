@@ -45,6 +45,7 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Map;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.query.QueryServices.DISABLE_VIEW_SUBTREE_VALIDATION;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
@@ -52,7 +53,6 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
  * Tests to ensure connection creation by metadata coproc does not need to make
  * RPC call to metada coproc internally.
  */
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class MetadataServerConnectionsIT extends BaseTest {
 
@@ -64,7 +64,7 @@ public class MetadataServerConnectionsIT extends BaseTest {
         props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
                 Long.toString(Long.MAX_VALUE));
         props.put(DISABLE_VIEW_SUBTREE_VALIDATION, "true");
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props), new ReadOnlyProps(props));
         } else {
             setUpTestDriver(new ReadOnlyProps(props));

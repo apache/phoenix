@@ -62,7 +62,6 @@ import org.junit.experimental.categories.Category;
 @edu.umd.cs.findbugs.annotations.SuppressWarnings(
         value="RV_RETURN_VALUE_IGNORED", 
         justification="Designed to ignore.")
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class DynamicFamilyIT extends ParallelStatsDisabledIT {
     private static final String WEB_STATS = generateUniqueName();

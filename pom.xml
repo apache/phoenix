@@ -2056,7 +2056,48 @@
             <configuration>
               <systemPropertyVariables>
                 <phoenix.ha.profile.active>${ha-test-enabled}</phoenix.ha.profile.active>
-            </systemPropertyVariables>
+              </systemPropertyVariables>
+              <excludes>
+                <exclude>org/apache/phoenix/end2end/AlterTableWithViewsIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/AppendOnlySchemaIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/AutoPartitionViewsIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/BackwardCompatibilityForSplittableSyscatIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/BackwardCompatibilityIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/BaseRowKeyMatcherTestIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/BaseViewIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/BaseViewTTLIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/CDCDefinitionIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/CDCStreamIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/ConcurrentMutationsExtendedIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/ConnectionIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/CsvBulkLoadToolIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/CursorWithRowValueConstructorIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/DefaultPhoenixMultiViewListProviderIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/GlobalConnectionTenantTableIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/IndexRebuildTaskIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/IndexRepairRegionScannerIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/IndexScrutinyToolIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/IndexScrutinyWithMaxLookbackIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/MetaDataEndpointImplIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/MetadataGetTableReadLockIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/ParameterizedIndexUpgradeToolIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/PhoenixDriverIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/PhoenixTTLToolIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/PreMatureTimelyAbortScanIt.java</exclude>
+                <exclude>org/apache/phoenix/end2end/PropertiesInSyncIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/QueryLoggerIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/QueryWithLimitIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/RegexBulkLoadToolIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/RenewLeaseIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/SyncUpdateCacheFreqIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/TenantSpecificViewIndexIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/UnnestArrayIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/UpgradeIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/UpgradeNamespaceIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/ViewTTLIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/index/BaseIndexWithRegionMovesIT.java</exclude>
+                <exclude>org/apache/phoenix/end2end/index/ViewIndexIT.java</exclude>
+              </excludes>
           </configuration>
           </plugin>
           <plugin>

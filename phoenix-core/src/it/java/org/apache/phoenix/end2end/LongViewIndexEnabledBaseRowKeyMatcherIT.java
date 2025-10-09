@@ -36,9 +36,9 @@ import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.query.QueryServices.SYSTEM_CATALOG_INDEXES_ENABLED;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class LongViewIndexEnabledBaseRowKeyMatcherIT extends BaseRowKeyMatcherTestIT {
 
@@ -74,7 +74,7 @@ public class LongViewIndexEnabledBaseRowKeyMatcherIT extends BaseRowKeyMatcherTe
             put(QueryServices.LONG_VIEW_INDEX_ENABLED_ATTRIB, String.valueOf(true));
         }};
 
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS,
                     DEFAULT_PROPERTIES.entrySet().iterator()),new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS,
                     DEFAULT_PROPERTIES.entrySet().iterator()));

@@ -51,7 +51,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class QueryMoreIT extends ParallelStatsDisabledIT {
     

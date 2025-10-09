@@ -29,7 +29,6 @@ import java.sql.ResultSet;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class FirstValueFunctionIT extends ParallelStatsDisabledIT {
 

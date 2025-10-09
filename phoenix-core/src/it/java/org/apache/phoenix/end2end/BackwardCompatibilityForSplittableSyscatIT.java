@@ -42,7 +42,6 @@ import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.UpgradePr
 /**
  * This class is meant for specifically testing syscat with all compatible client versions.
  */
-//Failing with HA Connection
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
 public class BackwardCompatibilityForSplittableSyscatIT extends SplitSystemCatalogIT {

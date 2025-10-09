@@ -52,7 +52,6 @@ import java.util.stream.IntStream;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
-//Passing with HA Connection
 @Category(ParallelStatsEnabledIT.class)
 @RunWith(Parameterized.class)
 public class SaltedTableWithParallelStatsEnabledIT extends ParallelStatsEnabledIT {

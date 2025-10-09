@@ -19,6 +19,7 @@
 package org.apache.phoenix.end2end;
 
 import static java.util.Arrays.asList;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.COLUMN_TYPES;
 import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.DEFAULT_SCHEMA_NAME;
 import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.MAX_ROWS;
@@ -84,7 +85,6 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-//Failing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class ViewTTLIT extends BaseViewTTLIT {
 
@@ -104,7 +104,7 @@ public class ViewTTLIT extends BaseViewTTLIT {
             put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(0));
             put(QueryServices.PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT, String.valueOf(1));
         }};
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS,
                     DEFAULT_PROPERTIES.entrySet().iterator()),new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS,
                     DEFAULT_PROPERTIES.entrySet().iterator()));

@@ -72,7 +72,6 @@ import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class MoveTTLDuringUpgradeIT extends ParallelStatsDisabledIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(MoveTTLDuringUpgradeIT.class);

@@ -36,7 +36,6 @@ import org.junit.experimental.categories.Category;
 /**
  * End to end tests for {@link LnFunction} and {@link LogFunction}
  */
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class LnLogFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 

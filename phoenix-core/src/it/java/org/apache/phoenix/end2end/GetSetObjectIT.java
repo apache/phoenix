@@ -41,7 +41,6 @@ import org.junit.experimental.categories.Category;
 /**
  * End to end tests for {@link SqrtFunction}
  */
-//Passing with HA Connection - No changes needed
 @Category(ParallelStatsDisabledTest.class)
 public class GetSetObjectIT extends ParallelStatsDisabledIT {
 

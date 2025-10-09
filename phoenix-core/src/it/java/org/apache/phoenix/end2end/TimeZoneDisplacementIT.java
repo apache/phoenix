@@ -37,7 +37,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-//Passing with HA Connection
 @Category(ParallelStatsEnabledTest.class)
 public class TimeZoneDisplacementIT extends ParallelStatsEnabledIT {
 

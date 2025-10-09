@@ -35,7 +35,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class RegexpReplaceFunctionIT extends ParallelStatsDisabledIT {
 

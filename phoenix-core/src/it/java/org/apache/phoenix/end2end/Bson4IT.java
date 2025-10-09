@@ -65,7 +65,6 @@ import static org.junit.Assert.assertTrue;
 /**
  * Tests for BSON.
  */
-//Passing with HA Connection - No changes needed
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class Bson4IT extends ParallelStatsDisabledIT {

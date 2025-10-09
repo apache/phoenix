@@ -48,7 +48,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//Failing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
     private final TableName catalogTable = TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);

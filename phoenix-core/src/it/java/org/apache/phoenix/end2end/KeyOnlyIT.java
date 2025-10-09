@@ -45,7 +45,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-//Passing with HA Connection
 @Category(ParallelStatsEnabledTest.class)
 public class KeyOnlyIT extends ParallelStatsEnabledIT {
     private String tableName;

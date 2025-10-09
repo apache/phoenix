@@ -41,7 +41,6 @@ import org.junit.experimental.categories.Category;
  * End to end tests for {@link GetByteFunction} {@link SetByteFunction} {@link GetBitFunction}
  * {@link SetBitFunction}
  */
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class GetSetByteBitFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 

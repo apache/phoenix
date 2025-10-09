@@ -36,7 +36,6 @@ import org.junit.experimental.categories.Category;
 /**
  * End to end tests for {@link SqrtFunction}
  */
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class SqrtFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 

@@ -39,9 +39,9 @@ import java.sql.SQLException;
 import java.util.Map;
 import java.util.Properties;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.*;
-//Failing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class PreMatureTimelyAbortScanIt extends ParallelStatsDisabledIT {
     private static final Logger LOG = LoggerFactory.getLogger(PreMatureTimelyAbortScanIt.class);
@@ -52,7 +52,7 @@ public class PreMatureTimelyAbortScanIt extends ParallelStatsDisabledIT {
         props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
         props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
         props.put(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Integer.toString(0));
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
@@ -60,12 +60,11 @@ public class PreMatureTimelyAbortScanIt extends ParallelStatsDisabledIT {
     }
 
     private String getUniqueUrl() {
-        return url + generateUniqueName();
+        return getUrl() + generateUniqueName();
     }
 
     @Test
     public void testPreMatureScannerAbortForCount() throws Exception {
-        System.out.println("get url pls check all" + url);
         try (Connection conn = DriverManager.getConnection(getUniqueUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute("CREATE TABLE LONG_BUG (ID INTEGER PRIMARY KEY, AMOUNT DECIMAL) SALT_BUCKETS = 16 ");
         }

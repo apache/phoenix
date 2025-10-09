@@ -41,7 +41,6 @@ import org.junit.experimental.categories.Category;
  * Basic tests for Alter Session Statements
  *
  */
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class AlterSessionIT extends ParallelStatsDisabledIT {
 

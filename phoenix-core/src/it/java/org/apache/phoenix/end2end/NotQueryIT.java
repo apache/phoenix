@@ -45,7 +45,6 @@ import org.junit.runners.Parameterized;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Doubles;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Floats;
 
-//Passing with HA Connection - No changes needed
 @RunWith(Parameterized.class)
 public abstract class NotQueryIT extends BaseQueryIT {
 

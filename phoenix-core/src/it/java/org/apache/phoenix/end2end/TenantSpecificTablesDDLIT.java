@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_DROP_PK;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MUTATE_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.TABLE_UNDEFINED;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
@@ -71,7 +72,6 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-//Passing with HA Connection
 @Category(ParallelStatsEnabledTest.class)
 public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
 
@@ -430,7 +430,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
                     + " should have been dropped when parent was dropped");
         } catch (Exception e) {
             //Expected
-            if (Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))) {
+            if (Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))) {
                 assertTrue(e.getCause() instanceof TableNotFoundException);
             } else{
                 assertTrue(e instanceof TableNotFoundException);

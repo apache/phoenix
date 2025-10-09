@@ -39,7 +39,6 @@ import static org.junit.Assert.assertEquals;
  * Disabling this test as this works on TTL being set on View which is removed and will be added in future.
  * TODO:- To enable this test after re-enabling TTL for view for more info check :- PHOENIX-6978
  */
-//Failing with HA Connection
 @Ignore
 @Category(NeedsOwnMiniClusterTest.class)
 public class DefaultPhoenixMultiViewListProviderIT extends ParallelStatsDisabledIT {

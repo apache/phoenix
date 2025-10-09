@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -42,7 +43,6 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class SequencePointInTimeIT extends BaseTest {
     private static final String SCHEMA_NAME = "S";
@@ -56,7 +56,7 @@ public class SequencePointInTimeIT extends BaseTest {
         // Must update config before starting server
         props.put(QueryServices.DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB, Boolean.TRUE.toString());
         props.put(QueryServices.DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB, "5");
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

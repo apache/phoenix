@@ -41,7 +41,6 @@ import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-//Passing with HA Connection
 @Category(ParallelStatsEnabledTest.class)
 public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
 	

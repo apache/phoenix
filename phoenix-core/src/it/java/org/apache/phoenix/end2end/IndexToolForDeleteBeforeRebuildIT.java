@@ -49,10 +49,10 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class IndexToolForDeleteBeforeRebuildIT extends ParallelStatsDisabledIT {
     private Connection conn;
@@ -86,7 +86,7 @@ public class IndexToolForDeleteBeforeRebuildIT extends ParallelStatsDisabledIT {
         clientProps.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(5));
         clientProps.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         clientProps.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.TRUE.toString());
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(serverProps.entrySet().iterator()),
                     new ReadOnlyProps(clientProps.entrySet().iterator()));
         } else {

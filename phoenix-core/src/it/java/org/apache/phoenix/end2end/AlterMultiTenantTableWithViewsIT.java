@@ -59,7 +59,6 @@ import org.apache.phoenix.util.ViewUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class AlterMultiTenantTableWithViewsIT extends SplitSystemCatalogIT {
 

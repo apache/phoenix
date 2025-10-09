@@ -44,7 +44,6 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-//Failing with HA Connection
 @RunWith(Parameterized.class)
 @Category(ParallelStatsDisabledTest.class)
 public class CDCDefinitionIT extends CDCBaseIT {
@@ -332,7 +331,7 @@ public class CDCDefinitionIT extends CDCBaseIT {
 
     @Test
     public void testDropTable() throws SQLException {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         conn.createStatement().execute(

@@ -21,6 +21,7 @@ import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.util.PairOfSameType;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.ParallelPhoenixUtil.FutureResult;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.monitoring.MetricType;
@@ -696,102 +697,203 @@ public class ParallelPhoenixConnection implements PhoenixMonitoredConnection {
 
     @Override
     public ConnectionQueryServices getQueryServices() throws SQLException {
-        throw new UnsupportedOperationException();
+        Function<PhoenixConnection, ConnectionQueryServices> function = (T) -> {
+            return T.getQueryServices();
+        };
+        return (ConnectionQueryServices) runOnConnections(function, true);
+
     }
 
     @Override
     public PTable getTable(PTableKey key) throws SQLException {
-        throw new UnsupportedOperationException();
+        Function<PhoenixConnection, PTable> function = (T) -> {
+            try {
+                return T.getTable(key);
+            } catch (SQLException exception) {
+                throw new CompletionException(exception);
+            }
+        };
+        return (PTable) runOnConnections(function, true);
+
     }
 
     @Override
     public PTable getTable(String name) throws SQLException {
-        throw new UnsupportedOperationException();
+        Function<PhoenixConnection, PTable> function = (T) -> {
+            try {
+                return T.getTable(name);
+            } catch (SQLException exception) {
+                throw new CompletionException(exception);
+            }
+        };
+        return (PTable) runOnConnections(function, true);
     }
 
     @Override
     public PTable getTableNoCache(String name) throws SQLException {
-        throw new UnsupportedOperationException();
+        Function<PhoenixConnection, PTable> function = (T) -> {
+            try {
+                return T.getTableNoCache(name);
+            } catch (SQLException exception) {
+                throw new CompletionException(exception);
+            }
+        };
+        return (PTable) runOnConnections(function, true);
     }
 
     @Override
     public Consistency getConsistency() throws SQLException {
-        throw new UnsupportedOperationException();
+        Function<PhoenixConnection, Consistency> function = (T) -> {
+                return T.getConsistency();
+        };
+        return (Consistency) runOnConnections(function, true);
     }
 
     @Override
     @Nullable
     public PName getTenantId() throws SQLException {
-        throw new UnsupportedOperationException();
+        Function<PhoenixConnection, PName> function = (T) -> {
+                return T.getTenantId();
+        };
+        return (PName) runOnConnections(function, true);
     }
 
     @Override
     public MutationState getMutationState() throws SQLException {
-        throw new UnsupportedOperationException();
+        Function<PhoenixConnection, MutationState> function = (T) -> {
+                return T.getMutationState();
+        };
+        return (MutationState) runOnConnections(function, true);
     }
 
     @Override
     public PMetaData getMetaDataCache() throws SQLException {
-        throw new UnsupportedOperationException();
+        Function<PhoenixConnection, PMetaData> function = (T) -> {
+                return T.getMetaDataCache();
+        };
+        return (PMetaData) runOnConnections(function, true);
     }
 
     @Override
     public int getMutateBatchSize() throws SQLException {
-        throw new UnsupportedOperationException();
+        Function<PhoenixConnection, Integer> function = (T) -> {
+                return T.getMutateBatchSize();
+        };
+        return (int) runOnConnections(function, true);
     }
 
     @Override
     public int executeStatements(Reader reader, List<Object> binds, PrintStream out) throws IOException, SQLException {
-        throw new UnsupportedOperationException();
+        Function<PhoenixConnection, Integer> function = (T) -> {
+            try {
+                return T.executeStatements(reader,binds,out);
+            } catch (SQLException exception) {
+                throw new CompletionException(exception);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        };
+        return (int) runOnConnections(function, true);
     }
 
     @Override
     public Format getFormatter(PDataType type) throws SQLException {
-        throw new UnsupportedOperationException();
+        Function<PhoenixConnection, Format> function = (T) -> {
+                return T.getFormatter(type);
+        };
+        return (Format) runOnConnections(function, true);
     }
 
     @Override
     public void setRunningUpgrade(boolean isRunningUpgrade) throws SQLException {
-        throw new UnsupportedOperationException();
+        Function<PhoenixConnection, Void> function = (T) -> {
+                T.setRunningUpgrade(isRunningUpgrade);
+                return null;
+        };
+        runOnConnections(function, true);
     }
 
     @Override
     public PTable getTable(String tenantId, String fullTableName) throws SQLException {
-        throw new UnsupportedOperationException();
+        Function<PhoenixConnection, PTable> function = (T) -> {
+            try {
+                return T.getTable(tenantId, fullTableName);
+            } catch (SQLException exception) {
+                throw new CompletionException(exception);
+            }
+        };
+        return (PTable) runOnConnections(function, true);
     }
 
     @Override
     public PTable getTableNoCache(PName tenantId, String name) throws SQLException {
-        throw new UnsupportedOperationException();
+        Function<PhoenixConnection, PTable> function = (T) -> {
+            try {
+                return T.getTableNoCache(tenantId, name);
+            } catch (SQLException exception) {
+                throw new CompletionException(exception);
+            }
+        };
+        return (PTable) runOnConnections(function, true);
     }
 
     @Override
     public void setIsClosing(boolean imitateIsClosing) throws SQLException {
-        throw new UnsupportedOperationException();
-    }
+        Function<PhoenixConnection, Void> function = (T) -> {
+            T.setIsClosing(imitateIsClosing);
+            return null;
+        };
+        runOnConnections(function, true);    }
 
     @Override
     public String getDatePattern() throws SQLException {
-        throw new UnsupportedOperationException();
+        Function<PhoenixConnection, String> function = (T) -> {
+                return T.getDatePattern();
+        };
+        return (String) runOnConnections(function, true);
     }
 
     @Override
     public PTable getTable(@Nullable String tenantId, String fullTableName, @Nullable Long timestamp) throws SQLException {
-        throw new UnsupportedOperationException();
+        Function<PhoenixConnection, PTable> function = (T) -> {
+            try {
+                return T.getTable(tenantId, fullTableName, timestamp);
+            } catch (SQLException exception) {
+                throw new CompletionException(exception);
+            }
+        };
+        return (PTable) runOnConnections(function, true);
     }
 
     @Override
     public boolean isRunningUpgrade() throws SQLException {
-        throw new UnsupportedOperationException();
+        Function<PhoenixConnection, Boolean> function = (T) -> {
+                return T.isRunningUpgrade();
+        };
+        return (boolean) runOnConnections(function, true);
     }
 
     @Override
     public String getURL() throws SQLException {
-        throw new UnsupportedOperationException();
+        Function<PhoenixConnection, String> function = (T) -> {
+                return T.getURL();
+        };
+        return (String) runOnConnections(function, true);
     }
 
     @Override
     public LogLevel getLogLevel() throws SQLException {
-        throw new UnsupportedOperationException();
+        Function<PhoenixConnection, LogLevel> function = (T) -> {
+                return T.getLogLevel();
+        };
+        return (LogLevel) runOnConnections(function, true);
+    }
+
+    @Override
+    public KeyValueBuilder getKeyValueBuilder() throws SQLException {
+        Function<PhoenixConnection, KeyValueBuilder> function = (T) -> {
+                return T.getKeyValueBuilder();
+        };
+        return (KeyValueBuilder) runOnConnections(function, true);
     }
 }

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -39,7 +40,6 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class CountDistinctCompressionIT extends BaseTest {
     @BeforeClass
@@ -47,7 +47,7 @@ public class CountDistinctCompressionIT extends BaseTest {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(3);
         // Must update config before starting server
         props.put(QueryServices.DISTINCT_VALUE_COMPRESS_THRESHOLD_ATTRIB, Long.toString(1));
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

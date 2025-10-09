@@ -37,7 +37,9 @@ import org.slf4j.LoggerFactory;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
-//Passing with HA Connection
+
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
+
 @Category(NeedsOwnMiniClusterTest.class)
 public class AggregateQueryWithRegionMoves2IT extends AggregateQueryWithRegionMovesIT {
 
@@ -125,7 +127,7 @@ public class AggregateQueryWithRegionMoves2IT extends AggregateQueryWithRegionMo
                 TestScanningResultPostDummyResultCaller.class.getName());
         props.put(QueryServices.PHOENIX_POST_VALID_PROCESS,
                 TestScanningResultPostValidResultCaller.class.getName());
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

@@ -21,6 +21,7 @@ package org.apache.phoenix.end2end;
 import static java.sql.Types.BIGINT;
 import static java.sql.Types.INTEGER;
 import static java.sql.Types.VARCHAR;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_ENCODED_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_SCHEME;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
@@ -53,7 +54,6 @@ import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS
  * {@link org.apache.phoenix.query.QueryServices#WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB} config is
  * turned on
  */
-//Passing with HA Connection
 //FIXME this class has no @Category and is never run by maven
 @RunWith(Parameterized.class)
 public class DynamicColumnWildcardIT extends BaseTest {
@@ -77,7 +77,7 @@ public class DynamicColumnWildcardIT extends BaseTest {
     public static synchronized void doSetup() throws Exception {
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
         clientProps.put(WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB, "true");
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(ReadOnlyProps.EMPTY_PROPS, new ReadOnlyProps(clientProps));
         } else {
             setUpTestDriver(ReadOnlyProps.EMPTY_PROPS, new ReadOnlyProps(clientProps));

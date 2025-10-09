@@ -84,7 +84,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class DateTimeIT extends ParallelStatsDisabledIT {
     private static final String PRODUCT_METRICS_NAME = "PRODUCT_METRICS";

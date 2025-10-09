@@ -36,7 +36,6 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class PartialScannerResultsDisabledIT extends ParallelStatsDisabledIT {
     public static final String TEST_TABLE_DDL =

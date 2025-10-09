@@ -58,7 +58,6 @@ import static org.junit.Assert.assertTrue;
 /**
  * Test that our MapReduce basic tools work as expected
  */
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class MapReduceIT extends ParallelStatsDisabledIT {
 

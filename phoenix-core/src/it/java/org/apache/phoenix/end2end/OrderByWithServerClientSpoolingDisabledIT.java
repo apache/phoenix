@@ -27,11 +27,12 @@ import org.junit.experimental.categories.Category;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
+
 /**
  * Same as the order by test but with spooling disabled both on the server and client. This will use
  * {@link SizeBoundQueue} for all its operations
  */
-//Passing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class OrderByWithServerClientSpoolingDisabledIT extends BaseOrderByIT {
 
@@ -44,7 +45,7 @@ public class OrderByWithServerClientSpoolingDisabledIT extends BaseOrderByIT {
             Boolean.toString(Boolean.FALSE));
         props.put(QueryServices.CLIENT_ORDERBY_SPOOLING_ENABLED_ATTRIB,
             Boolean.toString(Boolean.FALSE));
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

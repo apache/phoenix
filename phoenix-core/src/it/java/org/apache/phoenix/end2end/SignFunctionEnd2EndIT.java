@@ -38,7 +38,6 @@ import org.junit.experimental.categories.Category;
  * End to end tests for {@link SignFunction}
  * @since 4.0.0
  */
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class SignFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 

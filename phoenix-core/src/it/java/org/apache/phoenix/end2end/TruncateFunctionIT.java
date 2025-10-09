@@ -37,7 +37,6 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 public class TruncateFunctionIT extends ParallelStatsDisabledIT {
     private static final String DS1 = "1970-01-10 00:58:01.587";

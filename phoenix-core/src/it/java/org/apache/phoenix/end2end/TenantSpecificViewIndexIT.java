@@ -48,7 +48,6 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-//Failing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
 	

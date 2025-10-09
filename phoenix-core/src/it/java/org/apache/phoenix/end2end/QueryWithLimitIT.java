@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.HA_GROUP_PROFILE;
 import static org.apache.phoenix.query.QueryServicesOptions.UNLIMITED_QUEUE_SIZE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
@@ -47,7 +48,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-//Failing with HA Connection
 @Category(NeedsOwnMiniClusterTest.class)
 public class QueryWithLimitIT extends BaseTest {
     
@@ -67,7 +67,7 @@ public class QueryWithLimitIT extends BaseTest {
     @Before
     public void setupDriver() throws Exception {
         destroyDriver();
-        if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+        if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
             setUpTestClusterForHA(new ReadOnlyProps(props.entrySet().iterator()),new ReadOnlyProps(props.entrySet().iterator()));
         } else {
             setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
@@ -138,7 +138,7 @@ public class QueryWithLimitIT extends BaseTest {
             // copy the existing properties
             Map<String, String> newProps = Maps.newHashMap(props);
             newProps.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(UNLIMITED_QUEUE_SIZE));
-            if(Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))){
+            if(Boolean.parseBoolean(System.getProperty(HA_GROUP_PROFILE))){
                 setUpTestClusterForHA(new ReadOnlyProps(newProps.entrySet().iterator()),new ReadOnlyProps(newProps.entrySet().iterator()));
             } else {
                 setUpTestDriver(new ReadOnlyProps(newProps.entrySet().iterator()));

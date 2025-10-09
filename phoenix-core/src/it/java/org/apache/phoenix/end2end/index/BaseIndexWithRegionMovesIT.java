@@ -92,7 +92,6 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.junit.Assume.assumeFalse;
-//all implementation failing
 @RunWith(Parameterized.class)
 public abstract class BaseIndexWithRegionMovesIT extends ParallelStatsDisabledWithRegionMovesIT {
     private static final Random RAND = new Random();

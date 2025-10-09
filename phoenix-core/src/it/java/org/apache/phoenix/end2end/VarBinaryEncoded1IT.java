@@ -38,7 +38,6 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.util.PropertiesUtil;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-//Passing with HA Connection
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class VarBinaryEncoded1IT extends ParallelStatsDisabledIT {
@@ -1889,7 +1888,6 @@ public class VarBinaryEncoded1IT extends ParallelStatsDisabledIT {
   @Test
   public void testVarBinaryPkSchema7() throws Exception {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-    System.out.println("get url " + getUrl());
     final String tableName = generateUniqueName();
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       conn.createStatement().execute("CREATE TABLE " + tableName
