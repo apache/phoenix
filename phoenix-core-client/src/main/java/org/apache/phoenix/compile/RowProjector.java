@@ -92,7 +92,8 @@ public class RowProjector {
    */
   public RowProjector(List<? extends ColumnProjector> columnProjectors, int estimatedRowSize,
     boolean isProjectEmptyKeyValue, boolean hasUDFs, boolean isProjectAll,
-    boolean isProjectDynColsInWildcardQueries, ListMultimap<String, Integer> additionalNameMappings) {
+    boolean isProjectDynColsInWildcardQueries,
+    ListMultimap<String, Integer> additionalNameMappings) {
     this.columnProjectors = Collections.unmodifiableList(columnProjectors);
     int position = columnProjectors.size();
     reverseIndex = ArrayListMultimap.<String, Integer> create();
@@ -235,13 +236,14 @@ public class RowProjector {
   }
 
   /**
-   * PHOENIX-6644: Creates a new RowProjector with additional column name mappings merged from another projector.
-   * This is useful when an optimized query (e.g., using an index) rewrites column references but we
-   * want to preserve the original column names for ResultSet.getString(columnName) compatibility.
+   * PHOENIX-6644: Creates a new RowProjector with additional column name mappings merged from
+   * another projector. This is useful when an optimized query (e.g., using an index) rewrites
+   * column references but we want to preserve the original column names for
+   * ResultSet.getString(columnName) compatibility.
    *
-   * For example, when a view has "WHERE v1 = 'a'" and an index is used, the optimizer may rewrite
-   * "SELECT v1 FROM view" to "SELECT 'a' FROM index". This method adds the original column name "v1"
-   * to the reverseIndex so ResultSet.getString("v1") continues to work.
+   * For example, when a view has "WHERE v1 = 'a'" and an index is used, the optimizer may
+   * rewrite "SELECT v1 FROM view" to "SELECT 'a' FROM index". This method adds the original
+   * column name "v1" to the reverseIndex so ResultSet.getString("v1") continues to work.
    *
    * @param sourceProjector the projector containing original column name mappings to preserve
    * @return a new RowProjector with merged column name mappings
@@ -270,8 +272,8 @@ public class RowProjector {
       if (!sourceCol.getTableName().isEmpty()) {
         String sourceQualifiedName =
           SchemaUtil.getColumnName(sourceCol.getTableName(), sourceCol.getLabel());
-        String currentQualifiedName = currentCol.getTableName().isEmpty() ? "" :
-          SchemaUtil.getColumnName(currentCol.getTableName(), currentCol.getLabel());
+        String currentQualifiedName = currentCol.getTableName().isEmpty() ? ""
+          : SchemaUtil.getColumnName(currentCol.getTableName(), currentCol.getLabel());
 
         if (!sourceQualifiedName.equals(currentQualifiedName)) {
           additionalMappings.put(sourceQualifiedName, i);
