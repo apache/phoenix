@@ -76,6 +76,23 @@ public class RowProjector {
   public RowProjector(List<? extends ColumnProjector> columnProjectors, int estimatedRowSize,
     boolean isProjectEmptyKeyValue, boolean hasUDFs, boolean isProjectAll,
     boolean isProjectDynColsInWildcardQueries) {
+    this(columnProjectors, estimatedRowSize, isProjectEmptyKeyValue, hasUDFs, isProjectAll,
+      isProjectDynColsInWildcardQueries, null);
+  }
+
+  /**
+   * Construct RowProjector based on a list of ColumnProjectors with additional name mappings.
+   * @param columnProjectors ordered list of ColumnProjectors corresponding to projected columns in
+   *                         SELECT clause aggregating coprocessor. Only required in the case of an
+   *                         aggregate query with a limit clause and otherwise may be null.
+   * @param additionalNameMappings additional column name to position mappings to merge into the
+   *                               reverseIndex during construction. Used for preserving original
+   *                               column names when query optimization rewrites them (e.g., view
+   *                               constants). May be null.
+   */
+  public RowProjector(List<? extends ColumnProjector> columnProjectors, int estimatedRowSize,
+    boolean isProjectEmptyKeyValue, boolean hasUDFs, boolean isProjectAll,
+    boolean isProjectDynColsInWildcardQueries, ListMultimap<String, Integer> additionalNameMappings) {
     this.columnProjectors = Collections.unmodifiableList(columnProjectors);
     int position = columnProjectors.size();
     reverseIndex = ArrayListMultimap.<String, Integer> create();
@@ -91,6 +108,16 @@ public class RowProjector {
           SchemaUtil.getColumnName(colProjector.getTableName(), colProjector.getLabel()), position);
       }
     }
+
+    // Merge additional name mappings if provided (for PHOENIX-6644)
+    if (additionalNameMappings != null) {
+      for (String name : additionalNameMappings.keySet()) {
+        if (!reverseIndex.containsKey(name)) {
+          reverseIndex.putAll(name, additionalNameMappings.get(name));
+        }
+      }
+    }
+
     this.allCaseSensitive = allCaseSensitive;
     this.someCaseSensitive = someCaseSensitive;
     this.estimatedSize = estimatedRowSize;
@@ -205,5 +232,57 @@ public class RowProjector {
     for (ColumnProjector projector : columnProjectors) {
       projector.getExpression().reset();
     }
+  }
+
+  /**
+   * PHOENIX-6644: Creates a new RowProjector with additional column name mappings merged from another projector.
+   * This is useful when an optimized query (e.g., using an index) rewrites column references but we
+   * want to preserve the original column names for ResultSet.getString(columnName) compatibility.
+   *
+   * For example, when a view has "WHERE v1 = 'a'" and an index is used, the optimizer may rewrite
+   * "SELECT v1 FROM view" to "SELECT 'a' FROM index". This method adds the original column name "v1"
+   * to the reverseIndex so ResultSet.getString("v1") continues to work.
+   *
+   * @param sourceProjector the projector containing original column name mappings to preserve
+   * @return a new RowProjector with merged column name mappings
+   */
+  public RowProjector mergeColumnNameMappings(RowProjector sourceProjector) {
+    if (this.columnProjectors.size() != sourceProjector.columnProjectors.size()) {
+      return this;
+    }
+
+    ListMultimap<String, Integer> additionalMappings = ArrayListMultimap.create();
+
+    for (int i = 0; i < sourceProjector.columnProjectors.size(); i++) {
+      ColumnProjector sourceCol = sourceProjector.columnProjectors.get(i);
+      ColumnProjector currentCol = this.columnProjectors.get(i);
+
+      // Only add source labels if they're different from current labels
+      // This preserves original names like "v1" when optimizer rewrites to "'a'"
+      String sourceLabel = sourceCol.getLabel();
+      String currentLabel = currentCol.getLabel();
+
+      if (!sourceLabel.equals(currentLabel)) {
+        additionalMappings.put(sourceLabel, i);
+      }
+
+      // Also add qualified name from source if different
+      if (!sourceCol.getTableName().isEmpty()) {
+        String sourceQualifiedName =
+          SchemaUtil.getColumnName(sourceCol.getTableName(), sourceCol.getLabel());
+        String currentQualifiedName = currentCol.getTableName().isEmpty() ? "" :
+          SchemaUtil.getColumnName(currentCol.getTableName(), currentCol.getLabel());
+
+        if (!sourceQualifiedName.equals(currentQualifiedName)) {
+          additionalMappings.put(sourceQualifiedName, i);
+        }
+      }
+    }
+
+    // Create new RowProjector with additional mappings merged during construction
+    // This maintains immutability.
+    return new RowProjector(this.columnProjectors, this.estimatedSize,
+      this.isProjectEmptyKeyValue, this.hasUDFs, this.isProjectAll,
+      this.isProjectDynColsInWildcardQueries, additionalMappings);
   }
 }
