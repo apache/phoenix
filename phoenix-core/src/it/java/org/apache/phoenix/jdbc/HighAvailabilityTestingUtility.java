@@ -406,7 +406,7 @@ public class HighAvailabilityTestingUtility {
             }
 
             if (doRefreshHAGroup) {
-                haGroup.refreshClusterRoleRecord();
+                haGroup.refreshClusterRoleRecord(true);
 
                 // wait for the cluster roles are populated into client side from RegionServer endpoints.
                 ClusterRoleRecord newRoleRecord = generateCRRFromHAGroupStoreRecord(haGroup, record1, record2);
@@ -431,7 +431,7 @@ public class HighAvailabilityTestingUtility {
             } catch (Exception e) {
                 LOG.warn("Fail to invalidate HAGroupStoreClient for {} because {}", haGroupName, e.getMessage());
             }
-            haGroup.refreshClusterRoleRecord();
+            haGroup.refreshClusterRoleRecord(true);
 
             //If cluster 1 is down, server won't be able to reach peer for states and will get version passed in refreshSystemTableInOneCluster and OFFLINE role.
             HAGroupStoreRecord record1 = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, UNKNOWN.getDefaultHAGroupState(), HAGroupStoreRecord.DEFAULT_RECORD_VERSION);
@@ -457,7 +457,7 @@ public class HighAvailabilityTestingUtility {
             } catch (Exception e) {
                 LOG.warn("Fail to invalidate HAGroupStoreClient for {} because {}", haGroupName, e.getMessage());
             }
-            haGroup.refreshClusterRoleRecord();
+            haGroup.refreshClusterRoleRecord(true);
 
             //If cluster 2 is down, server won't be able to reach peer for states and will get version passed in refreshSystemTableInOneCluster and OFFLINE role.
             HAGroupStoreRecord record2 = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, UNKNOWN.getDefaultHAGroupState(), HAGroupStoreRecord.DEFAULT_RECORD_VERSION);
@@ -494,7 +494,7 @@ public class HighAvailabilityTestingUtility {
                 LOG.warn("Fail to invalidate HAGroupStoreClient for {} because {}", haGroupName, e.getMessage());
             }
 
-            haGroup.refreshClusterRoleRecord();
+            haGroup.refreshClusterRoleRecord(true);
 
             // wait for the cluster roles are populated into client side from RegionServer endpoints.
             ClusterRoleRecord newRoleRecord = generateCRRFromHAGroupStoreRecord(haGroup, record1, record2);
@@ -956,8 +956,9 @@ public class HighAvailabilityTestingUtility {
             conf.setInt(PHOENIX_HA_ZK_RETRY_BASE_SLEEP_MS_KEY, 100);
             conf.setInt(PHOENIX_HA_ZK_RETRY_MAX_KEY, 2);
             conf.setInt(PHOENIX_HA_ZK_RETRY_MAX_SLEEP_MS_KEY, 1000);
-            //This is Needed to get CRR when one cluster is down as RPC timeout is 2 sec and server
-            //will wait below time to try to get Peer record info from dead cluster
+            //This is needed to get CRR when one cluster is down, as RPC the timeout is 2 seconds
+            //and the server will wait for the specified time to try to retrieve peer record info
+            //from dead cluster
             conf.setLong(PHOENIX_HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS, 1000L);
 
             // Set Phoenix related settings, eg. for index management

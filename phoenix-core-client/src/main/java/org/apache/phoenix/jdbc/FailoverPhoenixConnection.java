@@ -345,7 +345,7 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
                     //If the exception is due to stale ClusterRoleRecord version, try
                     //refreshing the ClusterRoleRecord and state transitions if required
 
-                    if (!context.getHAGroup().refreshClusterRoleRecord()) {
+                    if (!context.getHAGroup().refreshClusterRoleRecord(true)) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.STALE_CRR_RETHROW_AFTER_REFRESH_FAILED)
                                 .setMessage(String.format("Error while running operation Stale ClusterRoleRecord for HAGroup %s" +
                                                 " found with version %s, refreshing HAGroup failed :- %s",

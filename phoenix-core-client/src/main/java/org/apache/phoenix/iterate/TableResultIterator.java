@@ -27,6 +27,7 @@ import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.NO
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.RENEWED;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.THRESHOLD_NOT_REACHED;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.UNINITIALIZED;
+import static org.apache.phoenix.jdbc.HighAvailabilityUtil.isStaleClusterRoleRecordExceptionExistsInThrowable;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -48,9 +49,12 @@ import org.apache.phoenix.compile.ExplainPlanAttributes
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessorclient.HashJoinCacheNotFoundException;
 import org.apache.phoenix.exception.ResultSetOutOfScanRangeException;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.BaseQueryPlan;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.jdbc.HighAvailabilityGroup;
 import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.query.QueryConstants;
@@ -233,6 +237,42 @@ public class TableResultIterator implements ResultIterator {
                 }
             } catch (SQLException e) {
                 LOGGER.error("Error while scanning table {} , scan {}", htable, scan);
+                if (isStaleClusterRoleRecordExceptionExistsInThrowable(e)) {
+                    LOGGER.debug("StaleHAGroupStoreException found refreshing HAGroup");
+                    if (plan.getContext().getConnection().getHAGroup() != null) {
+                        HighAvailabilityGroup haGroup = plan.getContext().getConnection()
+                                .getHAGroup();
+                        if (!haGroup.refreshClusterRoleRecord(true)) {
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode
+                                .STALE_CRR_RETHROW_AFTER_REFRESH_FAILED).setMessage(
+                                    String.format("Error while running operation Stale " +
+                                        "ClusterRoleRecord for HAGroup %s found with " +
+                                        "version %s, refreshing HAGroup failed :- %s",
+                                        haGroup, haGroup.getRoleRecord().getVersion(), e))
+                                        .build().buildException();
+                        }
+                    }
+                    //If we retry the scan but as this is only for pointLookup, those are supposed
+                    //to be fast, should we just fail and let application retry? Also Staleness is
+                    //mostly detected when we are trying to access a cluster which we are not
+                    //supposed to, refreshing for these scenarios lead to closure of connections and
+                    //their referenced objects including ResultSets and Iterators, so this might not
+                    //happen unless refreshing is taking some time.
+                    if (plan.getContext().getScanRanges().isPointLookup()) {
+                        if (!closed) {
+                            try {
+                                //TODO: Need to handle MultiPointLookups case.
+                                Scan newScan = ScanUtil.newScan(scan);
+                                newScan.withStartRow(newScan.getAttribute(SCAN_ACTUAL_START_ROW));
+                                this.scanIterator = plan.iterator(scanGrouper, newScan);
+                                lastTuple = scanIterator.next();
+                            } catch (Exception e1) {
+                                throw ClientUtil.parseServerException(e1);
+                            }
+                        }
+                    }
+                }
+
                 try {
                     throw ClientUtil.parseServerException(e);
                 } catch(HashJoinCacheNotFoundException e1) {

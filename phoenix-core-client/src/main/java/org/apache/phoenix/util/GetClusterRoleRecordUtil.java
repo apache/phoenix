@@ -124,8 +124,10 @@ public class GetClusterRoleRecordUtil {
 
     /**
      * Method to schedule a poller to fetch ClusterRoleRecord every 5 seconds (or configured value)
-     * until we get an Active ClusterRoleRecord
-     * @param conn Connection to be used to get RegionServer Endpoint Service
+     * until we get an Active ClusterRoleRecord (one role should be Active) if we receive an Active
+     * roleRecord then client this method will return the roleRecord to be consumed and used, if not
+     * then it will start a poller and return non-active roleRecord.
+     * @param url URL of the RegionServer Endpoint Service
      * @param haGroupName Name of the HA group
      * @param properties Connection properties
      * @param pollerInterval Interval in seconds to poll for ClusterRoleRecord
@@ -134,7 +136,7 @@ public class GetClusterRoleRecordUtil {
      */
     public static ClusterRoleRecord fetchClusterRoleRecord(String url, String haGroupName, HighAvailabilityGroup haGroup, long pollerInterval, Properties properties) throws SQLException {
         ClusterRoleRecord clusterRoleRecord = getClusterRoleRecord(url, haGroupName, true, properties);
-
+        //TODO: Will need to handle UNKNOWN role cases...
         if (clusterRoleRecord.getPolicy() == HighAvailabilityPolicy.FAILOVER &&
                 !clusterRoleRecord.getRole1().isActive() && !clusterRoleRecord.getRole2().isActive()) {
             LOGGER.info("Non-active ClusterRoleRecord found for HA group {}. Scheduling poller to check every {} seconds," +
@@ -149,7 +151,9 @@ public class GetClusterRoleRecordUtil {
 
     /**
      * Method to schedule a poller to fetch ClusterRoleRecord every pollerInterval seconds
-     * until we get an Active ClusterRoleRecord
+     * until we get an Active ClusterRoleRecord, poller will only start if client will receive,
+     * a Non-Active roleRecord (means either of the roles are not Active and client can't create
+     * a connection)
      * @param url URL of the RegionServer Endpoint Service
      * @param haGroupName Name of the HA group
      * @param haGroup HighAvailabilityGroup object to refresh the ClusterRoleRecord when an Active CRR is found
@@ -179,7 +183,7 @@ public class GetClusterRoleRecordUtil {
                                 pollerFuture.cancel(false);
                             }
                             //Refresh ClusterRoleRecord for the HAGroup with appropriate transition
-                            haGroup.refreshClusterRoleRecord();
+                            haGroup.refreshClusterRoleRecord(true);
                             schedulerMap.get(haGroupName).shutdown();
                             schedulerMap.remove(haGroupName);
                         }

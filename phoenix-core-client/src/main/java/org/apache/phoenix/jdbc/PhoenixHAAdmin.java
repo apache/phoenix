@@ -153,7 +153,6 @@ public class PhoenixHAAdmin implements Closeable {
 
     public static String getLocalMasterUrl(Configuration conf) {
         String local = conf.get(HConstants.MASTER_ADDRS_KEY).replaceAll(":", "\\\\:");
-        LOG.info("LOCAL MASTERRRRRRR {}", local);
         return local;
     }
 

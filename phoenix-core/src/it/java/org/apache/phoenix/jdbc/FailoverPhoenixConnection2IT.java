@@ -524,17 +524,24 @@ public class FailoverPhoenixConnection2IT {
     }
 
     /**
-     * Testing executeQuery/scans should detect and refresh CRR when haGroup's CRR update cache is expired
+     * Testing executeQuery/scans which are not pontlookup should detect and refresh CRR when
+     * haGroup's CRR update cache is expired
      */
     @Test(timeout = 300000)
     public void testStaleCrrVersionWithReadDetection() throws Exception {
         Connection connection = createFailoverConnection();
         //do Write
-        int id = RandomUtils.nextInt();
-        try (Statement stmt = connection.createStatement()) {
-            stmt.executeUpdate(String.format("UPSERT INTO %s VALUES(%d, 1984)", tableName, id));
-            connection.commit();
+        for(int i = 0; i < 100 ; i++) {
+            try (Statement stmt = connection.createStatement()) {
+                int value = RandomUtils.nextInt();
+                stmt.executeUpdate(String.format("UPSERT INTO %s VALUES(%d, %d)", tableName, value, value));
+            }
         }
+        try (Statement stmt = connection.createStatement()) {
+            stmt.executeUpdate(String.format("UPSERT INTO %s VALUES(1988, 1984)", tableName));
+        }
+        connection.commit();
+
         CLUSTERS.transitClusterRole(haGroup, ACTIVE_TO_STANDBY, STANDBY, false);
 
         //Expire the CRR cache in HAGroup for scan operation
@@ -542,8 +549,12 @@ public class FailoverPhoenixConnection2IT {
 
         //Read operation should refresh the CRR leading to success and also update the CRR in HAGroup
         try (ResultSet rs = connection.createStatement().executeQuery(
-                String.format("SELECT v FROM %s WHERE id = %d", tableName, id))) {
+                String.format("SELECT v FROM %s WHERE v = 1984", tableName))) {
             rs.next();
+
+            //Wait for transition to complete
+            sleepThreadFor(2000);
+
             String url = JDBCUtil.formatUrl(CLUSTERS.getJdbcUrl1(haGroup), haGroup.getRoleRecord().getRegistryType());
             assertEquals(haGroup.getRoleRecord().getRole(url), ACTIVE_TO_STANDBY);
         } catch (SQLException e) {
@@ -588,7 +599,7 @@ public class FailoverPhoenixConnection2IT {
         try (Connection conn = createFailoverConnection()){
             try {
                 ResultSet rs = connection.createStatement().executeQuery(
-                    String.format("SELECT v FROM %s WHERE id = %d", tableName, id));
+                    String.format("SELECT v FROM %s WHERE id = 1988", tableName));
                 fail("Should have failed as CRR is not Active and cache frequency is expired so creation " +
                     "of result set should try to refresh CRR and should close current connection and statement and fail");
             } catch (Exception e) {
@@ -596,7 +607,87 @@ public class FailoverPhoenixConnection2IT {
                 assertTrue(e instanceof FailoverSQLException);
             }
         }
+    }
 
+
+    /**
+     * Testing executeQuery/scans which are pointLookUps should detect and refresh CRR when
+     * haGroup's CRR update cache is expired
+     */
+    @Test(timeout = 300000)
+    public void testStaleCrrVersionWithPointLookUpReadDetection() throws Exception {
+        Connection connection = createFailoverConnection();
+        //do Write
+        int id = RandomUtils.nextInt();
+        try (Statement stmt = connection.createStatement()) {
+            stmt.executeUpdate(String.format("UPSERT INTO %s VALUES(%d, 1984)", tableName, id));
+            connection.commit();
+        }
+        CLUSTERS.transitClusterRole(haGroup, STANDBY, STANDBY, false);
+
+        //Read operation should refresh the CRR leading to success and also update the CRR in HAGroup
+        //as it is a point lookup
+        try (ResultSet rs = connection.createStatement().executeQuery(
+                String.format("SELECT v FROM %s WHERE id = %d", tableName, id))) {
+            rs.next();
+            if (!rs.isClosed()) {
+                assertEquals(rs.getInt(1), id);
+            }
+
+            //Wait for transition to finish
+            sleepThreadFor(3000);
+
+            String url = JDBCUtil.formatUrl(CLUSTERS.getJdbcUrl1(haGroup), haGroup.getRoleRecord().getRegistryType());
+            assertEquals(haGroup.getRoleRecord().getRole(url), STANDBY);
+        } catch (SQLException e) {
+            fail(String.format("Should have succeeded but failed with exception {}", e));
+        }
+
+        //connections should be closed
+        assertTrue(((FailoverPhoenixConnection)connection).getWrappedConnection().isClosed());
+
+        //Connection creation should fail as now we don't have active cluster
+        try {
+            createFailoverConnection();
+            fail("Should have failed since ACTIVE ZK cluster was shutdown");
+        } catch (SQLException e) {
+            assertEquals(e.getErrorCode(), CANNOT_ESTABLISH_CONNECTION.getErrorCode());
+            assertTrue(e.getCause() instanceof FailoverSQLException);
+            //Expected
+        }
+        //Above connection creation should start a poller as well
+        CLUSTERS.transitClusterRole(haGroup, STANDBY, STANDBY_TO_ACTIVE, false);
+        CLUSTERS.transitClusterRole(haGroup, STANDBY, ACTIVE, false);
+
+        //Sleep for 5 sec for poller to automatically pick up change
+        sleepThreadFor(5000);
+
+        //Connection creation and operations should work
+        try (Connection conn = createFailoverConnection()) {
+            doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
+        }
+
+        //Poller should have Stopped when we got Active CRR so transitions now should not be detected
+        //unless we do any scan or write
+
+        CLUSTERS.transitClusterRole(haGroup, STANDBY, ACTIVE_TO_STANDBY, false);
+        CLUSTERS.transitClusterRole(haGroup, STANDBY, STANDBY, false);
+
+        //Sleeping for 2 Sec to confirm poller is not detecting and has been stopped
+        sleepThreadFor(2000);
+
+        //Connection creation should happen
+        try (Connection conn = createFailoverConnection()){
+            try {
+                ResultSet rs = connection.createStatement().executeQuery(
+                        String.format("SELECT v FROM %s WHERE id = %d", tableName, id));
+                fail("Should have failed as CRR is not Active and cache frequency is expired so creation " +
+                        "of result set should try to refresh CRR and should close current connection and statement and fail");
+            } catch (Exception e) {
+                //Expected
+                assertTrue(e instanceof FailoverSQLException);
+            }
+        }
     }
 
     /**
@@ -687,7 +778,7 @@ public class FailoverPhoenixConnection2IT {
         CLUSTERS.transitClusterRole(haGroup, ACTIVE, ACTIVE, false);
 
         try {
-            haGroup.refreshClusterRoleRecord();
+            haGroup.refreshClusterRoleRecord(true);
             fail("Should have thrown an exception as ACTIVE --> ACTIVE is not a valid transition");
         } catch (SQLException e) {
             assertEquals(e.getErrorCode(), SQLExceptionCode.HA_ROLE_TRANSITION_NOT_ALLOWED.getErrorCode());

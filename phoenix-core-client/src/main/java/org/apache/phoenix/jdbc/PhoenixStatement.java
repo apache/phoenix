@@ -352,14 +352,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                     .run(new CallRunner.CallableThrowable<PhoenixResultSet, SQLException>() {
                         @Override public PhoenixResultSet call() throws SQLException {
                             final long startTime = EnvironmentEdgeManager.currentTimeMillis();
-                            //Refresh the cluster role record for failover policy if refresh interval is expired
-                            if (connection.getHAGroup() != null &&
-                                connection.getHAGroup().getRoleRecord() != null &&
-                                connection.getHAGroup().getRoleRecord().getPolicy() == HighAvailabilityPolicy.FAILOVER &&
-                                connection.getHAGroup().shouldRefreshRoleRecord()) {
-                                    LOGGER.info("Refreshing cluster role record for before executing query");
-                                    connection.getHAGroup().refreshClusterRoleRecord();
-                            }
                             boolean success = false;
                             boolean updateMetrics = true;
                             boolean pointLookup = false;
@@ -384,7 +376,16 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 // not the projected table, so plan.getContext().getResolver().getTables() won't work.
                                 if (plan.getContext().getScanRanges().isPointLookup()) {
                                     pointLookup = true;
-                                }
+                                } else if (connection.getHAGroup() != null &&
+                                    connection.getHAGroup().getRoleRecord() != null &&
+                                    connection.getHAGroup().getRoleRecord().getPolicy() == HighAvailabilityPolicy.FAILOVER &&
+                                    connection.getHAGroup().shouldRefreshRoleRecord()) {
+                                    //Refresh the cluster role record for failover policy if refresh interval is expired
+                                    LOGGER.info("Refreshing cluster role record for before executing query");
+                                    connection.getHAGroup().refreshClusterRoleRecord(false);
+                                } 
+
+                                
                                 Iterator<TableRef> tableRefs = plan.getSourceRefs().iterator();
                                 connection.getMutationState().sendUncommitted(tableRefs);
                                 plan =

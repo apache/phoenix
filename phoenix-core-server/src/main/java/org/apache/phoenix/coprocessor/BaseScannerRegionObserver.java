@@ -18,8 +18,11 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Set;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
@@ -49,6 +52,7 @@ import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.exception.StaleClusterRoleRecordException;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
@@ -56,12 +60,14 @@ import org.apache.phoenix.index.CDCTableInfo;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.NonAggregateRegionScannerFactory;
 import org.apache.phoenix.iterate.RegionScannerFactory;
+import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.StringUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -183,6 +189,26 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                     scan.setFilter(new PagingFilter(scan.getFilter(),
                             getPageSizeMsForFilter(scan)));
                 }
+            }
+        }
+
+        byte[] haGroupNameBytes = scan.getAttribute(BaseScannerRegionObserverConstants
+                .HA_GROUP_NAME_ATTRIB);
+        //Check if scan's HAGroup is stale on client. If yes, throw an exception.
+        if (haGroupNameBytes != null) {
+            String haGroupName = new String(haGroupNameBytes, StandardCharsets.UTF_8);
+            final Configuration conf = c.getEnvironment().getConfiguration();
+            final HAGroupStoreManager haGroupStoreManager
+                    = HAGroupStoreManager.getInstance(conf);
+            if (haGroupStoreManager == null) {
+                throw new IOException("HAGroupStoreManager is null "
+                        + "for current cluster, check configuration");
+            }
+
+            if (StringUtils.isNoneBlank(haGroupName) && haGroupStoreManager
+                    .isHAGroupOnClientStale(haGroupName)) {
+                throw new StaleClusterRoleRecordException(String.format("HAGroupStoreRecord is "
+                        + "stale for haGroup %s on client", haGroupName));
             }
         }
     }

@@ -137,7 +137,7 @@ public class HAGroupStoreManager {
         return false;
     }
 
-    public boolean isHAGroupOnClientStale(String haGroupName) throws IOException, SQLException {
+    public boolean isHAGroupOnClientStale(String haGroupName) throws IOException {
         if (checkStaleCRRForEveryMutation) {
             HAGroupStoreClient haGroupStoreClient = getHAGroupStoreClient(haGroupName);
             //If local cluster is not ACTIVE/ACTIVE_TO_STANDBY, it means the Failover CRR is stale on client

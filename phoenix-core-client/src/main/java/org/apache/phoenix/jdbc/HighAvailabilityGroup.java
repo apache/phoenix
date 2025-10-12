@@ -63,6 +63,10 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CLIENT_CONNECTION_CACHE_MAX_DURATION;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
@@ -197,6 +201,10 @@ public class HighAvailabilityGroup {
     private volatile State state = State.UNINITIALIZED;
     private volatile long lastClusterRoleRecordRefreshTime = 0;
     private volatile long clusterRoleRecordCacheFrequency = PHOENIX_HA_CRR_CACHE_FREQUENCY_MS_DEFAULT;
+    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+    private final Lock readLock = rwLock.readLock();
+    private final Lock writeLock = rwLock.writeLock();
+
     /**
      * Private constructor.
      * <p>
@@ -984,81 +992,114 @@ public class HighAvailabilityGroup {
      * <p>
      * This method will get the new ClusterRoleRecord from RegionServer Endpoints and apply it to the HA group.
      * and it will call to transition the Policy's connections according to the new record.
+     * <p>
+     * This method uses a read-write lock pattern to allow multiple concurrent callers to check if a refresh
+     * is needed while ensuring only one thread performs the actual refresh operation at a time. This improves
+     * throughput by avoiding blocking all callers during the quick check phase.
      *
      * @return true if the new record is set as current one; false otherwise
      * @throws SQLException if there is an error getting the ClusterRoleRecord
      */
-    public synchronized boolean refreshClusterRoleRecord() throws SQLException {
-        ClusterRoleRecord newRoleRecord = getClusterRoleRecordFromEndpoint();
-        if (roleRecord == null) {
+    public boolean refreshClusterRoleRecord(boolean forceRefresh) throws SQLException {
+        // Allow concurrent reads to return fast in case refresh is not needed
+        readLock.lock();
+        try {
+            if (!forceRefresh && !shouldRefreshRoleRecord()) {
+                return true;
+            }
+        } finally {
+            readLock.unlock();
+        }
+
+        // Take a write lock to apply the refresh of roleRecord
+        writeLock.lock();
+        try {
+            // Re-check the condition under the write lock to prevent race conditions.
+            // Another thread might have already done the refresh while we were waiting for the
+            // write lock.
+            if (!forceRefresh && !shouldRefreshRoleRecord()) {
+                return true;
+            }
+
+            ClusterRoleRecord newRoleRecord = getClusterRoleRecordFromEndpoint();
+            if (roleRecord == null) {
+                roleRecord = newRoleRecord;
+                lastClusterRoleRecordRefreshTime = System.currentTimeMillis();
+                state = State.READY;
+                LOG.info("HA group {} is now in {} state after getting initial V{} role record: {}",
+                        info, state, roleRecord.getVersion(), roleRecord);
+                LOG.debug("HA group {} is ready", this);
+                return true;
+            }
+
+            //Check if newRoleRecord has same Info (HAGroupName and Policy)
+            if (!roleRecord.hasSameInfo(newRoleRecord)) {
+                LOG.error("New record {} has different HA group information (haGroupName/Policy) from" +
+                        " old record {}, which is not expected", newRoleRecord, roleRecord);
+                return false;
+            }
+
+            //Check if newRoleRecord is actually new
+            if (roleRecord.equals(newRoleRecord)) {
+                LOG.debug("New Role Record is same as current RoleRecord, no need to refresh {}",
+                        roleRecord.toString());
+                lastClusterRoleRecordRefreshTime = System.currentTimeMillis();
+                return true;
+            }
+
+            final ClusterRoleRecord oldRecord = roleRecord;
+            state = State.IN_TRANSITION;
+            LOG.info("HA group {} is in {} to set V{} record", info, state, newRoleRecord.getVersion());
+            Future<?> future = crrChangedExecutor.submit(() -> {
+                try {
+                    roleRecord.getPolicy().transitClusterRoleRecord(this, roleRecord, newRoleRecord);
+                } catch (SQLException e) {
+                    throw new CompletionException(e);
+                }
+            });
+
+            String transitionTimeoutProp = properties.getProperty(
+                    PHOENIX_HA_TRANSITION_TIMEOUT_MS_KEY, config.get(
+                            PHOENIX_HA_TRANSITION_TIMEOUT_MS_KEY));
+            long maxTransitionTimeMs = StringUtils.isNotEmpty(transitionTimeoutProp)
+                    ? Long.parseLong(transitionTimeoutProp)
+                    : PHOENIX_HA_TRANSITION_TIMEOUT_MS_DEFAULT;
+            try {
+                future.get(maxTransitionTimeMs, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException ie) {
+                LOG.error("Got interrupted when transiting cluster roles for HA group {}", info, ie);
+                future.cancel(true);
+                Thread.currentThread().interrupt();
+                return false;
+            } catch (ExecutionException | TimeoutException e) {
+                LOG.error("HA group {} failed to transit cluster roles per policy {} to new " +
+                                "record {}", info, roleRecord.getPolicy(), newRoleRecord, e);
+                //Rethrow the Role transitions not allowed exceptions
+                if (e.getCause() != null && e.getCause().getCause() != null) {
+                    if (e.getCause().getCause() instanceof SQLException && ((SQLException)e
+                            .getCause().getCause()).getErrorCode() == SQLExceptionCode
+                            .HA_ROLE_TRANSITION_NOT_ALLOWED.getErrorCode()) {
+                        state = State.READY;
+                        throw (SQLException)e.getCause().getCause();
+                    }
+                }
+                // Calling back HA policy function for cluster switch is conducted with best effort.
+                // HA group continues transition when its HA policy fails to deal with context switch
+                // (e.g. to close existing connections)
+                // The goal here is to gain higher availability even though existing resources against
+                // previous ACTIVE cluster may have not been closed cleanly.
+            }
+            //Update the role record and the last refresh time
             roleRecord = newRoleRecord;
             lastClusterRoleRecordRefreshTime = System.currentTimeMillis();
             state = State.READY;
-            LOG.info("HA group {} is now in {} state after getting initial V{} role record: {}",
-                    info, state, roleRecord.getVersion(), roleRecord);
-            LOG.debug("HA group {} is ready", this);
+            LOG.info("HA group {} is in {} state, Old: {}, new: {}", info, state, oldRecord,
+                    roleRecord);
+            LOG.debug("HA group is ready: {}", this);
             return true;
+        } finally {
+            writeLock.unlock();
         }
-
-        if (!newRoleRecord.isNewerThan(roleRecord)) {
-            LOG.warn("Does not apply new cluster role record as it does not have higher version. "
-                    + "Existing record: {}, new record: {}", roleRecord, newRoleRecord);
-            return false;
-        }
-
-        if (!roleRecord.hasSameInfo(newRoleRecord)) {
-            LOG.error("New record {} has different HA group information from old record {}, which is not expected",
-                    newRoleRecord, roleRecord);
-            return false;
-        }
-
-        final ClusterRoleRecord oldRecord = roleRecord;
-        state = State.IN_TRANSITION;
-        LOG.info("HA group {} is in {} to set V{} record", info, state, newRoleRecord.getVersion());
-        Future<?> future = crrChangedExecutor.submit(() -> {
-            try {
-                roleRecord.getPolicy().transitClusterRoleRecord(this, roleRecord, newRoleRecord);
-            } catch (SQLException e) {
-                throw new CompletionException(e);
-            }
-        });
-
-        String transitionTimeoutProp = properties.getProperty(PHOENIX_HA_TRANSITION_TIMEOUT_MS_KEY, config.get(PHOENIX_HA_TRANSITION_TIMEOUT_MS_KEY));
-        long maxTransitionTimeMs = StringUtils.isNotEmpty(transitionTimeoutProp)
-                ? Long.parseLong(transitionTimeoutProp)
-                : PHOENIX_HA_TRANSITION_TIMEOUT_MS_DEFAULT;
-        try {
-            future.get(maxTransitionTimeMs, TimeUnit.MILLISECONDS);
-        } catch (InterruptedException ie) {
-            LOG.error("Got interrupted when transiting cluster roles for HA group {}", info, ie);
-            future.cancel(true);
-            Thread.currentThread().interrupt();
-            return false;
-        } catch (ExecutionException | TimeoutException e) {
-            LOG.error("HA group {} failed to transit cluster roles per policy {} to new record {}",
-                info, roleRecord.getPolicy(), newRoleRecord, e);
-            //Rethrow the Role transitions not allowed exceptions
-            if (e.getCause() != null && e.getCause().getCause() != null) {
-                if (e.getCause().getCause() instanceof SQLException && ((SQLException)e.getCause()
-                        .getCause()).getErrorCode() == SQLExceptionCode.HA_ROLE_TRANSITION_NOT_ALLOWED.getErrorCode()) {
-                    state = State.READY;
-                    throw (SQLException)e.getCause().getCause();
-                }
-            }
-            // Calling back HA policy function for cluster switch is conducted with best effort.
-            // HA group continues transition when its HA policy fails to deal with context switch
-            // (e.g. to close existing connections)
-            // The goal here is to gain higher availability even though existing resources against
-            // previous ACTIVE cluster may have not been closed cleanly.
-        }
-        //Update the role record and the last refresh time
-        roleRecord = newRoleRecord;
-        lastClusterRoleRecordRefreshTime = System.currentTimeMillis();
-        state = State.READY;
-        LOG.info("HA group {} is in {} Does not apply new cluster role{} role record. Old: {}, new: {}",
-                info, state, roleRecord.getVersion(), oldRecord, roleRecord);
-        LOG.debug("HA group is ready: {}", this);
-        return true;
     }
 
     /**
