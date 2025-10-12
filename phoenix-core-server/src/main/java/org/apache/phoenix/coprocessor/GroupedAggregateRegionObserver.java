@@ -50,6 +50,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.regionserver.PhoenixScannerContext;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
@@ -81,7 +82,6 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.EncodedColumnsUtil;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
@@ -605,8 +605,6 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver
     private boolean nextInternal(List<Cell> resultsToReturn, ScannerContext scannerContext)
       throws IOException {
       boolean hasMore;
-      long startTime = EnvironmentEdgeManager.currentTimeMillis();
-      long now;
       Tuple result =
         useQualifierAsIndex ? new PositionBasedMultiKeyValueTuple() : new MultiKeyValueTuple();
       boolean acquiredLock = false;
@@ -643,8 +641,11 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver
               // Aggregate values here
               aggregators.aggregate(rowAggregators, result);
             }
-            now = EnvironmentEdgeManager.currentTimeMillis();
-            if (hasMore && groupByCache.size() < limit && (now - startTime) >= pageSizeMs) {
+            if (
+              hasMore && groupByCache.size() < limit
+                && (PhoenixScannerContext.isReturnImmediately(scannerContext)
+                  || PhoenixScannerContext.isTimedOut(scannerContext, pageSizeMs))
+            ) {
               return getDummyResult(resultsToReturn);
             }
           } while (hasMore && groupByCache.size() < limit);
@@ -784,8 +785,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver
       boolean hasMore;
       boolean atLimit;
       boolean aggBoundary = false;
-      long startTime = EnvironmentEdgeManager.currentTimeMillis();
-      long now;
+      boolean pageTimeout = false;
       Tuple result =
         useQualifierAsIndex ? new PositionBasedMultiKeyValueTuple() : new MultiKeyValueTuple();
       ImmutableBytesPtr key = null;
@@ -835,8 +835,14 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver
             atLimit = rowCount + countOffset >= limit;
             // Do rowCount + 1 b/c we don't have to wait for a complete
             // row in the case of a DISTINCT with a LIMIT
-            now = EnvironmentEdgeManager.currentTimeMillis();
-          } while (hasMore && !aggBoundary && !atLimit && (now - startTime) < pageSizeMs);
+            if (
+              PhoenixScannerContext.isReturnImmediately(scannerContext)
+                || PhoenixScannerContext.isTimedOut(scannerContext, pageSizeMs)
+            ) {
+              pageTimeout = true;
+              break;
+            }
+          } while (hasMore && !aggBoundary && !atLimit && !pageTimeout);
         }
       } catch (Exception e) {
         LOGGER.error("Ordered group-by scanner next encountered error for region {}",
@@ -850,7 +856,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver
         if (acquiredLock) region.closeRegionOperation();
       }
       try {
-        if (hasMore && !aggBoundary && !atLimit && (now - startTime) >= pageSizeMs) {
+        if (hasMore && !aggBoundary && !atLimit && pageTimeout) {
           updateDummyWithPrevRowKey(results, initStartRowKey, includeInitStartRowKey, scan);
           return true;
         }

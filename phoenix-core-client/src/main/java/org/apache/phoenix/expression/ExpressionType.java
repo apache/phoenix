@@ -206,7 +206,9 @@ public enum ExpressionType {
   SubBinaryFunction(SubBinaryFunction.class),
   ScanStartKeyFunction(ScanStartKeyFunction.class),
   ScanEndKeyFunction(ScanEndKeyFunction.class),
-  TotalSegmentsFunction(TotalSegmentsFunction.class);
+  TotalSegmentsFunction(TotalSegmentsFunction.class),
+  RowSizeFunction(RowSizeFunction.class),
+  RawRowSizeFunction(RawRowSizeFunction.class);
 
   ExpressionType(Class<? extends Expression> clazz) {
     this.clazz = clazz;

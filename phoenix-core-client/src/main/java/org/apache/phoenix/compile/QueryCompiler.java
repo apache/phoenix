@@ -70,6 +70,7 @@ import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
+import org.apache.phoenix.parse.RowSizeParseNode;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.SubqueryParseNode;
@@ -752,6 +753,16 @@ public class QueryCompiler {
   protected QueryPlan compileSingleFlatQuery(StatementContext context, SelectStatement select,
     boolean asSubquery, boolean allowPageFilter, QueryPlan innerPlan, boolean inJoin,
     boolean inUnion) throws SQLException {
+    for (AliasedNode node : select.getSelect()) {
+      if (node.getNode() instanceof RowSizeParseNode) {
+        throw new SQLException(
+          "ROW_SIZE() can only be an argument to an aggregation function in a select clause. \n"
+            + "To get the size of a single row, an aggregation function can be used over the row, e.g., \n"
+            + "SELECT SUM(ROW_SIZE()) ... WHERE PK = <my PK>. To return the row sizes for multiple rows, \n"
+            + "a group by clause can be used to have single row groups, e.g., \n"
+            + "SELECT SUM(ROW_SIZE()) ... WHERE PK = <my PK> GROUP BY PK ");
+      }
+    }
     boolean isApplicable = true;
     PTable projectedTable = null;
     if (this.projectTuples) {

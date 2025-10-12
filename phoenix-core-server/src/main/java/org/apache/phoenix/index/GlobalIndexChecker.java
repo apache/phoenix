@@ -51,6 +51,7 @@ import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.regionserver.PhoenixScannerContext;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
@@ -256,7 +257,6 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
           init();
           initialized = true;
         }
-        long startTime = EnvironmentEdgeManager.currentTimeMillis();
         do {
           if (raw) {
             hasMore = (scannerContext == null)
@@ -277,7 +277,10 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
           if (verifyRowAndRepairIfNecessary(result)) {
             break;
           }
-          if (hasMore && (EnvironmentEdgeManager.currentTimeMillis() - startTime) >= pageSizeMs) {
+          if (
+            hasMore && (PhoenixScannerContext.isTimedOut(scannerContext, pageSizeMs)
+              || PhoenixScannerContext.isReturnImmediately(scannerContext))
+          ) {
             byte[] rowKey = CellUtil.cloneRow(cell);
             result.clear();
             getDummyResult(rowKey, result);

@@ -60,4 +60,23 @@ public interface TaskRunner extends Stoppable {
    */
   public <R> Pair<List<R>, List<Future<R>>> submitUninterruptible(TaskBatch<R> tasks)
     throws EarlyExitFailure, ExecutionException;
+
+  /**
+   * Submit the given tasks to the pool without waiting for them to complete or collecting results.
+   * This is a fire-and-forget operation that allows tasks to run asynchronously in the background.
+   * <p>
+   * Unlike {@link #submit(TaskBatch)} and {@link #submitUninterruptible(TaskBatch)}, this method
+   * does not block waiting for task completion and does not return results or futures. It is useful
+   * for scenarios where you want to initiate background processing but don't need to wait for or
+   * collect the results.
+   * <p>
+   * Tasks are submitted to the underlying thread pool and will execute according to the pool's
+   * scheduling policy. If any task fails during execution, the failure will be handled internally
+   * and will not propagate back to the caller since no results are collected.
+   * @param <R>   the type of result that would be returned by the tasks (unused since no results
+   *              are collected)
+   * @param tasks the batch of tasks to submit for asynchronous execution
+   * @throws ExecutionException if there is an error submitting the tasks to the thread pool
+   */
+  <R> void submitOnly(TaskBatch<R> tasks) throws ExecutionException;
 }
