@@ -688,7 +688,7 @@
                 <configuration>
                   <resources>
                     <resource>
-                      <directory>${basedir}/target/generated-sources/replaced/test/resources</directory>
+                      <directory>${basedir}/src/test/resources</directory>
                     </resource>
                   </resources>
                 </configuration>
@@ -714,7 +714,7 @@
                 <configuration>
                   <resources>
                     <resource>
-                      <directory>${basedir}/target/generated-sources/replaced/it/resources</directory>
+                      <directory>${basedir}/src/it/resources</directory>
                     </resource>
                   </resources>
                 </configuration>
