@@ -362,7 +362,7 @@ public abstract class BasePermissionsIT {
   }
 
   protected static String getUrl() {
-    return "jdbc:phoenix:localhost:" + testUtil.getZkCluster().getClientPort() + ":/hbase";
+    return "jdbc:phoenix+zk:localhost:" + testUtil.getZkCluster().getClientPort() + ":/hbase";
   }
 
   private static Set<String> getHBaseTables() throws IOException {
