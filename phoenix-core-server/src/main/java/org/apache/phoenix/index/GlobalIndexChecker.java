@@ -29,6 +29,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import org.apache.hadoop.hbase.Cell;
@@ -58,6 +59,7 @@ import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.BaseRegionScanner;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.DataTableScanMetrics;
 import org.apache.phoenix.coprocessor.DelegateRegionScanner;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.filter.EmptyColumnOnlyFilter;
@@ -155,6 +157,7 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
     private String indexName;
     private long pageSizeMs;
     private boolean initialized = false;
+    private boolean isScanMetricsEnabled = false;
 
     public GlobalIndexScanner(RegionCoprocessorEnvironment env, Scan scan, RegionScanner scanner,
       GlobalIndexCheckerSource metricsSource) throws IOException {
@@ -186,6 +189,7 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
         DEFAULT_REPAIR_LOGGING_PERCENT);
       random = new Random(EnvironmentEdgeManager.currentTimeMillis());
       pageSizeMs = getPageSizeMsForRegionScanner(scan);
+      isScanMetricsEnabled = scan.isScanMetricsEnabled();
     }
 
     @Override
@@ -343,6 +347,12 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
       return scanner.getMvccReadPoint();
     }
 
+    private DataTableScanMetrics buildDataTableScanMetrics(Map<String, Long> scanMetrics) {
+      DataTableScanMetrics.Builder builder = new DataTableScanMetrics.Builder();
+      DataTableScanMetrics.buildDataTableScanMetrics(scanMetrics, builder);
+      return builder.build();
+    }
+
     private void repairIndexRows(byte[] indexRowKey, long ts, List<Cell> row) throws IOException {
       if (buildIndexScanForDataTable == null) {
         buildIndexScanForDataTable = new Scan();
@@ -400,8 +410,14 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
       buildIndexScanForDataTable.setAttribute(BaseScannerRegionObserverConstants.INDEX_ROW_KEY,
         indexRowKey);
       Result result = null;
+      buildIndexScanForDataTable.setScanMetricsEnabled(isScanMetricsEnabled);
       try (ResultScanner resultScanner = dataHTable.getScanner(buildIndexScanForDataTable)) {
         result = resultScanner.next();
+        if (isScanMetricsEnabled) {
+          Map<String, Long> scanMetrics = resultScanner.getScanMetrics().getMetricsMap();
+          DataTableScanMetrics dataTableScanMetrics = buildDataTableScanMetrics(scanMetrics);
+          dataTableScanMetrics.populateThreadLocalServerSideScanMetrics();
+        }
       } catch (Throwable t) {
         ClientUtil.throwIOException(dataHTable.getName().toString(), t);
       }

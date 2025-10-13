@@ -53,6 +53,7 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 import org.apache.hadoop.util.ReflectionUtils;
+import org.apache.phoenix.compat.hbase.CompatScanMetrics;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -163,6 +164,20 @@ public class ScanningResultIterator implements ResultIterator {
       changeMetric(scanMetricsHolder.getCountOfBytesScanned(),
         scanMetricsMap.get(BYTES_IN_RESULTS_METRIC_NAME));
       changeMetric(scanMetricsHolder.getCountOfRowsPaged(), dummyRowCounter);
+      changeMetric(scanMetricsHolder.getFsReadTime(),
+        CompatScanMetrics.getFsReadTime(scanMetricsMap));
+      changeMetric(scanMetricsHolder.getCountOfBytesReadFromFS(),
+        CompatScanMetrics.getBytesReadFromFs(scanMetricsMap));
+      changeMetric(scanMetricsHolder.getCountOfBytesReadFromMemstore(),
+        CompatScanMetrics.getBytesReadFromMemstore(scanMetricsMap));
+      changeMetric(scanMetricsHolder.getCountOfBytesReadFromBlockcache(),
+        CompatScanMetrics.getBytesReadFromBlockCache(scanMetricsMap));
+      changeMetric(scanMetricsHolder.getCountOfBlockReadOps(),
+        CompatScanMetrics.getBlockReadOpsCount(scanMetricsMap));
+      changeMetric(scanMetricsHolder.getRpcScanProcessingTime(),
+        CompatScanMetrics.getRpcScanProcessingTime(scanMetricsMap));
+      changeMetric(scanMetricsHolder.getRpcScanQueueWaitTime(),
+        CompatScanMetrics.getRpcScanQueueWaitTime(scanMetricsMap));
 
       changeMetric(GLOBAL_SCAN_BYTES, scanMetricsMap.get(BYTES_IN_RESULTS_METRIC_NAME));
       changeMetric(GLOBAL_HBASE_COUNT_RPC_CALLS, scanMetricsMap.get(RPC_CALLS_METRIC_NAME));
