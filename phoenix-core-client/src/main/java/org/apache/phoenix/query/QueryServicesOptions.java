@@ -255,7 +255,7 @@ public class QueryServicesOptions {
    * HConstants#HIGH_QOS is the max we will see to a standard table. We go higher to differentiate
    * and give some room for things in the middle
    */
-  public static final int DEFAULT_SERVER_SIDE_PRIORITY = 500;
+  public static final int DEFAULT_SERVER_SIDE_PRIORITY = 5000;
   public static final int DEFAULT_INDEX_PRIORITY = 1000;
   public static final int DEFAULT_METADATA_PRIORITY = 2000;
   public static final int DEFAULT_INVALIDATE_METADATA_CACHE_PRIORITY = 3000;
