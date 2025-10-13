@@ -82,9 +82,10 @@ public class RowProjector {
 
   /**
    * Construct RowProjector based on a list of ColumnProjectors with additional name mappings.
-   * @param columnProjectors ordered list of ColumnProjectors corresponding to projected columns in
-   *                         SELECT clause aggregating coprocessor. Only required in the case of an
-   *                         aggregate query with a limit clause and otherwise may be null.
+   * @param columnProjectors       ordered list of ColumnProjectors corresponding to projected
+   *                               columns in SELECT clause aggregating coprocessor. Only required
+   *                               in the case of an aggregate query with a limit clause and
+   *                               otherwise may be null.
    * @param additionalNameMappings additional column name to position mappings to merge into the
    *                               reverseIndex during construction. Used for preserving original
    *                               column names when query optimization rewrites them (e.g., view
@@ -239,12 +240,10 @@ public class RowProjector {
    * PHOENIX-6644: Creates a new RowProjector with additional column name mappings merged from
    * another projector. This is useful when an optimized query (e.g., using an index) rewrites
    * column references but we want to preserve the original column names for
-   * ResultSet.getString(columnName) compatibility.
-   *
-   * For example, when a view has "WHERE v1 = 'a'" and an index is used, the optimizer may
-   * rewrite "SELECT v1 FROM view" to "SELECT 'a' FROM index". This method adds the original
-   * column name "v1" to the reverseIndex so ResultSet.getString("v1") continues to work.
-   *
+   * ResultSet.getString(columnName) compatibility. For example, when a view has "WHERE v1 = 'a'"
+   * and an index is used, the optimizer may rewrite "SELECT v1 FROM view" to "SELECT 'a' FROM
+   * index". This method adds the original column name "v1" to the reverseIndex so
+   * ResultSet.getString("v1") continues to work.
    * @param sourceProjector the projector containing original column name mappings to preserve
    * @return a new RowProjector with merged column name mappings
    */
@@ -272,7 +271,8 @@ public class RowProjector {
       if (!sourceCol.getTableName().isEmpty()) {
         String sourceQualifiedName =
           SchemaUtil.getColumnName(sourceCol.getTableName(), sourceCol.getLabel());
-        String currentQualifiedName = currentCol.getTableName().isEmpty() ? ""
+        String currentQualifiedName = currentCol.getTableName().isEmpty()
+          ? ""
           : SchemaUtil.getColumnName(currentCol.getTableName(), currentCol.getLabel());
 
         if (!sourceQualifiedName.equals(currentQualifiedName)) {
@@ -283,8 +283,7 @@ public class RowProjector {
 
     // Create new RowProjector with additional mappings merged during construction
     // This maintains immutability.
-    return new RowProjector(this.columnProjectors, this.estimatedSize,
-      this.isProjectEmptyKeyValue, this.hasUDFs, this.isProjectAll,
-      this.isProjectDynColsInWildcardQueries, additionalMappings);
+    return new RowProjector(this.columnProjectors, this.estimatedSize, this.isProjectEmptyKeyValue,
+      this.hasUDFs, this.isProjectAll, this.isProjectDynColsInWildcardQueries, additionalMappings);
   }
 }
