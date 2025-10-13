@@ -539,7 +539,7 @@
                   <includes>
                     <include>**/*.java</include>
                   </includes>
-                  <!-- Omid uses unshaded protobuf 3 -->
+                  <!-- Omid uses unshaded protobuf 2.5 -->
                   <excludes>
                     <exclude>**/OmidTransactionContext*.java</exclude>
                   </excludes>
