@@ -18,30 +18,25 @@
 package org.apache.phoenix.monitoring;
 
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.function.Function;
 import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 import org.apache.phoenix.compat.hbase.CompatScanMetrics;
 
 public class SlowestScanReadMetricsQueue {
-  public static final Function<Map<String, Map<MetricType, Long>>, Long> CRITERIA = (input) -> {
-    for (Map<MetricType, Long> o1Metrics : input.values()) {
-      return o1Metrics.getOrDefault(MetricType.COUNT_MILLS_BETWEEN_NEXTS, 0L);
-    }
-    return 0L;
-  };
 
-  private static Comparator<Map<String, Map<MetricType, Long>>> COMPARATOR =
-    new Comparator<Map<String, Map<MetricType, Long>>>() {
+  public static final SlowestScanReadMetricsQueue NOOP_SLOWEST_SCAN_READ_METRICS_QUEUE =
+    new SlowestScanReadMetricsQueue() {
       @Override
-      public int compare(Map<String, Map<MetricType, Long>> o1,
-        Map<String, Map<MetricType, Long>> o2) {
-        return CRITERIA.apply(o1).compareTo(CRITERIA.apply(o2));
+      public void add(String tableName, Map<String, Long> scanMetrics) {
+      }
+
+      @Override
+      public Map<String, Map<MetricType, Long>> aggregate() {
+        return Collections.emptyMap();
       }
     };
 
@@ -118,16 +113,21 @@ public class SlowestScanReadMetricsQueue {
 
   public Map<String, Map<MetricType, Long>> aggregate() {
     Map<String, Map<MetricType, Long>> slowestScanReadMetrics = null;
+    long maxMillisBetweenNexts = Long.MIN_VALUE;
+
+    // Optimized: Single pass through the queue to find the maximum value
     while (!slowestScanReadMetricsQueue.isEmpty()) {
       Map<String, Map<MetricType, Long>> scanReadMetrics = slowestScanReadMetricsQueue.poll();
-      if (slowestScanReadMetrics == null) {
+
+      // Extract the millis between nexts value directly for comparison
+      long currentMillisBetweenNexts = extractMillisBetweenNexts(scanReadMetrics);
+
+      if (slowestScanReadMetrics == null || currentMillisBetweenNexts > maxMillisBetweenNexts) {
         slowestScanReadMetrics = scanReadMetrics;
-      } else {
-        if (COMPARATOR.compare(scanReadMetrics, slowestScanReadMetrics) > 0) {
-          slowestScanReadMetrics = scanReadMetrics;
-        }
+        maxMillisBetweenNexts = currentMillisBetweenNexts;
       }
     }
+
     if (slowestScanReadMetrics == null) {
       return Collections.emptyMap();
     }
@@ -136,7 +136,18 @@ public class SlowestScanReadMetricsQueue {
 
   public static Map<String, Map<MetricType, Long>> getSlowest(Map<String, Map<MetricType, Long>> o1,
     Map<String, Map<MetricType, Long>> o2) {
-    return COMPARATOR.compare(o1, o2) >= 0 ? o1 : o2;
+    // Optimized: Direct comparison without using COMPARATOR
+    long value1 = extractMillisBetweenNexts(o1);
+    long value2 = extractMillisBetweenNexts(o2);
+    return value1 >= value2 ? o1 : o2;
+  }
+
+  public static long extractMillisBetweenNexts(Map<String, Map<MetricType, Long>> input) {
+    Map<MetricType,
+      Long> metrics = input.values().iterator().hasNext()
+        ? input.values().iterator().next()
+        : Collections.emptyMap();
+    return metrics.getOrDefault(MetricType.COUNT_MILLS_BETWEEN_NEXTS, Long.MIN_VALUE);
   }
 
   public static class SlowestScanMetrics {

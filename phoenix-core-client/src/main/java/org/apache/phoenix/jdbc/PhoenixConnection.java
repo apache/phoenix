@@ -187,6 +187,7 @@ public class PhoenixConnection
   private String sourceOfOperation;
   private volatile SQLException reasonForClose;
   private static final String[] CONNECTION_PROPERTIES;
+  private final boolean isSlowestScanReadMetricsEnabled;
 
   private final ConcurrentLinkedQueue<PhoenixConnection> childConnections =
     new ConcurrentLinkedQueue<>();
@@ -320,6 +321,8 @@ public class PhoenixConnection
     this.mutateBatchSize = JDBCUtil.getMutateBatchSize(url, this.info, this.services.getProps());
     this.mutateBatchSizeBytes =
       JDBCUtil.getMutateBatchSizeBytes(url, this.info, this.services.getProps());
+    this.isSlowestScanReadMetricsEnabled =
+      JDBCUtil.getSlowestScanReadMetricsEnabled(url, this.info, this.services.getProps());
     datePattern =
       this.services.getProps().get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
     timePattern =
@@ -1488,5 +1491,9 @@ public class PhoenixConnection
 
   public void setActivityLogger(ConnectionActivityLogger connectionActivityLogger) {
     this.connectionActivityLogger = connectionActivityLogger;
+  }
+
+  public boolean isSlowestScanReadMetricsEnabled() {
+    return isSlowestScanReadMetricsEnabled;
   }
 }

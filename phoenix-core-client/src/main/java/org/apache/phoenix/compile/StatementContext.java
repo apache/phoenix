@@ -184,7 +184,10 @@ public class StatementContext {
     this.readMetricsQueue = new ReadMetricQueue(isRequestMetricsEnabled, connection.getLogLevel());
     this.overAllQueryMetrics =
       new OverAllQueryMetrics(isRequestMetricsEnabled, connection.getLogLevel());
-    this.slowestScanReadMetricsQueue = new SlowestScanReadMetricsQueue();
+    boolean isSlowestScanReadMetricsEnabled = connection.isSlowestScanReadMetricsEnabled();
+    this.slowestScanReadMetricsQueue = isSlowestScanReadMetricsEnabled
+      ? new SlowestScanReadMetricsQueue()
+      : SlowestScanReadMetricsQueue.NOOP_SLOWEST_SCAN_READ_METRICS_QUEUE;
     this.retryingPersistentCache = Maps.<Long, Boolean> newHashMap();
     this.hasFirstValidResult = new AtomicBoolean(false);
     this.subStatementContexts = Sets.newHashSet();
@@ -500,19 +503,31 @@ public class StatementContext {
     List<Map<String, Map<MetricType, Long>>> currentMetrics, long currentScanTimeInMillis,
     SlowestScanMetrics slowestScanMetrics) {
     Map<String, Map<MetricType, Long>> nodeScanMetrics = node.getReadMetricsQueue().aggregate();
+    long nodeScanTime = SlowestScanReadMetricsQueue.extractMillisBetweenNexts(nodeScanMetrics);
+    long newScanTimeInMillis = currentScanTimeInMillis + nodeScanTime;
+
     currentMetrics.add(nodeScanMetrics);
-    currentScanTimeInMillis += SlowestScanReadMetricsQueue.CRITERIA.apply(nodeScanMetrics);
-    if (node.getSubStatementContexts() == null || node.getSubStatementContexts().isEmpty()) {
-      if (currentScanTimeInMillis > slowestScanMetrics.getSumOfMillisSecBetweenNexts()) {
-        slowestScanMetrics.setSumOfMillisSecBetweenNexts(currentScanTimeInMillis);
-        slowestScanMetrics.setScanMetrics(new ArrayList<>(currentMetrics));
+
+    Set<StatementContext> subContexts = node.getSubStatementContexts();
+    if (subContexts == null || subContexts.isEmpty()) {
+      // Leaf node: update best if this path is better
+      if (newScanTimeInMillis > slowestScanMetrics.getSumOfMillisSecBetweenNexts()) {
+        slowestScanMetrics.setSumOfMillisSecBetweenNexts(newScanTimeInMillis);
+        // Avoid repeated ArrayList creation by only updating when we have a better path
+        List<Map<String, Map<MetricType, Long>>> newMetrics =
+          new ArrayList<>(currentMetrics.size());
+        for (Map<String, Map<MetricType, Long>> metric : currentMetrics) {
+          newMetrics.add(metric);
+        }
+        slowestScanMetrics.setScanMetrics(newMetrics);
       }
     } else {
-      for (StatementContext sub : node.getSubStatementContexts()) {
-        getSlowestScanReadMetricsUtil(sub, currentMetrics, currentScanTimeInMillis,
-          slowestScanMetrics);
+      // Process sub-contexts
+      for (StatementContext sub : subContexts) {
+        getSlowestScanReadMetricsUtil(sub, currentMetrics, newScanTimeInMillis, slowestScanMetrics);
       }
     }
+
     currentMetrics.remove(currentMetrics.size() - 1);
   }
 }

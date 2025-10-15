@@ -636,6 +636,7 @@ public interface QueryServices extends SQLCloseable {
     "phoenix.uncovered.index.threads.keepalive.sec";
 
   String USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP = "phoenix.bloomfilter.multikey.pointlookup";
+  String SLOWEST_SCAN_READ_METRICS_ENABLED = "phoenix.slowest.scan.read.metrics.enabled";
 
   /**
    * Get executor service used for parallel scans
