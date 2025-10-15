@@ -158,7 +158,7 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
   private RegionScanner getMockTimeRangeRegionScanner(final TimeRange timeRange) {
     return new BaseRegionScanner(Mockito.mock(RegionScanner.class)) {
       @Override
-      public boolean next(List<Cell> results) throws IOException {
+      public boolean next(List results) throws IOException {
         for (Cell cell : currentRowCells) {
           if (
             cell.getTimestamp() >= timeRange.getMin() && cell.getTimestamp() < timeRange.getMax()
@@ -169,7 +169,7 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
         return false; // indicate no more results
       }
 
-      public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+      public boolean next(List result, ScannerContext scannerContext) throws IOException {
         return next(result);
       }
     };

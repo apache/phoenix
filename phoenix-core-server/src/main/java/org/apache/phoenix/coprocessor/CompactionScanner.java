@@ -434,7 +434,7 @@ public class CompactionScanner implements InternalScanner {
   }
 
   @Override
-  public boolean next(List<Cell> result) throws IOException {
+  public boolean next(List result) throws IOException {
     boolean hasMore = storeScanner.next(result);
     inputCellCount += result.size();
     if (!result.isEmpty()) {
@@ -453,7 +453,7 @@ public class CompactionScanner implements InternalScanner {
   }
 
   @Override
-  public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+  public boolean next(List result, ScannerContext scannerContext) throws IOException {
     return next(result);
   }
 

@@ -24,6 +24,7 @@ import java.util.Map.Entry;
 import java.util.Optional;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparatorImpl;
+import org.apache.hadoop.hbase.ExtendedCell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -51,10 +52,10 @@ public class LocalIndexStoreFileScanner extends CompatLocalIndexStoreFileScanner
   }
 
   @Override
-  public Cell next() throws IOException {
-    Cell next = super.next();
+  public ExtendedCell next() throws IOException {
+    ExtendedCell next = (ExtendedCell) super.next();
     while (next != null && !isSatisfiedMidKeyCondition(next)) {
-      next = super.next();
+      next = (ExtendedCell) super.next();
     }
     while (super.peek() != null && !isSatisfiedMidKeyCondition(super.peek())) {
       super.next();
@@ -66,15 +67,15 @@ public class LocalIndexStoreFileScanner extends CompatLocalIndexStoreFileScanner
   }
 
   @Override
-  public Cell peek() {
-    Cell peek = super.peek();
+  public ExtendedCell peek() {
+    ExtendedCell peek = (ExtendedCell) super.peek();
     if (peek != null && (reader.isTop() || changeBottomKeys)) {
       peek = getChangedKey(peek, !reader.isTop() && changeBottomKeys);
     }
     return peek;
   }
 
-  private Cell getChangedKey(Cell next, boolean changeBottomKeys) {
+  private ExtendedCell getChangedKey(ExtendedCell next, boolean changeBottomKeys) {
     // If it is a top store file change the StartKey with SplitKey in Key
     // and produce the new value corresponding to the change in key
     byte[] changedKey = getNewRowkeyByRegionStartKeyReplacedWithSplitKey(next, changeBottomKeys);
@@ -90,8 +91,9 @@ public class LocalIndexStoreFileScanner extends CompatLocalIndexStoreFileScanner
    * Enforce seek all the time for local index store file scanner otherwise some times hbase might
    * return fake kvs not in physical files.
    */
-  @Override
-  public boolean requestSeek(Cell kv, boolean forward, boolean useBloom) throws IOException {
+  // HBase 3 API
+  public boolean requestSeek(ExtendedCell kv, boolean forward, boolean useBloom)
+    throws IOException {
     boolean requestSeek = super.requestSeek(kv, forward, useBloom);
     if (requestSeek) {
       Cell peek = super.peek();
@@ -105,30 +107,46 @@ public class LocalIndexStoreFileScanner extends CompatLocalIndexStoreFileScanner
     return requestSeek;
   }
 
-  @Override
-  public boolean seek(Cell key) throws IOException {
+  // HBase 2 API
+  public boolean requestSeek(Cell kvIn, boolean forward, boolean useBloom) throws IOException {
+    return requestSeek((ExtendedCell) kvIn, forward, useBloom);
+  }
+
+  // HBase 3 API
+  public boolean seek(ExtendedCell key) throws IOException {
     return seekOrReseek(key, true);
   }
 
-  @Override
-  public boolean reseek(Cell key) throws IOException {
+  // HBase 2 API
+  // TODO push these to the compatibility module ?
+  public boolean seek(Cell key) throws IOException {
+    return seek((ExtendedCell) key);
+  }
+
+  // HBase 3 API
+  public boolean reseek(ExtendedCell key) throws IOException {
     return seekOrReseek(key, false);
   }
 
-  @Override
-  public boolean seekToPreviousRow(Cell key) throws IOException {
+  // HBase 2 API
+  public boolean reseek(Cell key) throws IOException {
+    return reseek((ExtendedCell) key);
+  }
+
+  // HBase 3 API
+  public boolean seekToPreviousRow(ExtendedCell key) throws IOException {
     KeyValue kv = PhoenixKeyValueUtil.maybeCopyCell(key);
     if (reader.isTop()) {
-      Optional<Cell> firstKey = reader.getFirstKey();
+      Optional firstKey = reader.getFirstKey();
       // This will be null when the file is empty in which we can not seekBefore to
       // any key
       if (firstKey.isPresent()) {
         return false;
       }
-      if (this.comparator.compare(kv, firstKey.get(), true) <= 0) {
+      if (this.comparator.compare(kv, (ExtendedCell) firstKey.get(), true) <= 0) {
         return super.seekToPreviousRow(key);
       }
-      Cell replacedKey = getKeyPresentInHFiles(kv);
+      ExtendedCell replacedKey = getKeyPresentInHFiles(kv);
       boolean seekToPreviousRow = super.seekToPreviousRow(replacedKey);
       while (super.peek() != null && !isSatisfiedMidKeyCondition(super.peek())) {
         seekToPreviousRow = super.seekToPreviousRow(super.peek());
@@ -151,6 +169,11 @@ public class LocalIndexStoreFileScanner extends CompatLocalIndexStoreFileScanner
       seekToPreviousRow = super.seekToPreviousRow(super.peek());
     }
     return seekToPreviousRow;
+  }
+
+  // HBase 2 API
+  public boolean seekToPreviousRow(Cell key) throws IOException {
+    return seekToPreviousRow((ExtendedCell) key);
   }
 
   @Override
@@ -215,8 +238,8 @@ public class LocalIndexStoreFileScanner extends CompatLocalIndexStoreFileScanner
   /**
    * @param isSeek pass true for seek, false for reseek.
    */
-  public boolean seekOrReseek(Cell cell, boolean isSeek) throws IOException {
-    Cell keyToSeek = cell;
+  public boolean seekOrReseek(ExtendedCell cell, boolean isSeek) throws IOException {
+    ExtendedCell keyToSeek = cell;
     KeyValue splitKeyValue = new KeyValue.KeyOnlyKeyValue(reader.getSplitkey());
     if (reader.isTop()) {
       if (this.comparator.compare(cell, splitKeyValue, true) < 0) {
@@ -242,7 +265,7 @@ public class LocalIndexStoreFileScanner extends CompatLocalIndexStoreFileScanner
     return seekOrReseekToProperKey(isSeek, keyToSeek);
   }
 
-  private boolean seekOrReseekToProperKey(boolean isSeek, Cell kv) throws IOException {
+  private boolean seekOrReseekToProperKey(boolean isSeek, ExtendedCell kv) throws IOException {
     boolean seekOrReseek = isSeek ? super.seek(kv) : super.reseek(kv);
     while (seekOrReseek && super.peek() != null && !isSatisfiedMidKeyCondition(super.peek())) {
       super.next();

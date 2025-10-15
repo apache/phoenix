@@ -124,10 +124,10 @@ public class MetaDataRegionObserver implements RegionObserver, RegionCoprocessor
   private long statsTruncateTaskDelay;
 
   @Override
-  public void preClose(final ObserverContext<RegionCoprocessorEnvironment> c,
-    boolean abortRequested) {
+  public void preClose(final ObserverContext c, boolean abortRequested) {
     executor.shutdownNow();
-    GlobalCache.getInstance(c.getEnvironment()).getMetaDataCache().invalidateAll();
+    GlobalCache.getInstance((RegionCoprocessorEnvironment) c.getEnvironment()).getMetaDataCache()
+      .invalidateAll();
   }
 
   @Override
@@ -162,8 +162,8 @@ public class MetaDataRegionObserver implements RegionObserver, RegionCoprocessor
   }
 
   @Override
-  public void postOpen(ObserverContext<RegionCoprocessorEnvironment> e) {
-    final RegionCoprocessorEnvironment env = e.getEnvironment();
+  public void postOpen(ObserverContext e) {
+    final RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) e.getEnvironment();
 
     Runnable r = new Runnable() {
       @Override
@@ -220,12 +220,16 @@ public class MetaDataRegionObserver implements RegionObserver, RegionCoprocessor
       return;
     }
     // Ensure we only run one of the index rebuilder tasks
-    if (ServerUtil.isKeyInRegion(SYSTEM_CATALOG_KEY, e.getEnvironment().getRegion())) {
+    if (
+      ServerUtil.isKeyInRegion(SYSTEM_CATALOG_KEY,
+        ((RegionCoprocessorEnvironment) e.getEnvironment()).getRegion())
+    ) {
       try {
         Class.forName(PhoenixDriver.class.getName());
         initRebuildIndexConnectionProps(e.getEnvironment().getConfiguration());
         // starts index rebuild schedule work
-        BuildIndexScheduleTask task = new BuildIndexScheduleTask(e.getEnvironment());
+        BuildIndexScheduleTask task =
+          new BuildIndexScheduleTask((RegionCoprocessorEnvironment) e.getEnvironment());
         executor.scheduleWithFixedDelay(task, initialRebuildTaskDelay, rebuildIndexTimeInterval,
           TimeUnit.MILLISECONDS);
       } catch (ClassNotFoundException ex) {

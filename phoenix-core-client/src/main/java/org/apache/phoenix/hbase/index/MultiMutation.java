@@ -21,6 +21,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map.Entry;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellBuilder;
+import org.apache.hadoop.hbase.CellBuilderType;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
@@ -40,7 +42,8 @@ public class MultiMutation extends Mutation {
       byte[] family = kvs.getKey();
       List<Cell> list = getKeyValueList(family, kvs.getValue().size());
       list.addAll(kvs.getValue());
-      familyMap.put(family, list);
+      // override generics to fix the Cell/ExtendedCell type changes between HBase 2/3
+      familyMap.put(family, (List) list);
     }
 
     // add all the attributes, not overriding already stored ones
@@ -52,11 +55,17 @@ public class MultiMutation extends Mutation {
   }
 
   private List<Cell> getKeyValueList(byte[] family, int hint) {
-    List<Cell> list = familyMap.get(family);
+    // override generics to fix the Cell/ExtendedCell type changes between HBase 2/3
+    List<Cell> list = (List) (familyMap.get(family));
     if (list == null) {
       list = new ArrayList<Cell>(hint);
     }
     return list;
+  }
+
+  // No @Override to maintain Hadoop 2 compatibility
+  public CellBuilder getCellBuilder(CellBuilderType cellBuilderType) {
+    throw new IllegalArgumentException("MultiMutation does not implement a CellBuilder");
   }
 
   @Override
@@ -80,5 +89,4 @@ public class MultiMutation extends Mutation {
     MultiMutation other = (MultiMutation) obj;
     return rowKey.equals(other.rowKey);
   }
-
 }

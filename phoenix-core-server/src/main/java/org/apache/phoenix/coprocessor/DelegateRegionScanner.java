@@ -19,7 +19,6 @@ package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
 import java.util.List;
-import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
@@ -60,22 +59,22 @@ public class DelegateRegionScanner implements RegionScanner {
   }
 
   @Override
-  public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+  public boolean next(List result, ScannerContext scannerContext) throws IOException {
     return next(result, false, scannerContext);
   }
 
   @Override
-  public boolean next(List<Cell> result) throws IOException {
+  public boolean next(List result) throws IOException {
     return next(result, false, null);
   }
 
   @Override
-  public boolean nextRaw(List<Cell> result, ScannerContext scannerContext) throws IOException {
+  public boolean nextRaw(List result, ScannerContext scannerContext) throws IOException {
     return next(result, true, scannerContext);
   }
 
   @Override
-  public boolean nextRaw(List<Cell> result) throws IOException {
+  public boolean nextRaw(List result) throws IOException {
     return next(result, true, null);
   }
 
@@ -97,8 +96,7 @@ public class DelegateRegionScanner implements RegionScanner {
     }
   }
 
-  private boolean next(List<Cell> result, boolean raw, ScannerContext scannerContext)
-    throws IOException {
+  private boolean next(List result, boolean raw, ScannerContext scannerContext) throws IOException {
     if (scannerContext != null) {
       return raw ? delegate.nextRaw(result, scannerContext) : delegate.next(result, scannerContext);
     }

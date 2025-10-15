@@ -205,7 +205,6 @@ public class IndexTestUtil {
       assertCoprocsContains(GlobalIndexChecker.class, indexDescriptor);
 
       TableDescriptorBuilder indexDescBuilder = TableDescriptorBuilder.newBuilder(indexDescriptor);
-      removeCoproc(IndexRegionObserver.class, indexDescBuilder, admin);
       removeCoproc(GlobalIndexChecker.class, indexDescBuilder, admin);
     }
 

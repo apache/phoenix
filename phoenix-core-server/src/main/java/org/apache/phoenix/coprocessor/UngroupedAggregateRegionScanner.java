@@ -590,18 +590,17 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
   }
 
   @Override
-  public boolean nextRaw(List<Cell> results, ScannerContext scannerContext) throws IOException {
+  public boolean nextRaw(List results, ScannerContext scannerContext) throws IOException {
     return next(results, scannerContext);
   }
 
   @Override
-  public boolean next(List<Cell> resultsToReturn) throws IOException {
+  public boolean next(List resultsToReturn) throws IOException {
     return next(resultsToReturn, null);
   }
 
   @Override
-  public boolean next(List<Cell> resultsToReturn, ScannerContext scannerContext)
-    throws IOException {
+  public boolean next(List resultsToReturn, ScannerContext scannerContext) throws IOException {
     boolean hasMore;
     Configuration conf = env.getConfiguration();
     final TenantCache tenantCache = GlobalCache.getTenantCache(env, ScanUtil.getTenantId(scan));

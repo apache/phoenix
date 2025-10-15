@@ -23,7 +23,6 @@ import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForFilter;
 import java.io.IOException;
 import java.util.List;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeepDeletedCells;
@@ -149,8 +148,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
   }
 
   @Override
-  public void preScannerOpen(
-    org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c, Scan scan)
+  public void preScannerOpen(org.apache.hadoop.hbase.coprocessor.ObserverContext c, Scan scan)
     throws IOException {
     byte[] txnScn = scan.getAttribute(BaseScannerRegionObserverConstants.TX_SCN);
     if (txnScn != null) {
@@ -169,7 +167,8 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
       // results otherwise while in other cases, it may just mean out client-side data
       // on region boundaries is out of date and can safely be ignored.
       if (!skipRegionBoundaryCheck(scan) || ScanUtil.isLocalIndex(scan)) {
-        throwIfScanOutOfRegion(scan, c.getEnvironment().getRegion());
+        throwIfScanOutOfRegion(scan,
+          ((RegionCoprocessorEnvironment) c.getEnvironment()).getRegion());
       }
       // Muck with the start/stop row of the scan and set as reversed at the
       // last possible moment. You need to swap the start/stop and make the
@@ -249,22 +248,22 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     }
 
     @Override
-    public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+    public boolean next(List result, ScannerContext scannerContext) throws IOException {
       return nextInternal(result, scannerContext, false);
     }
 
     @Override
-    public boolean next(List<Cell> result) throws IOException {
+    public boolean next(List result) throws IOException {
       overrideDelegate();
       return super.next(result);
     }
 
     @Override
-    public boolean nextRaw(List<Cell> result, ScannerContext scannerContext) throws IOException {
+    public boolean nextRaw(List result, ScannerContext scannerContext) throws IOException {
       return nextInternal(result, scannerContext, true);
     }
 
-    private boolean nextInternal(List<Cell> result, ScannerContext scannerContext, boolean isRaw)
+    private boolean nextInternal(List result, ScannerContext scannerContext, boolean isRaw)
       throws IOException {
       overrideDelegate();
       if (scannerContext instanceof PhoenixScannerContext) {
@@ -289,7 +288,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     }
 
     @Override
-    public boolean nextRaw(List<Cell> result) throws IOException {
+    public boolean nextRaw(List result) throws IOException {
       overrideDelegate();
       return super.nextRaw(result);
     }
@@ -310,9 +309,11 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
    * IOException is thrown, to prevent the coprocessor from becoming blacklisted.
    */
   @Override
-  public final RegionScanner postScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
-    final Scan scan, final RegionScanner s) throws IOException {
+  public final RegionScanner postScannerOpen(final ObserverContext c, final Scan scan,
+    final RegionScanner s) throws IOException {
+    RegionCoprocessorEnvironment e = (RegionCoprocessorEnvironment) c.getEnvironment();
     try {
+
       if (!isRegionObserverFor(scan)) {
         return s;
       }
@@ -327,11 +328,10 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
       } else {
         // An old client may not set these attributes which are required by TTLRegionScanner
         if (emptyCF != null && emptyCQ != null) {
-          return new RegionScannerHolder(c, scan, new TTLRegionScanner(c.getEnvironment(), scan,
-            new PagingRegionScanner(c.getEnvironment().getRegion(), s, scan)));
+          return new RegionScannerHolder(c, scan,
+            new TTLRegionScanner(e, scan, new PagingRegionScanner(e.getRegion(), s, scan)));
         }
-        return new RegionScannerHolder(c, scan,
-          new PagingRegionScanner(c.getEnvironment().getRegion(), s, scan));
+        return new RegionScannerHolder(c, scan, new PagingRegionScanner(e.getRegion(), s, scan));
 
       }
     } catch (Throwable t) {
@@ -344,14 +344,13 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             + "Thorwing it as StaleRegionBoundaryCacheException",
           s.getRegionInfo().getRegionNameAsString(), t);
         Exception cause = new StaleRegionBoundaryCacheException(
-          c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString());
+          e.getRegion().getRegionInfo().getTable().getNameAsString());
         throw new DoNotRetryIOException(cause.getMessage(), cause);
       } else {
         LOGGER.error("postScannerOpen error for region {}",
           s.getRegionInfo().getRegionNameAsString(), t);
       }
-      ClientUtil.throwIOException(
-        c.getEnvironment().getRegion().getRegionInfo().getRegionNameAsString(), t);
+      ClientUtil.throwIOException(e.getRegion().getRegionInfo().getRegionNameAsString(), t);
       return null; // impossible
     }
   }
@@ -386,9 +385,9 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
   }
 
   @Override
-  public void preCompactScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
-    ScanType scanType, ScanOptions options, CompactionLifeCycleTracker tracker,
-    CompactionRequest request) throws IOException {
+  public void preCompactScannerOpen(ObserverContext c, Store store, ScanType scanType,
+    ScanOptions options, CompactionLifeCycleTracker tracker, CompactionRequest request)
+    throws IOException {
     Configuration conf = c.getEnvironment().getConfiguration();
     if (isPhoenixCompactionEnabled(conf)) {
       setScanOptionsForFlushesAndCompactions(options);
@@ -401,8 +400,8 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
   }
 
   @Override
-  public void preFlushScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
-    ScanOptions options, FlushLifeCycleTracker tracker) throws IOException {
+  public void preFlushScannerOpen(ObserverContext c, Store store, ScanOptions options,
+    FlushLifeCycleTracker tracker) throws IOException {
     Configuration conf = c.getEnvironment().getConfiguration();
 
     if (isPhoenixCompactionEnabled(conf)) {
@@ -416,9 +415,8 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
   }
 
   @Override
-  public void preMemStoreCompactionCompactScannerOpen(
-    ObserverContext<RegionCoprocessorEnvironment> c, Store store, ScanOptions options)
-    throws IOException {
+  public void preMemStoreCompactionCompactScannerOpen(ObserverContext c, Store store,
+    ScanOptions options) throws IOException {
     Configuration conf = c.getEnvironment().getConfiguration();
     if (isPhoenixCompactionEnabled(conf)) {
       setScanOptionsForFlushesAndCompactions(options);
@@ -444,8 +442,8 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
   }
 
   @Override
-  public void preStoreScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
-    ScanOptions options) throws IOException {
+  public void preStoreScannerOpen(ObserverContext c, Store store, ScanOptions options)
+    throws IOException {
 
     Configuration conf = c.getEnvironment().getConfiguration();
     if (isPhoenixCompactionEnabled(conf)) {

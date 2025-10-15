@@ -71,16 +71,16 @@ public class ScanRegionObserver extends BaseScannerRegionObserver implements Reg
   }
 
   @Override
-  public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-    MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+  public void preBatchMutate(ObserverContext c, MiniBatchOperationInProgress miniBatchOp)
+    throws IOException {
+    RegionCoprocessorEnvironment e = (RegionCoprocessorEnvironment) c.getEnvironment();
     try {
       preBatchMutateWithExceptions(miniBatchOp,
-        c.getEnvironment().getRegion().getTableDescriptor().getTableName().getNameAsString());
+        e.getRegion().getTableDescriptor().getTableName().getNameAsString());
     } catch (Throwable t) {
       // Wrap all exceptions in an IOException to prevent region server crashes
-      throw ClientUtil
-        .createIOException("Unable to Put cells corresponding to dynamic" + "column metadata for "
-          + c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString(), t);
+      throw ClientUtil.createIOException("Unable to Put cells corresponding to dynamic"
+        + "column metadata for " + e.getRegion().getRegionInfo().getTable().getNameAsString(), t);
     }
   }
 
@@ -163,16 +163,15 @@ public class ScanRegionObserver extends BaseScannerRegionObserver implements Reg
   }
 
   @Override
-  protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
-    final Scan scan, final RegionScanner s) throws Throwable {
-    NonAggregateRegionScannerFactory nonAggregateROUtil =
-      new NonAggregateRegionScannerFactory(c.getEnvironment());
+  protected RegionScanner doPostScannerOpen(final ObserverContext c, final Scan scan,
+    final RegionScanner s) throws Throwable {
+    RegionCoprocessorEnvironment e = (RegionCoprocessorEnvironment) c.getEnvironment();
+    NonAggregateRegionScannerFactory nonAggregateROUtil = new NonAggregateRegionScannerFactory(e);
     if (
       scan.getAttribute(BaseScannerRegionObserverConstants.READ_REPAIR_TRANSFORMING_TABLE) != null
     ) {
       readRepairTransformingTable = true;
-      globalIndexScanner =
-        globalIndexChecker.new GlobalIndexScanner(c.getEnvironment(), scan, s, metricsSource);
+      globalIndexScanner = globalIndexChecker.new GlobalIndexScanner(e, scan, s, metricsSource);
       return nonAggregateROUtil.getRegionScanner(scan, globalIndexScanner);
     }
     return nonAggregateROUtil.getRegionScanner(scan, s);

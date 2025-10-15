@@ -136,16 +136,18 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
   }
 
   @Override
-  public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-    MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+  public void preBatchMutate(ObserverContext c, MiniBatchOperationInProgress miniBatchOp)
+    throws IOException {
 
-    Mutation m = miniBatchOp.getOperation(0);
+    Mutation m = (Mutation) miniBatchOp.getOperation(0);
     if (!codec.isEnabled(m)) {
       return;
     }
 
+    RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) c.getEnvironment();
+
     PhoenixIndexMetaData indexMetaData =
-      new PhoenixIndexMetaDataBuilder(c.getEnvironment()).getIndexMetaData(miniBatchOp);
+      new PhoenixIndexMetaDataBuilder(env).getIndexMetaData(miniBatchOp);
     if (
       indexMetaData.getClientVersion() >= MetaDataProtocol.MIN_TX_CLIENT_SIDE_MAINTENANCE
         && !indexMetaData.hasLocalIndexes()
@@ -163,7 +165,6 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
         current = NullSpan.INSTANCE;
       }
 
-      RegionCoprocessorEnvironment env = c.getEnvironment();
       PhoenixTransactionContext txnContext = indexMetaData.getTransactionContext();
       if (txnContext == null) {
         throw new NullPointerException("Expected to find transaction in metadata for "
@@ -176,7 +177,7 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
         // get the index updates for all elements in this batch
         indexUpdates = generator.getIndexUpdates(htable, getMutationIterator(miniBatchOp));
       }
-      byte[] tableName = c.getEnvironment().getRegionInfo().getTable().getName();
+      byte[] tableName = env.getRegionInfo().getTable().getName();
       Iterator<Pair<Mutation, byte[]>> indexUpdatesItr = indexUpdates.iterator();
       List<Mutation> localUpdates = new ArrayList<Mutation>(indexUpdates.size());
       while (indexUpdatesItr.hasNext()) {
@@ -206,8 +207,8 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
   }
 
   @Override
-  public void postBatchMutateIndispensably(ObserverContext<RegionCoprocessorEnvironment> c,
-    MiniBatchOperationInProgress<Mutation> miniBatchOp, final boolean success) throws IOException {
+  public void postBatchMutateIndispensably(ObserverContext c,
+    MiniBatchOperationInProgress miniBatchOp, final boolean success) throws IOException {
     BatchMutateContext context = getBatchMutateContext(c);
     if (context == null || context.indexUpdates == null) {
       return;

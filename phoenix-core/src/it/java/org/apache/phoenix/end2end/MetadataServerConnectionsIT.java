@@ -40,8 +40,6 @@ import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.ConnectionImplementation;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorException;
@@ -129,43 +127,39 @@ public class MetadataServerConnectionsIT extends BaseTest {
         ThreadPoolExecutor htpe = null;
 
         // Get the thread pool executor from the connection.
-        if (conn instanceof ConnectionImplementation) {
-          ConnectionImplementation connImpl = ((ConnectionImplementation) conn);
-          Field props = null;
-          props = ConnectionImplementation.class.getDeclaredField("batchPool");
-          props.setAccessible(true);
-          ctpe = (ThreadPoolExecutor) props.get(connImpl);
-          LOGGER.debug("ConnectionImplementation Thread pool info :" + ctpe.toString());
 
-        }
+        Field props = null;
+        props = conn.getClass().getDeclaredField("batchPool");
+        props.setAccessible(true);
+        ctpe = (ThreadPoolExecutor) props.get(conn);
+        LOGGER.debug("ConnectionImplementation Thread pool info :" + ctpe.toString());
 
         // Get the thread pool executor from the HTable.
         Table hTable =
           ServerUtil.getHTableForCoprocessorScan(env, TableName.valueOf(fullTableName));
-        if (hTable instanceof HTable) {
-          HTable testTable = (HTable) hTable;
-          Field props = testTable.getClass().getDeclaredField("pool");
-          props.setAccessible(true);
-          htpe = ((ThreadPoolExecutor) props.get(hTable));
-          LOGGER.debug("HTable Thread pool info :" + htpe.toString());
-          // Assert the HTable thread pool config match the Connection pool configs.
-          // Since we are not overriding any defaults, it should match the defaults.
-          assertEquals(htpe.getMaximumPoolSize(), DEFAULT_HCONNECTION_POOL_MAX_SIZE);
-          assertEquals(htpe.getCorePoolSize(), DEFAULT_HCONNECTION_POOL_CORE_SIZE);
-          LOGGER.debug("HTable threadpool info {}, {}, {}, {}", htpe.getCorePoolSize(),
-            htpe.getMaximumPoolSize(), htpe.getQueue().remainingCapacity(),
-            htpe.getKeepAliveTime(TimeUnit.SECONDS));
 
-          int count = Thread.activeCount();
-          Thread[] th = new Thread[count];
-          // returns the number of threads put into the array
-          Thread.enumerate(th);
-          long hTablePoolCount =
-            Arrays.stream(th).filter(s -> s.getName().equals("htable-pool-0")).count();
-          // Assert no default HTable threadpools are created.
-          assertEquals(0, hTablePoolCount);
-          LOGGER.debug("htable-pool-0 threads {}", hTablePoolCount);
-        }
+        props = hTable.getClass().getDeclaredField("pool");
+        props.setAccessible(true);
+        htpe = ((ThreadPoolExecutor) props.get(hTable));
+        LOGGER.debug("HTable Thread pool info :" + htpe.toString());
+        // Assert the HTable thread pool config match the Connection pool configs.
+        // Since we are not overriding any defaults, it should match the defaults.
+        assertEquals(htpe.getMaximumPoolSize(), DEFAULT_HCONNECTION_POOL_MAX_SIZE);
+        assertEquals(htpe.getCorePoolSize(), DEFAULT_HCONNECTION_POOL_CORE_SIZE);
+        LOGGER.debug("HTable threadpool info {}, {}, {}, {}", htpe.getCorePoolSize(),
+          htpe.getMaximumPoolSize(), htpe.getQueue().remainingCapacity(),
+          htpe.getKeepAliveTime(TimeUnit.SECONDS));
+
+        int count = Thread.activeCount();
+        Thread[] th = new Thread[count];
+        // returns the number of threads put into the array
+        Thread.enumerate(th);
+        long hTablePoolCount =
+          Arrays.stream(th).filter(s -> s.getName().equals("htable-pool-0")).count();
+        // Assert no default HTable threadpools are created.
+        assertEquals(0, hTablePoolCount);
+        LOGGER.debug("htable-pool-0 threads {}", hTablePoolCount);
+
         // Assert that the threadpool from Connection and HTable are the same.
         assertEquals(ctpe, htpe);
       } catch (RuntimeException | NoSuchFieldException | IllegalAccessException | IOException t) {

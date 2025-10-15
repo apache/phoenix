@@ -111,13 +111,13 @@ public class UncoveredLocalIndexRegionScanner extends UncoveredIndexRegionScanne
   }
 
   @Override
-  public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+  public boolean next(List result, ScannerContext scannerContext) throws IOException {
     boolean hasMore = super.next(result, scannerContext);
     ServerIndexUtil.wrapResultUsingOffset(result, offset);
     return hasMore;
   }
 
-  public boolean next(List<Cell> result) throws IOException {
+  public boolean next(List result) throws IOException {
     return next(result, null);
   }
 }
