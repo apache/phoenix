@@ -59,18 +59,6 @@
       <version>${hbase30.compat.version}</version>
       <scope>provided</scope>
     </dependency>
-    <!--    <dependency>-->
-    <!--      <groupId>org.apache.hbase</groupId>-->
-    <!--      <artifactId>hbase-hadoop2-compat</artifactId>-->
-    <!--      <version>${hbase30.compat.version}</version>-->
-    <!--      <scope>provided</scope>-->
-    <!--    </dependency>-->
-    <!--        <dependency>-->
-    <!--      <groupId>org.apache.hbase</groupId>-->
-    <!--      <artifactId>hbase-protocol</artifactId>-->
-    <!--      <version>${hbase30.compat.version}</version>-->
-    <!--      <scope>provided</scope>-->
-    <!--    </dependency>-->
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-protocol-shaded</artifactId>
