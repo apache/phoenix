@@ -17,14 +17,17 @@
  */
 package org.apache.phoenix.end2end.index;
 
-import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE;
+import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_HA_GROUP_NAME;
 import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
@@ -33,6 +36,7 @@ import org.apache.phoenix.exception.MutationBlockedIOException;
 import org.apache.phoenix.execute.CommitException;
 import org.apache.phoenix.jdbc.ClusterRoleRecord;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord;
+import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
 import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixHAAdmin;
@@ -59,6 +63,8 @@ public class IndexRegionObserverMutationBlockingIT extends BaseTest {
     private PhoenixHAAdmin haAdmin;
     private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS = new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();
 
+    private String zkUrl;
+    private String peerZkUrl;
     @Rule
     public TestName testName = new TestName();
 
@@ -75,10 +81,10 @@ public class IndexRegionObserverMutationBlockingIT extends BaseTest {
 
     @Before
     public void setUp() throws Exception {
-        haAdmin = new PhoenixHAAdmin(config, ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
+        haAdmin = new PhoenixHAAdmin(config, ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-        String zkUrl = getLocalZkUrl(config);
-        String peerZkUrl = CLUSTERS.getZkUrl2();
+        zkUrl = getLocalZkUrl(config);
+        peerZkUrl = CLUSTERS.getZkUrl2();
         HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(), zkUrl, peerZkUrl,
                 ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
     }
@@ -105,7 +111,7 @@ public class IndexRegionObserverMutationBlockingIT extends BaseTest {
             // Set up HAGroupStoreRecord that will block mutations (ACTIVE_TO_STANDBY state)
             HAGroupStoreRecord haGroupStoreRecord
                     = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
-                    haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+                    haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, null, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZkUrl, this.zkUrl, this.peerZkUrl, 0L);
             haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, haGroupStoreRecord, -1);
 
             // Wait for the event to propagate
@@ -176,7 +182,9 @@ public class IndexRegionObserverMutationBlockingIT extends BaseTest {
             // Set up HAGroupStoreRecord that will block mutations (ACTIVE_TO_STANDBY state)
             HAGroupStoreRecord haGroupStoreRecord
                     = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
-                    haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+                    haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY,
+                    null, HighAvailabilityPolicy.FAILOVER.toString(),
+                    this.peerZkUrl, this.zkUrl, this.peerZkUrl, 0L);
             haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, haGroupStoreRecord, -1);
             Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -195,7 +203,9 @@ public class IndexRegionObserverMutationBlockingIT extends BaseTest {
             // Set up HAGroupStoreRecord that will block mutations (ACTIVE_TO_STANDBY state)
             haGroupStoreRecord
                     = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
-                    haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+                    haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
+                    null, HighAvailabilityPolicy.FAILOVER.toString(),
+                    this.peerZkUrl, this.zkUrl, this.peerZkUrl, 0L);
             haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, haGroupStoreRecord, -1);
             Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -213,5 +223,81 @@ public class IndexRegionObserverMutationBlockingIT extends BaseTest {
             return re.getCause(0) instanceof MutationBlockedIOException;
         }
         return false;
+    }
+
+    @Test
+    public void testSystemHAGroupTableMutationsAllowedDuringActiveToStandby() throws Exception {
+        String dataTableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        String haGroupName = testName.getMethodName();
+
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+            conn.setHAGroupName(haGroupName);
+
+            // Create data table and index for testing regular table blocking
+            conn.createStatement().execute("CREATE TABLE " + dataTableName +
+                    " (id VARCHAR PRIMARY KEY, name VARCHAR, age INTEGER)");
+            conn.createStatement().execute("CREATE INDEX " + indexName +
+                    " ON " + dataTableName + "(name)");
+
+            // Initially, mutations should work on both tables - verify baseline
+            conn.createStatement().execute("UPSERT INTO " + dataTableName +
+                    " VALUES ('1', 'John', 25)");
+
+            // Update system HA group table (should always work)
+            conn.createStatement().execute("UPSERT INTO " + SYSTEM_HA_GROUP_NAME +
+                    " (HA_GROUP_NAME, POLICY, VERSION) VALUES ('" + haGroupName + "_test', 'FAILOVER', 1)");
+            conn.commit();
+
+            // Set up HAGroupStoreRecord in ACTIVE_TO_STANDBY state (should block regular tables)
+            HAGroupStoreRecord haGroupStoreRecord = new HAGroupStoreRecord(
+                    HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
+                    haGroupName,
+                    HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY,
+                    null,
+                    HighAvailabilityPolicy.FAILOVER.toString(),
+                    this.peerZkUrl,
+                    this.zkUrl,
+                    this.peerZkUrl,
+                    0L);
+            haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, haGroupStoreRecord, -1);
+
+            // Wait for the event to propagate
+            Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+
+            // Test 1: Regular data table mutations should be BLOCKED
+            try {
+                conn.createStatement().execute("UPSERT INTO " + dataTableName +
+                        " VALUES ('2', 'Jane', 30)");
+                conn.commit();
+                fail("Expected MutationBlockedIOException for regular table during ACTIVE_TO_STANDBY");
+            } catch (CommitException e) {
+                assertTrue("Expected MutationBlockedIOException for regular table",
+                        containsMutationBlockedException(e));
+            }
+
+            // Test 2: System HA Group table mutations should be ALLOWED
+            try {
+                conn.createStatement().execute("UPSERT INTO " + SYSTEM_HA_GROUP_NAME +
+                        " (HA_GROUP_NAME, POLICY, VERSION) VALUES ('" + haGroupName + "_test2', 'FAILOVER', 2)");
+                conn.commit();
+
+                // Verify the system table mutation succeeded
+                try (Statement stmt = conn.createStatement();
+                     ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM " + SYSTEM_HA_GROUP_NAME +
+                             " WHERE HA_GROUP_NAME LIKE '" + haGroupName + "_test%'")) {
+                    assertTrue("Should have results", rs.next());
+                    assertEquals("Should have 2 test records in system table", 2, rs.getInt(1));
+                }
+
+            } catch (Exception e) {
+                fail("System HA Group table mutations should NOT be blocked during ACTIVE_TO_STANDBY: " + e.getMessage());
+            }
+
+            // Clean up test records from system table
+            conn.createStatement().execute("DELETE FROM " + SYSTEM_HA_GROUP_NAME +
+                    " WHERE HA_GROUP_NAME LIKE '" + haGroupName + "_test%'");
+            conn.commit();
+        }
     }
 }

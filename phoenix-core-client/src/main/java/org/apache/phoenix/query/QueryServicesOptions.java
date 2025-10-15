@@ -123,6 +123,7 @@ import static org.apache.phoenix.query.QueryServices.CLIENT_INDEX_ASYNC_THRESHOL
 import static org.apache.phoenix.query.QueryServices.PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED;
 import static org.apache.phoenix.query.QueryServices.MAX_IN_LIST_SKIP_SCAN_SIZE;
 import static org.apache.phoenix.query.QueryServices.WAL_EDIT_CODEC_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.HA_GROUP_STORE_SYNC_INTERVAL_SECONDS;
 
 import java.util.Map.Entry;
 
@@ -225,7 +226,7 @@ public class QueryServicesOptions {
     public static final int DEFAULT_GROUPBY_ESTIMATED_DISTINCT_VALUES = 1000;
     public static final int DEFAULT_CLOCK_SKEW_INTERVAL = 2000;
     public static final boolean DEFAULT_INDEX_FAILURE_HANDLING_REBUILD = true; // auto rebuild on
-    public static final boolean DEFAULT_INDEX_FAILURE_BLOCK_WRITE = false; 
+    public static final boolean DEFAULT_INDEX_FAILURE_BLOCK_WRITE = false;
     public static final boolean DEFAULT_INDEX_FAILURE_DISABLE_INDEX = true;
     public static final boolean DEFAULT_INDEX_FAILURE_THROW_EXCEPTION = true;
     public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL = 60000; // 60 secs
@@ -375,7 +376,7 @@ public class QueryServicesOptions {
     public static final int DEFAULT_CONNECTION_ACTIVITY_LOGGING_INTERVAL_IN_MINS = 15;
     public static final boolean DEFAULT_STATS_COLLECTION_ENABLED = true;
     public static final boolean DEFAULT_USE_STATS_FOR_PARALLELIZATION = true;
-    
+
     //Security defaults
     public static final boolean DEFAULT_PHOENIX_ACLS_ENABLED = false;
 
@@ -471,6 +472,9 @@ public class QueryServicesOptions {
     public static final Boolean DEFAULT_CQSI_THREAD_POOL_METRICS_ENABLED = false;
 
     public static final Boolean DEFAULT_SYNCHRONOUS_REPLICATION_ENABLED = false;
+
+    // Default HA Group Store sync job interval in seconds (15 minutes = 900 seconds)
+    public static final int DEFAULT_HA_GROUP_STORE_SYNC_INTERVAL_SECONDS = 900;
 
     private final Configuration config;
 
@@ -586,7 +590,9 @@ public class QueryServicesOptions {
             .setIfUnset(CQSI_THREAD_POOL_MAX_QUEUE, DEFAULT_CQSI_THREAD_POOL_MAX_QUEUE)
             .setIfUnset(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT,
                     DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT)
-            .setIfUnset(CQSI_THREAD_POOL_METRICS_ENABLED, DEFAULT_CQSI_THREAD_POOL_METRICS_ENABLED);
+            .setIfUnset(CQSI_THREAD_POOL_METRICS_ENABLED, DEFAULT_CQSI_THREAD_POOL_METRICS_ENABLED)
+            .setIfUnset(HA_GROUP_STORE_SYNC_INTERVAL_SECONDS,
+                    DEFAULT_HA_GROUP_STORE_SYNC_INTERVAL_SECONDS);
 
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set

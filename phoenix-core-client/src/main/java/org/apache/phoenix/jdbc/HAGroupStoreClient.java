@@ -21,6 +21,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -33,6 +34,9 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.lang3.StringUtils;
@@ -70,6 +74,8 @@ import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_ZK;
+import static org.apache.phoenix.query.QueryServices.HA_GROUP_STORE_SYNC_INTERVAL_SECONDS;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_HA_GROUP_STORE_SYNC_INTERVAL_SECONDS;
 
 
 /**
@@ -79,14 +85,15 @@ import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_ZK;
  */
 public class HAGroupStoreClient implements Closeable {
 
-    public static final String ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE = "phoenix"
-                    + ZKPaths.PATH_SEPARATOR + "consistentHA"
-                    + ZKPaths.PATH_SEPARATOR + "groupState";
+    public static final String ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE = "phoenix"
+                    + ZKPaths.PATH_SEPARATOR + "consistentHA";
     private static final long HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS = 30000L;
     // Multiplier for ZK session timeout to account for time it will take for HMaster to abort
     // the region server in case ZK connection is lost from the region server.
     @VisibleForTesting
     static final double ZK_SESSION_TIMEOUT_MULTIPLIER = 1.1;
+    // Maximum jitter in seconds for sync job start time (10 seconds)
+    private static final long SYNC_JOB_MAX_JITTER_SECONDS = 10;
     private PhoenixHAAdmin phoenixHaAdmin;
     private PhoenixHAAdmin peerPhoenixHaAdmin;
     private static final Logger LOGGER = LoggerFactory.getLogger(HAGroupStoreClient.class);
@@ -105,8 +112,6 @@ public class HAGroupStoreClient implements Closeable {
     private final Configuration conf;
     // ZK URL for the current cluster and HAGroupName
     private String zkUrl;
-    // Peer ZK URL for peer cluster and HAGroupName
-    private String peerZKUrl = null;
     // Peer Custom Event Listener
     private final PathChildrenCacheListener peerCustomPathChildrenCacheListener;
     // Wait time for sync mode
@@ -119,13 +124,8 @@ public class HAGroupStoreClient implements Closeable {
     // Map key format: "clusterType:targetState" -> Set<Listeners>
     private final ConcurrentHashMap<String, CopyOnWriteArraySet<HAGroupStateListener>>
             targetStateSubscribers = new ConcurrentHashMap<>();
-    // Policy for the HA group
-    private HighAvailabilityPolicy policy;
-    private ClusterRole clusterRole;
-    private ClusterRole peerClusterRole;
-    private String clusterUrl;
-    private String peerClusterUrl;
-    private long clusterRoleRecordVersion;
+    // Scheduled executor for periodic sync job
+    private ScheduledExecutorService syncExecutor;
 
     public static HAGroupStoreClient getInstance(Configuration conf, String haGroupName) throws SQLException {
         return getInstanceForZkUrl(conf, haGroupName, null);
@@ -188,8 +188,14 @@ public class HAGroupStoreClient implements Closeable {
             while (rs.next()) {
                 String zkUrl1 = rs.getString(ZK_URL_1);
                 String zkUrl2 = rs.getString(ZK_URL_2);
-                String formattedZkUrl1 = JDBCUtil.formatUrl(zkUrl1, RegistryType.ZK);
-                String formattedZkUrl2 = JDBCUtil.formatUrl(zkUrl2, RegistryType.ZK);
+                String formattedZkUrl1 = null;
+                String formattedZkUrl2 = null;
+                if (StringUtils.isNotBlank(zkUrl1)) {
+                    formattedZkUrl1 = JDBCUtil.formatUrl(zkUrl1, RegistryType.ZK);
+                }
+                if (StringUtils.isNotBlank(zkUrl2)) {
+                    formattedZkUrl2 = JDBCUtil.formatUrl(zkUrl2, RegistryType.ZK);
+                }
                 String formattedZkUrl = JDBCUtil.formatUrl(zkUrl, RegistryType.ZK);
                 if (StringUtils.equals(formattedZkUrl1, formattedZkUrl) ||
                         StringUtils.equals(formattedZkUrl2, formattedZkUrl)) {
@@ -214,11 +220,9 @@ public class HAGroupStoreClient implements Closeable {
         // Custom Event Listener
         this.peerCustomPathChildrenCacheListener = peerPathChildrenCacheListener;
         try {
-            // Initialize HAGroupStoreClient attributes
-            initializeHAGroupStoreClientAttributes(haGroupName);
             // Initialize Phoenix HA Admin
             this.phoenixHaAdmin = new PhoenixHAAdmin(this.zkUrl,
-                    conf, ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
+                    conf, ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
             // Initialize local cache
             this.pathChildrenCache = initializePathChildrenCache(phoenixHaAdmin,
                     pathChildrenCacheListener, ClusterType.LOCAL);
@@ -229,6 +233,8 @@ public class HAGroupStoreClient implements Closeable {
                 // Initialize peer cache
                 maybeInitializePeerPathChildrenCache();
             }
+            // Start periodic sync job
+            startPeriodicSyncJob();
 
         } catch (Exception e) {
             this.isHealthy = false;
@@ -249,9 +255,7 @@ public class HAGroupStoreClient implements Closeable {
             throw new IOException("HAGroupStoreClient is not healthy");
         }
         LOGGER.info("Rebuilding HAGroupStoreClient for HA group {}", haGroupName);
-        initializeHAGroupStoreClientAttributes(haGroupName);
         initializeZNodeIfNeeded();
-        maybeInitializePeerPathChildrenCache();
 
         // NOTE: this is a BLOCKING method.
         // Completely rebuild the internal cache by querying for all needed data
@@ -275,7 +279,7 @@ public class HAGroupStoreClient implements Closeable {
         if (!isHealthy) {
             throw new IOException("HAGroupStoreClient is not healthy");
         }
-        return fetchCacheRecord(this.pathChildrenCache, ClusterType.LOCAL).getLeft();
+        return fetchCacheRecordAndPopulateZKIfNeeded(this.pathChildrenCache, ClusterType.LOCAL).getLeft();
     }
 
     /**
@@ -286,15 +290,17 @@ public class HAGroupStoreClient implements Closeable {
      * @throws IOException if the client is not healthy or the operation fails
      * @throws StaleHAGroupStoreRecordVersionException if the version is stale
      * @throws InvalidClusterRoleTransitionException when transition is not valid
+     * @throws SQLException
      */
     public void setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState haGroupState)
-            throws IOException, StaleHAGroupStoreRecordVersionException,
-            InvalidClusterRoleTransitionException {
+            throws IOException,
+            InvalidClusterRoleTransitionException,
+            SQLException, StaleHAGroupStoreRecordVersionException {
         Preconditions.checkNotNull(haGroupState, "haGroupState cannot be null");
         if (!isHealthy) {
             throw new IOException("HAGroupStoreClient is not healthy");
         }
-        Pair<HAGroupStoreRecord, Stat> cacheRecord = fetchCacheRecord(
+        Pair<HAGroupStoreRecord, Stat> cacheRecord = fetchCacheRecordAndPopulateZKIfNeeded(
                 this.pathChildrenCache, ClusterType.LOCAL);
         HAGroupStoreRecord currentHAGroupStoreRecord = cacheRecord.getLeft();
         Stat currentHAGroupStoreRecordStat = cacheRecord.getRight();
@@ -310,7 +316,6 @@ public class HAGroupStoreClient implements Closeable {
                 // Once state changes back to ACTIVE_IN_SYNC or the role is
                 // NOT ACTIVE or ACTIVE_TO_STANDBY
                 // set the time to null to mark that we are current(or we don't have any reader).
-                // TODO: Verify that for reader this is the correct approach.
                 Long lastSyncTimeInMs = currentHAGroupStoreRecord
                         .getLastSyncStateTimeInMs();
                 ClusterRole clusterRole = haGroupState.getClusterRole();
@@ -327,15 +332,80 @@ public class HAGroupStoreClient implements Closeable {
                         currentHAGroupStoreRecord.getProtocolVersion(),
                         currentHAGroupStoreRecord.getHaGroupName(),
                         haGroupState,
-                        lastSyncTimeInMs
+                        lastSyncTimeInMs,
+                        currentHAGroupStoreRecord.getPolicy(),
+                        currentHAGroupStoreRecord.getPeerZKUrl(),
+                        currentHAGroupStoreRecord.getClusterUrl(),
+                        currentHAGroupStoreRecord.getPeerClusterUrl(),
+                        currentHAGroupStoreRecord.getAdminCRRVersion()
                 );
-                // TODO: Check if cluster role is changing, if so, we need to update
-                // the system table first
-                // Lock the row in System Table and make sure update is reflected
-                // in all regionservers
-                // It should automatically update the ZK record as well.
-                phoenixHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName,
+                try {
+                    phoenixHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName,
                         newHAGroupStoreRecord, currentHAGroupStoreRecordStat.getVersion());
+                } catch (StaleHAGroupStoreRecordVersionException e) {
+                    LOGGER.debug("Failed to update HAGroupStoreRecord for HA group "
+                            + haGroupName + " with cached stat version "
+                            + currentHAGroupStoreRecordStat.getVersion()
+                            + " checking if state is already updated in local cache", e);
+                    // Check against current cached record,
+                    // hoping that record is updated in local cache.
+                    Pair<HAGroupStoreRecord, Stat> cachedRecord
+                            = fetchCacheRecordAndPopulateZKIfNeeded(pathChildrenCache, ClusterType.LOCAL);
+                    currentHAGroupStoreRecord = cachedRecord.getLeft();
+                    Stat previousHAGroupStoreRecordStat = currentHAGroupStoreRecordStat;
+                    currentHAGroupStoreRecordStat = cachedRecord.getRight();
+                    if (currentHAGroupStoreRecord != null
+                            && currentHAGroupStoreRecord.getHAGroupState()
+                            == haGroupState)  {
+                        LOGGER.debug("HAGroupStoreRecord for HA group {} is already updated"
+                                        + "with state {}, no need to update",
+                                haGroupName, haGroupState);
+                        return;
+                    // Check if the cached version is not updated, only then check with ZK.
+                    } else if (currentHAGroupStoreRecordStat != null
+                            && currentHAGroupStoreRecordStat.getVersion()
+                            == previousHAGroupStoreRecordStat.getVersion()) {
+                        try {
+                            // Check against record in ZK, if it is still what we don't want,
+                            // throw an exception.
+                            currentHAGroupStoreRecord
+                                    = phoenixHaAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName)
+                                    .getLeft();
+                            if (currentHAGroupStoreRecord != null
+                                    && currentHAGroupStoreRecord.getHAGroupState()
+                                    == haGroupState) {
+                                LOGGER.debug("HAGroupStoreRecord for HA group {} is already "
+                                                + "updated with state {}, no need to update",
+                                        haGroupName, haGroupState);
+                                return;
+                            }
+                            throw e;
+                        } catch (StaleHAGroupStoreRecordVersionException e2) {
+                            throw e2;
+                        }
+                    }
+                }
+                // If cluster role is changing, if so, we update,
+                // the system table on best effort basis.
+                // We also have a periodic job which syncs the ZK
+                // state with System Table periodically.
+                if (currentHAGroupStoreRecord.getClusterRole() != clusterRole) {
+                    HAGroupStoreRecord peerZkRecord = getHAGroupStoreRecordFromPeer();
+                    ClusterRoleRecord.ClusterRole peerClusterRole = peerZkRecord != null
+                            ? peerZkRecord.getClusterRole()
+                            : ClusterRoleRecord.ClusterRole.UNKNOWN;
+                    SystemTableHAGroupRecord systemTableRecord = new SystemTableHAGroupRecord(
+                            HighAvailabilityPolicy.valueOf(newHAGroupStoreRecord.getPolicy()),
+                            clusterRole,
+                            peerClusterRole,
+                            newHAGroupStoreRecord.getClusterUrl(),
+                            newHAGroupStoreRecord.getPeerClusterUrl(),
+                            this.zkUrl,
+                            newHAGroupStoreRecord.getPeerZKUrl(),
+                            newHAGroupStoreRecord.getAdminCRRVersion()
+                    );
+                    updateSystemTableHAGroupRecordSilently(haGroupName, systemTableRecord);
+                }
         } else {
             LOGGER.info("Not updating HAGroupStoreRecord for HA group {} with state {}",
                     haGroupName, haGroupState);
@@ -351,17 +421,19 @@ public class HAGroupStoreClient implements Closeable {
      * @throws IOException
      */
     public ClusterRoleRecord getClusterRoleRecord() throws IOException {
+        HAGroupStoreRecord currentHAGroupStoreRecord = getHAGroupStoreRecord();
         HAGroupStoreRecord peerHAGroupStoreRecord = getHAGroupStoreRecordFromPeer();
         ClusterRoleRecord.ClusterRole peerClusterRole = peerHAGroupStoreRecord != null
                 ? peerHAGroupStoreRecord.getClusterRole()
                 : ClusterRole.UNKNOWN;
         return new ClusterRoleRecord(this.haGroupName,
-                                    this.policy,
-                                    this.clusterUrl,
-                                    this.clusterRole,
-                                    this.peerClusterUrl,
+                                    HighAvailabilityPolicy.valueOf(
+                                            currentHAGroupStoreRecord.getPolicy()),
+                                    currentHAGroupStoreRecord.getClusterUrl(),
+                                    currentHAGroupStoreRecord.getHAGroupState().getClusterRole(),
+                                    currentHAGroupStoreRecord.getPeerClusterUrl(),
                                     peerClusterRole,
-                                    this.clusterRoleRecordVersion);
+                                    currentHAGroupStoreRecord.getAdminCRRVersion());
     }
 
     /**
@@ -374,41 +446,108 @@ public class HAGroupStoreClient implements Closeable {
         if (!isHealthy) {
             throw new IOException("HAGroupStoreClient is not healthy");
         }
-        return fetchCacheRecord(this.peerPathChildrenCache, ClusterType.PEER).getLeft();
+        return fetchCacheRecordAndPopulateZKIfNeeded(this.peerPathChildrenCache, ClusterType.PEER).getLeft();
     }
 
-    private void initializeZNodeIfNeeded() throws IOException,
-            StaleHAGroupStoreRecordVersionException {
+    private void initializeZNodeIfNeeded() throws IOException, SQLException {
         // Sometimes the ZNode might not be available in local cache yet, so better to check
         // in ZK directly if we need to initialize
         Pair<HAGroupStoreRecord, Stat> cacheRecordFromZK =
                 phoenixHaAdmin.getHAGroupStoreRecordInZooKeeper(this.haGroupName);
         HAGroupStoreRecord haGroupStoreRecord = cacheRecordFromZK.getLeft();
-        HAGroupState defaultHAGroupState = this.clusterRole.getDefaultHAGroupState();
-        // Initialize lastSyncTimeInMs only if we start in ACTIVE_NOT_IN_SYNC state
-        //  and ZNode is not already present
-        Long lastSyncTimeInMs = defaultHAGroupState.equals(HAGroupState.ACTIVE_NOT_IN_SYNC)
-                                    ? System.currentTimeMillis()
-                                    : null;
-        HAGroupStoreRecord newHAGroupStoreRecord = new HAGroupStoreRecord(
-            HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
-            haGroupName,
-            this.clusterRole.getDefaultHAGroupState(),
-            lastSyncTimeInMs
-        );
-        // Only update current ZNode if it doesn't have the same role as present in System Table.
-        // If not exists, then create ZNode
-        // TODO: Discuss if this approach is what reader needs.
-        if (haGroupStoreRecord != null &&
-                !haGroupStoreRecord.getClusterRole().equals(this.clusterRole)) {
-            phoenixHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName,
-                    newHAGroupStoreRecord, cacheRecordFromZK.getRight().getVersion());
-        } else if (haGroupStoreRecord == null) {
+        // Only if the ZNode is not present, we need to create it from System Table
+        if (haGroupStoreRecord == null) {
+            SystemTableHAGroupRecord systemTableRecord
+                    = getSystemTableHAGroupRecord(this.haGroupName);
+            Preconditions.checkNotNull(systemTableRecord,
+                    "System Table HAGroupRecord cannot be null");
+            HAGroupStoreRecord.HAGroupState defaultHAGroupState
+                    = systemTableRecord.getClusterRole().getDefaultHAGroupState();
+            Long lastSyncTimeInMs
+                    = defaultHAGroupState.equals(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC)
+                    ? System.currentTimeMillis()
+                    : null;
+            HAGroupStoreRecord newHAGroupStoreRecord = new HAGroupStoreRecord(
+                    HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
+                    haGroupName,
+                    defaultHAGroupState,
+                    lastSyncTimeInMs,
+                    systemTableRecord.getPolicy().toString(),
+                    systemTableRecord.getPeerZKUrl(),
+                    systemTableRecord.getClusterUrl(),
+                    systemTableRecord.getPeerClusterUrl(),
+                    systemTableRecord.getAdminCRRVersion()
+            );
             phoenixHaAdmin.createHAGroupStoreRecordInZooKeeper(newHAGroupStoreRecord);
         }
     }
 
-    private void initializeHAGroupStoreClientAttributes(String haGroupName) throws SQLException {
+    /**
+     * Inner class to hold system table HA group record
+     */
+    public static class SystemTableHAGroupRecord {
+        private final HighAvailabilityPolicy policy;
+        private final ClusterRoleRecord.ClusterRole clusterRole;
+        private final ClusterRoleRecord.ClusterRole peerClusterRole;
+        private final String clusterUrl;
+        private final String peerClusterUrl;
+        private final String zkUrl;
+        private final String peerZKUrl;
+        private final long adminCRRVersion;
+
+        public SystemTableHAGroupRecord(HighAvailabilityPolicy policy,
+                                        ClusterRoleRecord.ClusterRole clusterRole,
+                                        ClusterRoleRecord.ClusterRole peerClusterRole,
+                                        String clusterUrl,
+                                        String peerClusterUrl,
+                                        String zkUrl,
+                                        String peerZKUrl,
+                                        long adminCRRVersion) {
+            this.policy = policy;
+            this.clusterRole = clusterRole;
+            this.peerClusterRole = peerClusterRole;
+            this.clusterUrl = clusterUrl;
+            this.peerClusterUrl = peerClusterUrl;
+            this.zkUrl = zkUrl;
+            this.peerZKUrl = peerZKUrl;
+            this.adminCRRVersion = adminCRRVersion;
+        }
+
+        public HighAvailabilityPolicy getPolicy() {
+            return policy;
+        }
+
+        public ClusterRoleRecord.ClusterRole getClusterRole() {
+            return clusterRole;
+        }
+
+        public ClusterRoleRecord.ClusterRole getPeerClusterRole() {
+            return peerClusterRole;
+        }
+
+        public String getClusterUrl() {
+            return clusterUrl;
+        }
+
+        public String getPeerClusterUrl() {
+            return peerClusterUrl;
+        }
+
+        public String getZkUrl() {
+            return zkUrl;
+        }
+
+        public String getPeerZKUrl() {
+            return peerZKUrl;
+        }
+
+        public long getAdminCRRVersion() {
+            return adminCRRVersion;
+        }
+    }
+
+    private SystemTableHAGroupRecord getSystemTableHAGroupRecord(String haGroupName)
+            throws SQLException {
         String queryString = String.format("SELECT * FROM %s WHERE %s = '%s'",
                 SYSTEM_HA_GROUP_NAME, HA_GROUP_NAME, haGroupName);
         try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(
@@ -416,68 +555,260 @@ public class HAGroupStoreClient implements Closeable {
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(queryString)) {
             if (rs.next()) {
-                this.policy = HighAvailabilityPolicy.valueOf(rs.getString(POLICY));
+                HighAvailabilityPolicy policy
+                        = HighAvailabilityPolicy.valueOf(rs.getString(POLICY));
                 String zkUrl1 = rs.getString(ZK_URL_1);
                 String zkUrl2 = rs.getString(ZK_URL_2);
                 String clusterRole1 = rs.getString(CLUSTER_ROLE_1);
                 String clusterRole2 = rs.getString(CLUSTER_ROLE_2);
                 String clusterUrl1 = rs.getString(CLUSTER_URL_1);
                 String clusterUrl2 = rs.getString(CLUSTER_URL_2);
-                this.clusterRoleRecordVersion = rs.getLong(VERSION);
-                Preconditions.checkNotNull(zkUrl1, "ZK_URL_1 in System Table cannot be null");
-                Preconditions.checkNotNull(zkUrl2, "ZK_URL_2 in System Table cannot be null");
-                String formattedZkUrl1 = JDBCUtil.formatUrl(zkUrl1, RegistryType.ZK);
-                String formattedZkUrl2 = JDBCUtil.formatUrl(zkUrl2, RegistryType.ZK);
-                String formattedZkUrl = JDBCUtil.formatUrl(this.zkUrl, RegistryType.ZK);
-                if (StringUtils.equals(formattedZkUrl1, formattedZkUrl)) {
-                    this.peerZKUrl = formattedZkUrl2;
-                    this.clusterRole = ClusterRoleRecord.ClusterRole.from(
-                            clusterRole1.getBytes(StandardCharsets.UTF_8));
-                    this.peerClusterRole = ClusterRoleRecord.ClusterRole.from(
-                            clusterRole2.getBytes(StandardCharsets.UTF_8));
-                    this.clusterUrl = clusterUrl1;
-                    this.peerClusterUrl = clusterUrl2;
-                } else if (StringUtils.equals(formattedZkUrl2, formattedZkUrl)) {
-                    this.peerZKUrl = JDBCUtil.formatUrl(zkUrl1, RegistryType.ZK);
-                    this.clusterRole = ClusterRoleRecord.ClusterRole.from(
-                            clusterRole2.getBytes(StandardCharsets.UTF_8));
-                    this.peerClusterRole = ClusterRoleRecord.ClusterRole.from(
-                            clusterRole1.getBytes(StandardCharsets.UTF_8));
-                    this.clusterUrl = clusterUrl2;
-                    this.peerClusterUrl = clusterUrl1;
+                long adminCRRVersion = rs.getLong(VERSION);
+                String formattedZkUrl1 = null;
+                String formattedZkUrl2 = null;
+                if (StringUtils.isNotBlank(zkUrl1)) {
+                    formattedZkUrl1 = JDBCUtil.formatUrl(zkUrl1, RegistryType.ZK);
                 }
+                if (StringUtils.isNotBlank(zkUrl2)) {
+                    formattedZkUrl2 = JDBCUtil.formatUrl(zkUrl2, RegistryType.ZK);
+                }
+                String formattedZkUrl = JDBCUtil.formatUrl(this.zkUrl, RegistryType.ZK);
+                String peerZKUrl;
+                ClusterRoleRecord.ClusterRole clusterRole;
+                ClusterRoleRecord.ClusterRole peerClusterRole;
+                String clusterUrl;
+                String peerClusterUrl;
+
+                if (StringUtils.equals(formattedZkUrl1, formattedZkUrl)) {
+                    peerZKUrl = formattedZkUrl2;
+                    clusterRole = ClusterRoleRecord.ClusterRole.from(
+                            clusterRole1.getBytes(StandardCharsets.UTF_8));
+                    peerClusterRole = ClusterRoleRecord.ClusterRole.from(
+                            clusterRole2.getBytes(StandardCharsets.UTF_8));
+                    clusterUrl = clusterUrl1;
+                    peerClusterUrl = clusterUrl2;
+                } else if (StringUtils.equals(formattedZkUrl2, formattedZkUrl)) {
+                    peerZKUrl = JDBCUtil.formatUrl(zkUrl1, RegistryType.ZK);
+                    clusterRole = ClusterRoleRecord.ClusterRole.from(
+                            clusterRole2.getBytes(StandardCharsets.UTF_8));
+                    peerClusterRole = ClusterRoleRecord.ClusterRole.from(
+                            clusterRole1.getBytes(StandardCharsets.UTF_8));
+                    clusterUrl = clusterUrl2;
+                    peerClusterUrl = clusterUrl1;
+                } else {
+                    throw new SQLException("Current zkUrl does not match"
+                            + "any zkUrl in System Table for HA group: " + haGroupName);
+                }
+
+                Preconditions.checkNotNull(clusterRole,
+                        "Cluster role in System Table cannot be null");
+                Preconditions.checkNotNull(peerClusterRole,
+                        "Peer cluster role in System Table cannot be null");
+                Preconditions.checkNotNull(clusterUrl,
+                        "Cluster URL in System Table cannot be null");
+                Preconditions.checkNotNull(peerZKUrl,
+                        "Peer ZK URL in System Table cannot be null");
+                Preconditions.checkNotNull(peerClusterUrl,
+                        "Peer Cluster URL in System Table cannot be null");
+
+                return new SystemTableHAGroupRecord(policy, clusterRole, peerClusterRole,
+                        clusterUrl, peerClusterUrl, formattedZkUrl, peerZKUrl, adminCRRVersion);
             } else {
                 throw new SQLException("HAGroupStoreRecord not found for HA group name: " +
                         haGroupName + " in System Table " + SYSTEM_HA_GROUP_NAME);
             }
         }
-        Preconditions.checkNotNull(this.clusterRole,
-                "Cluster role in System Table cannot be null");
-        Preconditions.checkNotNull(this.peerClusterRole,
-                "Peer cluster role in System Table cannot be null");
-        Preconditions.checkNotNull(this.clusterUrl,
-                "Cluster URL in System Table cannot be null");
-        Preconditions.checkNotNull(this.peerZKUrl,
-                "Peer ZK URL in System Table cannot be null");
-        Preconditions.checkNotNull(this.peerClusterUrl,
-                "Peer Cluster URL in System Table cannot be null");
-        Preconditions.checkNotNull(this.clusterRoleRecordVersion,
-                "Cluster role record version in System Table cannot be null");
     }
 
-    private void maybeInitializePeerPathChildrenCache() {
-        if (StringUtils.isNotBlank(this.peerZKUrl)) {
+    // Update the system table on best effort basis for HA group
+    // In case of failure, we will log the error and continue.
+    private void updateSystemTableHAGroupRecordSilently(String haGroupName,
+                                                        SystemTableHAGroupRecord record)
+            throws SQLException {
+        StringBuilder updateQuery = new StringBuilder("UPSERT INTO " + SYSTEM_HA_GROUP_NAME + " (");
+        StringBuilder valuesClause = new StringBuilder(" VALUES (");
+        List<Object> parameters = new ArrayList<>();
+
+        // Always include HA_GROUP_NAME as it's the key
+        updateQuery.append(HA_GROUP_NAME);
+        valuesClause.append("?");
+        parameters.add(haGroupName);
+
+        // Update non-null fields only.
+        if (record.getPolicy() != null) {
+            updateQuery.append(", ").append(POLICY);
+            valuesClause.append(", ?");
+            parameters.add(record.getPolicy().toString());
+        }
+
+        if (record.getClusterRole() != null) {
+            updateQuery.append(", ").append(CLUSTER_ROLE_1);
+            valuesClause.append(", ?");
+            parameters.add(record.getClusterRole().name());
+        }
+
+        if (record.getPeerClusterRole() != null) {
+            updateQuery.append(", ").append(CLUSTER_ROLE_2);
+            valuesClause.append(", ?");
+            parameters.add(record.getPeerClusterRole().name());
+        }
+
+        if (record.getClusterUrl() != null) {
+            updateQuery.append(", ").append(CLUSTER_URL_1);
+            valuesClause.append(", ?");
+            parameters.add(record.getClusterUrl());
+        }
+
+        if (record.getPeerClusterUrl() != null) {
+            updateQuery.append(", ").append(CLUSTER_URL_2);
+            valuesClause.append(", ?");
+            parameters.add(record.getPeerClusterUrl());
+        }
+
+        if (record.getZkUrl() != null) {
+            updateQuery.append(", ").append(ZK_URL_1);
+            valuesClause.append(", ?");
+            parameters.add(record.getZkUrl());
+        }
+
+        if (record.getPeerZKUrl() != null) {
+            updateQuery.append(", ").append(ZK_URL_2);
+            valuesClause.append(", ?");
+            parameters.add(record.getPeerZKUrl());
+        }
+
+        if (record.getAdminCRRVersion() > 0) {
+            updateQuery.append(", ").append(VERSION);
+            valuesClause.append(", ?");
+            parameters.add(record.getAdminCRRVersion());
+        }
+
+        updateQuery.append(")").append(valuesClause).append(")");
+
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(
+                JDBC_PROTOCOL_ZK + JDBC_PROTOCOL_SEPARATOR + zkUrl);
+             PreparedStatement pstmt = conn.prepareStatement(updateQuery.toString())) {
+
+            for (int i = 0; i < parameters.size(); i++) {
+                pstmt.setObject(i + 1, parameters.get(i));
+            }
+
+            pstmt.executeUpdate();
+            conn.commit();
+        } catch (Exception e) {
+            LOGGER.error("Failed to update system table on best"
+                    + "effort basis for HA group {}, error: {}", haGroupName, e);
+        }
+    }
+
+    /**
+     * Starts the periodic sync job that syncs ZooKeeper data (source of truth) to system table.
+     * The job runs at configurable intervals with a random jitter for the initial delay.
+     */
+    private void startPeriodicSyncJob() {
+        if (syncExecutor == null) {
+            syncExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "HAGroupStoreClient-SyncJob-" + haGroupName);
+                t.setDaemon(true);
+                return t;
+            });
+
+            // Get sync interval from configuration (in seconds)
+            long syncIntervalSeconds = conf.getLong(HA_GROUP_STORE_SYNC_INTERVAL_SECONDS,
+                    DEFAULT_HA_GROUP_STORE_SYNC_INTERVAL_SECONDS);
+
+            // Add jitter to initial delay
+            long jitterSeconds
+                    = ThreadLocalRandom.current().nextLong(0, SYNC_JOB_MAX_JITTER_SECONDS + 1);
+
+            LOGGER.info("Starting periodic sync job for HA group {} "
+                            + "with initial delay of {} seconds, "
+                            + "then every {} seconds",
+                    haGroupName,
+                    jitterSeconds,
+                    syncIntervalSeconds);
+
+            syncExecutor.scheduleAtFixedRate(
+                    this::syncZKToSystemTable,
+                    jitterSeconds,
+                    syncIntervalSeconds,
+                    TimeUnit.SECONDS
+            );
+        }
+    }
+
+    /**
+     * Syncs data from ZooKeeper (source of truth) to the system table.
+     * This method is called periodically to ensure consistency.
+     */
+    private void syncZKToSystemTable() {
+        if (!isHealthy) {
+            LOGGER.debug("HAGroupStoreClient is not healthy,"
+                    + "skipping sync for HA group {}", haGroupName);
+            return;
+        }
+
+        LOGGER.debug("Starting periodic sync from ZK to"
+                + "system table for HA group {}", haGroupName);
+        // Get current data from ZooKeeper
+        try {
+                HAGroupStoreRecord zkRecord = phoenixHaAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName).getLeft();
+            if (zkRecord == null) {
+                LOGGER.warn("No ZK record found for HA group {}, skipping sync", haGroupName);
+                return;
+            }
+            // Get peer record for complete information
+            HAGroupStoreRecord peerZkRecord = getHAGroupStoreRecordFromPeer();
+            ClusterRoleRecord.ClusterRole peerClusterRole = peerZkRecord != null
+                    ? peerZkRecord.getClusterRole()
+                    : ClusterRoleRecord.ClusterRole.UNKNOWN;
+            // Create SystemTableHAGroupRecord from ZK data
+            SystemTableHAGroupRecord systemTableRecord = new SystemTableHAGroupRecord(
+                    HighAvailabilityPolicy.valueOf(zkRecord.getPolicy()),
+                    zkRecord.getClusterRole(),
+                    peerClusterRole,
+                    zkRecord.getClusterUrl(),
+                    zkRecord.getPeerClusterUrl(),
+                    this.zkUrl,
+                    zkRecord.getPeerZKUrl(),
+                    zkRecord.getAdminCRRVersion()
+            );
+            // Update system table with ZK data
+            updateSystemTableHAGroupRecordSilently(haGroupName, systemTableRecord);
+            LOGGER.info("Successfully synced ZK data to system table for HA group {}", haGroupName);
+        } catch (IOException | SQLException e) {
+            long syncIntervalSeconds = conf.getLong(HA_GROUP_STORE_SYNC_INTERVAL_SECONDS,
+                    DEFAULT_HA_GROUP_STORE_SYNC_INTERVAL_SECONDS);
+            LOGGER.error("Failed to sync ZK data to system "
+                            + "table for HA group on best effort basis {},"
+                            + "retrying in {} seconds",
+                    haGroupName, syncIntervalSeconds);
+        }
+    }
+
+    private void maybeInitializePeerPathChildrenCache() throws IOException {
+        // There is an edge case when the cache is not initialized yet, but we get CHILD_ADDED event
+        // so we need to get the record from ZK.
+        HAGroupStoreRecord currentHAGroupStoreRecord
+                = phoenixHaAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName).getLeft();
+        if (currentHAGroupStoreRecord == null) {
+            LOGGER.error("Current HAGroupStoreRecord is null,"
+                    + "skipping peer path children cache initialization");
+            return;
+        }
+        String peerZKUrl = currentHAGroupStoreRecord.getPeerZKUrl();
+        if (StringUtils.isNotBlank(peerZKUrl)) {
             try {
                 // Setup peer connection if needed (first time or ZK Url changed)
                 if (peerPathChildrenCache == null
                     || peerPhoenixHaAdmin != null
-                        && !StringUtils.equals(this.peerZKUrl, peerPhoenixHaAdmin.getZkUrl())) {
+                        && !StringUtils.equals(peerZKUrl, peerPhoenixHaAdmin.getZkUrl())) {
                     // Clean up existing peer connection if it exists
                     closePeerConnection();
                     // Setup new peer connection
                     this.peerPhoenixHaAdmin
-                            = new PhoenixHAAdmin(this.peerZKUrl, conf,
-                            ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
+                            = new PhoenixHAAdmin(peerZKUrl, conf,
+                            ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
                     // Create new PeerPathChildrenCache
                     this.peerPathChildrenCache = initializePathChildrenCache(peerPhoenixHaAdmin,
                             this.peerCustomPathChildrenCacheListener, ClusterType.PEER);
@@ -543,6 +874,10 @@ public class HAGroupStoreClient implements Closeable {
                 case CHILD_UPDATED:
                     if (eventRecord != null) {
                         handleStateChange(eventRecord, eventStat, cacheType);
+                        // Reinitialize peer path children cache if peer url is added or updated.
+                        if (cacheType == ClusterType.LOCAL) {
+                            maybeInitializePeerPathChildrenCache();
+                        }
                     }
                     break;
                 case CHILD_REMOVED:
@@ -572,8 +907,8 @@ public class HAGroupStoreClient implements Closeable {
     }
 
 
-    private Pair<HAGroupStoreRecord, Stat> fetchCacheRecord(PathChildrenCache cache,
-                                                            ClusterType cacheType) {
+    private Pair<HAGroupStoreRecord, Stat> fetchCacheRecordAndPopulateZKIfNeeded(PathChildrenCache cache,
+                                                                                 ClusterType cacheType) {
         if (cache == null) {
             LOGGER.warn("{} HAGroupStoreClient cache is null, returning null", cacheType);
             return Pair.of(null, null);
@@ -644,10 +979,30 @@ public class HAGroupStoreClient implements Closeable {
         }
     }
 
+    /**
+     * Shuts down the periodic sync executor gracefully.
+     */
+    private void shutdownSyncExecutor() {
+        if (syncExecutor != null) {
+            syncExecutor.shutdown();
+            try {
+                if (!syncExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    syncExecutor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                syncExecutor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+            syncExecutor = null;
+        }
+    }
+
     @Override
     public void close() {
         try {
             LOGGER.info("Closing HAGroupStoreClient");
+            // Shutdown sync executor
+            shutdownSyncExecutor();
             if (pathChildrenCache != null) {
                 pathChildrenCache.close();
                 pathChildrenCache = null;
@@ -752,7 +1107,8 @@ public class HAGroupStoreClient implements Closeable {
         if (oldState == null || !oldState.equals(newState)) {
             LOGGER.info("Detected state transition for HA group {} from {} to {} on {} cluster",
                     haGroupName, oldState, newState, clusterType);
-            notifySubscribers(oldState, newState, newStat.getMtime(), clusterType);
+            notifySubscribers(oldState, newState, newStat.getMtime(), clusterType,
+                    newRecord.getLastSyncStateTimeInMs());
         }
     }
 
@@ -766,7 +1122,8 @@ public class HAGroupStoreClient implements Closeable {
     private void notifySubscribers(HAGroupState fromState,
                                    HAGroupState toState,
                                    long modifiedTime,
-                                   ClusterType clusterType) {
+                                   ClusterType clusterType,
+                                   Long lastSyncStateTimeInMs) {
         LOGGER.debug("Notifying subscribers of state transition "
                         + "for HA group {} from {} to {} on {} cluster",
                 haGroupName, fromState, toState, clusterType);
@@ -790,8 +1147,8 @@ public class HAGroupStoreClient implements Closeable {
 
             for (HAGroupStateListener listener : listenersToNotify) {
                 try {
-                    listener.onStateChange(haGroupName,
-                            toState, modifiedTime, clusterType);
+                    listener.onStateChange(haGroupName, fromState,
+                            toState, modifiedTime, clusterType, lastSyncStateTimeInMs);
                 } catch (Exception e) {
                     LOGGER.error("Error notifying listener of state transition "
                                     + "for HA group {} from {} to {} on {} cluster",

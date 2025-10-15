@@ -60,8 +60,6 @@ public class HAGroupStoreRecord {
         ACTIVE_IN_SYNC_TO_STANDBY,
         ACTIVE_WITH_OFFLINE_PEER,
         DEGRADED_STANDBY,
-        DEGRADED_STANDBY_FOR_READER,
-        DEGRADED_STANDBY_FOR_WRITER,
         OFFLINE,
         STANDBY,
         STANDBY_TO_ACTIVE,
@@ -87,8 +85,6 @@ public class HAGroupStoreRecord {
                     return ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY;
                 case ABORT_TO_STANDBY:
                 case DEGRADED_STANDBY:
-                case DEGRADED_STANDBY_FOR_READER:
-                case DEGRADED_STANDBY_FOR_WRITER:
                 case STANDBY:
                     return ClusterRoleRecord.ClusterRole.STANDBY;
                 case STANDBY_TO_ACTIVE:
@@ -113,7 +109,7 @@ public class HAGroupStoreRecord {
             );
 
             STANDBY.allowedTransitions = ImmutableSet.of(STANDBY_TO_ACTIVE,
-                    DEGRADED_STANDBY_FOR_READER, DEGRADED_STANDBY_FOR_WRITER);
+                    DEGRADED_STANDBY);
             // This needs to be manually recovered by operator
             OFFLINE.allowedTransitions = ImmutableSet.of();
             // This needs to be manually recovered by operator
@@ -126,11 +122,7 @@ public class HAGroupStoreRecord {
             STANDBY_TO_ACTIVE.allowedTransitions = ImmutableSet.of(ABORT_TO_STANDBY,
                     ACTIVE_IN_SYNC);
             DEGRADED_STANDBY.allowedTransitions
-                    = ImmutableSet.of(DEGRADED_STANDBY_FOR_READER, DEGRADED_STANDBY_FOR_WRITER);
-            DEGRADED_STANDBY_FOR_WRITER.allowedTransitions = ImmutableSet.of(STANDBY,
-                    DEGRADED_STANDBY);
-            DEGRADED_STANDBY_FOR_READER.allowedTransitions = ImmutableSet.of(STANDBY,
-                    DEGRADED_STANDBY);
+                    = ImmutableSet.of(STANDBY);
             ACTIVE_WITH_OFFLINE_PEER.allowedTransitions = ImmutableSet.of(ACTIVE_NOT_IN_SYNC);
             ABORT_TO_ACTIVE_IN_SYNC.allowedTransitions = ImmutableSet.of(ACTIVE_IN_SYNC);
             ABORT_TO_ACTIVE_NOT_IN_SYNC.allowedTransitions = ImmutableSet.of(ACTIVE_NOT_IN_SYNC);
@@ -164,27 +156,35 @@ public class HAGroupStoreRecord {
     private final String haGroupName;
     private final HAGroupState haGroupState;
     private final Long lastSyncStateTimeInMs;
+    private final String policy;
+    private final String peerZKUrl;
+    private final String clusterUrl;
+    private final String peerClusterUrl;
+    private final long adminCRRVersion;
 
     @JsonCreator
     public HAGroupStoreRecord(@JsonProperty("protocolVersion") String protocolVersion,
                               @JsonProperty("haGroupName") String haGroupName,
                               @JsonProperty("haGroupState") HAGroupState haGroupState,
-                              @JsonProperty("lastSyncStateTimeInMs") Long lastSyncStateTimeInMs) {
+                              @JsonProperty("lastSyncStateTimeInMs") Long lastSyncStateTimeInMs,
+                              @JsonProperty("policy") String policy,
+                              @JsonProperty("peerZKUrl") String peerZKUrl,
+                              @JsonProperty("clusterUrl") String clusterUrl,
+                              @JsonProperty("peerClusterUrl") String peerClusterUrl,
+                              @JsonProperty("adminCRRVersion")
+                                  long adminCRRVersion) {
         Preconditions.checkNotNull(haGroupName, "HA group name cannot be null!");
         Preconditions.checkNotNull(haGroupState, "HA group state cannot be null!");
 
         this.protocolVersion = Objects.toString(protocolVersion, DEFAULT_PROTOCOL_VERSION);
         this.haGroupName = haGroupName;
         this.haGroupState = haGroupState;
+        this.policy = policy;
         this.lastSyncStateTimeInMs = lastSyncStateTimeInMs;
-    }
-
-    /**
-     * Convenience constructor for backward compatibility without lastSyncStateTimeInMs.
-     */
-    public HAGroupStoreRecord(String protocolVersion,
-                              String haGroupName, HAGroupState haGroupState) {
-        this(protocolVersion, haGroupName, haGroupState, null);
+        this.peerZKUrl = peerZKUrl;
+        this.clusterUrl = clusterUrl;
+        this.peerClusterUrl = peerClusterUrl;
+        this.adminCRRVersion = adminCRRVersion;
     }
 
     public static Optional<HAGroupStoreRecord> fromJson(byte[] bytes) {
@@ -209,7 +209,12 @@ public class HAGroupStoreRecord {
         return haGroupName.equals(other.haGroupName)
                 && haGroupState.equals(other.haGroupState)
                 && protocolVersion.equals(other.protocolVersion)
-                && Objects.equals(lastSyncStateTimeInMs, other.lastSyncStateTimeInMs);
+                && Objects.equals(lastSyncStateTimeInMs, other.lastSyncStateTimeInMs)
+                && Objects.equals(policy, other.policy)
+                && Objects.equals(peerZKUrl, other.peerZKUrl)
+                && Objects.equals(clusterUrl, other.clusterUrl)
+                && Objects.equals(peerClusterUrl, other.peerClusterUrl)
+                && adminCRRVersion == other.adminCRRVersion;
     }
 
     public String getProtocolVersion() {
@@ -229,6 +234,26 @@ public class HAGroupStoreRecord {
         return lastSyncStateTimeInMs;
     }
 
+    public String getPeerZKUrl() {
+        return peerZKUrl;
+    }
+
+    public String getPolicy() {
+        return policy;
+    }
+
+    public String getClusterUrl() {
+        return clusterUrl;
+    }
+
+    public String getPeerClusterUrl() {
+        return peerClusterUrl;
+    }
+
+    public long getAdminCRRVersion() {
+        return adminCRRVersion;
+    }
+
     @JsonIgnore
     public ClusterRoleRecord.ClusterRole getClusterRole() {
         return haGroupState.getClusterRole();
@@ -241,6 +266,11 @@ public class HAGroupStoreRecord {
                 .append(haGroupName)
                 .append(haGroupState)
                 .append(lastSyncStateTimeInMs)
+                .append(policy)
+                .append(peerZKUrl)
+                .append(clusterUrl)
+                .append(peerClusterUrl)
+                .append(adminCRRVersion)
                 .hashCode();
     }
 
@@ -259,6 +289,11 @@ public class HAGroupStoreRecord {
                     .append(haGroupName, otherRecord.haGroupName)
                     .append(haGroupState, otherRecord.haGroupState)
                     .append(lastSyncStateTimeInMs, otherRecord.lastSyncStateTimeInMs)
+                    .append(policy, otherRecord.policy)
+                    .append(peerZKUrl, otherRecord.peerZKUrl)
+                    .append(clusterUrl, otherRecord.clusterUrl)
+                    .append(peerClusterUrl, otherRecord.peerClusterUrl)
+                    .append(adminCRRVersion, otherRecord.adminCRRVersion)
                     .isEquals();
         }
     }
@@ -270,6 +305,11 @@ public class HAGroupStoreRecord {
                 + ", haGroupName='" + haGroupName + '\''
                 + ", haGroupState=" + haGroupState
                 + ", lastSyncStateTimeInMs=" + lastSyncStateTimeInMs
+                + ", policy='" + policy + '\''
+                + ", peerZKUrl='" + peerZKUrl + '\''
+                + ", clusterUrl='" + clusterUrl + '\''
+                + ", peerClusterUrl='" + peerClusterUrl + '\''
+                + ", adminCRRVersion=" + adminCRRVersion
                 + '}';
     }
 

@@ -20,15 +20,26 @@ package org.apache.phoenix.jdbc;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.exception.InvalidClusterRoleTransitionException;
 import org.apache.phoenix.exception.StaleHAGroupStoreRecordVersionException;
+import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
+import static org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC;
+import static org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY;
+import static org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC;
+import static org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE;
+import static org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState.STANDBY;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions
@@ -45,6 +56,87 @@ public class HAGroupStoreManager {
     private final boolean mutationBlockEnabled;
     private final String zkUrl;
     private final Configuration conf;
+    /**
+     * Concurrent set to track HA groups that have already had failover management set up.
+     * Prevents duplicate subscriptions for the same HA group.
+     * Thread-safe without requiring external synchronization.
+     */
+    private final Set<String> failoverManagedHAGroups = ConcurrentHashMap.newKeySet();
+
+    /**
+     * Functional interface for resolving target local states based on current local state
+     * when peer cluster transitions occur.
+     */
+    @FunctionalInterface
+    private interface TargetStateResolver {
+        HAGroupStoreRecord.HAGroupState determineTarget(
+                HAGroupStoreRecord.HAGroupState currentLocalState);
+    }
+
+    /**
+     * Static mapping of peer state transitions to local target state resolvers.
+     * Defines all supported peer-to-local state transitions for failover management.
+     */
+    private static final Map<HAGroupStoreRecord.HAGroupState, TargetStateResolver>
+            PEER_STATE_TRANSITIONS = createPeerStateTransitions();
+
+    /**
+     * Static mapping of local state transitions to local target state resolvers.
+     * Defines all supported local-to-local state transitions for failover management.
+     */
+    private static final Map<HAGroupStoreRecord.HAGroupState, TargetStateResolver>
+            LOCAL_STATE_TRANSITIONS = createLocalStateTransitions();
+
+    private static Map<HAGroupStoreRecord.HAGroupState, TargetStateResolver>
+    createPeerStateTransitions() {
+        Map<HAGroupStoreRecord.HAGroupState, TargetStateResolver> transitions = new HashMap<>();
+
+        // Simple transition (no condition check)
+        transitions.put(ACTIVE_IN_SYNC_TO_STANDBY, currentLocal
+                -> STANDBY_TO_ACTIVE);
+
+        // Conditional transitions with state validation
+        transitions.put(ACTIVE_IN_SYNC, currentLocal -> {
+            if (currentLocal == ACTIVE_IN_SYNC_TO_STANDBY) {
+                return HAGroupStoreRecord.HAGroupState.STANDBY;
+            }
+            if (currentLocal == HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY) {
+                return HAGroupStoreRecord.HAGroupState.STANDBY;
+            }
+            return null; // No transition
+        });
+
+        transitions.put(ACTIVE_NOT_IN_SYNC, currentLocal -> {
+            if (currentLocal == ACTIVE_IN_SYNC_TO_STANDBY) {
+                return HAGroupStoreRecord.HAGroupState.STANDBY;
+            }
+            if (currentLocal == HAGroupStoreRecord.HAGroupState.STANDBY) {
+                return HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY;
+            }
+            return null; // No transition
+        });
+
+        transitions.put(HAGroupStoreRecord.HAGroupState.ABORT_TO_STANDBY, currentLocal ->
+                currentLocal == ACTIVE_IN_SYNC_TO_STANDBY
+                        ? HAGroupStoreRecord.HAGroupState.ABORT_TO_ACTIVE_IN_SYNC
+                        : null);
+
+        return transitions;
+    }
+
+    private static Map<HAGroupStoreRecord.HAGroupState, TargetStateResolver>
+    createLocalStateTransitions() {
+        Map<HAGroupStoreRecord.HAGroupState, TargetStateResolver> transitions = new HashMap<>();
+        // Local abort transitions - these are simple transitions (no condition check)
+        transitions.put(HAGroupStoreRecord.HAGroupState.ABORT_TO_STANDBY,
+                currentLocal -> STANDBY);
+        transitions.put(HAGroupStoreRecord.HAGroupState.ABORT_TO_ACTIVE_IN_SYNC,
+                currentLocal -> ACTIVE_IN_SYNC);
+        transitions.put(HAGroupStoreRecord.HAGroupState.ABORT_TO_ACTIVE_NOT_IN_SYNC,
+                currentLocal -> ACTIVE_NOT_IN_SYNC);
+        return transitions;
+    }
+
 
     /**
      * Creates/gets an instance of HAGroupStoreManager.
@@ -63,11 +155,13 @@ public class HAGroupStoreManager {
         return haGroupStoreManagerInstance;
     }
 
-    private HAGroupStoreManager(final Configuration conf) {
+    @VisibleForTesting
+    HAGroupStoreManager(final Configuration conf) {
         this.mutationBlockEnabled = conf.getBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED,
                 DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED);
         this.zkUrl = getLocalZkUrl(conf);
         this.conf = conf;
+        this.failoverManagedHAGroups.clear();
     }
 
     /**
@@ -89,7 +183,8 @@ public class HAGroupStoreManager {
      */
     public boolean isMutationBlocked(String haGroupName) throws IOException {
         if (mutationBlockEnabled) {
-            HAGroupStoreClient haGroupStoreClient = getHAGroupStoreClient(haGroupName);
+            HAGroupStoreClient haGroupStoreClient
+                    = getHAGroupStoreClientAndSetupFailoverManagement(haGroupName);
             HAGroupStoreRecord recordWithMetadata
                     = haGroupStoreClient.getHAGroupStoreRecord();
             return recordWithMetadata != null
@@ -103,16 +198,14 @@ public class HAGroupStoreManager {
     /**
      * Force rebuilds the HAGroupStoreClient instance for all HA groups.
      * If any HAGroupStoreClient instance is not created, it will be created.
-     * @param broadcastUpdate if true, the update will be broadcasted to all
-     *                       regionserver endpoints.
      * @throws Exception in case of an error with dependencies or table.
      */
-    public void invalidateHAGroupStoreClient(boolean broadcastUpdate) throws Exception {
+    public void invalidateHAGroupStoreClient() throws Exception {
         List<String> haGroupNames = HAGroupStoreClient.getHAGroupNames(this.zkUrl);
         List<String> failedHAGroupNames = new ArrayList<>();
         for (String haGroupName : haGroupNames) {
             try {
-                invalidateHAGroupStoreClient(haGroupName, broadcastUpdate);
+                invalidateHAGroupStoreClient(haGroupName);
             } catch (Exception e) {
                 failedHAGroupNames.add(haGroupName);
                 LOGGER.error("Failed to invalidate HAGroupStoreClient for " + haGroupName, e);
@@ -130,13 +223,11 @@ public class HAGroupStoreManager {
      * Force rebuilds the HAGroupStoreClient for a specific HA group.
      *
      * @param haGroupName name of the HA group, null for default HA group and tracks all HA groups.
-     * @param broadcastUpdate if true, the update will be broadcasted to all
-     *                       regionserver endpoints.
      * @throws Exception in case of an error with dependencies or table.
      */
-    public void invalidateHAGroupStoreClient(final String haGroupName,
-            boolean broadcastUpdate) throws Exception {
-        HAGroupStoreClient haGroupStoreClient = getHAGroupStoreClient(haGroupName);
+    public void invalidateHAGroupStoreClient(final String haGroupName) throws Exception {
+        HAGroupStoreClient haGroupStoreClient
+                = getHAGroupStoreClientAndSetupFailoverManagement(haGroupName);
         haGroupStoreClient.rebuild();
     }
 
@@ -150,7 +241,8 @@ public class HAGroupStoreManager {
      */
     public Optional<HAGroupStoreRecord> getHAGroupStoreRecord(final String haGroupName)
             throws IOException {
-        HAGroupStoreClient haGroupStoreClient = getHAGroupStoreClient(haGroupName);
+        HAGroupStoreClient haGroupStoreClient
+                = getHAGroupStoreClientAndSetupFailoverManagement(haGroupName);
         return Optional.ofNullable(haGroupStoreClient.getHAGroupStoreRecord());
     }
 
@@ -158,13 +250,14 @@ public class HAGroupStoreManager {
      * Returns the HAGroupStoreRecord for a specific HA group from peer cluster.
      *
      * @param haGroupName name of the HA group
-     * @return Optional HAGroupStoreRecord for the HA group from peer cluster can be empty if 
+     * @return Optional HAGroupStoreRecord for the HA group from peer cluster can be empty if
      *        the HA group is not found or peer cluster is not available.
      * @throws IOException when HAGroupStoreClient is not healthy.
      */
     public Optional<HAGroupStoreRecord> getPeerHAGroupStoreRecord(final String haGroupName)
             throws IOException {
-        HAGroupStoreClient haGroupStoreClient = getHAGroupStoreClient(haGroupName);
+        HAGroupStoreClient haGroupStoreClient
+                = getHAGroupStoreClientAndSetupFailoverManagement(haGroupName);
         return Optional.ofNullable(haGroupStoreClient.getHAGroupStoreRecordFromPeer());
     }
 
@@ -176,8 +269,9 @@ public class HAGroupStoreManager {
      */
     public void setHAGroupStatusToStoreAndForward(final String haGroupName)
             throws IOException, StaleHAGroupStoreRecordVersionException,
-            InvalidClusterRoleTransitionException {
-        HAGroupStoreClient haGroupStoreClient = getHAGroupStoreClient(haGroupName);
+            InvalidClusterRoleTransitionException, SQLException {
+        HAGroupStoreClient haGroupStoreClient
+                = getHAGroupStoreClientAndSetupFailoverManagement(haGroupName);
         haGroupStoreClient.setHAGroupStatusIfNeeded(
                 HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC);
     }
@@ -190,10 +284,49 @@ public class HAGroupStoreManager {
      */
     public void setHAGroupStatusToSync(final String haGroupName)
             throws IOException, StaleHAGroupStoreRecordVersionException,
-            InvalidClusterRoleTransitionException {
-        HAGroupStoreClient haGroupStoreClient = getHAGroupStoreClient(haGroupName);
+            InvalidClusterRoleTransitionException, SQLException {
+        HAGroupStoreClient haGroupStoreClient
+                = getHAGroupStoreClientAndSetupFailoverManagement(haGroupName);
         haGroupStoreClient.setHAGroupStatusIfNeeded(
                 HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+    }
+
+    /**
+     * Sets the HAGroupStoreRecord to transition from ACTIVE_IN_SYNC to STANDBY in local cluster.
+     * This initiates the failover process by moving the active cluster to a transitional state.
+     *
+     * @param haGroupName name of the HA group
+     * @throws IOException when HAGroupStoreClient is not healthy.
+     * @throws StaleHAGroupStoreRecordVersionException when the version is stale
+     * @throws InvalidClusterRoleTransitionException when the transition is not valid
+     * @throws SQLException when there is an error with the database operation
+     */
+    public void setHAGroupStatusToActiveInSyncToStandby(final String haGroupName)
+            throws IOException, StaleHAGroupStoreRecordVersionException,
+            InvalidClusterRoleTransitionException, SQLException {
+        HAGroupStoreClient haGroupStoreClient
+                = getHAGroupStoreClientAndSetupFailoverManagement(haGroupName);
+        haGroupStoreClient.setHAGroupStatusIfNeeded(
+                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+    }
+
+    /**
+     * Sets the HAGroupStoreRecord to abort failover and return to STANDBY in local cluster.
+     * This aborts an ongoing failover process by moving the standby cluster to abort state.
+     *
+     * @param haGroupName name of the HA group
+     * @throws IOException when HAGroupStoreClient is not healthy.
+     * @throws StaleHAGroupStoreRecordVersionException when the version is stale
+     * @throws InvalidClusterRoleTransitionException when the transition is not valid
+     * @throws SQLException when there is an error with the database operation
+     */
+    public void setHAGroupStatusToAbortToStandby(final String haGroupName)
+            throws IOException, StaleHAGroupStoreRecordVersionException,
+            InvalidClusterRoleTransitionException, SQLException {
+        HAGroupStoreClient haGroupStoreClient
+                = getHAGroupStoreClientAndSetupFailoverManagement(haGroupName);
+        haGroupStoreClient.setHAGroupStatusIfNeeded(
+                HAGroupStoreRecord.HAGroupState.ABORT_TO_STANDBY);
     }
 
     /**
@@ -208,8 +341,9 @@ public class HAGroupStoreManager {
      */
     public void setReaderToDegraded(final String haGroupName)
             throws IOException, StaleHAGroupStoreRecordVersionException,
-            InvalidClusterRoleTransitionException {
-        HAGroupStoreClient haGroupStoreClient = getHAGroupStoreClient(haGroupName);
+            InvalidClusterRoleTransitionException, SQLException {
+        HAGroupStoreClient haGroupStoreClient
+                = getHAGroupStoreClientAndSetupFailoverManagement(haGroupName);
         HAGroupStoreRecord currentRecord
                 = haGroupStoreClient.getHAGroupStoreRecord();
 
@@ -217,16 +351,8 @@ public class HAGroupStoreManager {
             throw new IOException("Current HAGroupStoreRecord is null for HA group: "
                     + haGroupName);
         }
-
-        HAGroupStoreRecord.HAGroupState currentState = currentRecord.getHAGroupState();
-        HAGroupStoreRecord.HAGroupState targetState
-                = HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY_FOR_READER;
-
-        if (currentState == HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY_FOR_WRITER) {
-            targetState = HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY;
-        }
-
-        haGroupStoreClient.setHAGroupStatusIfNeeded(targetState);
+        haGroupStoreClient.setHAGroupStatusIfNeeded(
+                HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY);
     }
 
     /**
@@ -241,8 +367,9 @@ public class HAGroupStoreManager {
      */
     public void setReaderToHealthy(final String haGroupName)
             throws IOException, StaleHAGroupStoreRecordVersionException,
-            InvalidClusterRoleTransitionException {
-        HAGroupStoreClient haGroupStoreClient = getHAGroupStoreClient(haGroupName);
+            InvalidClusterRoleTransitionException, SQLException {
+        HAGroupStoreClient haGroupStoreClient
+                = getHAGroupStoreClientAndSetupFailoverManagement(haGroupName);
         HAGroupStoreRecord currentRecord
                 = haGroupStoreClient.getHAGroupStoreRecord();
 
@@ -251,14 +378,7 @@ public class HAGroupStoreManager {
                     + "for HA group: " + haGroupName);
         }
 
-        HAGroupStoreRecord.HAGroupState currentState = currentRecord.getHAGroupState();
-        HAGroupStoreRecord.HAGroupState targetState = HAGroupStoreRecord.HAGroupState.STANDBY;
-
-        if (currentState == HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY) {
-            targetState = HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY_FOR_WRITER;
-        }
-
-        haGroupStoreClient.setHAGroupStatusIfNeeded(targetState);
+        haGroupStoreClient.setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.STANDBY);
     }
 
     /**
@@ -272,7 +392,8 @@ public class HAGroupStoreManager {
      */
     public ClusterRoleRecord getClusterRoleRecord(String haGroupName)
             throws IOException {
-        HAGroupStoreClient haGroupStoreClient = getHAGroupStoreClient(haGroupName);
+        HAGroupStoreClient haGroupStoreClient
+                = getHAGroupStoreClientAndSetupFailoverManagement(haGroupName);
         return haGroupStoreClient.getClusterRoleRecord();
     }
 
@@ -289,7 +410,8 @@ public class HAGroupStoreManager {
                                        HAGroupStoreRecord.HAGroupState targetState,
                                        ClusterType clusterType,
                                        HAGroupStateListener listener) throws IOException {
-        HAGroupStoreClient client = getHAGroupStoreClient(haGroupName);
+        HAGroupStoreClient client
+                = getHAGroupStoreClientAndSetupFailoverManagement(haGroupName);
         client.subscribeToTargetState(targetState, clusterType, listener);
         LOGGER.debug("Delegated subscription to target state {} "
                         + "for HA group {} on {} cluster to client",
@@ -309,7 +431,7 @@ public class HAGroupStoreManager {
                                            ClusterType clusterType,
                                            HAGroupStateListener listener) {
         try {
-            HAGroupStoreClient client = getHAGroupStoreClient(haGroupName);
+            HAGroupStoreClient client = getHAGroupStoreClientAndSetupFailoverManagement(haGroupName);
             client.unsubscribeFromTargetState(targetState, clusterType, listener);
             LOGGER.debug("Delegated unsubscription from target state {} "
                             + "for HA group {} on {} cluster to client",
@@ -336,5 +458,123 @@ public class HAGroupStoreManager {
                     + "for HA group: " + haGroupName);
         }
         return haGroupStoreClient;
+    }
+
+
+    /**
+     * Helper method to get HAGroupStoreClient instance and setup failover management.
+     * NOTE: As soon as the HAGroupStoreClient is initialized,
+     * it will setup the failover management as well.
+     * Failover management is only set up once per HA group
+     * to prevent duplicate subscriptions.
+     *
+     * @param haGroupName name of the HA group
+     * @return HAGroupStoreClient instance for the specified HA group
+     * @throws IOException when HAGroupStoreClient is not initialized
+     */
+    private synchronized HAGroupStoreClient
+    getHAGroupStoreClientAndSetupFailoverManagement(final String haGroupName)
+            throws IOException {
+        HAGroupStoreClient haGroupStoreClient = getHAGroupStoreClient(haGroupName);
+
+        // Only setup failover management once per HA group using atomic add operation
+        if (failoverManagedHAGroups.add(haGroupName)) {
+            // add() returns true if the element was not already present
+            setupPeerFailoverManagement(haGroupName);
+            setupLocalFailoverManagement(haGroupName);
+            LOGGER.info("Failover management setup completed for HA group: {}", haGroupName);
+        } else {
+            LOGGER.debug("Failover management already configured for HA group: {}", haGroupName);
+        }
+
+        return haGroupStoreClient;
+    }
+
+
+    // ===== Failover Management Related Methods =====
+
+    public void setupLocalFailoverManagement(String haGroupName) throws IOException {
+        HAGroupStoreClient haGroupStoreClient = getHAGroupStoreClient(haGroupName);
+
+        // Generic subscription loop using static local transition mapping
+        for (Map.Entry<HAGroupStoreRecord.HAGroupState, TargetStateResolver> entry
+                : LOCAL_STATE_TRANSITIONS.entrySet()) {
+            subscribeToTargetState(haGroupName, entry.getKey(), ClusterType.LOCAL,
+                    new FailoverManagementListener(haGroupStoreClient,
+                            entry.getValue()));
+        }
+
+        LOGGER.info("Setup local failover management for HA group: {} with {} state transitions",
+                haGroupName, LOCAL_STATE_TRANSITIONS.size());
+    }
+
+    /**
+     * Listener implementation for handling peer failover management state transitions.
+     * Subscribes to peer state changes and triggers appropriate local state transitions.
+     */
+    private static class FailoverManagementListener implements HAGroupStateListener {
+        private final HAGroupStoreClient client;
+        private final TargetStateResolver resolver;
+
+        FailoverManagementListener(HAGroupStoreClient client,
+                                          TargetStateResolver resolver) {
+            this.client = client;
+            this.resolver = resolver;
+        }
+
+        @Override
+        public void onStateChange(String haGroupName,
+                                  HAGroupState fromState,
+                                  HAGroupState toState,
+                                  long modifiedTime,
+                                  ClusterType clusterType,
+                                  Long lastSyncStateTimeInMs) {
+            HAGroupStoreRecord.HAGroupState targetState = null;
+            HAGroupStoreRecord.HAGroupState currentLocalState = null;
+
+            try {
+                // Get current local state
+                HAGroupStoreRecord currentRecord = client.getHAGroupStoreRecord();
+                if (currentRecord == null) {
+                    LOGGER.error("Current HAGroupStoreRecord is null for HA group: {} "
+                            + "in Failover Management, failover may be stalled", haGroupName);
+                    return;
+                }
+
+                // Resolve target state using TargetStateResolver
+                currentLocalState = currentRecord.getHAGroupState();
+                targetState = resolver.determineTarget(currentLocalState);
+
+                if (targetState == null) {
+                    return;
+                }
+
+                // Execute transition if valid
+                client.setHAGroupStatusIfNeeded(targetState);
+
+                LOGGER.info("Failover management transition: peer {} -> {}, "
+                                + "local {} -> {} for HA group: {}",
+                        toState, toState, currentLocalState, targetState, haGroupName);
+
+            } catch (Exception e) {
+                LOGGER.error("Failed to set HAGroupStatusIfNeeded for HA group: {} "
+                + "in Failover Management, event reaction/failover may be stalled",
+                haGroupName, e);
+            }
+        }
+    }
+
+    public void setupPeerFailoverManagement(String haGroupName) throws IOException {
+        HAGroupStoreClient haGroupStoreClient = getHAGroupStoreClient(haGroupName);
+
+        // Generic subscription loop using static transition mapping
+        for (Map.Entry<HAGroupStoreRecord.HAGroupState, TargetStateResolver> entry
+                : PEER_STATE_TRANSITIONS.entrySet()) {
+            subscribeToTargetState(haGroupName, entry.getKey(), ClusterType.PEER,
+                    new FailoverManagementListener(haGroupStoreClient, entry.getValue()));
+        }
+
+        LOGGER.info("Setup peer failover management for HA group: {} with {} state transitions",
+                haGroupName, PEER_STATE_TRANSITIONS.size());
     }
 }
