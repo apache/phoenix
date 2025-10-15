@@ -20,6 +20,14 @@ package org.apache.phoenix.compat.hbase;
 import java.util.Map;
 
 public class CompatScanMetrics {
+  public static final String FS_READ_TIME_METRIC_NAME = "fsReadTime";
+  public static final String BYTES_READ_FROM_FS_METRIC_NAME = "bytesReadFromFs";
+  public static final String BYTES_READ_FROM_MEMSTORE_METRIC_NAME = "bytesReadFromMemstore";
+  public static final String BYTES_READ_FROM_BLOCK_CACHE_METRIC_NAME = "bytesReadFromBlockCache";
+  public static final String BLOCK_READ_OPS_COUNT_METRIC_NAME = "blockReadOpsCount";
+  public static final String RPC_SCAN_PROCESSING_TIME_METRIC_NAME = "rpcScanProcessingTime";
+  public static final String RPC_SCAN_QUEUE_WAIT_TIME_METRIC_NAME = "rpcScanQueueWaitTime";
+
   private CompatScanMetrics() {
     // Not to be instantiated
   }

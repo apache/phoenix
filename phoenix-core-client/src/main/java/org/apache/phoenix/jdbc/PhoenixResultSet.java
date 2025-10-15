@@ -1497,6 +1497,11 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
   }
 
   @Override
+  public List<Map<String, Map<MetricType, Long>>> getSlowestScanReadMetrics() {
+    return context.getSlowestScanReadMetrics();
+  }
+
+  @Override
   public Map<MetricType, Long> getOverAllRequestReadMetrics() {
     return overAllQueryMetrics.publish();
   }

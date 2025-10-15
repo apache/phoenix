@@ -18,12 +18,15 @@
 package org.apache.phoenix.jdbc;
 
 import java.sql.ResultSet;
+import java.util.List;
 import java.util.Map;
 import org.apache.phoenix.monitoring.MetricType;
 
 public interface PhoenixMonitoredResultSet extends ResultSet {
 
   Map<String, Map<MetricType, Long>> getReadMetrics();
+
+  List<Map<String, Map<MetricType, Long>>> getSlowestScanReadMetrics();
 
   Map<MetricType, Long> getOverAllRequestReadMetrics();
 

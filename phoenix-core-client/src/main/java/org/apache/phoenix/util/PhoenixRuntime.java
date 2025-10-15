@@ -1547,6 +1547,12 @@ public class PhoenixRuntime {
     return resultSet.getReadMetrics();
   }
 
+  public static List<Map<String, Map<MetricType, Long>>> getSlowestScanReadMetrics(ResultSet rs)
+    throws SQLException {
+    PhoenixMonitoredResultSet resultSet = rs.unwrap(PhoenixMonitoredResultSet.class);
+    return resultSet.getSlowestScanReadMetrics();
+  }
+
   @Deprecated
   // use getRequestReadMetricInfo
   public static Map<String, Map<String, Long>> getRequestReadMetrics(ResultSet rs)

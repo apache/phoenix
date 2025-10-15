@@ -21,6 +21,7 @@ import static org.apache.phoenix.exception.SQLExceptionCode.CLASS_NOT_UNWRAPPABL
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -124,6 +125,17 @@ public class ParallelPhoenixResultSet extends DelegateResultSet
       metrics = new HashMap<>();
     }
     context.decorateMetrics(metrics);
+    return metrics;
+  }
+
+  @Override
+  public List<Map<String, Map<MetricType, Long>>> getSlowestScanReadMetrics() {
+    List<Map<String, Map<MetricType, Long>>> metrics;
+    if (rs != null) {
+      metrics = ((PhoenixMonitoredResultSet) rs).getSlowestScanReadMetrics();
+    } else {
+      metrics = Collections.emptyList();
+    }
     return metrics;
   }
 

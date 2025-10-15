@@ -31,8 +31,11 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.log.QueryLogger;
+import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.monitoring.OverAllQueryMetrics;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
+import org.apache.phoenix.monitoring.SlowestScanReadMetricsQueue;
+import org.apache.phoenix.monitoring.SlowestScanReadMetricsQueue.SlowestScanMetrics;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -91,6 +94,7 @@ public class StatementContext {
   private Integer totalSegmentsValue;
   private boolean hasRowSizeFunction = false;
   private boolean hasRawRowSizeFunction = false;
+  private SlowestScanReadMetricsQueue slowestScanReadMetricsQueue;
 
   public StatementContext(PhoenixStatement statement) {
     this(statement, new Scan());
@@ -180,6 +184,7 @@ public class StatementContext {
     this.readMetricsQueue = new ReadMetricQueue(isRequestMetricsEnabled, connection.getLogLevel());
     this.overAllQueryMetrics =
       new OverAllQueryMetrics(isRequestMetricsEnabled, connection.getLogLevel());
+    this.slowestScanReadMetricsQueue = new SlowestScanReadMetricsQueue();
     this.retryingPersistentCache = Maps.<Long, Boolean> newHashMap();
     this.hasFirstValidResult = new AtomicBoolean(false);
     this.subStatementContexts = Sets.newHashSet();
@@ -474,5 +479,40 @@ public class StatementContext {
 
   public void setTotalSegmentsValue(Integer totalSegmentsValue) {
     this.totalSegmentsValue = totalSegmentsValue;
+  }
+
+  public SlowestScanReadMetricsQueue getSlowestScanReadMetricsQueue() {
+    return slowestScanReadMetricsQueue;
+  }
+
+  public List<Map<String, Map<MetricType, Long>>> getSlowestScanReadMetrics() {
+    if (slowestScanReadMetricsQueue == null) {
+      return Collections.emptyList();
+    }
+
+    SlowestScanMetrics slowestScanMetrics =
+      new SlowestScanMetrics(Long.MIN_VALUE, new ArrayList<>());
+    getSlowestScanReadMetricsUtil(this, new ArrayList<>(), 0, slowestScanMetrics);
+    return slowestScanMetrics.getScanMetrics();
+  }
+
+  private static void getSlowestScanReadMetricsUtil(StatementContext node,
+    List<Map<String, Map<MetricType, Long>>> currentMetrics, long currentScanTimeInMillis,
+    SlowestScanMetrics slowestScanMetrics) {
+    Map<String, Map<MetricType, Long>> nodeScanMetrics = node.getReadMetricsQueue().aggregate();
+    currentMetrics.add(nodeScanMetrics);
+    currentScanTimeInMillis += SlowestScanReadMetricsQueue.CRITERIA.apply(nodeScanMetrics);
+    if (node.getSubStatementContexts() == null || node.getSubStatementContexts().isEmpty()) {
+      if (currentScanTimeInMillis > slowestScanMetrics.getSumOfMillisSecBetweenNexts()) {
+        slowestScanMetrics.setSumOfMillisSecBetweenNexts(currentScanTimeInMillis);
+        slowestScanMetrics.setScanMetrics(new ArrayList<>(currentMetrics));
+      }
+    } else {
+      for (StatementContext sub : node.getSubStatementContexts()) {
+        getSlowestScanReadMetricsUtil(sub, currentMetrics, currentScanTimeInMillis,
+          slowestScanMetrics);
+      }
+    }
+    currentMetrics.remove(currentMetrics.size() - 1);
   }
 }
