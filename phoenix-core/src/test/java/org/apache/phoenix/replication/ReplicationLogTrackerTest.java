@@ -1078,12 +1078,12 @@ public class ReplicationLogTrackerTest {
 
         // Verify results - check by filename instead of full path comparison
         assertEquals("Should return 2 old files", 2, result.size());
-        
+
         // Convert to sets of filenames for comparison
         Set<String> resultFilenames = result.stream()
                 .map(Path::getName)
                 .collect(Collectors.toSet());
-        
+
         assertTrue("Should contain oldFile1", resultFilenames.contains(oldFile1.getName()));
         assertTrue("Should contain oldFile2", resultFilenames.contains(oldFile2.getName()));
         assertFalse("Should not contain newFile1", resultFilenames.contains(newFile1.getName()));
@@ -1185,12 +1185,12 @@ public class ReplicationLogTrackerTest {
 
         // Verify results - should only contain the valid old file
         assertEquals("Should return 1 valid old file", 1, result.size());
-        
+
         // Convert to set of filenames for comparison
         Set<String> resultFilenames = result.stream()
                 .map(Path::getName)
                 .collect(Collectors.toSet());
-        
+
         assertTrue("Should contain validOldFile", resultFilenames.contains(validOldFile.getName()));
         assertFalse("Should not contain invalidFile1", resultFilenames.contains(invalidFile1.getName()));
         assertFalse("Should not contain invalidFile2", resultFilenames.contains(invalidFile2.getName()));
@@ -1222,12 +1222,12 @@ public class ReplicationLogTrackerTest {
 
         // Verify results - should only contain the file just before threshold
         assertEquals("Should return 1 file older than threshold", 1, result.size());
-        
+
         // Convert to set of filenames for comparison
         Set<String> resultFilenames = result.stream()
                 .map(Path::getName)
                 .collect(Collectors.toSet());
-        
+
         assertTrue("Should contain fileJustBeforeThreshold", resultFilenames.contains(fileJustBeforeThreshold.getName()));
         assertFalse("Should not contain fileAtThreshold", resultFilenames.contains(fileAtThreshold.getName()));
     }
@@ -1268,12 +1268,12 @@ public class ReplicationLogTrackerTest {
 
         // Verify results - should only contain the valid old files
         assertEquals("Should return 2 valid old files", 2, result.size());
-        
+
         // Convert to set of filenames for comparison
         Set<String> resultFilenames = result.stream()
                 .map(Path::getName)
                 .collect(Collectors.toSet());
-        
+
         assertTrue("Should contain oldFile1", resultFilenames.contains(oldFile1.getName()));
         assertTrue("Should contain oldFile2", resultFilenames.contains(oldFile2.getName()));
         assertFalse("Should not contain newFile1", resultFilenames.contains(newFile1.getName()));

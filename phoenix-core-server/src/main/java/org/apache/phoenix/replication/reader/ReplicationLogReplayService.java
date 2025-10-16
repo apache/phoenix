@@ -18,6 +18,7 @@
 package org.apache.phoenix.replication.reader;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executors;
@@ -25,6 +26,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -134,7 +136,7 @@ public class ReplicationLogReplayService {
             scheduler.scheduleAtFixedRate(() -> {
                 try {
                     startReplicationReplay();
-                } catch (IOException e) {
+                } catch (Exception e) {
                     LOG.error("Error during trigger of start replication replay", e);
                 }
             }, 0, executorFrequencySeconds, TimeUnit.SECONDS);
@@ -148,7 +150,7 @@ public class ReplicationLogReplayService {
      * Waits for the configured shutdown timeout before forcing shutdown if necessary.
      * @throws IOException if there's an error during shutdown
      */
-    public void stop() throws IOException {
+    public void stop() throws IOException, SQLException {
         boolean isEnabled = conf.getBoolean(PHOENIX_REPLICATION_REPLAY_ENABLED,
             DEFAULT_REPLICATION_REPLAY_ENABLED);
         if (!isEnabled) {
@@ -179,14 +181,20 @@ public class ReplicationLogReplayService {
                 Thread.currentThread().interrupt();
             }
         }
-        stopReplicationReplay();
+        try {
+            stopReplicationReplay();
+        } catch (Exception exception) {
+            LOG.error("Error while stopping the replication replay.", exception);
+            // TODO: Should there be an exception thrown instead and halt the RS stop?
+        }
+
         LOG.info("ReplicationLogReplayService stopped successfully");
     }
 
     /**
      * Start Replication Replay for all the HA groups
      */
-    protected void startReplicationReplay() throws IOException {
+    protected void startReplicationReplay() throws IOException, SQLException {
         List<String> replicationGroups = getReplicationGroups();
         for (String replicationGroup : replicationGroups) {
             ReplicationLogReplay.get(conf, replicationGroup).startReplay();
@@ -196,7 +204,7 @@ public class ReplicationLogReplayService {
     /**
      * Stops Replication Replay for all the HA groups
      */
-    protected void stopReplicationReplay() throws IOException {
+    protected void stopReplicationReplay() throws IOException, SQLException {
         List<String> replicationGroups = getReplicationGroups();
         for (String replicationGroup : replicationGroups) {
             ReplicationLogReplay replicationLogReplay =
@@ -209,8 +217,7 @@ public class ReplicationLogReplayService {
     /**
      * @return the list of HA groups on the cluster
      */
-    protected List<String> getReplicationGroups() {
-        // TODO: Return list of replication groups using HAGroupStoreClient
-        return Collections.singletonList("DEFAULT_HA_GROUP");
+    protected List<String> getReplicationGroups() throws SQLException {
+        return HAGroupStoreManager.getInstance(conf).getHAGroupNames();
     }
 }
