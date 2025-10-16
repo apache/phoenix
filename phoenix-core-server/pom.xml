@@ -170,10 +170,6 @@
   <build>
     <plugins>
       <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>build-helper-maven-plugin</artifactId>
-      </plugin>
-      <plugin>
         <artifactId>maven-dependency-plugin</artifactId>
         <configuration>
           <ignoreNonCompile>true</ignoreNonCompile>

@@ -1555,39 +1555,11 @@
             developers can run unit tests conveniently from the IDE or via
             "mvn package" from the command line without triggering time
             consuming integration tests. -->
-        <!--        <plugin>-->
-        <!--          <groupId>org.codehaus.mojo</groupId>-->
-        <!--          <artifactId>build-helper-maven-plugin</artifactId>-->
-        <!--          <version>${maven-build-helper-plugin.version}</version>-->
-        <!--          <executions>-->
-        <!--            <execution>-->
-        <!--              <id>add-test-source</id>-->
-        <!--              <goals>-->
-        <!--                <goal>add-test-source</goal>-->
-        <!--              </goals>-->
-        <!--              <phase>validate</phase>-->
-        <!--              <configuration>-->
-        <!--                <sources>-->
-        <!--                  <source>${basedir}/src/it/java</source>-->
-        <!--                </sources>-->
-        <!--              </configuration>-->
-        <!--            </execution>-->
-        <!--            <execution>-->
-        <!--              <id>add-test-resource</id>-->
-        <!--              <goals>-->
-        <!--                <goal>add-test-resource</goal>-->
-        <!--              </goals>-->
-        <!--              <phase>validate</phase>-->
-        <!--              <configuration>-->
-        <!--                <resources>-->
-        <!--                  <resource>-->
-        <!--                    <directory>${basedir}/src/it/resources</directory>-->
-        <!--                  </resource>-->
-        <!--                </resources>-->
-        <!--              </configuration>-->
-        <!--            </execution>-->
-        <!--          </executions>-->
-        <!--        </plugin>-->
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>build-helper-maven-plugin</artifactId>
+          <version>${maven-build-helper-plugin.version}</version>
+        </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-failsafe-plugin</artifactId>
@@ -1599,7 +1571,7 @@
             <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
             <forkedProcessExitTimeoutInSeconds>180</forkedProcessExitTimeoutInSeconds>
             <shutdown>exit</shutdown>
-            <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+            <!--            <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>-->
             <trimStackTrace>false</trimStackTrace>
             <!-- https://www.orpiske.net/2021/04/test-woes-with-maven-failsafe-3-0-0-m5 -->
             <useModulePath>false</useModulePath>
