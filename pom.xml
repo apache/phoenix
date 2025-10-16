@@ -150,6 +150,7 @@
     <!-- Plugin versions -->
     <maven-eclipse-plugin.version>2.10</maven-eclipse-plugin.version>
     <maven-build-helper-plugin.version>3.5.0</maven-build-helper-plugin.version>
+    <maven-replacer-plugin.version>1.5.2</maven-replacer-plugin.version>
     <restrict-imports.enforcer.version>2.4.0</restrict-imports.enforcer.version>
     <maven-antlr-eclipse-plugin.version>${antlr.version}</maven-antlr-eclipse-plugin.version>
     <spotbugs-maven-plugin.version>4.8.1.0</spotbugs-maven-plugin.version>
@@ -1559,6 +1560,11 @@
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>build-helper-maven-plugin</artifactId>
           <version>${maven-build-helper-plugin.version}</version>
+        </plugin>
+        <plugin>
+            <groupId>com.google.code.maven-replacer-plugin</groupId>
+            <artifactId>replacer</artifactId>
+            <version>${maven-replacer-plugin.version}</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
