@@ -136,15 +136,17 @@ public class HighAvailabilityGroup {
    */
   @VisibleForTesting
   static final Map<HAGroupInfo, HighAvailabilityGroup> GROUPS = new ConcurrentHashMap<>();
-  static final Map<HAGroupInfo, Set<HAURLInfo>> URLS = new ConcurrentHashMap<>();
   @VisibleForTesting
-  static final Cache<HAGroupInfo, Boolean> MISSING_CRR_GROUPS_CACHE = CacheBuilder.newBuilder()
+  public static final Map<HAGroupInfo, Set<HAURLInfo>> URLS = new ConcurrentHashMap<>();
+  @VisibleForTesting
+  public static final Cache<HAGroupInfo, Boolean> MISSING_CRR_GROUPS_CACHE =
+          CacheBuilder.newBuilder()
     .expireAfterWrite(PHOENIX_HA_TRANSITION_TIMEOUT_MS_DEFAULT, TimeUnit.MILLISECONDS).build();
   /**
    * The Curator client cache, one client instance per cluster.
    */
   @VisibleForTesting
-  static final Cache<String,
+  public static final Cache<String,
     CuratorFramework> CURATOR_CACHE = CacheBuilder.newBuilder()
       .expireAfterAccess(DEFAULT_CLIENT_CONNECTION_CACHE_MAX_DURATION, TimeUnit.MILLISECONDS)
       .removalListener(
@@ -644,7 +646,8 @@ public class HighAvailabilityGroup {
   }
 
   /** Returns true if the given phoenix connection points to ACTIVE cluster, else false */
-  boolean isActive(PhoenixConnection connection) {
+  @VisibleForTesting
+  public boolean isActive(PhoenixConnection connection) {
     if (state != State.READY || connection == null) {
       return false;
     }
@@ -687,11 +690,12 @@ public class HighAvailabilityGroup {
   }
 
   @VisibleForTesting
-  HAGroupInfo getGroupInfo() {
+  public HAGroupInfo getGroupInfo() {
     return info;
   }
 
-  Properties getProperties() {
+  @VisibleForTesting
+  public Properties getProperties() {
     return properties;
   }
 

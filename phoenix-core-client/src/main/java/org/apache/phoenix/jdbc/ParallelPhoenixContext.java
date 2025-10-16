@@ -35,6 +35,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -219,11 +220,13 @@ public class ParallelPhoenixContext {
     return this.operationTimeoutMs;
   }
 
-  CompletableFuture<?> getChainOnConn1() {
+  @VisibleForTesting
+  public CompletableFuture<?> getChainOnConn1() {
     return this.cluster1Context.getChainOnConn();
   }
 
-  CompletableFuture<?> getChainOnConn2() {
+  @VisibleForTesting
+  public CompletableFuture<?> getChainOnConn2() {
     return this.cluster2Context.getChainOnConn();
   }
 
