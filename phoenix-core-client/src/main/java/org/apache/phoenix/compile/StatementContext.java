@@ -24,7 +24,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
+
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
@@ -36,6 +39,7 @@ import org.apache.phoenix.monitoring.OverAllQueryMetrics;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.monitoring.SlowestScanReadMetricsQueue;
 import org.apache.phoenix.monitoring.SlowestScanReadMetricsQueue.SlowestScanMetrics;
+import org.apache.phoenix.monitoring.TopNTreeMap;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -488,20 +492,22 @@ public class StatementContext {
     return slowestScanReadMetricsQueue;
   }
 
-  public List<Map<String, Map<MetricType, Long>>> getSlowestScanReadMetrics() {
-    if (slowestScanReadMetricsQueue == null) {
-      return Collections.emptyList();
+  public List<List<Map<String, Map<MetricType, Long>>>> getTopNSlowestScanReadMetrics() {
+    TopNTreeMap<Long, List<Map<String, Map<MetricType, Long>>>> slowestScanReadMetrics =
+      new TopNTreeMap<>(10, (s1, s2) -> Long.compare(s2, s1));
+    getSlowestScanReadMetricsUtil(this, new ArrayList<>(), 0, slowestScanReadMetrics);
+    List<List<Map<String, Map<MetricType, Long>>>> topNSlowestScanReadMetrics =
+      new ArrayList<>(slowestScanReadMetrics.size());
+    for (Map.Entry<Long, List<Map<String, Map<MetricType, Long>>>> entry : slowestScanReadMetrics
+      .entrySet()) {
+      topNSlowestScanReadMetrics.add(entry.getValue());
     }
-
-    SlowestScanMetrics slowestScanMetrics =
-      new SlowestScanMetrics(Long.MIN_VALUE, new ArrayList<>());
-    getSlowestScanReadMetricsUtil(this, new ArrayList<>(), 0, slowestScanMetrics);
-    return slowestScanMetrics.getScanMetrics();
+    return topNSlowestScanReadMetrics;
   }
 
   private static void getSlowestScanReadMetricsUtil(StatementContext node,
     List<Map<String, Map<MetricType, Long>>> currentMetrics, long currentScanTimeInMillis,
-    SlowestScanMetrics slowestScanMetrics) {
+    TreeMap<Long, List<Map<String, Map<MetricType, Long>>>> slowestScanReadMetrics) {
     Map<String, Map<MetricType, Long>> nodeScanMetrics = node.getReadMetricsQueue().aggregate();
     long nodeScanTime = SlowestScanReadMetricsQueue.extractMillisBetweenNexts(nodeScanMetrics);
     long newScanTimeInMillis = currentScanTimeInMillis + nodeScanTime;
@@ -510,21 +516,16 @@ public class StatementContext {
 
     Set<StatementContext> subContexts = node.getSubStatementContexts();
     if (subContexts == null || subContexts.isEmpty()) {
-      // Leaf node: update best if this path is better
-      if (newScanTimeInMillis > slowestScanMetrics.getSumOfMillisSecBetweenNexts()) {
-        slowestScanMetrics.setSumOfMillisSecBetweenNexts(newScanTimeInMillis);
-        // Avoid repeated ArrayList creation by only updating when we have a better path
-        List<Map<String, Map<MetricType, Long>>> newMetrics =
-          new ArrayList<>(currentMetrics.size());
-        for (Map<String, Map<MetricType, Long>> metric : currentMetrics) {
-          newMetrics.add(metric);
-        }
-        slowestScanMetrics.setScanMetrics(newMetrics);
+      List<Map<String, Map<MetricType, Long>>> newMetrics = new ArrayList<>(currentMetrics.size());
+      for (Map<String, Map<MetricType, Long>> metric : currentMetrics) {
+        newMetrics.add(metric);
       }
+      slowestScanReadMetrics.put(-1 * newScanTimeInMillis, newMetrics);
     } else {
       // Process sub-contexts
       for (StatementContext sub : subContexts) {
-        getSlowestScanReadMetricsUtil(sub, currentMetrics, newScanTimeInMillis, slowestScanMetrics);
+        getSlowestScanReadMetricsUtil(sub, currentMetrics, newScanTimeInMillis,
+          slowestScanReadMetrics);
       }
     }
 
