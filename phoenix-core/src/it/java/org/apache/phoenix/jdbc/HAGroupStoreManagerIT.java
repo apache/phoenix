@@ -619,7 +619,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
 
 
         // === STEP 1: Operator initiates failover on cluster1 (active) ===
-        cluster1HAManager.setHAGroupStatusToActiveInSyncToStandby(haGroupName);
+        cluster1HAManager.initiateFailoverOnActiveCluster(haGroupName);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Verify cluster1 is now in transition state
@@ -727,7 +727,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
                 HAGroupStoreRecord.HAGroupState.STANDBY, cluster2Record.get().getHAGroupState());
 
         // === STEP 1: Operator initiates failover on cluster1 (active) ===
-        cluster1HAManager.setHAGroupStatusToActiveInSyncToStandby(haGroupName);
+        cluster1HAManager.initiateFailoverOnActiveCluster(haGroupName);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Verify cluster1 is now in transition state

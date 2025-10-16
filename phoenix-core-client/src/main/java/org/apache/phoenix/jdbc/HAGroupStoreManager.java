@@ -287,13 +287,25 @@ public class HAGroupStoreManager {
             InvalidClusterRoleTransitionException, SQLException {
         HAGroupStoreClient haGroupStoreClient
                 = getHAGroupStoreClientAndSetupFailoverManagement(haGroupName);
-        haGroupStoreClient.setHAGroupStatusIfNeeded(
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+        HAGroupStoreRecord haGroupStoreRecord = haGroupStoreClient.getHAGroupStoreRecord();
+        if (haGroupStoreRecord != null) {
+            HAGroupState targetHAGroupState = haGroupStoreRecord.getHAGroupState()
+                    == HAGroupState.ACTIVE_NOT_IN_SYNC_TO_STANDBY
+                    ? ACTIVE_IN_SYNC_TO_STANDBY
+                    : ACTIVE_IN_SYNC;
+                    haGroupStoreClient.setHAGroupStatusIfNeeded(targetHAGroupState);
+        } else {
+            throw new IOException("Current HAGroupStoreRecord is null for HA group: "
+                    + haGroupName);
+        }
+
     }
 
     /**
-     * Sets the HAGroupStoreRecord to transition from ACTIVE_IN_SYNC to STANDBY in local cluster.
-     * This initiates the failover process by moving the active cluster to a transitional state.
+     * Initiates failover on the active cluster by transitioning to the appropriate TO_STANDBY state.
+     * Checks current state and transitions to:
+     * - ACTIVE_IN_SYNC_TO_STANDBY if currently ACTIVE_IN_SYNC
+     * - ACTIVE_NOT_IN_SYNC_TO_STANDBY if currently ACTIVE_NOT_IN_SYNC
      *
      * @param haGroupName name of the HA group
      * @throws IOException when HAGroupStoreClient is not healthy.
@@ -301,13 +313,33 @@ public class HAGroupStoreManager {
      * @throws InvalidClusterRoleTransitionException when the transition is not valid
      * @throws SQLException when there is an error with the database operation
      */
-    public void setHAGroupStatusToActiveInSyncToStandby(final String haGroupName)
+    public void initiateFailoverOnActiveCluster(final String haGroupName)
             throws IOException, StaleHAGroupStoreRecordVersionException,
             InvalidClusterRoleTransitionException, SQLException {
         HAGroupStoreClient haGroupStoreClient
                 = getHAGroupStoreClientAndSetupFailoverManagement(haGroupName);
-        haGroupStoreClient.setHAGroupStatusIfNeeded(
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+
+        // Get current state
+        HAGroupStoreRecord currentRecord = haGroupStoreClient.getHAGroupStoreRecord();
+        if (currentRecord == null) {
+            throw new IOException("Current HAGroupStoreRecord is null for HA group: " + haGroupName);
+        }
+
+        HAGroupStoreRecord.HAGroupState currentState = currentRecord.getHAGroupState();
+        HAGroupStoreRecord.HAGroupState targetState;
+
+        // Determine target state based on current state
+        if (currentState == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC) {
+            targetState = HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY;
+        } else if (currentState == HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC) {
+            targetState = HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC_TO_STANDBY;
+        } else {
+            throw new InvalidClusterRoleTransitionException(
+                "Cannot initiate failover from state: " + currentState +
+                ". Cluster must be in ACTIVE_IN_SYNC or ACTIVE_NOT_IN_SYNC state.");
+        }
+
+        haGroupStoreClient.setHAGroupStatusIfNeeded(targetState);
     }
 
     /**
