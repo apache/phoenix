@@ -680,6 +680,110 @@ public class ReplicationLogDiscoveryTest {
         }
     }
 
+    /**
+     * Tests processing of in-progress directory when no files meet the timestamp criteria.
+     * Validates that no files are processed when all files are too recent.
+     */
+    @Test
+    public void testProcessInProgressDirectoryWithNoOldFiles() throws IOException {
+        // Set up current time for consistent testing
+        long currentTime = 1704153660000L; // 00:01:00
+        EnvironmentEdge edge = () -> currentTime;
+        EnvironmentEdgeManager.injectEdge(edge);
+
+        try {
+            // Create only recent files (all within the threshold)
+            long recentTimestamp1 = 1704153655000L; // 00:00:55 (5 seconds old)
+            long recentTimestamp2 = 1704153658000L; // 00:00:58 (2 seconds old)
+
+            List<Path> recentFiles1 = createInProgressFiles(recentTimestamp1, 2);
+            List<Path> recentFiles2 = createInProgressFiles(recentTimestamp2, 2);
+
+            // Process in-progress directory
+            discovery.processInProgressDirectory();
+
+            // Get processed files
+            List<Path> processedFiles = discovery.getProcessedFiles();
+
+            // Verify that no files were processed (all files are too recent)
+            assertEquals("Should not process any files when all files are too recent", 0, processedFiles.size());
+
+        } finally {
+            EnvironmentEdgeManager.reset();
+        }
+    }
+
+    /**
+     * Tests processing of in-progress directory with timestamp filtering using getOlderInProgressFiles.
+     * Validates that only files older than the calculated threshold are processed, excluding recent files.
+     */
+    @Test
+    public void testProcessInProgressDirectoryWithTimestampFiltering() throws IOException {
+        // Set up current time for consistent testing
+        long currentTime = 1704153660000L; // 00:01:00
+        EnvironmentEdge edge = () -> currentTime;
+        EnvironmentEdgeManager.injectEdge(edge);
+
+        try {
+            // Create files with various ages
+            long veryOldTimestamp = 1704153600000L; // 00:00:00 (1 minute old) - should be processed
+            long oldTimestamp = 1704153630000L; // 00:00:30 (30 seconds old) - should be processed
+            long recentTimestamp = 1704153655000L; // 00:00:55 (5 seconds old) - should NOT be processed
+            long veryRecentTimestamp = 1704153658000L; // 00:00:58 (2 seconds old) - should NOT be processed
+
+            List<Path> veryOldFiles = createInProgressFiles(veryOldTimestamp, 1);
+            List<Path> oldFiles = createInProgressFiles(oldTimestamp, 1);
+            List<Path> recentFiles = createInProgressFiles(recentTimestamp, 1);
+            List<Path> veryRecentFiles = createInProgressFiles(veryRecentTimestamp, 1);
+
+            // Process in-progress directory
+            discovery.processInProgressDirectory();
+
+            // Get processed files
+            List<Path> processedFiles = discovery.getProcessedFiles();
+
+            // Verify that only old files were processed (2 old files, 0 recent files)
+            assertEquals("Should process only old files based on timestamp filtering", 2, processedFiles.size());
+
+            // Create set of expected processed files (only old files)
+            Set<String> expectedProcessedPaths = new HashSet<>();
+            for (Path file : veryOldFiles) {
+                expectedProcessedPaths.add(file.toUri().getPath());
+            }
+            for (Path file : oldFiles) {
+                expectedProcessedPaths.add(file.toUri().getPath());
+            }
+
+            // Create set of actually processed file paths
+            Set<String> actualProcessedPaths = new HashSet<>();
+            for (Path file : processedFiles) {
+                actualProcessedPaths.add(file.toUri().getPath());
+            }
+
+            // Validate that only old files were processed
+            assertEquals("Expected and actual processed files should match (only old files)",
+                    expectedProcessedPaths, actualProcessedPaths);
+
+            // Verify that recent files were NOT processed
+            Set<String> recentFilePaths = new HashSet<>();
+            for (Path file : recentFiles) {
+                recentFilePaths.add(file.toUri().getPath());
+            }
+            for (Path file : veryRecentFiles) {
+                recentFilePaths.add(file.toUri().getPath());
+            }
+
+            // Ensure no recent files are in the processed set
+            for (String recentPath : recentFilePaths) {
+                assertFalse("Recent files should not be processed due to timestamp filtering",
+                        actualProcessedPaths.contains(recentPath));
+            }
+
+        } finally {
+            EnvironmentEdgeManager.reset();
+        }
+    }
+
     @Test
     public void testGetMinTimestampFromInProgressFilesEmptyList() throws IOException {
         // Mock empty list of in-progress files

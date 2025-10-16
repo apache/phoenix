@@ -1040,6 +1040,248 @@ public class ReplicationLogTrackerTest {
         assertEquals("Another in-progress file UUID should be extracted correctly", "87654321-4321-4321-4321-cba987654321", anotherUUID.get());
     }
 
+    @Test
+    public void testGetOlderInProgressFiles() throws IOException {
+        // Initialize tracker
+        tracker.init();
+
+        // Get the in-progress directory path
+        Path inProgressDir = tracker.getInProgressDirPath();
+
+        // Create files with different timestamps
+        long baseTimestamp = 1704153600000L; // 2024-01-02 00:00:00
+        long thresholdTimestamp = baseTimestamp + TimeUnit.HOURS.toMillis(1); // 1 hour later
+
+        // Files older than threshold (should be returned)
+        Path oldFile1 = new Path(inProgressDir, (baseTimestamp + TimeUnit.MINUTES.toMillis(30)) + "_rs1.plog");
+        Path oldFile2 = new Path(inProgressDir, (baseTimestamp + TimeUnit.MINUTES.toMillis(45)) + "_rs2.plog");
+
+        // Files newer than threshold (should not be returned)
+        Path newFile1 = new Path(inProgressDir, (baseTimestamp + TimeUnit.HOURS.toMillis(2)) + "_rs3.plog");
+        Path newFile2 = new Path(inProgressDir, (baseTimestamp + TimeUnit.HOURS.toMillis(3)) + "_rs4.plog");
+
+        // Invalid files (should be skipped)
+        Path invalidFile = new Path(inProgressDir, "invalid_timestamp_rs5.plog");
+
+        // Create all files
+        localFs.create(oldFile1, true).close();
+        localFs.create(oldFile2, true).close();
+        localFs.create(newFile1, true).close();
+        localFs.create(newFile2, true).close();
+        localFs.create(invalidFile, true).close();
+
+        // Call getOlderInProgressFiles
+        List<Path> result = tracker.getOlderInProgressFiles(thresholdTimestamp);
+
+        // Verify file system operations
+        Mockito.verify(mockFs, times(1)).listStatus(Mockito.eq(inProgressDir));
+
+        // Verify results - check by filename instead of full path comparison
+        assertEquals("Should return 2 old files", 2, result.size());
+        
+        // Convert to sets of filenames for comparison
+        Set<String> resultFilenames = result.stream()
+                .map(Path::getName)
+                .collect(Collectors.toSet());
+        
+        assertTrue("Should contain oldFile1", resultFilenames.contains(oldFile1.getName()));
+        assertTrue("Should contain oldFile2", resultFilenames.contains(oldFile2.getName()));
+        assertFalse("Should not contain newFile1", resultFilenames.contains(newFile1.getName()));
+        assertFalse("Should not contain newFile2", resultFilenames.contains(newFile2.getName()));
+        assertFalse("Should not contain invalidFile", resultFilenames.contains(invalidFile.getName()));
+    }
+
+    @Test
+    public void testGetOlderInProgressFilesWithNoOldFiles() throws IOException {
+        // Initialize tracker
+        tracker.init();
+
+        // Get the in-progress directory path
+        Path inProgressDir = tracker.getInProgressDirPath();
+
+        // Create files all newer than threshold
+        long baseTimestamp = 1704153600000L;
+        long thresholdTimestamp = baseTimestamp + TimeUnit.HOURS.toMillis(1);
+
+        Path newFile1 = new Path(inProgressDir, (baseTimestamp + TimeUnit.HOURS.toMillis(2)) + "_rs1.plog");
+        Path newFile2 = new Path(inProgressDir, (baseTimestamp + TimeUnit.HOURS.toMillis(3)) + "_rs2.plog");
+
+        localFs.create(newFile1, true).close();
+        localFs.create(newFile2, true).close();
+
+        // Call getOlderInProgressFiles
+        List<Path> result = tracker.getOlderInProgressFiles(thresholdTimestamp);
+
+        // Verify empty list is returned
+        assertTrue("Should return empty list when no files are older than threshold", result.isEmpty());
+    }
+
+    @Test
+    public void testGetOlderInProgressFilesForEmptyDirectory() throws IOException {
+        // Initialize tracker
+        tracker.init();
+
+        // Get the in-progress directory path
+        Path inProgressDir = tracker.getInProgressDirPath();
+
+        // Ensure directory exists but is empty
+        assertTrue("In-progress directory should exist", localFs.exists(inProgressDir));
+
+        // Call getOlderInProgressFiles
+        List<Path> result = tracker.getOlderInProgressFiles(1704153600000L);
+
+        // Verify empty list is returned
+        assertTrue("Should return empty list for empty directory", result.isEmpty());
+    }
+
+    @Test
+    public void testGetOlderInProgressFilesForNonExistentDirectory() throws IOException {
+        // Initialize tracker
+        tracker.init();
+
+        // Get the in-progress directory path
+        Path inProgressDir = tracker.getInProgressDirPath();
+
+        // Delete the in-progress directory to make it non-existent
+        localFs.delete(inProgressDir, true);
+        assertFalse("In-progress directory should not exist", localFs.exists(inProgressDir));
+
+        // Call getOlderInProgressFiles
+        List<Path> result = tracker.getOlderInProgressFiles(1704153600000L);
+
+        // Verify file system operations
+        Mockito.verify(mockFs, times(0)).listStatus(Mockito.any(Path.class));
+
+        // Verify empty list is returned
+        assertTrue("Should return empty list for non-existent directory", result.isEmpty());
+    }
+
+    @Test
+    public void testGetOlderInProgressFilesWithInvalidFiles() throws IOException {
+        // Initialize tracker
+        tracker.init();
+
+        // Get the in-progress directory path
+        Path inProgressDir = tracker.getInProgressDirPath();
+
+        long baseTimestamp = 1704153600000L;
+        long thresholdTimestamp = baseTimestamp + TimeUnit.HOURS.toMillis(1);
+
+        // Valid old file (should be returned)
+        Path validOldFile = new Path(inProgressDir, (baseTimestamp + TimeUnit.MINUTES.toMillis(30)) + "_rs1.plog");
+
+        // Invalid files (should be skipped)
+        Path invalidFile1 = new Path(inProgressDir, "invalid_timestamp_rs2.plog");
+        Path invalidFile2 = new Path(inProgressDir, "not_a_timestamp_rs3.plog");
+        Path invalidFile3 = new Path(inProgressDir, "1704153600000_rs4.txt"); // wrong extension
+
+        localFs.create(validOldFile, true).close();
+        localFs.create(invalidFile1, true).close();
+        localFs.create(invalidFile2, true).close();
+        localFs.create(invalidFile3, true).close();
+
+        // Call getOlderInProgressFiles
+        List<Path> result = tracker.getOlderInProgressFiles(thresholdTimestamp);
+
+        // Verify results - should only contain the valid old file
+        assertEquals("Should return 1 valid old file", 1, result.size());
+        
+        // Convert to set of filenames for comparison
+        Set<String> resultFilenames = result.stream()
+                .map(Path::getName)
+                .collect(Collectors.toSet());
+        
+        assertTrue("Should contain validOldFile", resultFilenames.contains(validOldFile.getName()));
+        assertFalse("Should not contain invalidFile1", resultFilenames.contains(invalidFile1.getName()));
+        assertFalse("Should not contain invalidFile2", resultFilenames.contains(invalidFile2.getName()));
+        assertFalse("Should not contain invalidFile3", resultFilenames.contains(invalidFile3.getName()));
+    }
+
+    @Test
+    public void testGetOlderInProgressFilesWithExactThreshold() throws IOException {
+        // Initialize tracker
+        tracker.init();
+
+        // Get the in-progress directory path
+        Path inProgressDir = tracker.getInProgressDirPath();
+
+        long baseTimestamp = 1704153600000L;
+        long thresholdTimestamp = baseTimestamp + TimeUnit.HOURS.toMillis(1);
+
+        // File with timestamp exactly at threshold (should NOT be returned - we want older than threshold)
+        Path fileAtThreshold = new Path(inProgressDir, thresholdTimestamp + "_rs1.plog");
+
+        // File with timestamp just before threshold (should be returned)
+        Path fileJustBeforeThreshold = new Path(inProgressDir, (thresholdTimestamp - 1) + "_rs2.plog");
+
+        localFs.create(fileAtThreshold, true).close();
+        localFs.create(fileJustBeforeThreshold, true).close();
+
+        // Call getOlderInProgressFiles
+        List<Path> result = tracker.getOlderInProgressFiles(thresholdTimestamp);
+
+        // Verify results - should only contain the file just before threshold
+        assertEquals("Should return 1 file older than threshold", 1, result.size());
+        
+        // Convert to set of filenames for comparison
+        Set<String> resultFilenames = result.stream()
+                .map(Path::getName)
+                .collect(Collectors.toSet());
+        
+        assertTrue("Should contain fileJustBeforeThreshold", resultFilenames.contains(fileJustBeforeThreshold.getName()));
+        assertFalse("Should not contain fileAtThreshold", resultFilenames.contains(fileAtThreshold.getName()));
+    }
+
+    @Test
+    public void testGetOlderInProgressFilesWithMixedFileTypes() throws IOException {
+        // Initialize tracker
+        tracker.init();
+
+        // Get the in-progress directory path
+        Path inProgressDir = tracker.getInProgressDirPath();
+
+        long baseTimestamp = 1704153600000L;
+        long thresholdTimestamp = baseTimestamp + TimeUnit.HOURS.toMillis(1);
+
+        // Valid old files (should be returned)
+        Path oldFile1 = new Path(inProgressDir, (baseTimestamp + TimeUnit.MINUTES.toMillis(30)) + "_rs1.plog");
+        Path oldFile2 = new Path(inProgressDir, (baseTimestamp + TimeUnit.MINUTES.toMillis(45)) + "_rs2.plog");
+
+        // Valid new files (should not be returned)
+        Path newFile1 = new Path(inProgressDir, (baseTimestamp + TimeUnit.HOURS.toMillis(2)) + "_rs3.plog");
+
+        // Invalid files (should be skipped)
+        Path invalidFile1 = new Path(inProgressDir, "invalid_timestamp_rs4.plog");
+        Path invalidFile2 = new Path(inProgressDir, "1704153600000_rs5.txt"); // wrong extension
+        Path invalidFile3 = new Path(inProgressDir, "not_a_number_rs6.plog");
+
+        // Create all files
+        localFs.create(oldFile1, true).close();
+        localFs.create(oldFile2, true).close();
+        localFs.create(newFile1, true).close();
+        localFs.create(invalidFile1, true).close();
+        localFs.create(invalidFile2, true).close();
+        localFs.create(invalidFile3, true).close();
+
+        // Call getOlderInProgressFiles
+        List<Path> result = tracker.getOlderInProgressFiles(thresholdTimestamp);
+
+        // Verify results - should only contain the valid old files
+        assertEquals("Should return 2 valid old files", 2, result.size());
+        
+        // Convert to set of filenames for comparison
+        Set<String> resultFilenames = result.stream()
+                .map(Path::getName)
+                .collect(Collectors.toSet());
+        
+        assertTrue("Should contain oldFile1", resultFilenames.contains(oldFile1.getName()));
+        assertTrue("Should contain oldFile2", resultFilenames.contains(oldFile2.getName()));
+        assertFalse("Should not contain newFile1", resultFilenames.contains(newFile1.getName()));
+        assertFalse("Should not contain invalidFile1", resultFilenames.contains(invalidFile1.getName()));
+        assertFalse("Should not contain invalidFile2", resultFilenames.contains(invalidFile2.getName()));
+        assertFalse("Should not contain invalidFile3", resultFilenames.contains(invalidFile3.getName()));
+    }
+
     private int countDirectories(FileSystem fs, Path path) throws IOException {
         if (!fs.exists(path)) {
             return 0;
