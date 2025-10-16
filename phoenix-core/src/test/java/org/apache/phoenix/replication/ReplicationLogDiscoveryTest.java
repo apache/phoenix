@@ -265,11 +265,6 @@ public class ReplicationLogDiscoveryTest {
         List<Path> processedFiles = discovery.getProcessedFiles();
         assertEquals("Invalid number of files processed", 3, processedFiles.size());
 
-        System.out.println("Processed files");
-        for (Path file : processedFiles) {
-            System.out.println(file);
-        }
-
         // Create set of expected files that should be processed (only new files)
         Set<String> expectedProcessedPaths = new HashSet<>();
         for (Path file : newFilesForRound) {
@@ -1237,11 +1232,11 @@ public class ReplicationLogDiscoveryTest {
             discovery.replay();
             List<ReplicationRound> processedRounds = discovery.getProcessedRounds();
             assertEquals("Should process exactly one round", 1, processedRounds.size());
-            
+
             ReplicationRound expectedRound = new ReplicationRound(initialEndTime, initialEndTime + roundTimeMills);
-            assertEquals("Processed round should match expected round", 
+            assertEquals("Processed round should match expected round",
                     expectedRound, processedRounds.get(0));
-            assertEquals("Last round processed should be updated", 
+            assertEquals("Last round processed should be updated",
                     expectedRound, discovery.getLastRoundProcessed());
         } finally {
             EnvironmentEdgeManager.reset();
@@ -1260,21 +1255,21 @@ public class ReplicationLogDiscoveryTest {
             discovery.replay();
             List<ReplicationRound> processedRounds = discovery.getProcessedRounds();
             assertEquals("Should process 3 rounds", 3, processedRounds.size());
-            
+
             // Verify first round
             ReplicationRound expectedRound1 = new ReplicationRound(initialEndTime, initialEndTime + roundTimeMills);
             assertEquals("First round should match expected", expectedRound1, processedRounds.get(0));
-            
+
             // Verify second round
             ReplicationRound expectedRound2 = new ReplicationRound(initialEndTime + roundTimeMills, initialEndTime + (2 * roundTimeMills));
             assertEquals("Second round should match expected", expectedRound2, processedRounds.get(1));
-            
+
             // Verify third round
             ReplicationRound expectedRound3 = new ReplicationRound(initialEndTime + (2 * roundTimeMills), initialEndTime + (3 * roundTimeMills));
             assertEquals("Third round should match expected", expectedRound3, processedRounds.get(2));
-            
+
             // Verify last round processed was updated to the last round
-            assertEquals("Last round processed should be updated to third round", 
+            assertEquals("Last round processed should be updated to third round",
                     expectedRound3, discovery.getLastRoundProcessed());
         } finally {
             EnvironmentEdgeManager.reset();
@@ -1288,7 +1283,7 @@ public class ReplicationLogDiscoveryTest {
         ReplicationRound round1 = new ReplicationRound(initialEndTime, initialEndTime + roundTimeMills);
         ReplicationRound round2 = new ReplicationRound(initialEndTime + roundTimeMills, initialEndTime + (2 * roundTimeMills));
         ReplicationRound round3 = new ReplicationRound(initialEndTime + (2 * roundTimeMills), initialEndTime + (3 * roundTimeMills));
-        
+
         createNewFilesForRound(round1, 2);
         createNewFilesForRound(round2, 2);
         createNewFilesForRound(round3, 2);
@@ -1307,16 +1302,16 @@ public class ReplicationLogDiscoveryTest {
 
         try {
             discovery.replay();
-            
+
             // Should have processed only the first round before exception
             List<ReplicationRound> processedRounds = discovery.getProcessedRounds();
             assertEquals("Should process only 1 round before exception", 1, processedRounds.size());
-            
+
             ReplicationRound expectedRound1 = new ReplicationRound(initialEndTime, initialEndTime + roundTimeMills);
             assertEquals("First round should be processed", expectedRound1, processedRounds.get(0));
-            
+
             // Last round processed should be updated to first round (before exception)
-            assertEquals("Last round processed should be updated to first round only", 
+            assertEquals("Last round processed should be updated to first round only",
                     expectedRound1, discovery.getLastRoundProcessed());
         } finally {
             EnvironmentEdgeManager.reset();
@@ -1334,21 +1329,21 @@ public class ReplicationLogDiscoveryTest {
 
         try {
             discovery.replay();
-            
+
             // Should process the remaining 2 rounds
             List<ReplicationRound> processedRounds = discovery.getProcessedRounds();
             assertEquals("Should process remaining 2 rounds", 2, processedRounds.size());
-            
+
             // Verify second round (continuing from where we left off)
             ReplicationRound expectedRound2 = new ReplicationRound(initialEndTime + roundTimeMills, initialEndTime + (2 * roundTimeMills));
             assertEquals("Second round should match expected", expectedRound2, processedRounds.get(0));
-            
+
             // Verify third round
             ReplicationRound expectedRound3 = new ReplicationRound(initialEndTime + (2 * roundTimeMills), initialEndTime + (3 * roundTimeMills));
             assertEquals("Third round should match expected", expectedRound3, processedRounds.get(1));
-            
+
             // Last round processed should now be updated to third round
-            assertEquals("Last round processed should be updated to third round", 
+            assertEquals("Last round processed should be updated to third round",
                     expectedRound3, discovery.getLastRoundProcessed());
         } finally {
             EnvironmentEdgeManager.reset();
@@ -1383,7 +1378,7 @@ public class ReplicationLogDiscoveryTest {
         // Test Case 1: Not enough time has passed (just started)
         long lastRoundEndTimestamp = 1704153600000L; // 2024-01-02 00:00:00
         discovery.setLastRoundProcessed(new ReplicationRound(lastRoundEndTimestamp - roundTimeMills, lastRoundEndTimestamp));
-        
+
         long currentTime1 = lastRoundEndTimestamp + 1000L; // Only 1 second later
 
         EnvironmentEdge edge1 = () -> currentTime1;
@@ -1391,7 +1386,7 @@ public class ReplicationLogDiscoveryTest {
 
         try {
             Optional<ReplicationRound> result1 = discovery.getNextRoundToProcess();
-            assertFalse("Should return empty when not enough time has passed (1 second)", 
+            assertFalse("Should return empty when not enough time has passed (1 second)",
                     result1.isPresent());
         } finally {
             EnvironmentEdgeManager.reset();
@@ -1399,7 +1394,7 @@ public class ReplicationLogDiscoveryTest {
 
         // Test Case 2: Not enough time has passed (just before threshold)
         discovery.setLastRoundProcessed(new ReplicationRound(lastRoundEndTimestamp - roundTimeMills, lastRoundEndTimestamp));
-        
+
         long currentTime2 = lastRoundEndTimestamp + totalWaitTime - 1L; // 1ms before threshold
 
         EnvironmentEdge edge2 = () -> currentTime2;
@@ -1407,7 +1402,7 @@ public class ReplicationLogDiscoveryTest {
 
         try {
             Optional<ReplicationRound> result2 = discovery.getNextRoundToProcess();
-            assertFalse("Should return empty when not enough time has passed (1ms before threshold)", 
+            assertFalse("Should return empty when not enough time has passed (1ms before threshold)",
                     result2.isPresent());
         } finally {
             EnvironmentEdgeManager.reset();
@@ -1415,7 +1410,7 @@ public class ReplicationLogDiscoveryTest {
 
         // Test Case 3: Exactly at threshold - should return next round
         discovery.setLastRoundProcessed(new ReplicationRound(lastRoundEndTimestamp - roundTimeMills, lastRoundEndTimestamp));
-        
+
         long currentTime3 = lastRoundEndTimestamp + totalWaitTime; // Exactly at threshold
 
         EnvironmentEdge edge3 = () -> currentTime3;
@@ -1424,7 +1419,7 @@ public class ReplicationLogDiscoveryTest {
         try {
             Optional<ReplicationRound> result3 = discovery.getNextRoundToProcess();
             assertTrue("Should return next round when exactly at threshold", result3.isPresent());
-            
+
             ReplicationRound expectedRound = new ReplicationRound(lastRoundEndTimestamp, lastRoundEndTimestamp + roundTimeMills);
             assertEquals("Returned round should match expected", expectedRound, result3.get());
         } finally {
@@ -1433,7 +1428,7 @@ public class ReplicationLogDiscoveryTest {
 
         // Test Case 4: Time has passed beyond threshold (1ms after)
         discovery.setLastRoundProcessed(new ReplicationRound(lastRoundEndTimestamp - roundTimeMills, lastRoundEndTimestamp));
-        
+
         long currentTime4 = lastRoundEndTimestamp + totalWaitTime + 1L; // 1ms after threshold
 
         EnvironmentEdge edge4 = () -> currentTime4;
@@ -1442,7 +1437,7 @@ public class ReplicationLogDiscoveryTest {
         try {
             Optional<ReplicationRound> result4 = discovery.getNextRoundToProcess();
             assertTrue("Should return next round when 1ms after threshold", result4.isPresent());
-            
+
             ReplicationRound expectedRound = new ReplicationRound(lastRoundEndTimestamp, lastRoundEndTimestamp + roundTimeMills);
             assertEquals("Returned round should match expected", expectedRound, result4.get());
         } finally {
@@ -1451,7 +1446,7 @@ public class ReplicationLogDiscoveryTest {
 
         // Test Case 5: Much time has passed (multiple rounds worth)
         discovery.setLastRoundProcessed(new ReplicationRound(lastRoundEndTimestamp - roundTimeMills, lastRoundEndTimestamp));
-        
+
         long currentTime5 = lastRoundEndTimestamp + (3 * totalWaitTime); // 3 rounds worth of time
 
         EnvironmentEdge edge5 = () -> currentTime5;
@@ -1459,9 +1454,9 @@ public class ReplicationLogDiscoveryTest {
 
         try {
             Optional<ReplicationRound> result5 = discovery.getNextRoundToProcess();
-            assertTrue("Should return next round when multiple rounds worth of time has passed", 
+            assertTrue("Should return next round when multiple rounds worth of time has passed",
                     result5.isPresent());
-            
+
             ReplicationRound expectedRound = new ReplicationRound(lastRoundEndTimestamp, lastRoundEndTimestamp + roundTimeMills);
             assertEquals("Returned round should match expected", expectedRound, result5.get());
         } finally {
@@ -1470,7 +1465,7 @@ public class ReplicationLogDiscoveryTest {
 
         // Test Case 6: Halfway through buffer time
         discovery.setLastRoundProcessed(new ReplicationRound(lastRoundEndTimestamp - roundTimeMills, lastRoundEndTimestamp));
-        
+
         long currentTime8 = lastRoundEndTimestamp + roundTimeMills + (bufferMillis / 2);
 
         EnvironmentEdge edge8 = () -> currentTime8;
@@ -1478,7 +1473,7 @@ public class ReplicationLogDiscoveryTest {
 
         try {
             Optional<ReplicationRound> result8 = discovery.getNextRoundToProcess();
-            assertFalse("Should return empty when halfway through buffer time", 
+            assertFalse("Should return empty when halfway through buffer time",
                     result8.isPresent());
         } finally {
             EnvironmentEdgeManager.reset();
@@ -1516,7 +1511,7 @@ public class ReplicationLogDiscoveryTest {
         }
 
         @Override
-        protected void processFile(Path path) {
+        protected void processFile(Path path) throws IOException {
             // Simulate file processing
             System.out.println("Simulating file processing");
             processedFiles.add(path);

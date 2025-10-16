@@ -18,7 +18,6 @@
 package org.apache.phoenix.replication;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Executors;
@@ -35,24 +34,26 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Abstract base class for discovering and processing replication log files in a round-by-round manner.
- * 
+ * Abstract base class for discovering and processing replication log files in a round-by-round
+ * manner.
+ *
  * This class provides the core framework for:
  * - Discovering replication log files from configured directories (new files and in-progress files)
  * - Processing files in time-based rounds with configurable duration and buffer periods
  * - Tracking progress via lastRoundProcessed to enable resumable processing
  * - Scheduling periodic replay operations via a configurable executor service
- * 
+ *
  * Round-based Processing:
  * - Files are organized into replication rounds based on timestamps
  * - Each round represents a time window (e.g., 1 minute) of replication activity
- * - Processing waits for round completion + buffer time before processing to ensure all files are available
- * 
+ * - Processing waits for round completion + buffer time before processing to ensure all files
+ *   are available
+ *
  * Subclasses must implement:
  * - processFile(Path): Defines how individual replication log files are processed
  * - createMetricsSource(): Provides metrics tracking for monitoring
  * - Configuration methods: Thread counts, intervals, probabilities, etc.
- * 
+ *
  * File Processing Flow:
  * 1. Discover new files for the current round
  * 2. Mark files as in-progress (move to in-progress directory)
@@ -189,16 +190,16 @@ public abstract class ReplicationLogDiscovery {
 
     /**
      * Executes a replay operation for the next set of replication rounds.
-     * 
+     *
      * This method continuously retrieves and processes rounds using getNextRoundToProcess() until:
      * - No more rounds are ready to process (not enough time has elapsed), or
      * - An error occurs during processing (will retry in next scheduled run)
-     * 
+     *
      * For each round:
      * 1. Calls processRound() to handle new files and optionally in-progress files
      * 2. Updates lastRoundProcessed to mark progress
      * 3. Retrieves the next round to process
-     * 
+     *
      * @throws IOException if there's an error during replay processing
      */
     public void replay() throws IOException {
@@ -208,7 +209,8 @@ public abstract class ReplicationLogDiscovery {
             try {
                 processRound(replicationRound);
             } catch (IOException e) {
-                LOG.error("Failed processing replication round {}. Will retry in next scheduled run.", replicationRound, e);
+                LOG.error("Failed processing replication round {}. Will retry in next "
+                        + "scheduled run.", replicationRound, e);
                 break; // stop this run, retry later
             }
             setLastRoundProcessed(replicationRound);
@@ -218,8 +220,9 @@ public abstract class ReplicationLogDiscovery {
 
     /**
      * Returns the next replication round to process based on lastRoundProcessed.
-     * Ensures sufficient time (round duration + buffer) has elapsed before returning the next round.
-     * 
+     * Ensures sufficient time (round duration + buffer) has elapsed before returning the next
+     * round.
+     *
      * @return Optional containing the next round to process, or empty if not enough time has passed
      */
     protected Optional<ReplicationRound> getNextRoundToProcess() {
@@ -229,7 +232,8 @@ public abstract class ReplicationLogDiscovery {
             // nothing more to process
             return Optional.empty();
         }
-        return Optional.of(new ReplicationRound(lastRoundEndTimestamp, lastRoundEndTimestamp + roundTimeMills));
+        return Optional.of(new ReplicationRound(lastRoundEndTimestamp,
+                lastRoundEndTimestamp + roundTimeMills));
     }
 
     /**
@@ -298,7 +302,8 @@ public abstract class ReplicationLogDiscovery {
                 .getNearestRoundStartTimestamp(EnvironmentEdgeManager.currentTime())
                 - getReplayIntervalSeconds() * 1000L;
         List<Path> files = replicationLogTracker.getOlderInProgressFiles(oldestTimestampToProcess);
-        LOG.info("Number of In Progress files with oldestTimestampToProcess {} is {}", oldestTimestampToProcess, files.size());
+        LOG.info("Number of In Progress files with oldestTimestampToProcess {} is {}",
+                oldestTimestampToProcess, files.size());
         while (!files.isEmpty()) {
             processOneRandomFile(files);
             files = replicationLogTracker.getOlderInProgressFiles(oldestTimestampToProcess);
@@ -346,29 +351,34 @@ public abstract class ReplicationLogDiscovery {
      * 1. In-progress files (highest priority) - indicates partially processed rounds
      * 2. New files (medium priority) - indicates unprocessed rounds waiting to be replayed
      * 3. Current time (fallback) - used when no files exist, starts from current time
-     * 
-     * The minimum timestamp is converted to a replication round using getReplicationRoundFromEndTime(),
+     *
+     * The minimum timestamp is converted to a replication round using
+     * getReplicationRoundFromEndTime(),
      * which rounds down to the nearest round boundary to ensure we start from a complete round.
-     * 
+     *
      * @throws IOException if there's an error reading file timestamps
      */
     protected void initializeLastRoundProcessed() throws IOException {
         Optional<Long> minTimestampFromInProgressFiles =
                 getMinTimestampFromInProgressFiles();
         if (minTimestampFromInProgressFiles.isPresent()) {
-            LOG.info("Initializing lastRoundProcessed from IN PROGRESS files with minimum timestamp as {}", minTimestampFromInProgressFiles.get());
+            LOG.info("Initializing lastRoundProcessed from IN PROGRESS files with minimum "
+                    + "timestamp as {}", minTimestampFromInProgressFiles.get());
             this.lastRoundProcessed = replicationLogTracker.getReplicationShardDirectoryManager()
                     .getReplicationRoundFromEndTime(minTimestampFromInProgressFiles.get());
         } else {
             Optional<Long> minTimestampFromNewFiles = getMinTimestampFromNewFiles();
             if (minTimestampFromNewFiles.isPresent()) {
-                LOG.info("Initializing lastRoundProcessed from IN files with minimum timestamp as {}", minTimestampFromNewFiles.get());
-                this.lastRoundProcessed = replicationLogTracker.getReplicationShardDirectoryManager()
+                LOG.info("Initializing lastRoundProcessed from IN files with minimum timestamp "
+                        + "as {}", minTimestampFromNewFiles.get());
+                this.lastRoundProcessed = replicationLogTracker
+                        .getReplicationShardDirectoryManager()
                         .getReplicationRoundFromEndTime(minTimestampFromNewFiles.get());
             } else {
                 long currentTime = EnvironmentEdgeManager.currentTime();
                 LOG.info("Initializing lastRoundProcessed from current time {}", currentTime);
-                this.lastRoundProcessed = replicationLogTracker.getReplicationShardDirectoryManager()
+                this.lastRoundProcessed = replicationLogTracker
+                        .getReplicationShardDirectoryManager()
                         .getReplicationRoundFromEndTime(EnvironmentEdgeManager.currentTime());
             }
         }

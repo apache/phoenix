@@ -183,9 +183,12 @@ public class ReplicationLogTracker {
     }
 
     /**
-     * Retrieves all valid log files in the in-progress directory that are older than the specified timestamp.
-     * @param timestampThreshold - The timestamp threshold in milliseconds. Files with timestamps less than this value will be returned.
-     * @return List of valid log file paths in the in-progress directory that are older than the threshold, empty list if directory doesn't exist or no files match
+     * Retrieves all valid log files in the in-progress directory that are older than the
+     * specified timestamp.
+     * @param timestampThreshold - The timestamp threshold in milliseconds. Files with timestamps
+     *                           less than this value will be returned.
+     * @return List of valid log file paths in the in-progress directory that are older than the
+     *         threshold, empty list if directory doesn't exist or no files match
      * @throws IOException if there's an error accessing the file system
      */
     public List<Path> getOlderInProgressFiles(long timestampThreshold) throws IOException {
@@ -204,12 +207,14 @@ public class ReplicationLogTracker {
                         olderInProgressFiles.add(status.getPath());
                     }
                 } catch (NumberFormatException e) {
-                    LOG.warn("Failed to extract timestamp from file {}, skipping", status.getPath().getName());
+                    LOG.warn("Failed to extract timestamp from file {}, skipping",
+                            status.getPath().getName());
                 }
             }
         }
 
-        LOG.debug("Found {} in-progress files older than timestamp {}", olderInProgressFiles.size(), timestampThreshold);
+        LOG.debug("Found {} in-progress files older than timestamp {}",
+                olderInProgressFiles.size(), timestampThreshold);
         return olderInProgressFiles;
     }
 
