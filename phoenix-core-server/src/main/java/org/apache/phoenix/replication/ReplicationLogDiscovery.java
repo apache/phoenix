@@ -294,11 +294,14 @@ public abstract class ReplicationLogDiscovery {
         getMetrics().incrementNumInProgressDirectoryProcessed();
         LOG.info("Starting in progress directory processing");
         long startTime = EnvironmentEdgeManager.currentTime();
-        List<Path> files = replicationLogTracker.getInProgressFiles();
-        LOG.info("Number of In Progress files is {}", files.size());
+        long oldestTimestampToProcess = replicationLogTracker.getReplicationShardDirectoryManager()
+                .getNearestRoundStartTimestamp(EnvironmentEdgeManager.currentTime())
+                - getReplayIntervalSeconds() * 1000L;
+        List<Path> files = replicationLogTracker.getOlderInProgressFiles(oldestTimestampToProcess);
+        LOG.info("Number of In Progress files with oldestTimestampToProcess {} is {}", oldestTimestampToProcess, files.size());
         while (!files.isEmpty()) {
             processOneRandomFile(files);
-            files = replicationLogTracker.getInProgressFiles();
+            files = replicationLogTracker.getOlderInProgressFiles(oldestTimestampToProcess);
         }
         long duration = EnvironmentEdgeManager.currentTime() - startTime;
         getMetrics().updateTimeToProcessInProgressFiles(duration);

@@ -183,6 +183,37 @@ public class ReplicationLogTracker {
     }
 
     /**
+     * Retrieves all valid log files in the in-progress directory that are older than the specified timestamp.
+     * @param timestampThreshold - The timestamp threshold in milliseconds. Files with timestamps less than this value will be returned.
+     * @return List of valid log file paths in the in-progress directory that are older than the threshold, empty list if directory doesn't exist or no files match
+     * @throws IOException if there's an error accessing the file system
+     */
+    public List<Path> getOlderInProgressFiles(long timestampThreshold) throws IOException {
+        if (!fileSystem.exists(getInProgressDirPath())) {
+            return Collections.emptyList();
+        }
+
+        FileStatus[] fileStatuses = fileSystem.listStatus(getInProgressDirPath());
+        List<Path> olderInProgressFiles = new ArrayList<>();
+
+        for (FileStatus status : fileStatuses) {
+            if (status.isFile() && isValidLogFile(status.getPath())) {
+                try {
+                    long fileTimestamp = getFileTimestamp(status.getPath());
+                    if (fileTimestamp < timestampThreshold) {
+                        olderInProgressFiles.add(status.getPath());
+                    }
+                } catch (NumberFormatException e) {
+                    LOG.warn("Failed to extract timestamp from file {}, skipping", status.getPath().getName());
+                }
+            }
+        }
+
+        LOG.debug("Found {} in-progress files older than timestamp {}", olderInProgressFiles.size(), timestampThreshold);
+        return olderInProgressFiles;
+    }
+
+    /**
      * Retrieves all valid log files from all shard directories.
      * @return List of all valid log file paths from all shard directories
      * @throws IOException if there's an error accessing the file system
