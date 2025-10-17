@@ -786,9 +786,8 @@ public class HighAvailabilityTestingUtility {
   }
 
   /**
-   * Helper method to close HighAvailabilityGroup from external packages.
-   * This is needed because HighAvailabilityGroup.close() is package-private.
-   *
+   * Helper method to close HighAvailabilityGroup from external packages. This is needed because
+   * HighAvailabilityGroup.close() is package-private.
    * @param haGroup the HighAvailabilityGroup to close
    */
   @VisibleForTesting
@@ -803,13 +802,13 @@ public class HighAvailabilityTestingUtility {
   }
 
   /**
-   * Helper method to get wrapped connection from FailoverPhoenixConnection.
-   * This is needed because FailoverPhoenixConnection.getWrappedConnection() is package-private.
-   *
+   * Helper method to get wrapped connection from FailoverPhoenixConnection. This is needed because
+   * FailoverPhoenixConnection.getWrappedConnection() is package-private.
    * @param failoverConnection the FailoverPhoenixConnection
    * @return the wrapped PhoenixConnection
    */
-  public static PhoenixConnection getWrappedConnection(FailoverPhoenixConnection failoverConnection) {
+  public static PhoenixConnection
+    getWrappedConnection(FailoverPhoenixConnection failoverConnection) {
     if (failoverConnection != null) {
       return failoverConnection.getWrappedConnection();
     }
@@ -817,22 +816,21 @@ public class HighAvailabilityTestingUtility {
   }
 
   /**
-   * Helper method to get ConnectionQueryServices from PhoenixDriver.
-   * This is needed because PhoenixDriver.getConnectionQueryServices() has protected access.
-   *
-   * @param url the JDBC URL
+   * Helper method to get ConnectionQueryServices from PhoenixDriver. This is needed because
+   * PhoenixDriver.getConnectionQueryServices() has protected access.
+   * @param url        the JDBC URL
    * @param properties the connection properties
    * @return the ConnectionQueryServices
    * @throws SQLException if connection cannot be established
    */
-  public static org.apache.phoenix.query.ConnectionQueryServices getConnectionQueryServices(String url, Properties properties) throws SQLException {
+  public static org.apache.phoenix.query.ConnectionQueryServices
+    getConnectionQueryServices(String url, Properties properties) throws SQLException {
     return PhoenixDriver.INSTANCE.getConnectionQueryServices(url, properties);
   }
 
   /**
-   * Helper method to get the PRINCIPAL constant from HBaseTestingUtilityPair.
-   * This is needed because HBaseTestingUtilityPair.PRINCIPAL is package-private.
-   *
+   * Helper method to get the PRINCIPAL constant from HBaseTestingUtilityPair. This is needed
+   * because HBaseTestingUtilityPair.PRINCIPAL is package-private.
    * @return the PRINCIPAL constant value
    */
   public static String getPrincipal() {
@@ -840,9 +838,8 @@ public class HighAvailabilityTestingUtility {
   }
 
   /**
-   * Helper method to check if ConnectionInfo is in PhoenixDriver cache.
-   * This is needed because PhoenixDriver.checkIfCQSIIsInCache() has protected access.
-   *
+   * Helper method to check if ConnectionInfo is in PhoenixDriver cache. This is needed because
+   * PhoenixDriver.checkIfCQSIIsInCache() has protected access.
    * @param connectionInfo the ConnectionInfo to check
    * @return true if the ConnectionInfo is in cache, false otherwise
    */
@@ -851,9 +848,8 @@ public class HighAvailabilityTestingUtility {
   }
 
   /**
-   * Helper method to get HA group name from HighAvailabilityGroup.
-   * This is needed because HAGroupInfo.getName() is defined in an inaccessible class.
-   *
+   * Helper method to get HA group name from HighAvailabilityGroup. This is needed because
+   * HAGroupInfo.getName() is defined in an inaccessible class.
    * @param haGroup the HighAvailabilityGroup
    * @return the HA group name
    */
@@ -865,16 +861,16 @@ public class HighAvailabilityTestingUtility {
   }
 
   /**
-   * Helper method to connect to the active cluster in an HA group.
-   * This is needed because HighAvailabilityGroup.connectActive() is package-private.
-   *
-   * @param haGroup the HighAvailabilityGroup
+   * Helper method to connect to the active cluster in an HA group. This is needed because
+   * HighAvailabilityGroup.connectActive() is package-private.
+   * @param haGroup    the HighAvailabilityGroup
    * @param properties the connection properties
-   * @param haurlInfo the HA URL info
+   * @param haurlInfo  the HA URL info
    * @return the PhoenixConnection to the active cluster
    * @throws SQLException if connection cannot be established
    */
-  public static PhoenixConnection connectActiveCluster(HighAvailabilityGroup haGroup, Properties properties, HAURLInfo haurlInfo) throws SQLException {
+  public static PhoenixConnection connectActiveCluster(HighAvailabilityGroup haGroup,
+    Properties properties, HAURLInfo haurlInfo) throws SQLException {
     if (haGroup != null) {
       return haGroup.connectActive(properties, haurlInfo);
     }
@@ -882,17 +878,17 @@ public class HighAvailabilityTestingUtility {
   }
 
   /**
-   * Helper method to connect to a specific cluster in an HA group.
-   * This is needed because HighAvailabilityGroup.connectToOneCluster() is package-private.
-   *
-   * @param haGroup the HighAvailabilityGroup
-   * @param url the cluster URL to connect to
+   * Helper method to connect to a specific cluster in an HA group. This is needed because
+   * HighAvailabilityGroup.connectToOneCluster() is package-private.
+   * @param haGroup    the HighAvailabilityGroup
+   * @param url        the cluster URL to connect to
    * @param properties the connection properties
-   * @param haurlInfo the HA URL info
+   * @param haurlInfo  the HA URL info
    * @return the PhoenixConnection to the specified cluster
    * @throws SQLException if connection cannot be established
    */
-  public static PhoenixConnection connectToOneCluster(HighAvailabilityGroup haGroup, String url, Properties properties, HAURLInfo haurlInfo) throws SQLException {
+  public static PhoenixConnection connectToOneCluster(HighAvailabilityGroup haGroup, String url,
+    Properties properties, HAURLInfo haurlInfo) throws SQLException {
     if (haGroup != null) {
       return haGroup.connectToOneCluster(url, properties, haurlInfo);
     }

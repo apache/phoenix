@@ -140,8 +140,8 @@ public class HighAvailabilityGroup {
   public static final Map<HAGroupInfo, Set<HAURLInfo>> URLS = new ConcurrentHashMap<>();
   @VisibleForTesting
   public static final Cache<HAGroupInfo, Boolean> MISSING_CRR_GROUPS_CACHE =
-          CacheBuilder.newBuilder()
-    .expireAfterWrite(PHOENIX_HA_TRANSITION_TIMEOUT_MS_DEFAULT, TimeUnit.MILLISECONDS).build();
+    CacheBuilder.newBuilder()
+      .expireAfterWrite(PHOENIX_HA_TRANSITION_TIMEOUT_MS_DEFAULT, TimeUnit.MILLISECONDS).build();
   /**
    * The Curator client cache, one client instance per cluster.
    */
