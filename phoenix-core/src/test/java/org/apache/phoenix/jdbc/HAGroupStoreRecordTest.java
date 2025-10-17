@@ -59,12 +59,13 @@ public class HAGroupStoreRecordTest {
   @Test
   public void testReadWriteJsonToFile() throws IOException {
     HAGroupStoreRecord record = getHAGroupStoreRecord(testName.getMethodName(), PROTOCOL_VERSION,
-      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, HAGroupStoreRecord.DEFAULT_RECORD_VERSION);
     String fileName = createJsonFileWithRecords(record);
     String fileContent = FileUtils.readFileToString(new File(fileName), "UTF-8");
     assertTrue(fileContent.contains(record.getHaGroupName()));
-    assertTrue(fileContent.contains(record.getProtocolVersion()));
+    assertTrue(fileContent.contains(record.getProtocolVersion().toString()));
     assertTrue(fileContent.contains(record.getHAGroupState().toString()));
+    assertTrue(fileContent.contains(String.valueOf(record.getRecordVersion())));
     // Create a new record from file
     Optional<HAGroupStoreRecord> record2 = HAGroupStoreRecord.fromJson(fileContent.getBytes());
     assertTrue(record2.isPresent());
@@ -75,7 +76,7 @@ public class HAGroupStoreRecordTest {
   @Test
   public void testToAndFromJson() throws IOException {
     HAGroupStoreRecord record = getHAGroupStoreRecord(testName.getMethodName(), PROTOCOL_VERSION,
-      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, HAGroupStoreRecord.DEFAULT_RECORD_VERSION);
     byte[] bytes = HAGroupStoreRecord.toJson(record);
     Optional<HAGroupStoreRecord> record2 = HAGroupStoreRecord.fromJson(bytes);
     assertTrue(record2.isPresent());
@@ -99,9 +100,9 @@ public class HAGroupStoreRecordTest {
   public void testHasSameInfo() {
     String haGroupName = testName.getMethodName();
     HAGroupStoreRecord record1 = getHAGroupStoreRecord(haGroupName, PROTOCOL_VERSION,
-      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, HAGroupStoreRecord.DEFAULT_RECORD_VERSION);
     HAGroupStoreRecord record2 = getHAGroupStoreRecord(haGroupName, PROTOCOL_VERSION,
-      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, HAGroupStoreRecord.DEFAULT_RECORD_VERSION);
 
     assertTrue(record1.hasSameInfo(record2)); // Same core info despite different state
     assertTrue(record1.hasSameInfo(record1)); // reflexive
@@ -112,26 +113,33 @@ public class HAGroupStoreRecordTest {
   public void testHasSameInfoNegative() {
     String haGroupName = testName.getMethodName();
     HAGroupStoreRecord record = getHAGroupStoreRecord(haGroupName, PROTOCOL_VERSION,
-      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, HAGroupStoreRecord.DEFAULT_RECORD_VERSION);
 
     // Different protocol version
-    HAGroupStoreRecord recordDifferentProtocol =
-      getHAGroupStoreRecord(haGroupName, "2.0", HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+    HAGroupStoreRecord recordDifferentProtocol = getHAGroupStoreRecord(haGroupName, "2.0",
+      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, HAGroupStoreRecord.DEFAULT_RECORD_VERSION);
     assertFalse(record.hasSameInfo(recordDifferentProtocol));
     assertFalse(recordDifferentProtocol.hasSameInfo(record));
 
     // Different HA group name
     String haGroupName2 = haGroupName + RandomStringUtils.randomAlphabetic(2);
     HAGroupStoreRecord record2 = getHAGroupStoreRecord(haGroupName2, PROTOCOL_VERSION,
-      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, HAGroupStoreRecord.DEFAULT_RECORD_VERSION);
     assertFalse(record.hasSameInfo(record2));
     assertFalse(record2.hasSameInfo(record));
 
     // Different HA group state
-    HAGroupStoreRecord recordDifferentState =
-      getHAGroupStoreRecord(haGroupName, PROTOCOL_VERSION, HAGroupStoreRecord.HAGroupState.STANDBY);
+    HAGroupStoreRecord recordDifferentState = getHAGroupStoreRecord(haGroupName, PROTOCOL_VERSION,
+      HAGroupStoreRecord.HAGroupState.STANDBY, HAGroupStoreRecord.DEFAULT_RECORD_VERSION);
     assertFalse(record.hasSameInfo(recordDifferentState));
     assertFalse(recordDifferentState.hasSameInfo(record));
+
+    // Different state version
+    HAGroupStoreRecord recordDifferentStateVersion =
+      getHAGroupStoreRecord(haGroupName, PROTOCOL_VERSION, HAGroupStoreRecord.HAGroupState.STANDBY,
+        HAGroupStoreRecord.DEFAULT_RECORD_VERSION + 1);
+    assertFalse(record.hasSameInfo(recordDifferentStateVersion));
+    assertFalse(recordDifferentStateVersion.hasSameInfo(record));
   }
 
   @Test
@@ -139,12 +147,15 @@ public class HAGroupStoreRecordTest {
     String haGroupName = testName.getMethodName();
     String protocolVersion = "1.5";
     HAGroupStoreRecord.HAGroupState haGroupState = HAGroupStoreRecord.HAGroupState.STANDBY;
+    long stateVersion = HAGroupStoreRecord.DEFAULT_RECORD_VERSION + 1;
 
-    HAGroupStoreRecord record = getHAGroupStoreRecord(haGroupName, protocolVersion, haGroupState);
+    HAGroupStoreRecord record =
+      getHAGroupStoreRecord(haGroupName, protocolVersion, haGroupState, stateVersion);
 
     assertEquals(haGroupName, record.getHaGroupName());
     assertEquals(protocolVersion, record.getProtocolVersion());
     assertEquals(haGroupState, record.getHAGroupState());
+    assertEquals(stateVersion, record.getRecordVersion());
     assertEquals(haGroupState.getClusterRole(), record.getClusterRole());
   }
 
@@ -152,12 +163,12 @@ public class HAGroupStoreRecordTest {
   public void testEqualsAndHashCode() {
     String haGroupName = testName.getMethodName();
     HAGroupStoreRecord record1 = getHAGroupStoreRecord(haGroupName, PROTOCOL_VERSION,
-      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, HAGroupStoreRecord.DEFAULT_RECORD_VERSION);
     HAGroupStoreRecord record2 = getHAGroupStoreRecord(haGroupName, PROTOCOL_VERSION,
-      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
-    HAGroupStoreRecord record3 =
-      getHAGroupStoreRecord(haGroupName, PROTOCOL_VERSION, HAGroupStoreRecord.HAGroupState.STANDBY); // Different
-                                                                                                     // state
+      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, HAGroupStoreRecord.DEFAULT_RECORD_VERSION);
+    HAGroupStoreRecord record3 = getHAGroupStoreRecord(haGroupName, PROTOCOL_VERSION,
+      HAGroupStoreRecord.HAGroupState.STANDBY, HAGroupStoreRecord.DEFAULT_RECORD_VERSION + 1); // Different
+                                                                                               // state
 
     // Test equals
     assertEquals(record1, record2); // symmetric
@@ -175,19 +186,20 @@ public class HAGroupStoreRecordTest {
   @Test
   public void testToString() {
     HAGroupStoreRecord record = getHAGroupStoreRecord(testName.getMethodName(), PROTOCOL_VERSION,
-      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, HAGroupStoreRecord.DEFAULT_RECORD_VERSION);
     String toString = record.toString();
 
     // Verify all fields are present in toString
     assertTrue(toString.contains(record.getHaGroupName()));
-    assertTrue(toString.contains(record.getProtocolVersion()));
+    assertTrue(toString.contains(record.getProtocolVersion().toString()));
     assertTrue(toString.contains(record.getHAGroupState().toString()));
+    assertTrue(toString.contains(String.valueOf(record.getRecordVersion())));
   }
 
   @Test
   public void testToPrettyString() {
     HAGroupStoreRecord record = getHAGroupStoreRecord(testName.getMethodName(), PROTOCOL_VERSION,
-      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, HAGroupStoreRecord.DEFAULT_RECORD_VERSION);
     LOG.info("toString(): {}", record.toString());
     LOG.info("toPrettyString:\n{}", record.toPrettyString());
     assertNotEquals(record.toString(), record.toPrettyString());
@@ -196,12 +208,20 @@ public class HAGroupStoreRecordTest {
 
   @Test(expected = NullPointerException.class)
   public void testConstructorWithNullHaGroupName() {
-    getHAGroupStoreRecord(null, PROTOCOL_VERSION, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+    getHAGroupStoreRecord(null, PROTOCOL_VERSION, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
+      HAGroupStoreRecord.DEFAULT_RECORD_VERSION);
   }
 
   @Test(expected = NullPointerException.class)
   public void testConstructorWithNullHAGroupState() {
-    getHAGroupStoreRecord(testName.getMethodName(), PROTOCOL_VERSION, null);
+    getHAGroupStoreRecord(testName.getMethodName(), PROTOCOL_VERSION, null,
+      HAGroupStoreRecord.DEFAULT_RECORD_VERSION);
+  }
+
+  @Test(expected = NullPointerException.class)
+  public void testConstructorWithNullStateVersion() {
+    new HAGroupStoreRecord(PROTOCOL_VERSION, testName.getMethodName(),
+      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, null);
   }
 
   // Tests for HAGroupState enum
@@ -343,7 +363,7 @@ public class HAGroupStoreRecordTest {
     assertEquals(HAGroupStoreRecord.HAGroupState.UNKNOWN,
       HAGroupStoreRecord.HAGroupState.from("null".getBytes()));
     assertEquals(HAGroupStoreRecord.HAGroupState.UNKNOWN,
-      HAGroupStoreRecord.HAGroupState.from("BLAH".getBytes())); // typo
+      HAGroupStoreRecord.HAGroupState.from("ACTIV".getBytes())); // typo
     assertEquals(HAGroupStoreRecord.HAGroupState.UNKNOWN,
       HAGroupStoreRecord.HAGroupState.from("ACTIVE_EXTRA".getBytes())); // extra text
     assertEquals(HAGroupStoreRecord.HAGroupState.UNKNOWN,
@@ -353,7 +373,7 @@ public class HAGroupStoreRecordTest {
 
   // Private Helper Methods
   private HAGroupStoreRecord getHAGroupStoreRecord(String haGroupName, String protocolVersion,
-    HAGroupStoreRecord.HAGroupState haGroupState) {
-    return new HAGroupStoreRecord(protocolVersion, haGroupName, haGroupState);
+    HAGroupStoreRecord.HAGroupState haGroupState, long stateVersion) {
+    return new HAGroupStoreRecord(protocolVersion, haGroupName, haGroupState, stateVersion);
   }
 }

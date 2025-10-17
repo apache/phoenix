@@ -447,6 +447,9 @@ public interface QueryServices extends SQLCloseable {
   // Block mutations based on cluster role record
   public static final String CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED =
     "phoenix.cluster.role.based.mutation.block.enabled";
+  // Check HAGroup is Stale for mutations
+  public static final String HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED =
+    "phoenix.ha.group.stale.for.mutation.check.enabled";
   // Enable Thread Pool Creation in CQSI to be used for HBase Client.
   String CQSI_THREAD_POOL_ENABLED = "phoenix.cqsi.thread.pool.enabled";
   // CQSI Thread Pool Related Configuration.

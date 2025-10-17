@@ -47,6 +47,9 @@ import org.apache.phoenix.thirdparty.org.apache.commons.cli.PosixParser;
 /**
  * The command line tool to manage high availability (HA) groups and their cluster roles.
  */
+@Deprecated // As we are moving ZKLess for HA, we will need to update or create new Tool from
+            // scratch
+// for Admin like commands used by this tool
 public class PhoenixHAAdminTool extends Configured implements Tool {
   // Following are return value of this tool. We need this to be very explicit because external
   // system calling this tool may need to retry, alert or audit the operations of cluster roles.

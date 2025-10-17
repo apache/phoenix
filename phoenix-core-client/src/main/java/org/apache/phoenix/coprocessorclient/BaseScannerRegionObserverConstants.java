@@ -201,7 +201,7 @@ public class BaseScannerRegionObserverConstants {
   public static final String SCANNER_OPENED_TRACE_INFO = "Scanner opened on server";
 
   /**
-   * Attribute name used to pass HAGroupName in Mutations.
+   * Attribute name used to pass HAGroupName in Mutations and Scans.
    */
   public static final String HA_GROUP_NAME_ATTRIB = "_HAGroupName";
 }

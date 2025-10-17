@@ -250,6 +250,7 @@ import org.apache.phoenix.iterate.TableResultIterator;
 import org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus;
 import org.apache.phoenix.jdbc.AbstractRPCConnectionInfo;
 import org.apache.phoenix.jdbc.ConnectionInfo;
+import org.apache.phoenix.jdbc.HighAvailabilityGroup;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.RPCConnectionInfo;
@@ -1234,11 +1235,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
 
   @Override
   public PhoenixConnection connect(String url, Properties info) throws SQLException {
+    return this.connect(url, info, null);
+  }
+
+  @Override
+  public PhoenixConnection connect(String url, Properties info, HighAvailabilityGroup haGroup)
+    throws SQLException {
     checkClosed();
     throwConnectionClosedIfNullMetaData();
     validateConnectionProperties(info);
 
-    return new PhoenixConnection(this, url, info);
+    return new PhoenixConnection(this, url, info, haGroup);
   }
 
   private ColumnFamilyDescriptor generateColumnFamilyDescriptor(

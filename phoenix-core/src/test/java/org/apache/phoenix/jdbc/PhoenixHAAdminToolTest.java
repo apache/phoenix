@@ -64,8 +64,8 @@ import org.apache.phoenix.thirdparty.org.apache.commons.cli.Option;
  */
 public class PhoenixHAAdminToolTest {
   private static final Logger LOG = LoggerFactory.getLogger(PhoenixHAAdminToolTest.class);
-  private static final String ZK1 = "zk1:2181:/hbase";
-  private static final String ZK2 = "zk2:2181:/hbase";
+  private static final String MASTER1 = "master1:60010";
+  private static final String MASTER2 = "master2:60010";
   private static final PrintStream STDOUT = System.out;
   private static final ByteArrayOutputStream STDOUT_CAPTURE = new ByteArrayOutputStream();
 
@@ -76,7 +76,7 @@ public class PhoenixHAAdminToolTest {
   private final CuratorFramework curator = Mockito.mock(CuratorFramework.class);
   /** HA admin to test for one test case. */
   private final PhoenixHAAdmin admin =
-    new PhoenixHAAdmin(ZK1, new Configuration(), mockHighAvailibilityCuratorProvider);
+    new PhoenixHAAdmin(MASTER1, new Configuration(), mockHighAvailibilityCuratorProvider);
 
   private String haGroupName;
   private ClusterRoleRecord recordV1;
@@ -89,8 +89,8 @@ public class PhoenixHAAdminToolTest {
     when(mockHighAvailibilityCuratorProvider.getCurator(anyString(), any(Properties.class),
       anyString())).thenReturn(curator);
     haGroupName = testName.getMethodName();
-    recordV1 = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER, ZK1,
-      ClusterRole.ACTIVE, ZK2, ClusterRole.STANDBY, 1);
+    recordV1 = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER, MASTER1,
+      ClusterRole.ACTIVE, MASTER2, ClusterRole.STANDBY, 1);
     saveRecordV1ToZk();
   }
 
@@ -147,8 +147,9 @@ public class PhoenixHAAdminToolTest {
 
     { // two records in JSON file
       String haGroupName2 = haGroupName + RandomStringUtils.randomAlphabetic(3);
-      ClusterRoleRecord record2 = new ClusterRoleRecord(haGroupName2,
-        HighAvailabilityPolicy.FAILOVER, ZK1, ClusterRole.ACTIVE, ZK2, ClusterRole.STANDBY, 1);
+      ClusterRoleRecord record2 =
+        new ClusterRoleRecord(haGroupName2, HighAvailabilityPolicy.FAILOVER, MASTER1,
+          ClusterRole.ACTIVE, MASTER2, ClusterRole.STANDBY, 1);
       String fileName = ClusterRoleRecordTest.createJsonFileWithRecords(recordV1, record2);
       List<ClusterRoleRecord> records = new PhoenixHAAdminTool().readRecordsFromFile(fileName);
       assertEquals(2, records.size());
@@ -184,7 +185,8 @@ public class PhoenixHAAdminToolTest {
     boolean result = false;
     saveRecordV1ToZk();
     ClusterRoleRecord recordV2 = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
-      ZK1, ClusterRole.STANDBY, ZK2, ClusterRole.STANDBY, 2); // higher version than recordV1 so
+      MASTER1, ClusterRole.STANDBY, MASTER2, ClusterRole.STANDBY, 2); // higher version than
+                                                                      // recordV1 so
     // update should be tried
     try {
       result = admin.createOrUpdateDataOnZookeeper(recordV2);
@@ -203,7 +205,7 @@ public class PhoenixHAAdminToolTest {
   public void testRejectLowerVersionRecord() throws Exception {
     saveRecordV1ToZk();
     ClusterRoleRecord recordV0 = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
-      ZK1, ClusterRole.STANDBY, ZK2, ClusterRole.STANDBY, 0); // lower version than recordV1
+      MASTER1, ClusterRole.STANDBY, MASTER2, ClusterRole.STANDBY, 0); // lower version than recordV1
     assertFalse(admin.createOrUpdateDataOnZookeeper(recordV0));
 
     verify(curator, never()).setData();
@@ -217,7 +219,8 @@ public class PhoenixHAAdminToolTest {
   public void testRejectInconsistentData() throws Exception {
     saveRecordV1ToZk();
     ClusterRoleRecord record2 = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
-      ZK1, ClusterRole.STANDBY, ZK2, ClusterRole.STANDBY, 1); // same version but different role1
+      MASTER1, ClusterRole.STANDBY, MASTER2, ClusterRole.STANDBY, 1); // same version but different
+                                                                      // role1
     try {
       admin.createOrUpdateDataOnZookeeper(record2);
     } catch (IOException e) {

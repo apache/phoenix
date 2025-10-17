@@ -39,6 +39,7 @@ import org.apache.phoenix.coprocessorclient.InvalidateServerMetadataCacheRequest
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.jdbc.HighAvailabilityGroup;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.log.ConnectionLimiter;
 import org.apache.phoenix.log.QueryLoggerDisruptor;
@@ -145,6 +146,12 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices
   @Override
   public PhoenixConnection connect(String url, Properties info) throws SQLException {
     return getDelegate().connect(url, info);
+  }
+
+  @Override
+  public PhoenixConnection connect(String url, Properties info, HighAvailabilityGroup haGroup)
+    throws SQLException {
+    return getDelegate().connect(url, info, haGroup);
   }
 
   @Override
