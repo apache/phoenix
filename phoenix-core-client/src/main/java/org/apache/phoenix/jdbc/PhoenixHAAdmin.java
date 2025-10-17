@@ -151,6 +151,11 @@ public class PhoenixHAAdmin implements Closeable {
         return String.format("%s:%d:%s", localZkQuorum, port, localZkRoot);
     }
 
+    public static String getLocalMasterUrl(Configuration conf) {
+        String local = conf.get(HConstants.MASTER_ADDRS_KEY).replaceAll(":", "\\\\:");
+        return local;
+    }
+
     /**
      * Gets curator from the cache if available otherwise calls into getCurator to make it.
      */

@@ -21,9 +21,13 @@ import org.apache.hadoop.hbase.*;
 import org.apache.phoenix.end2end.PhoenixRegionServerEndpointTestImpl;
 import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
 import org.apache.phoenix.hbase.index.write.TestTrackingParallelWriterIndexCommitter;
+import org.apache.phoenix.jdbc.PhoenixHAAdmin;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.util.HAGroupStoreTestUtil;
+import org.apache.zookeeper.data.Stat;
 import org.apache.commons.lang3.RandomUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Admin;
@@ -57,15 +61,23 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_REPLICATION_KEY;
 import static org.apache.hadoop.test.GenericTestUtils.waitFor;
 import static org.apache.phoenix.hbase.index.write.AbstractParallelWriterIndexCommitter.NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY;
 import static org.apache.phoenix.hbase.index.write.IndexWriter.INDEX_COMMITTER_CONF_KEY;
+import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.ACTIVE;
+import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.OFFLINE;
+import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.STANDBY;
+import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.UNKNOWN;
 import static org.apache.phoenix.jdbc.ClusterRoleRecordGeneratorTool.PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT;
 import static org.apache.phoenix.jdbc.FailoverPhoenixConnection.FAILOVER_TIMEOUT_MS_ATTR;
+import static org.apache.phoenix.jdbc.HAGroupStoreClient.PHOENIX_HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.*;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_HA_GROUP_NAME;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.HighAvailibilityCuratorProvider;
 
+import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.apache.phoenix.query.QueryServices.COLLECT_REQUEST_LEVEL_METRICS;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_MASTER;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_RPC;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_ZK;
+import static org.apache.phoenix.util.TestUtil.dumpTable;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -88,6 +100,8 @@ public class HighAvailabilityTestingUtility {
         private String zkUrl1;
         /** The host\:port::/hbase format of the JDBC string for HBase cluster 2. */
         private String zkUrl2;
+        private String masterAddress1;
+        private String masterAddress2;
         private PhoenixHAAdmin haAdmin1;
         private PhoenixHAAdmin haAdmin2;
         private Admin admin1;
@@ -123,8 +137,11 @@ public class HighAvailabilityTestingUtility {
             zkUrl1 = String.format("%s\\:%d::/hbase", confAddress1, hbaseCluster1.getZkCluster().getClientPort());
             zkUrl2 = String.format("%s\\:%d::/hbase", confAddress2, hbaseCluster2.getZkCluster().getClientPort());
 
-            haAdmin1 = new PhoenixHAAdmin(getZkUrl1(), hbaseCluster1.getConfiguration(), HighAvailibilityCuratorProvider.INSTANCE);
-            haAdmin2 = new PhoenixHAAdmin(getZkUrl2(), hbaseCluster2.getConfiguration(), HighAvailibilityCuratorProvider.INSTANCE);
+            masterAddress1 = hbaseCluster1.getConfiguration().get(HConstants.MASTER_ADDRS_KEY).replaceAll(":", "\\\\:");
+            masterAddress2 = hbaseCluster2.getConfiguration().get(HConstants.MASTER_ADDRS_KEY).replaceAll(":", "\\\\:");
+
+            haAdmin1 = new PhoenixHAAdmin(getZkUrl1(), hbaseCluster1.getConfiguration(), HighAvailibilityCuratorProvider.INSTANCE, HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
+            haAdmin2 = new PhoenixHAAdmin(getZkUrl2(), hbaseCluster2.getConfiguration(), HighAvailibilityCuratorProvider.INSTANCE, HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
 
             admin1 = hbaseCluster1.getConnection().getAdmin();
             admin2 = hbaseCluster2.getConnection().getAdmin();
@@ -136,8 +153,8 @@ public class HighAvailabilityTestingUtility {
             admin1.addReplicationPeer(PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT, replicationPeerConfig1);
             admin2.addReplicationPeer(PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT, replicationPeerConfig2);
 
-            LOG.info("MiniHBase DR cluster pair is ready for testing.  Cluster Urls [{},{}]",
-                    getZkUrl1(), getZkUrl2());
+            LOG.info("MiniHBase DR cluster pair is ready for testing.  Cluster Urls [{},{}] and Master Urls [{}, {}]",
+                    getZkUrl1(), getZkUrl2(), getMasterAddress1(), getMasterAddress2());
             logClustersStates();
         }
 
@@ -146,137 +163,343 @@ public class HighAvailabilityTestingUtility {
          */
         public String getURL(int clusterIndex, ClusterRoleRecord.RegistryType registryType) {
             if (registryType == null) {
-                return clusterIndex == 1 ? zkUrl1 : zkUrl2;
+                return clusterIndex == 1 ? masterAddress1 : masterAddress2;
             }
-            String masterAddress1 = hbaseCluster1.getConfiguration().get(HConstants.MASTER_ADDRS_KEY);
-            String masterAddress2 = hbaseCluster2.getConfiguration().get(HConstants.MASTER_ADDRS_KEY);
             switch (registryType) {
+                case ZK:
+                    return clusterIndex == 1 ? zkUrl1 : zkUrl2;
                 case RPC:
                 case MASTER:
-                    return clusterIndex == 1 ? masterAddress1.replaceAll(":", "\\\\:") :
-                            masterAddress2.replaceAll(":", "\\\\:");
-                case ZK:
                 default:
-                    return clusterIndex == 1 ? zkUrl1 : zkUrl2;
+                    return clusterIndex == 1 ? masterAddress1 : masterAddress2;
             }
-        }
-
-        /** initialize two ZK clusters for cluster role znode. */
-        public void initClusterRole(String haGroupName, HighAvailabilityPolicy policy)
-                throws Exception {
-            ClusterRoleRecord record = new ClusterRoleRecord(
-                    haGroupName, policy,
-                    getZkUrl1(), ClusterRole.ACTIVE,
-                    getZkUrl2(), ClusterRole.STANDBY,
-                    1);
-            addRoleRecordToClusters(record);
-        }
-
-        public void initClusterRole(String haGroupName, HighAvailabilityPolicy policy,
-                                    ClusterRoleRecord.RegistryType type) throws Exception {
-            ClusterRoleRecord record = new ClusterRoleRecord(
-                    haGroupName, policy, type,
-                    getURL(1, type), ClusterRole.ACTIVE,
-                    getURL(2, type), ClusterRole.STANDBY,
-                    1);
-            addRoleRecordToClusters(record);
-        }
-
-        private void addRoleRecordToClusters(ClusterRoleRecord record) throws Exception {
-            int failures = 0;
-            do {
-                try {
-                    haAdmin1.createOrUpdateDataOnZookeeper(record);
-                } catch (Exception e) {
-                    failures++;
-                }
-            } while (failures > 0 && failures < 4);
-            failures = 0;
-            do {
-                try {
-                    haAdmin2.createOrUpdateDataOnZookeeper(record);
-                } catch (Exception e) {
-                    failures++;
-                    Thread.sleep(200);
-                }
-            } while (failures > 0 && failures < 4);
         }
 
         /**
-         * Set cluster roles for an HA group and wait the cluster role transition to happen.
-         *
+         * Initialize ClusterRoleRecord, this method creates HAGroupStoreRecord ZNodes in both
+         * clusters making first cluster ACTIVE and second STANDBY, it also upserts rows to both
+         * cluster's SYSTEM Table.
+         * @param haGroupName name of HA group
+         * @param policy policy to be used for HA group
+         */
+        public void initClusterRole(String haGroupName, HighAvailabilityPolicy policy)
+                throws Exception {
+            HAGroupStoreRecord activeRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, ACTIVE.getDefaultHAGroupState(), HAGroupStoreRecord.DEFAULT_RECORD_VERSION);
+            HAGroupStoreRecord standbyRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, STANDBY.getDefaultHAGroupState(), HAGroupStoreRecord.DEFAULT_RECORD_VERSION);
+
+            upsertGroupRecordInBothSystemTable(haGroupName, ACTIVE, STANDBY, HAGroupStoreRecord.DEFAULT_RECORD_VERSION, HAGroupStoreRecord.DEFAULT_RECORD_VERSION, null, policy);
+            addOrUpdateRoleRecordToClusters(haGroupName, activeRecord, standbyRecord);
+        }
+
+        /**
+         * Initialize ClusterRoleRecord when cluster 2 is down, this method creates HAGroupStoreRecord ZNodes in
+         * cluster 1 making it ACTIVE, it also upserts rows to cluster 1's SYSTEM Table.
+         * @param haGroupName name of HA group
+         * @param policy policy to be used for HA group
+         */
+        public void initClusterRoleRecordFor1Cluster(String haGroupName, HighAvailabilityPolicy policy) throws Exception {
+            HAGroupStoreRecord activeRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, ACTIVE.getDefaultHAGroupState(), HAGroupStoreRecord.DEFAULT_RECORD_VERSION);
+            upsertGroupRecordInASystemTable(haGroupName, ACTIVE, STANDBY, HAGroupStoreRecord.DEFAULT_RECORD_VERSION, HAGroupStoreRecord.DEFAULT_RECORD_VERSION, null, policy, 1);
+            addOrUpdateRoleRecordToClusters(haGroupName, activeRecord, null);
+        }
+
+        /**
+         * Add or update HAGroupStoreRecord to both clusters, if record is null then it will not be
+         * added to cluster
+         * @param haGroupName name of HA group
+         * @param activeRecord record to be added to active cluster
+         * @param standbyRecord record to be added to standby cluster
+         */
+        private void addOrUpdateRoleRecordToClusters(String haGroupName, HAGroupStoreRecord activeRecord, HAGroupStoreRecord standbyRecord) throws Exception {
+            String path = PhoenixHAAdmin.toPath(haGroupName);
+            int failures = 0;
+            if (activeRecord != null) {
+                do {
+                    try {
+                        if (haAdmin1.getCurator().checkExists().forPath(path) == null) {
+                            haAdmin1.createHAGroupStoreRecordInZooKeeper(activeRecord);
+                        } else {
+                            final Pair<HAGroupStoreRecord, Stat> currentRecord = haAdmin1.getHAGroupStoreRecordInZooKeeper(haGroupName);
+                            if (currentRecord.getRight() != null && currentRecord.getLeft() != null) {
+                                haAdmin1.updateHAGroupStoreRecordInZooKeeper(haGroupName, activeRecord, currentRecord.getRight().getVersion());
+                            } else {
+                                throw new IOException("Current HAGroupStoreRecord in ZK is null, cannot update HAGroupStoreRecord " + haGroupName);
+                            }
+                        }
+                    } catch (Exception e) {
+                        failures++;
+                    }
+                } while (failures > 0 && failures < 4);
+            }
+            failures = 0;
+            if (standbyRecord != null) {
+                do {
+                    try {
+                        if (haAdmin2.getCurator().checkExists().forPath(path) == null) {
+                            haAdmin2.createHAGroupStoreRecordInZooKeeper(standbyRecord);
+                        } else {
+                            final Pair<HAGroupStoreRecord, Stat> currentRecord = haAdmin2.getHAGroupStoreRecordInZooKeeper(haGroupName);
+                            if (currentRecord.getRight() != null && currentRecord.getLeft() != null) {
+                                haAdmin2.updateHAGroupStoreRecordInZooKeeper(haGroupName, standbyRecord, currentRecord.getRight().getVersion());
+                            } else {
+                                throw new IOException("Current HAGroupStoreRecord in ZK is null, cannot update HAGroupStoreRecord " + haGroupName);
+                            }
+                        }
+                    } catch (Exception e) {
+                        failures++;
+                        Thread.sleep(200);
+                    }
+                } while (failures > 0 && failures < 4);
+            }
+        }
+
+        /**
+         * Upsert HAGroupStoreRecord/ClusterRoleRecord info in both cluster's SYSTEM Table.
+         */
+        private void upsertGroupRecordInBothSystemTable(String haGroupName, ClusterRole role1, ClusterRole role2, long version1, long version2, String overrideZKUrl, HighAvailabilityPolicy policy) throws Exception {
+            HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, getZkUrl1(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), role1, role2, version1, version2, overrideZKUrl, policy, getHATestProperties());
+            HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, getZkUrl2(), getZkUrl1(), getMasterAddress2(), getMasterAddress1(), role2, role1, version2, version1, overrideZKUrl, policy, getHATestProperties());
+        }
+
+        /**
+         * Upsert HAGroupStoreRecord/ClusterRoleRecord info in given cluster's SYSTEM Table.
+         */
+        private void upsertGroupRecordInASystemTable(String haGroupName, ClusterRole role1, ClusterRole role2, long version1, long version2, String overrideZKUrl, HighAvailabilityPolicy policy, int clusterIndex) throws Exception {
+            if (clusterIndex == 1) {
+                HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, getZkUrl1(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), role1, role2, version1, version2, overrideZKUrl, policy, getHATestProperties());
+            } else {
+                HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, getZkUrl2(), getZkUrl1(), getMasterAddress2(), getMasterAddress1(), role2, role1, version2, version1, overrideZKUrl, policy, getHATestProperties());
+            }
+        }
+
+        /**
+         * Refresh SYSTEM Table info of HAGroupStoreRecord/ClusterRoleRecord in both clusters.
+         */
+        private void refreshSystemTableInBothClusters(String haGroupName, ClusterRole role1, ClusterRole role2, long version1, long version2, String overrideZKUrl, HighAvailabilityPolicy policy) throws Exception {
+            HAGroupStoreTestUtil.deleteHAGroupRecordInSystemTable(haGroupName, getZkUrl1());
+            HAGroupStoreTestUtil.deleteHAGroupRecordInSystemTable(haGroupName, getZkUrl2());
+            upsertGroupRecordInBothSystemTable(haGroupName, role1, role2, version1, version2, overrideZKUrl, policy);
+        }
+
+        /**
+         * Refresh SYSTEM Table info of HAGroupStoreRecord/ClusterRoleRecord in given cluster.
+         */
+        private void refreshSystemTableInOneCluster(String haGroupName, ClusterRole role1, ClusterRole role2, long version1, long version2, String overrideZKUrl, HighAvailabilityPolicy policy, int clusterIndex) throws Exception {
+            String zkUrl = clusterIndex == 1 ? getZkUrl1() : getZkUrl2();
+            HAGroupStoreTestUtil.deleteHAGroupRecordInSystemTable(haGroupName, zkUrl);
+            upsertGroupRecordInASystemTable(haGroupName, role1, role2, version1, version2, overrideZKUrl, policy, clusterIndex);
+        }
+
+        /**
+         * Do self recovery which is missing now, for transitions that have happened when cluster
+         * was down.
+         */
+        public void doUpdatesMissedWhenClusterWasDown(HighAvailabilityGroup haGroup, ClusterRole role1, ClusterRole role2, int clusterIndex) throws Exception {
+            String haGroupName = haGroup.getGroupInfo().getName();
+            final Pair<HAGroupStoreRecord, Stat> currentRecord1 = getHaAdmin1().getHAGroupStoreRecordInZooKeeper(haGroupName);
+            final Pair<HAGroupStoreRecord, Stat> currentRecord2 = getHaAdmin2().getHAGroupStoreRecordInZooKeeper(haGroupName);
+            long newVersion;
+            HAGroupStoreRecord newRecord;
+            if (clusterIndex == 1) {
+                newVersion = currentRecord1.getLeft().getRecordVersion() + 1;
+                newRecord = new HAGroupStoreRecord(currentRecord1.getLeft().getProtocolVersion(), haGroupName, role1.getDefaultHAGroupState(), newVersion);
+                refreshSystemTableInOneCluster(haGroupName, role1, role2, newVersion, currentRecord2.getLeft().getRecordVersion(), null, haGroup.getRoleRecord().getPolicy(), clusterIndex);
+                addOrUpdateRoleRecordToClusters(haGroupName, newRecord,null);
+                try{
+                    HAGroupStoreManager.getInstance(hbaseCluster1.getConfiguration()).invalidateHAGroupStoreClient(haGroupName, true);
+                } catch (Exception e) {
+                    LOG.warn("Fail to invalidate HAGroupStoreClient for {} because {}", haGroupName, e.getMessage());
+                }
+            } else {
+                newVersion = currentRecord2.getLeft().getRecordVersion() + 1;
+                newRecord = new HAGroupStoreRecord(currentRecord2.getLeft().getProtocolVersion(), haGroupName, role2.getDefaultHAGroupState(), newVersion);
+                refreshSystemTableInOneCluster(haGroupName, role1, role2, currentRecord1.getLeft().getRecordVersion(), newVersion, null, haGroup.getRoleRecord().getPolicy(), clusterIndex);
+                addOrUpdateRoleRecordToClusters(haGroupName, null, newRecord);
+                try{
+                    HAGroupStoreManager.getInstance(hbaseCluster2.getConfiguration()).invalidateHAGroupStoreClient(haGroupName, true);
+                } catch (Exception e) {
+                    LOG.warn("Fail to invalidate HAGroupStoreClient for {} because {}", haGroupName, e.getMessage());
+                }
+            }
+        }
+
+        public void deleteHAGroupRecordFromBothClusters(String haGroupName) throws Exception {
+            haAdmin1.getCurator().delete().quietly().forPath(toPath(haGroupName));
+            haAdmin2.getCurator().delete().quietly().forPath(toPath(haGroupName));
+            HAGroupStoreTestUtil.deleteHAGroupRecordInSystemTable(haGroupName, getZkUrl1());
+            HAGroupStoreTestUtil.deleteHAGroupRecordInSystemTable(haGroupName, getZkUrl2());
+        }
+
+        public void rebuildBothClustersGroupStoreClient(String haGroupName) {
+            try{
+                HAGroupStoreManager.getInstance(hbaseCluster1.getConfiguration()).invalidateHAGroupStoreClient(haGroupName, true);
+                HAGroupStoreManager.getInstance(hbaseCluster2.getConfiguration()).invalidateHAGroupStoreClient(haGroupName, true);
+            } catch (Exception e) {
+                LOG.warn("Fail to invalidate HAGroupStoreClient for {} because {}", haGroupName, e.getMessage());
+            }
+        }
+
+        /**
+         * Generate ClusterRoleRecord from HAGroupStoreRecords
+         */
+        private ClusterRoleRecord generateCRRFromHAGroupStoreRecord(HighAvailabilityGroup haGroup, HAGroupStoreRecord activeRecord, HAGroupStoreRecord standbyRecord) {
+            return new ClusterRoleRecord(
+                    haGroup.getGroupInfo().getName(), haGroup.getRoleRecord().getPolicy(),
+                    getURL(1, haGroup.getRoleRecord().getRegistryType()), activeRecord.getHAGroupState().getClusterRole(),
+                    getURL(2, haGroup.getRoleRecord().getRegistryType()), standbyRecord.getHAGroupState().getClusterRole(),
+                    combineCanonicalVersions(activeRecord.getRecordVersion(), standbyRecord.getRecordVersion())); // always use a newer version
+        }
+
+        /**
+         * Combine two versions into a single long value to be used for comparison and sending back to client
+         * @param version1 HAGroupRecord version for cluster 1
+         * @param version2 HAGroupRecord version for cluster 2
+         * @return combined version
+         */
+        public long combineCanonicalVersions(long version1, long version2) {
+            LOG.info("Combining versions: {} and {} with master addresses: {} and {}", version1, version2, masterAddress1, masterAddress2);
+            if (masterAddress1.compareTo(masterAddress2) <= 0) {
+                return (version2 << 32) | version1;
+            } else {
+                return (version1 << 32) | version2;
+            }
+        }
+
+        /**
+         * Update HAGroup's clusterRoleRecord info to new roles (Update HAGroupStoreRecord and
+         * SYSTEM Tables) and then do the refresh of the clusterRoleRecord in HAGroup
+         * @param haGroup the HA group
+         * @param role1 new cluster role for the first cluster in the group
+         * @param role2 new cluster role for the second cluster in the group
+         */
+        public void transitClusterRole(HighAvailabilityGroup haGroup, ClusterRole role1,
+                                       ClusterRole role2) throws Exception {
+            transitClusterRole(haGroup, role1, role2, true);
+        }
+
+        /**
+         * Update HAGroup's clusterRoleRecord info to new roles (Update HAGroupStoreRecord and
+         * SYSTEM Tables) and then do the refresh of the clusterRoleRecord in HAGroup based on the
+         * param provided.
          * @param haGroup the HA group name
          * @param role1 cluster role for the first cluster in the group
          * @param role2 cluster role for the second cluster in the group
          */
         public void transitClusterRole(HighAvailabilityGroup haGroup, ClusterRole role1,
-                ClusterRole role2) throws Exception {
-            final ClusterRoleRecord newRoleRecord = new ClusterRoleRecord(
-                    haGroup.getGroupInfo().getName(), haGroup.getRoleRecord().getPolicy(),
-                    haGroup.getRoleRecord().getRegistryType(),
-                    getURL(1, haGroup.getRoleRecord().getRegistryType()), role1,
-                    getURL(2, haGroup.getRoleRecord().getRegistryType()), role2,
-                    haGroup.getRoleRecord().getVersion() + 1); // always use a newer version
-            applyNewRoleRecord(newRoleRecord, haGroup);
+                ClusterRole role2, boolean doRefreshHAGroup) throws Exception {
+            String haGroupName = haGroup.getGroupInfo().getName();
+            final Pair<HAGroupStoreRecord, Stat> currentRecord1 = haAdmin1.getHAGroupStoreRecordInZooKeeper(haGroupName);
+            final Pair<HAGroupStoreRecord, Stat> currentRecord2 = haAdmin2.getHAGroupStoreRecordInZooKeeper(haGroupName);
+            long newVersion1 = currentRecord1.getLeft().getRecordVersion() + 1;
+            long newVersion2 = currentRecord2.getLeft().getRecordVersion() + 1;
+
+            HAGroupStoreRecord record1 = new HAGroupStoreRecord(currentRecord1.getLeft().getProtocolVersion(), haGroupName, role1.getDefaultHAGroupState(), newVersion1);
+            HAGroupStoreRecord record2 = new HAGroupStoreRecord(currentRecord2.getLeft().getProtocolVersion(), haGroupName, role2.getDefaultHAGroupState(), newVersion2);
+
+            refreshSystemTableInBothClusters(haGroupName, role1, role2, newVersion1, newVersion2, null, haGroup.getRoleRecord().getPolicy());
+            addOrUpdateRoleRecordToClusters(haGroupName, record1, record2);
+            try{
+                HAGroupStoreManager.getInstance(hbaseCluster1.getConfiguration()).invalidateHAGroupStoreClient(haGroupName, true);
+                HAGroupStoreManager.getInstance(hbaseCluster2.getConfiguration()).invalidateHAGroupStoreClient(haGroupName, true);
+            } catch (Exception e) {
+                LOG.warn("Fail to invalidate HAGroupStoreClient for {} because {}", haGroupName, e.getMessage());
+            }
+
+            if (doRefreshHAGroup) {
+                haGroup.refreshClusterRoleRecord(true);
+
+                // wait for the cluster roles are populated into client side from RegionServer endpoints.
+                ClusterRoleRecord newRoleRecord = generateCRRFromHAGroupStoreRecord(haGroup, record1, record2);
+                LOG.info("New role record to check: {}", newRoleRecord);
+                waitFor(() -> newRoleRecord.equals(haGroup.getRoleRecord()), 1000, 10_000);
+            }
+
         }
 
-        /**
-         * Set registryType for roleRecord and wait the cluster role transition to happen.
-         *
-         * @param haGroup the HA group name
-         * @param type RegistryType to change roleRecord to
-         */
-        public void transitClusterRoleRecordRegistry(HighAvailabilityGroup haGroup,
-                                                     ClusterRoleRecord.RegistryType type) throws Exception {
-            final ClusterRoleRecord newRoleRecord = new ClusterRoleRecord(
-                    haGroup.getGroupInfo().getName(), haGroup.getRoleRecord().getPolicy(),
-                    type,
-                    getURL(1, type), ClusterRole.ACTIVE,
-                    getURL(2, type), ClusterRole.STANDBY,
-                    haGroup.getRoleRecord().getVersion() + 1); // always use a newer version
-            applyNewRoleRecord(newRoleRecord, haGroup);
+        public void transitClusterRoleWithCluster1Down(HighAvailabilityGroup haGroup, ClusterRole role1,
+                ClusterRole role2) throws Exception {
+            String haGroupName = haGroup.getGroupInfo().getName();
+            final Pair<HAGroupStoreRecord, Stat> currentRecord2 = haAdmin2.getHAGroupStoreRecordInZooKeeper(haGroupName);
+            long newVersion2 = currentRecord2.getLeft().getRecordVersion() + 1;
+
+            HAGroupStoreRecord record2 = new HAGroupStoreRecord(currentRecord2.getLeft().getProtocolVersion(), haGroupName, role2.getDefaultHAGroupState(), newVersion2);
+
+            refreshSystemTableInOneCluster(haGroupName, role1, role2, 1, newVersion2, null, haGroup.getRoleRecord().getPolicy(), 2);
+            addOrUpdateRoleRecordToClusters(haGroupName, null, record2);
+            try{
+            HAGroupStoreManager.getInstance(hbaseCluster2.getConfiguration()).invalidateHAGroupStoreClient(haGroupName, true);
+            } catch (Exception e) {
+                LOG.warn("Fail to invalidate HAGroupStoreClient for {} because {}", haGroupName, e.getMessage());
+            }
+            haGroup.refreshClusterRoleRecord(true);
+
+            //If cluster 1 is down, server won't be able to reach peer for states and will get version passed in refreshSystemTableInOneCluster and OFFLINE role.
+            HAGroupStoreRecord record1 = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, UNKNOWN.getDefaultHAGroupState(), HAGroupStoreRecord.DEFAULT_RECORD_VERSION);
+
+            // wait for the cluster roles are populated into client side from RegionServer endpoints.
+            ClusterRoleRecord newRoleRecord = generateCRRFromHAGroupStoreRecord(haGroup, record1, record2);
+            LOG.info("New role record to check: {}", newRoleRecord);
+            waitFor(() -> newRoleRecord.equals(haGroup.getRoleRecord()), 1000, 10_000);
+        }
+
+        public void transitClusterRoleWithCluster2Down(HighAvailabilityGroup haGroup, ClusterRole role1,
+                ClusterRole role2) throws Exception {
+            String haGroupName = haGroup.getGroupInfo().getName();
+            final Pair<HAGroupStoreRecord, Stat> currentRecord1 = haAdmin1.getHAGroupStoreRecordInZooKeeper(haGroupName);
+            long newVersion1 = currentRecord1.getLeft().getRecordVersion() + 1;
+
+            HAGroupStoreRecord record1 = new HAGroupStoreRecord(currentRecord1.getLeft().getProtocolVersion(), haGroupName, role1.getDefaultHAGroupState(), newVersion1);
+
+            refreshSystemTableInOneCluster(haGroupName, role1, role2, newVersion1, 1, null, haGroup.getRoleRecord().getPolicy(), 1);
+            addOrUpdateRoleRecordToClusters(haGroupName, record1, null);
+            try{
+                HAGroupStoreManager.getInstance(hbaseCluster1.getConfiguration()).invalidateHAGroupStoreClient(haGroupName, true);
+            } catch (Exception e) {
+                LOG.warn("Fail to invalidate HAGroupStoreClient for {} because {}", haGroupName, e.getMessage());
+            }
+            haGroup.refreshClusterRoleRecord(true);
+
+            //If cluster 2 is down, server won't be able to reach peer for states and will get version passed in refreshSystemTableInOneCluster and OFFLINE role.
+            HAGroupStoreRecord record2 = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, UNKNOWN.getDefaultHAGroupState(), HAGroupStoreRecord.DEFAULT_RECORD_VERSION);
+
+            // wait for the cluster roles are populated into client side from RegionServer endpoints.
+            ClusterRoleRecord newRoleRecord = generateCRRFromHAGroupStoreRecord(haGroup, record1, record2);
+            LOG.info("New role record to check: {}", newRoleRecord);
+            waitFor(() -> newRoleRecord.equals(haGroup.getRoleRecord()), 1000, 10_000);
         }
 
         public void refreshClusterRoleRecordAfterClusterRestart(HighAvailabilityGroup haGroup,
-                                                ClusterRole role1, ClusterRole role2) throws Exception {
-            final ClusterRoleRecord newRoleRecord = new ClusterRoleRecord(
-                    haGroup.getGroupInfo().getName(), haGroup.getRoleRecord().getPolicy(),
-                    haGroup.getRoleRecord().getRegistryType(),
-                    getURL(1, haGroup.getRoleRecord().getRegistryType()), role1,
-                    getURL(2, haGroup.getRoleRecord().getRegistryType()), role2,
-                    haGroup.getRoleRecord().getVersion() + 1); // always use a newer version
-            applyNewRoleRecord(newRoleRecord, haGroup);
-        }
-
-        private void applyNewRoleRecord(ClusterRoleRecord newRoleRecord,
-                                        HighAvailabilityGroup haGroup) throws Exception {
-            LOG.info("Transiting cluster role for HA group {} V{}->V{}, existing: {}, new: {}",
-                    haGroup.getGroupInfo().getName(), haGroup.getRoleRecord().getVersion(),
-                    newRoleRecord.getVersion(), haGroup.getRoleRecord(), newRoleRecord);
-            boolean successAtLeastOnce = false;
-            try {
-                haAdmin1.createOrUpdateDataOnZookeeper(newRoleRecord);
-                successAtLeastOnce = true;
-            } catch (IOException e) {
-                LOG.warn("Fail to update new record on {} because {}", getZkUrl1(), e.getMessage());
+                                                ClusterRole role1, ClusterRole role2, int clusterIndex) throws Exception {
+            String haGroupName = haGroup.getGroupInfo().getName();
+            long newVersion1, newVersion2;
+            //TODO:- Inducing version change, but how would we know that a URL is changed
+            //as we don't store url in ZNodes so it doesn't increase version for that change
+            if (clusterIndex == 1) {
+                newVersion1 = 1L;
+                newVersion2 = 2L;
+            } else {
+                newVersion1 = 2L;
+                newVersion2 = 1L;
             }
-            try {
-                haAdmin2.createOrUpdateDataOnZookeeper(newRoleRecord);
-                successAtLeastOnce = true;
-            } catch (IOException e) {
-                LOG.warn("Fail to update new record on {} because {}", getZkUrl2(), e.getMessage());
+            HAGroupStoreRecord record1 = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, role1.getDefaultHAGroupState(), newVersion1);
+            HAGroupStoreRecord record2 = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, role2.getDefaultHAGroupState(), newVersion2);
+
+            refreshSystemTableInBothClusters(haGroupName, role1, role2, newVersion1, newVersion2, null, haGroup.getRoleRecord().getPolicy());
+            addOrUpdateRoleRecordToClusters(haGroupName, record1, record2);
+
+            try{
+                HAGroupStoreManager.getInstance(hbaseCluster1.getConfiguration()).invalidateHAGroupStoreClient(haGroupName, true);
+                HAGroupStoreManager.getInstance(hbaseCluster2.getConfiguration()).invalidateHAGroupStoreClient(haGroupName, true);
+            } catch (Exception e) {
+                LOG.warn("Fail to invalidate HAGroupStoreClient for {} because {}", haGroupName, e.getMessage());
             }
 
-            if (!successAtLeastOnce) {
-                throw new IOException("Failed to update the new role record on either cluster");
-            }
-            // wait for the cluster roles are populated into client side from ZK nodes.
+            haGroup.refreshClusterRoleRecord(true);
+
+            // wait for the cluster roles are populated into client side from RegionServer endpoints.
+            ClusterRoleRecord newRoleRecord = generateCRRFromHAGroupStoreRecord(haGroup, record1, record2);
+            LOG.info("New role record to check: {}", newRoleRecord);
             waitFor(() -> newRoleRecord.equals(haGroup.getRoleRecord()), 1000, 10_000);
-            // May have to wait for the transistion to be picked up client side, current test timeouts around 3seconds
-            Thread.sleep(5000);
-
-            LOG.info("Now the HA group {} should have detected and updated V{} cluster role record",
-                    haGroup, newRoleRecord.getVersion());
         }
 
         /**
@@ -356,7 +579,7 @@ public class HighAvailabilityTestingUtility {
         /** A Testable interface that can throw checked exception. */
         @FunctionalInterface
         public interface Testable {
-            void test() throws Exception;
+            void    test() throws Exception;
         }
 
         /**
@@ -368,18 +591,23 @@ public class HighAvailabilityTestingUtility {
          * @param testable testing logic that is runnable
          * @throws Exception if fails to stop, test or restart HBase cluster
          */
-        public static void doTestWhenOneHBaseDown(HBaseTestingUtility cluster, Testable testable)
+        public void doTestWhenOneHBaseDown(HBaseTestingUtility cluster, Testable testable)
                 throws Exception {
             final int zkClientPort = cluster.getZkCluster().getClientPort();
+            final int masterPort = getGivenClusterMasterPort(cluster);
             try {
                 LOG.info("Shutting down HBase cluster using ZK localhost:{}", zkClientPort);
                 cluster.shutdownMiniHBaseCluster();
-                LOG.info("Start testing when HBase is down using ZK localhost:{}", zkClientPort);
+                LOG.info("Start testing when HBase is down using ZK localhost:{} and master address localhost:{}", zkClientPort, masterPort);
                 testable.test();
                 LOG.info("Test succeeded when HBase is down using ZK localhost:{}", zkClientPort);
             } finally {
                 LOG.info("Finished testing when HBase is down using ZK localhost:{}", zkClientPort);
+                resetPortsForRestart(cluster, masterPort);
                 cluster.startMiniHBaseCluster(StartMiniClusterOption.builder().numMasters(1).numRegionServers(1).build());
+                LOG.info("Master after restart :- {}, port before restart {} and masters before restart {} {}}",
+                    cluster.getConfiguration().get(HConstants.MASTER_ADDRS_KEY).replaceAll(":", "\\\\:"),
+                    masterPort, masterAddress1, masterAddress2);
                 LOG.info("Restarted HBase cluster using ZK localhost:{}", zkClientPort);
             }
         }
@@ -391,25 +619,69 @@ public class HighAvailabilityTestingUtility {
          * @param testable testing logic that is runnable
          * @throws Exception if fails to stop, test or restart
          */
-        public static void doTestWhenOneZKDown(HBaseTestingUtility cluster, Testable testable)
+        public void doTestWhenOneZKDown(HBaseTestingUtility cluster, Testable testable)
                 throws Exception {
             final int zkClientPort = cluster.getZkCluster().getClientPort();
+            final int masterPort = getGivenClusterMasterPort(cluster);
             try {
                 LOG.info("Shutting down HBase cluster using ZK localhost:{}", zkClientPort);
                 cluster.shutdownMiniHBaseCluster();
                 LOG.info("Shutting down ZK cluster at localhost:{}", zkClientPort);
                 cluster.shutdownMiniZKCluster();
-                LOG.info("Start testing when ZK & HBase is down at localhost:{}", zkClientPort);
+                LOG.info("Start testing when ZK & HBase is down at localhost:{} and master address localhost:{}", zkClientPort, masterPort);
                 testable.test();
                 LOG.info("Test succeeded when ZK & HBase is down at localhost:{}", zkClientPort);
             } finally {
-                LOG.info("Finished testing when ZK & HBase is down at localhost:{}", zkClientPort);
-                cluster.startMiniZKCluster(1, zkClientPort);
+                resetPortsForRestart(cluster, masterPort);
+                LOG.info("Finished testing when ZK & HBase is down at localhost:{} and master address localhost:{}", zkClientPort, masterPort);
+               cluster.startMiniZKCluster(1, zkClientPort);
                 LOG.info("Restarted ZK cluster at localhost:{}", zkClientPort);
-                cluster.startMiniHBaseCluster(StartMiniClusterOption.builder().numMasters(1).numRegionServers(1).build());
+               cluster.startMiniHBaseCluster(StartMiniClusterOption.builder().numMasters(1).numRegionServers(1).build());
+                LOG.info("Master after restart :- {}, port before restart {} and masters before restart {} {}}",
+                    cluster.getConfiguration().get(HConstants.MASTER_ADDRS_KEY).replaceAll(":", "\\\\:"),
+                    masterPort, masterAddress1, masterAddress2);
                 LOG.info("Restarted HBase cluster using ZK localhost:{}", zkClientPort);
             }
         }
+
+        /**
+         * Set Master port to same as before restart, as we are using master urls now
+         * @param cluster for which restart is happening
+         * @param masterPort old master port.
+         */
+        private void resetPortsForRestart(HBaseTestingUtility cluster, int masterPort) {
+            //Disable random port assignment and set the master port to the given port
+            cluster.getConfiguration().set("hbase.localcluster.assign.random.ports", "false");
+            cluster.getConfiguration().set("hbase.master.port", String.valueOf(masterPort));
+
+            //Set Random ports to everything else for HBase cluster
+            cluster.getConfiguration().set("hbase.master.info.port", String.valueOf(0));
+            cluster.getConfiguration().set("hbase.regionserver.port", String.valueOf(0));
+            cluster.getConfiguration().set("hbase.regionserver.info.port", String.valueOf(0));
+        }
+
+        /**
+         * Reset the configs for new random ports
+         * @param cluster cluster for which restart is happening
+         */
+        private void resetPortsToRandomForNewRestart(HBaseTestingUtility cluster) {
+            cluster.getConfiguration().set("hbase.localcluster.assign.random.ports", "true");
+            cluster.getConfiguration().set("hbase.master.port", String.valueOf(0));
+            cluster.getConfiguration().set("hbase.master.info.port", String.valueOf(0));
+            cluster.getConfiguration().set("hbase.regionserver.port", String.valueOf(0));
+            cluster.getConfiguration().set("hbase.regionserver.info.port", String.valueOf(0));
+        }
+
+        public int getGivenClusterMasterPort(HBaseTestingUtility cluster) {
+            if (cluster == hbaseCluster1) {
+                return Integer.parseInt(masterAddress1.split(":")[1]);
+            } else {
+                return Integer.parseInt(masterAddress2.split(":")[1]);
+            }
+        }
+
+
+
 
         /**
          * The JDBC connection url for the given clusters in particular format.
@@ -424,11 +696,11 @@ public class HighAvailabilityTestingUtility {
         }
 
         public String getJdbcHAUrl(String principal) {
-            return String.format("%s:[%s|%s]:%s", JDBC_PROTOCOL_ZK, getZkUrl1(), getZkUrl2(), principal);
+            return String.format("%s:[%s|%s]:%s", JDBC_PROTOCOL_RPC, getMasterAddress1(), getMasterAddress2(), principal);
         }
 
         public String getJdbcHAUrlWithoutPrincipal() {
-            return String.format("%s:[%s|%s]", JDBC_PROTOCOL_ZK, getZkUrl1(), getZkUrl2());
+            return String.format("%s:[%s|%s]", JDBC_PROTOCOL_RPC, getMasterAddress1(), getMasterAddress2());
         }
 
 
@@ -459,7 +731,7 @@ public class HighAvailabilityTestingUtility {
         }
 
         public String getJdbcUrl(String url) {
-            return String.format("jdbc:phoenix+zk:%s:%s", url, PRINCIPAL);
+            return String.format("jdbc:phoenix+rpc:%s:::%s", url, PRINCIPAL);
         }
 
         public String getJdbcUrlWithoutPrincipal(HighAvailabilityGroup haGroup, String url) {
@@ -478,16 +750,32 @@ public class HighAvailabilityTestingUtility {
             return zkUrl2;
         }
 
+        public String getMasterAddress1() {
+            return masterAddress1;
+        }
+
+        public String getMasterAddress2() {
+            return masterAddress2;
+        }
+
+        public PhoenixHAAdmin getHaAdmin1() {
+            return haAdmin1;
+        }
+
+        public PhoenixHAAdmin getHaAdmin2() {
+            return haAdmin2;
+        }
+
         private String getUrlWithoutPrincipal(HighAvailabilityGroup haGroup, String url) {
             StringBuilder sb = new StringBuilder();
             switch (haGroup.getRoleRecord().getRegistryType()) {
+                case ZK:
+                    return sb.append(JDBC_PROTOCOL_ZK).append(":").append(url).toString();
                 case MASTER:
                     return sb.append(JDBC_PROTOCOL_MASTER).append(":").append(url).append("::").toString();
                 case RPC:
-                    return sb.append(JDBC_PROTOCOL_RPC).append(":").append(url).append("::").toString();
-                case ZK:
                 default:
-                    return sb.append(JDBC_PROTOCOL_ZK).append(":").append(url).toString();
+                    return sb.append(JDBC_PROTOCOL_RPC).append(":").append(url).append("::").toString();
             }
         }
 
@@ -595,12 +883,15 @@ public class HighAvailabilityTestingUtility {
                 hbaseCluster1.shutdownMiniHBaseCluster();
                 hbaseCluster1.shutdownMiniZKCluster();
             } finally {
+                resetPortsToRandomForNewRestart(hbaseCluster1);
                 hbaseCluster1.startMiniZKCluster(1);
                 hbaseCluster1.startMiniHBaseCluster(StartMiniClusterOption.builder().numMasters(1).numRegionServers(1).build());
 
                 String confAddress = hbaseCluster1.getConfiguration().get(HConstants.ZOOKEEPER_QUORUM);
 
                 zkUrl1 = String.format("%s\\:%d::/hbase", confAddress, hbaseCluster1.getZkCluster().getClientPort());
+
+                masterAddress1 = hbaseCluster1.getConfiguration().get(HConstants.MASTER_ADDRS_KEY).replaceAll(":", "\\\\:");
 
                 haAdmin1 = new PhoenixHAAdmin(getZkUrl1(), hbaseCluster1.getConfiguration(), HighAvailibilityCuratorProvider.INSTANCE);
 
@@ -610,10 +901,12 @@ public class HighAvailabilityTestingUtility {
         }
 
         public void restartCluster2() throws Exception {
+            String oldMasters = getMasterAddress1() + "  " + getMasterAddress2();
             try {
                 hbaseCluster2.shutdownMiniHBaseCluster();
                 hbaseCluster2.shutdownMiniZKCluster();
             } finally {
+                resetPortsToRandomForNewRestart(hbaseCluster2);
                 hbaseCluster2.startMiniZKCluster(1);
                 hbaseCluster2.startMiniHBaseCluster(StartMiniClusterOption.builder().numMasters(1).numRegionServers(1).build());
 
@@ -621,9 +914,12 @@ public class HighAvailabilityTestingUtility {
 
                 zkUrl2 = String.format("%s\\:%d::/hbase", confAddress, hbaseCluster2.getZkCluster().getClientPort());
 
+                masterAddress2 = hbaseCluster2.getConfiguration().get(HConstants.MASTER_ADDRS_KEY).replaceAll(":", "\\\\:");
+
                 haAdmin2 = new PhoenixHAAdmin(getZkUrl2(), hbaseCluster2.getConfiguration(), HighAvailibilityCuratorProvider.INSTANCE);
 
                 admin2 = hbaseCluster2.getConnection().getAdmin();
+                LOG.info("Before restart master address is {} and after restart master address is {}", oldMasters, getMasterAddress1() + "  " + getMasterAddress2());
             }
         }
 
@@ -660,6 +956,10 @@ public class HighAvailabilityTestingUtility {
             conf.setInt(PHOENIX_HA_ZK_RETRY_BASE_SLEEP_MS_KEY, 100);
             conf.setInt(PHOENIX_HA_ZK_RETRY_MAX_KEY, 2);
             conf.setInt(PHOENIX_HA_ZK_RETRY_MAX_SLEEP_MS_KEY, 1000);
+            //This is needed to get CRR when one cluster is down, as RPC the timeout is 2 seconds
+            //and the server will wait for the specified time to try to retrieve peer record info
+            //from dead cluster
+            conf.setLong(PHOENIX_HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS, 1000L);
 
             // Set Phoenix related settings, eg. for index management
             conf.set(IndexManagementUtil.WAL_EDIT_CODEC_CLASS_KEY,
@@ -774,6 +1074,17 @@ public class HighAvailabilityTestingUtility {
                 new PhoenixHAExecutorServiceProvider.PhoenixHAClusterExecutorServices(Executors.newFixedThreadPool(1), Executors.newFixedThreadPool(1)));
     }
 
+    public static void sleepThreadFor(long sleepTime) {
+        long start = System.currentTimeMillis();
+        while (System.currentTimeMillis() - start < sleepTime) {
+            try {
+                Thread.sleep(sleepTime - (System.currentTimeMillis() - start));
+            } catch (InterruptedException e) {
+                // Keep looping to complete the sleep duration.
+            }
+        }
+    }
+
     /**
      * Properties with tuned retry and timeout configuration to bring up and down miniclusters and connect to them
      * @return set properteis
@@ -800,6 +1111,7 @@ public class HighAvailabilityTestingUtility {
         properties.setProperty(SOCKET_TIMEOUT_WRITE,"2000");
         properties.setProperty(REPLICATION_SOURCE_SHIPEDITS_TIMEOUT,"5000");
         properties.setProperty(HConstants.THREAD_WAKE_FREQUENCY, "100");
+        properties.setProperty(PHOENIX_HA_CRR_POLLER_INTERVAL_MS_KEY, "500");
         return properties;
     }
 }

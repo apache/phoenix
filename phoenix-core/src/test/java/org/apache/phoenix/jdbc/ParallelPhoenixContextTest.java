@@ -84,7 +84,7 @@ public class ParallelPhoenixContextTest {
         ParallelPhoenixContext context =
                 new ParallelPhoenixContext(new Properties(),
                         new HighAvailabilityGroup(haGroupInfo,
-                                Mockito.mock(Properties.class),
+                                new Properties(),
                                 Mockito.mock(ClusterRoleRecord.class),
                                 HighAvailabilityGroup.State.READY),
                         executorList, Lists.newArrayList(Boolean.FALSE, Boolean.TRUE),
@@ -105,7 +105,7 @@ public class ParallelPhoenixContextTest {
         ParallelPhoenixContext context =
                 new ParallelPhoenixContext(new Properties(),
                         new HighAvailabilityGroup(haGroupInfo,
-                                Mockito.mock(Properties.class),
+                                new Properties(),
                                 Mockito.mock(ClusterRoleRecord.class),
                                 HighAvailabilityGroup.State.READY),
                         executorList, Lists.newArrayList(Boolean.TRUE, Boolean.FALSE),

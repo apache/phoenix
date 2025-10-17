@@ -29,6 +29,8 @@ import org.apache.phoenix.util.JacksonUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.DEFAULT_PHOENIX_HA_CRR_REGISTRY_TYPE;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -68,6 +70,13 @@ public class ClusterRoleRecord {
         public boolean canConnect() {
             return this == ACTIVE || this == STANDBY
                     || this == ACTIVE_TO_STANDBY || this == STANDBY_TO_ACTIVE;
+        }
+
+        /**
+         * @return true if a cluster with this role is active or active to standby, otherwise false
+         */
+        public boolean isActive() {
+            return this == ACTIVE || this == ACTIVE_TO_STANDBY;
         }
 
         public static ClusterRole from(byte[] bytes) {
@@ -133,44 +142,35 @@ public class ClusterRoleRecord {
      * master4\\:port4,master5\\:port5
      * @param haGroupName HighAvailability Group name / CRR name
      * @param policy Policy used by give CRR
-     * @param registryType {@link RegistryType} to be used for given urls
      * @param url1 ZK/HMaster url based on registry type for first cluster
      * @param role1 {@link ClusterRole} which describes the current state of first cluster
      * @param url2 ZK/HMaster url based on registry type for second cluster
      * @param role2 {@link ClusterRole} which describes the current state of second cluster
      * @param version version of a given CRR
-     * @param zk1 ZK url of first cluster when CRR is in old format for backward compatibility
-     * @param zk2 ZK url of second cluster when CRR is in old format for backward compatibility
      */
     @JsonCreator
     public ClusterRoleRecord(@JsonProperty("haGroupName") String haGroupName,
                              @JsonProperty("policy") HighAvailabilityPolicy policy,
-                             @JsonProperty("registryType") RegistryType registryType,
                              @JsonProperty("url1") String url1,
                              @JsonProperty("role1") ClusterRole role1,
                              @JsonProperty("url2") String url2,
                              @JsonProperty("role2") ClusterRole role2,
-                             @JsonProperty("version") long version,
-                             @JsonProperty("zk1") String zk1,
-                             @JsonProperty("zk2") String zk2) {
+                             @JsonProperty("version") long version) {
         this.haGroupName = haGroupName;
         this.policy = policy;
-        this.registryType = registryType != null ? registryType : RegistryType.ZK;
 
-        String resolvedUrl1 = (url1 != null) ? url1 : zk1; //For Backward Compatibility
-        String resolvedUrl2 = (url2 != null) ? url2 : zk2; //For Backward Compatibility
+        //Default registry type is RPC from Consistent Cluster Failover onwards
+        this.registryType =  DEFAULT_PHOENIX_HA_CRR_REGISTRY_TYPE;
 
         //Do we really need to normalize here ?
         //We are normalizing to have urls in specific formats for each registryType for getting
         //accurate comparisons. We are passing registryType as these url most probably won't have
         //protocol in url, and it might be normalized based to wrong registry type, as we normalize
         //w.r.t {@link ConnectionInfo.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY},
-        //but considering source of truth of registryType is present in CLusterRoleRecord we are
-        //normalizing based on that.
-        //url will be in form :- zk1\\:port1,zk2\\:port2,zk3\\:port3,zk4\\:port4,zk5\\:port5::znode
-        //or master1\\:port1,master2\\:port2,master3\\:port3,master4\\:port4,master5\\:port5
-        url1 = JDBCUtil.formatUrl(resolvedUrl1, this.registryType);
-        url2 = JDBCUtil.formatUrl(resolvedUrl2, this.registryType);
+        //As we are expecting only master URLs as Consistent Cluster Failover onwards we only will allow RPC registry type
+        //url will be in form :- master1\\:port1,master2\\:port2,master3\\:port3,master4\\:port4,master5\\:port5
+        url1 = JDBCUtil.formatUrl(url1, this.registryType);
+        url2 = JDBCUtil.formatUrl(url2, this.registryType);
 
         Preconditions.checkArgument(!url1.equals(url2), "Two clusters have the same URLS!");
         Preconditions.checkNotNull(role1, "Role of a cluster cannot be null!");
@@ -191,21 +191,6 @@ public class ClusterRoleRecord {
         this.version = version;
     }
 
-    public ClusterRoleRecord(String haGroupName, HighAvailabilityPolicy policy,
-                             String url1, ClusterRole role1,
-                             String url2, ClusterRole role2,
-                             long version) {
-        this(haGroupName, policy, RegistryType.ZK, url1, role1, url2, role2, version, null, null);
-    }
-
-    public ClusterRoleRecord(String haGroupName, HighAvailabilityPolicy policy,
-                             RegistryType registryType,
-                             String url1, ClusterRole role1,
-                             String url2, ClusterRole role2,
-                             long version) {
-        this(haGroupName, policy, registryType, url1, role1, url2, role2, version, null, null);
-    }
-
     public static Optional<ClusterRoleRecord> fromJson(byte[] bytes) {
         if (bytes == null) {
             return Optional.empty();
@@ -224,10 +209,10 @@ public class ClusterRoleRecord {
 
     @JsonIgnore
     public Optional<String> getActiveUrl() {
-        if (role1 == ClusterRole.ACTIVE) {
+        if (role1.isActive()) {
             return Optional.of(url1);
         }
-        if (role2 == ClusterRole.ACTIVE) {
+        if (role2.isActive()) {
             return Optional.of(url2);
         }
         return Optional.empty();

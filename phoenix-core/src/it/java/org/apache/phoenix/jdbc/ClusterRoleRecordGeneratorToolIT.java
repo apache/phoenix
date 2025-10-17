@@ -98,14 +98,14 @@ public class ClusterRoleRecordGeneratorToolIT {
         generator1.setConf(conf1);
 
         // created with cluster1's conf, so cluster1 is ACTIVE
-        List<ClusterRoleRecord> records = generator1.listAllRecordsByZk();
+        List<ClusterRoleRecord> records = generator1.listAllRecordsByMaster();
         assertNotNull(records);
         LOG.info("Generated following records from cluster1: {}", records);
         assertEquals(1, records.size());
         for (ClusterRoleRecord record : records) {
             assertEquals(HighAvailabilityPolicy.FAILOVER, record.getPolicy());
-            assertEquals(ClusterRole.ACTIVE, record.getRole(CLUSTERS.getZkUrl1()));
-            assertEquals(ClusterRole.STANDBY, record.getRole(CLUSTERS.getZkUrl2()));
+            assertEquals(ClusterRole.ACTIVE, record.getRole(CLUSTERS.getMasterAddress1()));
+            assertEquals(ClusterRole.STANDBY, record.getRole(CLUSTERS.getMasterAddress2()));
         }
     }
 
@@ -120,14 +120,14 @@ public class ClusterRoleRecordGeneratorToolIT {
         generator2.setConf(conf2);
 
         // created with cluster2's conf, so cluster2 is ACTIVE
-        List<ClusterRoleRecord> records = generator2.listAllRecordsByZk();
+        List<ClusterRoleRecord> records = generator2.listAllRecordsByMaster();
         assertNotNull(records);
         LOG.info("Generated following records from cluster2: {}", records);
         assertEquals(3, records.size());
         for (ClusterRoleRecord record : records) {
             assertEquals(HighAvailabilityPolicy.PARALLEL, record.getPolicy());
-            assertEquals(ClusterRole.ACTIVE, record.getRole(CLUSTERS.getZkUrl2()));
-            assertEquals(ClusterRole.STANDBY, record.getRole(CLUSTERS.getZkUrl1()));
+            assertEquals(ClusterRole.ACTIVE, record.getRole(CLUSTERS.getMasterAddress2()));
+            assertEquals(ClusterRole.STANDBY, record.getRole(CLUSTERS.getMasterAddress1()));
         }
     }
 }

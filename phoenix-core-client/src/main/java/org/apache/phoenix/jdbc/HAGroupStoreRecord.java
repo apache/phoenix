@@ -45,6 +45,7 @@ public class HAGroupStoreRecord {
 
     private static final Logger LOG = LoggerFactory.getLogger(HAGroupStoreRecord.class);
     public static final String DEFAULT_PROTOCOL_VERSION = "1.0";
+    public static final long DEFAULT_RECORD_VERSION = 1L;
 
     /**
      * Enum representing the HA group state with each state having a corresponding ClusterRole.
@@ -163,19 +164,23 @@ public class HAGroupStoreRecord {
     private final String protocolVersion;
     private final String haGroupName;
     private final HAGroupState haGroupState;
+    private final long recordVersion;
     private final Long lastSyncStateTimeInMs;
 
     @JsonCreator
     public HAGroupStoreRecord(@JsonProperty("protocolVersion") String protocolVersion,
                               @JsonProperty("haGroupName") String haGroupName,
                               @JsonProperty("haGroupState") HAGroupState haGroupState,
+                              @JsonProperty("recordVersion") Long recordVersion,
                               @JsonProperty("lastSyncStateTimeInMs") Long lastSyncStateTimeInMs) {
         Preconditions.checkNotNull(haGroupName, "HA group name cannot be null!");
         Preconditions.checkNotNull(haGroupState, "HA group state cannot be null!");
+        Preconditions.checkNotNull(recordVersion, "Record version cannot be null!");
 
         this.protocolVersion = Objects.toString(protocolVersion, DEFAULT_PROTOCOL_VERSION);
         this.haGroupName = haGroupName;
         this.haGroupState = haGroupState;
+        this.recordVersion = recordVersion;
         this.lastSyncStateTimeInMs = lastSyncStateTimeInMs;
     }
 
@@ -183,8 +188,16 @@ public class HAGroupStoreRecord {
      * Convenience constructor for backward compatibility without lastSyncStateTimeInMs.
      */
     public HAGroupStoreRecord(String protocolVersion,
+                              String haGroupName, HAGroupState haGroupState, Long recordVersion) {
+        this(protocolVersion, haGroupName, haGroupState, recordVersion, null);
+    }
+
+        /**
+     * Convenience constructor for backward compatibility without recordVersion and lastSyncStateTimeInMs.
+     */
+    public HAGroupStoreRecord(String protocolVersion,
                               String haGroupName, HAGroupState haGroupState) {
-        this(protocolVersion, haGroupName, haGroupState, null);
+        this(protocolVersion, haGroupName, haGroupState, DEFAULT_RECORD_VERSION, null);
     }
 
     public static Optional<HAGroupStoreRecord> fromJson(byte[] bytes) {
@@ -209,6 +222,7 @@ public class HAGroupStoreRecord {
         return haGroupName.equals(other.haGroupName)
                 && haGroupState.equals(other.haGroupState)
                 && protocolVersion.equals(other.protocolVersion)
+                && recordVersion == other.recordVersion
                 && Objects.equals(lastSyncStateTimeInMs, other.lastSyncStateTimeInMs);
     }
 
@@ -218,6 +232,10 @@ public class HAGroupStoreRecord {
 
     public String getHaGroupName() {
         return haGroupName;
+    }
+
+    public long getRecordVersion() {
+        return recordVersion;
     }
 
     @JsonProperty("haGroupState")
@@ -240,6 +258,7 @@ public class HAGroupStoreRecord {
                 .append(protocolVersion)
                 .append(haGroupName)
                 .append(haGroupState)
+                .append(recordVersion)
                 .append(lastSyncStateTimeInMs)
                 .hashCode();
     }
@@ -258,6 +277,7 @@ public class HAGroupStoreRecord {
                     .append(protocolVersion, otherRecord.protocolVersion)
                     .append(haGroupName, otherRecord.haGroupName)
                     .append(haGroupState, otherRecord.haGroupState)
+                    .append(recordVersion, otherRecord.recordVersion)
                     .append(lastSyncStateTimeInMs, otherRecord.lastSyncStateTimeInMs)
                     .isEquals();
         }
@@ -269,6 +289,7 @@ public class HAGroupStoreRecord {
                 + "protocolVersion='" + protocolVersion + '\''
                 + ", haGroupName='" + haGroupName + '\''
                 + ", haGroupState=" + haGroupState
+                + ", recordVersion=" + recordVersion
                 + ", lastSyncStateTimeInMs=" + lastSyncStateTimeInMs
                 + '}';
     }

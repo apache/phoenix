@@ -38,8 +38,10 @@ import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+import static org.apache.phoenix.jdbc.HAGroupStoreRecord.DEFAULT_RECORD_VERSION;
 import static org.apache.hadoop.hbase.HConstants.DEFAULT_ZK_SESSION_TIMEOUT;
 import static org.apache.hadoop.hbase.HConstants.ZK_SESSION_TIMEOUT;
 import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE;
@@ -68,6 +70,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
     private String zkUrl;
     private String peerZKUrl;
     private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS = new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();
+    private final String defaultProtocolVersion = "1.0";
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -107,7 +110,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
 
         // Update to ACTIVE_TO_STANDBY role (should block mutations)
         HAGroupStoreRecord transitionRecord = new HAGroupStoreRecord(
-                "1.0", haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+                defaultProtocolVersion, haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, DEFAULT_RECORD_VERSION);
 
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, transitionRecord, 0);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
@@ -126,7 +129,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName1, zkUrl,
                 this.peerZKUrl, ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.ACTIVE, null);
         HAGroupStoreRecord activeRecord1 = new HAGroupStoreRecord(
-                "1.0", haGroupName1, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+                defaultProtocolVersion, haGroupName1, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, DEFAULT_RECORD_VERSION);
         haAdmin.createHAGroupStoreRecordInZooKeeper(activeRecord1);
 
         HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName2, zkUrl,
@@ -138,7 +141,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
 
         // Update only second group to ACTIVE_NOT_IN_SYNC_TO_STANDBY
         HAGroupStoreRecord transitionRecord2 = new HAGroupStoreRecord(
-                "1.0", haGroupName2, HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC_TO_STANDBY);
+                defaultProtocolVersion, haGroupName2, HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC_TO_STANDBY, DEFAULT_RECORD_VERSION);
 
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName2, transitionRecord2, 0);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
@@ -205,7 +208,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         try {
             // Create a HAGroupStoreRecord in the peer cluster
             HAGroupStoreRecord peerRecord = new HAGroupStoreRecord(
-                    "1.0", haGroupName, HAGroupStoreRecord.HAGroupState.STANDBY);
+                    defaultProtocolVersion, haGroupName, HAGroupStoreRecord.HAGroupState.STANDBY, DEFAULT_RECORD_VERSION);
 
             peerHaAdmin.createHAGroupStoreRecordInZooKeeper(peerRecord);
             Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
@@ -230,7 +233,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
 
             // Create peer record again with different state
             HAGroupStoreRecord newPeerRecord = new HAGroupStoreRecord(
-                    "1.0", haGroupName, HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY_FOR_READER);
+                    defaultProtocolVersion, haGroupName, HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY_FOR_READER, DEFAULT_RECORD_VERSION);
 
             peerHaAdmin.createHAGroupStoreRecordInZooKeeper(newPeerRecord);
             Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
@@ -269,7 +272,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
 
         // Create a HAGroupStoreRecord first
         HAGroupStoreRecord record = new HAGroupStoreRecord(
-                "1.0", haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+                defaultProtocolVersion, haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, DEFAULT_RECORD_VERSION);
 
         haAdmin.createHAGroupStoreRecordInZooKeeper(record);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
@@ -303,14 +306,14 @@ public class HAGroupStoreManagerIT extends BaseTest {
         conf.set(HConstants.ZOOKEEPER_QUORUM, getLocalZkUrl(config));
 
         // Set the HAGroupStoreManager instance to null via reflection to force recreation
-        Field field = HAGroupStoreManager.class.getDeclaredField("haGroupStoreManagerInstance");
+        Field field = HAGroupStoreManager.class.getDeclaredField("instances");
         field.setAccessible(true);
-        field.set(null, null);
+        field.set(null, new ConcurrentHashMap<>());
 
         HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(config);
         // Create HAGroupStoreRecord with ACTIVE_IN_SYNC_TO_STANDBY role
         HAGroupStoreRecord transitionRecord = new HAGroupStoreRecord(
-                "1.0", haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+                defaultProtocolVersion, haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, DEFAULT_RECORD_VERSION);
 
         haAdmin.createHAGroupStoreRecordInZooKeeper(transitionRecord);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
@@ -319,7 +322,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         assertFalse(haGroupStoreManager.isMutationBlocked(haGroupName));
 
         // Set the HAGroupStoreManager instance back to null via reflection to force recreation for other tests
-        field.set(null, null);
+        field.set(null, new ConcurrentHashMap<>());
     }
 
     @Test
@@ -329,7 +332,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
 
         // Create an initial HAGroupStoreRecord with ACTIVE status
         HAGroupStoreRecord initialRecord = new HAGroupStoreRecord(
-                "1.0", haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+                defaultProtocolVersion, haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, DEFAULT_RECORD_VERSION);
 
         haAdmin.createHAGroupStoreRecordInZooKeeper(initialRecord);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
@@ -466,7 +469,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
 
         // Update the auto-created record to STANDBY state for testing
         HAGroupStoreRecord standbyRecord = new HAGroupStoreRecord(
-                "1.0", haGroupName, HAGroupStoreRecord.HAGroupState.STANDBY);
+                defaultProtocolVersion, haGroupName, HAGroupStoreRecord.HAGroupState.STANDBY, DEFAULT_RECORD_VERSION);
 
         // Get the record to initialize ZNode from HAGroup so that we can artificially update it via HAAdmin
         Optional<HAGroupStoreRecord> currentRecord = haGroupStoreManager.getHAGroupStoreRecord(haGroupName);
@@ -488,7 +491,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
 
         // Test transition from DEGRADED_STANDBY_FOR_WRITER to DEGRADED_STANDBY
         HAGroupStoreRecord degradedWriterRecord = new HAGroupStoreRecord(
-                "1.0", haGroupName, HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY_FOR_WRITER);
+                defaultProtocolVersion, haGroupName, HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY_FOR_WRITER, DEFAULT_RECORD_VERSION);
 
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, degradedWriterRecord, 2);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);

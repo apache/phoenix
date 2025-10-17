@@ -24,25 +24,25 @@ import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.apache.curator.RetryPolicy;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
-import org.apache.curator.framework.recipes.cache.NodeCache;
 import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.apache.curator.utils.ZKPaths;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.util.PairOfSameType;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
+import org.apache.phoenix.jdbc.ClusterRoleRecord.RegistryType;
+import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
 import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
-import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.phoenix.util.GetClusterRoleRecordUtil;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import edu.umd.cs.findbugs.annotations.NonNull;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -57,16 +57,19 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CLIENT_CONNECTION_CACHE_MAX_DURATION;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 
 /**
  * An high availability (HA) group is an association between a pair of HBase clusters, a group of
@@ -125,6 +128,22 @@ public class HighAvailabilityGroup {
             PHOENIX_HA_ATTR_PREFIX + "transition.timeout.ms";
     public static final long PHOENIX_HA_TRANSITION_TIMEOUT_MS_DEFAULT = 5 * 60 * 1000; // 5 mins
 
+    public static final String PHOENIX_HA_CRR_POLLER_INTERVAL_MS_KEY =
+            PHOENIX_HA_ATTR_PREFIX + "crr.poller.interval.ms";
+    public static final String PHOENIX_HA_CRR_POLLER_INTERVAL_MS_DEFAULT = "5000"; // 5 seconds
+
+    public static final String PHOENIX_HA_CRR_REGISTRY_TYPE_KEY =
+            PHOENIX_HA_ATTR_PREFIX + "crr.registry.type";
+
+    /**
+     * The frequency to cache the ClusterRoleRecord for this HA group.
+     */
+    public static final String PHOENIX_HA_CRR_CACHE_FREQUENCY_MS_KEY =
+            PHOENIX_HA_ATTR_PREFIX + "crr.cache.frequency.ms";
+    public static final long PHOENIX_HA_CRR_CACHE_FREQUENCY_MS_DEFAULT = 2000; // 2 seconds
+
+    public static final RegistryType DEFAULT_PHOENIX_HA_CRR_REGISTRY_TYPE = RegistryType.RPC;
+
     static final Logger LOG = LoggerFactory.getLogger(HighAvailabilityGroup.class);
 
     /**
@@ -165,31 +184,26 @@ public class HighAvailabilityGroup {
      */
     private final Properties properties;
     /**
-     * Executor service for the two role managers.
+     * Configuration to be used for default properties values
      */
-    private final ExecutorService roleManagerExecutor = Executors.newFixedThreadPool(2,
-            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("phoenixHAGroup-%d").build());
-    /**
-     * The count down latch to make sure at least one role manager has pulled data from ZK.
-     */
-    private final CountDownLatch roleManagerLatch = new CountDownLatch(1);
-    /**
-     * Pair of role managers for watching cluster role records from the two ZK clusters.
-     */
-    private final AtomicReference<PairOfSameType<HAClusterRoleManager>> roleManagers
-            = new AtomicReference<>();
-    /**
-     * Executor for applying the cluster role to this HA group.
-     */
-    private final ExecutorService nodeChangedExecutor = Executors.newFixedThreadPool(1);
+    private final Configuration config;
     /**
      * Current cluster role record for this HA group.
      */
     private volatile ClusterRoleRecord roleRecord;
     /**
+     * Executor for applying the cluster role to this HA group.
+     */
+    private final ExecutorService crrChangedExecutor = Executors.newFixedThreadPool(1);
+    /**
      * State of this HA group.
      */
     private volatile State state = State.UNINITIALIZED;
+    private volatile long lastClusterRoleRecordRefreshTime = 0;
+    private volatile long clusterRoleRecordCacheFrequency = PHOENIX_HA_CRR_CACHE_FREQUENCY_MS_DEFAULT;
+    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+    private final Lock readLock = rwLock.readLock();
+    private final Lock writeLock = rwLock.writeLock();
 
     /**
      * Private constructor.
@@ -199,6 +213,10 @@ public class HighAvailabilityGroup {
     private HighAvailabilityGroup(HAGroupInfo info, Properties properties) {
         this.info = info;
         this.properties = properties;
+        this.config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+        // Get the cluster role record cache frequency from properties and if properties is not set, then get it from config
+        this.clusterRoleRecordCacheFrequency = Long.parseLong(properties.getProperty(PHOENIX_HA_CRR_CACHE_FREQUENCY_MS_KEY,
+            config.get(PHOENIX_HA_CRR_CACHE_FREQUENCY_MS_KEY, String.valueOf(PHOENIX_HA_CRR_CACHE_FREQUENCY_MS_DEFAULT))));
     }
     /**
      * This is for test usage only. In production, the record should be retrieved from ZooKeeper.
@@ -210,21 +228,33 @@ public class HighAvailabilityGroup {
         this.properties = properties;
         this.roleRecord = record;
         this.state = state;
+        this.config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+        // Get the cluster role record cache frequency from properties and if properties is not set, then get it from config
+        this.clusterRoleRecordCacheFrequency = Long.parseLong(properties.getProperty(PHOENIX_HA_CRR_CACHE_FREQUENCY_MS_KEY,
+            config.get(PHOENIX_HA_CRR_CACHE_FREQUENCY_MS_KEY, String.valueOf(PHOENIX_HA_CRR_CACHE_FREQUENCY_MS_DEFAULT))));
     }
 
     /**
-     * Get an instance of HAURLInfo given the HA connecting URL (with "|") and client properties.
+     * Get an instance of {@link HAURLInfo} given the HA connecting URL (with "|") and client properties.
      * Here we do parsing of url and try to extract principal and other additional params
-     * @throws SQLException
+     * @throws SQLException if fails to get HA information and/or invalid properties are seen
      */
     public static HAURLInfo getUrlInfo(String url, Properties properties) throws SQLException {
-        url  = checkUrl(url);
+        //Check if HA group name is provided in the properties if not throw an exception
+        String name = properties.getProperty(PHOENIX_HA_GROUP_ATTR);
+        if (StringUtils.isEmpty(name)) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.HA_INVALID_PROPERTIES)
+                    .setMessage(String.format("HA group name can not be empty for HA URL %s", url))
+                    .build()
+                    .buildException();
+        }
+        url = checkUrl(url);
         String principal = null;
         String additionalJDBCParams = null;
         int idx = url.indexOf("]");
-        int extraIdx = url.indexOf(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR, idx + 1);
+        int extraIdx = url.indexOf(JDBC_PROTOCOL_SEPARATOR, idx + 1);
         if (extraIdx != -1) {
-            //after zk quorums there should be a separator
+            //after quorums there should be a separator
             if (extraIdx != idx + 1) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
                         .setMessage(String.format("URL %s is not a valid HA connection string",
@@ -234,7 +264,7 @@ public class HighAvailabilityGroup {
             }
             additionalJDBCParams  = url.substring(extraIdx + 1);
             //Get the principal
-            extraIdx = additionalJDBCParams.indexOf(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+            extraIdx = additionalJDBCParams.indexOf(JDBC_PROTOCOL_SEPARATOR);
             if (extraIdx != -1) {
                 if (extraIdx != 0) {
                     principal = additionalJDBCParams.substring(0, extraIdx);
@@ -276,13 +306,6 @@ public class HighAvailabilityGroup {
                 ? (additionalJDBCParams.equals(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR))
                     ? null : additionalJDBCParams) : null;
 
-        String name = properties.getProperty(PHOENIX_HA_GROUP_ATTR);
-        if (StringUtils.isEmpty(name)) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.HA_INVALID_PROPERTIES)
-                    .setMessage(String.format("HA group name can not be empty for HA URL %s", url))
-                    .build()
-                    .buildException();
-        }
         HAURLInfo haurlInfo = new HAURLInfo(name, principal, additionalJDBCParams);
         HAGroupInfo info = getHAGroupInfo(url, properties);
         URLS.computeIfAbsent(info, haGroupInfo -> new HashSet<>()).add(haurlInfo);
@@ -291,9 +314,6 @@ public class HighAvailabilityGroup {
 
     private static HAGroupInfo getHAGroupInfo(String url, Properties properties)
             throws SQLException {
-        url = checkUrl(url);
-        url = url.substring(url.indexOf("[") + 1, url.indexOf("]"));
-        String [] urls = url.split("\\|");
         String name = properties.getProperty(PHOENIX_HA_GROUP_ATTR);
         if (StringUtils.isEmpty(name)) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.HA_INVALID_PROPERTIES)
@@ -301,19 +321,33 @@ public class HighAvailabilityGroup {
                     .build()
                     .buildException();
         }
+        url = checkUrl(url);
+        url = url.substring(url.indexOf("[") + 1, url.indexOf("]"));
+        String [] urls = url.split("\\|");
         return new HAGroupInfo(name, urls[0], urls[1]);
     }
 
     /**
-     * checks if the given url is appropriate for HA Connection
-     * @param url
+     * checks if the given url is appropriate for HA Connections, HA URL will only work for RPC Registry
+     * so it won't accept MASTER or ZK protocols but if no protocol is specified, it will be assumed to be RPC
+     * @param url url passed by clients to phoenix-client
      * @return the url without protocol
-     * @throws SQLException
+     * @throws SQLException MalformedConnectionUrlException if url is not a valid HA url
      */
     private static String checkUrl(String url) throws SQLException {
-        if (url.startsWith(PhoenixRuntime.JDBC_PROTOCOL)) {
+        if (url.startsWith(PhoenixRuntime.JDBC_PROTOCOL_RPC)) {
+            url = url.substring(PhoenixRuntime.JDBC_PROTOCOL_RPC.length() + 1);
+        } else if (url.startsWith(PhoenixRuntime.JDBC_PROTOCOL_MASTER)) {
+            throwMalFormedConnectionUrlException(String.format("Protocol specified is MASTER, which " +
+                    "is not acceptable for HA Connections, only RPC Registry is mandated, for url %s", url));
+        } else if (url.startsWith(PhoenixRuntime.JDBC_PROTOCOL_ZK)){
+            throwMalFormedConnectionUrlException(String.format("Protocol specified is ZK, which " +
+                    "is not acceptable for HA Connections only RPC Registry is mandated, for url %s", url));
+        } else if (url.startsWith(PhoenixRuntime.JDBC_PROTOCOL)) {
             url = url.substring(PhoenixRuntime.JDBC_PROTOCOL.length() + 1);
         }
+
+        //Check if url is a valid HA URL
         if (!(url.contains("[") && url.contains("|") && url.contains("]"))) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
                     .setMessage(String.format("URL %s is not a valid HA connection string", url))
@@ -342,6 +376,8 @@ public class HighAvailabilityGroup {
     public static Optional<HighAvailabilityGroup> get(String url, Properties properties)
             throws SQLException {
         HAGroupInfo info = getHAGroupInfo(url, properties);
+
+        //create a cache for missing CRR to prevent unnecessary exceptions (cache expires in 5 minutes)
         if (MISSING_CRR_GROUPS_CACHE.getIfPresent(info) != null) {
             return Optional.empty();
         }
@@ -353,23 +389,19 @@ public class HighAvailabilityGroup {
         } catch (Exception e) {
             GROUPS.remove(info);
             haGroup.close();
-            try {
-                CuratorFramework curator1 = CURATOR_CACHE.getIfPresent(generateCacheKey(info.getUrl1(), null));
-                CuratorFramework curator2 = CURATOR_CACHE.getIfPresent(generateCacheKey(info.getUrl2(), null));
-                if (curator1 != null && curator2 != null) {
-                    Stat node1 = curator1.checkExists().forPath(info.getZkPath());
-                    Stat node2 = curator2.checkExists().forPath(info.getZkPath());
-                    if (node1 == null && node2 == null) {
-                        // The HA group fails to initialize due to missing cluster role records on
-                        // both ZK clusters. We will put this HA group into negative cache.
-                        MISSING_CRR_GROUPS_CACHE.put(info, true);
-                        return Optional.empty();
-                    }
-                }
-            } catch (Exception e2) {
-                LOG.error("HA group {} failed to initialized. Got exception when checking if znode"
-                        + " exists on the two ZK clusters.", info, e2);
+
+            if (e instanceof SQLException && ((SQLException)e).getErrorCode()
+                        == SQLExceptionCode.CLUSTER_ROLE_RECORD_NOT_FOUND.getErrorCode()) {
+
+                LOG.error("HA group {} failed to initialized. Got exception when getting " +
+                        "ClusterRoleRecord for HA group {}", info, e.getCause());
+                //If the exception is due to missing CRR, we will put this HA group into negative
+                //cache to prevent unnecessary computations of trying to get CRR for every
+                //connection cache expires every 5 secs
+                MISSING_CRR_GROUPS_CACHE.put(info, true);
+                return Optional.empty();
             }
+
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION)
                     .setMessage(String.format("Cannot start HA group %s for URL %s", haGroup, url))
                     .setRootCause(e)
@@ -412,9 +444,9 @@ public class HighAvailabilityGroup {
         }
 
         // Ensure the fallback cluster URL includes the JDBC protocol prefix
-        if (!fallbackCluster.startsWith(PhoenixRuntime.JDBC_PROTOCOL_ZK)) {
-            fallbackCluster = PhoenixRuntime.JDBC_PROTOCOL_ZK
-                    + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + fallbackCluster;
+        if (!fallbackCluster.startsWith(PhoenixRuntime.JDBC_PROTOCOL_RPC)) {
+            fallbackCluster = PhoenixRuntime.JDBC_PROTOCOL_RPC
+                    + JDBC_PROTOCOL_SEPARATOR + fallbackCluster;
         }
 
         LOG.info("Falling back to single cluster '{}' for the HA group {} to serve HA connection "
@@ -573,68 +605,21 @@ public class HighAvailabilityGroup {
     }
 
     /**
-     * Initialize this HA group by registering ZK watchers and getting initial cluster role record.
+     * Initialize this HA group by getting initial ClusterRoleRecord from RegionServer Endpoints.
      * <p>
      * If this is already initialized, calling this method is a no-op. This method is lock free as
      * current thread will either return fast or wait for the in-progress initialization or timeout.
      */
-    public void init() throws IOException {
+    public void init() throws IOException, SQLException {
         if (state != State.UNINITIALIZED) {
             return;
         }
 
-        PairOfSameType<HAClusterRoleManager> newRoleManagers = new PairOfSameType<>(
-                new HAClusterRoleManager(info.urls.getFirst(), properties),
-                new HAClusterRoleManager(info.urls.getSecond(), properties));
-        if (!roleManagers.compareAndSet(null, newRoleManagers)) {
-            LOG.info("Someone already started role managers; waiting for that one...");
-            waitForInitialization(properties);
-            return;
-        }
+        ClusterRoleRecord roleRecordFromEndpoint = getClusterRoleRecordFromEndpoint();
 
-        Future<?> f1 = roleManagerExecutor.submit(newRoleManagers.getFirst());
-        Future<?> f2 = roleManagerExecutor.submit(newRoleManagers.getSecond());
-        try {
-            waitForInitialization(properties);
-        } catch (IOException e) {
-            // HA group that fails to initialize will not be kept in the global cache.
-            // Next connection request will create and initialize a new HA group.
-            // Before returning in case of exception, following code will cancel the futures.
-            f1.cancel(true);
-            f2.cancel(true);
-            throw e;
-        }
-
-        assert roleRecord != null;
-        LOG.info("Initial cluster role for HA group {} is {}", info, roleRecord);
-    }
-
-    /**
-     * Helper method that will block current thread until the HA group is initialized.
-     * <p>
-     * After returning, the HA state might not be in READY state. That is possible when a new ZK
-     * node change is detected triggering HA group to become IN_TRANSIT state.
-     *
-     * @param properties the connection properties
-     * @throws IOException when current HA group is not initialized before timeout
-     */
-    private void waitForInitialization(Properties properties) throws IOException {
-        String connectionTimeoutMsProp = properties.getProperty(
-                PHOENIX_HA_ZK_CONNECTION_TIMEOUT_MS_KEY);
-        int timeout = !StringUtils.isEmpty(connectionTimeoutMsProp)
-                ? Integer.parseInt(connectionTimeoutMsProp)
-                : PHOENIX_HA_ZK_CONNECTION_TIMEOUT_MS_DEFAULT;
-        boolean started = false;
-        try {
-            started = roleManagerLatch.await(timeout, TimeUnit.MILLISECONDS);
-        } catch (InterruptedException e) {
-            LOG.warn("Got interrupted when waiting for cluster role managers to start", e);
-            Thread.currentThread().interrupt();
-        }
-        if (!started) {
-            LOG.warn("Timed out {}ms waiting for HA group '{}' to be initialized.", timeout, info);
-            throw new IOException("Fail to initialize HA group " + info);
-        }
+        LOG.info("Initial cluster role for HA group {} is {}", info, roleRecordFromEndpoint);
+        roleRecord = roleRecordFromEndpoint;
+        state = State.READY;
     }
 
     /**
@@ -760,7 +745,7 @@ public class HighAvailabilityGroup {
         Preconditions.checkArgument(driver instanceof PhoenixEmbeddedDriver,
                 "No JDBC driver is registered for Phoenix high availability (HA) framework");
         return ((PhoenixEmbeddedDriver) driver).getConnectionQueryServices(jdbcString, properties)
-                .connect(jdbcString, properties);
+                .connect(jdbcString, properties, this);
     }
 
     @VisibleForTesting
@@ -786,20 +771,6 @@ public class HighAvailabilityGroup {
      * Someone calling close on this would make it unusable, since the state would become closed.
      */
     void close() {
-        roleManagerExecutor.shutdownNow();
-        try {
-            // TODO: Parameterize and set in future work item for pluggable
-            if (!roleManagerExecutor.awaitTermination(PHOENIX_HA_ZK_SESSION_TIMEOUT_MS_DEFAULT,
-                    TimeUnit.MILLISECONDS)) {
-                LOG.error("Fail to shut down role managers service for HA group: {}", info);
-            }
-        } catch (InterruptedException e) {
-            LOG.warn("HA group {} close() got interrupted when closing role managers", info, e);
-            // (Re-)Cancel if current thread also interrupted
-            roleManagerExecutor.shutdownNow();
-            // Preserve interrupt status
-            Thread.currentThread().interrupt();
-        }
         state = State.CLOSED;
     }
 
@@ -808,77 +779,6 @@ public class HighAvailabilityGroup {
         return roleRecord == null
                 ? "HighAvailabilityGroup{roleRecord=null, info=" + info + ", state=" + state + "}"
                 : "HighAvailabilityGroup{roleRecord=" + roleRecord + ", state=" + state + "}";
-    }
-
-    /**
-     * Set the new cluster role record for this HA group.
-     * <p>
-     * Calling this method will make HA group be in transition state where no request can be served.
-     * The data source may come from either of the two clusters as seen by the ZK watcher.
-     *
-     * @param newRoleRecord the new cluster role record to set
-     * @return true if the new record is set as current one; false otherwise
-     */
-    private synchronized boolean applyClusterRoleRecord(@NonNull ClusterRoleRecord newRoleRecord) {
-        if (roleRecord == null) {
-            roleRecord = newRoleRecord;
-            state = State.READY;
-            LOG.info("HA group {} is now in {} state after getting initial V{} role record: {}",
-                    info, state, roleRecord.getVersion(), roleRecord);
-            LOG.debug("HA group {} is ready", this);
-            return true;
-        }
-
-        if (!newRoleRecord.isNewerThan(roleRecord)) {
-            LOG.warn("Does not apply new cluster role record as it does not have higher version. "
-                    + "Existing record: {}, new record: {}", roleRecord, newRoleRecord);
-            return false;
-        }
-
-        if (!roleRecord.hasSameInfo(newRoleRecord)) {
-            LOG.error("New record {} has different HA group information from old record {}",
-                    newRoleRecord, roleRecord);
-            return false;
-        }
-
-        final ClusterRoleRecord oldRecord = roleRecord;
-        state = State.IN_TRANSITION;
-        LOG.info("HA group {} is in {} to set V{} record", info, state, newRoleRecord.getVersion());
-        Future<?> future = nodeChangedExecutor.submit(() -> {
-            try {
-                roleRecord.getPolicy().transitClusterRoleRecord(this, roleRecord, newRoleRecord);
-            } catch (SQLException e) {
-                throw new CompletionException(e);
-            }
-        });
-
-        // TODO: save timeout in the HA group info (aka cluster role record) instead in properties
-        String transitionTimeoutProp = properties.getProperty(PHOENIX_HA_TRANSITION_TIMEOUT_MS_KEY);
-        long maxTransitionTimeMs = StringUtils.isNotEmpty(transitionTimeoutProp)
-                ? Long.parseLong(transitionTimeoutProp)
-                : PHOENIX_HA_TRANSITION_TIMEOUT_MS_DEFAULT;
-        try {
-            future.get(maxTransitionTimeMs, TimeUnit.MILLISECONDS);
-        } catch (InterruptedException ie) {
-            LOG.error("Got interrupted when transiting cluster roles for HA group {}", info, ie);
-            future.cancel(true);
-            Thread.currentThread().interrupt();
-            return false;
-        } catch (ExecutionException | TimeoutException e) {
-            LOG.error("HA group {} failed to transit cluster roles per policy {} to new record {}",
-                    info, roleRecord.getPolicy(), newRoleRecord, e);
-            // Calling back HA policy function for cluster switch is conducted with best effort.
-            // HA group continues transition when its HA policy fails to deal with context switch
-            // (e.g. to close existing connections)
-            // The goal here is to gain higher availability even though existing resources against
-            // previous ACTIVE cluster may have not been closed cleanly.
-        }
-        roleRecord = newRoleRecord;
-        state = State.READY;
-        LOG.info("HA group {} is in {} state after applying V{} role record. Old: {}, new: {}",
-                info, state, roleRecord.getVersion(), oldRecord, roleRecord);
-        LOG.debug("HA group is ready: {}", this);
-        return true;
     }
 
     /**
@@ -917,9 +817,9 @@ public class HighAvailabilityGroup {
             this.name = name;
             //Normalizing these urls with ZK protocol as these are the ZK urls of clusters where
             //roleRecords resides.
-            url1 = JDBCUtil.formatUrl(url1, ClusterRoleRecord.RegistryType.ZK);
-            url2 = JDBCUtil.formatUrl(url2, ClusterRoleRecord.RegistryType.ZK);
-            Preconditions.checkArgument(!url1.equals(url2), "Two clusters have the same ZK!");
+            url1 = JDBCUtil.formatUrl(url1, DEFAULT_PHOENIX_HA_CRR_REGISTRY_TYPE);
+            url2 = JDBCUtil.formatUrl(url2, DEFAULT_PHOENIX_HA_CRR_REGISTRY_TYPE);
+            Preconditions.checkArgument(!url1.equals(url2), "Two clusters have the same urls!");
             // Ignore the given order of url1 and url2, and reorder for equals comparison.
             if (url1.compareTo(url2) > 0) {
                 this.urls = new PairOfSameType<>(url2, url1);
@@ -941,18 +841,11 @@ public class HighAvailabilityGroup {
         }
 
         public String getJDBCUrl1(HAURLInfo haURLInfo) {
-            return getJDBCUrl(getUrl1(), haURLInfo, ClusterRoleRecord.RegistryType.ZK);
+            return getJDBCUrl(getUrl1(), haURLInfo, DEFAULT_PHOENIX_HA_CRR_REGISTRY_TYPE);
         }
 
         public String getJDBCUrl2(HAURLInfo haURLInfo) {
-            return getJDBCUrl(getUrl2(), haURLInfo, ClusterRoleRecord.RegistryType.ZK);
-        }
-
-        /**
-         * Helper method to return the znode path in the Phoenix HA namespace.
-         */
-        String getZkPath() {
-            return ZKPaths.PATH_SEPARATOR + name;
+            return getJDBCUrl(getUrl2(), haURLInfo, DEFAULT_PHOENIX_HA_CRR_REGISTRY_TYPE);
         }
 
         @Override
@@ -997,7 +890,7 @@ public class HighAvailabilityGroup {
      * @param type Registry Type for which url has to be constructed
      * @return jdbc url in proper format i.e. jdbc:phoenix+<registry>:url:principal:additionalParam
      * example :- jdbc:phoenix+zk:zk1\\:port1,zk2\\:port2,zk3\\:port3,zk4\\:port4,zk5\\:port5::znode:principal:additionalParams
-     * or jdbc:phoenix+master:master1\\:port1,master2\\:port2,master3\\:port3,master4\\:port4,master5\\:port5::principal:additionParams
+     * or jdbc:phoenix+master:master1\\:port1,master2\\:port2,master3\\:port3,master4\\:port4,master5\\:port5:::principal:additionParams
      */
     public static String getJDBCUrl(String url, HAURLInfo haURLInfo,
                                     ClusterRoleRecord.RegistryType type) {
@@ -1019,21 +912,21 @@ public class HighAvailabilityGroup {
             default:
                 sb.append(PhoenixRuntime.JDBC_PROTOCOL);
         }
-        sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+        sb.append(JDBC_PROTOCOL_SEPARATOR);
         sb.append(url);
         if (haURLInfo != null) {
             if (ObjectUtils.anyNotNull(haURLInfo.getPrincipal(), haURLInfo.getAdditionalJDBCParams())) {
                 if (extraSeparator) {
                     //For Master and RPC connection url we need 2 extra separator between port and
                     //principal as there is no ZNode
-                    sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR).
-                            append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+                    sb.append(JDBC_PROTOCOL_SEPARATOR).
+                            append(JDBC_PROTOCOL_SEPARATOR);
                 }
-                sb.append(haURLInfo.getPrincipal() == null ? PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR
-                        : PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + haURLInfo.getPrincipal());
+                sb.append(haURLInfo.getPrincipal() == null ? JDBC_PROTOCOL_SEPARATOR
+                        : JDBC_PROTOCOL_SEPARATOR + haURLInfo.getPrincipal());
             }
             if (ObjectUtils.anyNotNull(haURLInfo.getAdditionalJDBCParams())) {
-                sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR).
+                sb.append(JDBC_PROTOCOL_SEPARATOR).
                         append(haURLInfo.getAdditionalJDBCParams());
             }
         }
@@ -1041,73 +934,184 @@ public class HighAvailabilityGroup {
     }
 
     /**
-     * Maintains the client view of cluster roles for the HA group using data retrieved from one ZK.
-     * <p>
-     * It is a runnable to keep setting up the curator and the node cache. It will also register
-     * the node watcher so any znode data change will trigger a callback function updating HA group.
+     * Helper method to construct the jdbc HA url for the given urls and HAURLInfo
+     * @param url1 url1 of the HA group
+     * @param url2 url2 of the HA group
+     * @param haURLInfo HAURLInfo object containing principal and additional params
+     * @return jdbc HA url in proper format i.e. jdbc:phoenix+rpc:[url1|url2]:principal:additionalParams
+     * example :- jdbc:phoenix+rpc:[master1\\:port1,master2\\:port2,master3\\:port3,master4\\:port4,master5\\:port5|
+     *    peer_master1\\:port1,peer_master2\\:port2,peer_master3\\:port3,peer_master4\\:port4,peer_master5\\:port5]:principal:additionParams
      */
-    private final class HAClusterRoleManager implements Runnable {
-        private final String jdbcUrl;
-        private final Properties properties;
-        private NodeCache cache;
+    public static String getJDBCHAUrl(String url1, String url2, HAURLInfo haURLInfo) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(PhoenixRuntime.JDBC_PROTOCOL_RPC).append(JDBC_PROTOCOL_SEPARATOR);
+        sb.append("[").append(url1).append("|").append(url2).append("]");
+        if (haURLInfo != null) {
+            if (ObjectUtils.anyNotNull(haURLInfo.getPrincipal(), haURLInfo.getAdditionalJDBCParams())) {
+                sb.append(haURLInfo.getPrincipal() == null ? JDBC_PROTOCOL_SEPARATOR
+                        : JDBC_PROTOCOL_SEPARATOR + haURLInfo.getPrincipal());
+            }
+            if (ObjectUtils.anyNotNull(haURLInfo.getAdditionalJDBCParams())) {
+                sb.append(JDBC_PROTOCOL_SEPARATOR).
+                        append(haURLInfo.getAdditionalJDBCParams());
+            }
+        }
+        return sb.toString();
+    }
 
-        /**
-         * Constructor which creates and starts the ZK watcher.
-         *
-         * @param jdbcUrl    JDBC url without jdbc:phoenix prefix which may be host:port:/hbase format
-         * @param properties The properties defining ZK client timeouts and retries
-         */
-        HAClusterRoleManager(String jdbcUrl, Properties properties) {
-            this.jdbcUrl = jdbcUrl;
-            this.properties = properties;
+
+    private static void throwMalFormedConnectionUrlException(String message) throws SQLException {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
+                .setMessage(message)
+                .build()
+                .buildException();
+    }
+
+
+
+    /**
+     * Method to get ClusterRoleRecord from RegionServer Endpoints from either of the clusters.
+     * @return ClusterRoleRecord from the first available cluster
+     * @throws SQLException if there is an error getting the ClusterRoleRecord
+     */
+    private ClusterRoleRecord getClusterRoleRecordFromEndpoint() throws SQLException {
+        long pollerInterval = Long.parseLong(properties.getProperty(PHOENIX_HA_CRR_POLLER_INTERVAL_MS_KEY,
+                config.get(PHOENIX_HA_CRR_POLLER_INTERVAL_MS_KEY, PHOENIX_HA_CRR_POLLER_INTERVAL_MS_DEFAULT)));
+
+        //Get the CRR via RSEndpoint for cluster 1
+        try {
+            return GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl1(), info.getName(), this, pollerInterval, properties);
+        } catch (Exception e) {
+            //Got exception from cluster 1 when trying to get CRR, try cluster 2
+            return GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl2(), info.getName(), this, pollerInterval, properties);
+        }
+    }
+
+    /**
+     * Refresh the cluster role record for this HA group.
+     * <p>
+     * This method will get the new ClusterRoleRecord from RegionServer Endpoints and apply it to the HA group.
+     * and it will call to transition the Policy's connections according to the new record.
+     * <p>
+     * This method uses a read-write lock pattern to allow multiple concurrent callers to check if a refresh
+     * is needed while ensuring only one thread performs the actual refresh operation at a time. This improves
+     * throughput by avoiding blocking all callers during the quick check phase.
+     *
+     * @return true if the new record is set as current one; false otherwise
+     * @throws SQLException if there is an error getting the ClusterRoleRecord
+     */
+    public boolean refreshClusterRoleRecord(boolean forceRefresh) throws SQLException {
+        // Allow concurrent reads to return fast in case refresh is not needed
+        readLock.lock();
+        try {
+            if (!forceRefresh && !shouldRefreshRoleRecord()) {
+                return true;
+            }
+        } finally {
+            readLock.unlock();
         }
 
-        @Override
-        public void run() {
-            final String zpath = info.getZkPath();
-            while (!Thread.currentThread().isInterrupted()) {
+        // Take a write lock to apply the refresh of roleRecord
+        writeLock.lock();
+        try {
+            // Re-check the condition under the write lock to prevent race conditions.
+            // Another thread might have already done the refresh while we were waiting for the
+            // write lock.
+            if (!forceRefresh && !shouldRefreshRoleRecord()) {
+                return true;
+            }
+
+            ClusterRoleRecord newRoleRecord = getClusterRoleRecordFromEndpoint();
+            if (roleRecord == null) {
+                roleRecord = newRoleRecord;
+                lastClusterRoleRecordRefreshTime = System.currentTimeMillis();
+                state = State.READY;
+                LOG.info("HA group {} is now in {} state after getting initial V{} role record: {}",
+                        info, state, roleRecord.getVersion(), roleRecord);
+                LOG.debug("HA group {} is ready", this);
+                return true;
+            }
+
+            //Check if newRoleRecord has same Info (HAGroupName and Policy)
+            if (!roleRecord.hasSameInfo(newRoleRecord)) {
+                LOG.error("New record {} has different HA group information (haGroupName/Policy) from" +
+                        " old record {}, which is not expected", newRoleRecord, roleRecord);
+                return false;
+            }
+
+            //Check if newRoleRecord is actually new
+            if (roleRecord.equals(newRoleRecord)) {
+                LOG.debug("New Role Record is same as current RoleRecord, no need to refresh {}",
+                        roleRecord.toString());
+                lastClusterRoleRecordRefreshTime = System.currentTimeMillis();
+                return true;
+            }
+
+            final ClusterRoleRecord oldRecord = roleRecord;
+            state = State.IN_TRANSITION;
+            LOG.info("HA group {} is in {} to set V{} record", info, state, newRoleRecord.getVersion());
+            Future<?> future = crrChangedExecutor.submit(() -> {
                 try {
-                    cache = new NodeCache(getCurator(jdbcUrl, properties), zpath);
-                    cache.getListenable().addListener(this::nodeChanged);
-                    cache.start();
-                    return; // return after building the initial node cache
-                } catch (InterruptedException e) {
-                    LOG.warn("HA cluster role manager thread for '{}' is interrupted, exiting",
-                            jdbcUrl, e);
-                    break;
-                } catch (Throwable t) {
-                    LOG.warn("Fail to start node cache on '{}' for '{}'. Retry", jdbcUrl, zpath, t);
-                    try {
-                        // TODO: do better than fixed time sleep
-                        Thread.sleep(1_000);
-                    } catch (InterruptedException e) {
-                        LOG.warn("HA cluster role manager thread for '{}' is interrupted, exiting",
-                                jdbcUrl, e);
-                        break;
+                    roleRecord.getPolicy().transitClusterRoleRecord(this, roleRecord, newRoleRecord);
+                } catch (SQLException e) {
+                    throw new CompletionException(e);
+                }
+            });
+
+            String transitionTimeoutProp = properties.getProperty(
+                    PHOENIX_HA_TRANSITION_TIMEOUT_MS_KEY, config.get(
+                            PHOENIX_HA_TRANSITION_TIMEOUT_MS_KEY));
+            long maxTransitionTimeMs = StringUtils.isNotEmpty(transitionTimeoutProp)
+                    ? Long.parseLong(transitionTimeoutProp)
+                    : PHOENIX_HA_TRANSITION_TIMEOUT_MS_DEFAULT;
+            try {
+                future.get(maxTransitionTimeMs, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException ie) {
+                LOG.error("Got interrupted when transiting cluster roles for HA group {}", info, ie);
+                future.cancel(true);
+                Thread.currentThread().interrupt();
+                return false;
+            } catch (ExecutionException | TimeoutException e) {
+                LOG.error("HA group {} failed to transit cluster roles per policy {} to new " +
+                                "record {}", info, roleRecord.getPolicy(), newRoleRecord, e);
+                //Rethrow the Role transitions not allowed exceptions
+                if (e.getCause() != null && e.getCause().getCause() != null) {
+                    if (e.getCause().getCause() instanceof SQLException && ((SQLException)e
+                            .getCause().getCause()).getErrorCode() == SQLExceptionCode
+                            .HA_ROLE_TRANSITION_NOT_ALLOWED.getErrorCode()) {
+                        state = State.READY;
+                        throw (SQLException)e.getCause().getCause();
                     }
                 }
+                // Calling back HA policy function for cluster switch is conducted with best effort.
+                // HA group continues transition when its HA policy fails to deal with context switch
+                // (e.g. to close existing connections)
+                // The goal here is to gain higher availability even though existing resources against
+                // previous ACTIVE cluster may have not been closed cleanly.
             }
+            //Update the role record and the last refresh time
+            roleRecord = newRoleRecord;
+            lastClusterRoleRecordRefreshTime = System.currentTimeMillis();
+            state = State.READY;
+            LOG.info("HA group {} is in {} state, Old: {}, new: {}", info, state, oldRecord,
+                    roleRecord);
+            LOG.debug("HA group is ready: {}", this);
+            return true;
+        } finally {
+            writeLock.unlock();
         }
-
-        /**
-         * Call back functions when a cluster role change is notified by this ZK cluster.
-         */
-        private void nodeChanged() {
-            byte[] data = cache.getCurrentData().getData();
-            Optional<ClusterRoleRecord> newRecordOptional = ClusterRoleRecord.fromJson(data);
-            if (!newRecordOptional.isPresent()) {
-                LOG.error("Fail to deserialize new record; keep current record {}", roleRecord);
-                return;
-            }
-            ClusterRoleRecord newRecord = newRecordOptional.get();
-            LOG.info("HA group {} got a record from cluster {}: {}", info.name, jdbcUrl, newRecord);
-
-            if (applyClusterRoleRecord(newRecord)) {
-                LOG.info("Successfully apply new cluster role record from cluster '{}', "
-                        + "new record: {}", jdbcUrl, newRecord);
-                roleManagerLatch.countDown();
-            }
-        }
-
     }
+
+    /**
+     * Check if we should refresh the RoleRecord based on cache frequency if the cacheAge is
+     * greater than clusterRoleRecordCacheFrequency, then return true
+     */
+    public boolean shouldRefreshRoleRecord() {
+        if (roleRecord == null) {
+            return true; // Always refresh if no role record
+        }
+        long cacheAge = System.currentTimeMillis() - lastClusterRoleRecordRefreshTime;
+        return cacheAge >= clusterRoleRecordCacheFrequency;
+    }
+
 }

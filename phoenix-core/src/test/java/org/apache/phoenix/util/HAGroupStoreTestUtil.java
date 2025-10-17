@@ -18,11 +18,13 @@
 package org.apache.phoenix.util;
 
 import org.apache.phoenix.jdbc.ClusterRoleRecord;
+import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Properties;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_HA_GROUP_NAME;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
@@ -47,7 +49,31 @@ public class HAGroupStoreTestUtil {
     public static void upsertHAGroupRecordInSystemTable(String haGroupName, String zkUrl, String peerZKUrl,
                                                         ClusterRoleRecord.ClusterRole localClusterRole,
                                                         ClusterRoleRecord.ClusterRole peerClusterRole, String overrideConnZkUrl) throws SQLException {
-        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(JDBC_PROTOCOL_ZK + JDBC_PROTOCOL_SEPARATOR + (overrideConnZkUrl != null ? overrideConnZkUrl : zkUrl));
+        upsertHAGroupRecordInSystemTable(haGroupName, zkUrl, peerZKUrl,zkUrl, peerZKUrl, localClusterRole, peerClusterRole,1L,1L, overrideConnZkUrl, HighAvailabilityPolicy.FAILOVER, new Properties());
+    }
+
+
+    public static void upsertHAGroupRecordInSystemTable(String haGroupName, String zkUrl, String peerZKUrl, String clusterUrl1, String clusterUrl2,
+        ClusterRoleRecord.ClusterRole localClusterRole, ClusterRoleRecord.ClusterRole peerClusterRole, String overrideConnZkUrl) throws SQLException {
+        upsertHAGroupRecordInSystemTable(haGroupName, zkUrl, peerZKUrl, clusterUrl1, clusterUrl2, localClusterRole, peerClusterRole,1L,1L, overrideConnZkUrl, HighAvailabilityPolicy.FAILOVER, new Properties());
+}
+
+    /**
+     * Upserts an HA group record into the system table for testing purposes.
+     *
+     * @param haGroupName the HA group name
+     * @param zkUrl the ZooKeeper URL for the local cluster
+     * @param peerZKUrl the ZooKeeper URL for the peer cluster
+     * @param localClusterRole the role of the local cluster
+     * @param peerClusterRole the role of the peer cluster
+     * @param overrideConnZkUrl optional override for the connection ZK URL
+     * @throws SQLException if the database operation fails
+     */
+    public static void upsertHAGroupRecordInSystemTable(String haGroupName, String zkUrl, String peerZKUrl, String clusterUrl1, String clusterUrl2,
+                                                        ClusterRoleRecord.ClusterRole localClusterRole,
+                                                        ClusterRoleRecord.ClusterRole peerClusterRole, long version1, long version2,
+                                                        String overrideConnZkUrl, HighAvailabilityPolicy policy, Properties props) throws SQLException {
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(JDBC_PROTOCOL_ZK + JDBC_PROTOCOL_SEPARATOR + (overrideConnZkUrl != null ? overrideConnZkUrl : zkUrl), props);
              Statement stmt = conn.createStatement()) {
             // Only insert values that are not null
             StringBuilder queryBuilder = new StringBuilder("UPSERT INTO " + SYSTEM_HA_GROUP_NAME + " (HA_GROUP_NAME, ");
@@ -63,13 +89,13 @@ public class HAGroupStoreTestUtil {
             if (peerClusterRole != null) {
                 queryBuilder.append("CLUSTER_ROLE_2, ");
             }
-            if (zkUrl != null) {
+            if (clusterUrl1 != null) {
                 queryBuilder.append("CLUSTER_URL_1, ");
             }
-            if (peerZKUrl != null) {
+            if (clusterUrl2 != null) {
                 queryBuilder.append("CLUSTER_URL_2, ");
             }
-            queryBuilder.append("POLICY, VERSION) ");
+            queryBuilder.append("POLICY, VERSION_CLUSTER_1, VERSION_CLUSTER_2) ");
             queryBuilder.append("VALUES ('" + haGroupName + "', ");
             if (zkUrl != null) {
                 queryBuilder.append("'" + zkUrl + "', ");
@@ -83,13 +109,13 @@ public class HAGroupStoreTestUtil {
             if (peerClusterRole != null) {
                 queryBuilder.append("'" + peerClusterRole + "', ");
             }
-            if (zkUrl != null) {
-                queryBuilder.append("'" + zkUrl + "', ");
+            if (clusterUrl1 != null) {
+                queryBuilder.append("'" + clusterUrl1 + "', ");
             }
-            if (peerZKUrl != null) {
-                queryBuilder.append("'" + peerZKUrl + "', ");
+            if (clusterUrl2 != null) {
+                queryBuilder.append("'" + clusterUrl2 + "', ");
             }
-            queryBuilder.append("'FAILOVER', 1)");
+            queryBuilder.append("'" + policy.name() + "', " + version1 + ", " + version2 + ")");
             stmt.executeUpdate(queryBuilder.toString());
             conn.commit();
         }

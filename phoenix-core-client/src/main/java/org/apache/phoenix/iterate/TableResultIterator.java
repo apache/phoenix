@@ -27,6 +27,7 @@ import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.NO
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.RENEWED;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.THRESHOLD_NOT_REACHED;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.UNINITIALIZED;
+import static org.apache.phoenix.jdbc.HighAvailabilityUtil.isStaleClusterRoleRecordExceptionExistsInThrowable;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -48,9 +49,12 @@ import org.apache.phoenix.compile.ExplainPlanAttributes
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessorclient.HashJoinCacheNotFoundException;
 import org.apache.phoenix.exception.ResultSetOutOfScanRangeException;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.BaseQueryPlan;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.jdbc.HighAvailabilityGroup;
 import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.query.QueryConstants;
@@ -233,6 +237,29 @@ public class TableResultIterator implements ResultIterator {
                 }
             } catch (SQLException e) {
                 LOGGER.error("Error while scanning table {} , scan {}", htable, scan);
+                if (isStaleClusterRoleRecordExceptionExistsInThrowable(e)) {
+                    LOGGER.debug("StaleClusterRoleRecordException found refreshing HAGroup");
+                    if (plan.getContext().getConnection().getHAGroup() != null) {
+                        HighAvailabilityGroup haGroup = plan.getContext().getConnection()
+                                .getHAGroup();
+                        if (!haGroup.refreshClusterRoleRecord(true)) {
+                            LOGGER.error("Error while refreshing HAGroup for Stale " +
+                                    "ClusterRoleRecord found for scan operation");
+                        }
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.FAILOVER_IN_PROGRESS)
+                                .setMessage(String.format("Operation failed because failover is " +
+                                                "in progress for HAGroup %s, %s",
+                                        haGroup, e)).build().buildException();
+                    }
+                    //If we receive StaleClusterRoleRecordException, that means Operation was
+                    //supposed to be executed on Active Cluster but was in reality was sent to
+                    //STANDBY Cluster, that can happen only when Failover is in Progress, So we
+                    //catch that exception and refresh the roleRecord of HAGroup, which will lead to
+                    //closure of all current connections (as they are not Active anymore), which
+                    //will close the Statements and Iterators associated with the connections, that
+                    //is why we are not retrying the operation and throwing the exception.
+                }
+
                 try {
                     throw ClientUtil.parseServerException(e);
                 } catch(HashJoinCacheNotFoundException e1) {

@@ -40,6 +40,7 @@ import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MetaDataMutationRes
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.jdbc.HighAvailabilityGroup;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.log.ConnectionLimiter;
 import org.apache.phoenix.log.QueryLoggerDisruptor;
@@ -162,6 +163,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
                                                  int queryTimeout) throws SQLException;
 
     public PhoenixConnection connect(String url, Properties info) throws SQLException;
+    public PhoenixConnection connect(String url, Properties info, HighAvailabilityGroup haGroup) throws SQLException;
 
     /**
      * @param tableTimestamp timestamp of table if its present in the client side cache
