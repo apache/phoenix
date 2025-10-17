@@ -530,7 +530,7 @@ public class HAGroupStoreManager {
      * @return HAGroupStoreClient instance for the specified HA group
      * @throws IOException when HAGroupStoreClient is not initialized
      */
-    private HAGroupStoreClient 
+    private HAGroupStoreClient
     getHAGroupStoreClientAndSetupFailoverManagement(final String haGroupName)
             throws IOException {
         HAGroupStoreClient haGroupStoreClient = getHAGroupStoreClient(haGroupName);

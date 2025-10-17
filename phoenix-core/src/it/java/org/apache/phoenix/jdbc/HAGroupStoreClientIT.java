@@ -592,10 +592,11 @@ public class HAGroupStoreClientIT extends BaseTest {
                 this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
         createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, initialRecord);
 
-        HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
-        
-        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS 
-                + (long) Math.ceil(DEFAULT_ZK_SESSION_TIMEOUT 
+        HAGroupStoreClient haGroupStoreClient 
+                = HAGroupStoreClient.getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
+
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS
+                + (long) Math.ceil(DEFAULT_ZK_SESSION_TIMEOUT
                     * HAGroupStoreClient.ZK_SESSION_TIMEOUT_MULTIPLIER));
         haGroupStoreClient.setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
