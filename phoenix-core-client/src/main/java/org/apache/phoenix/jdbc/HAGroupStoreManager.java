@@ -140,8 +140,16 @@ public class HAGroupStoreManager {
     public boolean isHAGroupOnClientStale(String haGroupName) throws IOException {
         if (checkStaleCRRForEveryMutation) {
             HAGroupStoreClient haGroupStoreClient = getHAGroupStoreClient(haGroupName);
-            //If local cluster is not ACTIVE/ACTIVE_TO_STANDBY, it means the Failover CRR is stale on client
-            //As they are trying to write/read from a STANDBY cluster.
+            //If local cluster is not ACTIVE/ACTIVE_TO_STANDBY, it means the Failover CRR is stale
+            //on client as they are trying to write/read from a STANDBY cluster.
+            //If we plan to use Standby clusters for scan operations, depends on whether the
+            //connection is an SCN connection or not, If a connection is not an SCN connection then
+            //Standby cluster can't be used as most recent data is only available through ACTIVE
+            //cluster. For SCN connections, future client functionality might allow attempts to
+            //open connections to the standby cluster, which would then accept or reject the query
+            //based on whether the SCN falls within its consistency point, and will require a change
+            //in the logic her, with much bigger change.
+
             return haGroupStoreClient.getPolicy() == HighAvailabilityPolicy.FAILOVER &&
                     !haGroupStoreClient.getHAGroupStoreRecord().getHAGroupState().getClusterRole().isActive();
         }

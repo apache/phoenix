@@ -321,8 +321,9 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
      * This is the utility method to help wrapping a method call to phoenix connection.
      * If we receive a {@link org.apache.phoenix.exception.StaleClusterRoleRecordException},
      * we will try to refresh the CRR and transition the connections according to the new record.
-     * StaleCRRException is thrown for mutations only for scans we are checking before executing the
-     * queries and in any case if the refresh is successful or not, we will throw the exception.
+     * StaleCRRException is thrown for mutations and pointLookups only for scans we are checking
+     * before executing the queries and in any case if the refresh is successful or not,
+     * we will throw the exception.
      *
      * @param s   the supplier which returns a value and may throw SQLException
      * @param <T> type of the returned object by the supplier
@@ -341,21 +342,28 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
                 return s.get();
             } catch (Exception e) {
                 if (isStaleClusterRoleRecordExceptionExistsInThrowable(e)) {
-                    LOG.debug("StaleHAGroupStoreException found refreshing HAGroup");
+                    //If we receive StaleClusterRoleRecordException, that means Operation was
+                    //supposed to be executed on Active Cluster but was in reality was sent to
+                    //STANDBY Cluster, that can happen only when Failover is in Progress, So we
+                    //catch that exception and refresh the roleRecord of HAGroup, which will lead to
+                    //closure of all current connections (as they are not Active anymore). To retry
+                    //the operation here, we will need to create a new connection with new context
+                    //and everything to new Active Cluster. So, we will throw a new exception
+                    //{@link SQLExceptionCode.FAILOVER_IN_PROGRESS}
+
+                    LOG.debug("StaleClusterRoleRecordException found refreshing HAGroup");
                     //If the exception is due to stale ClusterRoleRecord version, try
                     //refreshing the ClusterRoleRecord and state transitions if required
 
                     if (!context.getHAGroup().refreshClusterRoleRecord(true)) {
-                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.STALE_CRR_RETHROW_AFTER_REFRESH_FAILED)
-                                .setMessage(String.format("Error while running operation Stale ClusterRoleRecord for HAGroup %s" +
-                                                " found with version %s, refreshing HAGroup failed :- %s",
-                                        context.getHAGroup(), context.getHAGroup().getRoleRecord().getVersion(), e)).build().buildException();
+                        LOG.error("Error while refreshing HAGroup for Stale ClusterRoleRecord " +
+                                "found for mutation operation");
                     }
 
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.STALE_CRR_RETHROW_AFTER_REFRESH)
-                            .setMessage(String.format("Error while running operation Stale ClusterRoleRecord for HAGroup %s" +
-                                            " found with version %s :- %s",
-                                    context.getHAGroup(), context.getHAGroup().getRoleRecord().getVersion(), e)).build().buildException();
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.FAILOVER_IN_PROGRESS)
+                            .setMessage(String.format("Operation failed because failover is in " +
+                                            "progress for HAGroup %s, %s",
+                                    context.getHAGroup(), e)).build().buildException();
 
                 }
                 if (policy.shouldFailover(e, ++failoverCount)) {

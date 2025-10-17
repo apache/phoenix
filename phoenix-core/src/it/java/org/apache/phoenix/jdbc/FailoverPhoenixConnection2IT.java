@@ -19,7 +19,7 @@ package org.apache.phoenix.jdbc;
 
 import static org.apache.hadoop.test.GenericTestUtils.waitFor;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION;
-import static org.apache.phoenix.exception.SQLExceptionCode.STALE_CRR_RETHROW_AFTER_REFRESH;
+import static org.apache.phoenix.exception.SQLExceptionCode.FAILOVER_IN_PROGRESS;
 import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.ACTIVE;
 import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY;
 import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.STANDBY;
@@ -494,9 +494,8 @@ public class FailoverPhoenixConnection2IT {
             doTestBasicOperationsWithConnection(connection, tableName, haGroupName);
             fail("Should have failed since CRR is stale");
         } catch (SQLException e) {
-            //Should fail but CRR must be refresh after detecting Stale version
-            LOG.info("Printing exception", e);
-            assertEquals(e.getErrorCode(), STALE_CRR_RETHROW_AFTER_REFRESH.getErrorCode());
+            //Should fail but CRR must be refreshed after detecting Stale version
+            assertEquals(e.getErrorCode(), FAILOVER_IN_PROGRESS.getErrorCode());
         }
 
         //Connection creation should fail as now we don't have active cluster
@@ -547,21 +546,42 @@ public class FailoverPhoenixConnection2IT {
         //Expire the CRR cache in HAGroup for scan operation
         sleepThreadFor(3000);
 
-        //Read operation should refresh the CRR leading to success and also update the CRR in HAGroup
+        //Read operation should refresh the CRR leading to success and also update the CRR in
+        //HAGroup and continuing the scan and giving back correct result
         try (ResultSet rs = connection.createStatement().executeQuery(
                 String.format("SELECT v FROM %s WHERE v = 1984", tableName))) {
             rs.next();
-
+            assertEquals(1984, rs.getInt(1));
             //Wait for transition to complete
             sleepThreadFor(2000);
 
-            String url = JDBCUtil.formatUrl(CLUSTERS.getJdbcUrl1(haGroup), haGroup.getRoleRecord().getRegistryType());
-            assertEquals(haGroup.getRoleRecord().getRole(url), ACTIVE_TO_STANDBY);
+            String url = JDBCUtil.formatUrl(CLUSTERS.getJdbcUrl1(haGroup), haGroup.getRoleRecord()
+                    .getRegistryType());
+            assertEquals(ACTIVE_TO_STANDBY, haGroup.getRoleRecord().getRole(url));
         } catch (SQLException e) {
             fail(String.format("Should have succeeded but failed with exception {}", e));
         }
 
-        CLUSTERS.transitClusterRole(haGroup, STANDBY, STANDBY, true);
+        CLUSTERS.transitClusterRole(haGroup, STANDBY, STANDBY, false);
+
+        //Expire the CRR cache in HAGroup for scan operation
+        sleepThreadFor(3000);
+
+        //Read operation should refresh the CRR leading to success and also update the CRR in
+        //HAGroup but will throw exception as role for ACTIVE cluster is changing
+        try (ResultSet rs = connection.createStatement().executeQuery(
+                String.format("SELECT v FROM %s WHERE v = 1984", tableName))) {
+            fail("Should have thrown an exception");
+        } catch (SQLException e) {
+            assertEquals(e.getErrorCode(), FAILOVER_IN_PROGRESS.getErrorCode());
+
+            //wait for transition to happen to prevent Flakiness of tests
+            sleepThreadFor(2000);
+            String url = JDBCUtil.formatUrl(CLUSTERS.getJdbcUrl1(haGroup), haGroup.getRoleRecord()
+                    .getRegistryType());
+            assertEquals(STANDBY, haGroup.getRoleRecord().getRole(url));
+        }
+
         //connections should be closed
         assertTrue(((FailoverPhoenixConnection)connection).getWrappedConnection().isClosed());
 
@@ -630,19 +650,18 @@ public class FailoverPhoenixConnection2IT {
         try (ResultSet rs = connection.createStatement().executeQuery(
                 String.format("SELECT v FROM %s WHERE id = %d", tableName, id))) {
             rs.next();
-            if (!rs.isClosed()) {
-                assertEquals(rs.getInt(1), id);
-            }
-
-            //Wait for transition to finish
-            sleepThreadFor(3000);
-
-            String url = JDBCUtil.formatUrl(CLUSTERS.getJdbcUrl1(haGroup), haGroup.getRoleRecord().getRegistryType());
-            assertEquals(haGroup.getRoleRecord().getRole(url), STANDBY);
+            //It will fail but can't be tested here as it happens asynchronously. But CRR must have
+            //been refreshed
         } catch (SQLException e) {
-            fail(String.format("Should have succeeded but failed with exception {}", e));
+            //Expected but not caught here as we are running the iterator asynchronously within a
+            //separate thread managed by the ExecutorService.
         }
+        //To prevent flakiness sleep for 2 sec
+        sleepThreadFor(2000);
 
+        String url = JDBCUtil.formatUrl(CLUSTERS.getJdbcUrl1(haGroup), haGroup.getRoleRecord()
+                .getRegistryType());
+        assertEquals(STANDBY, haGroup.getRoleRecord().getRole(url));
         //connections should be closed
         assertTrue(((FailoverPhoenixConnection)connection).getWrappedConnection().isClosed());
 
@@ -705,7 +724,6 @@ public class FailoverPhoenixConnection2IT {
             getConnectionQueryServices(CLUSTERS.getJdbcUrl1(haGroup), clientProperties);
         ConnectionInfo connInfo = ConnectionInfo.create(CLUSTERS.getJdbcUrl1(haGroup),
             PhoenixDriver.INSTANCE.getQueryServices().getProps(), clientProperties);
-        
 
         //transit url1 to ACTIVE_TO_STANDBY and url2 to STANDBY_TO_ACTIVE and refresh the roleRecord of haGroup
         //This transition should not affect the connections as ACTIVE --> ACTIVE_TO_STANDBY is noop

@@ -95,7 +95,7 @@ public class HAGroupStoreTestUtil {
             if (clusterUrl2 != null) {
                 queryBuilder.append("CLUSTER_URL_2, ");
             }
-            queryBuilder.append("POLICY, VERSION_1, VERSION_2) ");
+            queryBuilder.append("POLICY, VERSION_CLUSTER_1, VERSION_CLUSTER_2) ");
             queryBuilder.append("VALUES ('" + haGroupName + "', ");
             if (zkUrl != null) {
                 queryBuilder.append("'" + zkUrl + "', ");

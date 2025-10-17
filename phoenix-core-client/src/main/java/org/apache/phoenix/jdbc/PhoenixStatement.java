@@ -63,6 +63,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 
@@ -378,14 +379,30 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                     pointLookup = true;
                                 } else if (connection.getHAGroup() != null &&
                                     connection.getHAGroup().getRoleRecord() != null &&
-                                    connection.getHAGroup().getRoleRecord().getPolicy() == HighAvailabilityPolicy.FAILOVER &&
+                                    connection.getHAGroup().getRoleRecord().getPolicy()
+                                            == HighAvailabilityPolicy.FAILOVER &&
                                     connection.getHAGroup().shouldRefreshRoleRecord()) {
-                                    //Refresh the cluster role record for failover policy if refresh interval is expired
-                                    LOGGER.info("Refreshing cluster role record for before executing query");
-                                    connection.getHAGroup().refreshClusterRoleRecord(false);
-                                } 
-
-                                
+                                    //Refresh the cluster role record for failover policy if refresh
+                                    //interval is expired
+                                    LOGGER.debug("Refreshing cluster role record for before " +
+                                            "executing query");
+                                    Optional<String> activeUrl = connection.getHAGroup()
+                                            .getRoleRecord().getActiveUrl();
+                                    if (!connection.getHAGroup().refreshClusterRoleRecord(false)) {
+                                        LOGGER.error("Error while refreshing HAGroup");
+                                    }
+                                    if (!activeUrl.equals(connection.getHAGroup().getRoleRecord()
+                                            .getActiveUrl())) {
+                                        throw new SQLExceptionInfo.Builder(SQLExceptionCode
+                                                .FAILOVER_IN_PROGRESS)
+                                                .setMessage(String.format("Operation failed " +
+                                                                "because failover is in " +
+                                                                "progress for HAGroup %s",
+                                                        connection.getHAGroup()))
+                                                .build()
+                                                .buildException();
+                                    }
+                                }
                                 Iterator<TableRef> tableRefs = plan.getSourceRefs().iterator();
                                 connection.getMutationState().sendUncommitted(tableRefs);
                                 plan =

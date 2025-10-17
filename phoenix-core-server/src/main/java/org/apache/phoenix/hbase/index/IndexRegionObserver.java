@@ -640,20 +640,20 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             //slow due to haGroupStoreClient initialization) and caching will give us old result
             //in case one cluster is unreachable instead of UNKNOWN.
 
-            boolean isHAGroupOnClientStale = haGroupStoreManager
+                boolean isHAGroupOnClientStale = haGroupStoreManager
                     .isHAGroupOnClientStale(haGroupName);
-            if (StringUtils.isNotBlank(haGroupName) && isHAGroupOnClientStale) {
-              throw new StaleClusterRoleRecordException(String.format("HAGroupStoreRecord is "
+                if (StringUtils.isNotBlank(haGroupName) && isHAGroupOnClientStale) {
+                    throw new StaleClusterRoleRecordException(String.format("HAGroupStoreRecord is "
                     + "stale for haGroup %s on client", haGroupName));
-            }
+                }
 
-            //Check if mutation's haGroup is stale
-            if (StringUtils.isNotBlank(haGroupName)
-                    && haGroupStoreManager.isMutationBlocked(haGroupName)) {
-              throw new MutationBlockedIOException("Blocking Mutation as Some CRRs are in "
+                //Check if mutation's haGroup is stale
+                if (StringUtils.isNotBlank(haGroupName)
+                        && haGroupStoreManager.isMutationBlocked(haGroupName)) {
+                    throw new MutationBlockedIOException("Blocking Mutation as Some CRRs are in "
                     + "ACTIVE_TO_STANDBY state and "
                     + "CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
-            }
+                }
           }
           preBatchMutateWithExceptions(c, miniBatchOp);
           return;

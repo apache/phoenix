@@ -238,39 +238,26 @@ public class TableResultIterator implements ResultIterator {
             } catch (SQLException e) {
                 LOGGER.error("Error while scanning table {} , scan {}", htable, scan);
                 if (isStaleClusterRoleRecordExceptionExistsInThrowable(e)) {
-                    LOGGER.debug("StaleHAGroupStoreException found refreshing HAGroup");
+                    LOGGER.debug("StaleClusterRoleRecordException found refreshing HAGroup");
                     if (plan.getContext().getConnection().getHAGroup() != null) {
                         HighAvailabilityGroup haGroup = plan.getContext().getConnection()
                                 .getHAGroup();
                         if (!haGroup.refreshClusterRoleRecord(true)) {
-                            throw new SQLExceptionInfo.Builder(SQLExceptionCode
-                                .STALE_CRR_RETHROW_AFTER_REFRESH_FAILED).setMessage(
-                                    String.format("Error while running operation Stale " +
-                                        "ClusterRoleRecord for HAGroup %s found with " +
-                                        "version %s, refreshing HAGroup failed :- %s",
-                                        haGroup, haGroup.getRoleRecord().getVersion(), e))
-                                        .build().buildException();
+                            LOGGER.error("Error while refreshing HAGroup for Stale " +
+                                    "ClusterRoleRecord found for scan operation");
                         }
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.FAILOVER_IN_PROGRESS)
+                                .setMessage(String.format("Operation failed because failover is " +
+                                                "in progress for HAGroup %s, %s",
+                                        haGroup, e)).build().buildException();
                     }
-                    //If we retry the scan but as this is only for pointLookup, those are supposed
-                    //to be fast, should we just fail and let application retry? Also Staleness is
-                    //mostly detected when we are trying to access a cluster which we are not
-                    //supposed to, refreshing for these scenarios lead to closure of connections and
-                    //their referenced objects including ResultSets and Iterators, so this might not
-                    //happen unless refreshing is taking some time.
-                    if (plan.getContext().getScanRanges().isPointLookup()) {
-                        if (!closed) {
-                            try {
-                                //TODO: Need to handle MultiPointLookups case.
-                                Scan newScan = ScanUtil.newScan(scan);
-                                newScan.withStartRow(newScan.getAttribute(SCAN_ACTUAL_START_ROW));
-                                this.scanIterator = plan.iterator(scanGrouper, newScan);
-                                lastTuple = scanIterator.next();
-                            } catch (Exception e1) {
-                                throw ClientUtil.parseServerException(e1);
-                            }
-                        }
-                    }
+                    //If we receive StaleClusterRoleRecordException, that means Operation was
+                    //supposed to be executed on Active Cluster but was in reality was sent to
+                    //STANDBY Cluster, that can happen only when Failover is in Progress, So we
+                    //catch that exception and refresh the roleRecord of HAGroup, which will lead to
+                    //closure of all current connections (as they are not Active anymore), which
+                    //will close the Statements and Iterators associated with the connections, that
+                    //is why we are not retrying the operation and throwing the exception.
                 }
 
                 try {
