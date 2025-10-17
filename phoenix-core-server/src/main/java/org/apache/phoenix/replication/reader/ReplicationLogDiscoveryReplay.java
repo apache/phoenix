@@ -125,7 +125,7 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
     private final AtomicReference<ReplicationReplayState> replicationReplayState =
             new AtomicReference<>(ReplicationReplayState.NOT_INITIALIZED);
 
-    public static final List<HAGroupStoreRecord.HAGroupState> WRITER_DEGRADED_STATES =
+    private static final List<HAGroupStoreRecord.HAGroupState> WRITER_DEGRADED_STATES =
             Arrays.asList(HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY_FOR_WRITER,
                     HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY);
 
@@ -299,18 +299,21 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
                 // Normal processing, update last round processed and in-sync
                 setLastRoundProcessed(replicationRound);
                 setLastRoundInSync(replicationRound);
-                LOG.info("Processed round {} successfully, lastRoundProcessed={}, " +
-                        "lastRoundInSync={}", replicationRound, lastRoundProcessed,
+                LOG.info("Processed round {} successfully, lastRoundProcessed={}, "
+                                + "lastRoundInSync={}", replicationRound, lastRoundProcessed,
                         lastRoundInSync);
                 break;
 
             case DEGRADED:
                 // Only update last round processed, and NOT last round in sync
                 setLastRoundProcessed(replicationRound);
-                LOG.info("Processed round {} successfully with cluster in DEGRADED " +
-                        "state, lastRoundProcessed={}, lastRoundInSync={}", replicationRound,
-                        lastRoundProcessed, lastRoundInSync);
+                LOG.info("Processed round {} successfully with cluster in DEGRADED "
+                                + "state, lastRoundProcessed={}, lastRoundInSync={}",
+                        replicationRound, lastRoundProcessed, lastRoundInSync);
                 break;
+
+            default:
+                throw new IllegalStateException("Unexpected state: " + currentState);
             }
             optionalNextRound = getNextRoundToProcess();
         }
