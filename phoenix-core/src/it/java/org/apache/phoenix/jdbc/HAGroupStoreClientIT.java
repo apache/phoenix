@@ -569,9 +569,6 @@ public class HAGroupStoreClientIT extends BaseTest {
 
         HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
 
-        // Get the current record
-        HAGroupStoreRecord currentRecord = haGroupStoreClient.getHAGroupStoreRecord();
-
         // Try to set to ACTIVE_IN_SYNC immediately (should not update due to timing)
         haGroupStoreClient.setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
 
@@ -596,8 +593,10 @@ public class HAGroupStoreClientIT extends BaseTest {
         createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, initialRecord);
 
         HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
-        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS + DEFAULT_ZK_SESSION_TIMEOUT);
-
+        
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS 
+                + (long) Math.ceil(DEFAULT_ZK_SESSION_TIMEOUT 
+                    * HAGroupStoreClient.ZK_SESSION_TIMEOUT_MULTIPLIER));
         haGroupStoreClient.setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -663,7 +662,6 @@ public class HAGroupStoreClientIT extends BaseTest {
         createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, initialRecord);
 
         HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient.getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
-        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // First transition: ACTIVE -> ACTIVE_TO_STANDBY
         haGroupStoreClient.setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
@@ -1012,7 +1010,29 @@ public class HAGroupStoreClientIT extends BaseTest {
                 // All fields successfully verified - sync job is working correctly
             }
 
-            // 6. Test cleanup - verify executor shuts down properly when we exit try-with-resources
+            // 7. Test that no update happens when system table is already in sync with ZK
+            // Wait for another sync cycle to ensure the optimization is working
+            Thread.sleep(16000); // Wait for another sync cycle (15s + 1s buffer)
+
+            // Verify system table still has the same data (no redundant updates)
+            try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(
+                    JDBC_PROTOCOL_ZK + JDBC_PROTOCOL_SEPARATOR + zkUrl);
+                 Statement stmt = conn.createStatement();
+                 ResultSet rs = stmt.executeQuery("SELECT * FROM " + SYSTEM_HA_GROUP_NAME +
+                         " WHERE HA_GROUP_NAME = '" + haGroupName + "'")) {
+                assertTrue("System table should still have record", rs.next());
+
+                // Verify all fields remain the same (no unnecessary update occurred)
+                assertEquals("VERSION should remain the same", 5L, rs.getLong("VERSION"));
+                assertEquals("CLUSTER_ROLE_1 should remain the same", "STANDBY", rs.getString("CLUSTER_ROLE_1"));
+                assertEquals("CLUSTER_ROLE_2 should remain the same", "STANDBY_TO_ACTIVE", rs.getString("CLUSTER_ROLE_2"));
+                assertEquals("CLUSTER_URL_1 should remain the same", updatedClusterUrl, rs.getString("CLUSTER_URL_1"));
+                assertEquals("CLUSTER_URL_2 should remain the same", updatedPeerClusterUrl, rs.getString("CLUSTER_URL_2"));
+
+                // This verifies that the equals() check is working and preventing redundant updates
+            }
+
+            // 8. Test cleanup - verify executor shuts down properly when we exit try-with-resources
             // The close() will be called automatically, and we can verify shutdown in a separate assertion
             haGroupStoreClient.close(); // Explicit close to test shutdown
             assertTrue("Sync executor should be shutdown after close", syncExecutor.isShutdown());

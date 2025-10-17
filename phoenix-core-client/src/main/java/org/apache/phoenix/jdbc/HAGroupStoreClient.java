@@ -339,52 +339,8 @@ public class HAGroupStoreClient implements Closeable {
                         currentHAGroupStoreRecord.getPeerClusterUrl(),
                         currentHAGroupStoreRecord.getAdminCRRVersion()
                 );
-                try {
-                    phoenixHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName,
+                phoenixHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName,
                         newHAGroupStoreRecord, currentHAGroupStoreRecordStat.getVersion());
-                } catch (StaleHAGroupStoreRecordVersionException e) {
-                    LOGGER.debug("Failed to update HAGroupStoreRecord for HA group "
-                            + haGroupName + " with cached stat version "
-                            + currentHAGroupStoreRecordStat.getVersion()
-                            + " checking if state is already updated in local cache", e);
-                    // Check against current cached record,
-                    // hoping that record is updated in local cache.
-                    Pair<HAGroupStoreRecord, Stat> cachedRecord
-                            = fetchCacheRecordAndPopulateZKIfNeeded(pathChildrenCache, ClusterType.LOCAL);
-                    currentHAGroupStoreRecord = cachedRecord.getLeft();
-                    Stat previousHAGroupStoreRecordStat = currentHAGroupStoreRecordStat;
-                    currentHAGroupStoreRecordStat = cachedRecord.getRight();
-                    if (currentHAGroupStoreRecord != null
-                            && currentHAGroupStoreRecord.getHAGroupState()
-                            == haGroupState)  {
-                        LOGGER.debug("HAGroupStoreRecord for HA group {} is already updated"
-                                        + "with state {}, no need to update",
-                                haGroupName, haGroupState);
-                        return;
-                    // Check if the cached version is not updated, only then check with ZK.
-                    } else if (currentHAGroupStoreRecordStat != null
-                            && currentHAGroupStoreRecordStat.getVersion()
-                            == previousHAGroupStoreRecordStat.getVersion()) {
-                        try {
-                            // Check against record in ZK, if it is still what we don't want,
-                            // throw an exception.
-                            currentHAGroupStoreRecord
-                                    = phoenixHaAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName)
-                                    .getLeft();
-                            if (currentHAGroupStoreRecord != null
-                                    && currentHAGroupStoreRecord.getHAGroupState()
-                                    == haGroupState) {
-                                LOGGER.debug("HAGroupStoreRecord for HA group {} is already "
-                                                + "updated with state {}, no need to update",
-                                        haGroupName, haGroupState);
-                                return;
-                            }
-                            throw e;
-                        } catch (StaleHAGroupStoreRecordVersionException e2) {
-                            throw e2;
-                        }
-                    }
-                }
                 // If cluster role is changing, if so, we update,
                 // the system table on best effort basis.
                 // We also have a periodic job which syncs the ZK
@@ -543,6 +499,31 @@ public class HAGroupStoreClient implements Closeable {
 
         public long getAdminCRRVersion() {
             return adminCRRVersion;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null || getClass() != obj.getClass()) {
+                return false;
+            }
+            SystemTableHAGroupRecord other = (SystemTableHAGroupRecord) obj;
+            return Objects.equals(policy, other.policy)
+                    && Objects.equals(clusterRole, other.clusterRole)
+                    && Objects.equals(peerClusterRole, other.peerClusterRole)
+                    && Objects.equals(clusterUrl, other.clusterUrl)
+                    && Objects.equals(peerClusterUrl, other.peerClusterUrl)
+                    && Objects.equals(zkUrl, other.zkUrl)
+                    && Objects.equals(peerZKUrl, other.peerZKUrl)
+                    && adminCRRVersion == other.adminCRRVersion;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(policy, clusterRole, peerClusterRole, clusterUrl,
+                    peerClusterUrl, zkUrl, peerZKUrl, adminCRRVersion);
         }
     }
 
@@ -763,7 +744,7 @@ public class HAGroupStoreClient implements Closeable {
                     ? peerZkRecord.getClusterRole()
                     : ClusterRoleRecord.ClusterRole.UNKNOWN;
             // Create SystemTableHAGroupRecord from ZK data
-            SystemTableHAGroupRecord systemTableRecord = new SystemTableHAGroupRecord(
+            SystemTableHAGroupRecord newSystemTableRecord = new SystemTableHAGroupRecord(
                     HighAvailabilityPolicy.valueOf(zkRecord.getPolicy()),
                     zkRecord.getClusterRole(),
                     peerClusterRole,
@@ -773,8 +754,17 @@ public class HAGroupStoreClient implements Closeable {
                     zkRecord.getPeerZKUrl(),
                     zkRecord.getAdminCRRVersion()
             );
+
+            // Read existing record from system table to check if update is needed
+            SystemTableHAGroupRecord existingSystemTableRecord = getSystemTableHAGroupRecord(haGroupName);
+            if (newSystemTableRecord.equals(existingSystemTableRecord)) {
+                LOGGER.debug("System table record is already up-to-date for HA group {}, skipping update",
+                        haGroupName);
+                return;
+            }
+
             // Update system table with ZK data
-            updateSystemTableHAGroupRecordSilently(haGroupName, systemTableRecord);
+            updateSystemTableHAGroupRecordSilently(haGroupName, newSystemTableRecord);
             LOGGER.info("Successfully synced ZK data to system table for HA group {}", haGroupName);
         } catch (IOException | SQLException e) {
             long syncIntervalSeconds = conf.getLong(HA_GROUP_STORE_SYNC_INTERVAL_SECONDS,
@@ -907,8 +897,8 @@ public class HAGroupStoreClient implements Closeable {
     }
 
 
-    private Pair<HAGroupStoreRecord, Stat> fetchCacheRecordAndPopulateZKIfNeeded(PathChildrenCache cache,
-                                                                                 ClusterType cacheType) {
+    private Pair<HAGroupStoreRecord, Stat> fetchCacheRecordAndPopulateZKIfNeeded(
+            PathChildrenCache cache, ClusterType cacheType) {
         if (cache == null) {
             LOGGER.warn("{} HAGroupStoreClient cache is null, returning null", cacheType);
             return Pair.of(null, null);
@@ -945,7 +935,7 @@ public class HAGroupStoreClient implements Closeable {
         if (childData != null) {
             Pair<HAGroupStoreRecord, Stat> recordAndStat
                     = extractHAGroupStoreRecordOrNull(childData);
-            LOGGER.info("Built {} cluster record: {}", cacheType, recordAndStat.getLeft());
+            LOGGER.debug("Built {} cluster record: {}", cacheType, recordAndStat.getLeft());
             return recordAndStat;
         }
         return Pair.of(null, null);
@@ -1034,7 +1024,9 @@ public class HAGroupStoreClient implements Closeable {
         long waitTime = 0L;
         if (currentHAGroupState.isTransitionAllowed(newHAGroupState)) {
             if (currentHAGroupState == HAGroupState.ACTIVE_NOT_IN_SYNC
-                    && newHAGroupState == HAGroupState.ACTIVE_IN_SYNC) {
+                    && newHAGroupState == HAGroupState.ACTIVE_IN_SYNC
+                    || (currentHAGroupState == HAGroupState.ACTIVE_NOT_IN_SYNC_TO_STANDBY
+                    && newHAGroupState == HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY)) {
                 waitTime = waitTimeForSyncModeInMs;
             }
         } else {
