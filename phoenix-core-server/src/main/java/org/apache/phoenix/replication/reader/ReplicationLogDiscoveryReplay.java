@@ -215,7 +215,7 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
                 minimumTimestampFromFiles = Math.min(minimumTimestampFromFiles,
                         minTimestampFromInProgressFiles.get());
             }
-            if(minTimestampFromNewFiles.isPresent()) {
+            if (minTimestampFromNewFiles.isPresent()) {
                 LOG.info("Found minimum timestamp from IN files as {}",
                         minTimestampFromNewFiles.get());
                 minimumTimestampFromFiles = Math.min(minimumTimestampFromFiles,
@@ -235,8 +235,8 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
             this.lastRoundInSync = new ReplicationRound(lastRoundProcessed.getStartTime(),
                     lastRoundProcessed.getEndTime());
         }
-        LOG.info("Initialized last round processed as {}, last round in sync as {} and " +
-                "replication replay state as {}", lastRoundProcessed, lastRoundInSync,
+        LOG.info("Initialized last round processed as {}, last round in sync as {} and "
+                        + "replication replay state as {}", lastRoundProcessed, lastRoundInSync,
                 replicationReplayState);
     }
 
@@ -276,8 +276,8 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
             try {
                 processRound(replicationRound);
             } catch (IOException e) {
-                LOG.error("Failed processing replication round {}. Will retry in next " +
-                        "scheduled run.", replicationRound, e);
+                LOG.error("Failed processing replication round {}. Will retry in next "
+                        + "scheduled run.", replicationRound, e);
                 break; // stop this run, retry later
             }
 
@@ -285,32 +285,32 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
             ReplicationReplayState currentState = replicationReplayState.get();
 
             switch (currentState) {
-                case SYNCED_RECOVERY:
-                    // Rewind to last in-sync round
-                    LOG.info("SYNCED_RECOVERY detected, rewinding to lastRoundInSync={}",
-                            lastRoundInSync);
-                    setLastRoundProcessed(lastRoundInSync);
-                    // Only reset to NORMAL if state hasn't been flipped to DEGRADED
-                    replicationReplayState.compareAndSet(ReplicationReplayState.SYNCED_RECOVERY,
-                            ReplicationReplayState.SYNC);
-                    break;
+            case SYNCED_RECOVERY:
+                // Rewind to last in-sync round
+                LOG.info("SYNCED_RECOVERY detected, rewinding to lastRoundInSync={}",
+                        lastRoundInSync);
+                setLastRoundProcessed(lastRoundInSync);
+                // Only reset to NORMAL if state hasn't been flipped to DEGRADED
+                replicationReplayState.compareAndSet(ReplicationReplayState.SYNCED_RECOVERY,
+                        ReplicationReplayState.SYNC);
+                break;
 
-                case SYNC:
-                    // Normal processing, update last round processed and in-sync
-                    setLastRoundProcessed(replicationRound);
-                    setLastRoundInSync(replicationRound);
-                    LOG.info("Processed round {} successfully, lastRoundProcessed={}, " +
-                            "lastRoundInSync={}", replicationRound, lastRoundProcessed,
-                            lastRoundInSync);
-                    break;
+            case SYNC:
+                // Normal processing, update last round processed and in-sync
+                setLastRoundProcessed(replicationRound);
+                setLastRoundInSync(replicationRound);
+                LOG.info("Processed round {} successfully, lastRoundProcessed={}, " +
+                        "lastRoundInSync={}", replicationRound, lastRoundProcessed,
+                        lastRoundInSync);
+                break;
 
-                case DEGRADED:
-                    // Only update last round processed, and NOT last round in sync
-                    setLastRoundProcessed(replicationRound);
-                    LOG.info("Processed round {} successfully with cluster in DEGRADED " +
-                            "state, lastRoundProcessed={}, lastRoundInSync={}", replicationRound,
-                            lastRoundProcessed, lastRoundInSync);
-                    break;
+            case DEGRADED:
+                // Only update last round processed, and NOT last round in sync
+                setLastRoundProcessed(replicationRound);
+                LOG.info("Processed round {} successfully with cluster in DEGRADED " +
+                        "state, lastRoundProcessed={}, lastRoundInSync={}", replicationRound,
+                        lastRoundProcessed, lastRoundInSync);
+                break;
             }
             optionalNextRound = getNextRoundToProcess();
         }
@@ -399,7 +399,7 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
     protected HAGroupStoreRecord getHAGroupRecord() throws IOException {
         Optional<HAGroupStoreRecord> optionalHAGroupStateRecord =
                 HAGroupStoreManager.getInstance(conf).getHAGroupStoreRecord(haGroupName);
-        if(!optionalHAGroupStateRecord.isPresent()) {
+        if (!optionalHAGroupStateRecord.isPresent()) {
             throw new IOException("HAGroupStoreRecord not found for HA Group: " + haGroupName);
         }
         return optionalHAGroupStateRecord.get();

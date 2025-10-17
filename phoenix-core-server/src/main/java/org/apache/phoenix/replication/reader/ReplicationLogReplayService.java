@@ -19,7 +19,6 @@ package org.apache.phoenix.replication.reader;
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -150,7 +149,7 @@ public class ReplicationLogReplayService {
      * Waits for the configured shutdown timeout before forcing shutdown if necessary.
      * @throws IOException if there's an error during shutdown
      */
-    public void stop() throws IOException, SQLException {
+    public void stop() throws IOException {
         boolean isEnabled = conf.getBoolean(PHOENIX_REPLICATION_REPLAY_ENABLED,
             DEFAULT_REPLICATION_REPLAY_ENABLED);
         if (!isEnabled) {
