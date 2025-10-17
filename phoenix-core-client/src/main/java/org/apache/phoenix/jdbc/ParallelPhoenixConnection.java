@@ -118,7 +118,7 @@ public class ParallelPhoenixConnection implements PhoenixMonitoredConnection {
   }
 
   @VisibleForTesting
-  ParallelPhoenixContext getContext() {
+  public ParallelPhoenixContext getContext() {
     return this.context;
   }
 
