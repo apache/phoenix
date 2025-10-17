@@ -43,14 +43,16 @@ import org.junit.rules.TestName;
 
 import java.util.Map;
 
-import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE;
+import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 @Category({NeedsOwnMiniClusterTest.class })
-public class PhoenixRegionServerEndpointITWithConsistentFailover extends BaseTest {
+public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTest {
 
     private static final Long ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS = 5000L;
     private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS = new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();
@@ -83,30 +85,43 @@ public class PhoenixRegionServerEndpointITWithConsistentFailover extends BaseTes
         assertNotNull(coprocessor);
         ServerRpcController controller = new ServerRpcController();
 
-        try (PhoenixHAAdmin peerHAAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster2().getConfiguration(), ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE)) {
-            HAGroupStoreRecord peerHAGroupStoreRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, HAGroupState.STANDBY);
+        try (PhoenixHAAdmin peerHAAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster2().getConfiguration(), ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE)) {
+            HAGroupStoreRecord peerHAGroupStoreRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
+            HAGroupState.STANDBY, null, HighAvailabilityPolicy.FAILOVER.toString(),
+             CLUSTERS.getZkUrl2(), CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(), 0L);
             peerHAAdmin.createHAGroupStoreRecordInZooKeeper(peerHAGroupStoreRecord);
         }
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // First getClusterRoleRecord to check if HAGroupStoreClient is working as expected
         ClusterRoleRecord expectedRecord = buildExpectedClusterRoleRecord(haGroupName, ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY);
-        executeGetClusterRoleRecordAndVerify(coprocessor, controller, haGroupName, expectedRecord);
+        executeGetClusterRoleRecordAndVerify(coprocessor, controller, haGroupName, expectedRecord, false);
 
-        // Change the role of local cluster to ACTIVE_TO_STANDBY in System Table
+        // Delete the HAGroupStoreRecord from ZK
+        try (PhoenixHAAdmin haAdmin = new PhoenixHAAdmin(config, ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE)) {
+            haAdmin.deleteHAGroupStoreRecordInZooKeeper(haGroupName);
+        }
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+        // Delete the row from System Table
+        HAGroupStoreTestUtil.deleteHAGroupRecordInSystemTable(haGroupName, zkUrl);
+
+        // Expect exception when getting ClusterRoleRecord because the HAGroupStoreRecord is not found in ZK
+        controller = new ServerRpcController();
+        executeGetClusterRoleRecordAndVerify(coprocessor, controller, haGroupName, expectedRecord, true);
+
+        // Update the row
         HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(), zkUrl, peerZkUrl,
         ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY, ClusterRoleRecord.ClusterRole.STANDBY, null);
 
-        // Cluster Role will still be same as before as cache is not invalidated yet
-        executeGetClusterRoleRecordAndVerify(coprocessor, controller, haGroupName, expectedRecord);
-
         // Now Invalidate the Cache
+        controller = new ServerRpcController();
         coprocessor.invalidateHAGroupStoreClient(controller, getInvalidateHAGroupStoreClientRequest(haGroupName), null);
         assertFalse(controller.failed());
 
         // Local Cluster Role will be updated to ACTIVE_TO_STANDBY as cache is invalidated
+        controller = new ServerRpcController();
         ClusterRoleRecord expectedRecordAfterInvalidation = buildExpectedClusterRoleRecord(haGroupName, ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY, ClusterRoleRecord.ClusterRole.STANDBY);
-        executeGetClusterRoleRecordAndVerify(coprocessor, controller, haGroupName, expectedRecordAfterInvalidation);
+        executeGetClusterRoleRecordAndVerify(coprocessor, controller, haGroupName, expectedRecordAfterInvalidation, false);
     }
 
     private ClusterRoleRecord buildExpectedClusterRoleRecord(String haGroupName, ClusterRoleRecord.ClusterRole localRole, ClusterRoleRecord.ClusterRole peerRole) {
@@ -114,10 +129,10 @@ public class PhoenixRegionServerEndpointITWithConsistentFailover extends BaseTes
     }
 
     private void executeGetClusterRoleRecordAndVerify(PhoenixRegionServerEndpoint coprocessor, ServerRpcController controller,
-                                                      String haGroupName, ClusterRoleRecord expectedRecord) {
+                                                      String haGroupName, ClusterRoleRecord expectedRecord, boolean expectControllerFail) {
         RpcCallback<RegionServerEndpointProtos.GetClusterRoleRecordResponse> rpcCallback = createValidationCallback(haGroupName, expectedRecord);
         coprocessor.getClusterRoleRecord(controller, getClusterRoleRecordRequest(haGroupName), rpcCallback);
-        assertFalse(controller.failed());
+        assertEquals(expectControllerFail, controller.failed());
     }
 
     private RpcCallback<RegionServerEndpointProtos.GetClusterRoleRecordResponse> createValidationCallback(String haGroupName, ClusterRoleRecord expectedRecord) {
@@ -151,7 +166,6 @@ public class PhoenixRegionServerEndpointITWithConsistentFailover extends BaseTes
     private RegionServerEndpointProtos.InvalidateHAGroupStoreClientRequest getInvalidateHAGroupStoreClientRequest(String haGroupName) {
         RegionServerEndpointProtos.InvalidateHAGroupStoreClientRequest.Builder requestBuilder
                 = RegionServerEndpointProtos.InvalidateHAGroupStoreClientRequest.newBuilder();
-        requestBuilder.setBroadcastUpdate(false);
         requestBuilder.setHaGroupName(ByteStringer.wrap(Bytes.toBytes(haGroupName)));
         return  requestBuilder.build();
     }

@@ -155,6 +155,7 @@ import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverCons
 import static org.apache.phoenix.hbase.index.util.IndexManagementUtil.rethrowIndexingException;
 import static org.apache.phoenix.index.PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB;
 import static org.apache.phoenix.index.PhoenixIndexBuilderHelper.RETURN_RESULT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_HA_GROUP_NAME;
 import static org.apache.phoenix.query.QueryServices.SYNCHRONOUS_REPLICATION_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SYNCHRONOUS_REPLICATION_ENABLED;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
@@ -630,15 +631,20 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
               throw new IOException("HAGroupStoreManager is null "
                       + "for current cluster, check configuration");
           }
-          // Extract HAGroupName from the mutations
-          final Set<String> haGroupNames = extractHAGroupNameAttribute(miniBatchOp);
-          // Check if mutation is blocked for any of the HAGroupNames
-          for (String haGroupName : haGroupNames) {
-              if (StringUtils.isNotBlank(haGroupName)
-                      && haGroupStoreManager.isMutationBlocked(haGroupName)) {
-                  throw new MutationBlockedIOException("Blocking Mutation as Some CRRs are in "
-                          + "ACTIVE_TO_STANDBY state and "
-                          + "CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
+          String tableName
+                  = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
+          // We don't want to check for mutation blocking for the system ha group table
+          if (!tableName.equals(SYSTEM_HA_GROUP_NAME)) {
+              // Extract HAGroupName from the mutations
+              final Set<String> haGroupNames = extractHAGroupNameAttribute(miniBatchOp);
+              // Check if mutation is blocked for any of the HAGroupNames
+              for (String haGroupName : haGroupNames) {
+                  if (StringUtils.isNotBlank(haGroupName)
+                          && haGroupStoreManager.isMutationBlocked(haGroupName)) {
+                      throw new MutationBlockedIOException("Blocking Mutation as Some CRRs are in "
+                              + "ACTIVE_TO_STANDBY state and "
+                              + "CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
+                  }
               }
           }
           preBatchMutateWithExceptions(c, miniBatchOp);

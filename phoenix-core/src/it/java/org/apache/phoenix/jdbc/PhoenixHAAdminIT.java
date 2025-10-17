@@ -41,7 +41,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE;
+import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -71,8 +71,8 @@ public class PhoenixHAAdminIT extends BaseTest {
 
     @Before
     public void before() throws Exception {
-        haAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster1().getConfiguration(), ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
-        peerHaAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster2().getConfiguration(), ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
+        haAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster1().getConfiguration(), ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
+        peerHaAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster2().getConfiguration(), ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
         cleanupTestZnodes();
     }
 
@@ -100,7 +100,9 @@ public class PhoenixHAAdminIT extends BaseTest {
         HAGroupStoreRecord record = new HAGroupStoreRecord(
                 "v1.0",
                 haGroupName,
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
+                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
+                null, HighAvailabilityPolicy.FAILOVER.toString(), peerZKUrl,
+                CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(), 0L
         );
 
         // Create the record in ZooKeeper
@@ -121,7 +123,9 @@ public class PhoenixHAAdminIT extends BaseTest {
         HAGroupStoreRecord record1 = new HAGroupStoreRecord(
                 "v1.0",
                 haGroupName,
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
+                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
+                null, HighAvailabilityPolicy.FAILOVER.toString(), CLUSTERS.getZkUrl2(),
+                CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(), 0L
         );
 
         // Create the first record
@@ -131,7 +135,9 @@ public class PhoenixHAAdminIT extends BaseTest {
         HAGroupStoreRecord record2 = new HAGroupStoreRecord(
                 "v1.0",
                 haGroupName,
-                HAGroupStoreRecord.HAGroupState.STANDBY
+                HAGroupStoreRecord.HAGroupState.STANDBY,
+                null, HighAvailabilityPolicy.FAILOVER.toString(), CLUSTERS.getZkUrl2(),
+                CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(), 0L
         );
 
         // This should throw an exception due to NodeExistsException handling
@@ -162,7 +168,9 @@ public class PhoenixHAAdminIT extends BaseTest {
         HAGroupStoreRecord initialRecord = new HAGroupStoreRecord(
                 "v1.0",
                 haGroupName,
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
+                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
+                null, HighAvailabilityPolicy.FAILOVER.toString(), peerZKUrl,
+                CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(), 0L
         );
 
         haAdmin.createHAGroupStoreRecordInZooKeeper(initialRecord);
@@ -176,7 +184,9 @@ public class PhoenixHAAdminIT extends BaseTest {
         HAGroupStoreRecord updatedRecord = new HAGroupStoreRecord(
                 "v1.0",
                 haGroupName,
-                HAGroupStoreRecord.HAGroupState.STANDBY
+                HAGroupStoreRecord.HAGroupState.STANDBY,
+                null, HighAvailabilityPolicy.FAILOVER.toString(), peerZKUrl,
+                CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(), 0L
         );
 
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, updatedRecord, currentVersion);
@@ -200,7 +210,9 @@ public class PhoenixHAAdminIT extends BaseTest {
         HAGroupStoreRecord initialRecord = new HAGroupStoreRecord(
                 "v1.0",
                 haGroupName,
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
+                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
+                null, HighAvailabilityPolicy.FAILOVER.toString(), peerZKUrl,
+                CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(), 0L
         );
 
         haAdmin.createHAGroupStoreRecordInZooKeeper(initialRecord);
@@ -214,7 +226,9 @@ public class PhoenixHAAdminIT extends BaseTest {
         HAGroupStoreRecord updatedRecord = new HAGroupStoreRecord(
                 "v1.0",
                 haGroupName,
-                HAGroupStoreRecord.HAGroupState.STANDBY
+                HAGroupStoreRecord.HAGroupState.STANDBY,
+                null, HighAvailabilityPolicy.FAILOVER.toString(), peerZKUrl,
+                CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(), 0L
         );
 
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, updatedRecord, currentVersion);
@@ -223,7 +237,9 @@ public class PhoenixHAAdminIT extends BaseTest {
         HAGroupStoreRecord anotherUpdate = new HAGroupStoreRecord(
                 "v1.0",
                 haGroupName,
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY
+                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY,
+                null, HighAvailabilityPolicy.FAILOVER.toString(), peerZKUrl,
+                CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(), 0L
         );
 
         try {
@@ -244,7 +260,9 @@ public class PhoenixHAAdminIT extends BaseTest {
         HAGroupStoreRecord initialRecord = new HAGroupStoreRecord(
                 "v1.0",
                 haGroupName,
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
+                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
+                null, HighAvailabilityPolicy.FAILOVER.toString(), peerZKUrl,
+                CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(), 0L
         );
 
         haAdmin.createHAGroupStoreRecordInZooKeeper(initialRecord);
@@ -285,7 +303,9 @@ public class PhoenixHAAdminIT extends BaseTest {
         HAGroupStoreRecord initialRecord = new HAGroupStoreRecord(
                 "v1.0",
                 haGroupName,
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
+                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
+                null, HighAvailabilityPolicy.FAILOVER.toString(), peerZKUrl,
+                CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(), 0L
         );
 
         haAdmin.createHAGroupStoreRecordInZooKeeper(initialRecord);
@@ -304,7 +324,9 @@ public class PhoenixHAAdminIT extends BaseTest {
         HAGroupStoreRecord updatedRecord = new HAGroupStoreRecord(
                 "v1.0",
                 haGroupName,
-                HAGroupStoreRecord.HAGroupState.STANDBY
+                HAGroupStoreRecord.HAGroupState.STANDBY,
+                null, HighAvailabilityPolicy.FAILOVER.toString(), peerZKUrl,
+                CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(), 0L
         );
 
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, updatedRecord, stat.getVersion());
@@ -331,7 +353,9 @@ public class PhoenixHAAdminIT extends BaseTest {
         HAGroupStoreRecord initialRecord = new HAGroupStoreRecord(
                 "v1.0",
                 haGroupName,
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
+                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
+                null, HighAvailabilityPolicy.FAILOVER.toString(), CLUSTERS.getZkUrl2(),
+                CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(), 0L
         );
 
         haAdmin.createHAGroupStoreRecordInZooKeeper(initialRecord);
@@ -362,7 +386,9 @@ public class PhoenixHAAdminIT extends BaseTest {
                     HAGroupStoreRecord updatedRecord = new HAGroupStoreRecord(
                             "v1.0",
                             haGroupName,
-                            HAGroupStoreRecord.HAGroupState.STANDBY
+                            HAGroupStoreRecord.HAGroupState.STANDBY,
+                            null, HighAvailabilityPolicy.FAILOVER.toString(), CLUSTERS.getZkUrl2(),
+                            CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(), 0L
                     );
 
                     // All threads use the same currentVersion, causing conflicts
@@ -416,7 +442,9 @@ public class PhoenixHAAdminIT extends BaseTest {
         HAGroupStoreRecord initialRecord = new HAGroupStoreRecord(
                 "v1.0",
                 haGroupName,
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
+                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
+                null, HighAvailabilityPolicy.FAILOVER.toString(), CLUSTERS.getZkUrl2(),
+                CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(), 0L
         );
 
         haAdmin.createHAGroupStoreRecordInZooKeeper(initialRecord);
@@ -443,7 +471,9 @@ public class PhoenixHAAdminIT extends BaseTest {
                     HAGroupStoreRecord updatedRecord = new HAGroupStoreRecord(
                             "v1.0",
                             haGroupName,
-                            threadId % 2 == 0 ? HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC : HAGroupStoreRecord.HAGroupState.STANDBY
+                            threadId % 2 == 0 ? HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC : HAGroupStoreRecord.HAGroupState.STANDBY,
+                            null, HighAvailabilityPolicy.FAILOVER.toString(), CLUSTERS.getZkUrl2(),
+                            CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(), 0L
                     );
 
                     // Update with the current version
