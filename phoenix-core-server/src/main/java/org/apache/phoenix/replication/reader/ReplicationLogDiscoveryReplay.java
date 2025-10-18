@@ -158,8 +158,8 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
 
         HAGroupStateListener triggerFailoverListner = (groupName, toState, modifiedTime,
                 clusterType) -> {
-            if (clusterType == ClusterType.LOCAL &&
-                    HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE.equals(toState)) {
+            if (clusterType == ClusterType.LOCAL
+                    && HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE.equals(toState)) {
                 failoverPending.set(true);
                 LOG.info("Failover trigger detected for {}. replicationReplayState={}. "
                                 + "Setting failover pending to {}",
@@ -169,8 +169,8 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
 
         HAGroupStateListener abortFailoverListner = (groupName, toState, modifiedTime,
                 clusterType) -> {
-            if (clusterType == ClusterType.LOCAL &&
-                    HAGroupStoreRecord.HAGroupState.ABORT_TO_STANDBY.equals(toState)) {
+            if (clusterType == ClusterType.LOCAL
+                    && HAGroupStoreRecord.HAGroupState.ABORT_TO_STANDBY.equals(toState)) {
                 failoverPending.set(false);
                 LOG.info("Failover abort detected for {}. replicationReplayState={}. "
                                 + "Setting failover pending to {}",
@@ -277,7 +277,7 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
                 replicationReplayState);
 
         // Update the failoverPending variable during initialization
-        if(HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE.equals(
+        if (HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE.equals(
                 haGroupStoreRecord.getHAGroupState())) {
             failoverPending.compareAndSet(false, true);
         }
@@ -361,7 +361,7 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
             optionalNextRound = getNextRoundToProcess();
         }
 
-        if(!optionalNextRound.isPresent() && shouldTriggerFailover()) {
+        if (!optionalNextRound.isPresent() && shouldTriggerFailover()) {
             LOG.info("No more rounds to process, lastRoundInSync={}, lastRoundProcessed={}. "
                             + "Failover is triggered & in progress directory is empty. "
                             + "Marking cluster state as {}",
@@ -479,7 +479,7 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
     }
 
     protected void triggerFailover() throws IOException, InvalidClusterRoleTransitionException {
-        // TODO: Update cluster state to ACTIVE_IN_SYNC within try block 
+        // TODO: Update cluster state to ACTIVE_IN_SYNC within try block
         // (once API is supported in HA Store)
         // Throw any exception back to caller.
     }
