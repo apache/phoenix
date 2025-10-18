@@ -30,6 +30,7 @@ import java.util.concurrent.CompletionException;
 import java.util.function.Function;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.monitoring.MetricType;
+import org.apache.phoenix.monitoring.ScanMetricsGroup;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
@@ -129,10 +130,10 @@ public class ParallelPhoenixResultSet extends DelegateResultSet
   }
 
   @Override
-  public List<Map<String, Map<MetricType, Long>>> getSlowestScanReadMetrics() {
-    List<Map<String, Map<MetricType, Long>>> metrics;
+  public List<List<ScanMetricsGroup>> getTopNSlowestScanReadMetrics() {
+    List<List<ScanMetricsGroup>> metrics;
     if (rs != null) {
-      metrics = ((PhoenixMonitoredResultSet) rs).getSlowestScanReadMetrics();
+      metrics = ((PhoenixMonitoredResultSet) rs).getTopNSlowestScanReadMetrics();
     } else {
       metrics = Collections.emptyList();
     }

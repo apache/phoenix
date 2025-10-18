@@ -42,11 +42,6 @@ public interface ResultIterator extends SQLCloseable {
     public void explain(List<String> planSteps,
       ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
     }
-
-    @Override
-    public String getIteratorId() {
-      return "";
-    }
   };
 
   /**
@@ -71,6 +66,4 @@ public interface ResultIterator extends SQLCloseable {
    *                                     individual attributes of ExplainPlan.
    */
   void explain(List<String> planSteps, ExplainPlanAttributesBuilder explainPlanAttributesBuilder);
-
-  public String getIteratorId();
 }

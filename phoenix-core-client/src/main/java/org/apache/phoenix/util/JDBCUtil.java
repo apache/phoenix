@@ -148,13 +148,24 @@ public class JDBCUtil {
       : Integer.parseInt(batchSizeStr));
   }
 
-  public static boolean getSlowestScanReadMetricsEnabled(String url, Properties info,
+  public static int getSlowestScanMetricsCount(String url, Properties info, ReadOnlyProps props)
+    throws SQLException {
+    String slowestScanMetricsCountStr =
+      findProperty(url, info, QueryServices.SLOWEST_SCAN_METRICS_COUNT);
+    return (slowestScanMetricsCountStr == null
+      ? props.getInt(QueryServices.SLOWEST_SCAN_METRICS_COUNT,
+        QueryServicesOptions.DEFAULT_SLOWEST_SCAN_METRICS_COUNT)
+      : Integer.parseInt(slowestScanMetricsCountStr));
+  }
+
+  public static boolean isScanMetricsByRegionEnabled(String url, Properties info,
     ReadOnlyProps props) throws SQLException {
-    String slowestScanReadMetricsEnabledStr =
-      findProperty(url, info, QueryServices.SLOWEST_SCAN_READ_METRICS_ENABLED);
-    return (slowestScanReadMetricsEnabledStr == null
-      ? props.getBoolean(QueryServices.SLOWEST_SCAN_READ_METRICS_ENABLED, false)
-      : Boolean.parseBoolean(slowestScanReadMetricsEnabledStr));
+    String scanMetricsByRegionEnabledStr =
+      findProperty(url, info, QueryServices.SCAN_METRICS_BY_REGION_ENABLED);
+    return (scanMetricsByRegionEnabledStr == null
+      ? props.getBoolean(QueryServices.SCAN_METRICS_BY_REGION_ENABLED,
+        QueryServicesOptions.DEFAULT_SCAN_METRICS_BY_REGION_ENABLED)
+      : Boolean.parseBoolean(scanMetricsByRegionEnabledStr));
   }
 
   public static long getMutateBatchSizeBytes(String url, Properties info, ReadOnlyProps props)

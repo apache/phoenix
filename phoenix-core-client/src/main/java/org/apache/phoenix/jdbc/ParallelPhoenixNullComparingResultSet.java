@@ -34,6 +34,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.monitoring.MetricType;
+import org.apache.phoenix.monitoring.ScanMetricsGroup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -242,10 +243,10 @@ public class ParallelPhoenixNullComparingResultSet extends DelegateResultSet
   }
 
   @Override
-  public List<Map<String, Map<MetricType, Long>>> getSlowestScanReadMetrics() {
-    List<Map<String, Map<MetricType, Long>>> metrics;
+  public List<List<ScanMetricsGroup>> getTopNSlowestScanReadMetrics() {
+    List<List<ScanMetricsGroup>> metrics;
     if (rs != null) {
-      metrics = ((PhoenixMonitoredResultSet) rs).getSlowestScanReadMetrics();
+      metrics = ((PhoenixMonitoredResultSet) rs).getTopNSlowestScanReadMetrics();
     } else {
       metrics = Collections.emptyList();
     }

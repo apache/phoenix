@@ -72,6 +72,7 @@ import org.apache.phoenix.log.QueryStatus;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.monitoring.OverAllQueryMetrics;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
+import org.apache.phoenix.monitoring.ScanMetricsGroup;
 import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
@@ -1497,8 +1498,8 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
   }
 
   @Override
-  public List<Map<String, Map<MetricType, Long>>> getSlowestScanReadMetrics() {
-    return context.getSlowestScanReadMetrics();
+  public List<List<ScanMetricsGroup>> getTopNSlowestScanReadMetrics() {
+    return context.getTopNSlowestScanReadMetrics();
   }
 
   @Override

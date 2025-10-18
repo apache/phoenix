@@ -72,9 +72,4 @@ public class MockResultIterator implements PeekingResultIterator {
     return tuple;
   }
 
-  @Override
-  public String getIteratorId() {
-    return "";
-  }
-
 }

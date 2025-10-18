@@ -67,6 +67,7 @@ import org.apache.phoenix.monitoring.HTableThreadPoolMetricsManager;
 import org.apache.phoenix.monitoring.HistogramDistribution;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.monitoring.PhoenixTableMetric;
+import org.apache.phoenix.monitoring.ScanMetricsGroup;
 import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.monitoring.connectionqueryservice.ConnectionQueryServicesMetricsManager;
 import org.apache.phoenix.query.QueryConstants;
@@ -1547,10 +1548,10 @@ public class PhoenixRuntime {
     return resultSet.getReadMetrics();
   }
 
-  public static List<Map<String, Map<MetricType, Long>>> getSlowestScanReadMetrics(ResultSet rs)
+  public static List<List<ScanMetricsGroup>> getTopNSlowestScanReadMetrics(ResultSet rs)
     throws SQLException {
     PhoenixMonitoredResultSet resultSet = rs.unwrap(PhoenixMonitoredResultSet.class);
-    return resultSet.getSlowestScanReadMetrics();
+    return resultSet.getTopNSlowestScanReadMetrics();
   }
 
   @Deprecated

@@ -53,6 +53,7 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
+import org.apache.hadoop.hbase.client.metrics.ScanMetricsRegionInfo;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.phoenix.compat.hbase.CompatScanMetrics;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
@@ -61,6 +62,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.monitoring.CombinableMetric;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
+import org.apache.phoenix.monitoring.ScanMetricsGroup;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.tuple.ResultTuple;
@@ -85,6 +87,7 @@ public class ScanningResultIterator implements ResultIterator {
   private final boolean isMapReduceContext;
   private final long maxQueryEndTime;
   private final TableName tableName;
+  private final boolean isScanMetricsByRegionEnabled;
 
   private long dummyRowCounter = 0;
 
@@ -114,6 +117,7 @@ public class ScanningResultIterator implements ResultIterator {
         ScanningResultPostValidResultCaller.class);
     this.scanningResultPostValidResultCaller = ReflectionUtils.newInstance(validResultCallerClazz,
       context.getConnection().getQueryServices().getConfiguration());
+    this.isScanMetricsByRegionEnabled = scan.isScanMetricsByRegionEnabled();
   }
 
   @Override
@@ -206,7 +210,15 @@ public class ScanningResultIterator implements ResultIterator {
 
       changeMetric(GLOBAL_PAGED_ROWS_COUNTER, dummyRowCounter);
 
-      context.getSlowestScanReadMetricsQueue().add(tableName.getNameAsString(), scanMetricsMap);
+      ScanMetricsGroup scanMetricsGroup;
+      if (isScanMetricsByRegionEnabled) {
+        Map<ScanMetricsRegionInfo, Map<String, Long>> scanMetricsByRegion =
+          scanMetrics.collectMetricsByRegion();
+        scanMetricsGroup =
+          new ScanMetricsGroup(tableName.getNameAsString(), scanMetricsByRegion, scanMetricsMap);
+      } else {
+        scanMetricsGroup = new ScanMetricsGroup(tableName.getNameAsString(), scanMetricsMap);
+      }
 
       scanMetricsUpdated = true;
     }
