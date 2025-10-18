@@ -17,9 +17,7 @@
  */
 package org.apache.phoenix.monitoring;
 
-import java.util.Collections;
 import java.util.Deque;
-import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedDeque;
 
 public class SlowestScanReadMetricsQueue {
@@ -62,13 +60,5 @@ public class SlowestScanReadMetricsQueue {
       return ScanMetricsGroup.EMPTY_SCAN_METRICS_GROUP;
     }
     return slowestScanMetricsGroup;
-  }
-
-  public static long extractMillisBetweenNexts(Map<String, Map<MetricType, Long>> input) {
-    Map<MetricType,
-      Long> metrics = input.values().iterator().hasNext()
-        ? input.values().iterator().next()
-        : Collections.emptyMap();
-    return metrics.getOrDefault(MetricType.COUNT_MILLS_BETWEEN_NEXTS, Long.MIN_VALUE);
   }
 }
