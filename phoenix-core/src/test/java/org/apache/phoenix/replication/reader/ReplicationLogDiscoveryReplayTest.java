@@ -19,6 +19,7 @@ package org.apache.phoenix.replication.reader;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -39,11 +40,15 @@ import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertNotNull;
+import static org.mockito.Mockito.when;
 
 public class ReplicationLogDiscoveryReplayTest {
 
@@ -219,7 +224,8 @@ public class ReplicationLogDiscoveryReplayTest {
                 HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY_FOR_WRITER,
                 expectedLastRoundProcessed,
                 expectedLastRoundInSync,
-                ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED);
+                ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED,
+                false);
     }
 
     @Test
@@ -246,7 +252,8 @@ public class ReplicationLogDiscoveryReplayTest {
                 HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY_FOR_WRITER,
                 expectedLastRoundProcessed,
                 expectedLastRoundInSync,
-                ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED);
+                ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED,
+                false);
     }
 
     @Test
@@ -272,7 +279,8 @@ public class ReplicationLogDiscoveryReplayTest {
                 HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY,
                 expectedLastRoundProcessed,
                 expectedLastRoundInSync,
-                ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED);
+                ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED,
+                false);
     }
 
     @Test
@@ -297,7 +305,8 @@ public class ReplicationLogDiscoveryReplayTest {
                 HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY_FOR_WRITER,
                 expectedLastRoundProcessed,
                 expectedLastRoundInSync,
-                ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED);
+                ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED,
+                false);
     }
 
     @Test
@@ -321,7 +330,8 @@ public class ReplicationLogDiscoveryReplayTest {
                 HAGroupStoreRecord.HAGroupState.STANDBY,
                 expectedLastRoundProcessed,
                 expectedLastRoundInSync,
-                ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
+                ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
+                false);
     }
 
     @Test
@@ -345,7 +355,8 @@ public class ReplicationLogDiscoveryReplayTest {
                 HAGroupStoreRecord.HAGroupState.STANDBY,
                 expectedLastRoundProcessed,
                 expectedLastRoundInSync,
-                ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
+                ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
+                false);
     }
 
     @Test
@@ -370,7 +381,8 @@ public class ReplicationLogDiscoveryReplayTest {
                 HAGroupStoreRecord.HAGroupState.STANDBY,
                 expectedLastRoundProcessed,
                 expectedLastRoundInSync,
-                ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
+                ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
+                false);
     }
 
     @Test
@@ -393,7 +405,36 @@ public class ReplicationLogDiscoveryReplayTest {
                 HAGroupStoreRecord.HAGroupState.STANDBY,
                 expectedLastRoundProcessed,
                 expectedLastRoundInSync,
-                ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
+                ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
+                false);
+    }
+
+    /**
+     * Tests initializeLastRoundProcessed in STANDBY_TO_ACTIVE state.
+     * Validates that failoverPending is set to true when HA group state is STANDBY_TO_ACTIVE.
+     */
+    @Test
+    public void testInitializeLastRoundProcessed_StandbyToActiveState() throws IOException {
+        long currentTime = 1704153600000L; // 2024-01-02 00:00:00
+
+        TestableReplicationLogTracker fileTracker = createReplicationLogTracker(conf, haGroupName, localFs, standbyUri);
+        fileTracker.init();
+        long roundTimeMills = fileTracker.getReplicationShardDirectoryManager()
+                .getReplicationRoundDurationSeconds() * 1000L;
+
+        ReplicationRound expectedLastRoundProcessed = new ReplicationRound(currentTime - roundTimeMills, currentTime);
+        ReplicationRound expectedLastRoundInSync = new ReplicationRound(currentTime - roundTimeMills, currentTime);
+
+        testInitializeLastRoundProcessedHelper(
+                currentTime,
+                null,
+                null,
+                null,
+                HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE,
+                expectedLastRoundProcessed,
+                expectedLastRoundInSync,
+                ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
+                true);
     }
 
     /**
@@ -408,6 +449,7 @@ public class ReplicationLogDiscoveryReplayTest {
      * @param expectedLastRoundProcessed Expected lastRoundProcessed after initialization
      * @param expectedLastRoundInSync Expected lastRoundInSync after initialization
      * @param expectedReplayState Expected ReplicationReplayState after initialization
+     * @param expectedFailoverPending Expected failoverPending value after initialization
      */
     private void testInitializeLastRoundProcessedHelper(
             long currentTime,
@@ -417,7 +459,8 @@ public class ReplicationLogDiscoveryReplayTest {
             HAGroupStoreRecord.HAGroupState haGroupState,
             ReplicationRound expectedLastRoundProcessed,
             ReplicationRound expectedLastRoundInSync,
-            ReplicationLogDiscoveryReplay.ReplicationReplayState expectedReplayState) throws IOException {
+            ReplicationLogDiscoveryReplay.ReplicationReplayState expectedReplayState,
+            boolean expectedFailoverPending) throws IOException {
 
         TestableReplicationLogTracker fileTracker = createReplicationLogTracker(conf, haGroupName, localFs, standbyUri);
         fileTracker.init();
@@ -473,6 +516,10 @@ public class ReplicationLogDiscoveryReplayTest {
                 // Verify state
                 assertEquals("Replication replay state should match expected",
                         expectedReplayState, discovery.getReplicationReplayState());
+
+                // Verify failoverPending
+                assertEquals("Failover pending should match expected",
+                        expectedFailoverPending, discovery.getFailoverPending());
             } finally {
                 EnvironmentEdgeManager.reset();
             }
@@ -544,6 +591,9 @@ public class ReplicationLogDiscoveryReplayTest {
                 assertEquals("State should remain SYNC",
                         ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
                         discovery.getReplicationReplayState());
+
+                // Verify triggerFailover was not called
+                assertEquals("triggerFailover should not be called", 0, discovery.getTriggerFailoverCallCount());
             } finally {
                 EnvironmentEdgeManager.reset();
             }
@@ -583,8 +633,6 @@ public class ReplicationLogDiscoveryReplayTest {
                 discovery.setLastRoundInSync(lastRoundInSyncBeforeReplay);
                 discovery.setReplicationReplayState(ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED);
 
-                ReplicationRound lastRoundBeforeReplay = discovery.getLastRoundProcessed();
-
                 discovery.replay();
 
                 // Verify processRound was called 3 times
@@ -615,6 +663,9 @@ public class ReplicationLogDiscoveryReplayTest {
                 assertEquals("State should remain DEGRADED",
                         ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED,
                         discovery.getReplicationReplayState());
+
+                // Verify triggerFailover was not called
+                assertEquals("triggerFailover should not be called", 0, discovery.getTriggerFailoverCallCount());
             } finally {
                 EnvironmentEdgeManager.reset();
             }
@@ -711,6 +762,9 @@ public class ReplicationLogDiscoveryReplayTest {
                 assertEquals("State should transition to SYNC",
                         ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
                         discovery.getReplicationReplayState());
+
+                // Verify triggerFailover was not called
+                assertEquals("triggerFailover should not be called", 0, discovery.getTriggerFailoverCallCount());
             } finally {
                 EnvironmentEdgeManager.reset();
             }
@@ -752,8 +806,6 @@ public class ReplicationLogDiscoveryReplayTest {
 
                 // Simulate listener changing state to DEGRADED after 2 rounds
                 discovery.setStateChangeAfterRounds(2, ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED);
-
-                ReplicationRound lastRoundBeforeReplay = discovery.getLastRoundProcessed();
 
                 discovery.replay();
 
@@ -797,6 +849,9 @@ public class ReplicationLogDiscoveryReplayTest {
                 assertEquals("State should be DEGRADED",
                         ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED,
                         discovery.getReplicationReplayState());
+
+                // Verify triggerFailover was not called
+                assertEquals("triggerFailover should not be called", 0, discovery.getTriggerFailoverCallCount());
             } finally {
                 EnvironmentEdgeManager.reset();
             }
@@ -817,7 +872,6 @@ public class ReplicationLogDiscoveryReplayTest {
             long initialEndTime = 1704499200000L;
             long roundTimeMills = fileTracker.getReplicationShardDirectoryManager().getReplicationRoundDurationSeconds() * 1000L;
             long bufferMillis = (long) (roundTimeMills * 0.15);
-            long totalWaitTime = roundTimeMills + bufferMillis;
 
             // Create HAGroupStoreRecord for DEGRADED state
             HAGroupStoreRecord mockRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
@@ -892,6 +946,9 @@ public class ReplicationLogDiscoveryReplayTest {
                 assertEquals("State should be SYNC after SYNCED_RECOVERY",
                         ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
                         discovery.getReplicationReplayState());
+
+                // Verify triggerFailover was not called
+                assertEquals("triggerFailover should not be called", 0, discovery.getTriggerFailoverCallCount());
             } finally {
                 EnvironmentEdgeManager.reset();
             }
@@ -912,7 +969,6 @@ public class ReplicationLogDiscoveryReplayTest {
             long initialEndTime = 1704672000000L;
             long roundTimeMills = fileTracker.getReplicationShardDirectoryManager().getReplicationRoundDurationSeconds() * 1000L;
             long bufferMillis = (long) (roundTimeMills * 0.15);
-            long totalWaitTime = roundTimeMills + bufferMillis;
 
             // Create HAGroupStoreRecord for STANDBY state
             HAGroupStoreRecord mockRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
@@ -1026,6 +1082,9 @@ public class ReplicationLogDiscoveryReplayTest {
                 assertEquals("State should be SYNC after SYNCED_RECOVERY",
                         ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
                         discoveryWithTransitions.getReplicationReplayState());
+
+                // Verify triggerFailover was not called
+                assertEquals("triggerFailover should not be called", 0, discoveryWithTransitions.getTriggerFailoverCallCount());
             } finally {
                 EnvironmentEdgeManager.reset();
             }
@@ -1086,6 +1145,93 @@ public class ReplicationLogDiscoveryReplayTest {
                 assertEquals("State should remain SYNC",
                         ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
                         discovery.getReplicationReplayState());
+
+                // Verify triggerFailover was not called
+                assertEquals("triggerFailover should not be called", 0, discovery.getTriggerFailoverCallCount());
+            } finally {
+                EnvironmentEdgeManager.reset();
+            }
+        } finally {
+            fileTracker.close();
+        }
+    }
+
+    /**
+     * Tests replay method when failoverPending becomes true during processing and triggers failover after all rounds.
+     * Validates that triggerFailover is called exactly once when all conditions are met.
+     */
+    @Test
+    public void testReplay_TriggerFailoverAfterProcessing() throws IOException {
+        TestableReplicationLogTracker fileTracker = createReplicationLogTracker(conf, haGroupName, localFs, standbyUri);
+
+        try {
+            long initialEndTime = 1704153600000L; // 2024-01-02 00:00:00
+            long roundTimeMills = fileTracker.getReplicationShardDirectoryManager().getReplicationRoundDurationSeconds() * 1000L;
+            long bufferMillis = (long) (roundTimeMills * 0.15);
+            long totalWaitTime = roundTimeMills + bufferMillis;
+
+            // Create HAGroupStoreRecord for STANDBY state
+            HAGroupStoreRecord mockRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
+                    HAGroupStoreRecord.HAGroupState.STANDBY, initialEndTime);
+
+            // Set current time to allow processing 3 rounds
+            long currentTime = initialEndTime + (3 * totalWaitTime);
+            EnvironmentEdge edge = () -> currentTime;
+            EnvironmentEdgeManager.injectEdge(edge);
+
+            try {
+                TestableReplicationLogDiscoveryReplay discovery =
+                        new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord);
+                ReplicationRound initialRound = new ReplicationRound(initialEndTime - roundTimeMills, initialEndTime);
+                discovery.setLastRoundProcessed(initialRound);
+                discovery.setLastRoundInSync(initialRound);
+                discovery.setReplicationReplayState(ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
+
+                // Set up state change: after processing 2 rounds, set failoverPending to true
+                discovery.setStateChangeAfterRounds(2, ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
+                discovery.setFailoverPendingAfterRounds(2, true);
+
+                discovery.replay();
+
+                // Verify processRound was called 3 times
+                assertEquals("processRound should be called 3 times", 3, discovery.getProcessRoundCallCount());
+
+                // Verify the rounds passed to processRound
+                List<ReplicationRound> processedRounds = discovery.getProcessedRounds();
+                ReplicationRound expectedRound1 = new ReplicationRound(initialEndTime, initialEndTime + roundTimeMills);
+                assertEquals("First round should match expected", expectedRound1, processedRounds.get(0));
+
+                ReplicationRound expectedRound2 = new ReplicationRound(initialEndTime + roundTimeMills, initialEndTime + (2 * roundTimeMills));
+                assertEquals("Second round should match expected", expectedRound2, processedRounds.get(1));
+
+                ReplicationRound expectedRound3 = new ReplicationRound(initialEndTime + (2 * roundTimeMills), initialEndTime + (3 * roundTimeMills));
+                assertEquals("Third round should match expected", expectedRound3, processedRounds.get(2));
+
+                // Verify lastRoundProcessed was updated to 3rd round
+                ReplicationRound lastRoundProcessed = discovery.getLastRoundProcessed();
+                assertNotNull("Last round processed should not be null", lastRoundProcessed);
+                assertEquals("Last round processed should be updated to 3rd round",
+                        expectedRound3, lastRoundProcessed);
+
+                // Verify lastRoundInSync was also updated in SYNC state
+                ReplicationRound lastRoundInSync = discovery.getLastRoundInSync();
+                assertNotNull("Last round in sync should not be null", lastRoundInSync);
+                assertEquals("Last round in sync should be updated to match last round processed in SYNC state",
+                        expectedRound3, lastRoundInSync);
+
+                // Verify state remains SYNC
+                assertEquals("State should remain SYNC",
+                        ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
+                        discovery.getReplicationReplayState());
+
+                // Verify triggerFailover was called exactly once
+                assertEquals("triggerFailover should be called exactly once", 1, discovery.getTriggerFailoverCallCount());
+
+                // Verify failoverPending is set to false after failover is triggered
+                assertFalse("failoverPending should be set to false after failover is triggered", 
+                        discovery.getFailoverPending());
+
+                // TODO: Ensure cluster state is updated to ACTIVE_IN_SYNC once failover is triggered.
             } finally {
                 EnvironmentEdgeManager.reset();
             }
@@ -1104,12 +1250,135 @@ public class ReplicationLogDiscoveryReplayTest {
      * Testable implementation of ReplicationLogTracker for unit testing.
      * Exposes protected methods to allow test access.
      */
-    private class TestableReplicationLogTracker extends ReplicationLogTracker {
+    private static class TestableReplicationLogTracker extends ReplicationLogTracker {
         public TestableReplicationLogTracker(Configuration conf, String haGroupName, FileSystem fileSystem, URI rootURI, DirectoryType directoryType, MetricsReplicationLogTracker metrics) {
             super(conf, haGroupName, fileSystem, rootURI, directoryType, metrics);
         }
         public Path getInProgressDirPath() {
             return super.getInProgressDirPath();
+        }
+    }
+
+    /**
+     * Tests the shouldTriggerFailover method with various combinations of failoverPending,
+     * lastRoundInSync, lastRoundProcessed and in-progress files state.
+     */
+    @Test
+    public void testShouldTriggerFailover() throws IOException {
+        // Set up current time for consistent testing
+        long currentTime = 1704153660000L; // 00:01:00
+        EnvironmentEdge edge = () -> currentTime;
+        EnvironmentEdgeManager.injectEdge(edge);
+
+        // Initialize haGroupStoreRecord
+        final ReplicationLogTracker tracker = Mockito.spy(createReplicationLogTracker(conf, haGroupName, localFs, standbyUri));
+        long initialEndTime = currentTime - tracker.getReplicationShardDirectoryManager().getReplicationRoundDurationSeconds() * 1000L;
+        HAGroupStoreRecord haGroupStoreRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
+                HAGroupStoreRecord.HAGroupState.STANDBY, initialEndTime);
+
+        try {
+            // Create test rounds
+            ReplicationRound testRound = new ReplicationRound(1704153600000L, 1704153660000L);
+            ReplicationRound differentRound = new ReplicationRound(1704153540000L, 1704153600000L);
+
+            // Test Case 1: All conditions true - should return true
+            {
+                when(tracker.getInProgressFiles()).thenReturn(Collections.emptyList());
+                TestableReplicationLogDiscoveryReplay discovery = new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
+                discovery.setLastRoundInSync(testRound);
+                discovery.setLastRoundProcessed(testRound);
+                discovery.setFailoverPending(true);
+
+                assertTrue("Should trigger failover when all conditions are met",
+                        discovery.shouldTriggerFailover());
+            }
+
+            // Test Case 2: failoverPending is false - should return false
+            {
+                when(tracker.getInProgressFiles()).thenReturn(Collections.emptyList());
+                TestableReplicationLogDiscoveryReplay discovery = new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
+                discovery.setLastRoundInSync(testRound);
+                discovery.setLastRoundProcessed(testRound);
+                discovery.setFailoverPending(false);
+
+                assertFalse("Should not trigger failover when failoverPending is false",
+                        discovery.shouldTriggerFailover());
+            }
+
+            // Test Case 3: lastRoundInSync not equals lastRoundProcessed - should return false
+            {
+                when(tracker.getInProgressFiles()).thenReturn(Collections.emptyList());
+                TestableReplicationLogDiscoveryReplay discovery = new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
+                discovery.setLastRoundInSync(testRound);
+                discovery.setLastRoundProcessed(differentRound);
+                discovery.setFailoverPending(true);
+
+                assertFalse("Should not trigger failover when lastRoundInSync != lastRoundProcessed",
+                        discovery.shouldTriggerFailover());
+            }
+
+            // Test Case 4: in-progress files not empty - should return false
+            {
+                when(tracker.getInProgressFiles()).thenReturn(Collections.singletonList(new Path("test.plog")));
+                TestableReplicationLogDiscoveryReplay discovery = new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
+                discovery.setLastRoundInSync(testRound);
+                discovery.setLastRoundProcessed(testRound);
+                discovery.setFailoverPending(true);
+
+                assertFalse("Should not trigger failover when in-progress files are not empty",
+                        discovery.shouldTriggerFailover());
+            }
+
+            // Test Case 5: failoverPending false AND lastRoundInSync != lastRoundProcessed - should return false
+            {
+                when(tracker.getInProgressFiles()).thenReturn(Collections.emptyList());
+                TestableReplicationLogDiscoveryReplay discovery = new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
+                discovery.setLastRoundInSync(testRound);
+                discovery.setLastRoundProcessed(differentRound);
+                discovery.setFailoverPending(false);
+
+                assertFalse("Should not trigger failover when failoverPending is false and rounds differ",
+                        discovery.shouldTriggerFailover());
+            }
+
+            // Test Case 6: failoverPending false AND in-progress files not empty - should return false
+            {
+                when(tracker.getInProgressFiles()).thenReturn(Collections.singletonList(new Path("test.plog")));
+                TestableReplicationLogDiscoveryReplay discovery = new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
+                discovery.setLastRoundInSync(testRound);
+                discovery.setLastRoundProcessed(testRound);
+                discovery.setFailoverPending(false);
+
+                assertFalse("Should not trigger failover when failoverPending is false and files exist",
+                        discovery.shouldTriggerFailover());
+            }
+
+            // Test Case 7: lastRoundInSync != lastRoundProcessed AND in-progress files not empty - should return false
+            {
+                when(tracker.getInProgressFiles()).thenReturn(Collections.singletonList(new Path("test.plog")));
+                TestableReplicationLogDiscoveryReplay discovery = new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
+                discovery.setLastRoundInSync(testRound);
+                discovery.setLastRoundProcessed(differentRound);
+                discovery.setFailoverPending(true);
+
+                assertFalse("Should not trigger failover when rounds differ and files exist",
+                        discovery.shouldTriggerFailover());
+            }
+
+            // Test Case 8: All conditions false - should return false
+            {
+                when(tracker.getInProgressFiles()).thenReturn(Collections.singletonList(new Path("test.plog")));
+                TestableReplicationLogDiscoveryReplay discovery = new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
+                discovery.setLastRoundInSync(testRound);
+                discovery.setLastRoundProcessed(differentRound);
+                discovery.setFailoverPending(false);
+
+                assertFalse("Should not trigger failover when all conditions are false",
+                        discovery.shouldTriggerFailover());
+            }
+
+        } finally {
+            EnvironmentEdgeManager.reset();
         }
     }
 
@@ -1123,6 +1392,8 @@ public class ReplicationLogDiscoveryReplayTest {
         private int roundsProcessed = 0;
         private int stateChangeAfterRounds = -1;
         private ReplicationReplayState newStateAfterRounds = null;
+        private int failoverPendingChangeAfterRounds = -1;
+        private boolean failoverPendingValueAfterRounds = false;
         private final List<ReplicationRound> processedRounds = new java.util.ArrayList<>();
 
         public TestableReplicationLogDiscoveryReplay(ReplicationLogTracker replicationLogReplayFileTracker,
@@ -1148,24 +1419,38 @@ public class ReplicationLogDiscoveryReplayTest {
                 LOG.info("Rounds Processed: {}, newStateAfterRounds: {}", roundsProcessed, newStateAfterRounds);
                 setReplicationReplayState(newStateAfterRounds);
             }
+            
+            // Simulate failover pending change by listener after certain number of rounds
+            if (failoverPendingChangeAfterRounds > 0 && roundsProcessed == failoverPendingChangeAfterRounds) {
+                LOG.info("Rounds Processed: {}, setting failoverPending to: {}", roundsProcessed, failoverPendingValueAfterRounds);
+                setFailoverPending(failoverPendingValueAfterRounds);
+            }
             // Don't actually process files in tests
-        }
-
-        public ReplicationRound getLastRoundInSync() {
-            return super.getLastRoundInSync();
-        }
-
-        public ReplicationReplayState getReplicationReplayState() {
-            return super.getReplicationReplayState();
-        }
-
-        public void setLastRoundProcessed(ReplicationRound round) {
-            super.setLastRoundProcessed(round);
         }
 
         public void setStateChangeAfterRounds(int afterRounds, ReplicationReplayState newState) {
             this.stateChangeAfterRounds = afterRounds;
             this.newStateAfterRounds = newState;
+        }
+
+        public void setFailoverPendingAfterRounds(int afterRounds, boolean failoverPendingValue) {
+            this.failoverPendingChangeAfterRounds = afterRounds;
+            this.failoverPendingValueAfterRounds = failoverPendingValue;
+        }
+
+        private int triggerFailoverCallCount = 0;
+
+        @Override
+        protected void triggerFailover() {
+            // Track calls to triggerFailover for validation
+            triggerFailoverCallCount++;
+            
+            // Simulate the real behavior: set failoverPending to false after triggering failover
+            setFailoverPending(false);
+        }
+
+        public int getTriggerFailoverCallCount() {
+            return triggerFailoverCallCount;
         }
 
         public int getProcessRoundCallCount() {
