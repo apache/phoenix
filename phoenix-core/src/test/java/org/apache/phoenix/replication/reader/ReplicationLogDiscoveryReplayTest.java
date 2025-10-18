@@ -1228,7 +1228,7 @@ public class ReplicationLogDiscoveryReplayTest {
                 assertEquals("triggerFailover should be called exactly once", 1, discovery.getTriggerFailoverCallCount());
 
                 // Verify failoverPending is set to false after failover is triggered
-                assertFalse("failoverPending should be set to false after failover is triggered", 
+                assertFalse("failoverPending should be set to false after failover is triggered",
                         discovery.getFailoverPending());
 
                 // TODO: Ensure cluster state is updated to ACTIVE_IN_SYNC once failover is triggered.
@@ -1419,7 +1419,7 @@ public class ReplicationLogDiscoveryReplayTest {
                 LOG.info("Rounds Processed: {}, newStateAfterRounds: {}", roundsProcessed, newStateAfterRounds);
                 setReplicationReplayState(newStateAfterRounds);
             }
-            
+
             // Simulate failover pending change by listener after certain number of rounds
             if (failoverPendingChangeAfterRounds > 0 && roundsProcessed == failoverPendingChangeAfterRounds) {
                 LOG.info("Rounds Processed: {}, setting failoverPending to: {}", roundsProcessed, failoverPendingValueAfterRounds);
@@ -1444,7 +1444,7 @@ public class ReplicationLogDiscoveryReplayTest {
         protected void triggerFailover() {
             // Track calls to triggerFailover for validation
             triggerFailoverCallCount++;
-            
+
             // Simulate the real behavior: set failoverPending to false after triggering failover
             setFailoverPending(false);
         }
