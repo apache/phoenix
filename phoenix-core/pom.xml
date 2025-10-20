@@ -499,7 +499,7 @@
   </build>
   <profiles>
     <profile>
-      <id>phoenix-hbase-compat-2.x</id>
+      <id>hbase-2.x</id>
       <activation>
         <property>
           <name>hbase.profile</name>
@@ -575,7 +575,7 @@
       </build>
     </profile>
     <profile>
-      <id>phoenix-hbase-compat-3.0.0</id>
+      <id>hbase-3.x</id>
       <activation>
         <property>
           <name>hbase.profile</name>
