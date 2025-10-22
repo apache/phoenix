@@ -289,7 +289,7 @@ public abstract class ReplicationLogDiscovery {
     }
 
     /**
-     * Processes all files in the in-progress directory.
+     * Processes all files (older than 1 round time) in the in-progress directory.
      * Continuously processes files until no in-progress files remain.
      * @throws IOException if there's an error during file processing
      */
@@ -309,6 +309,7 @@ public abstract class ReplicationLogDiscovery {
             files = replicationLogTracker.getOlderInProgressFiles(oldestTimestampToProcess);
         }
         long duration = EnvironmentEdgeManager.currentTime() - startTime;
+        LOG.info("Finished in-progress files processing in {}ms", duration);
         getMetrics().updateTimeToProcessInProgressFiles(duration);
     }
 
