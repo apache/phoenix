@@ -107,8 +107,7 @@ public class ScanMetricsGroup {
     return sumOfMillisSecBetweenNexts;
   }
 
-  @Override
-  public String toString() {
+  public JsonObject toJson() {
     if (scanMetricsByRegion != null) {
       JsonObject tableJson = new JsonObject();
       tableJson.addProperty("table", tableName);
@@ -126,7 +125,7 @@ public class ScanMetricsGroup {
         regionMetrics.add(regionJson);
       }
       tableJson.add("regions", regionMetrics);
-      return tableJson.toString();
+      return tableJson;
     } else {
       JsonObject tableJson = new JsonObject();
       tableJson.addProperty("table", tableName);
@@ -134,7 +133,12 @@ public class ScanMetricsGroup {
         MetricType metricType = getMetricType(scanMetricEntry.getKey());
         tableJson.addProperty(metricType.shortName(), scanMetricEntry.getValue());
       }
-      return tableJson.toString();
+      return tableJson;
     }
+  }
+
+  @Override
+  public String toString() {
+    return toJson().toString();
   }
 }
