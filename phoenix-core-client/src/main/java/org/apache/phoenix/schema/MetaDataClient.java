@@ -4063,7 +4063,7 @@ public class MetaDataClient {
     String parentTableName = statement.getTableName().getTableName();
     String indexName = CDCUtil.getCDCIndexName(statement.getCdcObjName().getName());
     // Mark CDC Stream as Disabled
-    long cdcIndexTimestamp = connection.getTable(indexName).getTimeStamp();
+    long cdcIndexTimestamp = connection.getTable(SchemaUtil.getTableName(schemaName, indexName)).getTimeStamp();
     String streamName = String.format(CDC_STREAM_NAME_FORMAT, parentTableName, cdcTableName,
       cdcIndexTimestamp, CDCUtil.getCDCCreationUTCDateTime(cdcIndexTimestamp));
     markCDCStreamStatus(parentTableName, streamName, CDCUtil.CdcStreamStatus.DISABLED);
