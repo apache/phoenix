@@ -55,6 +55,7 @@ import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTes
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.zookeeper.data.Stat;
+import org.joda.time.DateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -84,10 +85,13 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_HA_GROUP_STO
  * Uses {@link PathChildrenCache} from {@link org.apache.curator.framework.CuratorFramework}.
  */
 public class HAGroupStoreClient implements Closeable {
-
+    
     public static final String ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE = "phoenix"
                     + ZKPaths.PATH_SEPARATOR + "consistentHA";
-    private static final long HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS = 30000L;
+    public static final String PHOENIX_HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS
+            = "phoenix.ha.group.store.client.initialization.timeout.ms";
+    static final long DEFAULT_HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS
+            = 30000L;
     // Multiplier for ZK session timeout to account for time it will take for HMaster to abort
     // the region server in case ZK connection is lost from the region server.
     @VisibleForTesting
@@ -155,6 +159,7 @@ public class HAGroupStoreClient implements Closeable {
                 if (result == null || !result.isHealthy) {
                     result = new HAGroupStoreClient(conf, null, null, haGroupName, zkUrl);
                     if (!result.isHealthy) {
+                        
                         result.close();
                         result = null;
                     } else {
@@ -232,6 +237,9 @@ public class HAGroupStoreClient implements Closeable {
                 this.isHealthy = true;
                 // Initialize peer cache
                 maybeInitializePeerPathChildrenCache();
+            } else {
+                LOGGER.error("PathChildrenCache is not initialized, HAGroupStoreClient for "
+                        + haGroupName + " is unhealthy");
             }
             // Start periodic sync job
             startPeriodicSyncJob();
@@ -383,13 +391,13 @@ public class HAGroupStoreClient implements Closeable {
                 ? peerHAGroupStoreRecord.getClusterRole()
                 : ClusterRole.UNKNOWN;
         return new ClusterRoleRecord(this.haGroupName,
-                                    HighAvailabilityPolicy.valueOf(
-                                            currentHAGroupStoreRecord.getPolicy()),
-                                    currentHAGroupStoreRecord.getClusterUrl(),
-                                    currentHAGroupStoreRecord.getHAGroupState().getClusterRole(),
-                                    currentHAGroupStoreRecord.getPeerClusterUrl(),
-                                    peerClusterRole,
-                                    currentHAGroupStoreRecord.getAdminCRRVersion());
+                HighAvailabilityPolicy.valueOf(
+                        currentHAGroupStoreRecord.getPolicy()),
+                currentHAGroupStoreRecord.getClusterUrl(),
+                currentHAGroupStoreRecord.getHAGroupState().getClusterRole(),
+                currentHAGroupStoreRecord.getPeerClusterUrl(),
+                peerClusterRole,
+                currentHAGroupStoreRecord.getAdminCRRVersion());
     }
 
     /**
@@ -413,6 +421,7 @@ public class HAGroupStoreClient implements Closeable {
         HAGroupStoreRecord haGroupStoreRecord = cacheRecordFromZK.getLeft();
         // Only if the ZNode is not present, we need to create it from System Table
         if (haGroupStoreRecord == null) {
+            LOGGER.info("HAGroupStoreRecord is not available in ZK, creating from SystemTable Record");
             SystemTableHAGroupRecord systemTableRecord
                     = getSystemTableHAGroupRecord(this.haGroupName);
             Preconditions.checkNotNull(systemTableRecord,
@@ -832,9 +841,14 @@ public class HAGroupStoreClient implements Closeable {
                     ? customListener
                     : createCacheListener(latch, cacheType));
             newPathChildrenCache.start(PathChildrenCache.StartMode.POST_INITIALIZED_EVENT);
-            boolean initialized = latch.await(HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS,
+            boolean initialized = latch.await(conf.getLong(PHOENIX_HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS,
+                            DEFAULT_HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS),
                     TimeUnit.MILLISECONDS);
-            return initialized ? newPathChildrenCache : null;
+            if (!initialized && customListener == null) {
+                newPathChildrenCache.close();
+                return null;
+            }
+            return newPathChildrenCache;
         } catch (Exception e) {
             if (newPathChildrenCache != null) {
                 try {
@@ -857,12 +871,13 @@ public class HAGroupStoreClient implements Closeable {
                     = extractHAGroupStoreRecordOrNull(childData);
             HAGroupStoreRecord eventRecord = eventRecordAndStat.getLeft();
             Stat eventStat = eventRecordAndStat.getRight();
-            LOGGER.info("HAGroupStoreClient Cache {} received event {} type {} at {}",
-                    cacheType, eventRecord, event.getType(), System.currentTimeMillis());
+            LOGGER.info("HAGroupStoreClient Cache {} received event {} type {} at {} with ZKUrl {} and PeerZKUrl {} for haGroupName {}",
+                    cacheType, eventRecord, event.getType(), System.currentTimeMillis(), phoenixHaAdmin.getZkUrl(),
+                    peerPhoenixHaAdmin != null ? peerPhoenixHaAdmin.getZkUrl() : "peerPhoenixHaAdmin is null", haGroupName);
             switch (event.getType()) {
                 case CHILD_ADDED:
                 case CHILD_UPDATED:
-                    if (eventRecord != null) {
+                    if (eventRecord != null && Objects.equals(eventRecord.getHaGroupName(), haGroupName)) {
                         handleStateChange(eventRecord, eventStat, cacheType);
                         // Reinitialize peer path children cache if peer url is added or updated.
                         if (cacheType == ClusterType.LOCAL) {

@@ -97,32 +97,12 @@ public class ParallelPhoenixConnectionWorkflowIT {
      * HA group for this test.
      */
     private HighAvailabilityGroup haGroup;
-    /**
-     * registry Type to use in CRR
-     */
-    private ClusterRoleRecord.RegistryType registryType;
 
-    @Parameters(name="ParallelPhoenixConnectionWorkflowIT_resultSetType={0}, registryType={1}") // name is used by failsafe as file name in reports
-    public static Collection<Object[]> data() {
-        return Arrays.asList( new Object[][]{
-                {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_RESULT_SET.getName(),
-                        ClusterRoleRecord.RegistryType.ZK},
-                {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_NULL_COMPARING_RESULT_SET.getName(),
-                        ClusterRoleRecord.RegistryType.ZK},
-                {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_RESULT_SET.getName(),
-                        ClusterRoleRecord.RegistryType.MASTER},
-                {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_NULL_COMPARING_RESULT_SET.getName(),
-                        ClusterRoleRecord.RegistryType.MASTER},
-                {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_RESULT_SET.getName(),
-                        ClusterRoleRecord.RegistryType.RPC},
-                {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_NULL_COMPARING_RESULT_SET.getName(),
-                        ClusterRoleRecord.RegistryType.RPC},
-                {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_RESULT_SET.getName(),
-                        null},
-                {ParallelPhoenixResultSetType.PARALLEL_PHOENIX_NULL_COMPARING_RESULT_SET.getName(),
-                        null}
-
-        });
+    @Parameters(name="ParallelPhoenixConnectionWorkflowIT_resultSetType={0}") // name is used by failsafe as file name in reports
+    public static Collection<String> data() {
+        return Arrays.asList(
+                ParallelPhoenixResultSetType.PARALLEL_PHOENIX_RESULT_SET.getName(),
+                ParallelPhoenixResultSetType.PARALLEL_PHOENIX_NULL_COMPARING_RESULT_SET.getName());
 
     }
 
@@ -152,8 +132,8 @@ public class ParallelPhoenixConnectionWorkflowIT {
                 "  )  \n" +
                 ") IMMUTABLE_ROWS=true, VERSIONS=1, REPLICATION_SCOPE=1", tableName);
 
-        CONNECTIONS = Lists.newArrayList(getConnection(CLUSTERS.getJdbcUrl(CLUSTERS.getZkUrl1())),
-                getConnection(CLUSTERS.getJdbcUrl(CLUSTERS.getZkUrl2())));
+        CONNECTIONS = Lists.newArrayList(getConnection(CLUSTERS.getJdbcUrl(CLUSTERS.getMasterAddress1())),
+                getConnection(CLUSTERS.getJdbcUrl(CLUSTERS.getMasterAddress2())));
 
         for (Connection conn : CONNECTIONS) {
             try (Statement statement = conn.createStatement()) {
@@ -165,7 +145,7 @@ public class ParallelPhoenixConnectionWorkflowIT {
         CLUSTERS.checkReplicationComplete();
 
         //preload some data
-        try (Connection connection = getConnection(CLUSTERS.getJdbcUrl(CLUSTERS.getZkUrl1()))) {
+        try (Connection connection = getConnection(CLUSTERS.getJdbcUrl(CLUSTERS.getMasterAddress1()))) {
             loadData(connection, USER_ID, WORK_ID, 100, 20);
         }
         CLUSTERS.checkReplicationComplete();
@@ -209,27 +189,18 @@ public class ParallelPhoenixConnectionWorkflowIT {
         }
     }
 
-    public ParallelPhoenixConnectionWorkflowIT(String resultSetType,
-                                               ClusterRoleRecord.RegistryType registryType) {
+    public ParallelPhoenixConnectionWorkflowIT(String resultSetType) {
         GLOBAL_PROPERTIES.setProperty(ParallelPhoenixResultSetFactory.PHOENIX_PARALLEL_RESULTSET_TYPE, resultSetType);
-        this.registryType = registryType;
     }
 
     @Before
     public void setup() throws Exception {
-        if (registryType == ClusterRoleRecord.RegistryType.RPC) {
-            assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.5.0")>=0);
-        }
         String haGroupName = testName.getMethodName();
         clientProperties = new Properties(GLOBAL_PROPERTIES);
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName);
 
         // Make first cluster ACTIVE
-        if (registryType == null) {
-            CLUSTERS.initClusterRole(haGroupName, PARALLEL);
-        } else {
-            CLUSTERS.initClusterRole(haGroupName, PARALLEL, registryType);
-        }
+        CLUSTERS.initClusterRole(haGroupName, PARALLEL);
 
         jdbcHAUrl = CLUSTERS.getJdbcHAUrl();
         haGroup = HighAvailabilityTestingUtility.getHighAvailibilityGroup(jdbcHAUrl, clientProperties);

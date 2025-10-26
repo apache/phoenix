@@ -172,7 +172,7 @@ public class HAGroupStoreRecord {
                               @JsonProperty("clusterUrl") String clusterUrl,
                               @JsonProperty("peerClusterUrl") String peerClusterUrl,
                               @JsonProperty("adminCRRVersion")
-                                  long adminCRRVersion) {
+                              long adminCRRVersion) {
         Preconditions.checkNotNull(haGroupName, "HA group name cannot be null!");
         Preconditions.checkNotNull(haGroupState, "HA group state cannot be null!");
 

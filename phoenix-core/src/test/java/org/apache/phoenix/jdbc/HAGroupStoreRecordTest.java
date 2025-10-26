@@ -68,6 +68,7 @@ public class HAGroupStoreRecordTest {
         assertTrue(fileContent.contains(record.getHaGroupName()));
         assertTrue(fileContent.contains(record.getProtocolVersion()));
         assertTrue(fileContent.contains(record.getHAGroupState().toString()));
+        assertTrue(fileContent.contains(String.valueOf(record.getAdminCRRVersion())));
         // Create a new record from file
         Optional<HAGroupStoreRecord> record2 = HAGroupStoreRecord.fromJson(fileContent.getBytes());
         assertTrue(record2.isPresent());
@@ -149,13 +150,13 @@ public class HAGroupStoreRecordTest {
         String haGroupName = testName.getMethodName();
         String protocolVersion = "1.5";
         HAGroupStoreRecord.HAGroupState haGroupState = HAGroupStoreRecord.HAGroupState.STANDBY;
-
         HAGroupStoreRecord record = getHAGroupStoreRecord(haGroupName, protocolVersion, haGroupState, HighAvailabilityPolicy.FAILOVER.toString(),
                 "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L);
 
         assertEquals(haGroupName, record.getHaGroupName());
         assertEquals(protocolVersion, record.getProtocolVersion());
         assertEquals(haGroupState, record.getHAGroupState());
+        assertEquals(0L, record.getAdminCRRVersion());
         assertEquals(haGroupState.getClusterRole(), record.getClusterRole());
     }
 
@@ -195,6 +196,7 @@ public class HAGroupStoreRecordTest {
         assertTrue(toString.contains(record.getHaGroupName()));
         assertTrue(toString.contains(record.getProtocolVersion()));
         assertTrue(toString.contains(record.getHAGroupState().toString()));
+        assertTrue(toString.contains(String.valueOf(record.getAdminCRRVersion())));
     }
 
     @Test

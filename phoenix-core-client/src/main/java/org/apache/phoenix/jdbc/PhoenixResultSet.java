@@ -907,7 +907,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
             if (rowProjectorWithDynamicCols != null) {
                 rowProjectorWithDynamicCols.reset();
             }
-        } catch (RuntimeException | SQLException e) {
+        } catch (Exception e) {
             // FIXME: Expression.evaluate does not throw SQLException
             // so this will unwrap throws from that.
             queryLogger.log(QueryLogInfo.QUERY_STATUS_I, QueryStatus.FAILED.toString());

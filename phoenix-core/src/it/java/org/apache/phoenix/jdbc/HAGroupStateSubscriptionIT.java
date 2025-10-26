@@ -106,6 +106,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
 
         // Insert a HAGroupStoreRecord into the system table
         HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(), zkUrl, peerZKUrl,
+                CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
                 ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
     }
 

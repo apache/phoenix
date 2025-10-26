@@ -21,7 +21,6 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.exception.StaleHAGroupStoreRecordVersionException;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.exception.InvalidClusterRoleTransitionException;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -35,12 +34,11 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.rules.TestName;
 
-import java.io.IOException;
 import java.lang.reflect.Field;
-import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static org.apache.hadoop.hbase.HConstants.DEFAULT_ZK_SESSION_TIMEOUT;
@@ -113,7 +111,6 @@ public class HAGroupStoreManagerIT extends BaseTest {
                 "1.0", haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY,
                 null, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl,
                  this.peerZKUrl, 0L);
-
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, transitionRecord, 0);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -318,9 +315,9 @@ public class HAGroupStoreManagerIT extends BaseTest {
         conf.set(HConstants.ZOOKEEPER_QUORUM, getLocalZkUrl(config));
 
         // Set the HAGroupStoreManager instance to null via reflection to force recreation
-        Field field = HAGroupStoreManager.class.getDeclaredField("haGroupStoreManagerInstance");
+        Field field = HAGroupStoreManager.class.getDeclaredField("instances");
         field.setAccessible(true);
-        field.set(null, null);
+        field.set(null, new ConcurrentHashMap<>());
 
         HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(conf);
         // Create HAGroupStoreRecord with ACTIVE_IN_SYNC_TO_STANDBY role
@@ -336,7 +333,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         assertFalse(haGroupStoreManager.isMutationBlocked(haGroupName));
 
         // Set the HAGroupStoreManager instance back to null via reflection to force recreation for other tests
-        field.set(null, null);
+        field.set(null, new ConcurrentHashMap<>());
     }
 
     @Test
@@ -587,8 +584,10 @@ public class HAGroupStoreManagerIT extends BaseTest {
         CLUSTERS.getHBaseCluster2().getMiniHBaseCluster().getConf().setLong(ZK_SESSION_TIMEOUT, 10*1000);
 
         HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl1, zkUrl2,
+                CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
                 ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
         HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl1, zkUrl2,
+                CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
                 ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, zkUrl2);
 
         // Create separate HAAdmin instances for both clusters using try-with-resources
@@ -662,9 +661,9 @@ public class HAGroupStoreManagerIT extends BaseTest {
         ClusterRoleRecord cluster1Role = cluster1HAManager.getClusterRoleRecord(haGroupName);
         ClusterRoleRecord cluster2Role = cluster2HAManager.getClusterRoleRecord(haGroupName);
         assertEquals("Cluster1 should now have STANDBY role",
-                ClusterRoleRecord.ClusterRole.STANDBY, cluster1Role.getRole(CLUSTERS.getZkUrl1()));
+                ClusterRoleRecord.ClusterRole.STANDBY, cluster1Role.getRole(CLUSTERS.getMasterAddress1()));
          assertEquals("Cluster2 should now have ACTIVE role",
-                 ClusterRoleRecord.ClusterRole.ACTIVE, cluster2Role.getRole(CLUSTERS.getZkUrl2()));
+                 ClusterRoleRecord.ClusterRole.ACTIVE, cluster2Role.getRole(CLUSTERS.getMasterAddress2()));
     }
 
     @Test
@@ -678,8 +677,10 @@ public class HAGroupStoreManagerIT extends BaseTest {
         CLUSTERS.getHBaseCluster2().getMiniHBaseCluster().getConf().setLong(ZK_SESSION_TIMEOUT, 10*1000);
 
         HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl1, zkUrl2,
+                CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
                 ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
         HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl1, zkUrl2,
+                CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
                 ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, zkUrl2);
 
         // Create HAGroupStoreManager instances for both clusters using constructor
@@ -770,9 +771,9 @@ public class HAGroupStoreManagerIT extends BaseTest {
         ClusterRoleRecord cluster1Role = cluster1HAManager.getClusterRoleRecord(haGroupName);
         ClusterRoleRecord cluster2Role = cluster2HAManager.getClusterRoleRecord(haGroupName);
         assertEquals("Cluster1 should have ACTIVE role",
-                ClusterRoleRecord.ClusterRole.ACTIVE, cluster1Role.getRole(CLUSTERS.getZkUrl1()));
+                ClusterRoleRecord.ClusterRole.ACTIVE, cluster1Role.getRole(CLUSTERS.getMasterAddress1()));
         assertEquals("Cluster2 should have STANDBY role",
-                ClusterRoleRecord.ClusterRole.STANDBY, cluster2Role.getRole(CLUSTERS.getZkUrl2()));
+                ClusterRoleRecord.ClusterRole.STANDBY, cluster2Role.getRole(CLUSTERS.getMasterAddress2()));
     }
 
     @Test
@@ -785,9 +786,11 @@ public class HAGroupStoreManagerIT extends BaseTest {
         CLUSTERS.getHBaseCluster1().getMiniHBaseCluster().getConf().setLong(ZK_SESSION_TIMEOUT, 10*1000);
         CLUSTERS.getHBaseCluster2().getMiniHBaseCluster().getConf().setLong(ZK_SESSION_TIMEOUT, 10*1000);
 
-        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl1, zkUrl2,
+        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl1, zkUrl2, 
+                CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
                 ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
         HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl1, zkUrl2,
+                CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
                 ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, zkUrl2);
 
         // Create HAGroupStoreManager instances for both clusters using constructor

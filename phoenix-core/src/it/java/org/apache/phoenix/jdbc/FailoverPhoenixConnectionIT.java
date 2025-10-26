@@ -26,6 +26,7 @@ import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATT
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithStatement;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
 import static org.apache.phoenix.query.BaseTest.extractThreadPoolExecutorFromCQSI;
+import static org.apache.phoenix.query.QueryServices.CLIENT_CACHE_ENCODING;
 import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT;
 import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_CORE_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ENABLED;
@@ -68,6 +69,7 @@ import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
+import org.apache.phoenix.util.HAGroupStoreTestUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -199,6 +201,7 @@ public class FailoverPhoenixConnectionIT {
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
         }
 
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY);
         CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.STANDBY);
 
         try {
@@ -246,6 +249,8 @@ public class FailoverPhoenixConnectionIT {
         Connection conn = createFailoverConnection();
         doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
 
+        //transit only the way we allow now
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY_TO_ACTIVE);
         CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.ACTIVE);
 
         // The wrapped connection is still against the first cluster, and is closed
@@ -265,6 +270,8 @@ public class FailoverPhoenixConnectionIT {
         Statement stmt = conn.createStatement();
         doTestBasicOperationsWithStatement(conn, stmt, tableName);
 
+        //transit only the way we allow now
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY_TO_ACTIVE);
         CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.ACTIVE);
 
         assertFalse(conn.isClosed());
@@ -292,6 +299,8 @@ public class FailoverPhoenixConnectionIT {
         assertFalse(failoverConn.isClosed());
         assertFalse(wrappedConn.isClosed());
 
+        //transit only the way we allow now
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY_TO_ACTIVE);
         CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.ACTIVE);
 
         assertFalse(phoenixConn.isClosed()); // normal Phoenix connection is not closed
@@ -317,6 +326,8 @@ public class FailoverPhoenixConnectionIT {
         assertFalse(wrappedConn.isClosed());
         assertFalse(wrappedConn2.isClosed());
 
+        //transit only the way we allow now
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY_TO_ACTIVE);
         CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.ACTIVE);
 
         assertTrue(wrappedConn.isClosed());
@@ -357,9 +368,10 @@ public class FailoverPhoenixConnectionIT {
         cqs.removeConnection(wrapped.unwrap(PhoenixConnection.class));
         cqs.addConnection(spy.unwrap(PhoenixConnection.class));
 
-        // (ACTIVE, STANDBY) -> (STANDBY, ACTIVE)
+        // (ACTIVE, STANDBY) -> (ACTIVE_TO_STANDBY, STANDBY_TO_ACTIVE) -> (STANDBY, ACTIVE)
         // The transition will finish as we set PHOENIX_HA_TRANSITION_TIMEOUT_MS_KEY for this class
         // even though the spied connection is stuck at the latch when closing
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY_TO_ACTIVE);
         CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.ACTIVE);
 
         // Verify the spied object has been called once
@@ -402,6 +414,8 @@ public class FailoverPhoenixConnectionIT {
             connectionList.add(createFailoverConnection());
         }
 
+        //transit only the way we allow now
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY_TO_ACTIVE);
         CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.ACTIVE);
 
         for (short i = 0; i < numberOfConnections; i++) {
@@ -439,7 +453,9 @@ public class FailoverPhoenixConnectionIT {
         }
 
         latchToTransitRole.await();
-        CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.STANDBY);
+        //transit only the way we allow now
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY_TO_ACTIVE);
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.ACTIVE);
         latchToCreateMoreConnections.countDown();
 
         waitFor(() -> {
@@ -475,6 +491,7 @@ public class FailoverPhoenixConnectionIT {
         }
 
         // Make the second cluster the active one.
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY_TO_ACTIVE);
         CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.ACTIVE);
 
         try (Connection conn = createFailoverConnection()) {
@@ -497,6 +514,8 @@ public class FailoverPhoenixConnectionIT {
         }
 
         // Make the second cluster the active one.
+        //transit only the way we allow now
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY_TO_ACTIVE);
         CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.ACTIVE);
 
         try (Connection conn = createFailoverConnection()) {
@@ -506,6 +525,7 @@ public class FailoverPhoenixConnectionIT {
         }
 
         // Failover back to the first cluster.
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY_TO_ACTIVE, ClusterRole.ACTIVE_TO_STANDBY);
         CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE, ClusterRole.STANDBY);
 
         try (Connection conn = createFailoverConnection()) {
@@ -524,6 +544,7 @@ public class FailoverPhoenixConnectionIT {
         doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
 
         // Make the second cluster ACTIVE will not change the wrapped connection.
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY_TO_ACTIVE);
         CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.ACTIVE);
         doTestActionShouldFailBecauseOfFailover(conn::createStatement);
 
@@ -532,6 +553,7 @@ public class FailoverPhoenixConnectionIT {
         doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
 
         // failover explicitly once more (failover back)
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY_TO_ACTIVE, ClusterRole.ACTIVE_TO_STANDBY);
         CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE, ClusterRole.STANDBY);
         FailoverPhoenixConnection.failover(conn, 30_000);
         doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
@@ -545,6 +567,7 @@ public class FailoverPhoenixConnectionIT {
         Connection conn = createFailoverConnection();
         doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
 
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY);
         CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.STANDBY);
 
         try {
@@ -569,6 +592,7 @@ public class FailoverPhoenixConnectionIT {
         doTestBasicOperationsWithConnection(tenantConn, tableName, haGroupName);
 
         // Make the second cluster ACTIVE will not change the wrapped connection.
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY_TO_ACTIVE);
         CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.ACTIVE);
         doTestActionShouldFailBecauseOfFailover(tenantConn::createStatement);
 
@@ -590,6 +614,7 @@ public class FailoverPhoenixConnectionIT {
         doTestBasicOperationsWithStatement(conn, stmt1, tableName);
 
         // Make the second cluster the active one.
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY_TO_ACTIVE);
         CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.ACTIVE);
 
         assertFalse(conn.isClosed());
@@ -612,6 +637,7 @@ public class FailoverPhoenixConnectionIT {
         doVerifyMetrics(conn, 1L);
 
         // Failover the HA group
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY_TO_ACTIVE);
         CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.ACTIVE);
         // wrapped connection should have been closed; but "conn" is not so we can still get metrics
         doVerifyMetrics(conn, 1L);
@@ -665,6 +691,7 @@ public class FailoverPhoenixConnectionIT {
         assertFalse(wrappedConn3.isClosed());
         assertFalse(wrappedConn4.isClosed());
 
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY_TO_ACTIVE);
         CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.ACTIVE);
 
         assertTrue(wrappedConn.isClosed());

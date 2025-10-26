@@ -141,6 +141,7 @@ import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.VarBinaryFormatter;
+import org.xbill.DNS.tools.primary;
 
 /**
  * 
@@ -189,7 +190,10 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
     private LogLevel auditLogLevel;
     private Double logSamplingRate;
     private String sourceOfOperation;
+    @Nullable //Only available for connection which is part of HA Connections
     private String haGroupName;
+    @Nullable //Only available for connection which is part of HA Connections
+    private HighAvailabilityGroup haGroup;
     private volatile SQLException reasonForClose;
     private static final String[] CONNECTION_PROPERTIES;
 
@@ -220,7 +224,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
         this(connection.getQueryServices(), connection.getURL(), connection
                 .getClientInfo(), connection
                 .getMutationState(), isDescRowKeyOrderUpgrade,
-                isRunningUpgrade, connection.buildingIndex, true);
+                isRunningUpgrade, connection.buildingIndex, true, null);
         this.isAutoCommit = connection.isAutoCommit;
         this.isAutoFlush = connection.isAutoFlush;
         this.sampler = connection.sampler;
@@ -237,7 +241,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
         this(connection.getQueryServices(), connection.getURL(), connection
                 .getClientInfo(), mutationState,
                 connection.isDescVarLengthRowKeyUpgrade(), connection
-                .isRunningUpgrade(), connection.buildingIndex, true);
+                .isRunningUpgrade(), connection.buildingIndex, true, null);
     }
 
     public PhoenixConnection(PhoenixConnection connection, long scn)
@@ -248,7 +252,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
 	public PhoenixConnection(PhoenixConnection connection, Properties props) throws SQLException {
         this(connection.getQueryServices(), connection.getURL(), props, connection
                 .getMutationState(), connection.isDescVarLengthRowKeyUpgrade(),
-                connection.isRunningUpgrade(), connection.buildingIndex, true);
+                connection.isRunningUpgrade(), connection.buildingIndex, true, null);
         this.isAutoCommit = connection.isAutoCommit;
         this.isAutoFlush = connection.isAutoFlush;
         this.sampler = connection.sampler;
@@ -257,7 +261,12 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
 
     public PhoenixConnection(ConnectionQueryServices services, String url,
             Properties info) throws SQLException {
-        this(services, url, info, null, false, false, false, false);
+        this(services, url, info, null, false, false, false, false, null);
+    }
+
+    public PhoenixConnection(ConnectionQueryServices services, String url,
+            Properties info, HighAvailabilityGroup haGroup) throws SQLException {
+        this(services, url, info, null, false, false, false, false, haGroup);
     }
 
     public PhoenixConnection(PhoenixConnection connection,
@@ -265,13 +274,13 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
                     throws SQLException {
         this(services, connection.url, info, null,
                 connection.isDescVarLengthRowKeyUpgrade(), connection
-                .isRunningUpgrade(), connection.buildingIndex, true);
+                .isRunningUpgrade(), connection.buildingIndex, true, null);
     }
 
     private PhoenixConnection(ConnectionQueryServices services, String url,
             Properties info, MutationState mutationState,
             boolean isDescVarLengthRowKeyUpgrade, boolean isRunningUpgrade,
-            boolean buildingIndex, boolean isInternalConnection) throws SQLException {
+            boolean buildingIndex, boolean isInternalConnection, HighAvailabilityGroup haGroup) throws SQLException {
             this.url = url;
             this.isDescVarLengthRowKeyUpgrade = isDescVarLengthRowKeyUpgrade;
             this.isInternalConnection = isInternalConnection;
@@ -285,6 +294,9 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
 
             // Copy so client cannot change
             this.info = PropertiesUtil.deepCopy(info);
+            //get HAGroupName from the connection info
+            this.haGroupName = info.getProperty(HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR);
+            this.haGroup = haGroup;
             final PName tenantId = JDBCUtil.getTenantId(url, info);
             if (this.info.isEmpty() && tenantId == null) {
                 this.services = services;
@@ -1263,6 +1275,15 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
 
     public String getHAGroupName() {
         return this.haGroupName;
+    }
+
+    /**
+     * Get the HAGroup for which this connection is part of, This will return null for Single
+     * Cluster Connections
+     * @return The HAGroup for which this connection is part of.
+     */
+    public HighAvailabilityGroup getHAGroup() {
+        return this.haGroup;
     }
 
     @Override
