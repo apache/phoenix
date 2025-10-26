@@ -642,7 +642,7 @@ public class FailoverPhoenixConnection2IT {
             connection.commit();
         }
         CLUSTERS.transitClusterRole(haGroup, STANDBY, STANDBY, false);
-        
+
         //Read operation should refresh the CRR leading to success and also update the CRR in HAGroup
         //as it is a point lookup
         try (ResultSet rs = connection.createStatement().executeQuery(

@@ -183,7 +183,7 @@ public class HAGroupStoreManager {
             return new HAGroupStoreManager(conf, url);
         });
     }
-    
+
     @VisibleForTesting
     HAGroupStoreManager(final Configuration conf) {
         this(conf, getLocalZkUrl(conf));
@@ -245,7 +245,7 @@ public class HAGroupStoreManager {
             //based on whether the SCN falls within its consistency point, and will require a change
             //in the logic her, with much bigger change.
             HAGroupStoreRecord hagroupStoreRecord = haGroupStoreClient.getHAGroupStoreRecord();
-            return (HighAvailabilityPolicy.valueOf(hagroupStoreRecord.getPolicy()) 
+            return (HighAvailabilityPolicy.valueOf(hagroupStoreRecord.getPolicy())
                     == HighAvailabilityPolicy.FAILOVER) &&
                     !(hagroupStoreRecord.getHAGroupState().getClusterRole().isActive());
         }

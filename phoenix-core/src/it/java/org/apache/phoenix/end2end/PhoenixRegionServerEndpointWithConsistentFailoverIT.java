@@ -73,7 +73,7 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTes
         peerZkUrl = CLUSTERS.getZkUrl2();
         HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(), zkUrl, peerZkUrl,
                 CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
-                ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, 
+                ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY,
                 null);
     }
 
@@ -110,8 +110,8 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTes
         executeGetClusterRoleRecordAndVerify(coprocessor, controller, haGroupName, expectedRecord, true);
 
         // Update the row
-        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(), zkUrl, peerZkUrl, 
-                CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), 
+        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(), zkUrl, peerZkUrl,
+                CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
                 ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY, ClusterRoleRecord.ClusterRole.STANDBY, null);
 
         // Now Invalidate the Cache

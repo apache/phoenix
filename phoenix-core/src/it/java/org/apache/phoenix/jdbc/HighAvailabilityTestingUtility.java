@@ -186,9 +186,9 @@ public class HighAvailabilityTestingUtility {
          */
         public void initClusterRole(String haGroupName, HighAvailabilityPolicy policy)
                 throws Exception {
-            HAGroupStoreRecord activeRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, ACTIVE.getDefaultHAGroupState(), 
+            HAGroupStoreRecord activeRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, ACTIVE.getDefaultHAGroupState(),
                     null, policy != null ? policy.name() : HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), 1L);
-            HAGroupStoreRecord standbyRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, STANDBY.getDefaultHAGroupState(), 
+            HAGroupStoreRecord standbyRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, STANDBY.getDefaultHAGroupState(),
                     null, policy != null ? policy.name() :HighAvailabilityPolicy.FAILOVER.name(), getZkUrl1(), getMasterAddress2(), getMasterAddress1(), 1L);
             upsertGroupRecordInBothSystemTable(haGroupName, ACTIVE, STANDBY, 1L, 1L,null, policy);
             addOrUpdateRoleRecordToClusters(haGroupName, activeRecord, standbyRecord);
@@ -201,7 +201,7 @@ public class HighAvailabilityTestingUtility {
          * @param policy policy to be used for HA group
          */
         public void initClusterRoleRecordFor1Cluster(String haGroupName, HighAvailabilityPolicy policy) throws Exception {
-            HAGroupStoreRecord activeRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, ACTIVE.getDefaultHAGroupState(), 
+            HAGroupStoreRecord activeRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, ACTIVE.getDefaultHAGroupState(),
                     null, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), 1L);
             upsertGroupRecordInASystemTable(haGroupName, ACTIVE, STANDBY, 1L, 1L, null, policy, 1);
             addOrUpdateRoleRecordToClusters(haGroupName, activeRecord, null);
@@ -304,12 +304,12 @@ public class HighAvailabilityTestingUtility {
             final Pair<HAGroupStoreRecord, Stat> currentRecord2 = getHaAdmin2().getHAGroupStoreRecordInZooKeeper(haGroupName);
             HAGroupStoreRecord newRecord;
             if (clusterIndex == 1) {
-                newRecord = new HAGroupStoreRecord(currentRecord1.getLeft().getProtocolVersion(), haGroupName, role1.getDefaultHAGroupState(), 
+                newRecord = new HAGroupStoreRecord(currentRecord1.getLeft().getProtocolVersion(), haGroupName, role1.getDefaultHAGroupState(),
                         null, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), 1L);
                 refreshSystemTableInOneCluster(haGroupName, role1, role2, newRecord.getAdminCRRVersion(), currentRecord2.getLeft().getAdminCRRVersion(), null, haGroup.getRoleRecord().getPolicy(), clusterIndex);
                 addOrUpdateRoleRecordToClusters(haGroupName, newRecord,null);
             } else {
-                newRecord = new HAGroupStoreRecord(currentRecord2.getLeft().getProtocolVersion(), haGroupName, role2.getDefaultHAGroupState(), 
+                newRecord = new HAGroupStoreRecord(currentRecord2.getLeft().getProtocolVersion(), haGroupName, role2.getDefaultHAGroupState(),
                         null, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), 1L);
                 refreshSystemTableInOneCluster(haGroupName, role1, role2, currentRecord1.getLeft().getAdminCRRVersion(), newRecord.getAdminCRRVersion(), null, haGroup.getRoleRecord().getPolicy(), clusterIndex);
                 addOrUpdateRoleRecordToClusters(haGroupName, null, newRecord);
@@ -463,7 +463,7 @@ public class HighAvailabilityTestingUtility {
 
             refreshSystemTableInBothClusters(haGroupName, role1, role2, 2, 2, null, haGroup.getRoleRecord().getPolicy());
             addOrUpdateRoleRecordToClusters(haGroupName, record1, record2);
-            
+
             // Adding this wait because HAGroup on client is not quickly refreshed.
             Thread.sleep(10000);
 
@@ -1002,7 +1002,7 @@ public class HighAvailabilityTestingUtility {
             LOG.warn("Fail to prime HAGroupStoreClient for {} because {}", haGroupName, e.getMessage());
         }
     }
-    
+
     /**
      * This tests that basic operation using a connection works.
      *

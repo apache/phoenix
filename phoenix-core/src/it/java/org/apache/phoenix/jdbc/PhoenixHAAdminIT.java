@@ -96,7 +96,7 @@ public class PhoenixHAAdminIT extends BaseTest {
     public void testCreateHAGroupStoreRecordInZooKeeper() throws Exception {
         String haGroupName = testName.getMethodName();
         String peerZKUrl = CLUSTERS.getZkUrl2();
-        
+
         HAGroupStoreRecord record = createInitialRecord(haGroupName);
 
         // Create the record in ZooKeeper
@@ -113,7 +113,7 @@ public class PhoenixHAAdminIT extends BaseTest {
     @Test
     public void testCreateHAGroupStoreRecordInZooKeeperWithExistingNode() throws Exception {
         String haGroupName = testName.getMethodName();
-        
+
         HAGroupStoreRecord record1 = createInitialRecord(haGroupName);
 
         // Create the first record
@@ -470,7 +470,7 @@ public class PhoenixHAAdminIT extends BaseTest {
                 haGroupName,
                 HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
                 null,
-                HighAvailabilityPolicy.FAILOVER.toString(), 
+                HighAvailabilityPolicy.FAILOVER.toString(),
                 CLUSTERS.getZkUrl2(),
                 CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), 0L);
     }

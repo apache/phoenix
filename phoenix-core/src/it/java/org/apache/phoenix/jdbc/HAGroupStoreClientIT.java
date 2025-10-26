@@ -429,7 +429,7 @@ public class HAGroupStoreClientIT extends BaseTest {
     @Test
     public void testHAGroupStoreClientWithRootPathDeletion() throws Exception {
         String haGroupName = testName.getMethodName();
-        
+
         HAGroupStoreRecord record1 = new HAGroupStoreRecord("v1.0", haGroupName,
                 HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, null, HighAvailabilityPolicy.FAILOVER.toString(),
                 this.peerZKUrl, this.masterUrl, this.peerMasterUrl, 0L);
@@ -595,7 +595,7 @@ public class HAGroupStoreClientIT extends BaseTest {
                 this.peerZKUrl, this.masterUrl, this.peerMasterUrl, 0L);
         createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, initialRecord);
 
-        HAGroupStoreClient haGroupStoreClient 
+        HAGroupStoreClient haGroupStoreClient
                 = HAGroupStoreClient.getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
 
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS

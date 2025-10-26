@@ -786,7 +786,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         CLUSTERS.getHBaseCluster1().getMiniHBaseCluster().getConf().setLong(ZK_SESSION_TIMEOUT, 10*1000);
         CLUSTERS.getHBaseCluster2().getMiniHBaseCluster().getConf().setLong(ZK_SESSION_TIMEOUT, 10*1000);
 
-        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl1, zkUrl2, 
+        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl1, zkUrl2,
                 CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
                 ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
         HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl1, zkUrl2,

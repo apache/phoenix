@@ -105,8 +105,8 @@ public class IndexRegionObserverMutationBlockingIT {
             // Set up HAGroupStoreRecord that will block mutations (ACTIVE_TO_STANDBY state)
             HAGroupStoreRecord haGroupStoreRecord
                     = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
-                    haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, 
-                    null, HighAvailabilityPolicy.FAILOVER.toString(), 
+                    haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY,
+                    null, HighAvailabilityPolicy.FAILOVER.toString(),
                     this.peerZkUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), 0L);
             haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, haGroupStoreRecord, -1);
 

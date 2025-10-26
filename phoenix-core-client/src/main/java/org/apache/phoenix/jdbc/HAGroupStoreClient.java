@@ -85,7 +85,7 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_HA_GROUP_STO
  * Uses {@link PathChildrenCache} from {@link org.apache.curator.framework.CuratorFramework}.
  */
 public class HAGroupStoreClient implements Closeable {
-    
+
     public static final String ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE = "phoenix"
                     + ZKPaths.PATH_SEPARATOR + "consistentHA";
     public static final String PHOENIX_HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS
@@ -159,7 +159,6 @@ public class HAGroupStoreClient implements Closeable {
                 if (result == null || !result.isHealthy) {
                     result = new HAGroupStoreClient(conf, null, null, haGroupName, zkUrl);
                     if (!result.isHealthy) {
-                        
                         result.close();
                         result = null;
                     } else {
