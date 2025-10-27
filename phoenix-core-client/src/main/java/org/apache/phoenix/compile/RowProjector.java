@@ -267,15 +267,17 @@ public class RowProjector {
         // Labels are different, so qualified names are guaranteed to be different
         additionalMappings.put(sourceLabel, i);
         if (!sourceCol.getTableName().isEmpty()) {
-          additionalMappings.put(
-            SchemaUtil.getColumnName(sourceCol.getTableName(), sourceCol.getLabel()), i);
+          additionalMappings
+            .put(SchemaUtil.getColumnName(sourceCol.getTableName(), sourceCol.getLabel()), i);
         }
       } else {
         // Labels are the same, so check if table names differ
-        if (!sourceCol.getTableName().isEmpty()
-          && !sourceCol.getTableName().equals(currentCol.getTableName())) {
-          additionalMappings.put(
-            SchemaUtil.getColumnName(sourceCol.getTableName(), sourceCol.getLabel()), i);
+        if (
+          !sourceCol.getTableName().isEmpty()
+            && !sourceCol.getTableName().equals(currentCol.getTableName())
+        ) {
+          additionalMappings
+            .put(SchemaUtil.getColumnName(sourceCol.getTableName(), sourceCol.getLabel()), i);
         }
       }
     }
