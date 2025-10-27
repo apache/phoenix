@@ -264,19 +264,18 @@ public class RowProjector {
       String currentLabel = currentCol.getLabel();
 
       if (!sourceLabel.equals(currentLabel)) {
+        // Labels are different, so qualified names are guaranteed to be different
         additionalMappings.put(sourceLabel, i);
-      }
-
-      // Also add qualified name from source if different
-      if (!sourceCol.getTableName().isEmpty()) {
-        String sourceQualifiedName =
-          SchemaUtil.getColumnName(sourceCol.getTableName(), sourceCol.getLabel());
-        String currentQualifiedName = currentCol.getTableName().isEmpty()
-          ? ""
-          : SchemaUtil.getColumnName(currentCol.getTableName(), currentCol.getLabel());
-
-        if (!sourceQualifiedName.equals(currentQualifiedName)) {
-          additionalMappings.put(sourceQualifiedName, i);
+        if (!sourceCol.getTableName().isEmpty()) {
+          additionalMappings.put(
+            SchemaUtil.getColumnName(sourceCol.getTableName(), sourceCol.getLabel()), i);
+        }
+      } else {
+        // Labels are the same, so check if table names differ
+        if (!sourceCol.getTableName().isEmpty()
+          && !sourceCol.getTableName().equals(currentCol.getTableName())) {
+          additionalMappings.put(
+            SchemaUtil.getColumnName(sourceCol.getTableName(), sourceCol.getLabel()), i);
         }
       }
     }
