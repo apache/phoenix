@@ -640,8 +640,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
               final Set<String> haGroupNames = extractHAGroupNameAttribute(miniBatchOp);
               // Check if mutation is blocked for any of the HAGroupNames
               for (String haGroupName : haGroupNames) {
-                  //TODO: Below approach might be slow need to figure out faster way, 
-                  // slower part is getting haGroupStoreClient We can also cache 
+                  //TODO: Below approach might be slow need to figure out faster way,
+                  // slower part is getting haGroupStoreClient We can also cache
                   // roleRecord (I tried it and still it's slow due to haGroupStoreClient
                   // initialization) and caching will give us old result in case one cluster
                   // is unreachable instead of UNKNOWN.
