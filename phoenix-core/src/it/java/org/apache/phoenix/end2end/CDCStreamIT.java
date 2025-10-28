@@ -33,6 +33,7 @@ import static org.junit.Assert.assertTrue;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -432,6 +433,34 @@ public class CDCStreamIT extends CDCBaseIT {
     rs = conn.createStatement().executeQuery(partitionQuery);
     Assert.assertTrue(rs.next());
   }
+
+    @Test
+    public void testStreamMetadataWhenCDCIsDropped() throws SQLException {
+        Connection conn = newConnection();
+        MetaDataClient mdc = new MetaDataClient(conn.unwrap(PhoenixConnection.class));
+        String schemaName = "\"" + generateUniqueName().toLowerCase() + "\"";
+        String tableName =
+                SchemaUtil.getTableName(schemaName, "\"" + generateUniqueName().toLowerCase() + "\"");
+        String unescapedFullTableName = SchemaUtil.getUnEscapedFullName(tableName);
+        String create_table_sql =
+                "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER, v2 DATE)";
+        conn.createStatement().execute(create_table_sql);
+        String cdcName = "\"" + generateUniqueName().toLowerCase() + "\"";
+        String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
+        conn.createStatement().execute(cdc_sql);
+        TaskRegionObserver.SelfHealingTask task = new TaskRegionObserver.SelfHealingTask(
+                taskRegionEnvironment, QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
+        task.run();
+        String drop_cdc_sql = "DROP CDC " + cdcName + " ON " + tableName;
+        Assert.assertNotNull(mdc.getStreamNameIfCDCEnabled(unescapedFullTableName));
+        // check if stream metadata is cleared when cdc is dropped
+        conn.createStatement().execute(drop_cdc_sql);
+        Assert.assertNull(mdc.getStreamNameIfCDCEnabled(unescapedFullTableName));
+        // should be able to re-create cdc with same name and metadata should be populated
+        conn.createStatement().execute(cdc_sql);
+        Assert.assertNotNull(mdc.getStreamNameIfCDCEnabled(unescapedFullTableName));
+        task.run();
+    }
 
   @Test
   public void testCDCStreamTTL() throws Exception {

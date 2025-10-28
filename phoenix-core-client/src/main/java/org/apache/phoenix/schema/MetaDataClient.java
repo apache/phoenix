@@ -4064,9 +4064,10 @@ public class MetaDataClient {
     String indexName = CDCUtil.getCDCIndexName(statement.getCdcObjName().getName());
     // Mark CDC Stream as Disabled
     long cdcIndexTimestamp = connection.getTable(SchemaUtil.getTableName(schemaName, indexName)).getTimeStamp();
-    String streamName = String.format(CDC_STREAM_NAME_FORMAT, parentTableName, cdcTableName,
+    String fullParentTableName = SchemaUtil.getTableName(schemaName, parentTableName);
+    String streamName = String.format(CDC_STREAM_NAME_FORMAT, fullParentTableName, cdcTableName,
       cdcIndexTimestamp, CDCUtil.getCDCCreationUTCDateTime(cdcIndexTimestamp));
-    markCDCStreamStatus(parentTableName, streamName, CDCUtil.CdcStreamStatus.DISABLED);
+    markCDCStreamStatus(fullParentTableName, streamName, CDCUtil.CdcStreamStatus.DISABLED);
     // Dropping the virtual CDC Table
     dropTable(schemaName, cdcTableName, parentTableName, PTableType.CDC, statement.ifExists(),
       false, false);
@@ -4161,7 +4162,7 @@ public class MetaDataClient {
     String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
     try {
       PTable ptable = connection.getTable(fullTableName);
-      if (PTableType.TABLE.equals(ptable.getType()) && CDCUtil.hasCDCIndex(ptable)) {
+      if (PTableType.TABLE.equals(ptable.getType())) {
         deleteAllStreamMetadataForTable(fullTableName);
       }
       if (
