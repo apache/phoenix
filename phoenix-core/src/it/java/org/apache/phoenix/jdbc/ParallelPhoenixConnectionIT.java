@@ -368,7 +368,7 @@ public class ParallelPhoenixConnectionIT {
      */
     @Test
     public void testCluster1OfflineRole() throws Exception {
-        CLUSTERS.transitClusterRole(haGroup, ClusterRole.OFFLINE, ClusterRole.ACTIVE);
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.OFFLINE, ClusterRole.ACTIVE, true, PARALLEL);
         try (Connection conn = getParallelConnection()) {
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
         }
@@ -379,14 +379,14 @@ public class ParallelPhoenixConnectionIT {
      */
     @Test
     public void testBothClusterATSRole() throws Exception {
-        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.ACTIVE_TO_STANDBY);
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.ACTIVE_TO_STANDBY, true, PARALLEL);
         try (ParallelPhoenixConnection conn = (ParallelPhoenixConnection) getParallelConnection()) {
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
             fail("Expected MutationBlockedIOException to be thrown");
         } catch (SQLException e) {
             assertTrue(containsMutationBlockedException(e));
         } finally {
-            CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE, ClusterRole.STANDBY);
+            CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE, ClusterRole.STANDBY, true, PARALLEL);
         }
     }
 
@@ -411,14 +411,14 @@ public class ParallelPhoenixConnectionIT {
     }
 
     private void testOneClusterATSRole(ClusterRole otherRole) throws Exception {
-        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, otherRole);
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, otherRole, true, PARALLEL);
         try (Connection conn = getParallelConnection()) {
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
         } catch (SQLException e) {
             fail("Expected no exception to be thrown as one cluster is "
                     + "in ACTIVE_TO_STANDBY and other in " + otherRole);
         } finally {
-            CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE, ClusterRole.STANDBY);
+            CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE, ClusterRole.STANDBY, true, PARALLEL);
         }
     }
 

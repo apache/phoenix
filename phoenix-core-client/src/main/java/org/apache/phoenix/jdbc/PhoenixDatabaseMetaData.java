@@ -477,8 +477,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String PARENT_PARTITION_START_TIME = "PARENT_PARTITION_START_TIME";
     public static final String HA_GROUP_NAME = "HA_GROUP_NAME";
     public static final String POLICY = "POLICY";
-    public static final String VERSION_CLUSTER_1 = "VERSION_CLUSTER_1";
-    public static final String VERSION_CLUSTER_2 = "VERSION_CLUSTER_2";
+    public static final String VERSION = "VERSION";
     public static final String ZK_URL_1 = "ZK_URL_1";
     public static final String ZK_URL_2 = "ZK_URL_2";
     public static final String CLUSTER_URL_1 = "CLUSTER_URL_1";

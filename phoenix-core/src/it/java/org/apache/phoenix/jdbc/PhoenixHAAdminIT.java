@@ -41,7 +41,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE;
+import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -58,8 +58,6 @@ public class PhoenixHAAdminIT extends BaseTest {
     private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS = new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();
     private PhoenixHAAdmin haAdmin;
     private PhoenixHAAdmin peerHaAdmin;
-    private final String defaultProtocolVersion = "v1.0";
-    private final long defaultStateVersion = 1;
 
     @Rule
     public TestName testName = new TestName();
@@ -73,8 +71,8 @@ public class PhoenixHAAdminIT extends BaseTest {
 
     @Before
     public void before() throws Exception {
-        haAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster1().getConfiguration(), ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
-        peerHaAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster2().getConfiguration(), ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
+        haAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster1().getConfiguration(), ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
+        peerHaAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster2().getConfiguration(), ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
         cleanupTestZnodes();
     }
 
@@ -123,10 +121,11 @@ public class PhoenixHAAdminIT extends BaseTest {
 
         // Try to create again with different data
         HAGroupStoreRecord record2 = new HAGroupStoreRecord(
-                defaultProtocolVersion,
+                HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
                 haGroupName,
                 HAGroupStoreRecord.HAGroupState.STANDBY,
-                defaultStateVersion
+                0L, HighAvailabilityPolicy.FAILOVER.toString(), CLUSTERS.getZkUrl2(),
+                CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), 0L
         );
 
         // This should throw an exception due to NodeExistsException handling
@@ -146,7 +145,7 @@ public class PhoenixHAAdminIT extends BaseTest {
         assertEquals(record1.getHAGroupState(), savedRecord.getHAGroupState());
         assertEquals(record1.getProtocolVersion(), savedRecord.getProtocolVersion());
         assertEquals(record1.getHaGroupName(), savedRecord.getHaGroupName());
-        assertEquals(record1.getRecordVersion(), savedRecord.getRecordVersion());
+        assertEquals(record1.getAdminCRRVersion(), savedRecord.getAdminCRRVersion());
     }
 
     @Test
@@ -166,10 +165,11 @@ public class PhoenixHAAdminIT extends BaseTest {
 
         // Update the record
         HAGroupStoreRecord updatedRecord = new HAGroupStoreRecord(
-                defaultProtocolVersion,
+                HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
                 haGroupName,
                 HAGroupStoreRecord.HAGroupState.STANDBY,
-                defaultStateVersion + 1
+                0L, HighAvailabilityPolicy.FAILOVER.toString(), peerZKUrl,
+                CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), 0L
         );
 
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, updatedRecord, currentVersion);
@@ -182,7 +182,7 @@ public class PhoenixHAAdminIT extends BaseTest {
         assertEquals(updatedRecord.getHAGroupState(), savedRecord.getHAGroupState());
         assertEquals(updatedRecord.getProtocolVersion(), savedRecord.getProtocolVersion());
         assertEquals(updatedRecord.getHaGroupName(), savedRecord.getHaGroupName());
-        assertEquals(updatedRecord.getRecordVersion(), savedRecord.getRecordVersion());
+        assertEquals(updatedRecord.getAdminCRRVersion(), savedRecord.getAdminCRRVersion());
     }
 
     @Test
@@ -202,20 +202,22 @@ public class PhoenixHAAdminIT extends BaseTest {
 
         // Update the record with current version (should succeed)
         HAGroupStoreRecord updatedRecord = new HAGroupStoreRecord(
-                defaultProtocolVersion,
+                HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
                 haGroupName,
                 HAGroupStoreRecord.HAGroupState.STANDBY,
-                defaultStateVersion + 1
+                0L, HighAvailabilityPolicy.FAILOVER.toString(), peerZKUrl,
+                CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), 0L
         );
 
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, updatedRecord, currentVersion);
 
         // Try to update again with the same (now stale) version - should fail
         HAGroupStoreRecord anotherUpdate = new HAGroupStoreRecord(
-                defaultProtocolVersion,
+                HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
                 haGroupName,
                 HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY,
-                defaultStateVersion + 2
+                0L, HighAvailabilityPolicy.FAILOVER.toString(), peerZKUrl,
+                CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), 0L
         );
 
         try {
@@ -251,7 +253,7 @@ public class PhoenixHAAdminIT extends BaseTest {
         assertEquals(initialRecord.getClusterRole(), retrievedRecord.getClusterRole());
         assertEquals(initialRecord.getHAGroupState(), retrievedRecord.getHAGroupState());
         assertEquals(initialRecord.getProtocolVersion(), retrievedRecord.getProtocolVersion());
-        assertEquals(initialRecord.getRecordVersion(), retrievedRecord.getRecordVersion());
+        assertEquals(initialRecord.getAdminCRRVersion(), retrievedRecord.getAdminCRRVersion());
 
         // Verify stat is valid
         assertTrue(stat.getVersion() >= 0);
@@ -284,14 +286,15 @@ public class PhoenixHAAdminIT extends BaseTest {
         assertEquals(initialRecord.getClusterRole(), retrievedRecord.getClusterRole());
         assertEquals(initialRecord.getHAGroupState(), retrievedRecord.getHAGroupState());
         assertEquals(initialRecord.getProtocolVersion(), retrievedRecord.getProtocolVersion());
-        assertEquals(initialRecord.getRecordVersion(), retrievedRecord.getRecordVersion());
+        assertEquals(initialRecord.getAdminCRRVersion(), retrievedRecord.getAdminCRRVersion());
 
         // Step 3: Update the record
         HAGroupStoreRecord updatedRecord = new HAGroupStoreRecord(
-                defaultProtocolVersion,
+                HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
                 haGroupName,
                 HAGroupStoreRecord.HAGroupState.STANDBY,
-                defaultStateVersion + 1
+                0L, HighAvailabilityPolicy.FAILOVER.toString(), peerZKUrl,
+                CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), 0L
         );
 
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, updatedRecord, stat.getVersion());
@@ -305,7 +308,7 @@ public class PhoenixHAAdminIT extends BaseTest {
         assertEquals(updatedRecord.getClusterRole(), finalRecord.getClusterRole());
         assertEquals(updatedRecord.getHAGroupState(), finalRecord.getHAGroupState());
         assertEquals(updatedRecord.getProtocolVersion(), finalRecord.getProtocolVersion());
-        assertEquals(updatedRecord.getRecordVersion(), finalRecord.getRecordVersion());
+        assertEquals(updatedRecord.getAdminCRRVersion(), finalRecord.getAdminCRRVersion());
         // Verify stat version increased
         assertTrue(finalStat.getVersion() > stat.getVersion());
     }
@@ -343,10 +346,11 @@ public class PhoenixHAAdminIT extends BaseTest {
 
                     // Create a unique update record for this thread
                     HAGroupStoreRecord updatedRecord = new HAGroupStoreRecord(
-                            defaultProtocolVersion,
+                            HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
                             haGroupName,
                             HAGroupStoreRecord.HAGroupState.STANDBY,
-                            defaultStateVersion + 1
+                            0L, HighAvailabilityPolicy.FAILOVER.toString(), CLUSTERS.getZkUrl2(),
+                            CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), 0L
                     );
 
                     // All threads use the same currentVersion, causing conflicts
@@ -421,10 +425,11 @@ public class PhoenixHAAdminIT extends BaseTest {
 
                     // Create update record for this thread
                     HAGroupStoreRecord updatedRecord = new HAGroupStoreRecord(
-                            defaultProtocolVersion,
+                            HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
                             haGroupName,
                             threadId % 2 == 0 ? HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC : HAGroupStoreRecord.HAGroupState.STANDBY,
-                            defaultStateVersion + 1
+                            0L, HighAvailabilityPolicy.FAILOVER.toString(), CLUSTERS.getZkUrl2(),
+                            CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), 0L
                     );
 
                     // Update with the current version
@@ -461,13 +466,12 @@ public class PhoenixHAAdminIT extends BaseTest {
 
     private HAGroupStoreRecord createInitialRecord(String haGroupName) {
         return new HAGroupStoreRecord(
-                defaultProtocolVersion,
+                "v1.0",
                 haGroupName,
                 HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
-                defaultStateVersion
-        );
+                0L,
+                HighAvailabilityPolicy.FAILOVER.toString(),
+                CLUSTERS.getZkUrl2(),
+                CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), 0L);
     }
-
-
-
 }

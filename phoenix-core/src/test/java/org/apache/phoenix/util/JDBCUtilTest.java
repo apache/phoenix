@@ -27,6 +27,7 @@ import static org.junit.Assert.assertTrue;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.phoenix.jdbc.ClusterRoleRecord;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.phoenix.query.QueryServices;

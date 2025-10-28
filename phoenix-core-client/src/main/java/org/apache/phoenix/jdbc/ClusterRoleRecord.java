@@ -104,7 +104,7 @@ public class ClusterRoleRecord {
                 case OFFLINE:
                     return HAGroupStoreRecord.HAGroupState.OFFLINE;
                 case ACTIVE_TO_STANDBY:
-                    return HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY;
+                    return HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC_TO_STANDBY;
                 case STANDBY_TO_ACTIVE:
                     return HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE;
                 case UNKNOWN:
@@ -337,6 +337,4 @@ public class ClusterRoleRecord {
             return toString();
         }
     }
-
-
 }

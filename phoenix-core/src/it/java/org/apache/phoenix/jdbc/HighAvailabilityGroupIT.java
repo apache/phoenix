@@ -21,6 +21,7 @@ import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_ESTABLISH_CON
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.*;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithConnection;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
+import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.primeHAGroupStoreClientOnCluster;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -341,7 +342,8 @@ public class HighAvailabilityGroupIT {
         String haGroupName2 = testName.getMethodName() + 2;
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName2);
         CLUSTERS.initClusterRole(haGroupName2, HighAvailabilityPolicy.FAILOVER);
-
+        primeHAGroupStoreClientOnCluster(CLUSTERS.getHBaseCluster1(), haGroupName2);
+        primeHAGroupStoreClientOnCluster(CLUSTERS.getHBaseCluster2(), haGroupName2);
         //Try with ACTIVE HBase cluster down
         CLUSTERS.doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
             Optional<HighAvailabilityGroup> haGroup2 = null;

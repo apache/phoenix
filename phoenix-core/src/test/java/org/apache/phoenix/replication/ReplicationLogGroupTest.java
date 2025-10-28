@@ -51,6 +51,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.ServerName;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.replication.log.LogFileWriter;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.junit.After;
@@ -101,7 +102,7 @@ public class ReplicationLogGroupTest {
         // Set a short sync timeout for testing
         conf.setLong(ReplicationLogGroup.REPLICATION_LOG_SYNC_TIMEOUT_KEY, TEST_SYNC_TIMEOUT);
         // Set rotation time to 10 seconds
-        conf.setLong(ReplicationLogGroup.REPLICATION_LOG_ROTATION_TIME_MS_KEY, TEST_ROTATION_TIME);
+        conf.setLong(QueryServices.REPLICATION_LOG_ROTATION_TIME_MS_KEY, TEST_ROTATION_TIME);
         // Small size threshold for testing
         conf.setLong(ReplicationLogGroup.REPLICATION_LOG_ROTATION_SIZE_BYTES_KEY,
             TEST_ROTATION_SIZE_BYTES);

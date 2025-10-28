@@ -52,7 +52,6 @@ message InvalidateServerMetadataCacheRequest {
 
 message InvalidateHAGroupStoreClientRequest {
   required bytes haGroupName = 1;
-  required bool broadcastUpdate = 2;
 }
 
 message InvalidateHAGroupStoreClientResponse {
