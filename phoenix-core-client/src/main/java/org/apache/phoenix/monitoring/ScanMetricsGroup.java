@@ -95,7 +95,7 @@ public class ScanMetricsGroup {
       case CompatScanMetrics.RPC_SCAN_QUEUE_WAIT_TIME_METRIC_NAME:
         return MetricType.RPC_SCAN_QUEUE_WAIT_TIME;
       default:
-        throw new IllegalArgumentException("Invalid metric name: " + metricName);
+        return null;
     }
   }
 
@@ -108,8 +108,14 @@ public class ScanMetricsGroup {
   }
 
   public JsonObject toJson() {
+    JsonObject tableJson = new JsonObject();
+    if (
+      (scanMetrics == null || scanMetrics.isEmpty())
+        && (scanMetricsByRegion == null || scanMetricsByRegion.isEmpty())
+    ) {
+      return tableJson;
+    }
     if (scanMetricsByRegion != null) {
-      JsonObject tableJson = new JsonObject();
       tableJson.addProperty("table", tableName);
       JsonArray regionMetrics = new JsonArray();
       for (Map.Entry<ScanMetricsRegionInfo, Map<String, Long>> entry : scanMetricsByRegion
@@ -120,21 +126,25 @@ public class ScanMetricsGroup {
         regionJson.addProperty("server", regionInfo.getServerName().toString());
         for (Map.Entry<String, Long> scanMetricEntry : entry.getValue().entrySet()) {
           MetricType metricType = getMetricType(scanMetricEntry.getKey());
+          if (metricType == null) {
+            continue;
+          }
           regionJson.addProperty(metricType.shortName(), scanMetricEntry.getValue());
         }
         regionMetrics.add(regionJson);
       }
       tableJson.add("regions", regionMetrics);
-      return tableJson;
     } else {
-      JsonObject tableJson = new JsonObject();
       tableJson.addProperty("table", tableName);
       for (Map.Entry<String, Long> scanMetricEntry : scanMetrics.entrySet()) {
         MetricType metricType = getMetricType(scanMetricEntry.getKey());
+        if (metricType == null) {
+          continue;
+        }
         tableJson.addProperty(metricType.shortName(), scanMetricEntry.getValue());
       }
-      return tableJson;
     }
+    return tableJson;
   }
 
   @Override

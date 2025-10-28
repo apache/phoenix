@@ -1501,6 +1501,6 @@ public class PhoenixConnection
   }
 
   public boolean isScanMetricsByRegionEnabled() {
-    return isScanMetricsByRegionEnabled;
+    return slowestScanMetricsCount > 0 && isScanMetricsByRegionEnabled;
   }
 }

@@ -54,6 +54,7 @@ public class UnionResultIterators implements ResultIterators {
     readMetricsList = Lists.newArrayListWithCapacity(nPlans);
     overAllQueryMetricsList = Lists.newArrayListWithCapacity(nPlans);
     for (QueryPlan plan : plans) {
+      parentStmtCtx.addSubStatementContext(plan.getContext());
       readMetricsList.add(plan.getContext().getReadMetricsQueue());
       overAllQueryMetricsList.add(plan.getContext().getOverallQueryMetrics());
       iterators.add(LookAheadResultIterator.wrap(plan.iterator()));
@@ -102,11 +103,12 @@ public class UnionResultIterators implements ResultIterators {
   private void setMetricsInParentContext() {
     ReadMetricQueue parentCtxReadMetrics = parentStmtCtx.getReadMetricsQueue();
     for (ReadMetricQueue readMetrics : readMetricsList) {
-      parentCtxReadMetrics.combineReadMetrics(readMetrics);
+      parentCtxReadMetrics.combineReadMetrics(readMetrics, true);
     }
     OverAllQueryMetrics parentCtxQueryMetrics = parentStmtCtx.getOverallQueryMetrics();
     for (OverAllQueryMetrics metric : overAllQueryMetricsList) {
       parentCtxQueryMetrics.combine(metric);
+      metric.reset();
     }
   }
 

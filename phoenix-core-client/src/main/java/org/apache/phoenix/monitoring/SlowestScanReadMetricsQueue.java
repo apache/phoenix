@@ -17,7 +17,9 @@
  */
 package org.apache.phoenix.monitoring;
 
+import java.util.Collections;
 import java.util.Deque;
+import java.util.Iterator;
 import java.util.concurrent.ConcurrentLinkedDeque;
 
 public class SlowestScanReadMetricsQueue {
@@ -29,8 +31,8 @@ public class SlowestScanReadMetricsQueue {
       }
 
       @Override
-      public ScanMetricsGroup aggregate() {
-        return ScanMetricsGroup.EMPTY_SCAN_METRICS_GROUP;
+      public Iterator<ScanMetricsGroup> getIterator() {
+        return Collections.emptyIterator();
       }
     };
 
@@ -44,21 +46,7 @@ public class SlowestScanReadMetricsQueue {
     this.slowestScanReadMetricsQueue.add(scanMetricsGroup);
   }
 
-  public ScanMetricsGroup aggregate() {
-    ScanMetricsGroup slowestScanMetricsGroup = null;
-    long maxMillisBetweenNexts = Long.MIN_VALUE;
-    while (!slowestScanReadMetricsQueue.isEmpty()) {
-      ScanMetricsGroup scanMetricsGroup = slowestScanReadMetricsQueue.poll();
-      long currentMillisBetweenNexts = scanMetricsGroup.getSumOfMillisSecBetweenNexts();
-      if (slowestScanMetricsGroup == null || currentMillisBetweenNexts > maxMillisBetweenNexts) {
-        slowestScanMetricsGroup = scanMetricsGroup;
-        maxMillisBetweenNexts = currentMillisBetweenNexts;
-      }
-    }
-
-    if (slowestScanMetricsGroup == null) {
-      return ScanMetricsGroup.EMPTY_SCAN_METRICS_GROUP;
-    }
-    return slowestScanMetricsGroup;
+  public Iterator<ScanMetricsGroup> getIterator() {
+    return this.slowestScanReadMetricsQueue.iterator();
   }
 }

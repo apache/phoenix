@@ -23,10 +23,10 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -38,7 +38,7 @@ import org.apache.phoenix.monitoring.OverAllQueryMetrics;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.monitoring.ScanMetricsGroup;
 import org.apache.phoenix.monitoring.SlowestScanReadMetricsQueue;
-import org.apache.phoenix.monitoring.TopNTreeMap;
+import org.apache.phoenix.monitoring.TopNTreeMultiMap;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -498,12 +498,12 @@ public class StatementContext {
     if (slowestScanMetricsCount <= 0) {
       return Collections.emptyList();
     }
-    TopNTreeMap<Long, List<ScanMetricsGroup>> slowestScanMetricsGroups =
-      new TopNTreeMap<>(slowestScanMetricsCount, (s1, s2) -> Long.compare(s2, s1));
+    TopNTreeMultiMap<Long, List<ScanMetricsGroup>> slowestScanMetricsGroups =
+      new TopNTreeMultiMap<>(slowestScanMetricsCount, (s1, s2) -> Long.compare(s2, s1));
     getSlowestScanReadMetricsUtil(this, new ArrayDeque<>(), 0, slowestScanMetricsGroups);
     List<List<ScanMetricsGroup>> topNSlowestScanMetricsGroups =
       new ArrayList<>(slowestScanMetricsGroups.size());
-    for (Map.Entry<Long, List<ScanMetricsGroup>> entry : slowestScanMetricsGroups.entrySet()) {
+    for (Map.Entry<Long, List<ScanMetricsGroup>> entry : slowestScanMetricsGroups.entries()) {
       topNSlowestScanMetricsGroups.add(entry.getValue());
     }
     return topNSlowestScanMetricsGroups;
@@ -511,31 +511,34 @@ public class StatementContext {
 
   private static void getSlowestScanReadMetricsUtil(StatementContext node,
     Deque<ScanMetricsGroup> currentScanMetricsGroups, long sumOfMillisBetweenNexts,
-    TreeMap<Long, List<ScanMetricsGroup>> topNSlowestScanMetricsGroups) {
-    ScanMetricsGroup currentScanMetricsGroup = node.getSlowestScanReadMetricsQueue().aggregate();
-    long currentMillisBetweenNexts = currentScanMetricsGroup.getSumOfMillisSecBetweenNexts();
-    long newSumOfMillisBetweenNexts = sumOfMillisBetweenNexts + currentMillisBetweenNexts;
+    TopNTreeMultiMap<Long, List<ScanMetricsGroup>> topNSlowestScanMetricsGroups) {
+    Iterator<ScanMetricsGroup> currentScanMetricsGroupIterator =
+      node.getSlowestScanReadMetricsQueue().getIterator();
+    while (currentScanMetricsGroupIterator.hasNext()) {
+      ScanMetricsGroup currentScanMetricsGroup = currentScanMetricsGroupIterator.next();
+      long currentMillisBetweenNexts = currentScanMetricsGroup.getSumOfMillisSecBetweenNexts();
+      long newSumOfMillisBetweenNexts = sumOfMillisBetweenNexts + currentMillisBetweenNexts;
 
-    // Add at tail of the dequeue
-    currentScanMetricsGroups.addLast(currentScanMetricsGroup);
+      // Add at tail of the dequeue
+      currentScanMetricsGroups.addLast(currentScanMetricsGroup);
 
-    Set<StatementContext> subContexts = node.getSubStatementContexts();
-    if (subContexts == null || subContexts.isEmpty()) {
-      List<ScanMetricsGroup> newScanMetricsGroups =
-        new ArrayList<>(currentScanMetricsGroups.size());
-      // Default iteration order is from head to tail
-      for (ScanMetricsGroup scanMetricsGroup : currentScanMetricsGroups) {
-        newScanMetricsGroups.add(scanMetricsGroup);
+      Set<StatementContext> subContexts = node.getSubStatementContexts();
+      if (subContexts == null || subContexts.isEmpty()) {
+        List<ScanMetricsGroup> newScanMetricsGroups =
+          new ArrayList<>(currentScanMetricsGroups.size());
+        // Default iteration order is from head to tail
+        for (ScanMetricsGroup scanMetricsGroup : currentScanMetricsGroups) {
+          newScanMetricsGroups.add(scanMetricsGroup);
+        }
+        topNSlowestScanMetricsGroups.put(newSumOfMillisBetweenNexts, newScanMetricsGroups);
+      } else {
+        // Process sub-contexts
+        for (StatementContext sub : subContexts) {
+          getSlowestScanReadMetricsUtil(sub, currentScanMetricsGroups, newSumOfMillisBetweenNexts,
+            topNSlowestScanMetricsGroups);
+        }
       }
-      topNSlowestScanMetricsGroups.put(newSumOfMillisBetweenNexts, newScanMetricsGroups);
-    } else {
-      // Process sub-contexts
-      for (StatementContext sub : subContexts) {
-        getSlowestScanReadMetricsUtil(sub, currentScanMetricsGroups, newSumOfMillisBetweenNexts,
-          topNSlowestScanMetricsGroups);
-      }
+      currentScanMetricsGroups.removeLast();
     }
-
-    currentScanMetricsGroups.removeLast();
   }
 }
