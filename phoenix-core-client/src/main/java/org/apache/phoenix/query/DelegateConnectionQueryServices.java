@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.query;
 
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
@@ -468,5 +469,10 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices
   public void invalidateServerMetadataCache(List<InvalidateServerMetadataCacheRequest> requests)
     throws Throwable {
     getDelegate().invalidateServerMetadataCache(requests);
+  }
+
+  @Override
+  public void deleteAllStreamMetadataForTable(Connection conn, String tableName) throws SQLException {
+      getDelegate().deleteAllStreamMetadataForTable(conn, tableName);
   }
 }

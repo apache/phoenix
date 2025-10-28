@@ -4163,7 +4163,8 @@ public class MetaDataClient {
     try {
       PTable ptable = connection.getTable(fullTableName);
       if (PTableType.TABLE.equals(ptable.getType())) {
-        deleteAllStreamMetadataForTable(fullTableName);
+        connection.unwrap(PhoenixConnection.class).getQueryServices()
+                .deleteAllStreamMetadataForTable(connection, fullTableName);
       }
       if (
         parentTableName != null && !parentTableName.equals(ptable.getParentTableName().getString())

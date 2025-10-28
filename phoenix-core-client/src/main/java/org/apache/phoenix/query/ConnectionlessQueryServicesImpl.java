@@ -20,6 +20,7 @@ package org.apache.phoenix.query;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE_BYTES;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -897,6 +898,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices
   @Override
   public void invalidateServerMetadataCache(List<InvalidateServerMetadataCacheRequest> requests)
     throws Throwable {
+    // No-op
+  }
+
+  @Override
+  public void deleteAllStreamMetadataForTable(Connection conn, String tableName) throws SQLException {
     // No-op
   }
 }
